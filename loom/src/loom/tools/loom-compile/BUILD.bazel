@@ -47,15 +47,15 @@ _IREE_VM_COMPILE_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_SPIRV_COMPILE_COPTS = iree_select({
-    "//loom/config/emit:spirv": [
-        "-DLOOM_COMPILE_HAVE_SPIRV=1",
+_SPIRV_VULKAN_COMPILE_COPTS = iree_select({
+    "//loom/config/execute:spirv_vulkan_hal": [
+        "-DLOOM_COMPILE_HAVE_SPIRV_VULKAN=1",
     ],
     "//conditions:default": [],
 })
 
-_SPIRV_COMPILE_DEPS = iree_select({
-    "//loom/config/emit:spirv": [
+_SPIRV_VULKAN_COMPILE_DEPS = iree_select({
+    "//loom/config/execute:spirv_vulkan_hal": [
         "//loom/src/loom/target/arch/spirv:provider",
         "//loom/src/loom/tooling/target/spirv:artifact_provider",
     ],
@@ -65,7 +65,7 @@ _SPIRV_COMPILE_DEPS = iree_select({
 loom_cc_binary(
     name = "loom-compile",
     srcs = ["loom-compile.c"],
-    copts = _AMDGPU_COMPILE_COPTS + _IREE_VM_COMPILE_COPTS + _SPIRV_COMPILE_COPTS,
+    copts = _AMDGPU_COMPILE_COPTS + _IREE_VM_COMPILE_COPTS + _SPIRV_VULKAN_COMPILE_COPTS,
     deps = [
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ops:op_registry",
@@ -81,7 +81,7 @@ loom_cc_binary(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
-    ] + _AMDGPU_COMPILE_DEPS + _IREE_VM_COMPILE_DEPS + _SPIRV_COMPILE_DEPS,
+    ] + _AMDGPU_COMPILE_DEPS + _IREE_VM_COMPILE_DEPS + _SPIRV_VULKAN_COMPILE_DEPS,
 )
 
 iree_execution_test_suite(

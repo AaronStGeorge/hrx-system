@@ -66,6 +66,11 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
 }
 
 
+def _append_unique_condition(conditions, condition):
+    if condition and condition not in conditions:
+        conditions.append(condition)
+
+
 class ConditionSelect:
     """Represents a supported conditional value from a Bazel select().
 
@@ -239,8 +244,7 @@ class BuildFileFunctions(object):
             # Empty list means compatible for this condition.
             if value == []:
                 condition = self._convert_select_condition(label)
-                if condition:
-                    compatible_conditions.append(condition)
+                _append_unique_condition(compatible_conditions, condition)
         if not compatible_conditions:
             return None
         return " OR ".join(compatible_conditions)
@@ -260,13 +264,12 @@ class BuildFileFunctions(object):
                 condition = self._convert_select_condition(label)
                 if not condition:
                     raise NotImplementedError(f"target_compatible_with: {label}")
-                conditions.append(condition)
+                _append_unique_condition(conditions, condition)
             for condition_select in target_compatible_with.selects:
                 condition = self._condition_select_compatibility_condition(
                     condition_select
                 )
-                if condition:
-                    conditions.append(condition)
+                _append_unique_condition(conditions, condition)
             if not conditions:
                 return None
             return " AND ".join(
@@ -278,7 +281,7 @@ class BuildFileFunctions(object):
         for label in target_compatible_with:
             condition = self._convert_select_condition(label)
             if condition:
-                conditions.append(condition)
+                _append_unique_condition(conditions, condition)
             else:
                 raise NotImplementedError(f"target_compatible_with: {label}")
         return " AND ".join(conditions)

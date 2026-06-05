@@ -17,10 +17,12 @@ _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/emit:llvmir": "LOOM_EMIT_LLVMIR",
     "//loom/config/emit:spirv": "LOOM_EMIT_SPIRV",
     "//loom/config/emit:wasm": "LOOM_EMIT_WASM",
+    "//loom/config/execute:amdgpu_hal": "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU",
     "//loom/config/execute:iree_hal": "LOOM_EXECUTE_IREE_HAL",
     "//loom/config/execute:iree_hal_amdgpu": "LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU",
     "//loom/config/execute:iree_hal_vulkan": "LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN",
     "//loom/config/execute:iree_vm": "LOOM_EXECUTE_IREE_VM",
+    "//loom/config/execute:spirv_vulkan_hal": "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN",
     "//loom/config/import:mlir": "LOOM_IMPORT_MLIR",
     "//loom/config/import:tilelang": "LOOM_IMPORT_TILELANG",
     "//loom/config/target:amdgpu": "LOOM_TARGET_AMDGPU",
@@ -116,6 +118,9 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         if label in _LOOM_CONFIG_CMAKE_OPTIONS:
             return _LOOM_CONFIG_CMAKE_OPTIONS[label]
         return super()._convert_select_condition(label)
+
+    def loom_config_compatible_with(self, config_labels):
+        return list(config_labels)
 
     def _should_emit_python_target(self):
         return self._current_package().startswith("loom/py/loom")

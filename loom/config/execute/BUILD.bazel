@@ -10,6 +10,7 @@ load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 package(default_visibility = ["//visibility:public"])
 
 DEFAULT_ENABLED = [
+    "iree_hal",
     "iree_vm",
 ]
 
@@ -46,5 +47,25 @@ selects.config_setting_group(
     match_all = [
         ":iree_hal",
         "//runtime/config/hal:driver_vulkan",
+    ],
+)
+
+# Internal execution provider capabilities. Public execution settings choose the
+# substrate; providers also need the matching Loom target/emitter slice.
+selects.config_setting_group(
+    name = "amdgpu_hal",
+    match_all = [
+        ":iree_hal_amdgpu",
+        "//loom/config/target/arch:amdgpu",
+        "//loom/config/emit:amdgpu",
+    ],
+)
+
+selects.config_setting_group(
+    name = "spirv_vulkan_hal",
+    match_all = [
+        ":iree_hal_vulkan",
+        "//loom/config/target/arch:spirv",
+        "//loom/config/emit:spirv",
     ],
 )

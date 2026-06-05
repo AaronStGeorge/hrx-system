@@ -13,16 +13,38 @@ if(NOT DEFINED LOOM_BUILD)
     "Build Loom compiler libraries, tools, bindings, and tests." ON)
 endif()
 
+option(LOOM_TARGET_DEFAULTS
+  "Default value for dependency-satisfied Loom production targets." ON)
+if(NOT DEFINED LOOM_TARGET_AMDGPU_DEFAULT)
+  set(LOOM_TARGET_AMDGPU_DEFAULT OFF)
+endif()
+if(NOT DEFINED LOOM_TARGET_IREE_VM_DEFAULT)
+  set(LOOM_TARGET_IREE_VM_DEFAULT ${LOOM_TARGET_DEFAULTS})
+endif()
+if(NOT DEFINED LOOM_TARGET_SPIRV_DEFAULT)
+  set(LOOM_TARGET_SPIRV_DEFAULT ${LOOM_TARGET_DEFAULTS})
+endif()
+if(NOT DEFINED LOOM_TARGET_WASM_DEFAULT)
+  set(LOOM_TARGET_WASM_DEFAULT OFF)
+endif()
+if(NOT DEFINED LOOM_TARGET_X86_DEFAULT)
+  set(LOOM_TARGET_X86_DEFAULT ${LOOM_TARGET_DEFAULTS})
+endif()
 option(LOOM_TARGET_AMDGPU
-  "Enables Loom AMDGPU target support." OFF)
+  "Enables Loom AMDGPU target support."
+  ${LOOM_TARGET_AMDGPU_DEFAULT})
 option(LOOM_TARGET_IREE_VM
-  "Enables Loom IREE VM target support." ON)
+  "Enables Loom IREE VM target support."
+  ${LOOM_TARGET_IREE_VM_DEFAULT})
 option(LOOM_TARGET_SPIRV
-  "Enables Loom SPIR-V target support." OFF)
+  "Enables Loom SPIR-V target support."
+  ${LOOM_TARGET_SPIRV_DEFAULT})
 option(LOOM_TARGET_WASM
-  "Enables Loom WebAssembly target support." OFF)
+  "Enables Loom WebAssembly target support."
+  ${LOOM_TARGET_WASM_DEFAULT})
 option(LOOM_TARGET_X86
-  "Enables Loom x86 target support." OFF)
+  "Enables Loom x86 target support."
+  ${LOOM_TARGET_X86_DEFAULT})
 
 option(LOOM_TARGET_ARCH_AMDGPU
   "Enables the AMDGPU Loom target architecture slice."
@@ -88,10 +110,20 @@ if(LOOM_TARGET_X86)
   set(LOOM_TARGET_ARCH_X86 ON)
 endif()
 
+option(LOOM_EXECUTE_DEFAULTS
+  "Default value for dependency-satisfied Loom execution substrates." ON)
+if(NOT DEFINED LOOM_EXECUTE_IREE_HAL_DEFAULT)
+  set(LOOM_EXECUTE_IREE_HAL_DEFAULT ${LOOM_EXECUTE_DEFAULTS})
+endif()
+if(NOT DEFINED LOOM_EXECUTE_IREE_VM_DEFAULT)
+  set(LOOM_EXECUTE_IREE_VM_DEFAULT ${LOOM_EXECUTE_DEFAULTS})
+endif()
 option(LOOM_EXECUTE_IREE_HAL
-  "Enables Loom execution providers that use IREE HAL runtime support." OFF)
+  "Enables Loom execution providers that use IREE HAL runtime support."
+  ${LOOM_EXECUTE_IREE_HAL_DEFAULT})
 option(LOOM_EXECUTE_IREE_VM
-  "Enables Loom execution tests that use IREE VM runtime support." ON)
+  "Enables Loom execution tests that use IREE VM runtime support."
+  ${LOOM_EXECUTE_IREE_VM_DEFAULT})
 
 option(LOOM_IMPORT_MLIR
   "Enables the Loom MLIR importer package and importer tests." OFF)

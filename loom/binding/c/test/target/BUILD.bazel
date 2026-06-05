@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -16,10 +17,10 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
+LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/target/arch:spirv",
     "//loom/config/emit:spirv",
-]
+])
 
 loom_cc_library(
     name = "iree_hal_execution_test_util",

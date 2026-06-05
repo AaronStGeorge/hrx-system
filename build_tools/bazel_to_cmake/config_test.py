@@ -189,12 +189,15 @@ class ConfigTest(unittest.TestCase):
             build_dir="",
         )
 
-        target_compatible_with = functions.select(
+        target_compatible_with = [
+            SimpleNamespace(cmake_condition="IREE_HAL_DRIVER_WEBGPU"),
+            SimpleNamespace(cmake_condition="IREE_HAL_DRIVER_WEBGPU"),
+        ] + functions.select(
             {
                 "@platforms//cpu:wasm32": [],
                 "//conditions:default": ["@platforms//:incompatible"],
             }
-        ) + [SimpleNamespace(cmake_condition="IREE_HAL_DRIVER_WEBGPU")]
+        )
 
         self.assertEqual(
             functions._target_compatible_condition(target_compatible_with),

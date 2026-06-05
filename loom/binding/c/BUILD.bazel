@@ -10,6 +10,7 @@ load(
     "iree_select",
     "loom_assert_no_dependencies",
     "loom_cc_library",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -81,17 +82,17 @@ LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS = [
     "include/loomc/target/iree_hal.h",
 ]
 
-LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
+LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/target/arch:spirv",
     "//loom/config/emit:spirv",
-]
+])
 
-LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH + [
-    "//loom/config/execute:iree_hal_vulkan",
-]
+LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:spirv_vulkan_hal",
+])
 
 LOOMC_TARGET_SPIRV_VULKAN_DEPS = iree_select({
-    "//loom/config/execute:iree_hal_vulkan": [
+    "//loom/config/execute:spirv_vulkan_hal": [
         "@vulkan_headers",
     ],
     "//conditions:default": [],

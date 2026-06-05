@@ -219,6 +219,19 @@ production artifact emission needed by that backend. Runtime execution remains a
 separate concern controlled by Loom execution support and the runtime
 `IREE_HAL_DRIVER_*` options.
 
+The default SDK-free Loom target set is `iree_vm,spirv,x86`. AMDGPU and
+WebAssembly remain opt-in in this checkout until their external header/SDK
+repositories are wired into the default source graph. The default execution
+substrate set is `iree_hal,iree_vm`; backend execution providers still require a
+matching runtime HAL driver such as `IREE_HAL_DRIVER_VULKAN` or
+`IREE_HAL_DRIVER_AMDGPU`.
+
+CMake exposes `LOOM_TARGET_DEFAULTS` and `LOOM_EXECUTE_DEFAULTS` to set the
+default value for dependency-satisfied target and execution options before the
+individual `LOOM_TARGET_*` and `LOOM_EXECUTE_*` overrides are evaluated. Bazel
+configuration writes complete native lists instead, so portable `-D...=OFF`
+options remove entries from the default set.
+
 | Option | Values | CMake | Bazel portable | Bazel native |
 | --- | --- | --- | --- | --- |
 | `LOOM_TARGET_AMDGPU` | `ON`, `OFF` | Builds Loom AMDGPU target support and production AMDGPU emission. | Adds or removes `amdgpu` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
@@ -231,7 +244,8 @@ separate concern controlled by Loom execution support and the runtime
 | `LOOM_EXECUTE_IREE_VM` | `ON`, `OFF` | Builds Loom execution providers that run through the IREE VM substrate. | Adds or removes `iree_vm` from the Loom execute substrate set. | `--//loom/config/execute:enable=<complete-execute-list>` |
 
 The native Loom target flag is a complete list. The default target set is
-`iree_vm`:
+`iree_vm,spirv,x86`, and the default execution substrate set is
+`iree_hal,iree_vm`:
 
 ```bash
 python dev.py bazel configure \

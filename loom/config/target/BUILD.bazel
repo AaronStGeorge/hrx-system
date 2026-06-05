@@ -13,6 +13,8 @@ package(default_visibility = ["//visibility:public"])
 # needed to compile for that backend.
 DEFAULT_ENABLED = [
     "iree_vm",
+    "spirv",
+    "x86",
 ]
 
 SUPPORTED_VALUES = [

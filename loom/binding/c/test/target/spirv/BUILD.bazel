@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
     "loom_cc_test",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -15,6 +16,10 @@ package(
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:iree_hal_vulkan",
+])
 
 LOOMC_TARGET_SPIRV_VULKAN_DEPS = iree_select({
     "//loom/config/execute:iree_hal_vulkan": [
@@ -52,6 +57,7 @@ loom_cc_test(
 loom_cc_test(
     name = "vulkan_test",
     srcs = ["vulkan_test.cc"],
+    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_spirv",
@@ -83,6 +89,7 @@ loom_cc_test(
     tags = [
         "driver=vulkan",
     ],
+    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_iree_hal",

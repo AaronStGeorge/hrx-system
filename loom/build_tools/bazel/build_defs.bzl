@@ -25,6 +25,8 @@ load(":cc_benchmark.bzl", _loom_cc_benchmark = "loom_cc_benchmark")
 load(":cc_fuzz.bzl", _loom_cc_fuzz = "loom_cc_fuzz")
 load(":cc_test.bzl", _loom_cc_test = "loom_cc_test")
 
+_INCOMPATIBLE_TARGET = ["@platforms//:incompatible"]
+
 iree_cmake_extra_content = _iree_cmake_extra_content
 iree_select = _iree_select
 loom_cc_benchmark = _loom_cc_benchmark
@@ -38,6 +40,25 @@ def _loom_bazel_generator_args(args):
         arg.replace("$(rootpath ", "$(location ").replace("$(execpath ", "$(location ")
         for arg in args
     ]
+
+def loom_config_compatible_with(config_labels):
+    """Returns target compatibility selectors for Loom configuration labels.
+
+    Args:
+      config_labels: Loom config setting or config setting group labels that
+        must all be enabled for a target to be compatible.
+
+    Returns:
+      A target_compatible_with value that marks the target incompatible when any
+      config label is disabled.
+    """
+    target_compatible_with = []
+    for config_label in config_labels:
+        target_compatible_with = target_compatible_with + select({
+            config_label: [],
+            "//conditions:default": _INCOMPATIBLE_TARGET,
+        })
+    return target_compatible_with
 
 def _loom_output_basename(path):
     return path.split("/")[-1]

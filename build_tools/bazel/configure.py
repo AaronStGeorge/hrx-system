@@ -16,12 +16,12 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-HOST_DRIVERS = ("local-sync", "local-task", "null")
-DEFAULT_LOOM_TARGETS = ("iree_vm",)
-DEFAULT_LOOM_EXECUTE = ("iree_vm",)
 LOOM_EXECUTE_SUBSTRATES = ("iree_hal", "iree_vm")
 LOOM_TARGETS = ("amdgpu", "iree_vm", "spirv", "wasm", "x86")
 LOOM_EMITTERS = ("amdgpu", "iree_vm", "llvmir", "spirv", "wasm")
+HOST_DRIVERS = ("local-sync", "local-task", "null")
+DEFAULT_LOOM_EXECUTE = LOOM_EXECUTE_SUBSTRATES
+DEFAULT_LOOM_TARGETS = ("iree_vm", "spirv", "x86")
 
 SDK_DRIVER_PACKAGES = {
     "amdgpu": (
@@ -270,7 +270,7 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Writes .bazelrc.configured for this checkout. Defaults to a "
-            "host-only SDK-free recursive build scope."
+            "SDK-free recursive build scope."
         ),
         epilog="""Examples:
   python build_tools/bazel/configure.py

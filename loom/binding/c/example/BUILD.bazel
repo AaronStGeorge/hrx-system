@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_binary",
     "loom_cc_test",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -16,14 +17,14 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
+LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/target/arch:spirv",
     "//loom/config/emit:spirv",
-]
+])
 
-LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH + [
-    "//loom/config/execute:iree_hal_vulkan",
-]
+LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:spirv_vulkan_hal",
+])
 
 loom_cc_binary(
     name = "source_info",
