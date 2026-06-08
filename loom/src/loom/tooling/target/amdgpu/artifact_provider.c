@@ -155,6 +155,11 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
 
   const loom_amdgpu_hal_kernel_library_options_t library_options = {
       .processor = processor ? processor->processor : iree_string_view_empty(),
+      .target_selection =
+          {
+              .bundle = target->target_bundle,
+              .data = target->data,
+          },
       .diagnostic_sink = diagnostic_sink,
       .source_resolver = source_resolver,
       .max_errors = max_errors,

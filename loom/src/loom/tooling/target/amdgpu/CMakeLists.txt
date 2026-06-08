@@ -34,6 +34,23 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_library(
+  NAME
+    testbench_requirements
+  HDRS
+    "testbench_requirements.h"
+  SRCS
+    "testbench_requirements.c"
+  DEPS
+    iree::base
+    loom::target::arch::amdgpu::target_info_defs
+    loom::tooling::execution::hal::testbench_actual
+    loom::tooling::testbench::requirements
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_test(
   NAME
     artifact_provider_test

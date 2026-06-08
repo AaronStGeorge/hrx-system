@@ -18,6 +18,7 @@
 #include "loom/ir/ir.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/emit/native/amdgpu/hal_kernel_metadata.h"
+#include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
@@ -34,6 +35,10 @@ typedef struct loom_amdgpu_hal_kernel_library_options_t {
   // descriptor-set family while letting JIT runners specialize to the concrete
   // HAL device ISA.
   iree_string_view_t processor;
+  // Optional runtime/device target selection applied to compatible module
+  // target records before entry selection, verification, scheduling, and
+  // allocation.
+  loom_target_selection_t target_selection;
   // Diagnostic sink used for verification, materialization, scheduling, and
   // allocation diagnostics. A NULL callback still counts diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;

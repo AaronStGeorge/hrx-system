@@ -32,6 +32,7 @@ _AMDGPU_TARGET_DEPS = iree_select({
     "//loom/config/target:amdgpu_artifacts": [
         "//loom/src/loom/target/arch/amdgpu:provider",
         "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
+        "//loom/src/loom/tooling/target/amdgpu:testbench_requirements",
     ],
     "//conditions:default": [],
 })

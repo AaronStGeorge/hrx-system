@@ -30,6 +30,7 @@ _AMDGPU_EXECUTE_COPTS = iree_select({
 _AMDGPU_EXECUTE_DEPS = iree_select({
     "//loom/config/execute:amdgpu_hal": [
         "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
+        "//loom/src/loom/tooling/target/amdgpu:testbench_requirements",
         "//loom/src/loom/tooling/target/amdgpu/execution:provider",
     ],
     "//conditions:default": [],

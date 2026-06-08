@@ -441,6 +441,7 @@ loom_cc_library(
     loom::target::function_contract
     loom::target::launch
     loom::target::provider
+    loom::target::types
     loom::verify
   PUBLIC
 )

@@ -32,6 +32,7 @@
 #if IREE_BENCHMARK_LOOM_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/provider.h"
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
+#include "loom/tooling/target/amdgpu/testbench_requirements.h"
 #endif  // IREE_BENCHMARK_LOOM_HAVE_AMDGPU
 #if IREE_BENCHMARK_LOOM_HAVE_IREE_VM
 #include "loom/tooling/execution/ireevm/provider.h"
@@ -105,7 +106,7 @@ static const loom_run_hal_artifact_provider_registry_t
 #endif  // IREE_BENCHMARK_LOOM_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 };
 
-#if IREE_BENCHMARK_LOOM_HAVE_SPIRV
+#if IREE_BENCHMARK_LOOM_HAVE_AMDGPU || IREE_BENCHMARK_LOOM_HAVE_SPIRV
 static iree_status_t iree_benchmark_loom_append_requirement_provider(
     iree_host_size_t provider_capacity,
     loom_testbench_requirement_provider_t* providers,
@@ -119,7 +120,7 @@ static iree_status_t iree_benchmark_loom_append_requirement_provider(
   providers[(*inout_provider_count)++] = provider;
   return iree_ok_status();
 }
-#endif  // IREE_BENCHMARK_LOOM_HAVE_SPIRV
+#endif  // IREE_BENCHMARK_LOOM_HAVE_AMDGPU || IREE_BENCHMARK_LOOM_HAVE_SPIRV
 
 static iree_status_t iree_benchmark_loom_populate_requirement_providers(
     void* user_data, loom_run_hal_testbench_context_t* hal_context,
@@ -127,18 +128,26 @@ static iree_status_t iree_benchmark_loom_populate_requirement_providers(
     loom_testbench_requirement_provider_t* providers,
     iree_host_size_t* inout_provider_count) {
   (void)user_data;
+#if IREE_BENCHMARK_LOOM_HAVE_AMDGPU
+  loom_testbench_requirement_provider_t amdgpu_provider = {0};
+  loom_amdgpu_hal_testbench_requirement_provider_initialize(hal_context,
+                                                            &amdgpu_provider);
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_append_requirement_provider(
+      provider_capacity, providers, inout_provider_count, amdgpu_provider));
+#endif  // IREE_BENCHMARK_LOOM_HAVE_AMDGPU
 #if IREE_BENCHMARK_LOOM_HAVE_SPIRV
   loom_testbench_requirement_provider_t spirv_provider = {0};
   loom_spirv_vulkan_hal_testbench_requirement_provider_initialize(
       hal_context, &spirv_provider);
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_append_requirement_provider(
       provider_capacity, providers, inout_provider_count, spirv_provider));
-#else
+#endif  // IREE_BENCHMARK_LOOM_HAVE_SPIRV
+#if !IREE_BENCHMARK_LOOM_HAVE_AMDGPU && !IREE_BENCHMARK_LOOM_HAVE_SPIRV
   (void)hal_context;
   (void)provider_capacity;
   (void)providers;
   (void)inout_provider_count;
-#endif  // IREE_BENCHMARK_LOOM_HAVE_SPIRV
+#endif  // !IREE_BENCHMARK_LOOM_HAVE_AMDGPU && !IREE_BENCHMARK_LOOM_HAVE_SPIRV
   return iree_ok_status();
 }
 
