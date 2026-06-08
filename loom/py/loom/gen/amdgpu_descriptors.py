@@ -136,7 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             descriptor_set,
             view_descriptor_sets,
         )
-        generated = generate_descriptor_set(descriptor_set, format_output=False)
+        generated = generate_descriptor_set(descriptor_set)
         args.header.parent.mkdir(parents=True, exist_ok=True)
         args.source.parent.mkdir(parents=True, exist_ok=True)
         args.header.write_text(generated.header, encoding="utf-8")
@@ -144,7 +144,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             generate_descriptor_set_shared_source(
                 storage_descriptor_set,
                 (descriptor_set, *view_descriptor_sets),
-                format_output=False,
             ),
             encoding="utf-8",
         )
@@ -152,10 +151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             view_header_path = view_headers.get(view_info.generator_target)
             if view_header_path is None:
                 continue
-            view_generated = generate_descriptor_set(
-                view_descriptor_set,
-                format_output=False,
-            )
+            view_generated = generate_descriptor_set(view_descriptor_set)
             view_header_path.parent.mkdir(parents=True, exist_ok=True)
             view_header_path.write_text(
                 view_generated.header,

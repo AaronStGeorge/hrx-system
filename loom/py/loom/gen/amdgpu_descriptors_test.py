@@ -80,13 +80,12 @@ def test_storage_generation_reuses_parsed_isa_for_declared_views() -> None:
         descriptor_count = 2 if target == view_target else 1
         return _descriptor_set(target, descriptor_count)
 
-    def generate_descriptor_set(descriptor_set: DescriptorSet, format_output: bool) -> SimpleNamespace:
+    def generate_descriptor_set(descriptor_set: DescriptorSet) -> SimpleNamespace:
         return SimpleNamespace(header=f"// {descriptor_set.key}\n")
 
     def generate_descriptor_set_shared_source(
         storage_descriptor_set: DescriptorSet,
         view_descriptor_sets: tuple[DescriptorSet, ...],
-        format_output: bool,
     ) -> str:
         return "// shared\n"
 

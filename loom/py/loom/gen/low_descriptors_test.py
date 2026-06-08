@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from typing import cast
 
@@ -205,7 +206,6 @@ def test_shared_source_emits_one_storage_table_with_multiple_views() -> None:
     source = generate_descriptor_set_shared_source(
         storage_set,
         (base_view, extension_view),
-        format_output=False,
     )
 
     assert source.count("static const loom_low_descriptor_t kTestLowCoreDescriptors[]") == 1
@@ -239,7 +239,6 @@ def test_shared_source_emits_sibling_view_descriptor_surfaces() -> None:
     source = generate_descriptor_set_shared_source(
         storage_set,
         (first_view, sibling_view, storage_set),
-        format_output=False,
     )
 
     assert source.count("static const loom_low_operand_t kTestLowCoreOperands[]") == 1
@@ -315,7 +314,7 @@ def test_generator_rejects_unknown_hazard_resource() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("schedule class 'test.scalar.alu' hazard references unknown resource 'missing'"),
+        match=re.escape("schedule class 'test.scalar.alu' hazard references unknown resource 'missing'"),
     ):
         generate_descriptor_set(
             descriptor_set,
@@ -340,7 +339,7 @@ def test_generator_rejects_ambiguous_hazard_reference() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("schedule class 'test.scalar.alu' hazard must reference exactly one resource, counter, or target id"),
+        match=re.escape("schedule class 'test.scalar.alu' hazard must reference exactly one resource, counter, or target id"),
     ):
         generate_descriptor_set(
             descriptor_set,
@@ -375,7 +374,7 @@ def test_generator_rejects_asm_form_unknown_operand_field() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' asm form 'test.add.i32' operand references unknown operand field 'missing'"),
+        match=re.escape("descriptor 'test.add.i32' asm form 'test.add.i32' operand references unknown operand field 'missing'"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -389,7 +388,7 @@ def test_generator_rejects_asm_form_result_with_operand_role() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' asm form 'test.add.i32' result field 'lhs' names a non-result operand"),
+        match=re.escape("descriptor 'test.add.i32' asm form 'test.add.i32' result field 'lhs' names a non-result operand"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -426,7 +425,7 @@ def test_generator_rejects_ambiguous_asm_mnemonics() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("asm mnemonic 'dup' is ambiguous between descriptors 'test.add.i32' and 'test.mul.i32'"),
+        match=re.escape("asm mnemonic 'dup' is ambiguous between descriptors 'test.add.i32' and 'test.mul.i32'"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -440,7 +439,7 @@ def test_generator_rejects_asm_form_unknown_immediate_field() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' asm form 'test.const.i32' immediate references unknown immediate field 'missing'"),
+        match=re.escape("descriptor 'test.const.i32' asm form 'test.const.i32' immediate references unknown immediate field 'missing'"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -462,7 +461,7 @@ def test_generator_rejects_duplicate_asm_immediate_name() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.cond_br.i32' asm form 'test.cond_br.i32' uses immediate name 'target' more than once"),
+        match=re.escape("descriptor 'test.cond_br.i32' asm form 'test.cond_br.i32' uses immediate name 'target' more than once"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -477,7 +476,7 @@ def test_generator_rejects_asm_form_without_mnemonic() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' asm form must specify a mnemonic because the descriptor has no default mnemonic"),
+        match=re.escape("descriptor 'test.add.i32' asm form must specify a mnemonic because the descriptor has no default mnemonic"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -491,7 +490,7 @@ def test_generator_rejects_empty_asm_form_mnemonic() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' asm form specifies an empty mnemonic"),
+        match=re.escape("descriptor 'test.add.i32' asm form specifies an empty mnemonic"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -501,7 +500,7 @@ def test_generator_rejects_missing_schedule_resource() -> None:
 
     with pytest.raises(
         ValueError,
-        match="schedule class 'test.scalar.alu' references unknown resource 'test.scalar'",
+        match=re.escape("schedule class 'test.scalar.alu' references unknown resource 'test.scalar'"),
     ):
         generate_descriptor_set(
             bad_resource_set,
@@ -554,7 +553,7 @@ def test_generator_rejects_missing_enum_immediate_domain() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' enum immediate 'i32_value' has no enum domain"),
+        match=re.escape("descriptor 'test.const.i32' enum immediate 'i32_value' has no enum domain"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -573,7 +572,7 @@ def test_generator_rejects_unknown_enum_immediate_domain() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' enum immediate 'i32_value' references unknown enum domain 'missing'"),
+        match=re.escape("descriptor 'test.const.i32' enum immediate 'i32_value' references unknown enum domain 'missing'"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -591,7 +590,7 @@ def test_generator_rejects_non_enum_immediate_domain() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' non-enum immediate 'i32_value' references enum domain 'test.condition'"),
+        match=re.escape("descriptor 'test.const.i32' non-enum immediate 'i32_value' references enum domain 'test.condition'"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -627,7 +626,7 @@ def test_generator_rejects_default_without_default_flag() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' immediate 'i32_value' has a default value without the default-value flag"),
+        match=re.escape("descriptor 'test.const.i32' immediate 'i32_value' has a default value without the default-value flag"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -648,7 +647,7 @@ def test_generator_rejects_default_outside_unsigned_range() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' immediate 'i32_value' default value is out of unsigned range"),
+        match=re.escape("descriptor 'test.const.i32' immediate 'i32_value' default value is out of unsigned range"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -677,7 +676,7 @@ def test_generator_rejects_default_outside_enum_domain() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' immediate 'i32_value' default value is not in enum domain 'test.condition'"),
+        match=re.escape("descriptor 'test.const.i32' immediate 'i32_value' default value is not in enum domain 'test.condition'"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -694,7 +693,7 @@ def test_generator_rejects_missing_schedule_class() -> None:
 
     with pytest.raises(
         ValueError,
-        match="descriptor 'test.add.i32' has no schedule class",
+        match=re.escape("descriptor 'test.add.i32' has no schedule class"),
     ):
         generate_descriptor_set(bad_set)
 
@@ -714,7 +713,7 @@ def test_generator_rejects_result_after_operand() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' has result operand 'dst' after non-result operands"),
+        match=re.escape("descriptor 'test.add.i32' has result operand 'dst' after non-result operands"),
     ):
         generate_descriptor_set(bad_set)
 
@@ -735,7 +734,7 @@ def test_generator_rejects_operand_result_role() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operand 'dst' uses OPERAND_RESULT; use separate result and operand rows plus an explicit constraint"),
+        match=re.escape("descriptor 'test.add.i32' operand 'dst' uses OPERAND_RESULT; use separate result and operand rows plus an explicit constraint"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -758,7 +757,7 @@ def test_generator_rejects_implicit_operand_without_implicit_flag() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' implicit operand 'lhs' must set the implicit flag"),
+        match=re.escape("descriptor 'test.add.i32' implicit operand 'lhs' must set the implicit flag"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -836,7 +835,7 @@ def test_generator_rejects_direct_address_map_with_unit_count() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operand 'dst' direct address map must not set an addressable unit count"),
+        match=re.escape("descriptor 'test.add.i32' operand 'dst' direct address map must not set an addressable unit count"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -857,7 +856,7 @@ def test_generator_rejects_bounded_address_map_without_unit_count() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operand 'dst' bounded address map must set an addressable unit count"),
+        match=re.escape("descriptor 'test.add.i32' operand 'dst' bounded address map must set an addressable unit count"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -882,7 +881,7 @@ def test_generator_rejects_bounded_address_map_on_implicit_operand() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operand 'lhs' bounded address map must apply to an explicit value operand"),
+        match=re.escape("descriptor 'test.add.i32' operand 'lhs' bounded address map must apply to an explicit value operand"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -905,7 +904,7 @@ def test_generator_rejects_bounded_address_map_smaller_than_operand() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operand 'dst' bounded address map covers fewer units than the operand consumes"),
+        match=re.escape("descriptor 'test.add.i32' operand 'dst' bounded address map covers fewer units than the operand consumes"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -928,7 +927,7 @@ def test_generator_rejects_bounded_address_map_without_concrete_alt() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operand 'dst' bounded address map requires a concrete register-class alternative"),
+        match=re.escape("descriptor 'test.add.i32' operand 'dst' bounded address map requires a concrete register-class alternative"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -947,7 +946,7 @@ def test_generator_rejects_untied_duplicate_operand_encoding_field() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operands 'dst' and 'lhs' share encoding field id 7 without a tied constraint"),
+        match=re.escape("descriptor 'test.add.i32' operands 'dst' and 'lhs' share encoding field id 7 without a tied constraint"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -966,7 +965,7 @@ def test_generator_rejects_operand_fixed_encoding_field_overlap() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' operand 'dst' shares fixed encoding field id 7"),
+        match=re.escape("descriptor 'test.add.i32' operand 'dst' shares fixed encoding field id 7"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -1015,7 +1014,7 @@ def test_generator_rejects_immediate_with_direct_and_sliced_encoding() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' immediate 'i32_value' uses both direct and sliced encoding fields"),
+        match=re.escape("descriptor 'test.const.i32' immediate 'i32_value' uses both direct and sliced encoding fields"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -1035,7 +1034,7 @@ def test_generator_rejects_incomplete_sliced_immediate_encoding() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.const.i32' immediate 'i32_value' encoding slices cover 0xffff instead of 0xffffffff"),
+        match=re.escape("descriptor 'test.const.i32' immediate 'i32_value' encoding slices cover 0xffff instead of 0xffffffff"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -1049,7 +1048,7 @@ def test_generator_rejects_absent_encoding_without_pseudo_flag() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' uses absent encoding id without the pseudo flag"),
+        match=re.escape("descriptor 'test.add.i32' uses absent encoding id without the pseudo flag"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -1066,7 +1065,7 @@ def test_generator_rejects_pseudo_flag_with_target_encoding() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' uses the pseudo flag with a target encoding id"),
+        match=re.escape("descriptor 'test.add.i32' uses the pseudo flag with a target encoding id"),
     ):
         generate_descriptor_set(descriptor_set)
 
@@ -1085,6 +1084,6 @@ def test_generator_rejects_pseudo_flag_with_target_encoding_format() -> None:
 
     with pytest.raises(
         ValueError,
-        match=("descriptor 'test.add.i32' uses the pseudo flag with a target encoding format id"),
+        match=re.escape("descriptor 'test.add.i32' uses the pseudo flag with a target encoding format id"),
     ):
         generate_descriptor_set(descriptor_set)

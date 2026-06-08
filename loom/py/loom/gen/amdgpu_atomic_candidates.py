@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -33,17 +32,6 @@ from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
 from loom.target.low_descriptors import target_relative_name  # noqa: E402
 
 
-def _clang_format_source(source: str, assume_filename: Path) -> str:
-    result = subprocess.run(
-        ["clang-format", f"--assume-filename={assume_filename}"],
-        input=source,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    return result.stdout
-
-
 def _c_identifier(value: str) -> str:
     identifier = re.sub(r"[^0-9A-Za-z_]", "_", value).strip("_")
     if not identifier:
@@ -57,7 +45,7 @@ def _descriptor_ref_constant_name(key: str) -> str:
     return f"LOOM_AMDGPU_DESCRIPTOR_REF_{_c_identifier(target_relative_name('amdgpu', key))}"
 
 
-def _emit_header(*, header_path: Path, format_output: bool) -> str:
+def _emit_header() -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -113,10 +101,7 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
         "",
         "#endif  // LOOM_TARGET_ARCH_AMDGPU_LOWER_ATOMIC_CANDIDATES_H_",
     ]
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, header_path)
+    return "\n".join(lines) + "\n"
 
 
 def _candidate_initializer(candidate: AmdgpuAtomicDescriptorCandidate) -> str:
@@ -134,7 +119,7 @@ def _candidate_initializer(candidate: AmdgpuAtomicDescriptorCandidate) -> str:
     )
 
 
-def _emit_source(*, public_header: str, source_path: Path, format_output: bool) -> str:
+def _emit_source(*, public_header: str) -> str:
     candidates = amdgpu_atomic_descriptor_candidates()
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -158,10 +143,7 @@ def _emit_source(*, public_header: str, source_path: Path, format_output: bool) 
         "const iree_host_size_t kLoomAmdgpuAtomicDescriptorCandidateCount =",
         "    IREE_ARRAYSIZE(kLoomAmdgpuAtomicDescriptorCandidates);",
     ]
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, source_path)
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -183,21 +165,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="loom/target/arch/amdgpu/atomic_candidates.h",
         help="Public include path for the generated header.",
     )
-    parser.add_argument("--format", action="store_true")
     args = parser.parse_args(argv)
 
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
-        _emit_header(header_path=args.header, format_output=args.format),
+        _emit_header(),
         encoding="utf-8",
     )
     args.source.write_text(
-        _emit_source(
-            public_header=args.public_header,
-            source_path=args.source,
-            format_output=args.format,
-        ),
+        _emit_source(public_header=args.public_header),
         encoding="utf-8",
     )
     return 0

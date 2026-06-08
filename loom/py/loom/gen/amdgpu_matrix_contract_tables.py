@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -134,17 +133,6 @@ class _MatrixDescriptorShape:
     result_register_count: int
     has_sparse_index: bool
     has_scale_operands: bool
-
-
-def _clang_format_source(source: str, assume_filename: Path) -> str:
-    result = subprocess.run(
-        ["clang-format", f"--assume-filename={assume_filename}"],
-        input=source,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    return result.stdout
 
 
 def _c_identifier(value: str) -> str:
@@ -434,7 +422,7 @@ def _contract_initializer(
     )
 
 
-def _emit_header(*, header_path: Path, format_output: bool) -> str:
+def _emit_header() -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -465,13 +453,10 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
         "",
         "#endif  // LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_TABLES_H_",
     ]
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, header_path)
+    return "\n".join(lines) + "\n"
 
 
-def _emit_source(*, public_header: str, source_path: Path, format_output: bool) -> str:
+def _emit_source(*, public_header: str) -> str:
     keys_by_semantic_tag = _matrix_descriptor_keys_by_semantic_tag()
     descriptor_shapes_by_key = _matrix_descriptor_shapes_by_key()
     lines = [
@@ -504,10 +489,7 @@ def _emit_source(*, public_header: str, source_path: Path, format_output: bool) 
             "    IREE_ARRAYSIZE(kLoomAmdgpuMatrixContractDescriptors);",
         ]
     )
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, source_path)
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -529,21 +511,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="loom/target/arch/amdgpu/matrix_contract_tables.h",
         help="Public include path for the generated header.",
     )
-    parser.add_argument("--format", action="store_true")
     args = parser.parse_args(argv)
 
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
-        _emit_header(header_path=args.header, format_output=args.format),
+        _emit_header(),
         encoding="utf-8",
     )
     args.source.write_text(
-        _emit_source(
-            public_header=args.public_header,
-            source_path=args.source,
-            format_output=args.format,
-        ),
+        _emit_source(public_header=args.public_header),
         encoding="utf-8",
     )
     return 0

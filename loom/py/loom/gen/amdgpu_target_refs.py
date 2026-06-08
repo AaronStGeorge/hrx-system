@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -41,17 +40,6 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     sorted_descriptor_set_infos,
 )
 from loom.target.low_descriptors import target_relative_name  # noqa: E402
-
-
-def _clang_format_source(source: str, assume_filename: Path) -> str:
-    result = subprocess.run(
-        ["clang-format", f"--assume-filename={assume_filename}"],
-        input=source,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    return result.stdout
 
 
 def _parse_isa_xml_argument(value: str) -> tuple[str, Path]:
@@ -129,7 +117,7 @@ def _materialize_descriptor_ref_tables(
     return descriptor_set_tables
 
 
-def _emit_header(*, header_path: Path, format_output: bool) -> str:
+def _emit_header() -> str:
     descriptor_ref_keys = amdgpu_descriptor_ref_keys()
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -180,18 +168,13 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
             "#endif  // LOOM_TARGET_ARCH_AMDGPU_TARGET_REFS_H_",
         ]
     )
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, header_path)
+    return "\n".join(lines) + "\n"
 
 
 def _emit_source(
     *,
     public_header: str,
-    source_path: Path,
     isa_specs: Mapping[str, AmdgpuIsaFactSource],
-    format_output: bool,
 ) -> str:
     descriptor_set_tables = _materialize_descriptor_ref_tables(isa_specs)
     lines = [
@@ -259,10 +242,7 @@ def _emit_source(
             "}",
         ]
     )
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, source_path)
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -290,22 +270,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=[],
         help="ISA XML fact source as key:path.",
     )
-    parser.add_argument("--format", action="store_true")
     args = parser.parse_args(argv)
 
     isa_specs = _parse_isa_xml_arguments(args.isa_xml)
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
-        _emit_header(header_path=args.header, format_output=args.format),
+        _emit_header(),
         encoding="utf-8",
     )
     args.source.write_text(
         _emit_source(
             public_header=args.public_header,
-            source_path=args.source,
             isa_specs=isa_specs,
-            format_output=args.format,
         ),
         encoding="utf-8",
     )

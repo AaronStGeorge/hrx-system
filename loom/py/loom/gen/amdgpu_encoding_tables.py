@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import re
 import struct
-import subprocess
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -221,17 +220,6 @@ def _view_infos_for_storage_target(
     return view_infos
 
 
-def _clang_format_source(source: str, assume_filename: Path) -> str:
-    result = subprocess.run(
-        ["clang-format", f"--assume-filename={assume_filename}"],
-        input=source,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    return result.stdout
-
-
 def _c_identifier(value: str) -> str:
     identifier = re.sub(r"[^0-9A-Za-z_]", "_", value).strip("_")
     if not identifier:
@@ -332,8 +320,6 @@ def _emit_header(
     *,
     header_guard: str,
     table_function: str,
-    format_output: bool,
-    header_path: Path,
 ) -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -372,23 +358,16 @@ def _emit_header(
             f"#endif  // {header_guard}",
         ]
     )
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, header_path)
+    return "\n".join(lines) + "\n"
 
 
 def _emit_header_for_target(
     *,
     target: str,
-    format_output: bool,
-    header_path: Path,
 ) -> str:
     return _emit_header(
         header_guard=f"LOOM_TARGET_ARCH_AMDGPU_{target.upper()}_ENCODING_TABLES_H_",
         table_function=f"loom_amdgpu_{target}_encoding_table",
-        format_output=format_output,
-        header_path=header_path,
     )
 
 
@@ -556,8 +535,6 @@ def _emit_source(
     inline_f32_sources: tuple[_InlineF32Source, ...],
     vector_source_vgpr0: int,
     vector_source_vgpr_count: int,
-    source_path: Path,
-    format_output: bool,
 ) -> str:
     encodings = _with_supplemental_encodings(target, encodings)
     compiled_formats, compiled_fields, compiled_ranges = _compile_formats(
@@ -707,10 +684,7 @@ def _emit_source(
                 "",
             ]
         )
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, source_path)
+    return "\n".join(lines) + "\n"
 
 
 def _parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -727,7 +701,6 @@ def _parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=[],
         help="Generated encoding-table view header as <target>=<path>.",
     )
-    parser.add_argument("--format", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -772,8 +745,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.header.write_text(
         _emit_header_for_target(
             target=args.target,
-            format_output=args.format,
-            header_path=args.header,
         ),
         encoding="utf-8",
     )
@@ -785,8 +756,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         view_header_path.write_text(
             _emit_header_for_target(
                 target=view_info.generator_target,
-                format_output=args.format,
-                header_path=view_header_path,
             ),
             encoding="utf-8",
         )
@@ -814,8 +783,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             inline_f32_sources=inline_f32_sources,
             vector_source_vgpr0=vector_source_vgpr0,
             vector_source_vgpr_count=vector_source_vgpr_count,
-            source_path=args.source,
-            format_output=args.format,
         ),
         encoding="utf-8",
     )

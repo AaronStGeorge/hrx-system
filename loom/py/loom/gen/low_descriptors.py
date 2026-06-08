@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -409,17 +408,6 @@ def _validate_immediate_encoding(descriptor: Descriptor, immediate: Immediate) -
 
 def _hazard_reference_count(hazard: Hazard) -> int:
     return sum(reference is not None for reference in (hazard.resource, hazard.counter_id, hazard.target_id))
-
-
-def _clang_format_source(source: str, assume_filename: Path) -> str:
-    result = subprocess.run(
-        ["clang-format", f"--assume-filename={assume_filename}"],
-        input=source,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    return result.stdout
 
 
 def _select_descriptors(spec: DescriptorSet, allowlist: DescriptorAllowlist | None) -> list[Descriptor]:
@@ -1404,8 +1392,6 @@ def _compile_descriptor_set(
 def _emit_header_for_spec(
     compiled: _CompiledDescriptorSet,
     header_spec: DescriptorSet,
-    *,
-    format_output: bool,
 ) -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -1478,18 +1464,11 @@ def _emit_header_for_spec(
             f"#endif  // {header_spec.header_guard}",
         ]
     )
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, header_spec.c_header_path)
+    return "\n".join(lines) + "\n"
 
 
-def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
-    return _emit_header_for_spec(
-        compiled,
-        compiled.spec,
-        format_output=format_output,
-    )
+def _emit_header(compiled: _CompiledDescriptorSet) -> str:
+    return _emit_header_for_spec(compiled, compiled.spec)
 
 
 def _emit_string_table(compiled: _CompiledDescriptorSet, lines: list[str]) -> None:
@@ -1857,7 +1836,6 @@ def _emit_source_for_views(
     compiled: _CompiledDescriptorSet,
     *,
     views: Sequence[_DescriptorSetView],
-    format_output: bool,
 ) -> str:
     spec = compiled.spec
     pool = compiled.string_pool
@@ -2379,13 +2357,10 @@ def _emit_source_for_views(
         view_lines.append("}")
         lines.extend(view_lines)
         lines.append("")
-    source = "\n".join(lines) + "\n"
-    if not format_output:
-        return source
-    return _clang_format_source(source, spec.c_source_path)
+    return "\n".join(lines) + "\n"
 
 
-def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
+def _emit_source(compiled: _CompiledDescriptorSet) -> str:
     return _emit_source_for_views(
         compiled,
         views=[
@@ -2402,7 +2377,6 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 uses_storage_operand_form_tables=True,
             )
         ],
-        format_output=format_output,
     )
 
 
@@ -2502,13 +2476,11 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
 def generate_descriptor_set(
     spec: DescriptorSet,
     allowlist: DescriptorAllowlist | None = None,
-    *,
-    format_output: bool = True,
 ) -> GeneratedDescriptorSet:
     compiled = _compile_descriptor_set(spec, allowlist)
     return GeneratedDescriptorSet(
-        header=_emit_header(compiled, format_output=format_output),
-        source=_emit_source(compiled, format_output=format_output),
+        header=_emit_header(compiled),
+        source=_emit_source(compiled),
         manifest_json=_emit_manifest_json(compiled),
     )
 
@@ -2516,8 +2488,6 @@ def generate_descriptor_set(
 def generate_descriptor_set_shared_source(
     storage_spec: DescriptorSet,
     view_specs: Sequence[DescriptorSet],
-    *,
-    format_output: bool = True,
 ) -> str:
     """Generates one C source containing shared storage and multiple set views.
 
@@ -2536,14 +2506,12 @@ def generate_descriptor_set_shared_source(
         allow_ambiguous_asm_mnemonics=True,
     )
     views = tuple(_descriptor_set_view_for_spec(compiled, view_spec) for view_spec in view_specs)
-    return _emit_source_for_views(compiled, views=views, format_output=format_output)
+    return _emit_source_for_views(compiled, views=views)
 
 
 def generate_descriptor_set_shared_header(
     storage_spec: DescriptorSet,
     view_spec: DescriptorSet,
-    *,
-    format_output: bool = True,
 ) -> str:
     """Generates a public view header for a shared descriptor storage source."""
 
@@ -2553,11 +2521,7 @@ def generate_descriptor_set_shared_header(
         allow_ambiguous_asm_mnemonics=True,
     )
     _descriptor_set_view_for_spec(compiled, view_spec)
-    return _emit_header_for_spec(
-        compiled,
-        view_spec,
-        format_output=format_output,
-    )
+    return _emit_header_for_spec(compiled, view_spec)
 
 
 def write_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> None:
@@ -2574,9 +2538,8 @@ def write_descriptor_set_to_paths(
     header_path: Path,
     source_path: Path,
     allowlist: DescriptorAllowlist | None = None,
-    format_output: bool = False,
 ) -> None:
-    generated = generate_descriptor_set(spec, allowlist, format_output=format_output)
+    generated = generate_descriptor_set(spec, allowlist)
     header_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.parent.mkdir(parents=True, exist_ok=True)
     header_path.write_text(generated.header, encoding="utf-8")
