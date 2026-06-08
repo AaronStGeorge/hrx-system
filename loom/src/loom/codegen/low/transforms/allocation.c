@@ -50,18 +50,15 @@ static const loom_pass_option_def_t kLowMaterializeAllocationOptions[] = {
               "spill lowering path, or all/none.")},
 };
 
-enum {
-  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_STORAGE = 0,
-  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS = 1,
-  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS = 2,
-};
+#define LOOM_LOW_MATERIALIZE_ALLOCATION_STATISTICS(V, statistics_type)         \
+  V(statistics_type, storage, "storage",                                       \
+    "Number of low.storage.reserve ops inserted.")                             \
+  V(statistics_type, spills, "spills", "Number of low.spill stores inserted.") \
+  V(statistics_type, reloads, "reloads", "Number of low.reload ops inserted.")
 
-static const loom_pass_statistic_def_t kLowMaterializeAllocationStatistics[] = {
-    {IREE_SVL("storage"),
-     IREE_SVL("Number of low.storage.reserve ops inserted.")},
-    {IREE_SVL("spills"), IREE_SVL("Number of low.spill stores inserted.")},
-    {IREE_SVL("reloads"), IREE_SVL("Number of low.reload ops inserted.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_low_materialize_allocation_statistics,
+                            loom_low_materialize_allocation_statistics_t,
+                            LOOM_LOW_MATERIALIZE_ALLOCATION_STATISTICS)
 
 static const loom_pass_info_t
     loom_low_materialize_allocation_pass_info_storage = {
@@ -71,8 +68,7 @@ static const loom_pass_info_t
         .kind = LOOM_PASS_FUNCTION,
         .option_defs = kLowMaterializeAllocationOptions,
         .option_count = IREE_ARRAYSIZE(kLowMaterializeAllocationOptions),
-        .statistic_defs = kLowMaterializeAllocationStatistics,
-        .statistic_count = IREE_ARRAYSIZE(kLowMaterializeAllocationStatistics),
+        .statistic_layout = &loom_low_materialize_allocation_statistics_layout,
 };
 
 const loom_pass_info_t* loom_low_materialize_allocation_pass_info(void) {
@@ -419,12 +415,11 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
           table.spill_plan_count);
     }
 
-    loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_STORAGE,
-                            result.storage_count);
-    loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS,
-                            result.spill_count);
-    loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS,
-                            result.reload_count);
+    loom_low_materialize_allocation_statistics_t* statistics =
+        loom_low_materialize_allocation_statistics(pass);
+    statistics->storage += (int64_t)result.storage_count;
+    statistics->spills += (int64_t)result.spill_count;
+    statistics->reloads += (int64_t)result.reload_count;
     loom_pass_mark_changed(pass);
     allow_existing_storage_traffic = true;
     ++iteration_count;

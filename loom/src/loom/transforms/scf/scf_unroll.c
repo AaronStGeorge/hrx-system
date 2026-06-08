@@ -28,26 +28,23 @@
 // Options and statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_SCF_UNROLL_STAT_LOOPS_UNROLLED = 0,
-  LOOM_SCF_UNROLL_STAT_ITERATIONS_MATERIALIZED = 1,
-  LOOM_SCF_UNROLL_STAT_POLICIES_CLEARED = 2,
-};
+#define LOOM_SCF_UNROLL_STATISTICS(V, statistics_type)                   \
+  V(statistics_type, loops_unrolled, "loops-unrolled",                   \
+    "Number of scf.for loops unrolled.")                                 \
+  V(statistics_type, iterations_materialized, "iterations-materialized", \
+    "Number of loop body copies materialized.")                          \
+  V(statistics_type, policies_cleared, "policies-cleared",               \
+    "Number of no-op scf.for unroll policies removed.")
 
-static const loom_pass_statistic_def_t kScfUnrollStatistics[] = {
-    {IREE_SVL("loops-unrolled"), IREE_SVL("Number of scf.for loops unrolled.")},
-    {IREE_SVL("iterations-materialized"),
-     IREE_SVL("Number of loop body copies materialized.")},
-    {IREE_SVL("policies-cleared"),
-     IREE_SVL("Number of no-op scf.for unroll policies removed.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_scf_unroll_statistics,
+                            loom_scf_unroll_statistics_t,
+                            LOOM_SCF_UNROLL_STATISTICS)
 
 static const loom_pass_info_t loom_scf_unroll_pass_info_storage = {
     .name = IREE_SVL("unroll-scf-for"),
     .description = IREE_SVL("Consume local scf.for unroll policies."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kScfUnrollStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kScfUnrollStatistics),
+    .statistic_layout = &loom_scf_unroll_statistics_layout,
 };
 
 const loom_pass_info_t* loom_scf_unroll_pass_info(void) {
@@ -127,6 +124,8 @@ static iree_status_t loom_scf_unroll_collect_loop(
 typedef struct loom_scf_unroll_context_t {
   // Current pass invocation.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_scf_unroll_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Rewriter used for cloning and erasure.
@@ -481,10 +480,7 @@ static iree_status_t loom_scf_unroll_clear_policy(
       value_checkpoint));
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       context->rewriter, op, new_results.values, new_results.count));
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass,
-                            LOOM_SCF_UNROLL_STAT_POLICIES_CLEARED, 1);
-  }
+  ++context->statistics->policies_cleared;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -597,13 +593,8 @@ static iree_status_t loom_scf_unroll_try_unroll(
     IREE_RETURN_IF_ERROR(loom_rewriter_erase(context->rewriter, op));
   }
 
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass, LOOM_SCF_UNROLL_STAT_LOOPS_UNROLLED,
-                            1);
-    loom_pass_statistic_add(context->pass,
-                            LOOM_SCF_UNROLL_STAT_ITERATIONS_MATERIALIZED,
-                            trip_count);
-  }
+  ++context->statistics->loops_unrolled;
+  context->statistics->iterations_materialized += trip_count;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -654,6 +645,7 @@ iree_status_t loom_scf_unroll_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_scf_unroll_context_t context = {
       .pass = pass,
+      .statistics = loom_scf_unroll_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
   };

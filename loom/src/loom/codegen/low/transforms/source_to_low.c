@@ -47,20 +47,18 @@ static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
               "means no limit.")},
 };
 
-enum {
-  LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS = 0,
-  LOOM_LOW_SOURCE_TO_LOW_STAT_FUNCTIONS = 1,
-  LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS = 2,
-  LOOM_LOW_SOURCE_TO_LOW_STAT_DECLARATIONS = 3,
-};
+#define LOOM_LOW_SOURCE_TO_LOW_STATISTICS(V, statistics_type)                \
+  V(statistics_type, errors, "errors", "Number of lowering errors emitted.") \
+  V(statistics_type, functions, "functions",                                 \
+    "Number of source funcs lowered.")                                       \
+  V(statistics_type, remarks, "remarks",                                     \
+    "Number of lowering remarks emitted.")                                   \
+  V(statistics_type, declarations, "declarations",                           \
+    "Number of source import declarations lowered.")
 
-static const loom_pass_statistic_def_t kLowSourceToLowStatistics[] = {
-    {IREE_SVL("errors"), IREE_SVL("Number of lowering errors emitted.")},
-    {IREE_SVL("functions"), IREE_SVL("Number of source funcs lowered.")},
-    {IREE_SVL("remarks"), IREE_SVL("Number of lowering remarks emitted.")},
-    {IREE_SVL("declarations"),
-     IREE_SVL("Number of source import declarations lowered.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_low_source_to_low_statistics,
+                            loom_low_source_to_low_statistics_t,
+                            LOOM_LOW_SOURCE_TO_LOW_STATISTICS)
 
 static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
     .name = IREE_SVL("source-to-low"),
@@ -68,8 +66,7 @@ static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
     .kind = LOOM_PASS_MODULE,
     .option_defs = kLowSourceToLowOptions,
     .option_count = IREE_ARRAYSIZE(kLowSourceToLowOptions),
-    .statistic_defs = kLowSourceToLowStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kLowSourceToLowStatistics),
+    .statistic_layout = &loom_low_source_to_low_statistics_layout,
 };
 
 const loom_pass_info_t* loom_low_source_to_low_pass_info(void) {
@@ -219,6 +216,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
                                          loom_module_t* module) {
   const loom_low_source_to_low_pass_state_t* state =
       (const loom_low_source_to_low_pass_state_t*)pass->state;
+  loom_low_source_to_low_statistics_t* statistics =
+      loom_low_source_to_low_statistics(pass);
   const loom_low_pass_capability_t* low_capability =
       loom_low_pass_capability_from_pass(pass);
   const loom_low_descriptor_registry_t* descriptor_registry =
@@ -262,10 +261,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_import_declaration(module, selection->func,
                                                &lower_options, &lower_result);
-    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS,
-                            lower_result.error_count);
-    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,
-                            lower_result.remark_count);
+    statistics->errors += (int64_t)lower_result.error_count;
+    statistics->remarks += (int64_t)lower_result.remark_count;
     if (iree_status_is_ok(status) && lower_result.error_count > 0) {
       emitted_error_diagnostics = true;
       break;
@@ -315,10 +312,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     status = loom_low_lower_function(module, selection->func, &lower_options,
                                      &lower_result);
     loom_pass_value_fact_owner_invalidate(pass->value_facts);
-    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS,
-                            lower_result.error_count);
-    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,
-                            lower_result.remark_count);
+    statistics->errors += (int64_t)lower_result.error_count;
+    statistics->remarks += (int64_t)lower_result.remark_count;
     if (iree_status_is_ok(status) && lower_result.error_count > 0) {
       emitted_error_diagnostics = true;
       break;
@@ -331,10 +326,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);
 
-  loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_DECLARATIONS,
-                          declaration_count);
-  loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_FUNCTIONS,
-                          function_count);
+  statistics->declarations += (int64_t)declaration_count;
+  statistics->functions += (int64_t)function_count;
   if (declaration_count + function_count > 0) {
     loom_pass_mark_changed(pass);
   }

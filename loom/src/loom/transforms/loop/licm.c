@@ -12,28 +12,20 @@
 #include "loom/ops/op_defs.h"
 #include "loom/rewrite/rewriter.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_LICM_STATISTICS(V, statistics_type)     \
+  V(statistics_type, loops_visited, "loops-visited", \
+    "Number of loop-like operations inspected.")     \
+  V(statistics_type, ops_hoisted, "ops-hoisted",     \
+    "Number of loop-invariant operations hoisted.")
 
-enum {
-  LOOM_LICM_STAT_LOOPS_VISITED = 0,
-  LOOM_LICM_STAT_OPS_HOISTED = 1,
-};
-
-static const loom_pass_statistic_def_t kLICMStatistics[] = {
-    {IREE_SVL("loops-visited"),
-     IREE_SVL("Number of loop-like operations inspected.")},
-    {IREE_SVL("ops-hoisted"),
-     IREE_SVL("Number of loop-invariant operations hoisted.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_licm_statistics, loom_licm_statistics_t,
+                            LOOM_LICM_STATISTICS)
 
 static const loom_pass_info_t loom_licm_pass_info_storage = {
     .name = IREE_SVL("licm"),
     .description = IREE_SVL("Hoist loop-invariant pure operations."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kLICMStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kLICMStatistics),
+    .statistic_layout = &loom_licm_statistics_layout,
 };
 
 const loom_pass_info_t* loom_licm_pass_info(void) {
@@ -82,8 +74,10 @@ static loom_region_t* loom_licm_region_stack_pop(
 }
 
 typedef struct loom_licm_context_t {
-  // Pass instance owning statistics and the scratch arena.
+  // Pass instance owning the scratch arena.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_licm_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Rewriter used for all IR movement.
@@ -149,10 +143,7 @@ static iree_status_t loom_licm_hoist_from_loop_body(
           IREE_RETURN_IF_ERROR(
               loom_rewriter_move_before(context->rewriter, op, loop.op));
           *out_changed = true;
-          if (context->pass->statistics) {
-            loom_pass_statistic_add(context->pass, LOOM_LICM_STAT_OPS_HOISTED,
-                                    1);
-          }
+          ++context->statistics->ops_hoisted;
         } else {
           IREE_RETURN_IF_ERROR(
               loom_licm_push_child_regions(context, &context->loop_stack, op));
@@ -193,10 +184,7 @@ static iree_status_t loom_licm_process_function_once(
 
         loom_loop_like_t loop = loom_loop_like_cast(context->module, op);
         if (loom_loop_like_isa(loop)) {
-          if (context->pass->statistics) {
-            loom_pass_statistic_add(context->pass, LOOM_LICM_STAT_LOOPS_VISITED,
-                                    1);
-          }
+          ++context->statistics->loops_visited;
           IREE_RETURN_IF_ERROR(
               loom_licm_hoist_from_loop_body(context, loop, out_changed));
         }
@@ -221,6 +209,7 @@ iree_status_t loom_licm_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_licm_context_t context = {
       .pass = pass,
+      .statistics = loom_licm_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
   };

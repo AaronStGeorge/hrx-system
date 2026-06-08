@@ -106,16 +106,23 @@ class SymbolDCETest : public ::testing::Test {
                     int64_t expected_functions_eliminated) {
     iree_arena_allocator_t pass_arena;
     iree_arena_initialize(&block_pool_, &pass_arena);
-    int64_t statistics[2] = {0};
-    loom_pass_t pass = {
-        .info = loom_symbol_dce_pass_info(),
-        .instance_arena = &pass_arena,
-        .arena = &pass_arena,
-        .statistics = statistics,
-    };
+    const loom_pass_info_t* pass_info = loom_symbol_dce_pass_info();
+    const loom_pass_statistic_layout_t* statistic_layout =
+        pass_info->statistic_layout;
+    std::vector<uint8_t> statistic_storage(statistic_layout->storage_size, 0);
+    loom_pass_t pass = {};
+    pass.info = pass_info;
+    pass.instance_arena = &pass_arena;
+    pass.arena = &pass_arena;
+    pass.statistic_storage = statistic_storage.data();
     IREE_EXPECT_OK(loom_symbol_dce_run(&pass, module));
-    EXPECT_EQ(statistics[0], expected_symbols_eliminated);
-    EXPECT_EQ(statistics[1], expected_functions_eliminated);
+    const uint8_t* storage = statistic_storage.data();
+    const int64_t symbols_eliminated = *reinterpret_cast<const int64_t*>(
+        storage + statistic_layout->fields[0].offset);
+    const int64_t functions_eliminated = *reinterpret_cast<const int64_t*>(
+        storage + statistic_layout->fields[1].offset);
+    EXPECT_EQ(symbols_eliminated, expected_symbols_eliminated);
+    EXPECT_EQ(functions_eliminated, expected_functions_eliminated);
     iree_arena_deinitialize(&pass_arena);
   }
 

@@ -24,21 +24,18 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_FRAGMENTS_PROMOTED = 0,
-  LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_PROMOTED = 1,
-  LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_FORWARDED = 2,
-};
+#define LOOM_PROMOTE_PRIVATE_FRAGMENTS_STATISTICS(V, statistics_type) \
+  V(statistics_type, fragments_promoted, "fragments-promoted",        \
+    "Number of private fragment views promoted to SSA vectors.")      \
+  V(statistics_type, loads_promoted, "loads-promoted",                \
+    "Number of private scalar loads replaced with vector.extract.")   \
+  V(statistics_type, loads_forwarded, "loads-forwarded",              \
+    "Number of private scalar loads forwarded from a dominated "      \
+    "single store.")
 
-static const loom_pass_statistic_def_t kPromotePrivateFragmentsStatistics[] = {
-    {IREE_SVL("fragments-promoted"),
-     IREE_SVL("Number of private fragment views promoted to SSA vectors.")},
-    {IREE_SVL("loads-promoted"),
-     IREE_SVL("Number of private scalar loads replaced with vector.extract.")},
-    {IREE_SVL("loads-forwarded"),
-     IREE_SVL("Number of private scalar loads forwarded from a dominated "
-              "single store.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_promote_private_fragments_statistics,
+                            loom_promote_private_fragments_statistics_t,
+                            LOOM_PROMOTE_PRIVATE_FRAGMENTS_STATISTICS)
 
 static const loom_pass_info_t loom_promote_private_fragments_pass_info_storage =
     {
@@ -46,8 +43,7 @@ static const loom_pass_info_t loom_promote_private_fragments_pass_info_storage =
         .description =
             IREE_SVL("Promote simple private fragment buffers to SSA vectors."),
         .kind = LOOM_PASS_FUNCTION,
-        .statistic_defs = kPromotePrivateFragmentsStatistics,
-        .statistic_count = IREE_ARRAYSIZE(kPromotePrivateFragmentsStatistics),
+        .statistic_layout = &loom_promote_private_fragments_statistics_layout,
 };
 
 const loom_pass_info_t* loom_promote_private_fragments_pass_info(void) {
@@ -411,6 +407,8 @@ static iree_status_t loom_promote_private_fragments_collect_uses(
 typedef struct loom_promote_private_fragments_context_t {
   // Pass instance owning statistics and scratch allocations.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_promote_private_fragments_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Dominance state for store-to-load forwarding queries.
@@ -440,10 +438,7 @@ static iree_status_t loom_promote_private_fragments_replace_load(
       context->rewriter, load_op, &replacement, 1, checkpoint));
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       context->rewriter, load_op, &replacement, 1));
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(
-        context->pass, LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_PROMOTED, 1);
-  }
+  ++context->statistics->loads_promoted;
   return iree_ok_status();
 }
 
@@ -554,11 +549,7 @@ static iree_status_t loom_promote_private_fragments_forward_single_store(
   IREE_RETURN_IF_ERROR(
       loom_promote_private_fragments_try_erase_dead(context, alloca_op));
 
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass,
-                            LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_FORWARDED,
-                            loads->count);
-  }
+  context->statistics->loads_forwarded += loads->count;
   return iree_ok_status();
 }
 
@@ -604,11 +595,7 @@ static iree_status_t loom_promote_private_fragments_promote(
   IREE_RETURN_IF_ERROR(
       loom_promote_private_fragments_try_erase_dead(context, alloca_op));
 
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(
-        context->pass, LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_FRAGMENTS_PROMOTED,
-        1);
-  }
+  ++context->statistics->fragments_promoted;
   return iree_ok_status();
 }
 
@@ -812,11 +799,7 @@ static iree_status_t loom_promote_private_fragments_forward_static_slots(
   IREE_RETURN_IF_ERROR(
       loom_promote_private_fragments_try_erase_dead(context, alloca_op));
 
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass,
-                            LOOM_PROMOTE_PRIVATE_FRAGMENTS_STAT_LOADS_FORWARDED,
-                            loads->count);
-  }
+  context->statistics->loads_forwarded += loads->count;
   return iree_ok_status();
 }
 
@@ -921,6 +904,7 @@ iree_status_t loom_promote_private_fragments_run(loom_pass_t* pass,
 
     loom_promote_private_fragments_context_t context = {
         .pass = pass,
+        .statistics = loom_promote_private_fragments_statistics(pass),
         .module = module,
         .dominance = &dominance,
         .rewriter = &rewriter,

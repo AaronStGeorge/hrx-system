@@ -15,24 +15,21 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_SYMBOL_DCE_STAT_SYMBOLS_ELIMINATED = 0,
-  LOOM_SYMBOL_DCE_STAT_FUNCTIONS_ELIMINATED = 1,
-};
+#define LOOM_SYMBOL_DCE_STATISTICS(V, statistics_type)             \
+  V(statistics_type, symbols_eliminated, "symbols-eliminated",     \
+    "Number of unreachable symbol definitions removed.")           \
+  V(statistics_type, functions_eliminated, "functions-eliminated", \
+    "Number of unreachable private function-like symbols removed.")
 
-static const loom_pass_statistic_def_t kSymbolDCEStatistics[] = {
-    {IREE_SVL("symbols-eliminated"),
-     IREE_SVL("Number of unreachable symbol definitions removed.")},
-    {IREE_SVL("functions-eliminated"),
-     IREE_SVL("Number of unreachable private function-like symbols removed.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_symbol_dce_statistics,
+                            loom_symbol_dce_statistics_t,
+                            LOOM_SYMBOL_DCE_STATISTICS)
 
 static const loom_pass_info_t loom_symbol_dce_pass_info_storage = {
     .name = IREE_SVL("symbol-dce"),
     .description = IREE_SVL("Remove unreachable private symbol definitions."),
     .kind = LOOM_PASS_MODULE,
-    .statistic_defs = kSymbolDCEStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kSymbolDCEStatistics),
+    .statistic_layout = &loom_symbol_dce_statistics_layout,
 };
 
 const loom_pass_info_t* loom_symbol_dce_pass_info(void) {
@@ -42,6 +39,8 @@ const loom_pass_info_t* loom_symbol_dce_pass_info(void) {
 typedef struct loom_symbol_dce_state_t {
   // Active pass instance for scratch allocation and statistics.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_symbol_dce_statistics_t* statistics;
   // Module being rewritten.
   loom_module_t* module;
   // Rebuilt module symbol dependency table.
@@ -79,17 +78,15 @@ static iree_status_t loom_symbol_dce_erase_unreachable_symbols(
     return iree_ok_status();
   }
   loom_pass_mark_changed(state->pass);
-  loom_pass_statistic_add(state->pass, LOOM_SYMBOL_DCE_STAT_SYMBOLS_ELIMINATED,
-                          result.symbol_count);
-  loom_pass_statistic_add(state->pass,
-                          LOOM_SYMBOL_DCE_STAT_FUNCTIONS_ELIMINATED,
-                          result.function_like_count);
+  state->statistics->symbols_eliminated += result.symbol_count;
+  state->statistics->functions_eliminated += result.function_like_count;
   return iree_ok_status();
 }
 
 iree_status_t loom_symbol_dce_run(loom_pass_t* pass, loom_module_t* module) {
   loom_symbol_dce_state_t state = {
       .pass = pass,
+      .statistics = loom_symbol_dce_statistics(pass),
       .module = module,
   };
   IREE_RETURN_IF_ERROR(loom_symbol_dce_compute_live_symbols(&state));

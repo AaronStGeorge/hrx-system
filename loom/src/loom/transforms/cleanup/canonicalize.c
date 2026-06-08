@@ -51,23 +51,18 @@ static iree_status_t loom_canonicalize_replace_single_result_with_exact_i64(
                                                             replacement);
 }
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
-
 static const loom_pass_option_def_t kCanonicalizeOptions[] = {
     {IREE_SVL("max-iterations"),
      IREE_SVL("Maximum number of worklist iterations.")},
 };
 
-enum {
-  LOOM_CANONICALIZE_STAT_OPS_MODIFIED = 0,
-};
+#define LOOM_CANONICALIZE_STATISTICS(V, statistics_type) \
+  V(statistics_type, ops_modified, "ops-modified",       \
+    "Number of ops simplified by canonicalization.")
 
-static const loom_pass_statistic_def_t kCanonicalizeStatistics[] = {
-    {IREE_SVL("ops-modified"),
-     IREE_SVL("Number of ops simplified by canonicalization.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_canonicalize_statistics,
+                            loom_canonicalize_statistics_t,
+                            LOOM_CANONICALIZE_STATISTICS)
 
 static const loom_pass_info_t loom_canonicalize_pass_info_storage = {
     .name = IREE_SVL("canonicalize"),
@@ -75,8 +70,7 @@ static const loom_pass_info_t loom_canonicalize_pass_info_storage = {
     .kind = LOOM_PASS_FUNCTION,
     .option_defs = kCanonicalizeOptions,
     .option_count = 1,
-    .statistic_defs = kCanonicalizeStatistics,
-    .statistic_count = 1,
+    .statistic_layout = &loom_canonicalize_statistics_layout,
 };
 
 const loom_pass_info_t* loom_canonicalize_pass_info(void) {
@@ -1604,10 +1598,9 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
     if (result.changed) {
       loom_pass_mark_changed(pass);
     }
-    if (pass->statistics) {
-      loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED,
-                              result.ops_modified);
-    }
+    loom_canonicalize_statistics_t* statistics =
+        loom_canonicalize_statistics(pass);
+    statistics->ops_modified += result.ops_modified;
   }
   loom_canonicalizer_deinitialize(&canonicalizer);
   return status;

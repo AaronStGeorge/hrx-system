@@ -96,22 +96,22 @@ class LowLowerPassTest : public ::testing::Test {
     loom_pass_value_fact_owner_t value_facts = {};
     loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
     const loom_pass_info_t* pass_info = loom_low_source_to_low_pass_info();
-    std::vector<int64_t> statistics(pass_info->statistic_count, 0);
+    std::vector<uint8_t> statistic_storage(
+        pass_info->statistic_layout->storage_size, 0);
     loom_low_pass_environment_storage_t low_pass_environment_storage;
     loom_pass_environment_t environment =
         loom_low_pass_environment_storage_initialize(
             &registry_.registry, policy_registry, nullptr, nullptr, nullptr,
             nullptr, loom_target_selection_empty(),
             &low_pass_environment_storage);
-    loom_pass_t pass = {
-        .info = pass_info,
-        .module_run = loom_low_source_to_low_run,
-        .instance_arena = &instance_arena,
-        .arena = &instance_arena,
-        .statistics = statistics.data(),
-        .environment = &environment,
-        .value_facts = &value_facts,
-    };
+    loom_pass_t pass = {};
+    pass.info = pass_info;
+    pass.module_run = loom_low_source_to_low_run;
+    pass.instance_arena = &instance_arena;
+    pass.arena = &instance_arena;
+    pass.statistic_storage = statistic_storage.data();
+    pass.environment = &environment;
+    pass.value_facts = &value_facts;
     if (collector != nullptr) {
       pass.diagnostic_emitter = {
           .fn = CollectDiagnosticEmission,

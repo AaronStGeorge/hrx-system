@@ -24,6 +24,17 @@ typedef struct loom_dce_deadness_query_callback_t {
   void* user_data;
 } loom_dce_deadness_query_callback_t;
 
+#define LOOM_DCE_STATISTICS(V, statistics_type)        \
+  V(statistics_type, ops_eliminated, "ops-eliminated", \
+    "Number of dead operations removed.")
+
+LOOM_PASS_STATISTICS_DECLARE(loom_dce_statistics, loom_dce_statistics_t,
+                             LOOM_DCE_STATISTICS)
+
+// Statistic layout shared by DCE variants that call
+// loom_dce_run_with_deadness_query.
+extern const loom_pass_statistic_layout_t loom_dce_statistic_layout;
+
 // Returns immutable metadata for the dead code elimination pass.
 const loom_pass_info_t* loom_dce_pass_info(void);
 

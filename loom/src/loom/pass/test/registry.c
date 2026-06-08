@@ -86,6 +86,39 @@ static iree_status_t loom_test_pass_trace_record(
   return iree_ok_status();
 }
 
+#define LOOM_TEST_INVOCATION_STATISTICS(V, statistics_type) \
+  V(statistics_type, invocations, "invocations", "Number of pass invocations.")
+
+LOOM_PASS_STATISTICS_DEFINE(loom_test_invocation_statistics,
+                            loom_test_invocation_statistics_t,
+                            LOOM_TEST_INVOCATION_STATISTICS)
+
+#define LOOM_TEST_MARK_CHANGED_STATISTICS(V, statistics_type) \
+  V(statistics_type, invocations, "invocations",              \
+    "Number of pass invocations.")                            \
+  V(statistics_type, synthetic_events, "synthetic-events",    \
+    "Number of deterministic test events.")
+
+LOOM_PASS_STATISTICS_DEFINE(loom_test_mark_changed_statistics,
+                            loom_test_mark_changed_statistics_t,
+                            LOOM_TEST_MARK_CHANGED_STATISTICS)
+
+#define LOOM_TEST_RESOURCE_LIFETIME_STATISTICS(V, statistics_type) \
+  V(statistics_type, blocks_checked, "blocks-checked",             \
+    "Number of blocks checked for resource lifetimes.")            \
+  V(statistics_type, ops_checked, "ops-checked",                   \
+    "Number of operations visited for resource lifetimes.")        \
+  V(statistics_type, effects_checked, "effects-checked",           \
+    "Number of ownership effects interpreted.")                    \
+  V(statistics_type, releases_inserted, "releases-inserted",       \
+    "Number of test.resource.release operations inserted.")        \
+  V(statistics_type, edges_split, "edges-split",                   \
+    "Number of CFG edges split for resource cleanup.")
+
+LOOM_PASS_STATISTICS_DEFINE(loom_test_resource_lifetime_statistics,
+                            loom_test_resource_lifetime_statistics_t,
+                            LOOM_TEST_RESOURCE_LIFETIME_STATISTICS)
+
 static iree_status_t loom_test_module_noop_run(loom_pass_t* pass,
                                                loom_module_t* module) {
   (void)module;
@@ -93,7 +126,9 @@ static iree_status_t loom_test_module_noop_run(loom_pass_t* pass,
   IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
       trace, IREE_SV("test.module-noop"), IREE_SV("<module>")));
   if (trace) ++trace->module_noop_invocation_count;
-  if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
+  loom_test_invocation_statistics_t* statistics =
+      loom_test_invocation_statistics(pass);
+  ++statistics->invocations;
   return iree_ok_status();
 }
 
@@ -105,7 +140,9 @@ static iree_status_t loom_test_noop_run(loom_pass_t* pass,
       trace, IREE_SV("test.noop"),
       loom_test_pass_function_name(module, function)));
   if (trace) ++trace->noop_invocation_count;
-  if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
+  loom_test_invocation_statistics_t* statistics =
+      loom_test_invocation_statistics(pass);
+  ++statistics->invocations;
   return iree_ok_status();
 }
 
@@ -118,10 +155,10 @@ static iree_status_t loom_test_mark_changed_run(loom_pass_t* pass,
       loom_test_pass_function_name(module, function)));
   if (trace) ++trace->mark_changed_invocation_count;
   loom_pass_mark_changed(pass);
-  if (pass->statistics) {
-    loom_pass_statistic_add(pass, 0, 1);
-    loom_pass_statistic_add(pass, 1, 1);
-  }
+  loom_test_mark_changed_statistics_t* statistics =
+      loom_test_mark_changed_statistics(pass);
+  ++statistics->invocations;
+  ++statistics->synthetic_events;
   return iree_ok_status();
 }
 
@@ -158,7 +195,9 @@ static iree_status_t loom_test_options_run(loom_pass_t* pass,
       trace, IREE_SV("test.options"),
       loom_test_pass_function_name(module, function)));
   if (trace) ++trace->options_invocation_count;
-  if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
+  loom_test_invocation_statistics_t* statistics =
+      loom_test_invocation_statistics(pass);
+  ++statistics->invocations;
   return iree_ok_status();
 }
 
@@ -200,22 +239,6 @@ static iree_status_t loom_test_resource_lifetime_build_release(
   return loom_test_resource_release_build(builder, value_id, location, out_op);
 }
 
-enum {
-  LOOM_TEST_RESOURCE_LIFETIME_STAT_BLOCKS_CHECKED = 0,
-  LOOM_TEST_RESOURCE_LIFETIME_STAT_OPS_CHECKED = 1,
-  LOOM_TEST_RESOURCE_LIFETIME_STAT_EFFECTS_CHECKED = 2,
-  LOOM_TEST_RESOURCE_LIFETIME_STAT_RELEASES_INSERTED = 3,
-  LOOM_TEST_RESOURCE_LIFETIME_STAT_EDGES_SPLIT = 4,
-};
-
-static void loom_test_resource_lifetime_add_stat(loom_pass_t* pass,
-                                                 uint16_t statistic_index,
-                                                 uint64_t value) {
-  if (pass->statistics && value != 0) {
-    loom_pass_statistic_add(pass, statistic_index, (int64_t)value);
-  }
-}
-
 static iree_status_t loom_test_resource_lifetime_run(loom_pass_t* pass,
                                                      loom_module_t* module) {
   const loom_ownership_lifetime_materialization_policy_t policy = {
@@ -236,19 +259,13 @@ static iree_status_t loom_test_resource_lifetime_run(loom_pass_t* pass,
   loom_ownership_lifetime_result_t result = {0};
   IREE_RETURN_IF_ERROR(
       loom_ownership_lifetime_materialize_module(module, &options, &result));
-  loom_test_resource_lifetime_add_stat(
-      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_BLOCKS_CHECKED,
-      result.blocks_checked);
-  loom_test_resource_lifetime_add_stat(
-      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_OPS_CHECKED, result.ops_checked);
-  loom_test_resource_lifetime_add_stat(
-      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_EFFECTS_CHECKED,
-      result.effects_checked);
-  loom_test_resource_lifetime_add_stat(
-      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_RELEASES_INSERTED,
-      result.releases_inserted);
-  loom_test_resource_lifetime_add_stat(
-      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_EDGES_SPLIT, result.edges_split);
+  loom_test_resource_lifetime_statistics_t* statistics =
+      loom_test_resource_lifetime_statistics(pass);
+  statistics->blocks_checked += (int64_t)result.blocks_checked;
+  statistics->ops_checked += (int64_t)result.ops_checked;
+  statistics->effects_checked += (int64_t)result.effects_checked;
+  statistics->releases_inserted += (int64_t)result.releases_inserted;
+  statistics->edges_split += (int64_t)result.edges_split;
   if (result.releases_inserted != 0 || result.edges_split != 0) {
     loom_pass_mark_changed(pass);
   }
@@ -262,33 +279,12 @@ static iree_status_t loom_test_fail_run(loom_pass_t* pass,
   IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(trace, IREE_SV("test.fail"),
                                                    IREE_SV("<module>")));
   if (trace) ++trace->fail_invocation_count;
-  if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
+  loom_test_invocation_statistics_t* statistics =
+      loom_test_invocation_statistics(pass);
+  ++statistics->invocations;
   return iree_make_status(IREE_STATUS_INTERNAL,
                           "intentional test pass failure");
 }
-
-static const loom_pass_statistic_def_t kInvocationStatisticDefs[] = {
-    {IREE_SVL("invocations"), IREE_SVL("Number of pass invocations.")},
-};
-
-static const loom_pass_statistic_def_t kMarkChangedStatisticDefs[] = {
-    {IREE_SVL("invocations"), IREE_SVL("Number of pass invocations.")},
-    {IREE_SVL("synthetic-events"),
-     IREE_SVL("Number of deterministic test events.")},
-};
-
-static const loom_pass_statistic_def_t kTestResourceLifetimeStatisticDefs[] = {
-    {IREE_SVL("blocks-checked"),
-     IREE_SVL("Number of blocks checked for resource lifetimes.")},
-    {IREE_SVL("ops-checked"),
-     IREE_SVL("Number of operations visited for resource lifetimes.")},
-    {IREE_SVL("effects-checked"),
-     IREE_SVL("Number of ownership effects interpreted.")},
-    {IREE_SVL("releases-inserted"),
-     IREE_SVL("Number of test.resource.release operations inserted.")},
-    {IREE_SVL("edges-split"),
-     IREE_SVL("Number of CFG edges split for resource cleanup.")},
-};
 
 static const loom_pass_option_def_t kTestOptionsOptionDefs[] = {
     {
@@ -356,8 +352,7 @@ static const loom_pass_info_t kTestFailPassInfo = {
     .name = IREE_SVL("test.fail"),
     .description = IREE_SVL("Synthetic module pass that always fails."),
     .kind = LOOM_PASS_MODULE,
-    .statistic_defs = kInvocationStatisticDefs,
-    .statistic_count = IREE_ARRAYSIZE(kInvocationStatisticDefs),
+    .statistic_layout = &loom_test_invocation_statistics_layout,
 };
 
 static const loom_pass_info_t* loom_test_fail_pass_info(void) {
@@ -368,8 +363,7 @@ static const loom_pass_info_t kTestMarkChangedPassInfo = {
     .name = IREE_SVL("test.mark-changed"),
     .description = IREE_SVL("Synthetic function pass that reports a change."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kMarkChangedStatisticDefs,
-    .statistic_count = IREE_ARRAYSIZE(kMarkChangedStatisticDefs),
+    .statistic_layout = &loom_test_mark_changed_statistics_layout,
 };
 
 static const loom_pass_info_t* loom_test_mark_changed_pass_info(void) {
@@ -380,8 +374,7 @@ static const loom_pass_info_t kTestModuleNoopPassInfo = {
     .name = IREE_SVL("test.module-noop"),
     .description = IREE_SVL("Synthetic module no-op pass."),
     .kind = LOOM_PASS_MODULE,
-    .statistic_defs = kInvocationStatisticDefs,
-    .statistic_count = IREE_ARRAYSIZE(kInvocationStatisticDefs),
+    .statistic_layout = &loom_test_invocation_statistics_layout,
 };
 
 static const loom_pass_info_t* loom_test_module_noop_pass_info(void) {
@@ -392,8 +385,7 @@ static const loom_pass_info_t kTestNoopPassInfo = {
     .name = IREE_SVL("test.noop"),
     .description = IREE_SVL("Synthetic function no-op pass."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kInvocationStatisticDefs,
-    .statistic_count = IREE_ARRAYSIZE(kInvocationStatisticDefs),
+    .statistic_layout = &loom_test_invocation_statistics_layout,
 };
 
 static const loom_pass_info_t* loom_test_noop_pass_info(void) {
@@ -406,8 +398,7 @@ static const loom_pass_info_t kTestOptionsPassInfo = {
     .kind = LOOM_PASS_FUNCTION,
     .option_defs = kTestOptionsOptionDefs,
     .option_count = IREE_ARRAYSIZE(kTestOptionsOptionDefs),
-    .statistic_defs = kInvocationStatisticDefs,
-    .statistic_count = IREE_ARRAYSIZE(kInvocationStatisticDefs),
+    .statistic_layout = &loom_test_invocation_statistics_layout,
 };
 
 static const loom_pass_info_t* loom_test_options_pass_info(void) {
@@ -431,8 +422,7 @@ static const loom_pass_info_t kTestResourceLifetimePassInfo = {
     .description =
         IREE_SVL("Materialize explicit test resource lifetime operations."),
     .kind = LOOM_PASS_MODULE,
-    .statistic_defs = kTestResourceLifetimeStatisticDefs,
-    .statistic_count = IREE_ARRAYSIZE(kTestResourceLifetimeStatisticDefs),
+    .statistic_layout = &loom_test_resource_lifetime_statistics_layout,
 };
 
 static const loom_pass_info_t* loom_test_resource_lifetime_pass_info(void) {

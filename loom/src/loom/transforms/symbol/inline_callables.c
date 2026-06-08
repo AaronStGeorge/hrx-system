@@ -22,34 +22,28 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_INLINE_CALLABLES_STAT_REQUIRED_EDGES = 0,
-  LOOM_INLINE_CALLABLES_STAT_KEPT_EDGES = 1,
-  LOOM_INLINE_CALLABLES_STAT_CALLS_CLONED = 2,
-  LOOM_INLINE_CALLABLES_STAT_CALLS_TRANSFERRED = 3,
-  LOOM_INLINE_CALLABLES_STAT_SYMBOLS_TRANSFERRED = 4,
-};
+#define LOOM_INLINE_CALLABLES_STATISTICS(V, statistics_type)     \
+  V(statistics_type, required_edges, "required-edges",           \
+    "Number of call edges required to inline by policy.")        \
+  V(statistics_type, kept_edges, "kept-edges",                   \
+    "Number of call edges left unchanged by policy.")            \
+  V(statistics_type, calls_cloned, "calls-cloned",               \
+    "Number of call sites inlined by cloning the callee body.")  \
+  V(statistics_type, calls_transferred, "calls-transferred",     \
+    "Number of call sites inlined by moving the callee body.")   \
+  V(statistics_type, symbols_transferred, "symbols-transferred", \
+    "Number of private callable symbols erased by transfer inline.")
 
-static const loom_pass_statistic_def_t kInlineCallablesStatistics[] = {
-    {IREE_SVL("required-edges"),
-     IREE_SVL("Number of call edges required to inline by policy.")},
-    {IREE_SVL("kept-edges"),
-     IREE_SVL("Number of call edges left unchanged by policy.")},
-    {IREE_SVL("calls-cloned"),
-     IREE_SVL("Number of call sites inlined by cloning the callee body.")},
-    {IREE_SVL("calls-transferred"),
-     IREE_SVL("Number of call sites inlined by moving the callee body.")},
-    {IREE_SVL("symbols-transferred"),
-     IREE_SVL("Number of private callable symbols erased by transfer inline.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_inline_callables_statistics,
+                            loom_inline_callables_statistics_t,
+                            LOOM_INLINE_CALLABLES_STATISTICS)
 
 static const loom_pass_info_t loom_inline_callables_pass_info_storage = {
     .name = IREE_SVL("inline-callables"),
     .description =
         IREE_SVL("Inline call-like edges required by authored inline policy."),
     .kind = LOOM_PASS_MODULE,
-    .statistic_defs = kInlineCallablesStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kInlineCallablesStatistics),
+    .statistic_layout = &loom_inline_callables_statistics_layout,
 };
 
 const loom_pass_info_t* loom_inline_callables_pass_info(void) {
@@ -123,6 +117,8 @@ typedef struct loom_inline_plan_entry_t {
 typedef struct loom_inline_state_t {
   // Active pass invocation.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_inline_callables_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Dependency table built from the immutable module snapshot.
@@ -281,23 +277,20 @@ static void loom_inline_resolve_entry_policy(loom_inline_state_t* state,
   if (callee_noinline || call_noinline) {
     entry->effective_policy = LOOM_FUNC_INLINE_POLICY_NOINLINE;
     entry->action = LOOM_INLINE_PLAN_ACTION_KEEP;
-    loom_pass_statistic_add(state->pass, LOOM_INLINE_CALLABLES_STAT_KEPT_EDGES,
-                            1);
+    ++state->statistics->kept_edges;
     return;
   }
 
   if (callee_inline || call_inline) {
     entry->effective_policy = LOOM_FUNC_INLINE_POLICY_INLINE;
     entry->action = LOOM_INLINE_PLAN_ACTION_REQUIRED;
-    loom_pass_statistic_add(state->pass,
-                            LOOM_INLINE_CALLABLES_STAT_REQUIRED_EDGES, 1);
+    ++state->statistics->required_edges;
     return;
   }
 
   entry->effective_policy = 0;
   entry->action = LOOM_INLINE_PLAN_ACTION_KEEP;
-  loom_pass_statistic_add(state->pass, LOOM_INLINE_CALLABLES_STAT_KEPT_EDGES,
-                          1);
+  ++state->statistics->kept_edges;
 }
 
 static void loom_inline_add_required_graph_edge(loom_inline_state_t* state,
@@ -684,18 +677,15 @@ static iree_status_t loom_inline_execute_entry(
       IREE_RETURN_IF_ERROR(
           loom_callable_inline_call(rewriter, entry->call_op, entry->callee));
       loom_pass_mark_changed(state->pass);
-      loom_pass_statistic_add(state->pass,
-                              LOOM_INLINE_CALLABLES_STAT_CALLS_CLONED, 1);
+      ++state->statistics->calls_cloned;
       return iree_ok_status();
     }
     case LOOM_INLINE_PLAN_ACTION_TRANSFER: {
       IREE_RETURN_IF_ERROR(loom_callable_inline_consuming_call(
           rewriter, entry->call_op, entry->callee));
       loom_pass_mark_changed(state->pass);
-      loom_pass_statistic_add(state->pass,
-                              LOOM_INLINE_CALLABLES_STAT_CALLS_TRANSFERRED, 1);
-      loom_pass_statistic_add(
-          state->pass, LOOM_INLINE_CALLABLES_STAT_SYMBOLS_TRANSFERRED, 1);
+      ++state->statistics->calls_transferred;
+      ++state->statistics->symbols_transferred;
       return iree_ok_status();
     }
     default:
@@ -739,6 +729,7 @@ iree_status_t loom_inline_callables_run(loom_pass_t* pass,
                                         loom_module_t* module) {
   loom_inline_state_t state = {
       .pass = pass,
+      .statistics = loom_inline_callables_statistics(pass),
       .module = module,
   };
   IREE_RETURN_IF_ERROR(loom_symbol_dependency_table_build(module, pass->arena,

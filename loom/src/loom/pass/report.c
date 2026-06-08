@@ -48,20 +48,27 @@ static iree_status_t loom_pass_report_ensure_invocation_capacity(
 
 static iree_status_t loom_pass_report_copy_statistics(
     loom_pass_report_t* report, const loom_pass_info_t* pass_info,
-    const int64_t* statistic_values,
+    const void* statistic_storage,
     loom_pass_report_invocation_t* out_invocation) {
-  out_invocation->statistic_count = pass_info->statistic_count;
-  if (pass_info->statistic_count == 0) {
+  const loom_pass_statistic_layout_t* layout = pass_info->statistic_layout;
+  out_invocation->statistic_count = layout ? layout->field_count : 0;
+  if (!layout || layout->field_count == 0) {
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc_array(report->allocator, pass_info->statistic_count,
+      iree_allocator_malloc_array(report->allocator, layout->field_count,
                                   sizeof(*out_invocation->statistics),
                                   (void**)&out_invocation->statistics));
-  for (uint16_t i = 0; i < pass_info->statistic_count; ++i) {
+  for (uint16_t i = 0; i < layout->field_count; ++i) {
+    const loom_pass_statistic_field_t* field = &layout->fields[i];
+    int64_t value = 0;
+    if (statistic_storage) {
+      const uint8_t* storage = (const uint8_t*)statistic_storage;
+      value = *(const int64_t*)(const void*)(storage + field->offset);
+    }
     out_invocation->statistics[i] = (loom_pass_report_statistic_t){
-        .name = pass_info->statistic_defs[i].name,
-        .value = statistic_values ? statistic_values[i] : 0,
+        .name = field->name,
+        .value = value,
     };
   }
   return iree_ok_status();
@@ -97,7 +104,7 @@ iree_status_t loom_pass_report_append_invocation(
       .status_code = options->status_code,
   };
   IREE_RETURN_IF_ERROR(loom_pass_report_copy_statistics(
-      report, invoke->info, options->statistics, &invocation));
+      report, invoke->info, options->statistic_storage, &invocation));
   report->invocations[report->invocation_count++] = invocation;
   return iree_ok_status();
 }
@@ -205,8 +212,11 @@ static iree_status_t loom_pass_report_format_descriptor_json(
   }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "],\"statistics\":["));
-  for (uint16_t i = 0; i < info->statistic_count; ++i) {
-    const loom_pass_statistic_def_t* statistic = &info->statistic_defs[i];
+  const loom_pass_statistic_layout_t* statistic_layout = info->statistic_layout;
+  uint16_t statistic_count =
+      statistic_layout ? statistic_layout->field_count : 0;
+  for (uint16_t i = 0; i < statistic_count; ++i) {
+    const loom_pass_statistic_field_t* statistic = &statistic_layout->fields[i];
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, i == 0 ? "{" : ",{"));
     IREE_RETURN_IF_ERROR(loom_pass_report_write_json_string_field(

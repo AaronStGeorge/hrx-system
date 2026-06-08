@@ -10,25 +10,18 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+static const loom_pass_statistic_field_t kDCEStatisticFields[] = {
+    LOOM_DCE_STATISTICS(LOOM_PASS_STATISTIC_LAYOUT_FIELD_,
+                        loom_dce_statistics_t)};
 
-enum {
-  LOOM_DCE_STAT_OPS_ELIMINATED = 0,
-};
-
-static const loom_pass_statistic_def_t kDCEStatistics[] = {
-    {IREE_SVL("ops-eliminated"),
-     IREE_SVL("Number of dead operations removed.")},
-};
+const loom_pass_statistic_layout_t loom_dce_statistic_layout =
+    LOOM_PASS_STATISTIC_LAYOUT(loom_dce_statistics_t, kDCEStatisticFields);
 
 static const loom_pass_info_t loom_dce_pass_info_storage = {
     .name = IREE_SVL("dce"),
     .description = IREE_SVL("Remove operations with unused results."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kDCEStatistics,
-    .statistic_count = 1,
+    .statistic_layout = &loom_dce_statistic_layout,
 };
 
 const loom_pass_info_t* loom_dce_pass_info(void) {
@@ -266,6 +259,7 @@ iree_status_t loom_dce_run_with_deadness_query(
   if (!body) {
     return iree_ok_status();
   }
+  loom_dce_statistics_t* statistics = loom_dce_statistics(pass);
 
   loom_dce_worklist_t worklist = {0};
   iree_status_t status = loom_dce_worklist_initialize(pass->arena, &worklist);
@@ -303,9 +297,7 @@ iree_status_t loom_dce_run_with_deadness_query(
       break;
     }
     loom_pass_mark_changed(pass);
-    if (pass->statistics) {
-      loom_pass_statistic_add(pass, LOOM_DCE_STAT_OPS_ELIMINATED, 1);
-    }
+    ++statistics->ops_eliminated;
   }
 
   loom_dce_worklist_deinitialize(&worklist);

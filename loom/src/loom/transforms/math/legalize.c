@@ -33,14 +33,13 @@ static const loom_pass_option_def_t kMathLegalizeOptions[] = {
      IREE_SVL("Maximum number of worklist iterations.")},
 };
 
-enum {
-  LOOM_MATH_LEGALIZE_STAT_OPS_REWRITTEN = 0,
-};
+#define LOOM_MATH_LEGALIZE_STATISTICS(V, statistics_type) \
+  V(statistics_type, ops_rewritten, "ops-rewritten",      \
+    "Number of math operations rewritten.")
 
-static const loom_pass_statistic_def_t kMathLegalizeStatistics[] = {
-    {IREE_SVL("ops-rewritten"),
-     IREE_SVL("Number of math operations rewritten.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_math_legalize_statistics,
+                            loom_math_legalize_statistics_t,
+                            LOOM_MATH_LEGALIZE_STATISTICS)
 
 static const loom_pass_info_t loom_math_legalize_pass_info_storage = {
     .name = IREE_SVL("legalize-math"),
@@ -48,8 +47,7 @@ static const loom_pass_info_t loom_math_legalize_pass_info_storage = {
     .kind = LOOM_PASS_FUNCTION,
     .option_defs = kMathLegalizeOptions,
     .option_count = IREE_ARRAYSIZE(kMathLegalizeOptions),
-    .statistic_defs = kMathLegalizeStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kMathLegalizeStatistics),
+    .statistic_layout = &loom_math_legalize_statistics_layout,
 };
 
 const loom_pass_info_t* loom_math_legalize_pass_info(void) {
@@ -598,9 +596,6 @@ iree_status_t loom_math_legalize_run(loom_pass_t* pass, loom_module_t* module,
   if (result.changed) {
     loom_pass_mark_changed(pass);
   }
-  if (pass->statistics) {
-    loom_pass_statistic_add(pass, LOOM_MATH_LEGALIZE_STAT_OPS_REWRITTEN,
-                            result.ops_modified);
-  }
+  loom_math_legalize_statistics(pass)->ops_rewritten += result.ops_modified;
   return iree_ok_status();
 }

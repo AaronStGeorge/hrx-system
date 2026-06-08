@@ -20,26 +20,23 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-typedef enum loom_loop_fusion_stat_e {
-  LOOM_LOOP_FUSION_STAT_LOOPS_VISITED = 0,
-  LOOM_LOOP_FUSION_STAT_LOOPS_FUSED = 1,
-  LOOM_LOOP_FUSION_STAT_CANDIDATES_REJECTED = 2,
-} loom_loop_fusion_stat_t;
+#define LOOM_LOOP_FUSION_STATISTICS(V, statistics_type)          \
+  V(statistics_type, loops_visited, "loops-visited",             \
+    "Number of scf.for operations inspected.")                   \
+  V(statistics_type, loops_fused, "loops-fused",                 \
+    "Number of adjacent loop pairs fused.")                      \
+  V(statistics_type, candidates_rejected, "candidates-rejected", \
+    "Number of adjacent loop pairs rejected by preflight.")
 
-static const loom_pass_statistic_def_t kLoopFusionStatistics[] = {
-    {IREE_SVL("loops-visited"),
-     IREE_SVL("Number of scf.for operations inspected.")},
-    {IREE_SVL("loops-fused"), IREE_SVL("Number of adjacent loop pairs fused.")},
-    {IREE_SVL("candidates-rejected"),
-     IREE_SVL("Number of adjacent loop pairs rejected by preflight.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_loop_fusion_statistics,
+                            loom_loop_fusion_statistics_t,
+                            LOOM_LOOP_FUSION_STATISTICS)
 
 static const loom_pass_info_t loom_loop_fusion_pass_info_storage = {
     .name = IREE_SVL("loop-fusion"),
     .description = IREE_SVL("Fuse compatible adjacent scf.for loops."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kLoopFusionStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kLoopFusionStatistics),
+    .statistic_layout = &loom_loop_fusion_statistics_layout,
 };
 
 const loom_pass_info_t* loom_loop_fusion_pass_info(void) {
@@ -113,6 +110,8 @@ typedef struct loom_loop_fusion_for_info_t {
 typedef struct loom_loop_fusion_context_t {
   // Pass instance owning statistics and scratch memory.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_loop_fusion_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Rewriter used for all IR mutation.
@@ -798,27 +797,18 @@ static iree_status_t loom_loop_fusion_process_block(
     loom_loop_fusion_for_info_t first = {0};
     loom_loop_fusion_for_info_t second = {0};
     if (next_op && loom_loop_fusion_read_for_info(op, &first)) {
-      if (context->pass->statistics) {
-        loom_pass_statistic_add(context->pass,
-                                LOOM_LOOP_FUSION_STAT_LOOPS_VISITED, 1);
-      }
+      ++context->statistics->loops_visited;
       if (loom_loop_fusion_read_for_info(next_op, &second)) {
         if (loom_loop_fusion_candidate_is_legal(context, &first, &second)) {
           loom_op_t* fused_loop = NULL;
           IREE_RETURN_IF_ERROR(loom_loop_fusion_fuse_pair(
               context, &first, &second, &fused_loop));
-          if (context->pass->statistics) {
-            loom_pass_statistic_add(context->pass,
-                                    LOOM_LOOP_FUSION_STAT_LOOPS_FUSED, 1);
-          }
+          ++context->statistics->loops_fused;
           *out_changed = true;
           op = fused_loop;
           continue;
         }
-        if (context->pass->statistics) {
-          loom_pass_statistic_add(context->pass,
-                                  LOOM_LOOP_FUSION_STAT_CANDIDATES_REJECTED, 1);
-        }
+        ++context->statistics->candidates_rejected;
       }
     }
 
@@ -876,6 +866,7 @@ iree_status_t loom_loop_fusion_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_loop_fusion_context_t context = {
       .pass = pass,
+      .statistics = loom_loop_fusion_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
       .fusion_arena = &fusion_arena,

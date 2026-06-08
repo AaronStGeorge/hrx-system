@@ -9,7 +9,7 @@
 // Reports are caller-owned snapshots of interpreter execution. The interpreter
 // appends one record per pass invocation after the pass callback finishes and
 // before its instance arena is torn down, copying descriptor-defined statistic
-// counters into report-owned storage.
+// fields into report-owned storage.
 
 #ifndef LOOM_PASS_REPORT_H_
 #define LOOM_PASS_REPORT_H_
@@ -54,7 +54,7 @@ typedef struct loom_pass_report_invocation_t {
   bool changed;
   // Terminal status code returned by this invocation.
   iree_status_code_t status_code;
-  // Report-owned statistic values indexed by descriptor statistic order.
+  // Report-owned statistic values indexed by descriptor statistic field order.
   loom_pass_report_statistic_t* statistics;
   // Number of entries in statistics.
   uint16_t statistic_count;
@@ -88,8 +88,8 @@ typedef struct loom_pass_report_invocation_options_t {
   bool changed;
   // Terminal status code returned by this invocation.
   iree_status_code_t status_code;
-  // Pass statistic counter storage to snapshot.
-  const int64_t* statistics;
+  // Pass statistic storage matching the invoked descriptor layout.
+  const void* statistic_storage;
 } loom_pass_report_invocation_options_t;
 
 // Initializes an empty report.
@@ -99,9 +99,10 @@ void loom_pass_report_initialize(iree_allocator_t allocator,
 // Releases all report-owned storage.
 void loom_pass_report_deinitialize(loom_pass_report_t* report);
 
-// Appends one pass invocation record, copying statistic values into
-// report-owned storage. Descriptor metadata and symbol strings are borrowed
-// from static registries or live modules and must outlive the report.
+// Appends one pass invocation record, copying statistic values from typed
+// statistic storage into report-owned storage. Descriptor metadata and symbol
+// strings are borrowed from static registries or live modules and must outlive
+// the report.
 iree_status_t loom_pass_report_append_invocation(
     loom_pass_report_t* report,
     const loom_pass_report_invocation_options_t* options);

@@ -14,29 +14,22 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_KERNEL_RESOURCES_STATISTICS(V, statistics_type)       \
+  V(statistics_type, functions_normalized, "functions-normalized", \
+    "Number of exported device functions changed.")                \
+  V(statistics_type, view_args_normalized, "view-args-normalized", \
+    "Number of view-typed ABI arguments rewritten to buffer roots.")
 
-enum {
-  LOOM_KERNEL_RESOURCES_STAT_FUNCTIONS_NORMALIZED = 0,
-  LOOM_KERNEL_RESOURCES_STAT_VIEW_ARGS_NORMALIZED = 1,
-};
-
-static const loom_pass_statistic_def_t kKernelResourcesStatistics[] = {
-    {IREE_SVL("functions-normalized"),
-     IREE_SVL("Number of exported device functions changed.")},
-    {IREE_SVL("view-args-normalized"),
-     IREE_SVL("Number of view-typed ABI arguments rewritten to buffer roots.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_kernel_resources_statistics,
+                            loom_kernel_resources_statistics_t,
+                            LOOM_KERNEL_RESOURCES_STATISTICS)
 
 static const loom_pass_info_t loom_kernel_resources_pass_info_storage = {
     .name = IREE_SVL("normalize-kernel-resources"),
     .description =
         IREE_SVL("Normalize exported device resource args to buffer roots."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kKernelResourcesStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kKernelResourcesStatistics),
+    .statistic_layout = &loom_kernel_resources_statistics_layout,
 };
 
 const loom_pass_info_t* loom_normalize_kernel_resources_pass_info(void) {
@@ -79,10 +72,9 @@ static iree_status_t loom_kernel_resources_normalize_view_arg(
   loom_value_id_t view_id = loom_buffer_view_result(view_op);
   IREE_RETURN_IF_ERROR(
       loom_value_replace_all_uses_except(module, arg_id, view_id, view_op));
-  if (pass->statistics) {
-    loom_pass_statistic_add(pass,
-                            LOOM_KERNEL_RESOURCES_STAT_VIEW_ARGS_NORMALIZED, 1);
-  }
+  loom_kernel_resources_statistics_t* statistics =
+      loom_kernel_resources_statistics(pass);
+  ++statistics->view_args_normalized;
   return iree_ok_status();
 }
 
@@ -123,9 +115,10 @@ iree_status_t loom_normalize_kernel_resources_run(loom_pass_t* pass,
     changed_function = true;
   }
 
-  if (changed_function && pass->statistics) {
-    loom_pass_statistic_add(pass,
-                            LOOM_KERNEL_RESOURCES_STAT_FUNCTIONS_NORMALIZED, 1);
+  if (changed_function) {
+    loom_kernel_resources_statistics_t* statistics =
+        loom_kernel_resources_statistics(pass);
+    ++statistics->functions_normalized;
   }
   if (changed_function) {
     loom_pass_mark_changed(pass);

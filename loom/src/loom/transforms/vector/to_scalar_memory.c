@@ -252,10 +252,7 @@ static iree_status_t loom_vector_to_scalar_build_dynamic_active_prefix(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, lane_index,
       step, &lower_bound, 1, &index_type, 1, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));
@@ -648,10 +645,7 @@ static iree_status_t loom_vector_to_scalar_lower_memory_store_loop_axis(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
       step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));
@@ -836,10 +830,7 @@ static iree_status_t loom_vector_to_scalar_lower_fragment_store_columns(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
       step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));
@@ -880,10 +871,7 @@ iree_status_t loom_vector_to_scalar_lower_fragment_store(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
       step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));
@@ -935,10 +923,7 @@ static iree_status_t loom_vector_to_scalar_lower_dynamic_store_compress(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
       step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));
@@ -1123,10 +1108,7 @@ static iree_status_t loom_vector_to_scalar_lower_atomic_reduce_loop_axis(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
       step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));
@@ -1369,10 +1351,7 @@ static iree_status_t loom_vector_to_scalar_atomic_rmw_loop_axis(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
       step, &current_aggregate, 1, &state->vector_type, 1, NULL, 0,
       LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));
@@ -1531,10 +1510,7 @@ static iree_status_t loom_vector_to_scalar_atomic_cmpxchg_loop_axis(
       &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
       step, &current_aggregate, 1, &state->vector_type, 1, NULL, 0,
       LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0, state->location, &loop));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->rewriter->builder, loop, loom_scf_for_body(loop));

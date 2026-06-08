@@ -576,10 +576,7 @@ static_assert(IREE_ARRAYSIZE(kVectorToScalarLaneLowerers) ==
 iree_status_t loom_vector_to_scalar_build_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
-  }
+  loom_vector_to_scalar_record_lane_materialized(state);
   return kVectorToScalarLaneLowerers[state->descriptor->lane_kind](
       state, indices, out_lane);
 }
@@ -631,6 +628,7 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
   if (loom_vector_constant_isa(def_op)) {
     loom_vector_to_scalar_state_t def_state = {
         .pass = state->pass,
+        .statistics = state->statistics,
         .rewriter = state->rewriter,
         .op = def_op,
         .value_checkpoint = state->value_checkpoint,
@@ -646,6 +644,7 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
   if (loom_vector_poison_isa(def_op)) {
     loom_vector_to_scalar_state_t def_state = {
         .pass = state->pass,
+        .statistics = state->statistics,
         .rewriter = state->rewriter,
         .op = def_op,
         .value_checkpoint = state->value_checkpoint,
@@ -664,6 +663,7 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
     }
     loom_vector_to_scalar_state_t def_state = {
         .pass = state->pass,
+        .statistics = state->statistics,
         .rewriter = state->rewriter,
         .op = def_op,
         .value_checkpoint = state->value_checkpoint,
@@ -691,6 +691,7 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
       state->rewriter->module, loom_op_results(def_op)[result_ordinal]);
   loom_vector_to_scalar_state_t def_state = {
       .pass = state->pass,
+      .statistics = state->statistics,
       .rewriter = state->rewriter,
       .op = def_op,
       .descriptor = descriptor,

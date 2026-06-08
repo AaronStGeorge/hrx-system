@@ -18,14 +18,13 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/math.h"
 
-enum {
-  LOOM_LOW_SELECT_OPERAND_FORMS_STAT_FORMS_SELECTED = 0,
-};
+#define LOOM_LOW_SELECT_OPERAND_FORMS_STATISTICS(V, statistics_type) \
+  V(statistics_type, forms_selected, "forms-selected",               \
+    "Number of low packets rewritten to descriptor operand forms.")
 
-static const loom_pass_statistic_def_t kLowSelectOperandFormsStatistics[] = {
-    {IREE_SVL("forms-selected"),
-     IREE_SVL("Number of low packets rewritten to descriptor operand forms.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_low_select_operand_forms_statistics,
+                            loom_low_select_operand_forms_statistics_t,
+                            LOOM_LOW_SELECT_OPERAND_FORMS_STATISTICS)
 
 static const loom_pass_info_t loom_low_select_operand_forms_pass_info_storage =
     {
@@ -33,8 +32,7 @@ static const loom_pass_info_t loom_low_select_operand_forms_pass_info_storage =
         .description = IREE_SVL(
             "Rewrite low packets to descriptor-selected operand forms."),
         .kind = LOOM_PASS_FUNCTION,
-        .statistic_defs = kLowSelectOperandFormsStatistics,
-        .statistic_count = IREE_ARRAYSIZE(kLowSelectOperandFormsStatistics),
+        .statistic_layout = &loom_low_select_operand_forms_statistics_layout,
 };
 
 const loom_pass_info_t* loom_low_select_operand_forms_pass_info(void) {
@@ -42,8 +40,10 @@ const loom_pass_info_t* loom_low_select_operand_forms_pass_info(void) {
 }
 
 typedef struct loom_low_select_operand_forms_state_t {
-  // Pass invocation used for statistics and scratch arena allocation.
+  // Pass invocation used for scratch arena allocation.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_low_select_operand_forms_statistics_t* statistics;
   // Module being rewritten.
   loom_module_t* module;
   // Resolved target for the low function.
@@ -415,10 +415,7 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
   state->changed = true;
   *out_rewritten = true;
   loom_pass_mark_changed(state->pass);
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(
-        state->pass, LOOM_LOW_SELECT_OPERAND_FORMS_STAT_FORMS_SELECTED, 1);
-  }
+  ++state->statistics->forms_selected;
   return iree_ok_status();
 }
 
@@ -504,6 +501,7 @@ static iree_status_t loom_low_select_operand_forms_function(
       loom_rewriter_initialize(&rewriter, module, pass->arena));
   loom_low_select_operand_forms_state_t state = {
       .pass = pass,
+      .statistics = loom_low_select_operand_forms_statistics(pass),
       .module = module,
       .target = &target,
       .value_facts = value_facts,

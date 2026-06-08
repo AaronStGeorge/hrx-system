@@ -197,14 +197,15 @@ static iree_status_t loom_pass_interpreter_make_pass(
       .environment = &state->options->environment,
       .value_facts = &state->value_facts,
   };
-  if (invoke->info->statistic_count == 0) {
+  const loom_pass_statistic_layout_t* statistic_layout =
+      invoke->info->statistic_layout;
+  if (!statistic_layout || statistic_layout->storage_size == 0) {
     return iree_ok_status();
   }
-  iree_host_size_t statistics_size =
-      (iree_host_size_t)invoke->info->statistic_count * sizeof(int64_t);
-  IREE_RETURN_IF_ERROR(iree_arena_allocate(instance_arena, statistics_size,
-                                           (void**)&out_pass->statistics));
-  memset(out_pass->statistics, 0, statistics_size);
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(instance_arena,
+                                           statistic_layout->storage_size,
+                                           &out_pass->statistic_storage));
+  memset(out_pass->statistic_storage, 0, statistic_layout->storage_size);
   return iree_ok_status();
 }
 
@@ -376,7 +377,7 @@ static iree_status_t loom_pass_interpreter_invoke(
             .duration_nanoseconds = duration_nanoseconds,
             .changed = invocation_changed,
             .status_code = status_code,
-            .statistics = pass.statistics,
+            .statistic_storage = pass.statistic_storage,
         });
   }
 

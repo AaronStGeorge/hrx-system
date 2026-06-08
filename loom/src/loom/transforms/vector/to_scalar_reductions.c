@@ -92,10 +92,7 @@ static iree_status_t loom_vector_to_scalar_product_terms_from_ordinal(
       &state->lane_state, state->fused_product_lhs, index_list, out_lhs));
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
       &state->lane_state, state->fused_product_rhs, index_list, out_rhs));
-  if (state->lane_state.pass->statistics) {
-    loom_pass_statistic_add(state->lane_state.pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
-  }
+  loom_vector_to_scalar_record_lane_materialized(&state->lane_state);
   return iree_ok_status();
 }
 
@@ -215,10 +212,7 @@ static iree_status_t loom_vector_to_scalar_build_static_reduction_tree(
     };
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
         &state->lane_state, state->input, index_list, out_result));
-    if (state->lane_state.pass->statistics) {
-      loom_pass_statistic_add(state->lane_state.pass,
-                              LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
-    }
+    loom_vector_to_scalar_record_lane_materialized(&state->lane_state);
     return iree_ok_status();
   }
 
@@ -299,10 +293,7 @@ static iree_status_t loom_vector_to_scalar_lower_static_accumulator(
     };
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_accumulator_lane(
         state, index_list, accumulator, &accumulator));
-    if (state->lane_state.pass->statistics) {
-      loom_pass_statistic_add(state->lane_state.pass,
-                              LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
-    }
+    loom_vector_to_scalar_record_lane_materialized(&state->lane_state);
   }
   *out_replacement = accumulator;
   return iree_ok_status();
@@ -332,10 +323,7 @@ static iree_status_t loom_vector_to_scalar_accumulator_loop_axis(
       upper_bound, step, &current_accumulator, 1,
       &state->lane_state.result_scalar_type, 1, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->lane_state.location, &loop));
-  if (state->lane_state.pass->statistics) {
-    loom_pass_statistic_add(state->lane_state.pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(&state->lane_state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->lane_state.rewriter->builder, loop, loom_scf_for_body(loop));
@@ -350,10 +338,7 @@ static iree_status_t loom_vector_to_scalar_accumulator_loop_axis(
     };
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_accumulator_lane(
         state, index_list, accumulator_arg, &yielded_accumulator));
-    if (state->lane_state.pass->statistics) {
-      loom_pass_statistic_add(state->lane_state.pass,
-                              LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
-    }
+    loom_vector_to_scalar_record_lane_materialized(&state->lane_state);
   } else {
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_accumulator_loop_axis(
         state, (uint8_t)(axis + 1), accumulator_arg, dynamic_indices,
@@ -508,11 +493,7 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_materialize_lane(
   loom_value_id_t lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
       &state->lane_state, state->input, source_indices, &lane));
-
-  if (state->lane_state.pass->statistics) {
-    loom_pass_statistic_add(state->lane_state.pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
-  }
+  loom_vector_to_scalar_record_lane_materialized(&state->lane_state);
   *out_lane = lane;
   return iree_ok_status();
 }
@@ -577,10 +558,7 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_axis(
       upper_bound, step, &current_accumulator, 1,
       &state->lane_state.result_scalar_type, 1, NULL, 0, LOOM_VALUE_ID_INVALID,
       /*unroll_policy=*/0, state->lane_state.location, &loop));
-  if (state->lane_state.pass->statistics) {
-    loom_pass_statistic_add(state->lane_state.pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(&state->lane_state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->lane_state.rewriter->builder, loop, loom_scf_for_body(loop));
@@ -792,10 +770,7 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_result_loop_axis(
       upper_bound, step, &current_aggregate, 1, &state->result_type, 1, NULL, 0,
       LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0, state->lane_state.location,
       &loop));
-  if (state->lane_state.pass->statistics) {
-    loom_pass_statistic_add(state->lane_state.pass,
-                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
-  }
+  loom_vector_to_scalar_record_loop_created(&state->lane_state);
 
   loom_builder_ip_t saved = loom_builder_enter_region(
       &state->lane_state.rewriter->builder, loop, loom_scf_for_body(loop));

@@ -27,11 +27,155 @@ static const loom_pass_descriptor_t* LookupTestPass(iree_string_view_t name) {
 }
 
 static const loom_pass_info_t* BrokenStatisticsPassInfo() {
+  static const loom_pass_statistic_layout_t kLayout = {
+      /*.storage_size=*/sizeof(int64_t),
+      /*.fields=*/nullptr,
+      /*.field_count=*/1,
+  };
   static const loom_pass_info_t kInfo = {
-      .name = IREE_SVL("test.broken-statistics"),
-      .description = IREE_SVL("Synthetic pass with malformed statistics."),
-      .kind = LOOM_PASS_MODULE,
-      .statistic_count = 1,
+      /*.name=*/IREE_SVL("test.broken-statistics"),
+      /*.description=*/
+      IREE_SVL("Synthetic pass with malformed statistics."),
+      /*.kind=*/LOOM_PASS_MODULE,
+      /*.option_defs=*/nullptr,
+      /*.option_count=*/0,
+      /*.statistic_layout=*/&kLayout,
+  };
+  return &kInfo;
+}
+
+static const loom_pass_info_t* DuplicateStatisticsPassInfo() {
+  typedef struct duplicate_statistics_t {
+    int64_t first;
+    int64_t second;
+  } duplicate_statistics_t;
+  static const loom_pass_statistic_field_t kFields[] = {
+      LOOM_PASS_STATISTIC_FIELD(duplicate_statistics_t, first, "duplicated",
+                                "First field."),
+      LOOM_PASS_STATISTIC_FIELD(duplicate_statistics_t, second, "duplicated",
+                                "Second field."),
+  };
+  static const loom_pass_statistic_layout_t kLayout = {
+      /*.storage_size=*/sizeof(duplicate_statistics_t),
+      /*.fields=*/kFields,
+      /*.field_count=*/IREE_ARRAYSIZE(kFields),
+  };
+  static const loom_pass_info_t kInfo = {
+      /*.name=*/IREE_SVL("test.duplicate-statistics"),
+      /*.description=*/
+      IREE_SVL("Synthetic pass with duplicate statistics."),
+      /*.kind=*/LOOM_PASS_MODULE,
+      /*.option_defs=*/nullptr,
+      /*.option_count=*/0,
+      /*.statistic_layout=*/&kLayout,
+  };
+  return &kInfo;
+}
+
+static const loom_pass_info_t* DuplicateStatisticOffsetsPassInfo() {
+  static const loom_pass_statistic_field_t kFields[] = {
+      {
+          /*.name=*/IREE_SVL("first"),
+          /*.description=*/IREE_SVL("First field."),
+          /*.offset=*/0,
+      },
+      {
+          /*.name=*/IREE_SVL("second"),
+          /*.description=*/IREE_SVL("Second field."),
+          /*.offset=*/0,
+      },
+  };
+  static const loom_pass_statistic_layout_t kLayout = {
+      /*.storage_size=*/sizeof(int64_t),
+      /*.fields=*/kFields,
+      /*.field_count=*/IREE_ARRAYSIZE(kFields),
+  };
+  static const loom_pass_info_t kInfo = {
+      /*.name=*/IREE_SVL("test.duplicate-statistic-offsets"),
+      /*.description=*/
+      IREE_SVL("Synthetic pass with duplicate statistic offsets."),
+      /*.kind=*/LOOM_PASS_MODULE,
+      /*.option_defs=*/nullptr,
+      /*.option_count=*/0,
+      /*.statistic_layout=*/&kLayout,
+  };
+  return &kInfo;
+}
+
+static const loom_pass_info_t* UnalignedStatisticsPassInfo() {
+  static const loom_pass_statistic_field_t kFields[] = {
+      {
+          /*.name=*/IREE_SVL("unaligned"),
+          /*.description=*/IREE_SVL("Unaligned synthetic statistic."),
+          /*.offset=*/1,
+      },
+  };
+  static const loom_pass_statistic_layout_t kLayout = {
+      /*.storage_size=*/sizeof(int64_t) + 1,
+      /*.fields=*/kFields,
+      /*.field_count=*/IREE_ARRAYSIZE(kFields),
+  };
+  static const loom_pass_info_t kInfo = {
+      /*.name=*/IREE_SVL("test.unaligned-statistics"),
+      /*.description=*/
+      IREE_SVL("Synthetic pass with unaligned statistics."),
+      /*.kind=*/LOOM_PASS_MODULE,
+      /*.option_defs=*/nullptr,
+      /*.option_count=*/0,
+      /*.statistic_layout=*/&kLayout,
+  };
+  return &kInfo;
+}
+
+static const loom_pass_info_t* TooManyStatisticsPassInfo() {
+  static const loom_pass_statistic_field_t kFields[] = {
+      {/*.name=*/IREE_SVL("stat-00"),
+       /*.description=*/IREE_SVL("Statistic 00."),
+       /*.offset=*/sizeof(int64_t) * 0},
+      {/*.name=*/IREE_SVL("stat-01"),
+       /*.description=*/IREE_SVL("Statistic 01."),
+       /*.offset=*/sizeof(int64_t) * 1},
+      {/*.name=*/IREE_SVL("stat-02"),
+       /*.description=*/IREE_SVL("Statistic 02."),
+       /*.offset=*/sizeof(int64_t) * 2},
+      {/*.name=*/IREE_SVL("stat-03"),
+       /*.description=*/IREE_SVL("Statistic 03."),
+       /*.offset=*/sizeof(int64_t) * 3},
+      {/*.name=*/IREE_SVL("stat-04"),
+       /*.description=*/IREE_SVL("Statistic 04."),
+       /*.offset=*/sizeof(int64_t) * 4},
+      {/*.name=*/IREE_SVL("stat-05"),
+       /*.description=*/IREE_SVL("Statistic 05."),
+       /*.offset=*/sizeof(int64_t) * 5},
+      {/*.name=*/IREE_SVL("stat-06"),
+       /*.description=*/IREE_SVL("Statistic 06."),
+       /*.offset=*/sizeof(int64_t) * 6},
+      {/*.name=*/IREE_SVL("stat-07"),
+       /*.description=*/IREE_SVL("Statistic 07."),
+       /*.offset=*/sizeof(int64_t) * 7},
+      {/*.name=*/IREE_SVL("stat-08"),
+       /*.description=*/IREE_SVL("Statistic 08."),
+       /*.offset=*/sizeof(int64_t) * 8},
+      {/*.name=*/IREE_SVL("stat-09"),
+       /*.description=*/IREE_SVL("Statistic 09."),
+       /*.offset=*/sizeof(int64_t) * 9},
+      {/*.name=*/IREE_SVL("stat-10"),
+       /*.description=*/IREE_SVL("Statistic 10."),
+       /*.offset=*/sizeof(int64_t) * 10},
+  };
+  static const loom_pass_statistic_layout_t kLayout = {
+      /*.storage_size=*/sizeof(int64_t) * IREE_ARRAYSIZE(kFields),
+      /*.fields=*/kFields,
+      /*.field_count=*/IREE_ARRAYSIZE(kFields),
+  };
+  static const loom_pass_info_t kInfo = {
+      /*.name=*/IREE_SVL("test.too-many-statistics"),
+      /*.description=*/
+      IREE_SVL("Synthetic pass with too many statistics."),
+      /*.kind=*/LOOM_PASS_MODULE,
+      /*.option_defs=*/nullptr,
+      /*.option_count=*/0,
+      /*.statistic_layout=*/&kLayout,
   };
   return &kInfo;
 }
@@ -89,6 +233,62 @@ TEST(PassRegistryCoreTest, RejectsMissingStatisticMetadata) {
   const loom_pass_registry_t registry = {
       .descriptors = &descriptor,
       .descriptor_count = 1,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_registry_verify(&registry));
+}
+
+TEST(PassRegistryCoreTest, RejectsDuplicateStatisticNames) {
+  loom_pass_descriptor_t descriptor =
+      *LookupTestPass(IREE_SV("test.module-noop"));
+  descriptor.key = IREE_SVL("test.duplicate-statistics");
+  descriptor.info = DuplicateStatisticsPassInfo;
+  const loom_pass_registry_t registry = {
+      /*.descriptors=*/&descriptor,
+      /*.descriptor_count=*/1,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_registry_verify(&registry));
+}
+
+TEST(PassRegistryCoreTest, RejectsDuplicateStatisticOffsets) {
+  loom_pass_descriptor_t descriptor =
+      *LookupTestPass(IREE_SV("test.module-noop"));
+  descriptor.key = IREE_SVL("test.duplicate-statistic-offsets");
+  descriptor.info = DuplicateStatisticOffsetsPassInfo;
+  const loom_pass_registry_t registry = {
+      /*.descriptors=*/&descriptor,
+      /*.descriptor_count=*/1,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_registry_verify(&registry));
+}
+
+TEST(PassRegistryCoreTest, RejectsUnalignedStatisticFields) {
+  loom_pass_descriptor_t descriptor =
+      *LookupTestPass(IREE_SV("test.module-noop"));
+  descriptor.key = IREE_SVL("test.unaligned-statistics");
+  descriptor.info = UnalignedStatisticsPassInfo;
+  const loom_pass_registry_t registry = {
+      /*.descriptors=*/&descriptor,
+      /*.descriptor_count=*/1,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_registry_verify(&registry));
+}
+
+TEST(PassRegistryCoreTest, RejectsTooManyStatisticFields) {
+  loom_pass_descriptor_t descriptor =
+      *LookupTestPass(IREE_SV("test.module-noop"));
+  descriptor.key = IREE_SVL("test.too-many-statistics");
+  descriptor.info = TooManyStatisticsPassInfo;
+  const loom_pass_registry_t registry = {
+      /*.descriptors=*/&descriptor,
+      /*.descriptor_count=*/1,
   };
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,

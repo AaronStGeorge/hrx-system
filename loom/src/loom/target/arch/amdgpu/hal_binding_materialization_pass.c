@@ -14,36 +14,28 @@
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 
-enum {
-  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_ERRORS = 0,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_FUNCTIONS = 1,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_BINDINGS = 2,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DIRECT_ARGS = 3,
-  LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DESCRIPTORS = 4,
-};
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_STATISTICS(V, statistics_type) \
+  V(statistics_type, errors, "errors",                            \
+    "Number of AMDGPU HAL ABI errors emitted.")                   \
+  V(statistics_type, functions, "functions",                      \
+    "Number of target-low functions materialized.")               \
+  V(statistics_type, bindings, "bindings",                        \
+    "Number of HAL buffer bindings materialized.")                \
+  V(statistics_type, direct_args, "direct-args",                  \
+    "Number of direct kernarg values materialized.")              \
+  V(statistics_type, descriptors, "descriptors",                  \
+    "Number of HAL buffer descriptor pseudos materialized.")
 
-static const loom_pass_statistic_def_t
-    kAmdgpuMaterializeHalKernelAbiStatistics[] = {
-        {IREE_SVL("errors"),
-         IREE_SVL("Number of AMDGPU HAL ABI errors emitted.")},
-        {IREE_SVL("functions"),
-         IREE_SVL("Number of target-low functions materialized.")},
-        {IREE_SVL("bindings"),
-         IREE_SVL("Number of HAL buffer bindings materialized.")},
-        {IREE_SVL("direct-args"),
-         IREE_SVL("Number of direct kernarg values materialized.")},
-        {IREE_SVL("descriptors"),
-         IREE_SVL("Number of HAL buffer descriptor pseudos materialized.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_amdgpu_hal_kernel_abi_statistics,
+                            loom_amdgpu_hal_kernel_abi_statistics_t,
+                            LOOM_AMDGPU_HAL_KERNEL_ABI_STATISTICS)
 
 static const loom_pass_info_t
     loom_amdgpu_materialize_hal_kernel_abi_pass_info_storage = {
         .name = IREE_SVL("amdgpu-materialize-hal-kernel-abi"),
         .description = IREE_SVL("Materialize AMDGPU HAL kernel ABI resources."),
         .kind = LOOM_PASS_FUNCTION,
-        .statistic_defs = kAmdgpuMaterializeHalKernelAbiStatistics,
-        .statistic_count =
-            IREE_ARRAYSIZE(kAmdgpuMaterializeHalKernelAbiStatistics),
+        .statistic_layout = &loom_amdgpu_hal_kernel_abi_statistics_layout,
 };
 
 const loom_pass_info_t* loom_amdgpu_materialize_hal_kernel_abi_pass_info(void) {
@@ -90,8 +82,9 @@ iree_status_t loom_amdgpu_materialize_hal_kernel_abi_run(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_low(
       module, function.op, target.descriptor_set, /*max_errors=*/20,
       pass->diagnostic_emitter, &verify_result, pass->arena));
-  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_ERRORS,
-                          verify_result.error_count);
+  loom_amdgpu_hal_kernel_abi_statistics_t* statistics =
+      loom_amdgpu_hal_kernel_abi_statistics(pass);
+  statistics->errors += verify_result.error_count;
   if (verify_result.error_count != 0) {
     return iree_ok_status();
   }
@@ -100,13 +93,10 @@ iree_status_t loom_amdgpu_materialize_hal_kernel_abi_run(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_materialize(
       module, function.op, &target.bundle_storage.bundle, target.descriptor_set,
       &materialization, pass->arena));
-  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_FUNCTIONS, 1);
-  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_BINDINGS,
-                          materialization.materialized_binding_count);
-  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DIRECT_ARGS,
-                          materialization.materialized_direct_arg_count);
-  loom_pass_statistic_add(pass, LOOM_AMDGPU_HAL_KERNEL_ABI_STAT_DESCRIPTORS,
-                          materialization.materialized_descriptor_count);
+  ++statistics->functions;
+  statistics->bindings += materialization.materialized_binding_count;
+  statistics->direct_args += materialization.materialized_direct_arg_count;
+  statistics->descriptors += materialization.materialized_descriptor_count;
   if (loom_amdgpu_hal_binding_materialization_changed(&materialization)) {
     loom_pass_mark_changed(pass);
   }

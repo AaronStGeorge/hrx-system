@@ -11,44 +11,28 @@
 #include "loom/ops/op_defs.h"
 #include "loom/pass/value_facts.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_KERNEL_ASYNC_LEGALITY_STATISTICS(V, statistics_type) \
+  V(statistics_type, blocks_checked, "blocks-checked",            \
+    "Number of blocks checked for async stream legality.")        \
+  V(statistics_type, groups_checked, "groups-checked",            \
+    "Number of kernel.async.group ops checked.")                  \
+  V(statistics_type, waits_checked, "waits-checked",              \
+    "Number of kernel.async.wait ops checked.")
 
-enum {
-  LOOM_KERNEL_ASYNC_LEGALITY_STAT_BLOCKS_CHECKED = 0,
-  LOOM_KERNEL_ASYNC_LEGALITY_STAT_GROUPS_CHECKED = 1,
-  LOOM_KERNEL_ASYNC_LEGALITY_STAT_WAITS_CHECKED = 2,
-};
-
-static const loom_pass_statistic_def_t kKernelAsyncLegalityStatistics[] = {
-    {IREE_SVL("blocks-checked"),
-     IREE_SVL("Number of blocks checked for async stream legality.")},
-    {IREE_SVL("groups-checked"),
-     IREE_SVL("Number of kernel.async.group ops checked.")},
-    {IREE_SVL("waits-checked"),
-     IREE_SVL("Number of kernel.async.wait ops checked.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_kernel_async_legality_statistics,
+                            loom_kernel_async_legality_statistics_t,
+                            LOOM_KERNEL_ASYNC_LEGALITY_STATISTICS)
 
 static const loom_pass_info_t loom_kernel_async_legality_pass_info_storage = {
     .name = IREE_SVL("kernel-async-legality"),
     .description =
         IREE_SVL("Prove kernel async group/wait streams are lowerable."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kKernelAsyncLegalityStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kKernelAsyncLegalityStatistics),
+    .statistic_layout = &loom_kernel_async_legality_statistics_layout,
 };
 
 const loom_pass_info_t* loom_kernel_async_legality_pass_info(void) {
   return &loom_kernel_async_legality_pass_info_storage;
-}
-
-static void loom_kernel_async_legality_add_stat(loom_pass_t* pass,
-                                                uint16_t statistic_index,
-                                                uint64_t value) {
-  if (pass->statistics && value != 0) {
-    loom_pass_statistic_add(pass, statistic_index, (int64_t)value);
-  }
 }
 
 iree_status_t loom_kernel_async_legality_run(loom_pass_t* pass,
@@ -83,14 +67,10 @@ iree_status_t loom_kernel_async_legality_run(loom_pass_t* pass,
   loom_local_value_domain_release(&value_domain);
   IREE_RETURN_IF_ERROR(status);
 
-  loom_kernel_async_legality_add_stat(
-      pass, LOOM_KERNEL_ASYNC_LEGALITY_STAT_BLOCKS_CHECKED,
-      result.blocks_checked);
-  loom_kernel_async_legality_add_stat(
-      pass, LOOM_KERNEL_ASYNC_LEGALITY_STAT_GROUPS_CHECKED,
-      result.groups_checked);
-  loom_kernel_async_legality_add_stat(
-      pass, LOOM_KERNEL_ASYNC_LEGALITY_STAT_WAITS_CHECKED,
-      result.waits_checked);
+  loom_kernel_async_legality_statistics_t* statistics =
+      loom_kernel_async_legality_statistics(pass);
+  statistics->blocks_checked += (int64_t)result.blocks_checked;
+  statistics->groups_checked += (int64_t)result.groups_checked;
+  statistics->waits_checked += (int64_t)result.waits_checked;
   return iree_ok_status();
 }

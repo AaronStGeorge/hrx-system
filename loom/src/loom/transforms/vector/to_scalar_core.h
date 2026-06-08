@@ -20,14 +20,29 @@
 extern "C" {
 #endif
 
-typedef enum loom_vector_to_scalar_stat_e {
-  // Number of vector ops lowered by this pass.
-  LOOM_VECTOR_TO_SCALAR_STAT_OPS_LOWERED = 0,
-  // Number of scf.for loops created by this pass.
-  LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED = 1,
-  // Number of scalar lane programs materialized by this pass.
-  LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED = 2,
-} loom_vector_to_scalar_stat_t;
+#define LOOM_VECTOR_TO_SCALAR_STATISTICS(V, statistics_type)   \
+  V(statistics_type, ops_lowered, "ops-lowered",               \
+    "Number of vector ops lowered.")                           \
+  V(statistics_type, loops_created, "loops-created",           \
+    "Number of scf.for loops created.")                        \
+  V(statistics_type, lanes_materialized, "lanes-materialized", \
+    "Number of scalar lane programs materialized.")
+
+LOOM_PASS_STATISTICS_DECLARE(loom_vector_to_scalar_statistics,
+                             loom_vector_to_scalar_statistics_t,
+                             LOOM_VECTOR_TO_SCALAR_STATISTICS)
+
+extern const loom_pass_statistic_layout_t
+    loom_vector_to_scalar_statistics_layout;
+
+static inline loom_vector_to_scalar_statistics_t*
+loom_vector_to_scalar_statistics_if_available(loom_pass_t* pass) {
+  return pass && pass->statistic_storage && pass->info &&
+                 pass->info->statistic_layout ==
+                     &loom_vector_to_scalar_statistics_layout
+             ? loom_vector_to_scalar_statistics(pass)
+             : NULL;
+}
 
 typedef struct loom_vector_to_scalar_descriptor_t
     loom_vector_to_scalar_descriptor_t;
@@ -35,6 +50,11 @@ typedef struct loom_vector_to_scalar_descriptor_t
 typedef struct loom_vector_to_scalar_state_t {
   // Current pass instance owning statistics and transient arena state.
   loom_pass_t* pass;
+  // Typed statistics storage for this pass invocation or state-local discard
+  // storage when the scalarization helper is composed under another pass.
+  loom_vector_to_scalar_statistics_t* statistics;
+  // State-local discard storage used for composed helper invocations.
+  loom_vector_to_scalar_statistics_t discarded_statistics;
   // Rewriter used to insert replacement lane IR and maintain use-def state.
   loom_rewriter_t* rewriter;
   // Vector op currently being scalarized.
@@ -56,6 +76,29 @@ typedef struct loom_vector_to_scalar_state_t {
   // Source location assigned to replacement ops.
   loom_location_id_t location;
 } loom_vector_to_scalar_state_t;
+
+static inline void loom_vector_to_scalar_state_bind_statistics(
+    loom_vector_to_scalar_state_t* state, loom_pass_t* pass) {
+  state->statistics = loom_vector_to_scalar_statistics_if_available(pass);
+  if (!state->statistics) {
+    state->statistics = &state->discarded_statistics;
+  }
+}
+
+static inline void loom_vector_to_scalar_record_ops_lowered(
+    loom_vector_to_scalar_state_t* state) {
+  ++state->statistics->ops_lowered;
+}
+
+static inline void loom_vector_to_scalar_record_loop_created(
+    loom_vector_to_scalar_state_t* state) {
+  ++state->statistics->loops_created;
+}
+
+static inline void loom_vector_to_scalar_record_lane_materialized(
+    loom_vector_to_scalar_state_t* state) {
+  ++state->statistics->lanes_materialized;
+}
 
 // Returns the op defining |value_id|, or NULL when the value is not an op
 // result that can be rematerialized from its defining operation.

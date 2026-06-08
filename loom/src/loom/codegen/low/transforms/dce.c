@@ -11,19 +11,22 @@
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/pass/types.h"
 #include "loom/transforms/cleanup/dce.h"
 
-static const loom_pass_statistic_def_t kLowDceStatistics[] = {
-    {IREE_SVL("ops-eliminated"), IREE_SVL("Number of low operations removed.")},
+static const loom_pass_statistic_field_t kLowDceStatisticFields[] = {
+    LOOM_PASS_STATISTIC_FIELD(loom_dce_statistics_t, ops_eliminated,
+                              "ops-eliminated",
+                              "Number of low operations removed."),
 };
+
+static const loom_pass_statistic_layout_t kLowDceStatisticLayout =
+    LOOM_PASS_STATISTIC_LAYOUT(loom_dce_statistics_t, kLowDceStatisticFields);
 
 static const loom_pass_info_t loom_low_dce_pass_info_storage = {
     .name = IREE_SVL("low-dce"),
     .description = IREE_SVL("Remove dead descriptor-backed low packets."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kLowDceStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kLowDceStatistics),
+    .statistic_layout = &kLowDceStatisticLayout,
 };
 
 const loom_pass_info_t* loom_low_dce_pass_info(void) {

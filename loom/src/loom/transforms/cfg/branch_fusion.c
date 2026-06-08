@@ -13,31 +13,23 @@
 #include "loom/rewrite/remap.h"
 #include "loom/rewrite/rewriter.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_BRANCH_FUSION_STATISTICS(V, statistics_type)        \
+  V(statistics_type, branches_visited, "branches-visited",       \
+    "Number of region-branch operations inspected.")             \
+  V(statistics_type, branches_fused, "branches-fused",           \
+    "Number of adjacent branch pairs fused.")                    \
+  V(statistics_type, candidates_rejected, "candidates-rejected", \
+    "Number of adjacent branch pairs rejected by preflight.")
 
-enum {
-  LOOM_BRANCH_FUSION_STAT_BRANCHES_VISITED = 0,
-  LOOM_BRANCH_FUSION_STAT_BRANCHES_FUSED = 1,
-  LOOM_BRANCH_FUSION_STAT_CANDIDATES_REJECTED = 2,
-};
-
-static const loom_pass_statistic_def_t kBranchFusionStatistics[] = {
-    {IREE_SVL("branches-visited"),
-     IREE_SVL("Number of region-branch operations inspected.")},
-    {IREE_SVL("branches-fused"),
-     IREE_SVL("Number of adjacent branch pairs fused.")},
-    {IREE_SVL("candidates-rejected"),
-     IREE_SVL("Number of adjacent branch pairs rejected by preflight.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_branch_fusion_statistics,
+                            loom_branch_fusion_statistics_t,
+                            LOOM_BRANCH_FUSION_STATISTICS)
 
 static const loom_pass_info_t loom_branch_fusion_pass_info_storage = {
     .name = IREE_SVL("branch-fusion"),
     .description = IREE_SVL("Fuse compatible adjacent branch regions."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kBranchFusionStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kBranchFusionStatistics),
+    .statistic_layout = &loom_branch_fusion_statistics_layout,
 };
 
 const loom_pass_info_t* loom_branch_fusion_pass_info(void) {
@@ -106,8 +98,10 @@ typedef struct loom_branch_fusion_info_t {
 } loom_branch_fusion_info_t;
 
 typedef struct loom_branch_fusion_context_t {
-  // Pass instance owning statistics and persistent scratch memory.
+  // Pass instance owning persistent scratch memory.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_branch_fusion_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Rewriter used for all IR mutation.
@@ -559,27 +553,18 @@ static iree_status_t loom_branch_fusion_process_block(
     loom_branch_fusion_info_t second = {0};
     if (next_op &&
         loom_branch_fusion_read_if_info(context->module, op, &first)) {
-      if (context->pass->statistics) {
-        loom_pass_statistic_add(context->pass,
-                                LOOM_BRANCH_FUSION_STAT_BRANCHES_VISITED, 1);
-      }
+      ++context->statistics->branches_visited;
       if (loom_branch_fusion_read_if_info(context->module, next_op, &second)) {
         if (loom_branch_fusion_candidate_is_legal(&first, &second)) {
           loom_op_t* fused_if = NULL;
           IREE_RETURN_IF_ERROR(loom_branch_fusion_fuse_pair(
               context, &first, &second, &fused_if));
-          if (context->pass->statistics) {
-            loom_pass_statistic_add(context->pass,
-                                    LOOM_BRANCH_FUSION_STAT_BRANCHES_FUSED, 1);
-          }
+          ++context->statistics->branches_fused;
           *out_changed = true;
           op = fused_if;
           continue;
         }
-        if (context->pass->statistics) {
-          loom_pass_statistic_add(
-              context->pass, LOOM_BRANCH_FUSION_STAT_CANDIDATES_REJECTED, 1);
-        }
+        ++context->statistics->candidates_rejected;
       }
     }
 
@@ -627,6 +612,7 @@ iree_status_t loom_branch_fusion_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_branch_fusion_context_t context = {
       .pass = pass,
+      .statistics = loom_branch_fusion_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
       .fusion_arena = &fusion_arena,

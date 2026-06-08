@@ -9,44 +9,28 @@
 #include "loom/analysis/ownership_lifetime.h"
 #include "loom/ops/op_defs.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_OWNERSHIP_LIFETIME_STATISTICS(V, statistics_type) \
+  V(statistics_type, blocks_checked, "blocks-checked",         \
+    "Number of blocks checked for ownership lifetimes.")       \
+  V(statistics_type, ops_checked, "ops-checked",               \
+    "Number of operations visited for ownership lifetimes.")   \
+  V(statistics_type, effects_checked, "effects-checked",       \
+    "Number of ownership effects interpreted.")
 
-enum {
-  LOOM_OWNERSHIP_LIFETIME_STAT_BLOCKS_CHECKED = 0,
-  LOOM_OWNERSHIP_LIFETIME_STAT_OPS_CHECKED = 1,
-  LOOM_OWNERSHIP_LIFETIME_STAT_EFFECTS_CHECKED = 2,
-};
-
-static const loom_pass_statistic_def_t kOwnershipLifetimeStatistics[] = {
-    {IREE_SVL("blocks-checked"),
-     IREE_SVL("Number of blocks checked for ownership lifetimes.")},
-    {IREE_SVL("ops-checked"),
-     IREE_SVL("Number of operations visited for ownership lifetimes.")},
-    {IREE_SVL("effects-checked"),
-     IREE_SVL("Number of ownership effects interpreted.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_ownership_lifetime_statistics,
+                            loom_ownership_lifetime_statistics_t,
+                            LOOM_OWNERSHIP_LIFETIME_STATISTICS)
 
 static const loom_pass_info_t loom_ownership_lifetime_pass_info_storage = {
     .name = IREE_SVL("ownership-lifetime"),
     .description = IREE_SVL("Analyze descriptor-backed owned-resource "
                             "lifetimes across function and CFG control flow."),
     .kind = LOOM_PASS_MODULE,
-    .statistic_defs = kOwnershipLifetimeStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kOwnershipLifetimeStatistics),
+    .statistic_layout = &loom_ownership_lifetime_statistics_layout,
 };
 
 const loom_pass_info_t* loom_ownership_lifetime_pass_info(void) {
   return &loom_ownership_lifetime_pass_info_storage;
-}
-
-static void loom_ownership_lifetime_add_stat(loom_pass_t* pass,
-                                             uint16_t statistic_index,
-                                             uint64_t value) {
-  if (pass->statistics && value != 0) {
-    loom_pass_statistic_add(pass, statistic_index, (int64_t)value);
-  }
 }
 
 iree_status_t loom_ownership_lifetime_run(loom_pass_t* pass,
@@ -60,12 +44,10 @@ iree_status_t loom_ownership_lifetime_run(loom_pass_t* pass,
   IREE_RETURN_IF_ERROR(
       loom_ownership_lifetime_analyze_module(module, &options, &result));
 
-  loom_ownership_lifetime_add_stat(
-      pass, LOOM_OWNERSHIP_LIFETIME_STAT_BLOCKS_CHECKED, result.blocks_checked);
-  loom_ownership_lifetime_add_stat(
-      pass, LOOM_OWNERSHIP_LIFETIME_STAT_OPS_CHECKED, result.ops_checked);
-  loom_ownership_lifetime_add_stat(pass,
-                                   LOOM_OWNERSHIP_LIFETIME_STAT_EFFECTS_CHECKED,
-                                   result.effects_checked);
+  loom_ownership_lifetime_statistics_t* statistics =
+      loom_ownership_lifetime_statistics(pass);
+  statistics->blocks_checked += (int64_t)result.blocks_checked;
+  statistics->ops_checked += (int64_t)result.ops_checked;
+  statistics->effects_checked += (int64_t)result.effects_checked;
   return iree_ok_status();
 }

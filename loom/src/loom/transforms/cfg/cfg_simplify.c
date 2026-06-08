@@ -26,41 +26,33 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_CFG_SIMPLIFY_STAT_BRANCHES_FOLDED = 0,
-  LOOM_CFG_SIMPLIFY_STAT_EDGES_FORWARDED = 1,
-  LOOM_CFG_SIMPLIFY_STAT_BLOCKS_REMOVED = 2,
-  LOOM_CFG_SIMPLIFY_STAT_BLOCK_ARGS_REMOVED = 3,
-  LOOM_CFG_SIMPLIFY_STAT_BLOCKS_FUSED = 4,
-  LOOM_CFG_SIMPLIFY_STAT_DUPLICATE_BLOCKS_MERGED = 5,
-  LOOM_CFG_SIMPLIFY_STAT_TERMINAL_BLOCKS_DUPLICATED = 6,
-};
+#define LOOM_CFG_SIMPLIFY_STATISTICS(V, statistics_type)                       \
+  V(statistics_type, branches_folded, "branches-folded",                       \
+    "Number of conditional branches folded to direct branches.")               \
+  V(statistics_type, edges_forwarded, "edges-forwarded",                       \
+    "Number of predecessor edges forwarded through trivial blocks.")           \
+  V(statistics_type, blocks_removed, "blocks-removed",                         \
+    "Number of unreachable CFG blocks removed.")                               \
+  V(statistics_type, block_args_removed, "block-args-removed",                 \
+    "Number of redundant CFG block arguments removed.")                        \
+  V(statistics_type, blocks_fused, "blocks-fused",                             \
+    "Number of single-predecessor CFG blocks fused into their "                \
+    "predecessors.")                                                           \
+  V(statistics_type, duplicate_blocks_merged, "duplicate-blocks-merged",       \
+    "Number of duplicate terminal CFG blocks merged.")                         \
+  V(statistics_type, terminal_blocks_duplicated, "terminal-blocks-duplicated", \
+    "Number of direct branches replaced by duplicated terminal "               \
+    "successors.")
 
-static const loom_pass_statistic_def_t kCfgSimplifyStatistics[] = {
-    {IREE_SVL("branches-folded"),
-     IREE_SVL("Number of conditional branches folded to direct branches.")},
-    {IREE_SVL("edges-forwarded"),
-     IREE_SVL("Number of predecessor edges forwarded through trivial blocks.")},
-    {IREE_SVL("blocks-removed"),
-     IREE_SVL("Number of unreachable CFG blocks removed.")},
-    {IREE_SVL("block-args-removed"),
-     IREE_SVL("Number of redundant CFG block arguments removed.")},
-    {IREE_SVL("blocks-fused"),
-     IREE_SVL("Number of single-predecessor CFG blocks fused into their "
-              "predecessors.")},
-    {IREE_SVL("duplicate-blocks-merged"),
-     IREE_SVL("Number of duplicate terminal CFG blocks merged.")},
-    {IREE_SVL("terminal-blocks-duplicated"),
-     IREE_SVL("Number of direct branches replaced by duplicated terminal "
-              "successors.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_cfg_simplify_statistics,
+                            loom_cfg_simplify_statistics_t,
+                            LOOM_CFG_SIMPLIFY_STATISTICS)
 
 static const loom_pass_info_t loom_cfg_simplify_pass_info_storage = {
     .name = IREE_SVL("cfg-simplify"),
     .description = IREE_SVL("Simplify explicit CFG block structure."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kCfgSimplifyStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kCfgSimplifyStatistics),
+    .statistic_layout = &loom_cfg_simplify_statistics_layout,
 };
 
 const loom_pass_info_t* loom_cfg_simplify_pass_info(void) {
@@ -85,6 +77,8 @@ typedef struct loom_cfg_simplify_region_stack_t {
 typedef struct loom_cfg_simplify_state_t {
   // Active pass instance for statistics and scratch allocation.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_cfg_simplify_statistics_t* statistics;
   // Module being rewritten.
   loom_module_t* module;
   // Rewriter used for use-list preserving IR edits.
@@ -244,10 +238,7 @@ static iree_status_t loom_cfg_simplify_replace_cond_br_with_br(
     loom_cfg_simplify_state_t* state, loom_op_t* cond_br, loom_block_t* dest) {
   IREE_RETURN_IF_ERROR(
       loom_cfg_simplify_replace_br(state, cond_br, dest, NULL, 0));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass, LOOM_CFG_SIMPLIFY_STAT_BRANCHES_FOLDED,
-                            1);
-  }
+  ++state->statistics->branches_folded;
   return iree_ok_status();
 }
 
@@ -407,10 +398,7 @@ static iree_status_t loom_cfg_simplify_duplicate_terminal_successors(
 
     IREE_RETURN_IF_ERROR(loom_cfg_simplify_clone_terminal_before_branch(
         state, block->last_op, terminator));
-    if (state->pass->statistics) {
-      loom_pass_statistic_add(
-          state->pass, LOOM_CFG_SIMPLIFY_STAT_TERMINAL_BLOCKS_DUPLICATED, 1);
-    }
+    ++state->statistics->terminal_blocks_duplicated;
     state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
     *out_changed = true;
     return iree_ok_status();
@@ -446,10 +434,7 @@ static iree_status_t loom_cfg_simplify_remove_unreachable_blocks(
   IREE_RETURN_IF_ERROR(loom_region_remove_blocks(
       state->module, (loom_region_t*)graph->region, remove_blocks,
       graph->block_count, &removed_count));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass, LOOM_CFG_SIMPLIFY_STAT_BLOCKS_REMOVED,
-                            removed_count);
-  }
+  state->statistics->blocks_removed += removed_count;
   state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   *out_changed = removed_count != 0;
   return iree_ok_status();
@@ -1248,10 +1233,7 @@ static iree_status_t loom_cfg_simplify_thread_predecessor_to_block(
     }
     IREE_RETURN_IF_ERROR(loom_cfg_simplify_replace_br(
         state, predecessor_terminator, new_dest, NULL, 0));
-    if (state->pass->statistics) {
-      loom_pass_statistic_add(state->pass,
-                              LOOM_CFG_SIMPLIFY_STAT_EDGES_FORWARDED, 1);
-    }
+    ++state->statistics->edges_forwarded;
     *out_changed = true;
     return iree_ok_status();
   }
@@ -1273,10 +1255,7 @@ static iree_status_t loom_cfg_simplify_thread_predecessor_to_block(
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_to_worklist(state->rewriter, predecessor_terminator));
   state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass, LOOM_CFG_SIMPLIFY_STAT_EDGES_FORWARDED,
-                            1);
-  }
+  ++state->statistics->edges_forwarded;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -1713,10 +1692,7 @@ static iree_status_t loom_cfg_simplify_forward_branch_edge(
   IREE_RETURN_IF_ERROR(
       loom_cfg_simplify_replace_br(state, predecessor_br, new_dest,
                                    composed_args.values, composed_args.count));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass, LOOM_CFG_SIMPLIFY_STAT_EDGES_FORWARDED,
-                            1);
-  }
+  ++state->statistics->edges_forwarded;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -1737,10 +1713,7 @@ static iree_status_t loom_cfg_simplify_forward_cond_br_edge(
     IREE_RETURN_IF_ERROR(
         loom_rewriter_add_to_worklist(state->rewriter, predecessor_cond_br));
     state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
-    if (state->pass->statistics) {
-      loom_pass_statistic_add(state->pass,
-                              LOOM_CFG_SIMPLIFY_STAT_EDGES_FORWARDED, 1);
-    }
+    ++state->statistics->edges_forwarded;
     *out_changed = true;
     return iree_ok_status();
   }
@@ -1875,11 +1848,7 @@ static iree_status_t loom_cfg_simplify_fuse_single_predecessor_blocks(
     IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, predecessor_br));
     IREE_RETURN_IF_ERROR(
         loom_cfg_simplify_remove_cfg_block(state, graph, block_index));
-
-    if (state->pass->statistics) {
-      loom_pass_statistic_add(state->pass, LOOM_CFG_SIMPLIFY_STAT_BLOCKS_FUSED,
-                              1);
-    }
+    ++state->statistics->blocks_fused;
     state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
     *out_changed = true;
     return iree_ok_status();
@@ -2339,10 +2308,7 @@ static iree_status_t loom_cfg_simplify_merge_alpha_equivalent_blocks(
         state, graph, block_index, canonical_block));
     IREE_RETURN_IF_ERROR(
         loom_cfg_simplify_remove_cfg_block(state, graph, block_index));
-    if (state->pass->statistics) {
-      loom_pass_statistic_add(
-          state->pass, LOOM_CFG_SIMPLIFY_STAT_DUPLICATE_BLOCKS_MERGED, 1);
-    }
+    ++state->statistics->duplicate_blocks_merged;
     state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
     *out_changed = true;
     return iree_ok_status();
@@ -2370,10 +2336,7 @@ static iree_status_t loom_cfg_simplify_merge_duplicate_terminal_blocks(
         state, graph, block_index, canonical_block));
     IREE_RETURN_IF_ERROR(
         loom_cfg_simplify_remove_cfg_block(state, graph, block_index));
-    if (state->pass->statistics) {
-      loom_pass_statistic_add(
-          state->pass, LOOM_CFG_SIMPLIFY_STAT_DUPLICATE_BLOCKS_MERGED, 1);
-    }
+    ++state->statistics->duplicate_blocks_merged;
     state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
     *out_changed = true;
     return iree_ok_status();
@@ -2535,10 +2498,7 @@ static iree_status_t loom_cfg_simplify_remove_block_arg(
         state, pred_branches[i], arg_index));
   }
   IREE_RETURN_IF_ERROR(loom_block_remove_arg(state->module, block, arg_index));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_CFG_SIMPLIFY_STAT_BLOCK_ARGS_REMOVED, 1);
-  }
+  ++state->statistics->block_args_removed;
   state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
 }
@@ -2564,10 +2524,7 @@ static iree_status_t loom_cfg_simplify_remove_unused_block_arg(
         state, pred_branches[i], arg_index));
   }
   IREE_RETURN_IF_ERROR(loom_block_remove_arg(state->module, block, arg_index));
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass,
-                            LOOM_CFG_SIMPLIFY_STAT_BLOCK_ARGS_REMOVED, 1);
-  }
+  ++state->statistics->block_args_removed;
   state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
 }
@@ -2708,6 +2665,7 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_cfg_simplify_state_t state = {
       .pass = pass,
+      .statistics = loom_cfg_simplify_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
       .analysis_arena = &analysis_arena,

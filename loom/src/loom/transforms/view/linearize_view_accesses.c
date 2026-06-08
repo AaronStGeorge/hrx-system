@@ -29,33 +29,27 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VIEWS_CREATED = 0,
-  LOOM_LINEARIZE_VIEW_ACCESSES_STAT_LOADS_LINEARIZED = 1,
-  LOOM_LINEARIZE_VIEW_ACCESSES_STAT_STORES_LINEARIZED = 2,
-  LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VECTOR_LOADS_LINEARIZED = 3,
-  LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VECTOR_STORES_LINEARIZED = 4,
-};
+#define LOOM_LINEARIZE_VIEW_ACCESSES_STATISTICS(V, statistics_type)        \
+  V(statistics_type, views_created, "views-created",                       \
+    "Number of rank-1 buffer views created.")                              \
+  V(statistics_type, loads_linearized, "loads-linearized",                 \
+    "Number of scalar view.load operations linearized.")                   \
+  V(statistics_type, stores_linearized, "stores-linearized",               \
+    "Number of scalar view.store operations linearized.")                  \
+  V(statistics_type, vector_loads_linearized, "vector-loads-linearized",   \
+    "Number of vector.load operations linearized.")                        \
+  V(statistics_type, vector_stores_linearized, "vector-stores-linearized", \
+    "Number of vector.store operations linearized.")
 
-static const loom_pass_statistic_def_t kLinearizeViewAccessesStatistics[] = {
-    {IREE_SVL("views-created"),
-     IREE_SVL("Number of rank-1 buffer views created.")},
-    {IREE_SVL("loads-linearized"),
-     IREE_SVL("Number of scalar view.load operations linearized.")},
-    {IREE_SVL("stores-linearized"),
-     IREE_SVL("Number of scalar view.store operations linearized.")},
-    {IREE_SVL("vector-loads-linearized"),
-     IREE_SVL("Number of vector.load operations linearized.")},
-    {IREE_SVL("vector-stores-linearized"),
-     IREE_SVL("Number of vector.store operations linearized.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_linearize_view_accesses_statistics,
+                            loom_linearize_view_accesses_statistics_t,
+                            LOOM_LINEARIZE_VIEW_ACCESSES_STATISTICS)
 
 static const loom_pass_info_t loom_linearize_view_accesses_pass_info_storage = {
     .name = IREE_SVL("linearize-view-accesses"),
     .description = IREE_SVL("Linearize dense multi-dimensional view accesses."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kLinearizeViewAccessesStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kLinearizeViewAccessesStatistics),
+    .statistic_layout = &loom_linearize_view_accesses_statistics_layout,
 };
 
 const loom_pass_info_t* loom_linearize_view_accesses_pass_info(void) {
@@ -101,6 +95,8 @@ typedef struct loom_linearize_view_accesses_collect_context_t {
 typedef struct loom_linearize_view_accesses_context_t {
   // Owning pass instance.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_linearize_view_accesses_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Rewriter used for IR mutations.
@@ -576,10 +572,7 @@ static iree_status_t loom_linearize_view_accesses_get_linear_view(
       context->rewriter, loom_buffer_view_result(view_op), linear_view));
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_view_map_push(
       context->pass->arena, context->view_map, view_op, linear_view));
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass,
-                            LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VIEWS_CREATED, 1);
-  }
+  ++context->statistics->views_created;
   *out_linear_view = linear_view;
   return iree_ok_status();
 }
@@ -902,11 +895,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_load(
       context->rewriter, load_op, &replacement, 1, value_checkpoint));
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       context->rewriter, load_op, &replacement, 1));
-
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(
-        context->pass, LOOM_LINEARIZE_VIEW_ACCESSES_STAT_LOADS_LINEARIZED, 1);
-  }
+  ++context->statistics->loads_linearized;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -977,11 +966,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_store(
       loom_view_store_cache_temporal(store_op), store_op->location,
       &linear_store_op));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(context->rewriter, store_op));
-
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(
-        context->pass, LOOM_LINEARIZE_VIEW_ACCESSES_STAT_STORES_LINEARIZED, 1);
-  }
+  ++context->statistics->stores_linearized;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -1082,12 +1067,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_load(
         context->rewriter, load_op, &replacement, 1, value_checkpoint));
     IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
         context->rewriter, load_op, &replacement, 1));
-
-    if (context->pass->statistics) {
-      loom_pass_statistic_add(
-          context->pass,
-          LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VECTOR_LOADS_LINEARIZED, 1);
-    }
+    ++context->statistics->vector_loads_linearized;
     *out_changed = true;
     return iree_ok_status();
   }
@@ -1146,12 +1126,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_load(
       context->rewriter, load_op, &replacement, 1, value_checkpoint));
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       context->rewriter, load_op, &replacement, 1));
-
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(
-        context->pass,
-        LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VECTOR_LOADS_LINEARIZED, 1);
-  }
+  ++context->statistics->vector_loads_linearized;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -1246,12 +1221,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_store(
     }
 
     IREE_RETURN_IF_ERROR(loom_rewriter_erase(context->rewriter, store_op));
-
-    if (context->pass->statistics) {
-      loom_pass_statistic_add(
-          context->pass,
-          LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VECTOR_STORES_LINEARIZED, 1);
-    }
+    ++context->statistics->vector_stores_linearized;
     *out_changed = true;
     return iree_ok_status();
   }
@@ -1304,12 +1274,7 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_store(
       IREE_ARRAYSIZE(static_indices), cache_policy.cache_scope,
       cache_policy.cache_temporal, store_op->location, &linear_store_op));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(context->rewriter, store_op));
-
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(
-        context->pass,
-        LOOM_LINEARIZE_VIEW_ACCESSES_STAT_VECTOR_STORES_LINEARIZED, 1);
-  }
+  ++context->statistics->vector_stores_linearized;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -1378,6 +1343,7 @@ iree_status_t loom_linearize_view_accesses_run(loom_pass_t* pass,
   bool changed = false;
   loom_linearize_view_accesses_context_t context = {
       .pass = pass,
+      .statistics = loom_linearize_view_accesses_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
       .fact_table = fact_table,

@@ -226,12 +226,13 @@ TEST_F(VectorToScalarTest, TargetFragmentLayoutEnablesDistributedMmaFallback) {
   IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module, &pass_arena));
   IREE_ASSERT_OK(loom_rewriter_enable_analysis(&rewriter, function, facts));
 
-  int64_t statistics[3] = {};
-  loom_pass_t pass = {
-      .info = loom_vector_to_scalar_pass_info(),
-      .arena = &pass_arena,
-      .statistics = statistics,
-  };
+  const loom_pass_info_t* pass_info = loom_vector_to_scalar_pass_info();
+  std::vector<uint8_t> statistic_storage(
+      pass_info->statistic_layout->storage_size, 0);
+  loom_pass_t pass = {};
+  pass.info = pass_info;
+  pass.arena = &pass_arena;
+  pass.statistic_storage = statistic_storage.data();
 
   const loom_vector_mma_to_scalar_options_t empty_options =
       loom_vector_mma_to_scalar_options_empty();

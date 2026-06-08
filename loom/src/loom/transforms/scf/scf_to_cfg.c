@@ -26,27 +26,25 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_SCF_TO_CFG_STAT_IFS_LOWERED = 0,
-  LOOM_SCF_TO_CFG_STAT_FORS_LOWERED = 1,
-  LOOM_SCF_TO_CFG_STAT_WHILES_LOWERED = 2,
-  LOOM_SCF_TO_CFG_STAT_SWITCHES_LOWERED = 3,
-};
+#define LOOM_SCF_TO_CFG_STATISTICS(V, statistics_type)     \
+  V(statistics_type, ifs_lowered, "ifs-lowered",           \
+    "Number of scf.if ops lowered.")                       \
+  V(statistics_type, fors_lowered, "fors-lowered",         \
+    "Number of scf.for ops lowered.")                      \
+  V(statistics_type, whiles_lowered, "whiles-lowered",     \
+    "Number of scf.while ops lowered.")                    \
+  V(statistics_type, switches_lowered, "switches-lowered", \
+    "Number of scf.switch ops lowered.")
 
-static const loom_pass_statistic_def_t kScfToCfgStatistics[] = {
-    {IREE_SVL("ifs-lowered"), IREE_SVL("Number of scf.if ops lowered.")},
-    {IREE_SVL("fors-lowered"), IREE_SVL("Number of scf.for ops lowered.")},
-    {IREE_SVL("whiles-lowered"), IREE_SVL("Number of scf.while ops lowered.")},
-    {IREE_SVL("switches-lowered"),
-     IREE_SVL("Number of scf.switch ops lowered.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_scf_to_cfg_statistics,
+                            loom_scf_to_cfg_statistics_t,
+                            LOOM_SCF_TO_CFG_STATISTICS)
 
 static const loom_pass_info_t loom_scf_to_cfg_pass_info_storage = {
     .name = IREE_SVL("scf-to-cfg"),
     .description = IREE_SVL("Lower structured SCF control flow to CFG blocks."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kScfToCfgStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kScfToCfgStatistics),
+    .statistic_layout = &loom_scf_to_cfg_statistics_layout,
 };
 
 const loom_pass_info_t* loom_scf_to_cfg_pass_info(void) {
@@ -71,6 +69,8 @@ typedef struct loom_scf_to_cfg_region_stack_t {
 typedef struct loom_scf_to_cfg_state_t {
   // Current pass instance used for diagnostics and statistics.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_scf_to_cfg_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Rewriter used for use-list and type-use-aware mutations.
@@ -134,13 +134,6 @@ static iree_status_t loom_scf_to_cfg_emit(loom_scf_to_cfg_state_t* state,
       .param_count = IREE_ARRAYSIZE(params),
   };
   return iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission);
-}
-
-static void loom_scf_to_cfg_add_stat(loom_scf_to_cfg_state_t* state,
-                                     uint16_t statistic_index, int64_t delta) {
-  if (state->pass->statistics) {
-    loom_pass_statistic_add(state->pass, statistic_index, delta);
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -442,7 +435,7 @@ static iree_status_t loom_scf_to_cfg_lower_if(loom_scf_to_cfg_state_t* state,
 
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
-  loom_scf_to_cfg_add_stat(state, LOOM_SCF_TO_CFG_STAT_IFS_LOWERED, 1);
+  ++state->statistics->ifs_lowered;
   iree_arena_reset(state->lowering_arena);
   return iree_ok_status();
 }
@@ -722,7 +715,7 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
 
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
-  loom_scf_to_cfg_add_stat(state, LOOM_SCF_TO_CFG_STAT_FORS_LOWERED, 1);
+  ++state->statistics->fors_lowered;
   iree_arena_reset(state->lowering_arena);
   return iree_ok_status();
 }
@@ -839,7 +832,7 @@ static iree_status_t loom_scf_to_cfg_lower_while(loom_scf_to_cfg_state_t* state,
 
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
-  loom_scf_to_cfg_add_stat(state, LOOM_SCF_TO_CFG_STAT_WHILES_LOWERED, 1);
+  ++state->statistics->whiles_lowered;
   iree_arena_reset(state->lowering_arena);
   return iree_ok_status();
 }
@@ -984,7 +977,7 @@ static iree_status_t loom_scf_to_cfg_lower_switch(
 
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
-  loom_scf_to_cfg_add_stat(state, LOOM_SCF_TO_CFG_STAT_SWITCHES_LOWERED, 1);
+  ++state->statistics->switches_lowered;
   iree_arena_reset(state->lowering_arena);
   return iree_ok_status();
 }
@@ -1084,6 +1077,7 @@ iree_status_t loom_scf_to_cfg_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_scf_to_cfg_state_t state = {
       .pass = pass,
+      .statistics = loom_scf_to_cfg_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
       .lowering_arena = &lowering_arena,

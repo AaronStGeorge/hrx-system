@@ -7,9 +7,17 @@
 #include "loom/pass/testing/registry_verify.h"
 
 #include <inttypes.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "loom/pass/environment.h"
+
+typedef struct loom_pass_statistic_int64_alignment_t {
+  // Leading byte used to compute int64_t aggregate alignment.
+  char prefix;
+  // Aligned int64_t member.
+  int64_t value;
+} loom_pass_statistic_int64_alignment_t;
 
 static bool loom_pass_descriptor_key_matches_info(
     const loom_pass_descriptor_t* descriptor) {
@@ -224,19 +232,92 @@ static iree_status_t loom_pass_registry_verify_requirements(
 
 static iree_status_t loom_pass_registry_verify_statistics(
     const loom_pass_descriptor_t* descriptor, const loom_pass_info_t* info) {
-  if (info->statistic_count > 0 && !info->statistic_defs) {
+  const loom_pass_statistic_layout_t* layout = info->statistic_layout;
+  if (!layout) {
+    return iree_ok_status();
+  }
+  if (layout->field_count > LOOM_PASS_STATISTIC_FIELD_COUNT_MAX) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "pass descriptor '%.*s' declares statistics without statistic defs",
+        "pass descriptor '%.*s' statistic layout has %u fields but the maximum "
+        "is %u",
+        (int)descriptor->key.size, descriptor->key.data,
+        (unsigned)layout->field_count,
+        (unsigned)LOOM_PASS_STATISTIC_FIELD_COUNT_MAX);
+  }
+  if (layout->field_count == 0) {
+    if (layout->fields) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' statistic layout has fields without a count",
+          (int)descriptor->key.size, descriptor->key.data);
+    }
+    return iree_ok_status();
+  }
+  if (!layout->fields) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass descriptor '%.*s' declares statistic fields without metadata",
         (int)descriptor->key.size, descriptor->key.data);
   }
-  for (uint16_t i = 0; i < info->statistic_count; ++i) {
-    const loom_pass_statistic_def_t* statistic = &info->statistic_defs[i];
-    if (iree_string_view_is_empty(statistic->name)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "pass descriptor '%.*s' statistic %u has no name",
-                              (int)descriptor->key.size, descriptor->key.data,
-                              (unsigned)i);
+  if (layout->storage_size == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass descriptor '%.*s' declares statistic fields without storage",
+        (int)descriptor->key.size, descriptor->key.data);
+  }
+  for (uint16_t i = 0; i < layout->field_count; ++i) {
+    const loom_pass_statistic_field_t* field = &layout->fields[i];
+    if (iree_string_view_is_empty(field->name)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' statistic field %u has no name",
+          (int)descriptor->key.size, descriptor->key.data, (unsigned)i);
+    }
+    if (iree_string_view_is_empty(field->description)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' statistic field '%.*s' has no description",
+          (int)descriptor->key.size, descriptor->key.data,
+          (int)field->name.size, field->name.data);
+    }
+    if (field->offset > layout->storage_size ||
+        layout->storage_size - field->offset < sizeof(int64_t)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' statistic field '%.*s' offset %" PRIhsz
+          " is outside storage size %" PRIhsz,
+          (int)descriptor->key.size, descriptor->key.data,
+          (int)field->name.size, field->name.data, field->offset,
+          layout->storage_size);
+    }
+    const iree_host_size_t int64_alignment =
+        offsetof(loom_pass_statistic_int64_alignment_t, value);
+    if (field->offset % int64_alignment != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' statistic field '%.*s' offset %" PRIhsz
+          " is not int64 aligned",
+          (int)descriptor->key.size, descriptor->key.data,
+          (int)field->name.size, field->name.data, field->offset);
+    }
+    for (uint16_t j = 0; j < i; ++j) {
+      const loom_pass_statistic_field_t* previous = &layout->fields[j];
+      if (iree_string_view_equal(previous->name, field->name)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "pass descriptor '%.*s' statistic field '%.*s' is duplicated",
+            (int)descriptor->key.size, descriptor->key.data,
+            (int)field->name.size, field->name.data);
+      }
+      if (previous->offset == field->offset) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "pass descriptor '%.*s' statistic field '%.*s' reuses offset "
+            "%" PRIhsz,
+            (int)descriptor->key.size, descriptor->key.data,
+            (int)field->name.size, field->name.data, field->offset);
+      }
     }
   }
   return iree_ok_status();

@@ -17,6 +17,16 @@
 namespace loom {
 namespace {
 
+static iree_status_t InitializePassStatistics(loom_pass_t* pass,
+                                              iree_arena_allocator_t* arena) {
+  const loom_pass_statistic_layout_t* layout = pass->info->statistic_layout;
+  if (!layout) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(arena, layout->storage_size,
+                                           (void**)&pass->statistic_storage));
+  memset(pass->statistic_storage, 0, layout->storage_size);
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Test fixture
 //===----------------------------------------------------------------------===//
@@ -73,8 +83,12 @@ class DCETest : public ::testing::Test {
     loom_pass_t pass;
     memset(&pass, 0, sizeof(pass));
     pass.info = loom_dce_pass_info();
+    pass.instance_arena = &pass_arena;
     pass.arena = &pass_arena;
-    iree_status_t status = loom_dce_run(&pass, module_, func_like_);
+    iree_status_t status = InitializePassStatistics(&pass, &pass_arena);
+    if (iree_status_is_ok(status)) {
+      status = loom_dce_run(&pass, module_, func_like_);
+    }
     iree_arena_deinitialize(&pass_arena);
     return status;
   }
@@ -668,7 +682,9 @@ TEST_F(DCETest, NullFunctionBody) {
   loom_pass_t pass;
   memset(&pass, 0, sizeof(pass));
   pass.info = loom_dce_pass_info();
+  pass.instance_arena = &pass_arena;
   pass.arena = &pass_arena;
+  IREE_ASSERT_OK(InitializePassStatistics(&pass, &pass_arena));
   IREE_EXPECT_OK(loom_dce_run(&pass, module_, empty_func));
   iree_arena_deinitialize(&pass_arena);
 }

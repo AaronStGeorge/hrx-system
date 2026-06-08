@@ -14,6 +14,8 @@
 #ifndef LOOM_PASS_TYPES_H_
 #define LOOM_PASS_TYPES_H_
 
+#include <stddef.h>
+
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/error/emitter.h"
@@ -52,13 +54,90 @@ typedef struct loom_pass_option_def_t {
   iree_string_view_t description;
 } loom_pass_option_def_t;
 
-// Describes one statistic a pass reports.
-typedef struct loom_pass_statistic_def_t {
+enum {
+  // Maximum number of statistic fields one pass descriptor may expose.
+  LOOM_PASS_STATISTIC_FIELD_COUNT_MAX = 10,
+};
+
+// Describes one int64_t statistic field in a pass-owned statistics struct.
+typedef struct loom_pass_statistic_field_t {
   // Stable statistic key reported by the pass.
   iree_string_view_t name;
   // Human-readable statistic description.
   iree_string_view_t description;
-} loom_pass_statistic_def_t;
+  // Byte offset of the int64_t field within the pass statistics struct.
+  iree_host_size_t offset;
+} loom_pass_statistic_field_t;
+
+// Describes the typed statistics storage owned by one pass descriptor.
+typedef struct loom_pass_statistic_layout_t {
+  // Size in bytes of the pass-owned statistics struct.
+  iree_host_size_t storage_size;
+  // Descriptor-owned statistic fields in report order.
+  const loom_pass_statistic_field_t* fields;
+  // Number of entries in fields.
+  uint16_t field_count;
+} loom_pass_statistic_layout_t;
+
+// Defines one statistic field for a typed pass statistics layout.
+#define LOOM_PASS_STATISTIC_FIELD(statistics_type, field_name, statistic_name, \
+                                  statistic_description)                       \
+  {                                                                            \
+      /*.name=*/IREE_SVL(statistic_name),                                      \
+      /*.description=*/IREE_SVL(statistic_description),                        \
+      /*.offset=*/offsetof(statistics_type, field_name),                       \
+  }
+
+// Defines a typed pass statistics layout from a static field table.
+#define LOOM_PASS_STATISTIC_LAYOUT(statistics_type, field_array) \
+  {                                                              \
+      /*.storage_size=*/sizeof(statistics_type),                 \
+      /*.fields=*/field_array,                                   \
+      /*.field_count=*/IREE_ARRAYSIZE(field_array),              \
+  }
+
+// Declares one int64_t member in a pass statistics struct.
+#define LOOM_PASS_STATISTIC_STORAGE_FIELD_(                             \
+    statistics_type, field_name, statistic_name, statistic_description) \
+  int64_t field_name;
+
+// Declares one cold layout metadata row for a typed statistic field.
+#define LOOM_PASS_STATISTIC_LAYOUT_FIELD_(                               \
+    statistics_type, field_name, statistic_name, statistic_description)  \
+  LOOM_PASS_STATISTIC_FIELD(statistics_type, field_name, statistic_name, \
+                            statistic_description),
+
+// Declares typed statistics storage and a pass-local accessor. Shared pass
+// engines use this form in headers and define their cold layout metadata in the
+// implementation file that owns the descriptor.
+//
+// |statistic_fields| must be a macro of the form:
+//
+//   #define MY_PASS_STATISTICS(V, statistics_type) \
+//     V(statistics_type, field_name, "report-key", "Description.")
+//
+// Pass callbacks increment fields on the typed storage returned by the
+// generated accessor.
+#define LOOM_PASS_STATISTICS_DECLARE(accessor_name, statistics_type,      \
+                                     statistic_fields)                    \
+  typedef struct statistics_type {                                        \
+    statistic_fields(LOOM_PASS_STATISTIC_STORAGE_FIELD_, statistics_type) \
+  } statistics_type;                                                      \
+  static inline statistics_type* accessor_name(loom_pass_t* pass) {       \
+    return (statistics_type*)pass->statistic_storage;                     \
+  }
+
+// Defines the typed statistics storage, cold layout metadata, and accessor for
+// one ordinary pass-local statistic layout. Generic report and registry code
+// consume only the generated layout metadata.
+#define LOOM_PASS_STATISTICS_DEFINE(accessor_name, statistics_type,          \
+                                    statistic_fields)                        \
+  LOOM_PASS_STATISTICS_DECLARE(accessor_name, statistics_type,               \
+                               statistic_fields)                             \
+  static const loom_pass_statistic_field_t accessor_name##_fields[] = {      \
+      statistic_fields(LOOM_PASS_STATISTIC_LAYOUT_FIELD_, statistics_type)}; \
+  static const loom_pass_statistic_layout_t accessor_name##_layout =         \
+      LOOM_PASS_STATISTIC_LAYOUT(statistics_type, accessor_name##_fields);
 
 // Static metadata for one pass kind, shared across all invocations.
 typedef struct loom_pass_info_t {
@@ -72,10 +151,8 @@ typedef struct loom_pass_info_t {
   const loom_pass_option_def_t* option_defs;
   // Number of entries in option_defs.
   uint16_t option_count;
-  // Descriptor-owned statistic definitions in report order.
-  const loom_pass_statistic_def_t* statistic_defs;
-  // Number of entries in statistic_defs.
-  uint16_t statistic_count;
+  // Descriptor-owned typed statistic layout, or NULL when the pass has none.
+  const loom_pass_statistic_layout_t* statistic_layout;
 } loom_pass_info_t;
 
 typedef iree_status_t (*loom_module_pass_fn_t)(loom_pass_t* pass,
@@ -102,8 +179,8 @@ struct loom_pass_t {
   iree_arena_allocator_t* instance_arena;
   // Scratch arena for the current run callback.
   iree_arena_allocator_t* arena;
-  // Per-invocation statistic counters indexed by pass info statistic order.
-  int64_t* statistics;
+  // Per-invocation typed statistic storage matching info->statistic_layout.
+  void* statistic_storage;
   // Per-invocation state produced by create() and consumed by destroy().
   void* state;
   // True when the pass callback explicitly records an IR or semantic change.
@@ -123,15 +200,6 @@ struct loom_pass_t {
   // Interpreter-owned scoped value-fact workspace for this module execution.
   loom_pass_value_fact_owner_t* value_facts;
 };
-
-// Increments a statistic counter by |delta|. |statistic_index| must be less
-// than pass->info->statistic_count.
-static inline void loom_pass_statistic_add(loom_pass_t* pass,
-                                           uint16_t statistic_index,
-                                           int64_t delta) {
-  IREE_ASSERT(statistic_index < pass->info->statistic_count);
-  pass->statistics[statistic_index] += delta;
-}
 
 // Records that the current pass invocation changed IR or semantic module state.
 static inline void loom_pass_mark_changed(loom_pass_t* pass) {

@@ -13,30 +13,22 @@
 #include "loom/ops/op_defs.h"
 #include "loom/rewrite/rewriter.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_BRANCH_SINK_STATISTICS(V, statistics_type)                  \
+  V(statistics_type, branches_visited, "branches-visited",               \
+    "Number of branch operations inspected.")                            \
+  V(statistics_type, ops_sunk, "ops-sunk", "Number of operations sunk.") \
+  V(statistics_type, selectors_sunk, "selectors-sunk",                   \
+    "Number of branch selector operations sunk.")
 
-enum {
-  LOOM_BRANCH_SINK_STAT_BRANCHES_VISITED = 0,
-  LOOM_BRANCH_SINK_STAT_OPS_SUNK = 1,
-  LOOM_BRANCH_SINK_STAT_SELECTORS_SUNK = 2,
-};
-
-static const loom_pass_statistic_def_t kBranchSinkStatistics[] = {
-    {IREE_SVL("branches-visited"),
-     IREE_SVL("Number of branch operations inspected.")},
-    {IREE_SVL("ops-sunk"), IREE_SVL("Number of operations sunk.")},
-    {IREE_SVL("selectors-sunk"),
-     IREE_SVL("Number of branch selector operations sunk.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_branch_sink_statistics,
+                            loom_branch_sink_statistics_t,
+                            LOOM_BRANCH_SINK_STATISTICS)
 
 static const loom_pass_info_t loom_branch_sink_pass_info_storage = {
     .name = IREE_SVL("branch-sink"),
     .description = IREE_SVL("Sink branch-local pure producers into branches."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kBranchSinkStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kBranchSinkStatistics),
+    .statistic_layout = &loom_branch_sink_statistics_layout,
 };
 
 const loom_pass_info_t* loom_branch_sink_pass_info(void) {
@@ -85,8 +77,10 @@ static loom_region_t* loom_branch_sink_region_stack_pop(
 }
 
 typedef struct loom_branch_sink_context_t {
-  // Pass instance owning statistics and the scratch arena.
+  // Pass instance owning the scratch arena.
   loom_pass_t* pass;
+  // Typed statistics storage for the current pass invocation.
+  loom_branch_sink_statistics_t* statistics;
   // Module being transformed.
   loom_module_t* module;
   // Rewriter used for IR movement.
@@ -324,11 +318,8 @@ static iree_status_t loom_branch_sink_try_selector(
   IREE_RETURN_IF_ERROR(
       loom_rewriter_move_before(context->rewriter, candidate_op, branch_op));
   *out_sunk = true;
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass, LOOM_BRANCH_SINK_STAT_SELECTORS_SUNK,
-                            1);
-    loom_pass_statistic_add(context->pass, LOOM_BRANCH_SINK_STAT_OPS_SUNK, 1);
-  }
+  ++context->statistics->selectors_sunk;
+  ++context->statistics->ops_sunk;
   return iree_ok_status();
 }
 
@@ -356,19 +347,14 @@ static iree_status_t loom_branch_sink_try_candidate(
   IREE_RETURN_IF_ERROR(
       loom_rewriter_move_before(context->rewriter, candidate_op, insertion_op));
   *out_sunk = true;
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass, LOOM_BRANCH_SINK_STAT_OPS_SUNK, 1);
-  }
+  ++context->statistics->ops_sunk;
   return iree_ok_status();
 }
 
 static iree_status_t loom_branch_sink_process_branch(
     loom_branch_sink_context_t* context, loom_region_branch_t branch,
     bool* out_changed) {
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass,
-                            LOOM_BRANCH_SINK_STAT_BRANCHES_VISITED, 1);
-  }
+  ++context->statistics->branches_visited;
 
   bool selector_sunk = false;
   IREE_RETURN_IF_ERROR(loom_branch_sink_try_selector(
@@ -390,10 +376,7 @@ static iree_status_t loom_branch_sink_process_branch(
 
 static iree_status_t loom_branch_sink_process_cfg_cond_br(
     loom_branch_sink_context_t* context, loom_op_t* op, bool* out_changed) {
-  if (context->pass->statistics) {
-    loom_pass_statistic_add(context->pass,
-                            LOOM_BRANCH_SINK_STAT_BRANCHES_VISITED, 1);
-  }
+  ++context->statistics->branches_visited;
 
   bool selector_sunk = false;
   IREE_RETURN_IF_ERROR(loom_branch_sink_try_selector(
@@ -456,6 +439,7 @@ iree_status_t loom_branch_sink_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_branch_sink_context_t context = {
       .pass = pass,
+      .statistics = loom_branch_sink_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
   };

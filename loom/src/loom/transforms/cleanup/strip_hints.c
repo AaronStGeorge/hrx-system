@@ -9,24 +9,19 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_STRIP_HINTS_STATISTICS(V, statistics_type) \
+  V(statistics_type, hints_stripped, "hints-stripped",  \
+    "Number of hint ops removed.")
 
-enum {
-  LOOM_STRIP_HINTS_STAT_HINTS_STRIPPED = 0,
-};
-
-static const loom_pass_statistic_def_t kStripHintsStatistics[] = {
-    {IREE_SVL("hints-stripped"), IREE_SVL("Number of hint ops removed.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_strip_hints_statistics,
+                            loom_strip_hints_statistics_t,
+                            LOOM_STRIP_HINTS_STATISTICS)
 
 static const loom_pass_info_t loom_strip_hints_pass_info_storage = {
     .name = IREE_SVL("strip-hints"),
     .description = IREE_SVL("Remove compiler hint operations."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kStripHintsStatistics,
-    .statistic_count = 1,
+    .statistic_layout = &loom_strip_hints_statistics_layout,
 };
 
 const loom_pass_info_t* loom_strip_hints_pass_info(void) {
@@ -96,6 +91,7 @@ static iree_status_t loom_strip_hints_collect_blocks(
 iree_status_t loom_strip_hints_run(loom_pass_t* pass, loom_module_t* module,
                                    loom_func_like_t function) {
   if (!loom_func_like_body(function)) return iree_ok_status();
+  loom_strip_hints_statistics_t* statistics = loom_strip_hints_statistics(pass);
 
   for (uint8_t region_index = 0;
        region_index < loom_func_like_region_count(function); ++region_index) {
@@ -116,10 +112,7 @@ iree_status_t loom_strip_hints_run(loom_pass_t* pass, loom_module_t* module,
           if (iree_any_bit_set(traits, LOOM_TRAIT_HINT)) {
             IREE_RETURN_IF_ERROR(loom_op_erase(module, op));
             loom_pass_mark_changed(pass);
-            if (pass->statistics) {
-              loom_pass_statistic_add(pass,
-                                      LOOM_STRIP_HINTS_STAT_HINTS_STRIPPED, 1);
-            }
+            ++statistics->hints_stripped;
           }
         }
         op = prev_op;

@@ -13,25 +13,18 @@
 #include "loom/ops/op_defs.h"
 #include "loom/util/dominance.h"
 
-//===----------------------------------------------------------------------===//
-// Statistics
-//===----------------------------------------------------------------------===//
+#define LOOM_CSE_STATISTICS(V, statistics_type)                        \
+  V(statistics_type, expressions_eliminated, "expressions-eliminated", \
+    "Number of redundant expressions removed.")
 
-enum {
-  LOOM_CSE_STAT_EXPRESSIONS_ELIMINATED = 0,
-};
-
-static const loom_pass_statistic_def_t kCSEStatistics[] = {
-    {IREE_SVL("expressions-eliminated"),
-     IREE_SVL("Number of redundant expressions removed.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_cse_statistics, loom_cse_statistics_t,
+                            LOOM_CSE_STATISTICS)
 
 static const loom_pass_info_t loom_cse_pass_info_storage = {
     .name = IREE_SVL("cse"),
     .description = IREE_SVL("Eliminate common subexpressions."),
     .kind = LOOM_PASS_FUNCTION,
-    .statistic_defs = kCSEStatistics,
-    .statistic_count = 1,
+    .statistic_layout = &loom_cse_statistics_layout,
 };
 
 const loom_pass_info_t* loom_cse_pass_info(void) {
@@ -603,6 +596,7 @@ static bool loom_cse_result_is_consumed(const loom_module_t* module,
 iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
                            loom_func_like_t function) {
   if (!loom_func_like_body(function)) return iree_ok_status();
+  loom_cse_statistics_t* statistics = loom_cse_statistics(pass);
 
   loom_dominance_info_t dominance = {0};
   IREE_RETURN_IF_ERROR(
@@ -716,10 +710,7 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         status = loom_op_erase(module, op);
         if (!iree_status_is_ok(status)) break;
         loom_pass_mark_changed(pass);
-        if (pass->statistics) {
-          loom_pass_statistic_add(pass, LOOM_CSE_STAT_EXPRESSIONS_ELIMINATED,
-                                  1);
-        }
+        ++statistics->expressions_eliminated;
       } else {
         loom_cse_table_insert(&frame->scope->table, op, hash, traits);
       }

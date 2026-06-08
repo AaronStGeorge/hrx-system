@@ -33,42 +33,36 @@
 // Statistics
 //===----------------------------------------------------------------------===//
 
-enum {
-  LOOM_REFINE_BOUNDARIES_STAT_FUNCTIONS_CANONICALIZED = 0,
-  LOOM_REFINE_BOUNDARIES_STAT_FUNCTIONS_CHANGED = 1,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_FACTS_CHANGED = 2,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_REPLACEMENTS_CHANGED = 3,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_REPLACEMENTS_APPLIED = 4,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_CONSTANTS_MATERIALIZED = 5,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_ARGUMENTS_PRUNED = 6,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_RESULTS_PRUNED = 7,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_SIGNATURE_TYPES_REFINED = 8,
-  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_SPECIALIZATIONS_CREATED = 9,
-};
+#define LOOM_REFINE_BOUNDARIES_STATISTICS(V, statistics_type)                \
+  V(statistics_type, functions_canonicalized, "functions-canonicalized",     \
+    "Number of function bodies canonicalized.")                              \
+  V(statistics_type, functions_changed, "functions-changed",                 \
+    "Number of function canonicalizer runs that changed IR.")                \
+  V(statistics_type, boundary_facts_changed, "boundary-facts-changed",       \
+    "Number of fixed-point rounds that changed boundary facts.")             \
+  V(statistics_type, boundary_replacements_changed,                          \
+    "boundary-replacements-changed",                                         \
+    "Number of fixed-point rounds that changed boundary replacements.")      \
+  V(statistics_type, boundary_replacements_applied,                          \
+    "boundary-replacements-applied",                                         \
+    "Number of direct boundary value replacements applied.")                 \
+  V(statistics_type, boundary_constants_materialized,                        \
+    "boundary-constants-materialized",                                       \
+    "Number of exact boundary constants materialized.")                      \
+  V(statistics_type, boundary_arguments_pruned, "boundary-arguments-pruned", \
+    "Number of unused internal function arguments removed.")                 \
+  V(statistics_type, boundary_results_pruned, "boundary-results-pruned",     \
+    "Number of unused internal function results removed.")                   \
+  V(statistics_type, boundary_signature_types_refined,                       \
+    "boundary-signature-types-refined",                                      \
+    "Number of internal boundary value types refined.")                      \
+  V(statistics_type, boundary_specializations_created,                       \
+    "boundary-specializations-created",                                      \
+    "Number of private function specializations created.")
 
-static const loom_pass_statistic_def_t kRefineBoundariesStatistics[] = {
-    {IREE_SVL("functions-canonicalized"),
-     IREE_SVL("Number of function bodies canonicalized.")},
-    {IREE_SVL("functions-changed"),
-     IREE_SVL("Number of function canonicalizer runs that changed IR.")},
-    {IREE_SVL("boundary-facts-changed"),
-     IREE_SVL("Number of fixed-point rounds that changed boundary facts.")},
-    {IREE_SVL("boundary-replacements-changed"),
-     IREE_SVL(
-         "Number of fixed-point rounds that changed boundary replacements.")},
-    {IREE_SVL("boundary-replacements-applied"),
-     IREE_SVL("Number of direct boundary value replacements applied.")},
-    {IREE_SVL("boundary-constants-materialized"),
-     IREE_SVL("Number of exact boundary constants materialized.")},
-    {IREE_SVL("boundary-arguments-pruned"),
-     IREE_SVL("Number of unused internal function arguments removed.")},
-    {IREE_SVL("boundary-results-pruned"),
-     IREE_SVL("Number of unused internal function results removed.")},
-    {IREE_SVL("boundary-signature-types-refined"),
-     IREE_SVL("Number of internal boundary value types refined.")},
-    {IREE_SVL("boundary-specializations-created"),
-     IREE_SVL("Number of private function specializations created.")},
-};
+LOOM_PASS_STATISTICS_DEFINE(loom_refine_boundaries_statistics,
+                            loom_refine_boundaries_statistics_t,
+                            LOOM_REFINE_BOUNDARIES_STATISTICS)
 
 static const loom_pass_option_def_t kRefineBoundariesOptions[] = {
     {IREE_SVL("max-iterations"),
@@ -82,8 +76,7 @@ static const loom_pass_info_t loom_refine_boundaries_pass_info_storage = {
     .kind = LOOM_PASS_MODULE,
     .option_defs = kRefineBoundariesOptions,
     .option_count = IREE_ARRAYSIZE(kRefineBoundariesOptions),
-    .statistic_defs = kRefineBoundariesStatistics,
-    .statistic_count = IREE_ARRAYSIZE(kRefineBoundariesStatistics),
+    .statistic_layout = &loom_refine_boundaries_statistics_layout,
 };
 
 const loom_pass_info_t* loom_refine_boundaries_pass_info(void) {
@@ -1566,6 +1559,8 @@ static iree_status_t loom_refine_boundaries_run_function(
     loom_refine_boundaries_replacement_table_t* next_boundary_replacements,
     loom_refine_boundaries_function_t* function_info,
     int64_t* signature_type_changed_count) {
+  loom_refine_boundaries_statistics_t* statistics =
+      loom_refine_boundaries_statistics(pass);
   int64_t replacements_applied = 0;
   int64_t constants_materialized = 0;
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_apply_function_boundary_values(
@@ -1598,24 +1593,16 @@ static iree_status_t loom_refine_boundaries_run_function(
         function_info));
   }
 
-  if (pass->statistics) {
-    loom_pass_statistic_add(
-        pass, LOOM_REFINE_BOUNDARIES_STAT_FUNCTIONS_CANONICALIZED, 1);
-    if (replacements_applied > 0 || constants_materialized > 0 ||
-        canonicalize_result.changed) {
-      loom_pass_statistic_add(pass,
-                              LOOM_REFINE_BOUNDARIES_STAT_FUNCTIONS_CHANGED, 1);
-    }
-    if (replacements_applied > 0) {
-      loom_pass_statistic_add(
-          pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_REPLACEMENTS_APPLIED,
-          replacements_applied);
-    }
-    if (constants_materialized > 0) {
-      loom_pass_statistic_add(
-          pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_CONSTANTS_MATERIALIZED,
-          constants_materialized);
-    }
+  ++statistics->functions_canonicalized;
+  if (replacements_applied > 0 || constants_materialized > 0 ||
+      canonicalize_result.changed) {
+    ++statistics->functions_changed;
+  }
+  if (replacements_applied > 0) {
+    statistics->boundary_replacements_applied += replacements_applied;
+  }
+  if (constants_materialized > 0) {
+    statistics->boundary_constants_materialized += constants_materialized;
   }
   if (replacements_applied > 0 || constants_materialized > 0 ||
       canonicalize_result.changed) {
@@ -2854,6 +2841,8 @@ static iree_status_t loom_refine_boundaries_prune_internal_boundaries(
 iree_status_t loom_refine_boundaries_run_with_options(
     loom_pass_t* pass, loom_module_t* module,
     const loom_refine_boundaries_options_t* options) {
+  loom_refine_boundaries_statistics_t* statistics =
+      loom_refine_boundaries_statistics(pass);
   uint32_t max_iterations = options && options->max_iterations > 0
                                 ? options->max_iterations
                                 : LOOM_REFINE_BOUNDARIES_DEFAULT_MAX_ITERATIONS;
@@ -2942,12 +2931,8 @@ iree_status_t loom_refine_boundaries_run_with_options(
       signature_type_changed_count += call_result_type_changed_count;
       if (signature_type_changed_count > 0) {
         loom_pass_mark_changed(pass);
-        if (pass->statistics) {
-          loom_pass_statistic_add(
-              pass,
-              LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_SIGNATURE_TYPES_REFINED,
-              signature_type_changed_count);
-        }
+        statistics->boundary_signature_types_refined +=
+            signature_type_changed_count;
         continue;
       }
 
@@ -2957,12 +2942,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
       if (!iree_status_is_ok(status)) break;
       if (specialization_count > 0) {
         loom_pass_mark_changed(pass);
-        if (pass->statistics) {
-          loom_pass_statistic_add(
-              pass,
-              LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_SPECIALIZATIONS_CREATED,
-              specialization_count);
-        }
+        statistics->boundary_specializations_created += specialization_count;
         continue;
       }
 
@@ -2974,37 +2954,26 @@ iree_status_t loom_refine_boundaries_run_with_options(
       if (!iree_status_is_ok(status)) break;
       if (pruned_argument_count > 0 || pruned_result_count > 0) {
         loom_pass_mark_changed(pass);
-        if (pass->statistics) {
-          if (pruned_argument_count > 0) {
-            loom_pass_statistic_add(
-                pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_ARGUMENTS_PRUNED,
-                pruned_argument_count);
-          }
-          if (pruned_result_count > 0) {
-            loom_pass_statistic_add(
-                pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_RESULTS_PRUNED,
-                pruned_result_count);
-          }
+        if (pruned_argument_count > 0) {
+          statistics->boundary_arguments_pruned += pruned_argument_count;
+        }
+        if (pruned_result_count > 0) {
+          statistics->boundary_results_pruned += pruned_result_count;
         }
         continue;
       }
       converged = true;
       break;
     }
-    if (pass->statistics) {
-      if (signature_type_changed_count > 0) {
-        loom_pass_statistic_add(
-            pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_SIGNATURE_TYPES_REFINED,
-            signature_type_changed_count);
-      }
-      if (boundary_facts_changed) {
-        loom_pass_statistic_add(
-            pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_FACTS_CHANGED, 1);
-      }
-      if (boundary_replacements_changed) {
-        loom_pass_statistic_add(
-            pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_REPLACEMENTS_CHANGED, 1);
-      }
+    if (signature_type_changed_count > 0) {
+      statistics->boundary_signature_types_refined +=
+          signature_type_changed_count;
+    }
+    if (boundary_facts_changed) {
+      ++statistics->boundary_facts_changed;
+    }
+    if (boundary_replacements_changed) {
+      ++statistics->boundary_replacements_changed;
     }
 
     iree_arena_allocator_t* old_current_arena = current_facts_arena;
