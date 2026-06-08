@@ -22,6 +22,14 @@ _SANITIZER_OPTION_ENV = {
     "ubsan": "UBSAN_OPTIONS",
 }
 
+_SANITIZER_EXTRA_OPTIONS = {
+    # LSAN suppression matching depends on symbolized stack frames. Bazel test
+    # sandboxes may not expose llvm-symbolizer on PATH, but addr2line is
+    # available in normal GCC/Clang development environments and is enough for
+    # suppressions keyed to system functions such as pthread_once.
+    "lsan": ["allow_addr2line=1"],
+}
+
 def iree_sanitizer_suppression_files(sanitizer_suppressions):
     """Returns suppression file labels from a sanitizer suppression map.
 
@@ -80,5 +88,7 @@ def iree_sanitizer_suppression_env(env, sanitizer_suppressions):
                 "%s is set directly and by sanitizer_suppressions" %
                 option_env,
             )
-        result[option_env] = "suppressions=$(location %s)" % label
+        options = ["suppressions=$(location %s)" % label]
+        options.extend(_SANITIZER_EXTRA_OPTIONS.get(sanitizer, []))
+        result[option_env] = ":".join(options)
     return result
