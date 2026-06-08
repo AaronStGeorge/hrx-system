@@ -219,12 +219,13 @@ production artifact emission needed by that backend. Runtime execution remains a
 separate concern controlled by Loom execution support and the runtime
 `IREE_HAL_DRIVER_*` options.
 
-The default dependency-satisfied Loom target set is `amdgpu,iree_vm,x86`.
-AMDGPU target compilation uses pinned source dependencies by default and does
-not enable the runtime AMDGPU HAL driver. SPIR-V/Vulkan and WebAssembly remain
-opt-in in this checkout. The default execution substrate set is
-`iree_hal,iree_vm`; backend execution providers still require a matching
-runtime HAL driver such as `IREE_HAL_DRIVER_VULKAN` or
+The default dependency-satisfied Loom target set is
+`amdgpu,iree_vm,spirv,x86`. AMDGPU and SPIR-V target compilation use pinned
+source dependencies by default and do not enable the matching runtime HAL
+drivers. WebAssembly remains opt-in until the WASI SDK repository is available
+in this checkout. The default execution substrate set is `iree_hal,iree_vm`;
+backend execution providers still require a matching runtime HAL driver such as
+`IREE_HAL_DRIVER_VULKAN` or
 `IREE_HAL_DRIVER_AMDGPU`.
 
 CMake exposes `LOOM_TARGET_DEFAULTS` and `LOOM_EXECUTE_DEFAULTS` to set the
@@ -245,7 +246,7 @@ options remove entries from the default set.
 | `LOOM_EXECUTE_IREE_VM` | `ON`, `OFF` | Builds Loom execution providers that run through the IREE VM substrate. | Adds or removes `iree_vm` from the Loom execute substrate set. | `--//loom/config/execute:enable=<complete-execute-list>` |
 
 The native Loom target flag is a complete list. The default target set is
-`amdgpu,iree_vm,x86`, and the default execution substrate set is
+`amdgpu,iree_vm,spirv,x86`, and the default execution substrate set is
 `iree_hal,iree_vm`:
 
 ```bash
@@ -253,11 +254,11 @@ python dev.py bazel configure \
   --//loom/config/target:enable=amdgpu,iree_vm,spirv,x86
 ```
 
-The portable spelling adds the opt-in SPIR-V target without exposing the
+The portable spelling can disable a default target without exposing the
 internal target-architecture and emitter slices:
 
 ```bash
-python dev.py bazel configure -DLOOM_TARGET_SPIRV=ON
+python dev.py bazel configure -DLOOM_TARGET_SPIRV=OFF
 ```
 
 LLVM IR emission is a debug/developer artifact path. It is explicit even when a

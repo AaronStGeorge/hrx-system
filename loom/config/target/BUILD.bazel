@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 
 package(default_visibility = ["//visibility:public"])
@@ -14,6 +15,7 @@ package(default_visibility = ["//visibility:public"])
 DEFAULT_ENABLED = [
     "amdgpu",
     "iree_vm",
+    "spirv",
     "x86",
 ]
 
@@ -39,3 +41,30 @@ string_list_flag(
     )
     for value in SUPPORTED_VALUES
 ]
+
+# Internal target artifact capabilities. These are intentionally narrower than
+# public target values so source embedders can override the advanced target/emit
+# leaves without changing user-facing product target names.
+selects.config_setting_group(
+    name = "amdgpu_artifacts",
+    match_all = [
+        "//loom/config/target/arch:amdgpu",
+        "//loom/config/emit:amdgpu",
+    ],
+)
+
+selects.config_setting_group(
+    name = "spirv_artifacts",
+    match_all = [
+        "//loom/config/target/arch:spirv",
+        "//loom/config/emit:spirv",
+    ],
+)
+
+selects.config_setting_group(
+    name = "spirv_vulkan_artifacts",
+    match_all = [
+        ":spirv_artifacts",
+        "//runtime/config/hal:driver_vulkan",
+    ],
+)

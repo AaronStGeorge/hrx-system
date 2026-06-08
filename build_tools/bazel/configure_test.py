@@ -258,16 +258,19 @@ class ConfigureBazelTest(unittest.TestCase):
         args = self.configure_bazel.parse_arguments([])
         config = self.configure_bazel.generate_config(args)
 
-        self.assertIn("build --//loom/config/target:enable=amdgpu,iree_vm,x86", config)
+        self.assertIn(
+            "build --//loom/config/target:enable=amdgpu,iree_vm,spirv,x86",
+            config,
+        )
         self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
         self.assertIn("build --//loom/config/emit:enable=", config)
 
     def test_portable_loom_target_option_configures_target_scope(self):
-        args = self.configure_bazel.parse_arguments(["-DLOOM_TARGET_SPIRV=ON"])
+        args = self.configure_bazel.parse_arguments(["-DLOOM_TARGET_WASM=ON"])
         config = self.configure_bazel.generate_config(args)
 
         self.assertIn(
-            "build --//loom/config/target:enable=amdgpu,iree_vm,spirv,x86",
+            "build --//loom/config/target:enable=amdgpu,iree_vm,spirv,wasm,x86",
             config,
         )
         self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
@@ -279,7 +282,7 @@ class ConfigureBazelTest(unittest.TestCase):
         args = self.configure_bazel.parse_arguments(["-DLOOM_TARGET_AMDGPU=OFF"])
         config = self.configure_bazel.generate_config(args)
 
-        self.assertIn("build --//loom/config/target:enable=iree_vm,x86", config)
+        self.assertIn("build --//loom/config/target:enable=iree_vm,spirv,x86", config)
         self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
         self.assertIn("build --//loom/config/emit:enable=", config)
 
@@ -287,7 +290,10 @@ class ConfigureBazelTest(unittest.TestCase):
         args = self.configure_bazel.parse_arguments(["-DLOOM_EXECUTE_IREE_HAL=OFF"])
         config = self.configure_bazel.generate_config(args)
 
-        self.assertIn("build --//loom/config/target:enable=amdgpu,iree_vm,x86", config)
+        self.assertIn(
+            "build --//loom/config/target:enable=amdgpu,iree_vm,spirv,x86",
+            config,
+        )
         self.assertIn("build --//loom/config/execute:enable=iree_vm", config)
         self.assertIn("build --//loom/config/emit:enable=", config)
 
@@ -295,7 +301,10 @@ class ConfigureBazelTest(unittest.TestCase):
         args = self.configure_bazel.parse_arguments(["-DLOOM_EMIT_LLVMIR=ON"])
         config = self.configure_bazel.generate_config(args)
 
-        self.assertIn("build --//loom/config/target:enable=amdgpu,iree_vm,x86", config)
+        self.assertIn(
+            "build --//loom/config/target:enable=amdgpu,iree_vm,spirv,x86",
+            config,
+        )
         self.assertIn("build --//loom/config/execute:enable=iree_hal,iree_vm", config)
         self.assertIn("build --//loom/config/emit:enable=llvmir", config)
 
