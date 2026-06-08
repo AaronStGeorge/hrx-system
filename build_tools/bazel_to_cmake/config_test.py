@@ -174,6 +174,18 @@ class ConfigTest(unittest.TestCase):
             functions._convert_select_condition("//runtime/config/hal:driver_hip"),
             "IREE_HAL_DRIVER_HIP",
         )
+        self.assertEqual(
+            functions._convert_select_condition(
+                "//loom/config/target:amdgpu_artifacts"
+            ),
+            "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU",
+        )
+        self.assertEqual(
+            functions._convert_select_condition(
+                "//loom/config/target:spirv_vulkan_artifacts"
+            ),
+            "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN",
+        )
         with self.assertRaises(NotImplementedError):
             functions.select(
                 {
@@ -242,6 +254,97 @@ class ConfigTest(unittest.TestCase):
         self.assertIn('if(IREE_ARCH STREQUAL "wasm_32")', converter.body)
         self.assertIn("iree_native_test(", converter.body)
         self.assertIn("endif()", converter.body)
+
+    def test_native_test_converts_location_args_to_file_locators(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions.native_test(
+            name="location_test",
+            src="//tools:runner",
+            args=[
+                "$(location input.txt)",
+                "--flag=$(location nested/input.bin)",
+            ],
+        )
+
+        self.assertIn('"{{${PROJECT_SOURCE_DIR}/pkg/input.txt}}"', converter.body)
+        self.assertIn(
+            '"--flag={{${PROJECT_SOURCE_DIR}/pkg/nested/input.bin}}"',
+            converter.body,
+        )
+
+    def test_cc_test_emits_sanitizer_suppressions(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="",
+        )
+
+        functions.cc_test(
+            name="vulkan_test",
+            srcs=["vulkan_test.cc"],
+            sanitizer_suppressions={
+                "lsan": "//build_tools/sanitizer:lsan_suppressions_vulkan.txt",
+            },
+        )
+
+        self.assertIn("SANITIZER_SUPPRESSIONS", converter.body)
+        self.assertIn("    lsan", converter.body)
+        self.assertIn("    vulkan", converter.body)
+
+    def test_execution_test_suite_emits_target_compatible_guard(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions.iree_execution_test_suite(
+            name="execution_test",
+            manifests=["test.json"],
+            tools={"runner": "//tools:runner"},
+            target_compatible_with=functions.select(
+                {
+                    "@platforms//cpu:wasm32": [],
+                    "//conditions:default": ["@platforms//:incompatible"],
+                }
+            ),
+        )
+
+        self.assertIn('if(IREE_ARCH STREQUAL "wasm_32")', converter.body)
+        self.assertIn("iree_execution_test_suite(", converter.body)
+        self.assertIn("endif()", converter.body)
+
+    def test_execution_test_suite_emits_sanitizer_suppressions(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="/repo/pkg",
+            repo_root="/repo",
+        )
+
+        functions.iree_execution_test_suite(
+            name="execution_test",
+            manifests=["test.json"],
+            tools={"runner": "//tools:runner"},
+            sanitizer_suppressions={
+                "lsan": "//build_tools/sanitizer:lsan_suppressions_vulkan.txt",
+            },
+        )
+
+        self.assertIn("SANITIZER_SUPPRESSIONS", converter.body)
+        self.assertIn("    lsan", converter.body)
+        self.assertIn("    vulkan", converter.body)
 
 
 if __name__ == "__main__":

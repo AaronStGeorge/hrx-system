@@ -16,6 +16,8 @@
 # DATA: additional data files required by the manifests.
 # ARGS: additional arguments passed to the runner.
 # LABELS: additional labels to apply to the test.
+# SANITIZER_SUPPRESSIONS: Sanitizer/name pairs selecting suppression files.
+#     For example: lsan vulkan.
 # TIMEOUT: test timeout in seconds.
 function(iree_execution_test_suite)
   if(NOT IREE_BUILD_TESTS)
@@ -29,7 +31,7 @@ function(iree_execution_test_suite)
     _RULE
     ""
     "NAME;TIMEOUT"
-    "MANIFESTS;TOOLS;DATA;ARGS;LABELS"
+    "MANIFESTS;TOOLS;DATA;ARGS;LABELS;SANITIZER_SUPPRESSIONS"
     ${ARGN}
   )
 
@@ -102,5 +104,12 @@ function(iree_execution_test_suite)
   set_property(TEST ${_TEST_NAME} PROPERTY LABELS "${_RULE_LABELS}")
   set_property(TEST ${_TEST_NAME} PROPERTY TIMEOUT "${_RULE_TIMEOUT}")
   set_property(TEST ${_TEST_NAME} PROPERTY REQUIRED_FILES "${_REQUIRED_FILES}")
-  set_property(TEST ${_TEST_NAME} APPEND PROPERTY ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
+  set(_ENVIRONMENT_VARS "PYTHONDONTWRITEBYTECODE=1")
+  if(_RULE_SANITIZER_SUPPRESSIONS)
+    iree_append_sanitizer_suppression_environment(
+      _ENVIRONMENT_VARS
+      ${_RULE_SANITIZER_SUPPRESSIONS}
+    )
+  endif()
+  set_property(TEST ${_TEST_NAME} APPEND PROPERTY ENVIRONMENT ${_ENVIRONMENT_VARS})
 endfunction()

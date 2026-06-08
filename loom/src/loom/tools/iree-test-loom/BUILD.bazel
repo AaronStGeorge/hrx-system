@@ -4,12 +4,14 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/sanitizer:suppressions.bzl", "vulkan_suppressions")
 load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
     "loom_cc_binary",
     "loom_cc_library",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -75,6 +77,14 @@ _IREE_TEST_LOOM_EXECUTE_DEPS = (
     _SPIRV_VULKAN_EXECUTE_DEPS
 )
 
+_AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:amdgpu_hal",
+])
+
+_SPIRV_VULKAN_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:spirv_vulkan_hal",
+])
+
 loom_cc_library(
     name = "main",
     srcs = ["main.c"],
@@ -131,6 +141,7 @@ iree_execution_test_suite(
         "manual",
         "requires-gpu-amd",
     ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
     tools = {
         "iree-test-loom": ":iree-test-loom",
     },
@@ -145,11 +156,13 @@ iree_execution_test_suite(
         "testdata/spirv_vulkan_quantized_hal_actual.loom",
     ],
     manifests = ["iree-test-loom_spirv_vulkan.test.json"],
+    sanitizer_suppressions = vulkan_suppressions,
     tags = [
         "driver=vulkan",
         "manual",
         "requires-gpu-vulkan",
     ],
+    target_compatible_with = _SPIRV_VULKAN_HAL_COMPATIBLE_WITH,
     tools = {
         "iree-test-loom": ":iree-test-loom",
     },

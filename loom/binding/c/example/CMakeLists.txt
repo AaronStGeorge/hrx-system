@@ -111,6 +111,9 @@ loom_cc_test(
     "loom-resource=vulkan-device"
   RESOURCE_GROUP
     loom-vulkan-tests
+  SANITIZER_SUPPRESSIONS
+    lsan
+    vulkan
 )
 endif()
 

@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/sanitizer:suppressions.bzl", "vulkan_suppressions")
 load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
@@ -11,6 +12,7 @@ load(
     "loom_cc_binary",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -19,15 +21,15 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_EXECUTE_COPTS = iree_select({
-    "//loom/config/execute:amdgpu_hal": [
+_AMDGPU_TARGET_COPTS = iree_select({
+    "//loom/config/target:amdgpu_artifacts": [
         "-DIREE_BENCHMARK_LOOM_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
-_AMDGPU_EXECUTE_DEPS = iree_select({
-    "//loom/config/execute:amdgpu_hal": [
+_AMDGPU_TARGET_DEPS = iree_select({
+    "//loom/config/target:amdgpu_artifacts": [
         "//loom/src/loom/target/arch/amdgpu:provider",
         "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
     ],
@@ -48,15 +50,15 @@ _IREE_VM_EXECUTION_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_SPIRV_VULKAN_EXECUTE_COPTS = iree_select({
-    "//loom/config/execute:spirv_vulkan_hal": [
+_SPIRV_VULKAN_TARGET_COPTS = iree_select({
+    "//loom/config/target:spirv_vulkan_artifacts": [
         "-DIREE_BENCHMARK_LOOM_HAVE_SPIRV=1",
     ],
     "//conditions:default": [],
 })
 
-_SPIRV_VULKAN_EXECUTE_DEPS = iree_select({
-    "//loom/config/execute:spirv_vulkan_hal": [
+_SPIRV_VULKAN_TARGET_DEPS = iree_select({
+    "//loom/config/target:spirv_vulkan_artifacts": [
         "//loom/src/loom/target/arch/spirv:provider",
         "//loom/src/loom/tooling/target/spirv:artifact_provider",
         "//loom/src/loom/tooling/target/spirv:testbench_requirements",
@@ -64,17 +66,25 @@ _SPIRV_VULKAN_EXECUTE_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_IREE_BENCHMARK_LOOM_EXECUTE_COPTS = (
-    _AMDGPU_EXECUTE_COPTS +
+_IREE_BENCHMARK_LOOM_TARGET_COPTS = (
+    _AMDGPU_TARGET_COPTS +
     _IREE_VM_EXECUTION_COPTS +
-    _SPIRV_VULKAN_EXECUTE_COPTS
+    _SPIRV_VULKAN_TARGET_COPTS
 )
 
-_IREE_BENCHMARK_LOOM_EXECUTE_DEPS = (
-    _AMDGPU_EXECUTE_DEPS +
+_IREE_BENCHMARK_LOOM_TARGET_DEPS = (
+    _AMDGPU_TARGET_DEPS +
     _IREE_VM_EXECUTION_DEPS +
-    _SPIRV_VULKAN_EXECUTE_DEPS
+    _SPIRV_VULKAN_TARGET_DEPS
 )
+
+_AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:amdgpu_hal",
+])
+
+_SPIRV_VULKAN_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:spirv_vulkan_hal",
+])
 
 loom_cc_library(
     name = "main",
@@ -249,13 +259,13 @@ loom_cc_test(
 loom_cc_binary(
     name = "iree-benchmark-loom",
     srcs = ["iree-benchmark-loom.c"],
-    copts = _IREE_BENCHMARK_LOOM_EXECUTE_COPTS,
+    copts = _IREE_BENCHMARK_LOOM_TARGET_COPTS,
     deps = [
         ":main",
         "//loom/src/loom/tooling/execution:execution_provider",
         "//loom/src/loom/tooling/execution/hal:artifact",
         "//runtime/src/iree/base",
-    ] + _IREE_BENCHMARK_LOOM_EXECUTE_DEPS,
+    ] + _IREE_BENCHMARK_LOOM_TARGET_DEPS,
 )
 
 iree_execution_test_suite(
@@ -282,6 +292,7 @@ iree_execution_test_suite(
         "manual",
         "requires-gpu-amd",
     ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
     tools = {
         "iree-benchmark-loom": ":iree-benchmark-loom",
     },
@@ -296,11 +307,13 @@ iree_execution_test_suite(
         "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_quantized_hal_actual.loom",
     ],
     manifests = ["iree-benchmark-loom_spirv_vulkan.test.json"],
+    sanitizer_suppressions = vulkan_suppressions,
     tags = [
         "driver=vulkan",
         "manual",
         "requires-gpu-vulkan",
     ],
+    target_compatible_with = _SPIRV_VULKAN_HAL_COMPATIBLE_WITH,
     tools = {
         "iree-benchmark-loom": ":iree-benchmark-loom",
     },

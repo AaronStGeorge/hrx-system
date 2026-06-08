@@ -105,6 +105,7 @@ hrx_fix_ndebug()
 
 list(APPEND CMAKE_MODULE_PATH
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
+  "${CMAKE_CURRENT_LIST_DIR}/build_tools/sanitizer"
 )
 
 include("${CMAKE_CURRENT_LIST_DIR}/MODULE.cmake.lock")
@@ -116,6 +117,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/loom/project.cmake")
 # Shared repository CMake primitives.
 include(iree_macros)
 include(iree_copts)
+include(iree_sanitizer_suppressions)
 include(iree_cc_binary)
 include(iree_cc_library)
 include(iree_cc_test)

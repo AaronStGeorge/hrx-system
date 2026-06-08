@@ -184,24 +184,24 @@ loom_cc_test(
 )
 
 set(_iree_benchmark_loom_platform_copts "")
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
   list(APPEND _iree_benchmark_loom_platform_copts "-DIREE_BENCHMARK_LOOM_HAVE_AMDGPU=1")
 endif()
 if(LOOM_EXECUTE_IREE_VM)
   list(APPEND _iree_benchmark_loom_platform_copts "-DIREE_BENCHMARK_LOOM_HAVE_IREE_VM=1")
 endif()
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
   list(APPEND _iree_benchmark_loom_platform_copts "-DIREE_BENCHMARK_LOOM_HAVE_SPIRV=1")
 endif()
 set(_iree_benchmark_loom_platform_deps "")
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
   list(APPEND _iree_benchmark_loom_platform_deps loom::target::arch::amdgpu::provider)
   list(APPEND _iree_benchmark_loom_platform_deps loom::tooling::target::amdgpu::artifact_provider)
 endif()
 if(LOOM_EXECUTE_IREE_VM)
   list(APPEND _iree_benchmark_loom_platform_deps loom::tooling::execution::ireevm::provider)
 endif()
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
   list(APPEND _iree_benchmark_loom_platform_deps loom::target::arch::spirv::provider)
   list(APPEND _iree_benchmark_loom_platform_deps loom::tooling::target::spirv::artifact_provider)
   list(APPEND _iree_benchmark_loom_platform_deps loom::tooling::target::spirv::testbench_requirements)
@@ -235,6 +235,7 @@ iree_execution_test_suite(
     "hostonly"
 )
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_execution_test_suite(
   NAME
     amdgpu_execution_test
@@ -249,7 +250,9 @@ iree_execution_test_suite(
     "manual"
     "requires-gpu-amd"
 )
+endif()
 
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 iree_execution_test_suite(
   NAME
     spirv_vulkan_execution_test
@@ -262,10 +265,14 @@ iree_execution_test_suite(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/spirv_vulkan_coop_u8_hal_actual.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/spirv_vulkan_hal_actual.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/spirv_vulkan_quantized_hal_actual.loom"
+  SANITIZER_SUPPRESSIONS
+    lsan
+    vulkan
   LABELS
     "driver=vulkan"
     "manual"
     "requires-gpu-vulkan"
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

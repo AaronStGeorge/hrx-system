@@ -20,8 +20,6 @@ class TargetConverter:
                 f"{iree_repo}//build_tools:pthreads": [],
                 f"{iree_repo}//build_tools:dl": ["${CMAKE_DL_LIBS}"],
                 f"{iree_repo}//build_tools:rt": [],
-                # CMake test macros set ROCm LSAN_OPTIONS from driver labels.
-                f"{iree_repo}//build_tools/sanitizer:lsan_suppressions_rocm.txt": [],
                 # HIP
                 "@hip_api_headers//:headers": [
                     "iree::third_party::hip_api_headers",

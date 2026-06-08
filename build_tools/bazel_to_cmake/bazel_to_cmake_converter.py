@@ -65,6 +65,12 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/src/iree/hal/drivers/hip:rccl_enabled": "IREE_HAL_DRIVER_HIP_RCCL",
 }
 
+_LOOM_CONFIG_CMAKE_OPTIONS = {
+    "//loom/config/target:amdgpu_artifacts": "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU",
+    "//loom/config/target:spirv_artifacts": "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV",
+    "//loom/config/target:spirv_vulkan_artifacts": "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN",
+}
+
 
 def _append_unique_condition(conditions, condition):
     if condition and condition not in conditions:
@@ -234,7 +240,9 @@ class BuildFileFunctions(object):
         condition = self._convert_platform_condition(label)
         if condition:
             return condition
-        return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS.get(label)
+        return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS.get(
+            label
+        ) or _LOOM_CONFIG_CMAKE_OPTIONS.get(label)
 
     def _condition_select_compatibility_condition(self, condition_select):
         compatible_conditions = []
@@ -443,6 +451,23 @@ class BuildFileFunctions(object):
 
         return f"  {name}\n{values_list}\n"
 
+    def _convert_sanitizer_suppressions_block(self, sanitizer_suppressions):
+        if not sanitizer_suppressions:
+            return ""
+        entries = []
+        for sanitizer, label in sorted(sanitizer_suppressions.items()):
+            suppression_name = self._sanitizer_suppression_name(label)
+            entries.extend([sanitizer, suppression_name])
+        return self._convert_string_list_block(
+            "SANITIZER_SUPPRESSIONS", entries, quote=False
+        )
+
+    def _sanitizer_suppression_name(self, label):
+        suffix = label.rsplit(":", 1)[-1]
+        if suffix.startswith("lsan_suppressions_") and suffix.endswith(".txt"):
+            return suffix[len("lsan_suppressions_") : -len(".txt")]
+        raise NotImplementedError(f"sanitizer suppression label: {label}")
+
     def _convert_option_block(self, option, option_value):
         if option_value:
             # Note: this is a truthiness check as well as an existence check, e.g.
@@ -523,6 +548,20 @@ class BuildFileFunctions(object):
         for arg in args:
             converted_args.extend(self._convert_location_arg(arg))
         return converted_args
+
+    def _convert_native_test_location_arg(self, arg):
+        def replace_location(match):
+            paths = self._cmake_location_paths(match.group(2))
+            if len(paths) != 1:
+                return " ".join(paths)
+            return "{{%s}}" % paths[0]
+
+        return _LOCATION_PATTERN.sub(replace_location, arg)
+
+    def _convert_native_test_location_args(self, args):
+        if args is None:
+            return None
+        return [self._convert_native_test_location_arg(arg) for arg in args]
 
     def _location_label_keys(self, args):
         if args is None:
@@ -1453,6 +1492,7 @@ class BuildFileFunctions(object):
         includes=None,
         group=None,
         resource_group=None,
+        sanitizer_suppressions=None,
         target_compatible_with=None,
         **kwargs,
     ):
@@ -1484,6 +1524,9 @@ class BuildFileFunctions(object):
         resource_group_block = self._convert_string_arg_block(
             "RESOURCE_GROUP", resource_group, quote=False
         )
+        sanitizer_suppressions_block = self._convert_sanitizer_suppressions_block(
+            sanitizer_suppressions
+        )
 
         self._emit_platform_guard_begin(target_compatible_with)
         did_emit_testdata_guard = self._emit_optional_local_cts_testdata_guard_begin(
@@ -1510,6 +1553,7 @@ class BuildFileFunctions(object):
             f"{includes_block}"
             f"{group_block}"
             f"{resource_group_block}"
+            f"{sanitizer_suppressions_block}"
             f")\n\n"
         )
         self._emit_optional_local_cts_testdata_guard_end(did_emit_testdata_guard)
@@ -2299,17 +2343,23 @@ class BuildFileFunctions(object):
         tools,
         data=None,
         args=None,
+        sanitizer_suppressions=None,
         tags=None,
         timeout=None,
+        target_compatible_with=None,
         **kwargs,
     ):
         if self._should_skip_target(tags=tags, **kwargs):
             return
+        self._check_no_unhandled_kwargs("iree_execution_test_suite", kwargs)
 
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         manifests_block = self._convert_srcs_block(manifests, block_name="MANIFESTS")
         data_block = self._convert_srcs_block(data, block_name="DATA")
         args_block = self._convert_string_list_block("ARGS", args)
+        sanitizer_suppressions_block = self._convert_sanitizer_suppressions_block(
+            sanitizer_suppressions
+        )
         labels_block = self._convert_string_list_block("LABELS", tags)
         timeout_block = self._convert_timeout_arg_block("TIMEOUT", timeout)
 
@@ -2320,6 +2370,7 @@ class BuildFileFunctions(object):
             )
         tools_block = self._convert_string_list_block("TOOLS", tool_entries)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_execution_test_suite(\n"
             f"{name_block}"
@@ -2327,10 +2378,12 @@ class BuildFileFunctions(object):
             f"{tools_block}"
             f"{data_block}"
             f"{args_block}"
+            f"{sanitizer_suppressions_block}"
             f"{labels_block}"
             f"{timeout_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_generated_e2e_runner_test(
         self,
@@ -2407,6 +2460,7 @@ class BuildFileFunctions(object):
         args=None,
         data=None,
         env=None,
+        sanitizer_suppressions=None,
         tags=None,
         timeout=None,
         target_compatible_with=None,
@@ -2416,8 +2470,13 @@ class BuildFileFunctions(object):
 
         name_block = self._convert_string_arg_block("NAME", name)
         test_binary_block = self._convert_single_target_block("SRC", src)
-        args_block = self._convert_string_list_block("ARGS", args)
+        args_block = self._convert_string_list_block(
+            "ARGS", self._convert_native_test_location_args(args)
+        )
         labels_block = self._convert_string_list_block("LABELS", tags)
+        sanitizer_suppressions_block = self._convert_sanitizer_suppressions_block(
+            sanitizer_suppressions
+        )
         timeout_block = self._convert_timeout_arg_block("TIMEOUT", timeout)
 
         self._emit_platform_guard_begin(target_compatible_with)
@@ -2427,6 +2486,7 @@ class BuildFileFunctions(object):
             f"{args_block}"
             f"{test_binary_block}"
             f"{labels_block}"
+            f"{sanitizer_suppressions_block}"
             f"{timeout_block}"
             f")\n\n"
         )
