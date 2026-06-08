@@ -44,10 +44,7 @@ function(loom_low_descriptor_data_archive)
     SOURCE_DIR
       "${_RULE_SOURCE_DIR}"
   )
-  FetchContent_GetProperties("${_RULE_NAME}")
-  if(NOT ${_RULE_NAME}_POPULATED)
-    FetchContent_Populate("${_RULE_NAME}")
-  endif()
+  FetchContent_MakeAvailable("${_RULE_NAME}")
   if(NOT TARGET "${_RULE_NAME}")
     add_custom_target("${_RULE_NAME}")
   endif()
