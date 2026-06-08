@@ -96,7 +96,8 @@ iree_execution_test_suite(
     "testdata/amdgpu_hal_actual.loom"
   LABELS
     "driver=amdgpu"
-    "manual"
+    "iree-run-requirement=loom.resource.amd_gpu"
+    "loom-resource=amd-gpu"
     "requires-gpu-amd"
 )
 endif()
@@ -119,7 +120,8 @@ iree_execution_test_suite(
     vulkan
   LABELS
     "driver=vulkan"
-    "manual"
+    "iree-run-requirement=loom.resource.vulkan_device"
+    "loom-resource=vulkan-device"
     "requires-gpu-vulkan"
 )
 endif()

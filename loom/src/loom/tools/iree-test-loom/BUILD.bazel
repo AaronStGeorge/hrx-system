@@ -138,7 +138,8 @@ iree_execution_test_suite(
     manifests = ["iree-test-loom_amdgpu.test.json"],
     tags = [
         "driver=amdgpu",
-        "manual",
+        "iree-run-requirement=loom.resource.amd_gpu",
+        "loom-resource=amd-gpu",
         "requires-gpu-amd",
     ],
     target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
@@ -159,7 +160,8 @@ iree_execution_test_suite(
     sanitizer_suppressions = vulkan_suppressions,
     tags = [
         "driver=vulkan",
-        "manual",
+        "iree-run-requirement=loom.resource.vulkan_device",
+        "loom-resource=vulkan-device",
         "requires-gpu-vulkan",
     ],
     target_compatible_with = _SPIRV_VULKAN_HAL_COMPATIBLE_WITH,

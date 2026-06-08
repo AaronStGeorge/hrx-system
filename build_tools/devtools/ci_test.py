@@ -60,6 +60,18 @@ class CiTest(unittest.TestCase):
             text,
         )
 
+    def test_bazel_default_targets_include_loom(self):
+        args = ci.parse_arguments(["iree-bazel-cpu"])
+
+        steps = ci.steps_from_args(args)
+        build_step = next(step for step in steps if step.name == "Build IREE")
+        test_step = next(step for step in steps if step.name == "Test IREE")
+
+        self.assertIn("//runtime/...", build_step.argv)
+        self.assertIn("//loom/...", build_step.argv)
+        self.assertIn("//runtime/...", test_step.argv)
+        self.assertIn("//loom/...", test_step.argv)
+
     def test_amdgpu_dry_run_does_not_embed_machine_paths(self):
         args = ci.parse_arguments(
             [
@@ -209,6 +221,8 @@ class CiTest(unittest.TestCase):
                 "iree-bazel-amdgpu",
                 "--target",
                 "//runtime/...",
+                "--target",
+                "//loom/...",
             ]
         )
 
@@ -220,19 +234,34 @@ class CiTest(unittest.TestCase):
             self.assertTrue(any(target in step.argv for step in build_steps))
         self.assertTrue(
             any(
-                "--test_tag_filters=" + ci_config.AMDGPU_RESOURCE_TAG in line
+                "--test_tag_filters=" + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG in line
                 for line in command_lines
             )
         )
-        resource_test = next(
-            step for step in steps if step.name == "Test IREE AMDGPU resources"
+        self.assertTrue(
+            any(
+                "--test_tag_filters=" + ci_config.LOOM_AMDGPU_RESOURCE_TAG in line
+                for line in command_lines
+            )
         )
-        self.assertIn("//runtime/...", resource_test.argv)
+        runtime_resource_test = next(
+            step for step in steps if step.name == "Test IREE AMDGPU runtime resources"
+        )
+        self.assertIn("//runtime/...", runtime_resource_test.argv)
+        self.assertIn("//loom/...", runtime_resource_test.argv)
         for target in ci_config.AMDGPU_XFAIL_TARGETS:
-            self.assertIn(target, resource_test.argv)
+            self.assertIn(target, runtime_resource_test.argv)
         self.assertNotIn(
             "-//runtime/src/iree/hal/drivers/amdgpu:system_test",
-            resource_test.argv,
+            runtime_resource_test.argv,
+        )
+        loom_resource_test = next(
+            step for step in steps if step.name == "Test IREE AMDGPU Loom resources"
+        )
+        self.assertIn("//loom/...", loom_resource_test.argv)
+        self.assertIn(
+            "--test_tag_filters=" + ci_config.LOOM_AMDGPU_RESOURCE_TAG,
+            loom_resource_test.argv,
         )
 
     def test_amdgpu_sanitizer_command_uses_amdgpu_sanitizer_xfails(self):
@@ -285,7 +314,15 @@ class CiTest(unittest.TestCase):
         self.assertTrue(
             any(
                 "bazel test --config=tsan --test_tag_filters="
-                + ci_config.AMDGPU_RESOURCE_TAG
+                + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG
+                in line
+                for line in command_lines
+            )
+        )
+        self.assertTrue(
+            any(
+                "bazel test --config=tsan --test_tag_filters="
+                + ci_config.LOOM_AMDGPU_RESOURCE_TAG
                 in line
                 for line in command_lines
             )
@@ -450,6 +487,16 @@ class CiTest(unittest.TestCase):
             "^iree/hal/drivers/amdgpu/util/pm4_dispatch_live_test$",
             ci_config.AMDGPU_TSAN_CTEST_EXCLUDE_REGEX,
         )
+        self.assertEqual(
+            ci_config.bazel_pattern_to_ctest_regex("//loom/src/loom/codegen/low:test"),
+            "^loom/codegen/low/test$",
+        )
+        self.assertEqual(
+            ci_config.bazel_pattern_to_ctest_regex(
+                "//loom/binding/c/example:emit_spirv_vulkan_test"
+            ),
+            "^loom/binding/c/example/emit_spirv_vulkan_test$",
+        )
 
     def test_cmake_cpu_sanitizer_command_uses_cmake_build_dir_and_xfails(self):
         args = ci.parse_arguments(["iree-cmake-cpu-ubsan"])
@@ -482,7 +529,12 @@ class CiTest(unittest.TestCase):
                 for step in test_steps
             )
         )
-        self.assertTrue(any("runtime-resource=" in step.argv for step in test_steps))
+        self.assertTrue(
+            any(
+                ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX in step.argv
+                for step in test_steps
+            )
+        )
 
     def test_cmake_cpu_sanitizers_command_runs_each_configuration(self):
         args = ci.parse_arguments(["iree-cmake-cpu-sanitizers"])
@@ -547,7 +599,10 @@ class CiTest(unittest.TestCase):
             )
         )
         self.assertTrue(
-            any("-L runtime-resource=amd-gpu" in line for line in command_lines)
+            any(
+                ci_config.AMDGPU_CTEST_RESOURCE_LABEL_REGEX in step.argv
+                for step in steps
+            )
         )
 
     def test_cmake_amdgpu_tsan_uses_tsan_specific_xfails(self):

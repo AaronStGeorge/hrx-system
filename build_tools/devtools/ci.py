@@ -300,11 +300,12 @@ def amdgpu_test_steps(
     config_name = f" and {config.upper()}" if config is not None else ""
     return [
         bazel_test_step(
-            f"Test IREE AMDGPU resources{config_name}",
+            f"Test IREE AMDGPU {slice_name} resources{config_name}",
             targets + xfail_targets,
             config=config,
-            test_tag_filters=(ci_config.AMDGPU_RESOURCE_TAG,),
-        ),
+            test_tag_filters=(resource_tag,),
+        )
+        for slice_name, resource_tag in ci_config.AMDGPU_BAZEL_RESOURCE_SLICES
     ]
 
 
@@ -418,7 +419,7 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                 f"Test IREE CMake{sanitizer_name}",
                 exclude_regex=exclude_regex,
                 env=sanitizer_env(sanitizer),
-                label_exclude_regex="runtime-resource=",
+                label_exclude_regex=ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX,
             )
         )
     return steps
@@ -465,7 +466,7 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
         cmake_test_step(
             command_name,
             f"Test IREE CMake AMDGPU resource tests{sanitizer_name}",
-            label_regex=ci_config.AMDGPU_CTEST_RESOURCE_LABEL,
+            label_regex=ci_config.AMDGPU_CTEST_RESOURCE_LABEL_REGEX,
             exclude_regex=resource_exclude_regex,
             env=sanitizer_env(sanitizer),
             parallelism=1,
