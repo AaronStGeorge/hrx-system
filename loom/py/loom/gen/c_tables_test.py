@@ -37,6 +37,7 @@ from loom.dsl import (
     INTEGER,
     POOL,
     SYMBOL_DEFINE,
+    VECTOR,
     AliasResult,
     AttrDef,
     AttrMatchesElementType,
@@ -187,6 +188,49 @@ def test_generate_tables_omits_zero_default_vtable_fields() -> None:
     assert ".format_elements = NULL," not in tables_c
     assert ".format_element_count = 0," not in tables_c
     assert ".contract_families = 0," not in tables_c
+
+
+def test_generate_tables_omits_type_propagation_flag_for_scalar_only_constraints() -> None:
+    op = Op(
+        "test.addi",
+        group=Dialect("test"),
+        operands=[Operand("lhs", INTEGER), Operand("rhs", INTEGER)],
+        results=[Result("result", INTEGER)],
+        constraints=[SameType("lhs", "rhs", "result")],
+    )
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert "LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE" not in tables_c
+    assert ".vtable_flags =" not in tables_c
+
+
+def test_generate_tables_marks_type_propagation_candidate_for_refinable_types() -> None:
+    op = Op(
+        "test.refine",
+        group=Dialect("test"),
+        operands=[Operand("input", VECTOR)],
+        results=[Result("result", VECTOR)],
+        constraints=[SameType("input", "result")],
+    )
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert ".vtable_flags = LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE," in tables_c
+
+
+def test_generate_tables_marks_type_transfer_as_type_propagation_candidate() -> None:
+    op = Op(
+        "test.transfer",
+        group=Dialect("test"),
+        operands=[Operand("input", INTEGER)],
+        results=[Result("result", INTEGER)],
+        type_transfer="loom_test_transfer_types",
+    )
+
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert ".vtable_flags = LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE," in tables_c
 
 
 def test_generate_tables_omits_zero_default_symbol_definition_fields() -> None:

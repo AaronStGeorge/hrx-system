@@ -779,6 +779,9 @@ enum loom_op_vtable_flag_bits_e {
   LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS = 1u << 2,
   LOOM_OP_VTABLE_VARIADIC_REGIONS = 1u << 3,
   LOOM_OP_VTABLE_SEGMENTED_OPERANDS = 1u << 4,
+  // The op kind has generated constraints or type-transfer hooks that can
+  // narrow dynamic type properties during table-driven type propagation.
+  LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE = 1u << 5,
 };
 typedef uint8_t loom_op_vtable_flags_t;
 

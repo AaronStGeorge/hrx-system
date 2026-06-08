@@ -314,6 +314,10 @@ iree_status_t loom_type_refine_with_candidate(
   IREE_RETURN_IF_ERROR(
       loom_type_refinement_prepare_outputs(current_type, out_type, out_result));
 
+  if (memcmp(&current_type, &candidate_type, sizeof(current_type)) == 0) {
+    return iree_ok_status();
+  }
+
   if (loom_type_kind(current_type) != loom_type_kind(candidate_type)) {
     *out_result = LOOM_TYPE_REFINEMENT_CONFLICT;
     return iree_ok_status();

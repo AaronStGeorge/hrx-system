@@ -101,6 +101,13 @@ TEST(Vtable, AddiCounts) {
   EXPECT_FALSE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS);
 }
 
+TEST(Vtable, TypePropagationCandidateFlags) {
+  EXPECT_FALSE(TestVtable(LOOM_OP_TEST_ADDI)->vtable_flags &
+               LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE);
+  EXPECT_TRUE(TestVtable(LOOM_OP_TEST_ATTRS)->vtable_flags &
+              LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE);
+}
+
 TEST(Vtable, AddiTraits) {
   const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_ADDI);
   EXPECT_NE(vtable->traits & LOOM_TRAIT_PURE, 0u);

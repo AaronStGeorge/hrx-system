@@ -58,6 +58,16 @@ iree_status_t loom_type_propagator_prepare_region(
 iree_status_t loom_type_propagator_prepare_function(
     loom_type_propagator_t* propagator, loom_func_like_t function);
 
+// Returns true when applying the type propagator to |op| may commit a type
+// change. This is a cheap prefilter for pass hot paths: false means the op has
+// no generated type-refining metadata and, when analysis facts are available,
+// none of its directly declared values carry dynamic type properties that facts
+// can narrow. |vtable| may be NULL when the op kind is unknown.
+bool loom_type_propagator_may_apply_op(const loom_type_propagator_t* propagator,
+                                       const loom_rewriter_t* rewriter,
+                                       const loom_op_t* op,
+                                       const loom_op_vtable_t* vtable);
+
 // Applies one transactional propagation seeded at |op|. The transaction uses
 // generated constraints on |op| and every affected user/defining op reached by
 // candidate type changes. If the closure is consistent, all narrowed value

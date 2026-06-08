@@ -1415,18 +1415,23 @@ static iree_status_t loom_canonicalize_rewrite_op(
   }
   loom_greedy_rewrite_result_record_rewriter_flags(result, rewriter);
 
+  const loom_op_vtable_t* vtable = loom_op_vtable(driver->module, op);
+
   // Table-driven type propagation: generated equality constraints and
   // value facts can narrow dynamic shapes, encoding roles, and static
   // attachments without hand-writing one pattern per op family.
   bool types_propagated = false;
-  rewriter->flags = 0;
-  IREE_RETURN_IF_ERROR(loom_type_propagator_apply_op(
-      state->type_propagator, rewriter, op, &types_propagated));
-  if (types_propagated) {
-    loom_greedy_rewrite_result_record_change(
-        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
-    *out_changed = true;
-    return iree_ok_status();
+  if (loom_type_propagator_may_apply_op(state->type_propagator, rewriter, op,
+                                        vtable)) {
+    rewriter->flags = 0;
+    IREE_RETURN_IF_ERROR(loom_type_propagator_apply_op(
+        state->type_propagator, rewriter, op, &types_propagated));
+    if (types_propagated) {
+      loom_greedy_rewrite_result_record_change(
+          result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+      *out_changed = true;
+      return iree_ok_status();
+    }
   }
 
   // Symbolic address-domain cleanup uses the generic expression analysis
@@ -1444,7 +1449,6 @@ static iree_status_t loom_canonicalize_rewrite_op(
   }
 
   // Structural canonicalization patterns.
-  const loom_op_vtable_t* vtable = loom_op_vtable(driver->module, op);
   if (!vtable || !vtable->canonicalize) return iree_ok_status();
 
   rewriter->flags = 0;

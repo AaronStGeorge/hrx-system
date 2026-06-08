@@ -693,6 +693,107 @@ def _constraint_arg_ref(
     return f"LOOM_FIELD_REF({category}, {field_index})"
 
 
+TYPE_PROPAGATION_REFINABLE_CONSTRAINTS = frozenset(
+    {
+        TypeConstraint.TILE,
+        TypeConstraint.TENSOR,
+        TypeConstraint.VECTOR,
+        TypeConstraint.RANK_ONE_VECTOR,
+        TypeConstraint.VIEW,
+        TypeConstraint.INTEGER_ELEMENT,
+        TypeConstraint.FLOAT_ELEMENT,
+        TypeConstraint.INDEX_OR_NON_I1_INTEGER_ELEMENT,
+        TypeConstraint.I1_ELEMENT,
+        TypeConstraint.I8_ELEMENT,
+        TypeConstraint.I32_ELEMENT,
+        TypeConstraint.F16_OR_BF16_ELEMENT,
+        TypeConstraint.F32_ELEMENT,
+        TypeConstraint.ANY,
+        TypeConstraint.ANY_ENCODING,
+        TypeConstraint.ENCODING_LAYOUT,
+        TypeConstraint.ENCODING_SCHEMA,
+        TypeConstraint.ENCODING_STORAGE,
+        TypeConstraint.ENCODING_TRANSFORM,
+        TypeConstraint.POOL,
+    }
+)
+
+TYPE_PROPAGATION_RELATIONS = frozenset(
+    {
+        "LOOM_RELATION_PAIRWISE_EQ",
+        "LOOM_RELATION_ALL_SAME",
+        "LOOM_RELATION_REGION_ARG_MATCH",
+        "LOOM_RELATION_YIELD_MATCH",
+        "LOOM_RELATION_VARIADIC_MATCH",
+    }
+)
+
+TYPE_PROPAGATION_PROPERTIES = frozenset(
+    {
+        "LOOM_PROPERTY_TYPE",
+        "LOOM_PROPERTY_ENCODING",
+        "LOOM_PROPERTY_SHAPE",
+    }
+)
+
+TYPE_PROPAGATION_TYPE_NOOP_RELATIONS = frozenset(
+    {
+        "LOOM_RELATION_YIELD_MATCH",
+        "LOOM_RELATION_VARIADIC_MATCH",
+    }
+)
+
+
+def _op_value_type_constraints(op: Op) -> dict[str, TypeConstraint]:
+    constraints: dict[str, TypeConstraint] = {}
+    for operand in op.operands:
+        constraints[operand.name] = operand.type_constraint
+    if _func_args_are_operands(op) and _explicit_func_args_operand(op) is None:
+        constraints[_func_args_field_name(op)] = TypeConstraint.ANY
+    for result in op.results:
+        constraints[result.name] = result.type_constraint
+    return constraints
+
+
+def _constraint_arg_can_refine_type(
+    op: Op,
+    layout: FieldLayout,
+    value_type_constraints: Mapping[str, TypeConstraint],
+    arg_name: str,
+) -> bool:
+    field = layout.fields.get(arg_name)
+    if field is None:
+        return False
+    if field.kind == FieldKind.REGION:
+        return True
+    if field.kind not in (FieldKind.OPERAND, FieldKind.RESULT):
+        return False
+    type_constraint = value_type_constraints.get(arg_name)
+    return type_constraint in TYPE_PROPAGATION_REFINABLE_CONSTRAINTS
+
+
+def _op_has_type_propagation_candidate(op: Op, layout: FieldLayout) -> bool:
+    if op.type_transfer:
+        return True
+    value_type_constraints = _op_value_type_constraints(op)
+    for constraint in op.constraints:
+        constraint_entry = CONSTRAINT_MAP.get(constraint.name)
+        if constraint_entry is None:
+            continue
+        relation_name, property_name = constraint_entry
+        if property_name == "$data" or property_name == "$type_constraint_data":
+            continue
+        if relation_name not in TYPE_PROPAGATION_RELATIONS:
+            continue
+        if property_name not in TYPE_PROPAGATION_PROPERTIES:
+            continue
+        if property_name == "LOOM_PROPERTY_TYPE" and relation_name in TYPE_PROPAGATION_TYPE_NOOP_RELATIONS:
+            continue
+        if any(_constraint_arg_can_refine_type(op, layout, value_type_constraints, arg_name) for arg_name in constraint.args):
+            return True
+    return False
+
+
 def _resolve_attr_index(op: Op, attr_name: str | None, interface_name: str = "interface") -> int:
     """Resolves an attr name to its non-flags attr index.
 
@@ -3872,6 +3973,8 @@ def generate_tables_c(
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_REGIONS")
         if has_flags:
             vtable_flag_bits.append("LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS")
+        if _op_has_type_propagation_candidate(op, layout):
+            vtable_flag_bits.append("LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE")
         vtable_flags_str = " | ".join(vtable_flag_bits) if vtable_flag_bits else "0"
 
         sym_kind = _symbol_kind(op)

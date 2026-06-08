@@ -310,6 +310,66 @@ iree_status_t loom_type_propagator_prepare_function(
       propagator, loom_func_like_body(function), function.op);
 }
 
+static bool loom_type_propagator_type_has_refinement_surface(loom_type_t type) {
+  if ((loom_type_is_shaped(type) || loom_type_is_pool(type)) &&
+      !loom_type_is_all_static(type)) {
+    return true;
+  }
+  if (loom_type_has_ssa_encoding(type)) return true;
+  return loom_type_is_encoding(type) &&
+         loom_type_encoding_role(type) == LOOM_ENCODING_ROLE_UNKNOWN;
+}
+
+static bool loom_type_propagator_value_has_refinement_surface(
+    const loom_type_propagator_t* propagator, loom_value_id_t value_id) {
+  if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
+    return false;
+  }
+  return loom_type_propagator_type_has_refinement_surface(
+      loom_module_value_type(propagator->module, value_id));
+}
+
+static bool loom_type_propagator_op_values_have_refinement_surface(
+    const loom_type_propagator_t* propagator, const loom_op_t* op) {
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    if (loom_type_propagator_value_has_refinement_surface(propagator,
+                                                          operands[i])) {
+      return true;
+    }
+  }
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (loom_type_propagator_value_has_refinement_surface(propagator,
+                                                          results[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool loom_type_propagator_may_apply_op(const loom_type_propagator_t* propagator,
+                                       const loom_rewriter_t* rewriter,
+                                       const loom_op_t* op,
+                                       const loom_op_vtable_t* vtable) {
+  if (!propagator || !op) return false;
+  const bool facts_enabled = rewriter && rewriter->fact_table;
+  const bool vtable_can_refine =
+      vtable && iree_any_bit_set(vtable->vtable_flags,
+                                 LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE);
+
+  bool values_have_refinement_surface = false;
+  if (facts_enabled || vtable_can_refine) {
+    values_have_refinement_surface =
+        loom_type_propagator_op_values_have_refinement_surface(propagator, op);
+  }
+  if (facts_enabled && values_have_refinement_surface) return true;
+  if (!vtable_can_refine) return false;
+
+  if (vtable->type_transfer || op->region_count > 0) return true;
+  return values_have_refinement_surface;
+}
+
 static bool loom_type_propagator_has_candidate(
     const loom_type_propagator_t* propagator,
     loom_value_ordinal_t value_ordinal) {

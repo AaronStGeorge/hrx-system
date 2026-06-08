@@ -103,6 +103,39 @@ class TypePropagationTest : public ::testing::Test {
     return status;
   }
 
+  iree_status_t MayApply(loom_op_t* op, loom_value_fact_table_t* facts,
+                         bool* out_may_apply) {
+    *out_may_apply = false;
+    iree_arena_allocator_t pass_arena;
+    iree_arena_initialize(&block_pool_, &pass_arena);
+    loom_rewriter_t rewriter;
+    bool rewriter_initialized = false;
+    iree_status_t status =
+        loom_rewriter_initialize(&rewriter, module_, &pass_arena);
+    if (iree_status_is_ok(status)) {
+      rewriter_initialized = true;
+    }
+    if (iree_status_is_ok(status) && facts) {
+      status = loom_rewriter_enable_analysis(&rewriter, function_, facts);
+    }
+    loom_type_propagator_t* propagator = NULL;
+    if (iree_status_is_ok(status)) {
+      status = loom_type_propagator_allocate(module_, &pass_arena, &propagator);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_type_propagator_prepare_function(propagator, function_);
+    }
+    if (iree_status_is_ok(status)) {
+      const loom_op_vtable_t* vtable = loom_op_vtable(module_, op);
+      *out_may_apply =
+          loom_type_propagator_may_apply_op(propagator, &rewriter, op, vtable);
+    }
+    loom_type_propagator_deinitialize(propagator);
+    if (rewriter_initialized) loom_rewriter_deinitialize(&rewriter);
+    iree_arena_deinitialize(&pass_arena);
+    return status;
+  }
+
   iree_status_t BuildConstant(loom_attribute_t value, loom_type_t type,
                               loom_op_t** out_op) {
     return loom_test_constant_build(&builder_, value, type,
@@ -115,6 +148,88 @@ class TypePropagationTest : public ::testing::Test {
   loom_func_like_t function_;
   loom_builder_t builder_;
 };
+
+TEST_F(TypePropagationTest, MayApplySkipsScalarOnlyConstraints) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* lhs_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(1), i32_type, &lhs_op));
+  loom_op_t* rhs_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(2), i32_type, &rhs_op));
+
+  loom_op_t* add_op = NULL;
+  IREE_ASSERT_OK(
+      loom_test_addi_build(&builder_, loom_test_constant_result(lhs_op),
+                           loom_test_constant_result(rhs_op), i32_type,
+                           LOOM_LOCATION_UNKNOWN, &add_op));
+
+  bool may_apply = true;
+  IREE_EXPECT_OK(MayApply(add_op, NULL, &may_apply));
+
+  EXPECT_FALSE(may_apply);
+}
+
+TEST_F(TypePropagationTest, MayApplySkipsRefinableOpWithConcreteTypes) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* source_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(1), i32_type, &source_op));
+
+  loom_named_attr_slice_t empty_attrs = {0};
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, loom_test_constant_result(source_op), empty_attrs, i32_type,
+      LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  bool may_apply = true;
+  IREE_EXPECT_OK(MayApply(attrs_op, NULL, &may_apply));
+
+  EXPECT_FALSE(may_apply);
+}
+
+TEST_F(TypePropagationTest, MayApplyAcceptsRefinableOpWithDynamicTypes) {
+  loom_type_t static_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(16), 0);
+  loom_type_t dynamic_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_dynamic(1), 0);
+  loom_op_t* source_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(1), static_vector, &source_op));
+
+  loom_named_attr_slice_t empty_attrs = {0};
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, loom_test_constant_result(source_op), empty_attrs,
+      dynamic_vector, LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  bool may_apply = false;
+  IREE_EXPECT_OK(MayApply(attrs_op, NULL, &may_apply));
+
+  EXPECT_TRUE(may_apply);
+}
+
+TEST_F(TypePropagationTest, MayApplyAcceptsDynamicTypesWhenFactsAreEnabled) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(16), index_type, &dim_op));
+
+  loom_type_t dynamic_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+      loom_dim_pack_dynamic(loom_test_constant_result(dim_op)), 0);
+  loom_op_t* vector_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), dynamic_vector, &vector_op));
+
+  loom_pass_value_fact_owner_t value_fact_owner = {};
+  loom_pass_value_fact_owner_initialize(&block_pool_, &value_fact_owner);
+  loom_value_fact_table_t* facts = NULL;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_prepare(
+      &value_fact_owner, module_,
+      loom_pass_value_fact_scope_function(function_), &facts));
+
+  bool may_apply = false;
+  IREE_EXPECT_OK(MayApply(vector_op, facts, &may_apply));
+
+  EXPECT_TRUE(may_apply);
+
+  loom_pass_value_fact_owner_deinitialize(&value_fact_owner);
+}
 
 TEST_F(TypePropagationTest, SameTypeNarrowsResult) {
   loom_type_t static_vector = loom_type_shaped_1d(
