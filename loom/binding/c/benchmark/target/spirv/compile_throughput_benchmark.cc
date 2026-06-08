@@ -98,11 +98,10 @@ class SpirvScenarioBase : public CompileScenario {
     return SetUpWorkerSlots(worker_count);
   }
 
-  iree_status_t CompileModuleToPreparedLow(WorkspacePtr& workspace,
-                                           ModulePtr& module,
-                                           loomc_string_view_t module_name,
-                                           loomc_string_view_t entry_symbol,
-                                           loomc_config_options_t config) {
+  iree_status_t CompileModuleToPreparedLow(
+      WorkspacePtr& workspace, ModulePtr& module,
+      loomc_string_view_t module_name, loomc_string_view_t compile_root_symbol,
+      loomc_config_options_t config) {
     loomc_target_selection_options_t target_options = {
         /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
         /*.structure_size=*/sizeof(target_options),
@@ -114,7 +113,7 @@ class SpirvScenarioBase : public CompileScenario {
         /*.structure_size=*/sizeof(compile_options),
         /*.next=*/&target_options,
         /*.module_name=*/module_name,
-        /*.entry_symbol=*/entry_symbol,
+        /*.compile_root_symbol=*/compile_root_symbol,
         /*.artifact_flags=*/0,
         /*.config=*/config,
     };

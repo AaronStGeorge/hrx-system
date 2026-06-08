@@ -33,7 +33,7 @@ typedef struct iree_benchmark_loom_hal_input_ring_t {
 static bool iree_benchmark_loom_hal_invocation_options_equal(
     const loom_run_hal_invocation_options_t* lhs,
     const loom_run_hal_invocation_options_t* rhs) {
-  if (lhs->entry_point != rhs->entry_point ||
+  if (!iree_string_view_equal(lhs->function_name, rhs->function_name) ||
       lhs->constant_count != rhs->constant_count) {
     return false;
   }

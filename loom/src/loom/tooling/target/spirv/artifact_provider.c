@@ -15,7 +15,7 @@
 #include "loom/tooling/target/spirv/vulkan_profile.h"
 
 typedef struct loom_spirv_hal_artifact_storage_t {
-  // SPIR-V binary module bytes emitted for the selected low function.
+  // SPIR-V binary module bytes emitted for the selected artifact entries.
   loom_spirv_module_binary_t module;
 } loom_spirv_hal_artifact_storage_t;
 
@@ -98,8 +98,9 @@ static void loom_spirv_hal_artifact_provider_deinitialize_device_target(
   *target = (loom_run_hal_device_target_t){0};
 }
 
-static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
+static iree_status_t loom_spirv_hal_artifact_provider_emit_entries(
     loom_module_t* module, const loom_target_entry_options_t* target_options,
+    loom_target_entry_list_t entries,
     const loom_run_hal_device_target_t* target,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
     const loom_target_low_descriptor_registry_t* low_registry,
@@ -123,6 +124,17 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
     return iree_ok_status();
   }
 
+  loom_op_t** entry_ops = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, entries.count, sizeof(*entry_ops), (void**)&entry_ops));
+  for (uint16_t i = 0; i < entries.count; ++i) {
+    entry_ops[i] = entries.values[i].func.op;
+  }
+  loom_spirv_emit_low_module_options_t emit_options = {0};
+  loom_spirv_emit_low_module_options_initialize(&emit_options);
+  emit_options.entry_ops = entry_ops;
+  emit_options.entry_count = entries.count;
+
   loom_spirv_hal_artifact_storage_t* storage = NULL;
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(allocator, sizeof(*storage), (void**)&storage));
@@ -130,8 +142,8 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
 
   iree_status_t status = loom_spirv_emit_low_module(
       module, &low_registry->registry, target_selection,
-      loom_target_entry_emitter(diagnostic_emitter), arena, &storage->module,
-      allocator);
+      loom_target_entry_emitter(diagnostic_emitter), arena, &emit_options,
+      &storage->module, allocator);
   if (iree_status_is_ok(status) && diagnostic_emitter->error_count == 0) {
     const iree_const_byte_span_t module_bytes =
         loom_spirv_module_binary_byte_span(&storage->module);
@@ -153,7 +165,7 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
 
 static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
-    const loom_run_hal_device_target_t* target, iree_string_view_t entry_symbol,
+    const loom_run_hal_device_target_t* target,
     loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_run_candidate_artifact_flags_t artifact_flags,
@@ -170,7 +182,6 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
   *out_artifact = (loom_run_hal_artifact_t){0};
 
   const loom_target_entry_options_t target_options = {
-      .entry_symbol = entry_symbol,
       .diagnostic_sink = diagnostic_sink,
       .source_resolver = source_resolver,
       .max_errors = max_errors,
@@ -199,22 +210,22 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
       .fn = loom_spirv_hal_artifact_provider_bundle_is_compatible,
       .user_data = NULL,
   };
-  loom_target_entry_t entry = {0};
+  loom_target_entry_list_t entries = {0};
   bool selected = false;
   if (iree_status_is_ok(status) && verify_result.error_count == 0) {
-    status = loom_target_entry_select_entry(
+    status = loom_target_entry_select_all_entries(
         module, &target_options, entry_predicate, &diagnostic_emitter,
-        IREE_SV("SPIR-V Vulkan HAL"), &arena, &selected, &entry);
+        IREE_SV("SPIR-V Vulkan HAL"), &arena, &selected, &entries);
   }
   if (iree_status_is_ok(status) && verify_result.error_count == 0 && selected &&
       diagnostic_emitter.error_count == 0) {
     if (report != NULL) {
       loom_target_compile_report_record_target_bundle(
-          report, &entry.bundle_storage.bundle);
+          report, &entries.values[0].bundle_storage.bundle);
     }
-    status = loom_spirv_hal_artifact_provider_emit_selected_entry(
-        module, &target_options, target, &diagnostic_emitter, &low_registry,
-        &arena, allocator, out_emitted, out_artifact);
+    status = loom_spirv_hal_artifact_provider_emit_entries(
+        module, &target_options, entries, target, &diagnostic_emitter,
+        &low_registry, &arena, allocator, out_emitted, out_artifact);
   }
   if (report != NULL) {
     loom_target_compile_report_record_status(report, status);

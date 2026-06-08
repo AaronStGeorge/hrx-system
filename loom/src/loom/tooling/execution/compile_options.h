@@ -29,9 +29,9 @@ typedef uint32_t loom_run_candidate_artifact_flags_t;
 typedef struct loom_run_candidate_compile_options_t {
   // VM module name stored in VM bytecode archives. Empty uses "loom".
   iree_string_view_t module_name;
-  // Optional function symbol to compile. Empty requires one compatible function
-  // entry for the selected backend.
-  iree_string_view_t entry_symbol;
+  // Optional compile-root function symbol used by target-aware pass pipelines.
+  // Empty lets the backend compile every compatible function entry.
+  iree_string_view_t compile_root_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
   // allocation diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;

@@ -131,7 +131,7 @@ loom_amdgpu_hal_artifact_provider_report_row_storage(
 
 static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
-    const loom_run_hal_device_target_t* target, iree_string_view_t entry_symbol,
+    const loom_run_hal_device_target_t* target,
     loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_run_candidate_artifact_flags_t artifact_flags,
@@ -154,7 +154,6 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
   *storage = (loom_amdgpu_hal_artifact_storage_t){0};
 
   const loom_amdgpu_hal_kernel_library_options_t library_options = {
-      .entry_symbol = entry_symbol,
       .processor = processor ? processor->processor : iree_string_view_empty(),
       .diagnostic_sink = diagnostic_sink,
       .source_resolver = source_resolver,

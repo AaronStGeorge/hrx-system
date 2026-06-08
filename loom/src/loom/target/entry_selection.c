@@ -545,6 +545,56 @@ iree_status_t loom_target_entry_select_entry(
       out_selected, out_entry);
 }
 
+iree_status_t loom_target_entry_select_all_entries(
+    const loom_module_t* module, const loom_target_entry_options_t* options,
+    loom_target_entry_predicate_t predicate,
+    loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
+    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
+    bool* out_selected, loom_target_entry_list_t* out_entries) {
+  *out_entries = (loom_target_entry_list_t){0};
+  *out_selected = false;
+
+  loom_target_entry_t* entries = NULL;
+  if (module->symbols.count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, module->symbols.count, sizeof(*entries), (void**)&entries));
+  }
+
+  loom_symbol_fact_table_t fact_table = {0};
+  loom_target_entry_initialize_fact_table(arena, &fact_table);
+
+  uint16_t entry_count = 0;
+  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+    bool compatible = false;
+    loom_target_entry_t candidate = {0};
+    IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
+        module, &fact_table, options, (loom_symbol_id_t)i, predicate,
+        diagnostic_emitter, entry_kind, /*require_compatible=*/false,
+        &compatible, &candidate));
+    if (!compatible) {
+      continue;
+    }
+    if (entry_count == UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "target pipeline '%.*s' has too many "
+                              "compatible entries",
+                              (int)entry_kind.size, entry_kind.data);
+    }
+    loom_target_entry_assign_entry(&candidate, &entries[entry_count++]);
+  }
+
+  if (entry_count == 0) {
+    return loom_target_entry_emit_no_compatible_entry(diagnostic_emitter,
+                                                      entry_kind);
+  }
+  *out_entries = (loom_target_entry_list_t){
+      .values = entries,
+      .count = entry_count,
+  };
+  *out_selected = true;
+  return iree_ok_status();
+}
+
 iree_status_t loom_target_entry_select_artifact_entries(
     const loom_module_t* module, iree_string_view_t artifact_symbol,
     loom_target_entry_predicate_t predicate,

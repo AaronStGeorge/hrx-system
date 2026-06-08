@@ -36,7 +36,7 @@ typedef struct loom_run_hal_candidate_t {
 
 // Selects a HAL device target through |provider| and emits |run_module| to a
 // HAL artifact candidate. The module must already contain the prepared
-// target-low entries selected by |options->entry_symbol|.
+// target-low entries intended for the artifact.
 iree_status_t loom_run_hal_candidate_compile(
     const loom_run_hal_artifact_provider_t* provider,
     const loom_run_hal_runtime_t* runtime, loom_run_module_t* run_module,

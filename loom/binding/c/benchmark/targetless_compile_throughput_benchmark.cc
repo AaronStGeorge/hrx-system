@@ -81,7 +81,7 @@ class TunerFlowScenario final : public CompileScenario {
         /*.structure_size=*/sizeof(options),
         /*.next=*/nullptr,
         /*.module_name=*/loomc_make_cstring_view("tuner_kernel"),
-        /*.entry_symbol=*/loomc_make_cstring_view("@entry"),
+        /*.compile_root_symbol=*/loomc_make_cstring_view("@entry"),
         /*.artifact_flags=*/LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_BYTECODE,
         /*.config=*/
         {
@@ -223,7 +223,7 @@ class ModelFlowScenario final : public CompileScenario {
         /*.structure_size=*/sizeof(compile_options),
         /*.next=*/nullptr,
         /*.module_name=*/loomc_make_cstring_view("model_kernel"),
-        /*.entry_symbol=*/root_symbol,
+        /*.compile_root_symbol=*/root_symbol,
         /*.artifact_flags=*/LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_BYTECODE,
         /*.config=*/
         {

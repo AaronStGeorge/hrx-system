@@ -33,7 +33,7 @@ TEST_F(HalInvocationTest, RequestInitializeDefaultsToSingleWorkgroup) {
   loom_run_hal_invocation_request_t request = {};
   loom_run_hal_invocation_request_initialize(&request);
 
-  EXPECT_EQ(request.options.entry_point, 0u);
+  EXPECT_TRUE(iree_string_view_is_empty(request.options.function_name));
   EXPECT_EQ(request.options.workgroup_count[0], 1u);
   EXPECT_EQ(request.options.workgroup_count[1], 1u);
   EXPECT_EQ(request.options.workgroup_count[2], 1u);

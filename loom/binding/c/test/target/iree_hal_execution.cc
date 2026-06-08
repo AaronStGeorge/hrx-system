@@ -318,7 +318,7 @@ loomc_status_t CompileModule(const IreeHalKernelExecutionTarget& target,
       /*.structure_size=*/sizeof(compile_options),
       /*.next=*/&target_options,
       /*.module_name=*/target.module_name,
-      /*.entry_symbol=*/target.kernel_function_symbol,
+      /*.compile_root_symbol=*/target.kernel_function_symbol,
       /*.artifact_flags=*/0,
       /*.config=*/{},
   };

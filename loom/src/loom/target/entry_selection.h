@@ -147,6 +147,15 @@ iree_status_t loom_target_entry_select_entry(
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     bool* out_selected, loom_target_entry_t* out_entry);
 
+// Selects every compatible func entry according to |predicate| in module symbol
+// order.
+iree_status_t loom_target_entry_select_all_entries(
+    const loom_module_t* module, const loom_target_entry_options_t* options,
+    loom_target_entry_predicate_t predicate,
+    loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
+    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
+    bool* out_selected, loom_target_entry_list_t* out_entries);
+
 // Selects exported artifact entries in target.artifact plan order.
 //
 // |artifact_symbol| names the target.artifact symbol without or with a leading

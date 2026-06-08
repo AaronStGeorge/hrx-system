@@ -25,13 +25,9 @@ extern "C" {
 #endif
 
 typedef struct loom_amdgpu_hal_kernel_library_options_t {
-  // Optional function symbol to emit. Empty requires exactly one AMDGPU
-  // HAL-native-compatible function with a target record. A leading '@' is
-  // accepted for command-line ergonomics.
-  iree_string_view_t entry_symbol;
   // Optional target.artifact symbol to emit as one multi-export kernel library.
-  // Empty preserves single-entry selection. A leading '@' is accepted for
-  // command-line ergonomics.
+  // Empty emits every AMDGPU HAL-native-compatible function with a target
+  // record. A leading '@' is accepted for command-line ergonomics.
   iree_string_view_t artifact_symbol;
   // Optional AMDHSA processor name such as `gfx1100` overriding the selected
   // target record's processor. This preserves the target record's
@@ -81,13 +77,13 @@ void loom_amdgpu_hal_kernel_library_deinitialize(
 
 // Emits |module| into an allocator-owned AMDGPU HAL kernel library.
 //
-// |module| must already contain the prepared target-low entries selected by
-// |options->entry_symbol| or |options->artifact_symbol|. Target records are
-// resolved through the linked descriptor registry without materializing
-// companion target records in the IR. |out_emitted| is false when target
-// preflight or diagnostics rejected the module; status remains reserved for
-// infrastructure failures. The caller owns |out_library| when |out_emitted| is
-// true and must release it with loom_amdgpu_hal_kernel_library_deinitialize.
+// |module| must already contain the prepared target-low entries intended for
+// the artifact. Target records are resolved through the linked descriptor
+// registry without materializing companion target records in the IR.
+// |out_emitted| is false when target preflight or diagnostics rejected the
+// module; status remains reserved for infrastructure failures. The caller owns
+// |out_library| when |out_emitted| is true and must release it with
+// loom_amdgpu_hal_kernel_library_deinitialize.
 iree_status_t loom_amdgpu_emit_hal_kernel_library(
     loom_module_t* module,
     const loom_amdgpu_hal_kernel_library_options_t* options,

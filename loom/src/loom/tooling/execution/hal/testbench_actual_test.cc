@@ -101,5 +101,29 @@ TEST_F(HalTestbenchActualTest, IndexInputPacksAsOneDispatchConstantWord) {
   iree_vm_list_release(bindings);
 }
 
+TEST_F(HalTestbenchActualTest, OffsetInputPacksAsTwoDispatchConstantWords) {
+  iree_vm_variant_t inputs[] = {
+      iree_vm_make_variant_value(
+          iree_vm_value_make_i64(static_cast<int64_t>(0x1122334455667788ull))),
+  };
+  loom_type_t input_types[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET),
+  };
+  loom_run_hal_invocation_options_t options = {};
+  loom_run_hal_invocation_options_initialize(&options);
+  iree_vm_list_t* bindings = nullptr;
+
+  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
+      inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
+      iree_allocator_system(), &bindings));
+
+  EXPECT_EQ(iree_vm_list_size(bindings), 0u);
+  EXPECT_EQ(options.constant_count, 2u);
+  EXPECT_EQ(options.constants[0], 0x55667788u);
+  EXPECT_EQ(options.constants[1], 0x11223344u);
+
+  iree_vm_list_release(bindings);
+}
+
 }  // namespace
 }  // namespace loom

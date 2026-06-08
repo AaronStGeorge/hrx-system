@@ -80,7 +80,7 @@ TEST(CompileReportCaptureTest, AppendsJsonObject) {
   IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
       &options, iree_allocator_system(), &capture));
   capture.report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
-  capture.report.entry_symbol = IREE_SVL("entry");
+  capture.report.compile_root_symbol = IREE_SVL("entry");
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -93,8 +93,9 @@ TEST(CompileReportCaptureTest, AppendsJsonObject) {
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"artifact_kind\":\"vm-archive\""), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"entry\":\"entry\""), 0),
-            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"compile_root\":\"entry\""), 0),
+      IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);
   loom_run_compile_report_capture_deinitialize(&capture);

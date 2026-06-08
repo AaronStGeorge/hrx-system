@@ -257,7 +257,7 @@ TEST(CompileTest, CompileModuleRunsPreparedPassProgram) {
       /*.structure_size=*/sizeof(options),
       /*.next=*/nullptr,
       /*.module_name=*/loomc_make_cstring_view("jit_kernel"),
-      /*.entry_symbol=*/loomc_make_cstring_view("@entry"),
+      /*.compile_root_symbol=*/loomc_make_cstring_view("@entry"),
       /*.artifact_flags=*/0,
       /*.config=*/
       {
@@ -335,7 +335,7 @@ TEST(CompileTest, CompileModuleMaterializesInvocationConfig) {
       /*.structure_size=*/sizeof(options),
       /*.next=*/nullptr,
       /*.module_name=*/loomc_string_view_empty(),
-      /*.entry_symbol=*/loomc_string_view_empty(),
+      /*.compile_root_symbol=*/loomc_string_view_empty(),
       /*.artifact_flags=*/0,
       /*.config=*/
       {
@@ -384,7 +384,7 @@ TEST(CompileTest, CompileModuleEmitsRequestedArtifacts) {
       /*.structure_size=*/sizeof(options),
       /*.next=*/nullptr,
       /*.module_name=*/loomc_make_cstring_view("jit_kernel"),
-      /*.entry_symbol=*/loomc_make_cstring_view("@entry"),
+      /*.compile_root_symbol=*/loomc_make_cstring_view("@entry"),
       /*.artifact_flags=*/LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_TEXT |
           LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_BYTECODE |
           LOOMC_COMPILE_ARTIFACT_FLAG_REPORT_JSON,
@@ -464,7 +464,7 @@ TEST(CompileTest, CompileModuleReportsUnknownConfigAsResultDiagnostic) {
       /*.structure_size=*/sizeof(options),
       /*.next=*/nullptr,
       /*.module_name=*/loomc_string_view_empty(),
-      /*.entry_symbol=*/loomc_string_view_empty(),
+      /*.compile_root_symbol=*/loomc_string_view_empty(),
       /*.artifact_flags=*/LOOMC_COMPILE_ARTIFACT_FLAG_REPORT_JSON,
       /*.config=*/
       {
@@ -502,7 +502,7 @@ TEST(CompileTest, CompileModuleReportsUnresolvedConfigAsResultDiagnostic) {
       /*.structure_size=*/sizeof(options),
       /*.next=*/nullptr,
       /*.module_name=*/loomc_string_view_empty(),
-      /*.entry_symbol=*/loomc_string_view_empty(),
+      /*.compile_root_symbol=*/loomc_string_view_empty(),
       /*.artifact_flags=*/0,
       /*.config=*/
       {
@@ -533,7 +533,7 @@ TEST(CompileTest, CompileModuleRejectsInvalidInvocationConfig) {
       /*.structure_size=*/sizeof(options),
       /*.next=*/nullptr,
       /*.module_name=*/loomc_string_view_empty(),
-      /*.entry_symbol=*/loomc_string_view_empty(),
+      /*.compile_root_symbol=*/loomc_string_view_empty(),
       /*.artifact_flags=*/0,
       /*.config=*/
       {

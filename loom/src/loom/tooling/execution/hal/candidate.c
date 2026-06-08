@@ -32,7 +32,7 @@ static void loom_run_hal_candidate_initialize(
   loom_target_compile_report_initialize_if_empty(report,
                                                  &options->report_row_storage);
   report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  report->entry_symbol = options->entry_symbol;
+  report->compile_root_symbol = options->compile_root_symbol;
   report->backend_name = provider->name;
   report->target_family_name = provider->target_family_name;
 }
@@ -46,7 +46,7 @@ static void loom_run_hal_candidate_record_report_status(
     return;
   }
   report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  report->entry_symbol = options->entry_symbol;
+  report->compile_root_symbol = options->compile_root_symbol;
   report->backend_name = candidate->provider->name;
   report->target_family_name = candidate->provider->target_family_name;
   if (candidate->compiled) {
@@ -74,9 +74,9 @@ static iree_status_t loom_run_hal_candidate_emit_selected_target(
       options->report != NULL ? &candidate->compile_report : NULL;
   iree_status_t status = provider->emit_artifact(
       provider, run_module->module, &candidate->device_target,
-      options->entry_symbol, options->diagnostic_sink, options->source_resolver,
-      options->max_errors, options->artifact_flags, report, allocator,
-      &candidate->compiled, &candidate->artifact);
+      options->diagnostic_sink, options->source_resolver, options->max_errors,
+      options->artifact_flags, report, allocator, &candidate->compiled,
+      &candidate->artifact);
   if (iree_status_is_ok(status) && candidate->compiled &&
       candidate->artifact.target_bundle == NULL) {
     candidate->artifact.target_bundle = candidate->device_target.target_bundle;

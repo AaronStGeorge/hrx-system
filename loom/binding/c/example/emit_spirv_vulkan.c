@@ -21,6 +21,27 @@
 #include <dlfcn.h>
 #endif  // defined(_WIN32)
 
+#ifndef __has_feature
+#define __has_feature(x) 0
+#endif  // __has_feature
+
+#if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
+#define LOOMC_EXAMPLE_SANITIZER_ADDRESS 1
+#endif  // __SANITIZE_ADDRESS__ || __has_feature(address_sanitizer)
+
+#if defined(LOOMC_EXAMPLE_SANITIZER_ADDRESS) && defined(__has_include)
+#if __has_include(<sanitizer/lsan_interface.h>)
+#include <sanitizer/lsan_interface.h>
+#define LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH() __lsan_disable()
+#define LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP() __lsan_enable()
+#endif  // __has_include(<sanitizer/lsan_interface.h>)
+#endif  // LOOMC_EXAMPLE_SANITIZER_ADDRESS && __has_include
+
+#if !defined(LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH)
+#define LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH()
+#define LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP()
+#endif  // !LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH
+
 #include "loomc/loomc.h"
 #include "loomc/target/spirv.h"
 #include "loomc/target/spirv/vulkan.h"
@@ -165,11 +186,13 @@ static void vulkan_library_close(vulkan_library_t library) {
   if (library == 0) {
     return;
   }
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
 #if defined(_WIN32)
   FreeLibrary(library);
 #else
   dlclose(library);
 #endif  // defined(_WIN32)
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
 }
 
 static void emit_spirv_vulkan_state_deinitialize(
@@ -185,7 +208,9 @@ static void emit_spirv_vulkan_state_deinitialize(
   loomc_context_release(state->context);
   loomc_target_environment_release(state->target_environment);
   if (state->instance != VK_NULL_HANDLE && state->destroy_instance != NULL) {
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
     state->destroy_instance(state->instance, NULL);
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
   }
   vulkan_library_close(state->vulkan_library);
 }
@@ -271,11 +296,13 @@ static bool vulkan_library_open(vulkan_library_t* out_library) {
   *out_library = 0;
   for (size_t i = 0;
        i < sizeof(kVulkanLibraryNames) / sizeof(kVulkanLibraryNames[0]); ++i) {
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
 #if defined(_WIN32)
     vulkan_library_t library = LoadLibraryA(kVulkanLibraryNames[i]);
 #else
     vulkan_library_t library = dlopen(kVulkanLibraryNames[i], RTLD_NOW);
 #endif  // defined(_WIN32)
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
     if (library != 0) {
       *out_library = library;
       return true;
@@ -286,21 +313,31 @@ static bool vulkan_library_open(vulkan_library_t* out_library) {
 
 static void* vulkan_library_lookup(vulkan_library_t library,
                                    const char* symbol) {
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
 #if defined(_WIN32)
-  return (void*)GetProcAddress(library, symbol);
+  void* proc = (void*)GetProcAddress(library, symbol);
 #else
-  return dlsym(library, symbol);
+  void* proc = dlsym(library, symbol);
 #endif  // defined(_WIN32)
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
+  return proc;
 }
 
 static PFN_vkVoidFunction vulkan_loader_proc(
     const emit_spirv_vulkan_state_t* state, const char* name) {
-  return state->get_instance_proc_addr(VK_NULL_HANDLE, name);
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
+  PFN_vkVoidFunction proc = state->get_instance_proc_addr(VK_NULL_HANDLE, name);
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
+  return proc;
 }
 
 static PFN_vkVoidFunction vulkan_instance_proc(
     const emit_spirv_vulkan_state_t* state, const char* name) {
-  return state->get_instance_proc_addr(state->instance, name);
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
+  PFN_vkVoidFunction proc =
+      state->get_instance_proc_addr(state->instance, name);
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
+  return proc;
 }
 
 static loomc_status_t load_vulkan_loader(emit_spirv_vulkan_state_t* state) {
@@ -332,7 +369,9 @@ static loomc_status_t load_vulkan_loader(emit_spirv_vulkan_state_t* state) {
 static loomc_status_t create_vulkan_instance(emit_spirv_vulkan_state_t* state) {
   uint32_t instance_api_version = VK_API_VERSION_1_0;
   if (state->enumerate_instance_version != NULL) {
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
     VkResult result = state->enumerate_instance_version(&instance_api_version);
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
     if (vulkan_result_is_skip(result)) {
       emit_spirv_vulkan_state_skip(
           state, "Vulkan instance version query is unavailable");
@@ -363,8 +402,10 @@ static loomc_status_t create_vulkan_instance(emit_spirv_vulkan_state_t* state) {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pApplicationInfo = &application_info,
   };
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
   VkResult result =
       state->create_instance(&create_info, NULL, &state->instance);
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
   if (vulkan_result_is_skip(result)) {
     emit_spirv_vulkan_state_skip(
         state, "Vulkan instance could not be created on this machine");
@@ -402,8 +443,10 @@ static loomc_status_t load_vulkan_instance_functions(
 static loomc_status_t select_first_vulkan_physical_device(
     emit_spirv_vulkan_state_t* state) {
   uint32_t physical_device_count = 0;
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
   VkResult result = state->enumerate_physical_devices(
       state->instance, &physical_device_count, NULL);
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
   if (vulkan_result_is_skip(result)) {
     emit_spirv_vulkan_state_skip(
         state, "Vulkan physical-device enumeration is unavailable");
@@ -427,8 +470,10 @@ static loomc_status_t select_first_vulkan_physical_device(
   }
 
   uint32_t written_physical_device_count = physical_device_count;
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
   result = state->enumerate_physical_devices(
       state->instance, &written_physical_device_count, physical_devices);
+  LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
   if (vulkan_result_is_skip(result)) {
     emit_spirv_vulkan_state_skip(
         state, "Vulkan physical-device enumeration is unavailable");
@@ -449,8 +494,10 @@ static loomc_status_t select_first_vulkan_physical_device(
     VkPhysicalDeviceProperties2 properties2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
     };
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_PUSH();
     state->get_physical_device_properties2(state->physical_device,
                                            &properties2);
+    LOOMC_EXAMPLE_LEAK_CHECK_DISABLE_POP();
     state->physical_device_properties = properties2.properties;
   } else if (!vulkan_result_is_success(result)) {
     status = vulkan_result_to_status(
@@ -688,7 +735,8 @@ static loomc_status_t compile_module_to_prepared_low(
       .structure_size = sizeof(compile_options),
       .next = &target_options,
       .module_name = loomc_make_cstring_view("double_i32_at_byte_offset"),
-      .entry_symbol = loomc_make_cstring_view("@double_i32_at_byte_offset"),
+      .compile_root_symbol =
+          loomc_make_cstring_view("@double_i32_at_byte_offset"),
   };
   loomc_status_t status = loomc_compile_module(
       state->compiler, state->workspace, state->pass_program, state->module,

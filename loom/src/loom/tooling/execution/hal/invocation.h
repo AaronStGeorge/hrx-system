@@ -28,8 +28,9 @@ enum {
 };
 
 typedef struct loom_run_hal_invocation_options_t {
-  // HAL executable entry point table index to dispatch.
-  uint32_t entry_point;
+  // HAL executable function symbol to dispatch. Empty selects the only named
+  // function in the prepared executable.
+  iree_string_view_t function_name;
   // Dispatch workgroup count in x, y, z order.
   uint32_t workgroup_count[3];
   // Dispatch constants in HAL ABI order.
@@ -48,7 +49,7 @@ typedef struct loom_run_hal_binding_specs_t {
 } loom_run_hal_binding_specs_t;
 
 typedef struct loom_run_hal_invocation_plan_t {
-  // HAL executable entry point and dispatch geometry.
+  // HAL executable function symbol and dispatch geometry.
   loom_run_hal_invocation_options_t options;
   // Plan-owned materialized binding values in HAL binding ordinal order.
   iree_vm_list_t* bindings;
@@ -105,7 +106,7 @@ typedef struct loom_run_hal_invocation_request_t {
   const loom_run_hal_runtime_t* runtime;
   // Provider-produced artifact bytes to prepare and dispatch.
   const loom_run_hal_artifact_t* artifact;
-  // HAL dispatch entry point and workgroup count.
+  // HAL dispatch function symbol and workgroup count.
   loom_run_hal_invocation_options_t options;
   // Textual input/output binding specs parsed before dispatch.
   loom_run_hal_binding_specs_t bindings;
@@ -122,11 +123,13 @@ typedef struct loom_run_hal_invocation_result_t {
   int exit_code;
 } loom_run_hal_invocation_result_t;
 
-// Initializes invocation options to entry point 0 and a single workgroup.
+// Initializes invocation options to the single executable function and a single
+// workgroup.
 void loom_run_hal_invocation_options_initialize(
     loom_run_hal_invocation_options_t* out_options);
 
-// Initializes a request to dispatch entry point 0 over one workgroup.
+// Initializes a request to dispatch the single executable function over one
+// workgroup.
 void loom_run_hal_invocation_request_initialize(
     loom_run_hal_invocation_request_t* out_request);
 

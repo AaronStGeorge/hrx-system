@@ -52,10 +52,11 @@
 #include "loom/tooling/target/spirv/artifact_provider.h"
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
 
-IREE_FLAG(string, loom_entry, "",
-          "Optional function symbol to compile, such as '@main'. When omitted "
-          "the module must contain exactly one function entry compatible with "
-          "the selected backend.");
+IREE_FLAG(string, compile_root, "",
+          "Optional compile-root function symbol, such as '@main'. Native "
+          "backends use this to scope root-sensitive pass pipeline behavior; "
+          "artifact emission otherwise keeps every compatible exported "
+          "function.");
 IREE_FLAG(string, loom_backend, "vm",
           "Compilation backend to emit, such as 'vm' or a linked native "
           "backend.");
@@ -260,7 +261,8 @@ static iree_status_t loom_compile_run_pass_pipeline(
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
-  pipeline_options.entry_symbol = iree_make_cstring_view(FLAG_loom_entry);
+  pipeline_options.compile_root_symbol =
+      iree_make_cstring_view(FLAG_compile_root);
   pipeline_options.target_environment =
       loom_run_execution_environment_target_environment(environment);
   pipeline_options.low_descriptor_registry =
@@ -528,7 +530,8 @@ int main(int argc, char** argv) {
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
-  compile_options.entry_symbol = iree_make_cstring_view(FLAG_loom_entry);
+  compile_options.compile_root_symbol =
+      iree_make_cstring_view(FLAG_compile_root);
   if (iree_status_is_ok(status)) {
     compile_options.source_resolver =
         loom_run_module_source_resolver(&run_module);

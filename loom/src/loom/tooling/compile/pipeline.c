@@ -146,7 +146,7 @@ iree_status_t loom_compile_run_pipeline(
           options->target_environment);
 
   const loom_target_entry_options_t entry_options = {
-      .entry_symbol = options->entry_symbol,
+      .entry_symbol = options->compile_root_symbol,
       .diagnostic_sink = options->diagnostic_sink,
       .source_resolver = options->source_resolver,
       .max_errors = options->max_errors,

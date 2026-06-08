@@ -154,7 +154,6 @@ TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
   bool emitted = false;
   IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.emit_artifact(
       &loom_amdgpu_hal_artifact_provider, module.get(), &target,
-      /*entry_symbol=*/iree_string_view_empty(),
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING,
@@ -202,7 +201,6 @@ TEST_F(AmdgpuHalArtifactProviderTest,
   bool emitted = false;
   IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.emit_artifact(
       &loom_amdgpu_hal_artifact_provider, module.get(), &target,
-      /*entry_symbol=*/iree_string_view_empty(),
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,

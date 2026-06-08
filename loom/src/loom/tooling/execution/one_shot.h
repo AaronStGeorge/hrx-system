@@ -63,8 +63,9 @@ typedef struct loom_run_one_shot_options_t {
   loom_run_one_shot_value_specs_t vm_expected_outputs;
   // Maximum number of VM output elements to format.
   iree_host_size_t vm_max_output_element_count;
-  // HAL executable entry point ordinal to dispatch.
-  uint32_t hal_entry_point;
+  // HAL executable function symbol to dispatch. Empty selects the only named
+  // function in the prepared executable.
+  iree_string_view_t hal_function_name;
   // HAL dispatch workgroup count in x/y/z order.
   uint32_t hal_workgroup_count[3];
   // HAL dispatch constants in ABI order.
@@ -119,11 +120,11 @@ void loom_run_one_shot_options_initialize(
     loom_run_one_shot_options_t* out_options);
 
 // Applies the static dispatch workgroup count from a source kernel launch
-// config when |entry_symbol| names a kernel, or when the module has exactly one
-// kernel and |entry_symbol| is empty. Returns false when no unique source
-// kernel with a fully static workgroup count is available.
+// config when |compile_root_symbol| names a kernel, or when the module has
+// exactly one kernel and |compile_root_symbol| is empty. Returns false when no
+// unique source kernel with a fully static workgroup count is available.
 bool loom_run_one_shot_options_apply_static_hal_workgroup_count(
-    const loom_module_t* module, iree_string_view_t entry_symbol,
+    const loom_module_t* module, iree_string_view_t compile_root_symbol,
     loom_run_one_shot_options_t* options);
 
 // Initializes a one-shot result. Must be paired with

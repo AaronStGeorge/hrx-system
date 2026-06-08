@@ -9,12 +9,12 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
     "ffn_gate_up_swiglu_q6q8_plan_test"
   ARGS
-    "$(location ffn_gate_up_swiglu_q6q8.loom)"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom}}"
     "--dry_run"
   SRC
     loom::tools::iree-benchmark-loom
@@ -23,12 +23,12 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
     "mlp_down_projection_residual_bf16_plan_test"
   ARGS
-    "$(location mlp_down_projection_residual_bf16.loom)"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom}}"
     "--dry_run"
   SRC
     loom::tools::iree-benchmark-loom
@@ -37,11 +37,12 @@ iree_native_test(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_native_test(
   NAME
     "ffn_gate_up_swiglu_q6q8_amdgpu_test"
   ARGS
-    "$(location ffn_gate_up_swiglu_q6q8.loom)"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom}}"
     "--device=amdgpu"
     "--measure=dispatch_complete"
     "--iterations=1"
@@ -57,12 +58,14 @@ iree_native_test(
     "manual"
     "requires-gpu-amd"
 )
+endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_native_test(
   NAME
     "mlp_down_projection_residual_bf16_amdgpu_test"
   ARGS
-    "$(location mlp_down_projection_residual_bf16.loom)"
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom}}"
     "--device=amdgpu"
     "--measure=dispatch_complete"
     "--sample_compilation=per_sample"
@@ -79,5 +82,6 @@ iree_native_test(
     "manual"
     "requires-gpu-amd"
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -23,10 +23,11 @@
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 
-IREE_FLAG(string, loom_entry, "",
-          "Optional function symbol to compile, such as '@main'. When omitted "
-          "the module must contain exactly one function entry compatible with "
-          "the selected backend.");
+IREE_FLAG(string, compile_root, "",
+          "Optional compile-root function symbol, such as '@main'. Native "
+          "backends use this to scope root-sensitive pass pipeline behavior; "
+          "artifact emission otherwise keeps every compatible exported "
+          "function.");
 IREE_FLAG(string, loom_backend, "vm",
           "Compilation backend to run, such as 'vm' or a linked native "
           "backend.");
@@ -38,7 +39,9 @@ IREE_FLAG(string, pipeline, "default",
           "execution, '@symbol' to run a module-local pass.pipeline, or a "
           "comma-separated pass list such as 'canonicalize,cse'.");
 IREE_FLAG(string, function, "",
-          "VM export name to invoke. Empty selects the single export.");
+          "Function/export name to invoke. Empty selects the single VM export "
+          "or HAL executable function. For HAL backends, --compile_root is "
+          "used as the dispatch function name when --function is empty.");
 IREE_FLAG_LIST(string, input,
                "Appends a VM function input in IREE function I/O syntax.");
 IREE_FLAG_LIST(string, output,
@@ -49,8 +52,6 @@ IREE_FLAG_LIST(string, expected_output,
                "syntax. Expected outputs take precedence over --output.");
 IREE_FLAG(int32_t, output_max_element_count, 1024,
           "Maximum number of VM output elements to format.");
-IREE_FLAG(int32_t, entry_point, 0,
-          "HAL executable entry point ordinal to dispatch.");
 IREE_FLAG(string, workgroup_count, "",
           "Optional HAL dispatch workgroup count as `x,y,z`. When omitted, a "
           "static kernel.launch.config workgroup count is used when available, "
@@ -297,12 +298,12 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
 
   if (iree_any_bit_set(backend->flags,
                        LOOM_RUN_EXECUTION_BACKEND_FLAG_HAL_OPTIONS)) {
-    if (FLAG_entry_point < 0) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "--entry_point must be non-negative; got %d",
-                              (int)FLAG_entry_point);
-    }
-    out_options->hal_entry_point = (uint32_t)FLAG_entry_point;
+    const iree_string_view_t function_name =
+        iree_make_cstring_view(FLAG_function);
+    out_options->hal_function_name =
+        !iree_string_view_is_empty(function_name)
+            ? function_name
+            : iree_make_cstring_view(FLAG_compile_root);
     const iree_string_view_t workgroup_count =
         iree_make_cstring_view(FLAG_workgroup_count);
     if (!iree_string_view_is_empty(workgroup_count)) {
@@ -362,7 +363,8 @@ static iree_status_t iree_run_loom_run_pass_pipeline(
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
-  pipeline_options.entry_symbol = iree_make_cstring_view(FLAG_loom_entry);
+  pipeline_options.compile_root_symbol =
+      iree_make_cstring_view(FLAG_compile_root);
   pipeline_options.target_environment = configuration->target_environment;
   pipeline_options.low_descriptor_registry =
       loom_run_session_low_descriptor_registry(session);
@@ -514,7 +516,8 @@ int iree_run_loom_main(int argc, char** argv,
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
-  compile_options.entry_symbol = iree_make_cstring_view(FLAG_loom_entry);
+  compile_options.compile_root_symbol =
+      iree_make_cstring_view(FLAG_compile_root);
   loom_run_compile_report_capture_options_t compile_report_options = {0};
   if (iree_status_is_ok(status)) {
     status = iree_run_loom_compile_report_options_initialize(
@@ -545,7 +548,8 @@ int iree_run_loom_main(int argc, char** argv,
                        LOOM_RUN_EXECUTION_BACKEND_FLAG_HAL_OPTIONS) &&
       iree_string_view_is_empty(iree_make_cstring_view(FLAG_workgroup_count))) {
     loom_run_one_shot_options_apply_static_hal_workgroup_count(
-        run_module.module, compile_options.entry_symbol, &one_shot_options);
+        run_module.module, compile_options.compile_root_symbol,
+        &one_shot_options);
   }
   if (iree_status_is_ok(status)) {
     compile_options.source_resolver =

@@ -18,14 +18,14 @@ package(
 )
 
 _AMDGPU_COMPILE_COPTS = iree_select({
-    "//loom/config/emit:amdgpu": [
+    "//loom/config/target:amdgpu_artifacts": [
         "-DLOOM_COMPILE_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
 _AMDGPU_COMPILE_DEPS = iree_select({
-    "//loom/config/emit:amdgpu": [
+    "//loom/config/target:amdgpu_artifacts": [
         "//loom/src/loom/target/arch/amdgpu:provider",
         "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
     ],
@@ -48,14 +48,14 @@ _IREE_VM_COMPILE_DEPS = iree_select({
 })
 
 _SPIRV_VULKAN_COMPILE_COPTS = iree_select({
-    "//loom/config/execute:spirv_vulkan_hal": [
+    "//loom/config/target:spirv_vulkan_artifacts": [
         "-DLOOM_COMPILE_HAVE_SPIRV_VULKAN=1",
     ],
     "//conditions:default": [],
 })
 
 _SPIRV_VULKAN_COMPILE_DEPS = iree_select({
-    "//loom/config/execute:spirv_vulkan_hal": [
+    "//loom/config/target:spirv_vulkan_artifacts": [
         "//loom/src/loom/target/arch/spirv:provider",
         "//loom/src/loom/tooling/target/spirv:artifact_provider",
     ],

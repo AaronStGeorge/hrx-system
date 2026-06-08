@@ -712,12 +712,8 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
         report, options ? &options->report_row_storage : NULL);
     report->artifact_kind =
         LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_KERNEL_LIBRARY;
-    report->entry_symbol =
-        options ? options->entry_symbol : iree_string_view_empty();
   }
   const loom_target_entry_options_t target_options = {
-      .entry_symbol =
-          options ? options->entry_symbol : iree_string_view_empty(),
       .diagnostic_sink =
           options ? options->diagnostic_sink : (loom_diagnostic_sink_t){0},
       .source_resolver =
@@ -745,29 +741,16 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
   iree_arena_allocator_t table_arena;
   iree_arena_initialize(&block_pool, &table_arena);
 
-  loom_target_entry_t single_entry = {0};
   loom_target_entry_list_t entries = {0};
   const iree_string_view_t artifact_symbol =
       options
           ? loom_target_entry_normalize_symbol_name(options->artifact_symbol)
           : iree_string_view_empty();
-  const iree_string_view_t entry_symbol =
-      loom_target_entry_symbol_name(&target_options);
   loom_verify_result_t verify_result = {0};
   if (iree_status_is_ok(status)) {
     status = loom_target_entry_verify_module(
         module, &target_options,
         LOOM_AMDGPU_HAL_KERNEL_LIBRARY_DEFAULT_MAX_ERRORS, &verify_result);
-  }
-  if (iree_status_is_ok(status) && verify_result.error_count == 0 &&
-      !iree_string_view_is_empty(entry_symbol) &&
-      !iree_string_view_is_empty(artifact_symbol)) {
-    status = iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU HAL-native cannot select both entry '@%.*s' and artifact "
-        "'@%.*s'",
-        (int)entry_symbol.size, entry_symbol.data, (int)artifact_symbol.size,
-        artifact_symbol.data);
   }
   bool selected = false;
   if (iree_status_is_ok(status) && verify_result.error_count == 0 &&
@@ -777,15 +760,9 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
           module, artifact_symbol, entry_predicate, &diagnostic_emitter,
           IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &entries);
     } else {
-      status = loom_target_entry_select_entry(
+      status = loom_target_entry_select_all_entries(
           module, &target_options, entry_predicate, &diagnostic_emitter,
-          IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &single_entry);
-      if (iree_status_is_ok(status) && selected) {
-        entries = (loom_target_entry_list_t){
-            .values = &single_entry,
-            .count = 1,
-        };
-      }
+          IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &entries);
     }
   }
   if (iree_status_is_ok(status) && selected && options != NULL) {

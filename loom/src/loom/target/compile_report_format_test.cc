@@ -93,7 +93,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report);
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
-  report.entry_symbol = IREE_SVL("branchy");
+  report.compile_root_symbol = IREE_SVL("branchy");
   report.target_bundle_name = IREE_SVL("vm_target");
   report.lowered_symbol = IREE_SVL("branchy");
   loom_target_compile_report_record_artifact_size(&report, 128);
@@ -152,7 +152,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   iree_string_view_t output = iree_string_builder_view(&builder);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("artifact=vm-archive"), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("entry=branchy"), 0),
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("compile_root=branchy"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("pressure_classes=1"), 0),
             IREE_STRING_VIEW_NPOS);
@@ -227,8 +227,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"artifact_kind\":\"vm-archive\""), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"entry\":\"branchy\""), 0),
-            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"compile_root\":\"branchy\""), 0),
+      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"schedule\":{\"node_count\":5"), 0),
             IREE_STRING_VIEW_NPOS);
@@ -313,7 +314,7 @@ TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
   loom_target_compile_report_initialize(&report);
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
   report.backend_name = IREE_SVL("hal");
-  report.entry_symbol = IREE_SVL("entry");
+  report.compile_root_symbol = IREE_SVL("entry");
   loom_target_compile_report_record_artifact_size(&report, 256);
   report.pressure_rows = pressure_rows;
   report.pressure_row_count = IREE_ARRAYSIZE(pressure_rows);
@@ -353,7 +354,7 @@ TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
 TEST(CompileReportFormatTest, FormatsJsonEscapedStrings) {
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report);
-  report.entry_symbol = IREE_SVL("quote\"line\n");
+  report.compile_root_symbol = IREE_SVL("quote\"line\n");
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -366,8 +367,8 @@ TEST(CompileReportFormatTest, FormatsJsonEscapedStrings) {
       loom_target_compile_report_format_json(&report, &options, &stream));
 
   iree_string_view_t output = iree_string_builder_view(&builder);
-  EXPECT_NE(iree_string_view_find(output,
-                                  IREE_SV("\"entry\":\"quote\\\"line\\n\""), 0),
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"compile_root\":\"quote\\\"line\\n\""), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("\"backend\":null"), 0),
             IREE_STRING_VIEW_NPOS);

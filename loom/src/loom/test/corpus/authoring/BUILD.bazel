@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -17,10 +18,13 @@ exports_files([
     "mlp_down_projection_residual_bf16.loom",
 ])
 
-_AMDGPU_EXECUTE_COMPATIBLE_WITH = select({
-    "//loom/config/execute:iree_hal_amdgpu": [],
-    "//conditions:default": ["@platforms//:incompatible"],
-})
+_AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/target:amdgpu_artifacts",
+])
+
+_AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:amdgpu_hal",
+])
 
 iree_executable_test(
     name = "ffn_gate_up_swiglu_q6q8_plan_test",
@@ -33,7 +37,7 @@ iree_executable_test(
         "ffn_gate_up_swiglu_q6q8.loom",
     ],
     tags = ["hostonly"],
-    target_compatible_with = _AMDGPU_EXECUTE_COMPATIBLE_WITH,
+    target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
 )
 
 iree_executable_test(
@@ -47,7 +51,7 @@ iree_executable_test(
         "mlp_down_projection_residual_bf16.loom",
     ],
     tags = ["hostonly"],
-    target_compatible_with = _AMDGPU_EXECUTE_COMPATIBLE_WITH,
+    target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
 )
 
 iree_executable_test(
@@ -72,6 +76,7 @@ iree_executable_test(
         "manual",
         "requires-gpu-amd",
     ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
 )
 
 iree_executable_test(
@@ -97,4 +102,5 @@ iree_executable_test(
         "manual",
         "requires-gpu-amd",
     ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
 )

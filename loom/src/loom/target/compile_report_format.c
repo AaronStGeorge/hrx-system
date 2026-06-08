@@ -284,7 +284,7 @@ static iree_status_t loom_target_compile_report_format_summary(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("backend"), report->backend_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
-      builder, IREE_SV("entry"), report->entry_symbol));
+      builder, IREE_SV("compile_root"), report->compile_root_symbol));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("bundle"), report->target_bundle_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
@@ -1252,7 +1252,7 @@ iree_status_t loom_target_compile_report_format_json(
           stream, &first_field, "module", report->module_name));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
-          stream, &first_field, "entry", report->entry_symbol));
+          stream, &first_field, "compile_root", report->compile_root_symbol));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "backend", report->backend_name));

@@ -578,7 +578,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   loom_func_like_t entry_func = {0};
   IREE_RETURN_IF_ERROR(loom_run_hal_testbench_resolve_compile_func(
       provider, entry_symbol, &entry_func));
-  provider->invocation_options.entry_point = 0;
+  provider->invocation_options.function_name = entry_symbol;
   loom_target_dispatch_workgroup_count_t workgroup_count = {0};
   bool workgroup_count_resolved = false;
   IREE_RETURN_IF_ERROR(
@@ -610,7 +610,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   pipeline_options.pipeline = provider->pipeline;
   pipeline_options.target_pipeline_options =
       provider->context->artifact_provider->default_pipeline_options;
-  pipeline_options.entry_symbol = entry_symbol;
+  pipeline_options.compile_root_symbol = entry_symbol;
   pipeline_options.target_environment = provider->target_environment;
   pipeline_options.target_selection = (loom_target_selection_t){
       .bundle = provider->compile_device_target.target_bundle,
@@ -647,7 +647,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = IREE_SV("loom");
-  compile_options.entry_symbol = entry_symbol;
+  compile_options.compile_root_symbol = entry_symbol;
   compile_options.diagnostic_sink = diagnostic_sink;
   compile_options.source_resolver =
       loom_run_module_source_resolver(&provider->compile_module);
@@ -699,8 +699,7 @@ static iree_status_t loom_run_hal_testbench_invocation_options_push_constant(
   }
   const loom_scalar_type_t source_scalar_type =
       loom_type_element_type(source_type);
-  if (source_scalar_type == LOOM_SCALAR_TYPE_INDEX ||
-      source_scalar_type == LOOM_SCALAR_TYPE_OFFSET) {
+  if (source_scalar_type == LOOM_SCALAR_TYPE_INDEX) {
     int64_t integer_value = 0;
     switch (value.type) {
       case IREE_VM_VALUE_TYPE_I8:
@@ -737,6 +736,38 @@ static iree_status_t loom_run_hal_testbench_invocation_options_push_constant(
     }
     options->constants[options->constant_count++] =
         (uint32_t)(int32_t)integer_value;
+    return iree_ok_status();
+  }
+  if (source_scalar_type == LOOM_SCALAR_TYPE_OFFSET) {
+    int64_t integer_value = 0;
+    switch (value.type) {
+      case IREE_VM_VALUE_TYPE_I8:
+        integer_value = value.i8;
+        break;
+      case IREE_VM_VALUE_TYPE_I16:
+        integer_value = value.i16;
+        break;
+      case IREE_VM_VALUE_TYPE_I32:
+        integer_value = value.i32;
+        break;
+      case IREE_VM_VALUE_TYPE_I64:
+        integer_value = value.i64;
+        break;
+      default:
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "HAL dispatch offset constant requires an integer VM value");
+    }
+    if (options->constant_count + 2 > LOOM_RUN_HAL_MAX_CONSTANT_COUNT) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HAL dispatch constant count exceeds capacity "
+          "%" PRIhsz,
+          (iree_host_size_t)LOOM_RUN_HAL_MAX_CONSTANT_COUNT);
+    }
+    const uint64_t raw_value = (uint64_t)integer_value;
+    options->constants[options->constant_count++] = (uint32_t)raw_value;
+    options->constants[options->constant_count++] = (uint32_t)(raw_value >> 32);
     return iree_ok_status();
   }
   switch (value.type) {

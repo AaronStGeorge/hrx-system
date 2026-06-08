@@ -137,7 +137,8 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
     loom_run_hal_invocation_request_initialize(&invocation_request);
     invocation_request.runtime = &runtime;
     invocation_request.artifact = &candidate.artifact;
-    invocation_request.options.entry_point = request->options->hal_entry_point;
+    invocation_request.options.function_name =
+        request->options->hal_function_name;
     invocation_request.options.workgroup_count[0] =
         request->options->hal_workgroup_count[0];
     invocation_request.options.workgroup_count[1] =

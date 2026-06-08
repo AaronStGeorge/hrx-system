@@ -192,6 +192,7 @@ loom_cc_library(
   DEPS
     ::loomc
     ::loomc_target_spirv
+    iree::base::internal
     ${_loomc_target_spirv_vulkan_platform_deps}
   ALWAYSLINK
   INCLUDES

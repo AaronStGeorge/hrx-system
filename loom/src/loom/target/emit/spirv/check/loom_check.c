@@ -354,7 +354,7 @@ static iree_status_t loom_spirv_loom_check_emit_provider_execute(
   iree_status_t status = loom_spirv_emit_low_module(
       request->module, &request->low_registry->registry,
       loom_target_selection_empty(), diagnostic_emitter, request->case_arena,
-      &module, request->host_allocator);
+      /*options=*/NULL, &module, request->host_allocator);
 
   loom_spirv_toolchain_t toolchain;
   loom_spirv_toolchain_initialize_from_environment(&toolchain);

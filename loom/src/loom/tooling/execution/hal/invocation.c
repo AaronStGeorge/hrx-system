@@ -19,7 +19,6 @@ enum {
 void loom_run_hal_invocation_options_initialize(
     loom_run_hal_invocation_options_t* out_options) {
   *out_options = (loom_run_hal_invocation_options_t){
-      .entry_point = 0,
       .workgroup_count = {1, 1, 1},
   };
 }
@@ -218,9 +217,52 @@ static iree_const_byte_span_t loom_run_hal_dispatch_constants(
       options->constant_count * sizeof(options->constants[0]));
 }
 
-static iree_hal_executable_function_t loom_run_hal_dispatch_function(
-    const loom_run_hal_invocation_options_t* options) {
-  return iree_hal_executable_function_from_index(options->entry_point);
+static iree_string_view_t loom_run_hal_normalize_function_name(
+    iree_string_view_t function_name) {
+  function_name = iree_string_view_trim(function_name);
+  if (iree_string_view_starts_with_char(function_name, '@')) {
+    function_name = iree_string_view_remove_prefix(function_name, 1);
+  }
+  return function_name;
+}
+
+static iree_status_t loom_run_hal_select_single_function_name(
+    iree_hal_executable_t* executable, iree_string_view_t* out_function_name) {
+  *out_function_name = iree_string_view_empty();
+  const iree_host_size_t function_count =
+      iree_hal_executable_function_count(executable);
+  if (function_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL dispatch requires a function name when executable has %" PRIhsz
+        " functions",
+        function_count);
+  }
+  iree_hal_executable_function_info_t info = {0};
+  IREE_RETURN_IF_ERROR(iree_hal_executable_function_info(
+      executable, iree_hal_executable_function_from_index(0), &info));
+  if (iree_string_view_is_empty(info.name)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL dispatch requires a function name because the only executable "
+        "function has no reflected name");
+  }
+  *out_function_name = info.name;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_run_hal_lookup_dispatch_function(
+    iree_hal_executable_t* executable,
+    const loom_run_hal_invocation_options_t* options,
+    iree_hal_executable_function_t* out_function) {
+  iree_string_view_t function_name =
+      loom_run_hal_normalize_function_name(options->function_name);
+  if (iree_string_view_is_empty(function_name)) {
+    IREE_RETURN_IF_ERROR(
+        loom_run_hal_select_single_function_name(executable, &function_name));
+  }
+  return iree_hal_executable_lookup_function_by_name(executable, function_name,
+                                                     out_function);
 }
 
 static iree_status_t loom_run_hal_record_dispatch_batch(
@@ -236,6 +278,10 @@ static iree_status_t loom_run_hal_record_dispatch_batch(
       options->workgroup_count[0], options->workgroup_count[1],
       options->workgroup_count[2]);
   iree_const_byte_span_t constants = loom_run_hal_dispatch_constants(options);
+  iree_hal_executable_function_t function =
+      iree_hal_executable_function_invalid();
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_lookup_dispatch_function(executable, options, &function));
 
   iree_hal_command_buffer_t* command_buffer = NULL;
   iree_status_t status = iree_hal_command_buffer_create(
@@ -260,8 +306,6 @@ static iree_status_t loom_run_hal_record_dispatch_batch(
         .count = iree_vm_list_size(binding_list),
         .values = binding_refs,
     };
-    const iree_hal_executable_function_t function =
-        loom_run_hal_dispatch_function(options);
     status = iree_hal_command_buffer_dispatch(
         command_buffer, executable, function, config, constants, bindings,
         IREE_HAL_DISPATCH_FLAG_NONE);
@@ -318,11 +362,16 @@ static iree_status_t loom_run_hal_record_dispatch_sequence_batch(
           .values = binding_refs,
       };
       const loom_run_hal_invocation_options_t* options = &plan->options;
+      iree_hal_executable_function_t function =
+          iree_hal_executable_function_invalid();
+      status = loom_run_hal_lookup_dispatch_function(
+          candidates[step_index]->executable, options, &function);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
       iree_hal_dispatch_config_t config = iree_hal_make_static_dispatch_config(
           options->workgroup_count[0], options->workgroup_count[1],
           options->workgroup_count[2]);
-      const iree_hal_executable_function_t function =
-          loom_run_hal_dispatch_function(options);
       status = iree_hal_command_buffer_dispatch(
           command_buffer, candidates[step_index]->executable, function, config,
           loom_run_hal_dispatch_constants(options), bindings,
@@ -347,6 +396,10 @@ iree_status_t loom_run_hal_dispatch(
   iree_hal_buffer_ref_t binding_refs[LOOM_RUN_HAL_MAX_BINDING_COUNT];
   IREE_RETURN_IF_ERROR(loom_run_hal_binding_refs_from_list(
       binding_list, binding_refs, IREE_ARRAYSIZE(binding_refs)));
+  iree_hal_executable_function_t function =
+      iree_hal_executable_function_invalid();
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_lookup_dispatch_function(executable, options, &function));
 
   iree_hal_command_buffer_t* command_buffer = NULL;
   iree_hal_semaphore_t* semaphore = NULL;
@@ -369,8 +422,6 @@ iree_status_t loom_run_hal_dispatch(
     iree_hal_dispatch_config_t config = iree_hal_make_static_dispatch_config(
         options->workgroup_count[0], options->workgroup_count[1],
         options->workgroup_count[2]);
-    const iree_hal_executable_function_t function =
-        loom_run_hal_dispatch_function(options);
     status = iree_hal_command_buffer_dispatch(
         command_buffer, executable, function, config,
         loom_run_hal_dispatch_constants(options), bindings,

@@ -17,11 +17,11 @@ void loom_run_one_shot_options_initialize(
 }
 
 static const loom_op_t* loom_run_one_shot_lookup_entry_kernel(
-    const loom_module_t* module, iree_string_view_t entry_symbol) {
+    const loom_module_t* module, iree_string_view_t compile_root_symbol) {
   // Symbols are stored without their textual sigil.
-  (void)iree_string_view_consume_prefix_char(&entry_symbol, '@');
+  (void)iree_string_view_consume_prefix_char(&compile_root_symbol, '@');
   const loom_string_id_t name_id =
-      loom_module_lookup_string(module, entry_symbol);
+      loom_module_lookup_string(module, compile_root_symbol);
   if (name_id == LOOM_STRING_ID_INVALID) {
     return NULL;
   }
@@ -51,15 +51,15 @@ static const loom_op_t* loom_run_one_shot_find_single_kernel(
 }
 
 bool loom_run_one_shot_options_apply_static_hal_workgroup_count(
-    const loom_module_t* module, iree_string_view_t entry_symbol,
+    const loom_module_t* module, iree_string_view_t compile_root_symbol,
     loom_run_one_shot_options_t* options) {
   if (module == NULL || options == NULL) {
     return false;
   }
   const loom_op_t* kernel =
-      iree_string_view_is_empty(entry_symbol)
+      iree_string_view_is_empty(compile_root_symbol)
           ? loom_run_one_shot_find_single_kernel(module)
-          : loom_run_one_shot_lookup_entry_kernel(module, entry_symbol);
+          : loom_run_one_shot_lookup_entry_kernel(module, compile_root_symbol);
   if (kernel == NULL) {
     return false;
   }

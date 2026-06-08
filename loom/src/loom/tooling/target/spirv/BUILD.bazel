@@ -17,15 +17,15 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-LOOM_SPIRV_VULKAN_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/execute:iree_hal_vulkan",
+LOOM_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//runtime/config/hal:driver_vulkan",
 ])
 
 loom_cc_library(
     name = "artifact_provider",
     srcs = ["artifact_provider.c"],
     hdrs = ["artifact_provider.h"],
-    target_compatible_with = LOOM_SPIRV_VULKAN_HAL_COMPATIBLE_WITH,
+    target_compatible_with = LOOM_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         ":vulkan_profile",
         "//loom/src/loom/target:compile_report",
@@ -47,7 +47,7 @@ loom_cc_library(
     name = "testbench_requirements",
     srcs = ["testbench_requirements.c"],
     hdrs = ["testbench_requirements.h"],
-    target_compatible_with = LOOM_SPIRV_VULKAN_HAL_COMPATIBLE_WITH,
+    target_compatible_with = LOOM_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         ":vulkan_profile",
         "//loom/src/loom/tooling/execution/hal:testbench_actual",
@@ -60,7 +60,7 @@ loom_cc_library(
     name = "vulkan_profile",
     srcs = ["vulkan_profile.c"],
     hdrs = ["vulkan_profile.h"],
-    target_compatible_with = LOOM_SPIRV_VULKAN_HAL_COMPATIBLE_WITH,
+    target_compatible_with = LOOM_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/spirv:cooperative_properties",
@@ -77,7 +77,7 @@ loom_cc_library(
 loom_cc_test(
     name = "artifact_provider_test",
     srcs = ["artifact_provider_test.cc"],
-    target_compatible_with = LOOM_SPIRV_VULKAN_HAL_COMPATIBLE_WITH,
+    target_compatible_with = LOOM_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         ":artifact_provider",
         ":vulkan_profile",
@@ -94,6 +94,8 @@ loom_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/vulkan",
+        "//runtime/src/iree/hal/drivers/vulkan:headers",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -102,7 +104,7 @@ loom_cc_test(
 loom_cc_test(
     name = "vulkan_profile_test",
     srcs = ["vulkan_profile_test.cc"],
-    target_compatible_with = LOOM_SPIRV_VULKAN_HAL_COMPATIBLE_WITH,
+    target_compatible_with = LOOM_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         ":vulkan_profile",
         "//loom/src/loom/target:types",

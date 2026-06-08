@@ -1738,25 +1738,82 @@ static iree_status_t loom_spirv_emit_module_state_finalize(
   return loom_spirv_module_builder_finalize(&state->builder, out_module);
 }
 
+static iree_status_t loom_spirv_emit_low_module_initialize(
+    loom_module_t* module,
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_target_selection_t target_selection,
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    iree_arena_allocator_t* scratch_arena,
+    loom_spirv_module_binary_t* out_module,
+    loom_spirv_emit_module_state_t* out_state) {
+  IREE_ASSERT_ARGUMENT(out_module);
+
+  *out_module = (loom_spirv_module_binary_t){0};
+  loom_spirv_emit_module_state_initialize(module, descriptor_registry,
+                                          target_selection, diagnostic_emitter,
+                                          scratch_arena, out_state);
+  return iree_ok_status();
+}
+
+void loom_spirv_emit_low_module_options_initialize(
+    loom_spirv_emit_low_module_options_t* out_options) {
+  IREE_ASSERT_ARGUMENT(out_options);
+  *out_options = (loom_spirv_emit_low_module_options_t){0};
+}
+
+static iree_status_t loom_spirv_emit_low_module_options_validate(
+    const loom_spirv_emit_low_module_options_t* options) {
+  if (options == NULL || options->entry_count == 0) {
+    return iree_ok_status();
+  }
+  if (options->entry_ops == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "selected SPIR-V low module entries require an entry op list");
+  }
+  for (iree_host_size_t i = 0; i < options->entry_count; ++i) {
+    if (options->entry_ops[i] == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "selected SPIR-V low module entry list contains a null op");
+    }
+  }
+  return iree_ok_status();
+}
+
+static bool loom_spirv_emit_low_module_options_selects_entry(
+    const loom_spirv_emit_low_module_options_t* options,
+    loom_op_t* low_function_op) {
+  if (options == NULL || options->entry_count == 0) {
+    return true;
+  }
+  for (iree_host_size_t i = 0; i < options->entry_count; ++i) {
+    if (options->entry_ops[i] == low_function_op) {
+      return true;
+    }
+  }
+  return false;
+}
+
 iree_status_t loom_spirv_emit_low_module(
     loom_module_t* module,
     const loom_low_descriptor_registry_t* descriptor_registry,
     loom_target_selection_t target_selection,
     iree_diagnostic_emitter_t diagnostic_emitter,
     iree_arena_allocator_t* scratch_arena,
+    const loom_spirv_emit_low_module_options_t* options,
     loom_spirv_module_binary_t* out_module, iree_allocator_t allocator) {
-  IREE_ASSERT_ARGUMENT(out_module);
-
-  *out_module = (loom_spirv_module_binary_t){0};
   loom_spirv_emit_module_state_t state = {0};
-  loom_spirv_emit_module_state_initialize(module, descriptor_registry,
-                                          target_selection, diagnostic_emitter,
-                                          scratch_arena, &state);
-
   iree_status_t status = iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_low_module_options_validate(options));
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_low_module_initialize(
+      module, descriptor_registry, target_selection, diagnostic_emitter,
+      scratch_arena, out_module, &state));
   loom_symbol_t* symbol = NULL;
   loom_module_for_each_symbol(module, symbol) {
-    if (!loom_low_function_def_isa(symbol->defining_op)) {
+    if (!loom_low_function_def_isa(symbol->defining_op) ||
+        !loom_spirv_emit_low_module_options_selects_entry(
+            options, symbol->defining_op)) {
       continue;
     }
     status = loom_spirv_emit_low_function_into_module(

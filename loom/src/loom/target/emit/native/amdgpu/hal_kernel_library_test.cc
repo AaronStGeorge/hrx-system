@@ -74,6 +74,29 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
     ASSERT_NE(*out_module, nullptr);
   }
 
+  void ParseGfx11MultiKernel(loom_module_t** out_module) {
+    static const char kSource[] =
+        "amdgpu.target<gfx1100> @gfx_target\n"
+        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
+        "@first_kernel() {\n"
+        "  low.return\n"
+        "}\n"
+        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
+        "@second_kernel() {\n"
+        "  low.return\n"
+        "}\n";
+    DiagnosticCapture parse_capture;
+    loom_text_parse_options_t parse_options = {
+        .diagnostic_sink = parse_capture.sink(),
+        .max_errors = 20,
+    };
+    IREE_ASSERT_OK(loom_text_parse(iree_make_cstring_view(kSource),
+                                   IREE_SV("amdgpu_emit_test.loom"), &context_,
+                                   &block_pool_, &parse_options, out_module));
+    ASSERT_TRUE(parse_capture.diagnostics.empty());
+    ASSERT_NE(*out_module, nullptr);
+  }
+
   void ParseGfx942Kernel(loom_module_t** out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx942> @gfx_target\n"
@@ -170,6 +193,29 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsGfx942Kernel) {
 
   EXPECT_TRUE(emitted);
   EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
+  loom_module_t* module = nullptr;
+  ASSERT_NO_FATAL_FAILURE(ParseGfx11MultiKernel(&module));
+
+  DiagnosticCapture capture;
+  loom_amdgpu_hal_kernel_library_t library = {};
+  loom_amdgpu_hal_kernel_library_options_t options = {
+      .diagnostic_sink = capture.sink(),
+      .max_errors = 20,
+  };
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+      module, &options, iree_allocator_system(), &emitted, &library));
+
+  EXPECT_TRUE(emitted);
+  EXPECT_TRUE(capture.diagnostics.empty());
+  EXPECT_EQ(library.export_count, 2u);
+
+  loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                              iree_allocator_system());
+  loom_module_free(module);
 }
 
 TEST_F(AmdgpuHalKernelLibraryTest, DescriptorSetMismatchEmitsDiagnostic) {

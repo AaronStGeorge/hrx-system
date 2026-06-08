@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/hal/api.h"
+#include "iree/hal/drivers/vulkan/spirv.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm.h"
@@ -209,6 +210,50 @@ class SpirvVulkanHalArtifactProviderTest : public ::testing::Test {
     return iree_ok_status();
   }
 
+  iree_status_t ParseRawBdaMultiEntryModule(ModulePtr* out_module) {
+    static const char kSource[] =
+        "spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}\n"
+        "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
+        "@double_i32(%byte_offset: reg<spirv.offset64>) "
+        "asm<spirv.logical.core> {\n"
+        "  %input = resource<hal_binding> {index = 0, source_type = "
+        "hal.buffer} : reg<spirv.ptr.storage_buffer>\n"
+        "  %output = resource<hal_binding> {index = 1, source_type = "
+        "hal.buffer} : reg<spirv.ptr.storage_buffer>\n"
+        "  %input_view = OpPtrAccessChain.storage_buffer.i32.byte_offset "
+        "%input, %byte_offset\n"
+        "  %loaded = OpLoad.storage_buffer.i32 %input_view\n"
+        "  %result = OpIAdd %loaded, %loaded\n"
+        "  %output_view = OpPtrAccessChain.storage_buffer.i32.byte_offset "
+        "%output, %byte_offset\n"
+        "  OpStore.storage_buffer.i32 %output_view, %result\n"
+        "  return\n"
+        "}\n"
+        "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
+        "@copy_i32(%byte_offset: reg<spirv.offset64>) "
+        "asm<spirv.logical.core> {\n"
+        "  %input = resource<hal_binding> {index = 0, source_type = "
+        "hal.buffer} : reg<spirv.ptr.storage_buffer>\n"
+        "  %output = resource<hal_binding> {index = 1, source_type = "
+        "hal.buffer} : reg<spirv.ptr.storage_buffer>\n"
+        "  %input_view = OpPtrAccessChain.storage_buffer.i32.byte_offset "
+        "%input, %byte_offset\n"
+        "  %loaded = OpLoad.storage_buffer.i32 %input_view\n"
+        "  %output_view = OpPtrAccessChain.storage_buffer.i32.byte_offset "
+        "%output, %byte_offset\n"
+        "  OpStore.storage_buffer.i32 %output_view, %loaded\n"
+        "  return\n"
+        "}\n";
+    loom_text_parse_options_t options = ParseOptions();
+    loom_module_t* module = nullptr;
+    IREE_RETURN_IF_ERROR(
+        loom_text_parse(iree_make_cstring_view(kSource),
+                        IREE_SV("spirv_hal_artifact_provider_test.loom"),
+                        &context_, &block_pool_, &options, &module));
+    *out_module = ModulePtr(module);
+    return iree_ok_status();
+  }
+
   iree_status_t SelectBaselineTarget(loom_run_hal_device_target_t* out_target) {
     fake_hal_device_t device =
         FakeDevice(kBaselineQueryRows, IREE_ARRAYSIZE(kBaselineQueryRows));
@@ -257,7 +302,6 @@ TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsRawBdaSpirvArtifact) {
   bool emitted = false;
   IREE_ASSERT_OK(loom_spirv_vulkan_hal_artifact_provider.emit_artifact(
       &loom_spirv_vulkan_hal_artifact_provider, module.get(), &target,
-      /*entry_symbol=*/IREE_SV("@loom_kernel"),
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
@@ -278,6 +322,38 @@ TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsRawBdaSpirvArtifact) {
   uint32_t magic = 0;
   memcpy(&magic, artifact.executable_data.data, sizeof(magic));
   EXPECT_EQ(magic, 0x07230203u);
+
+  loom_spirv_vulkan_hal_artifact_provider.deinitialize_artifact(
+      &loom_spirv_vulkan_hal_artifact_provider, &artifact,
+      iree_allocator_system());
+}
+
+TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsAllCompatibleEntries) {
+  ModulePtr module;
+  IREE_ASSERT_OK(ParseRawBdaMultiEntryModule(&module));
+  ASSERT_NE(module.get(), nullptr);
+
+  loom_run_hal_device_target_t target = {};
+  IREE_ASSERT_OK(SelectBaselineTarget(&target));
+
+  loom_run_hal_artifact_t artifact = {};
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_spirv_vulkan_hal_artifact_provider.emit_artifact(
+      &loom_spirv_vulkan_hal_artifact_provider, module.get(), &target,
+      /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
+      /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
+      /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
+      /*report=*/nullptr, iree_allocator_system(), &emitted, &artifact));
+
+  ASSERT_TRUE(emitted);
+  ASSERT_NE(artifact.executable_data.data, nullptr);
+  ASSERT_EQ(artifact.executable_data.data_length % sizeof(uint32_t), 0u);
+
+  iree_hal_vulkan_spirv_module_analysis_t analysis = {};
+  IREE_ASSERT_OK(iree_hal_vulkan_spirv_analyze_module(
+      (const uint32_t*)artifact.executable_data.data,
+      artifact.executable_data.data_length / sizeof(uint32_t), &analysis));
+  EXPECT_EQ(analysis.compute_entry_point_count, 2u);
 
   loom_spirv_vulkan_hal_artifact_provider.deinitialize_artifact(
       &loom_spirv_vulkan_hal_artifact_provider, &artifact,

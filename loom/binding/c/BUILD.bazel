@@ -251,6 +251,7 @@ loom_cc_library(
     deps = [
         ":loomc",
         ":loomc_target_spirv",
+        "//runtime/src/iree/base/internal",
     ] + LOOMC_TARGET_SPIRV_VULKAN_DEPS,
     alwayslink = True,
 )

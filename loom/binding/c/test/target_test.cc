@@ -613,7 +613,7 @@ TEST(TargetTest, ReusesSelectionAcrossCompileWorkspaces) {
       /*.structure_size=*/sizeof(compile_options),
       /*.next=*/&target_options,
       /*.module_name=*/loomc_make_cstring_view("jit_kernel"),
-      /*.entry_symbol=*/loomc_make_cstring_view("@entry"),
+      /*.compile_root_symbol=*/loomc_make_cstring_view("@entry"),
       /*.artifact_flags=*/0,
       /*.config=*/{},
   };
