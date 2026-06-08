@@ -54,6 +54,8 @@ typedef struct loom_spirv_emit_module_state_t {
   loom_spirv_module_builder_t builder;
   // SPIR-V type and constant emission cache shared by the module.
   loom_spirv_type_context_t type_context;
+  // Module-level raw-BDA ABI layout shared by HAL kernel entries.
+  loom_spirv_module_raw_bda_layout_t raw_bda_layout;
   // Shared Input variables for workgroup/local/global invocation builtins.
   uint32_t builtin_variable_ids[LOOM_SPIRV_BUILTIN_VARIABLE_COUNT];
   // First function's module-level target contract.
@@ -253,6 +255,7 @@ static loom_spirv_module_abi_context_t loom_spirv_emit_abi_context(
       .scratch_arena = state->scratch_arena,
       .builder = state->builder,
       .type_context = state->type_context,
+      .raw_bda_layout = &state->module_state->raw_bda_layout,
       .value_table = &state->value_table,
   };
 }
@@ -1557,8 +1560,7 @@ static iree_status_t loom_spirv_emit_function(loom_spirv_emit_state_t* state) {
       LOOM_SPIRV_OP_FUNCTION, function_operands,
       IREE_ARRAYSIZE(function_operands)));
   IREE_RETURN_IF_ERROR(loom_spirv_emit_function_body(state));
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_entry_point(state));
-  return loom_spirv_module_abi_emit_metadata(&context, &state->abi_plan);
+  return loom_spirv_emit_entry_point(state);
 }
 
 static iree_status_t loom_spirv_emit_validate_target(
@@ -1735,6 +1737,15 @@ static iree_status_t loom_spirv_emit_module_state_finalize(
         IREE_STATUS_FAILED_PRECONDITION,
         "SPIR-V low module has no low function definitions");
   }
+  loom_spirv_module_abi_context_t context = {
+      .module = state->module,
+      .scratch_arena = state->scratch_arena,
+      .builder = &state->builder,
+      .type_context = &state->type_context,
+      .raw_bda_layout = &state->raw_bda_layout,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_module_abi_emit_metadata(&context, &state->raw_bda_layout));
   return loom_spirv_module_builder_finalize(&state->builder, out_module);
 }
 

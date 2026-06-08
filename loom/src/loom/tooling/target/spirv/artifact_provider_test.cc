@@ -349,11 +349,27 @@ TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsAllCompatibleEntries) {
   ASSERT_NE(artifact.executable_data.data, nullptr);
   ASSERT_EQ(artifact.executable_data.data_length % sizeof(uint32_t), 0u);
 
+  const uint32_t* spirv_words = (const uint32_t*)artifact.executable_data.data;
+  const iree_host_size_t spirv_word_count =
+      artifact.executable_data.data_length / sizeof(uint32_t);
+
   iree_hal_vulkan_spirv_module_analysis_t analysis = {};
   IREE_ASSERT_OK(iree_hal_vulkan_spirv_analyze_module(
-      (const uint32_t*)artifact.executable_data.data,
-      artifact.executable_data.data_length / sizeof(uint32_t), &analysis));
+      spirv_words, spirv_word_count, &analysis));
   EXPECT_EQ(analysis.compute_entry_point_count, 2u);
+  EXPECT_EQ(analysis.push_constant_variable_count, 1u);
+
+  iree_hal_vulkan_spirv_bda_dispatch_metadata_t metadata = {};
+  IREE_ASSERT_OK(iree_hal_vulkan_spirv_parse_bda_dispatch_metadata(
+      spirv_words, spirv_word_count, iree_allocator_system(), &metadata));
+  EXPECT_TRUE(metadata.is_present);
+  EXPECT_EQ(metadata.root_push_constant_offset, 0u);
+  EXPECT_EQ(metadata.root_push_constant_length, 32u);
+  EXPECT_EQ(metadata.constant_push_constant_offset, 32u);
+  EXPECT_EQ(metadata.constant_count, 2u);
+  EXPECT_EQ(metadata.binding_count, 2u);
+  iree_hal_vulkan_spirv_bda_dispatch_metadata_deinitialize(
+      &metadata, iree_allocator_system());
 
   loom_spirv_vulkan_hal_artifact_provider.deinitialize_artifact(
       &loom_spirv_vulkan_hal_artifact_provider, &artifact,

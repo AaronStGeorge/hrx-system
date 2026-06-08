@@ -45,9 +45,11 @@ void loom_spirv_emit_low_module_options_initialize(
 // select one or more entries when an artifact container describes a narrower
 // dispatch set than the whole source module.
 //
-// Every emitted function must resolve to the same SPIR-V module contract. The
-// output module owns allocator-backed word storage and must be deinitialized by
-// the caller.
+// Every emitted function must resolve to the same SPIR-V module contract. Raw
+// BDA HAL kernel entries must also share one dispatch ABI layout because the
+// current raw SPIR-V executable format exposes BDA metadata at module scope.
+// The output module owns allocator-backed word storage and must be
+// deinitialized by the caller.
 iree_status_t loom_spirv_emit_low_module(
     loom_module_t* module,
     const loom_low_descriptor_registry_t* descriptor_registry,

@@ -331,13 +331,12 @@ static iree_status_t loom_spirv_module_abi_bda_metadata(
       context, "iree.vulkan.bda.v1.bindings=%" PRIu32, binding_count);
 }
 
-static iree_status_t loom_spirv_module_abi_declare_bda_root(
-    loom_spirv_module_abi_context_t* context,
-    loom_spirv_module_abi_plan_t* plan) {
+static iree_status_t loom_spirv_module_abi_declare_bda_root_variable(
+    loom_spirv_module_abi_context_t* context, uint16_t constant_word_count,
+    uint32_t* out_variable_id) {
   uint32_t root_pointer_type_id = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_type_ptr_push_constant_bda_root(
-      context->type_context, plan->bda_constant_word_count,
-      &root_pointer_type_id));
+      context->type_context, constant_word_count, &root_pointer_type_id));
   const uint32_t root_variable_id = loom_spirv_module_abi_allocate_id(context);
   const uint32_t variable_operands[] = {
       root_pointer_type_id,
@@ -349,6 +348,41 @@ static iree_status_t loom_spirv_module_abi_declare_bda_root(
                                     LOOM_SPIRV_MODULE_SECTION_DECLARATION),
       LOOM_SPIRV_OP_VARIABLE, variable_operands,
       IREE_ARRAYSIZE(variable_operands)));
+  *out_variable_id = root_variable_id;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_module_abi_share_bda_root(
+    loom_spirv_module_abi_context_t* context,
+    loom_spirv_module_abi_plan_t* plan) {
+  if (context->raw_bda_layout == NULL) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "SPIR-V raw-BDA emission requires module layout "
+                            "state");
+  }
+
+  loom_spirv_module_raw_bda_layout_t* layout = context->raw_bda_layout;
+  if (layout->root_variable_id != 0) {
+    if (layout->binding_count != plan->bda_binding_count ||
+        layout->constant_word_count != plan->bda_constant_word_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "SPIR-V raw-BDA module mixes dispatch layouts; first raw-BDA "
+          "function uses %u bindings and %u constant words but current "
+          "function uses %u bindings and %u constant words",
+          layout->binding_count, layout->constant_word_count,
+          plan->bda_binding_count, plan->bda_constant_word_count);
+    }
+    plan->bda_root.variable_id = layout->root_variable_id;
+    return iree_ok_status();
+  }
+
+  uint32_t root_variable_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_module_abi_declare_bda_root_variable(
+      context, plan->bda_constant_word_count, &root_variable_id));
+  layout->root_variable_id = root_variable_id;
+  layout->binding_count = plan->bda_binding_count;
+  layout->constant_word_count = plan->bda_constant_word_count;
   plan->bda_root.variable_id = root_variable_id;
   return iree_ok_status();
 }
@@ -603,7 +637,7 @@ static iree_status_t loom_spirv_module_abi_build_raw_bda_plan(
   plan->arg_count = entry_block->arg_count;
   plan->bda_binding_count = binding_count;
   plan->bda_constant_word_count = constant_word_count;
-  return loom_spirv_module_abi_declare_bda_root(context, plan);
+  return loom_spirv_module_abi_share_bda_root(context, plan);
 }
 
 iree_status_t loom_spirv_module_abi_build_plan(
@@ -1122,10 +1156,11 @@ iree_status_t loom_spirv_module_abi_store_return_values(
 
 iree_status_t loom_spirv_module_abi_emit_metadata(
     loom_spirv_module_abi_context_t* context,
-    const loom_spirv_module_abi_plan_t* plan) {
-  if (plan->kind != LOOM_SPIRV_MODULE_ABI_PLAN_HAL_KERNEL_RAW_BDA) {
+    const loom_spirv_module_raw_bda_layout_t* raw_bda_layout) {
+  if (raw_bda_layout == NULL || raw_bda_layout->root_variable_id == 0) {
     return iree_ok_status();
   }
-  return loom_spirv_module_abi_bda_metadata(context, plan->bda_binding_count,
-                                            plan->bda_constant_word_count);
+  return loom_spirv_module_abi_bda_metadata(
+      context, raw_bda_layout->binding_count,
+      raw_bda_layout->constant_word_count);
 }

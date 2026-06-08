@@ -60,6 +60,15 @@ typedef struct loom_spirv_module_bda_root_t {
   uint32_t binding_base_id;
 } loom_spirv_module_bda_root_t;
 
+typedef struct loom_spirv_module_raw_bda_layout_t {
+  // Module-scope PushConstant root variable ID shared by raw-BDA functions.
+  uint32_t root_variable_id;
+  // Number of HAL binding-table entries required by every raw-BDA function.
+  uint16_t binding_count;
+  // Number of 32-bit HAL inline constants consumed by every raw-BDA function.
+  uint16_t constant_word_count;
+} loom_spirv_module_raw_bda_layout_t;
+
 typedef struct loom_spirv_module_abi_plan_t {
   // ABI materialization algorithm selected for this function.
   loom_spirv_module_abi_plan_kind_t kind;
@@ -100,6 +109,8 @@ typedef struct loom_spirv_module_abi_context_t {
   loom_spirv_module_builder_t* builder;
   // SPIR-V type and constant emission cache.
   loom_spirv_type_context_t* type_context;
+  // Module-level raw-BDA layout shared by emitted HAL kernel entries.
+  loom_spirv_module_raw_bda_layout_t* raw_bda_layout;
   // Function-local Loom value to SPIR-V value-ref table.
   loom_spirv_module_value_table_t* value_table;
 } loom_spirv_module_abi_context_t;
@@ -132,7 +143,7 @@ iree_status_t loom_spirv_module_abi_store_return_values(
 // Emits module metadata consumed by the raw-BDA HAL artifact loader.
 iree_status_t loom_spirv_module_abi_emit_metadata(
     loom_spirv_module_abi_context_t* context,
-    const loom_spirv_module_abi_plan_t* plan);
+    const loom_spirv_module_raw_bda_layout_t* raw_bda_layout);
 
 #ifdef __cplusplus
 }  // extern "C"
