@@ -661,7 +661,7 @@ def test_materialize_rejects_unknown_predefined_value() -> None:
 
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
-        match="references AMDGPU predefined value 'OPR_VGPR.v999'",
+        match=r"references AMDGPU predefined value 'OPR_VGPR\.v999'",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 
@@ -869,7 +869,7 @@ def test_materialize_rejects_implicit_decision_without_xml_operand() -> None:
 
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
-        match="has implicit operand decision\\(s\\).*has no implicit operands",
+        match=r"has implicit operand decision\(s\).*has no implicit operands",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 
@@ -908,7 +908,7 @@ def test_materialize_rejects_implicit_ignore_without_reason() -> None:
 
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
-        match="ignores implicit XML operand .* without a named reason",
+        match=r"ignores implicit XML operand .* without a named reason",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 
@@ -1005,7 +1005,7 @@ def test_materialize_rejects_implicit_xml_output_as_packet_operand() -> None:
 
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
-        match="maps output-only implicit XML operand .* to packet operand",
+        match=r"maps output-only implicit XML operand .* to packet operand",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 

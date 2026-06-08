@@ -92,7 +92,7 @@ class TestIndexedValue:
         )
         off = b.value("off", INDEX)
         indexed = tile[0, off]
-        base, static, dynamic = indexed.decompose()
+        _base, static, dynamic = indexed.decompose()
         sentinel = -(2**63)
         assert static == [0, sentinel]
         assert dynamic == [off.id]
@@ -101,7 +101,7 @@ class TestIndexedValue:
         b = _builder()
         t = b.value("t", F32)
         indexed = t["bad"]
-        with pytest.raises(TypeError, match="int.*or ValueRef"):
+        with pytest.raises(TypeError, match=r"int.*or ValueRef"):
             indexed.decompose()
 
 

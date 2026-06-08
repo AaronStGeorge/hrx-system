@@ -10,12 +10,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, ParamSpec, Protocol, TypeVar, overload
+from typing import Any, Protocol, overload
 
 TILELANG_CASE_ATTR = "__loom_tilelang_case__"
-
-_P = ParamSpec("_P")
-_R = TypeVar("_R")
 
 
 class TileLangT(Protocol):
@@ -36,32 +33,32 @@ class TileLangCaseMetadata:
 
 
 @overload
-def tilelang_case(
-    func: Callable[_P, _R],
+def tilelang_case[**P, R](
+    func: Callable[P, R],
     *,
     name: str | None = None,
     category: str = "composition",
     tags: Sequence[str] = (),
-) -> Callable[_P, _R]: ...
+) -> Callable[P, R]: ...
 
 
 @overload
-def tilelang_case(
+def tilelang_case[**P, R](
     func: None = None,
     *,
     name: str | None = None,
     category: str = "composition",
     tags: Sequence[str] = (),
-) -> Callable[[Callable[_P, _R]], Callable[_P, _R]]: ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
-def tilelang_case(
-    func: Callable[_P, _R] | None = None,
+def tilelang_case[**P, R](
+    func: Callable[P, R] | None = None,
     *,
     name: str | None = None,
     category: str = "composition",
     tags: Sequence[str] = (),
-) -> Callable[[Callable[_P, _R]], Callable[_P, _R]] | Callable[_P, _R]:
+) -> Callable[[Callable[P, R]], Callable[P, R]] | Callable[P, R]:
     """Marks a function as a TileLang importer check case."""
 
     metadata = TileLangCaseMetadata(
@@ -70,7 +67,7 @@ def tilelang_case(
         tags=tuple(tags),
     )
 
-    def decorate(case_func: Callable[_P, _R]) -> Callable[_P, _R]:
+    def decorate(case_func: Callable[P, R]) -> Callable[P, R]:
         setattr(case_func, TILELANG_CASE_ATTR, metadata)
         return case_func
 

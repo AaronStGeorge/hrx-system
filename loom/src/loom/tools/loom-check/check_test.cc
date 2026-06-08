@@ -271,12 +271,11 @@ TEST_F(CheckParseTest, TemplateDirectiveParentSegmentErrors) {
 TEST_F(CheckParseTest, MultipleTemplateDirectivesError) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      Parse(
-          "// TEMPLATE: "
-          "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-          "// TEMPLATE: loom/src/loom/test/corpus/vector/memory.loom-test\n"
-          "\n"
-          "func.def @f() {}\n"));
+      Parse("// TEMPLATE: "
+            "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+            "// TEMPLATE: loom/src/loom/test/corpus/vector/memory.loom-test\n"
+            "\n"
+            "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, CaseDirectiveErrors) {

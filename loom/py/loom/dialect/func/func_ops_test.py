@@ -113,7 +113,7 @@ class TestFuncDeclRoundTrip:
         parser = Parser()
         parser.register_ops(list(ALL_TEST_OPS) + list(ALL_FUNC_OPS))
         parser.register_types(ALL_BUILTIN_TYPES)
-        with pytest.raises(ParseError, match="LBRACE|top-level op"):
+        with pytest.raises(ParseError, match=r"LBRACE|top-level op"):
             parser.parse("func.decl @bad(%a: f32) -> (f32) {\n  func.return %a : f32\n}\n")
 
 

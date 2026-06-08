@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 
-# ruff: noqa: F401, F403
+# ruff: noqa: F403
 
 """AMDGPU descriptor declarations and builders."""
 

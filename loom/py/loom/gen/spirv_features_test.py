@@ -94,7 +94,8 @@ def test_validation_rejects_unknown_isa_symbol() -> None:
             FEATURE_ATOMS[0],
             capabilities=("LOOM_SPIRV_CAPABILITY_DOES_NOT_EXIST",),
         ),
-    ) + FEATURE_ATOMS[1:]
+        *FEATURE_ATOMS[1:],
+    )
 
     with _raises_value_error(r"unknown SPIR-V ISA symbol"):
         validate_feature_catalog(

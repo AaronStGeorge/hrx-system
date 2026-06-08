@@ -6,6 +6,7 @@
 
 """Tests for dynamic Loom Python builders."""
 
+import re
 from typing import Any, cast
 
 import pytest
@@ -138,7 +139,9 @@ def test_dynamic_builder_rejects_unknown_kwargs_with_op_name() -> None:
     rhs = builder.value("rhs", I32)
     test_builder = cast(Any, builder.test)
 
-    with pytest.raises(TypeError, match="test.addi: unexpected parameter 'lhz'"):
+    with pytest.raises(
+        TypeError, match=re.escape("test.addi: unexpected parameter 'lhz'")
+    ):
         test_builder.addi(lhz=lhs, rhs=rhs, results=[I32])
 
 

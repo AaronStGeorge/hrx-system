@@ -494,7 +494,7 @@ def test_select_instructions_accepts_aliases_and_fails_loudly() -> None:
     ]
     with pytest.raises(
         AmdgpuIsaXmlError,
-        match="sample.xml: unknown AMDGPU ISA instruction\\(s\\): MISSING",
+        match=r"sample\.xml: unknown AMDGPU ISA instruction\(s\): MISSING",
     ):
         spec.select_instructions(["MISSING"])
 

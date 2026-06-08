@@ -14,7 +14,6 @@ is the oracle for the C reader — these tests must be exhaustive.
 
 import struct
 from dataclasses import replace
-from typing import TypeVar
 
 import pytest
 
@@ -114,10 +113,8 @@ _TEST_PTR_REGISTER_CLASS_ID = next(
 # Helpers
 # ============================================================================
 
-_T = TypeVar("_T")
 
-
-def _append_unique(items: list[_T], additions: tuple[_T, ...]) -> None:
+def _append_unique[T](items: list[T], additions: tuple[T, ...]) -> None:
     seen_ids = {id(item) for item in items}
     for item in additions:
         item_id = id(item)
@@ -662,7 +659,7 @@ class TestTypesSection:
         body = Region(blocks=[block])
         func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
         module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
-        with pytest.raises(ValueError, match="1 dynamic dim.*0 dim binding"):
+        with pytest.raises(ValueError, match=r"1 dynamic dim.*0 dim binding"):
             write_module(module)
 
     def test_placeholder_type_fails_loudly(self) -> None:

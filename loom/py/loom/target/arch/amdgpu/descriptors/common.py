@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-# ruff: noqa: F401
 import struct
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace

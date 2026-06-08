@@ -558,7 +558,7 @@ class TestConstraints:
 
     def test_same_type_missing_values(self) -> None:
         c = SameType("a", "b")
-        ok, msg = c.check({"a": None})
+        ok, _msg = c.check({"a": None})
         assert ok, "Missing values should pass (can't check)"
 
     def test_same_kind(self) -> None:
@@ -576,7 +576,7 @@ class TestConstraints:
         assert c.error is not None
         assert c.error.error_id == "ERR_ENCODING_001"
         # No validate function — C-only check.
-        ok, msg = c.check({})
+        ok, _msg = c.check({})
         assert ok
 
     def test_same_shape(self) -> None:
@@ -1149,7 +1149,7 @@ class TestConstraints:
                 self.type = t
 
         c = SameType("inputs", "result")
-        ok, msg = c.check({"inputs": [], "result": FakeValue("f32")})
+        ok, _msg = c.check({"inputs": [], "result": FakeValue("f32")})
         assert ok, "Single value with empty list should pass"
 
     def test_same_element_type_variadic_pass(self) -> None:
@@ -1160,7 +1160,7 @@ class TestConstraints:
                 self.dtype = dt
 
         c = SameElementType("inputs", "result")
-        ok, msg = c.check(
+        ok, _msg = c.check(
             {
                 "inputs": [FakeTile("f32"), FakeTile("f32")],
                 "result": FakeTile("f32"),
@@ -1193,7 +1193,7 @@ class TestConstraints:
                 self.shape = s
 
         c = SameShape("inputs", "result")
-        ok, msg = c.check(
+        ok, _msg = c.check(
             {
                 "inputs": [FakeTile((4, 8)), FakeTile((4, 8))],
                 "result": FakeTile((4, 8)),
@@ -1227,7 +1227,7 @@ class TestConstraints:
                 self.ndim = rank
 
         c = RanksMatch("a", "b")
-        ok, msg = c.check(
+        ok, _msg = c.check(
             {
                 "a": [FakeTile(2), FakeTile(2)],
                 "b": FakeTile(2),
