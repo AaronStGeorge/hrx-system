@@ -300,7 +300,7 @@ def _common_method_imports() -> list[str]:
 def _header() -> list[str]:
     lines = line_comment_header(
         "#",
-        generator="loom.gen.builders_pyi",
+        generator="loom.gen.python.builders_pyi",
         regenerate="python3 loom/py/loom/gen/run.py builders_pyi --in-place",
     )
     lines.append("# ruff: noqa")

@@ -105,7 +105,7 @@ def _generate_package_init(package_init: PackageInit) -> str:
     lines.extend(
         line_comment_header(
             "#",
-            generator="loom.gen.package_inits",
+            generator="loom.gen.python.package_inits",
             regenerate="python3 loom/py/loom/gen/run.py package_inits --in-place",
         )
     )

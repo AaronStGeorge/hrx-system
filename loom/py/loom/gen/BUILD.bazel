@@ -21,48 +21,6 @@ iree_py_library(
     srcs = ["bootstrap.py"],
 )
 
-iree_py_test(
-    name = "gen_test",
-    srcs = [
-        "builders_pyi.py",
-        "builders_pyi_test.py",
-        "//loom/py/loom/tools:pytest_style_runner.py",
-    ],
-    args = [
-        "loom.gen.builders_pyi_test",
-    ],
-    main = "pytest_style_runner.py",
-    deps = [
-        ":bootstrap",
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen/support:generated_file",
-    ],
-)
-
-iree_py_library(
-    name = "package_inits",
-    srcs = ["package_inits.py"],
-    deps = [
-        ":bootstrap",
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen/support:generated_file",
-    ],
-)
-
-iree_py_test(
-    name = "package_inits_test",
-    srcs = [
-        "package_inits_test.py",
-        "//loom/py/loom/tools:pytest_style_runner.py",
-    ],
-    args = ["loom.gen.package_inits_test"],
-    main = "pytest_style_runner.py",
-    deps = [
-        ":package_inits",
-        "//loom/py/loom/gen/support:generated_file",
-    ],
-)
-
 iree_py_binary(
     name = "c_errors",
     srcs = ["c_errors.py"],

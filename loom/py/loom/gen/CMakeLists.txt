@@ -23,48 +23,6 @@ iree_py_library(
     "bootstrap.py"
 )
 
-iree_py_test(
-  NAME
-    gen_test
-  SRCS
-    "../tools/pytest_style_runner.py"
-  ARGS
-    "loom.gen.builders_pyi_test"
-  DEPS
-    loom::py::loom::gen::bootstrap
-    loom::py::loom::core
-    loom::py::loom::gen::support::generated_file
-  PACKAGE_DIRS
-    "${PROJECT_SOURCE_DIR}/loom/py"
-    "${PROJECT_BINARY_DIR}/loom/py"
-)
-
-iree_py_library(
-  NAME
-    package_inits
-  SRCS
-    "package_inits.py"
-  DEPS
-    loom::py::loom::gen::bootstrap
-    loom::py::loom::core
-    loom::py::loom::gen::support::generated_file
-)
-
-iree_py_test(
-  NAME
-    package_inits_test
-  SRCS
-    "../tools/pytest_style_runner.py"
-  ARGS
-    "loom.gen.package_inits_test"
-  DEPS
-    loom::py::loom::gen::package_inits
-    loom::py::loom::gen::support::generated_file
-  PACKAGE_DIRS
-    "${PROJECT_SOURCE_DIR}/loom/py"
-    "${PROJECT_BINARY_DIR}/loom/py"
-)
-
 iree_py_library(
   NAME
     c_errors

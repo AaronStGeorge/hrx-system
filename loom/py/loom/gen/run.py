@@ -27,11 +27,11 @@ from pathlib import Path
 import bootstrap  # type: ignore[import-not-found]
 
 GENERATORS = {
-    "builders_pyi": "loom.gen.builders_pyi",
+    "builders_pyi": "loom.gen.python.builders_pyi",
     "c_errors": "loom.gen.c_errors",
     "c_tables": "loom.gen.ops.c_tables",
     "low_descriptors": "loom.gen.target.low.low_descriptors",
-    "package_inits": "loom.gen.package_inits",
+    "package_inits": "loom.gen.python.package_inits",
     "textmate": "loom.gen.editor.textmate",
     "x86_packed_dot_contract": "loom.gen.x86_packed_dot_contract",
     "x86_target_profiles": "loom.gen.x86_target_profiles",

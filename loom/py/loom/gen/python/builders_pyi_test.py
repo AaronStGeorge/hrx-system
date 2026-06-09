@@ -8,7 +8,7 @@
 
 from loom.assembly import Ref
 from loom.dsl import ANY, Dialect, Op, OpCategory, Operand, Result
-from loom.gen.builders_pyi import generate_builder_stub_files
+from loom.gen.python.builders_pyi import generate_builder_stub_files
 
 
 def test_builders_pyi_uses_per_dialect_builders_dirs() -> None:
