@@ -436,15 +436,15 @@ static hipError_t iree_hip_ensure_initialized(void) {
   return hipSuccess;
 }
 
+// Frees and resets the per-device hipMalloc pool (defined with the pool).
+static void iree_hip_free_and_reset_contiguous_pool(
+    iree_hal_streaming_context_t* context);
+
 // Ensures context exists for current thread and returns it.
 // This implements HIP's implicit initialization behavior:
 // - Automatically calls hipInit() if needed
 // - Creates primary context for device 0 if no context exists
 // - Sets the context as current for the thread
-// Frees and resets the per-device hipMalloc pool (defined with the pool).
-static void iree_hip_free_and_reset_contiguous_pool(
-    iree_hal_streaming_context_t* context);
-
 static hipError_t iree_hip_ensure_context(
     iree_hal_streaming_context_t** out_context) {
   // First ensure initialized.
@@ -3165,13 +3165,14 @@ static hrx_device_pool_t* iree_hip_pool_containing_locked(uintptr_t addr) {
 // buffer_tables are per-context but the pool is shared per-device; a context
 // that cannot resolve pool pointers fails hipMemset/hipMemcpy with
 // hipErrorNotFound. Called from hipMalloc only — never on hot paths.
-static void iree_hip_pool_register_in_context_locked(
+// Returns OK when the buffer is already registered; propagates real failures
+// (e.g. out-of-memory growing the table) so the caller can surface them.
+static hrx_status_t iree_hip_pool_register_in_context_locked(
     hrx_device_pool_t* p, iree_hal_streaming_context_t* context) {
-  if (!p->buffer) return;
-  hrx_status_t s = hrx_buffer_table_insert(
+  if (!p->buffer) return hrx_ok_status();
+  return hrx_buffer_table_insert_if_new(
       &context->buffer_table, p->buffer->device_ptr, p->buffer->host_ptr,
       p->buffer->size, p->buffer->hrx_buf, p->buffer);
-  hrx_status_ignore(s);  // ALREADY_EXISTS (already registered) is fine.
 }
 
 // Frees and resets the pool for |context|'s device (e.g. on hipDeviceReset).
@@ -3384,17 +3385,33 @@ HIPAPI hipError_t hipMalloc(void** ptr, size_t size) {
     HIP_RETURN_ERROR(hipErrorInvalidDevice);
   }
 
-  // Align to 256 bytes for optimal GPU memory access.
+  // Align to 256 bytes for optimal GPU memory access. Guard the round-up so a
+  // size within 255 of the size_t max cannot wrap to a tiny aligned_size and
+  // under-allocate (aligned_size < size only happens on wrap).
   size_t aligned_size = (size + 255) & ~(size_t)255;
+  if (aligned_size < size) {
+    IREE_TRACE_ZONE_END(z0);
+    HIP_RETURN_ERROR(hipErrorOutOfMemory);
+  }
 
   pthread_mutex_lock(&g_pool_mutex);
 
   // Pool created by another context on this device? Make the sub-allocation
-  // resolvable in THIS context's buffer table before handing it out.
-  iree_hip_pool_register_in_context_locked(p, context);
+  // resolvable in THIS context's buffer table before handing it out. A real
+  // failure here (e.g. OOM growing the table) must not be silently ignored.
+  hrx_status_t reg_status =
+      iree_hip_pool_register_in_context_locked(p, context);
+  if (!hrx_status_is_ok(reg_status)) {
+    hrx_status_ignore(reg_status);
+    pthread_mutex_unlock(&g_pool_mutex);
+    IREE_TRACE_ZONE_END(z0);
+    HIP_RETURN_ERROR(hipErrorOutOfMemory);
+  }
 
-  // Bump-allocator capacity + tracking-table capacity checks.
-  if (p->offset + aligned_size > p->size) {
+  // Bump-allocator capacity + tracking-table capacity checks. Written to avoid
+  // overflow if p->offset + aligned_size approaches the size_t max (e.g.
+  // 32-bit): never form the sum directly.
+  if (aligned_size > p->size || p->offset > p->size - aligned_size) {
     pthread_mutex_unlock(&g_pool_mutex);
     IREE_TRACE_ZONE_END(z0);
     HIP_RETURN_ERROR(hipErrorOutOfMemory);
