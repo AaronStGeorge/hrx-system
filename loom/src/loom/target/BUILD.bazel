@@ -135,7 +135,7 @@ loom_cc_library(
     hdrs = ["low_descriptor_registry.h"],
     visibility = [
         "//loom/src/loom/codegen/low/lower:__pkg__",
-        "//loom/src/loom/codegen/low/transforms:__pkg__",
+        "//loom/src/loom/codegen/low/transforms/pipeline:__pkg__",
         "//loom/src/loom/target/all:__pkg__",
         "//loom/src/loom/target/arch:__subpackages__",
         "//loom/src/loom/target/configured:__pkg__",

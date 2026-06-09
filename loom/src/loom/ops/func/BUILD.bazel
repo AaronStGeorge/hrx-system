@@ -17,7 +17,7 @@ _FUNC_VISIBILITY = [
     "//loom/src/loom/analysis:__pkg__",
     "//loom/src/loom/codegen/low:__pkg__",
     "//loom/src/loom/codegen/low/testing:__pkg__",
-    "//loom/src/loom/codegen/low/transforms:__pkg__",
+    "//loom/src/loom/codegen/low/transforms:__subpackages__",
     "//loom/src/loom/codegen/low/lower:__pkg__",
     "//loom/src/loom/format/bytecode:__pkg__",
     "//loom/src/loom/format/text:__pkg__",

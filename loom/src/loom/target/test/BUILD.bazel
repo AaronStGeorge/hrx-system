@@ -16,6 +16,19 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_TEST_LOW_LOWER_VISIBILITY = [
+    "//loom/src/loom/codegen/low:__pkg__",
+    "//loom/src/loom/codegen/low/lower:__pkg__",
+    "//loom/src/loom/codegen/low/transforms/pipeline:__pkg__",
+    "//loom/src/loom/tools/loom-check:__pkg__",
+]
+
+_TEST_LOW_REGISTRY_VISIBILITY = [
+    "//loom/src/loom/codegen/low:__pkg__",
+    "//loom/src/loom/codegen/low/transforms/pipeline:__pkg__",
+    "//loom/src/loom/target:__pkg__",
+]
+
 #===------------------------------------------------------------------------===#
 # Backend-independent low test descriptors
 #===------------------------------------------------------------------------===#
@@ -52,6 +65,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
+    visibility = _TEST_LOW_REGISTRY_VISIBILITY,
     deps = [
         ":descriptors",
         "//loom/src/loom/codegen/low:descriptors",
@@ -66,6 +80,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
+    visibility = _TEST_LOW_LOWER_VISIBILITY,
     deps = [
         ":descriptors",
         "//loom/src/loom/codegen/low/lower",

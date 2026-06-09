@@ -22,7 +22,7 @@ _LOW_DESCRIPTOR_VISIBILITY = [
     "//loom/src/loom/codegen/low/lower:__pkg__",
     "//loom/src/loom/codegen/low/schedule:__pkg__",
     "//loom/src/loom/codegen/low/testing:__pkg__",
-    "//loom/src/loom/codegen/low/transforms:__pkg__",
+    "//loom/src/loom/codegen/low/transforms:__subpackages__",
     "//loom/src/loom/target:__pkg__",
     "//loom/src/loom/target/arch:__subpackages__",
     "//loom/src/loom/target/emit:__subpackages__",

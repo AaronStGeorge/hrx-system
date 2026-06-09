@@ -264,8 +264,8 @@ loom_cc_library(
     loom::codegen::low::transforms::allocation
     loom::codegen::low::transforms::dce
     loom::codegen::low::transforms::operand_forms
-    loom::codegen::low::transforms::source_to_low
-    loom::codegen::low::transforms::target_legalize
+    loom::codegen::low::transforms::pipeline::source_to_low
+    loom::codegen::low::transforms::pipeline::target_legalize
     loom::transforms::cfg::branch_fusion
     loom::transforms::cfg::branch_sink
     loom::transforms::cfg::cfg_simplify

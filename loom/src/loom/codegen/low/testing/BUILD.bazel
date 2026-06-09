@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -15,18 +14,6 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-loom_assert_no_dependencies(
-    name = "source_workload_pipeline_no_target_provider_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-        "//loom/src/loom/target/arch/wasm:low_registry",
-        "//loom/src/loom/target/arch/x86:low_registry",
-        "//loom/src/loom/target/arch/ireevm:low_registry",
-        "//loom/src/loom/target/test:low_registry",
-    ],
-    targets = [":source_workload_pipeline"],
 )
 
 loom_cc_library(
