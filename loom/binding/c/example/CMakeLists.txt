@@ -44,7 +44,7 @@ loom_cc_binary(
     "emit_spirv_offline.c"
   DEPS
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
+    loom::binding::c::target::spirv
 )
 endif()
 
@@ -56,8 +56,8 @@ loom_cc_binary(
     "emit_spirv_vulkaninfo.c"
   DEPS
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_vulkaninfo
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::vulkaninfo
 )
 endif()
 
@@ -70,8 +70,8 @@ loom_cc_binary(
   DEPS
     ${CMAKE_DL_LIBS}
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_vulkan
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::vulkan
 )
 endif()
 
@@ -88,9 +88,9 @@ loom_cc_binary(
     iree::hal
     iree::hal::drivers
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_iree_hal
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_iree_hal
+    loom::binding::c::target::iree_hal
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::iree_hal
 )
 endif()
 
@@ -103,8 +103,8 @@ loom_cc_test(
   DEPS
     ${CMAKE_DL_LIBS}
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_vulkan
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::vulkan
   LABELS
     "driver=vulkan"
     "iree-run-requirement=loom.resource.vulkan_device"
@@ -130,9 +130,9 @@ loom_cc_test(
     iree::hal
     iree::hal::drivers
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_iree_hal
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_iree_hal
+    loom::binding::c::target::iree_hal
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::iree_hal
   LABELS
     "driver=vulkan"
     "iree-run-requirement=loom.resource.vulkan_device"

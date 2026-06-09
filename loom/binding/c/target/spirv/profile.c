@@ -15,9 +15,9 @@
 #include "loom/target/arch/spirv/profile.h"
 #include "loom/target/arch/spirv/target_records.h"
 #include "loomc/iree.h"
+#include "profile_rows.h"
 #include "result.h"
 #include "target.h"
-#include "target/spirv/profile_rows.h"
 
 typedef struct loomc_spirv_feature_state_t {
   // Current observed state.

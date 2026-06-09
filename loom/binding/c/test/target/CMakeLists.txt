@@ -25,7 +25,7 @@ loom_cc_library(
     iree::hal::drivers
     iree::testing::gtest
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_iree_hal
+    loom::binding::c::target::iree_hal
     loom::binding::c::test::test_util
   TESTONLY
   INCLUDES
@@ -45,8 +45,8 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_iree_hal
-    loom::binding::c::loomc_target_spirv
+    loom::binding::c::target::iree_hal
+    loom::binding::c::target::spirv
     loom::binding::c::test::test_util
 )
 endif()
@@ -61,7 +61,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
+    loom::binding::c::target::spirv
     loom::binding::c::test::test_util
 )
 endif()

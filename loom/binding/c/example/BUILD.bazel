@@ -57,7 +57,7 @@ loom_cc_binary(
     target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
-        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c/target/spirv",
     ],
 )
 
@@ -67,8 +67,8 @@ loom_cc_binary(
     target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
-        "//loom/binding/c:loomc_target_spirv",
-        "//loom/binding/c:loomc_target_spirv_vulkaninfo",
+        "//loom/binding/c/target/spirv",
+        "//loom/binding/c/target/spirv/vulkaninfo",
     ],
 )
 
@@ -79,8 +79,8 @@ loom_cc_binary(
     deps = [
         "//build_tools:dl",
         "//loom/binding/c:loomc",
-        "//loom/binding/c:loomc_target_spirv",
-        "//loom/binding/c:loomc_target_spirv_vulkan",
+        "//loom/binding/c/target/spirv",
+        "//loom/binding/c/target/spirv/vulkan",
     ],
 )
 
@@ -90,9 +90,9 @@ loom_cc_binary(
     target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
-        "//loom/binding/c:loomc_target_iree_hal",
-        "//loom/binding/c:loomc_target_spirv",
-        "//loom/binding/c:loomc_target_spirv_iree_hal",
+        "//loom/binding/c/target/iree_hal",
+        "//loom/binding/c/target/spirv",
+        "//loom/binding/c/target/spirv/iree_hal",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",
@@ -112,8 +112,8 @@ loom_cc_test(
     deps = [
         "//build_tools:dl",
         "//loom/binding/c:loomc",
-        "//loom/binding/c:loomc_target_spirv",
-        "//loom/binding/c:loomc_target_spirv_vulkan",
+        "//loom/binding/c/target/spirv",
+        "//loom/binding/c/target/spirv/vulkan",
     ],
 )
 
@@ -126,9 +126,9 @@ loom_cc_test(
     target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
-        "//loom/binding/c:loomc_target_iree_hal",
-        "//loom/binding/c:loomc_target_spirv",
-        "//loom/binding/c:loomc_target_spirv_iree_hal",
+        "//loom/binding/c/target/iree_hal",
+        "//loom/binding/c/target/spirv",
+        "//loom/binding/c/target/spirv/iree_hal",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",

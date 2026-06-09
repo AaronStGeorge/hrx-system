@@ -20,7 +20,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_SPIRV_C_API_VISIBILITY = ["//loom/binding/c:__pkg__"]
+_SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
 _SPIRV_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
 

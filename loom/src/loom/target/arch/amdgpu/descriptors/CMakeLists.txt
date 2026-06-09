@@ -141,11 +141,11 @@ loom_cc_library(
   NAME
     shards_for_testing
   HDRS
-    ":cdna3_descriptors.h"
-    ":cdna4_descriptors.h"
-    ":rdna3_descriptors.h"
-    ":rdna4_descriptors.h"
-    ":rdna4_gfx125x_descriptors.h"
+    "cdna3_descriptors.h"
+    "cdna4_descriptors.h"
+    "rdna3_descriptors.h"
+    "rdna4_descriptors.h"
+    "rdna4_gfx125x_descriptors.h"
   DEPS
     ::cdna3
     ::cdna4

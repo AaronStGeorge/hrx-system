@@ -201,7 +201,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
+    loom::binding::c::target::spirv
 )
 endif()
 

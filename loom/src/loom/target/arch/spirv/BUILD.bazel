@@ -27,7 +27,7 @@ _SPIRV_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
 
 _SPIRV_CONTRACT_VISIBILITY = ["//loom/src/loom/target/arch/spirv/contracts:__pkg__"]
 
-_SPIRV_C_API_VISIBILITY = ["//loom/binding/c:__pkg__"]
+_SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
 _SPIRV_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/spirv:__pkg__"]
 

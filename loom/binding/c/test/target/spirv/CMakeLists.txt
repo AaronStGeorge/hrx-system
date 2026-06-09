@@ -19,7 +19,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
+    loom::binding::c::target::spirv
     loom::binding::c::test::test_util
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
@@ -38,8 +38,8 @@ loom_cc_test(
     iree::testing::gtest_main
     iree::testing::temp_file
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_vulkaninfo
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::vulkaninfo
     loom::binding::c::test::test_util
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
@@ -61,8 +61,8 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_vulkan
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::vulkan
     loom::binding::c::test::test_util
     ${_vulkan_test_platform_deps}
   LABELS
@@ -82,9 +82,9 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_iree_hal
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_iree_hal
+    loom::binding::c::target::iree_hal
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::iree_hal
     loom::binding::c::test::test_util
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
@@ -103,9 +103,9 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
-    loom::binding::c::loomc_target_iree_hal
-    loom::binding::c::loomc_target_spirv
-    loom::binding::c::loomc_target_spirv_iree_hal
+    loom::binding::c::target::iree_hal
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::iree_hal
     loom::binding::c::test::target::iree_hal_execution_test_util
   LABELS
     "driver=vulkan"

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "target/spirv/profile_rows.h"
+#include "profile_rows.h"
 
 #include "diagnostic.h"
 #include "loomc/iree.h"

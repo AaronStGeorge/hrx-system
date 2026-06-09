@@ -7,8 +7,6 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_cmake_extra_content",
-    "iree_select",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_config_compatible_with",
 )
@@ -24,18 +22,6 @@ iree_cmake_extra_content(
 set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(IREE_PACKAGE_ROOT_PREFIX "loom/binding/c")
 """,
-)
-
-loom_assert_no_dependencies(
-    name = "loomc_no_target_package_deps",
-    dependencies = [
-        ":loomc_target_iree_hal",
-        ":loomc_target_spirv",
-        ":loomc_target_spirv_iree_hal",
-        ":loomc_target_spirv_vulkan",
-        ":loomc_target_spirv_vulkaninfo",
-    ],
-    targets = [":loomc"],
 )
 
 LOOMC_PUBLIC_HDRS = [
@@ -82,21 +68,22 @@ LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS = [
     "include/loomc/target/iree_hal.h",
 ]
 
-LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
-    "//loom/config/target/arch:spirv",
-    "//loom/config/emit:spirv",
-])
+_TARGET_EXTENSION_VISIBILITY = [
+    "//loom/binding/c/target:__subpackages__",
+]
 
-LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
+_LOOMC_FULL_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:spirv_vulkan_hal",
 ])
 
-LOOMC_TARGET_SPIRV_VULKAN_DEPS = iree_select({
-    "//loom/config/execute:spirv_vulkan_hal": [
-        "//third_party:vulkan_headers",
-    ],
-    "//conditions:default": [],
-})
+exports_files(
+    LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS +
+    LOOMC_TARGET_SPIRV_PUBLIC_HDRS +
+    LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS +
+    LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS +
+    LOOMC_TARGET_SPIRV_VULKAN_PUBLIC_HDRS,
+    visibility = _TARGET_EXTENSION_VISIBILITY,
+)
 
 loom_cc_library(
     name = "loomc",
@@ -185,119 +172,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "loomc_target_spirv",
-    srcs = [
-        "src/target/spirv.c",
-        "src/target/spirv/profile.c",
-        "src/target/spirv/profile_rows.c",
-        "src/target/spirv/profile_rows.h",
-    ],
-    hdrs = LOOMC_TARGET_SPIRV_PUBLIC_HDRS,
-    includes = [
-        ".",
-        "include",
-        "src",
-    ],
-    linkstatic = True,
-    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
-    deps = [
-        ":loomc",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/target/arch/spirv:cooperative_properties",
-        "//loom/src/loom/target/arch/spirv:features",
-        "//loom/src/loom/target/arch/spirv:profile",
-        "//loom/src/loom/target/arch/spirv:provider",
-        "//loom/src/loom/target/arch/spirv:target_records",
-        "//loom/src/loom/target/emit/spirv:module_emitter",
-    ],
-    alwayslink = True,
-)
-
-loom_cc_library(
-    name = "loomc_target_spirv_vulkaninfo",
-    srcs = [
-        "src/target/spirv/vulkaninfo.c",
-    ],
-    hdrs = LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS,
-    includes = [
-        ".",
-        "include",
-        "src",
-    ],
-    linkstatic = True,
-    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
-    deps = [
-        ":loomc",
-        ":loomc_target_spirv",
-        "//runtime/src/iree/base/internal:json",
-    ],
-    alwayslink = True,
-)
-
-loom_cc_library(
-    name = "loomc_target_spirv_vulkan",
-    srcs = [
-        "src/target/spirv/vulkan.c",
-    ],
-    hdrs = LOOMC_TARGET_SPIRV_VULKAN_PUBLIC_HDRS,
-    includes = [
-        ".",
-        "include",
-        "src",
-    ],
-    linkstatic = True,
-    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
-    deps = [
-        ":loomc",
-        ":loomc_target_spirv",
-        "//runtime/src/iree/base/internal",
-    ] + LOOMC_TARGET_SPIRV_VULKAN_DEPS,
-    alwayslink = True,
-)
-
-loom_cc_library(
-    name = "loomc_target_iree_hal",
-    srcs = [
-        "src/target/iree_hal.c",
-    ],
-    hdrs = LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS,
-    includes = [
-        ".",
-        "include",
-        "src",
-    ],
-    linkstatic = True,
-    deps = [
-        ":loomc",
-        "//runtime/src/iree/hal",
-    ],
-    alwayslink = True,
-)
-
-loom_cc_library(
-    name = "loomc_target_spirv_iree_hal",
-    srcs = [
-        "src/target/spirv/iree_hal.c",
-    ],
-    hdrs = LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS,
-    includes = [
-        ".",
-        "include",
-        "src",
-    ],
-    linkstatic = True,
-    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
-    deps = [
-        ":loomc",
-        ":loomc_target_iree_hal",
-        ":loomc_target_spirv",
-        "//runtime/src/iree/hal",
-    ],
-    alwayslink = True,
-)
-
-loom_cc_library(
     name = "loomc_full",
     hdrs = (
         LOOMC_PUBLIC_HDRS +
@@ -311,13 +185,13 @@ loom_cc_library(
         ".",
         "include",
     ],
-    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
+    target_compatible_with = _LOOMC_FULL_COMPATIBLE_WITH,
     deps = [
         ":loomc",
-        ":loomc_target_iree_hal",
-        ":loomc_target_spirv",
-        ":loomc_target_spirv_iree_hal",
-        ":loomc_target_spirv_vulkan",
-        ":loomc_target_spirv_vulkaninfo",
+        "//loom/binding/c/target/iree_hal",
+        "//loom/binding/c/target/spirv",
+        "//loom/binding/c/target/spirv/iree_hal",
+        "//loom/binding/c/target/spirv/vulkan",
+        "//loom/binding/c/target/spirv/vulkaninfo",
     ],
 )

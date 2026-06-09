@@ -117,141 +117,6 @@ loom_cc_library(
   PUBLIC
 )
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-loom_cc_library(
-  NAME
-    loomc_target_spirv
-  HDRS
-    "include/loomc/target/spirv.h"
-    "include/loomc/target/spirv/base.h"
-    "include/loomc/target/spirv/emit.h"
-    "include/loomc/target/spirv/profile.h"
-  SRCS
-    "src/target/spirv.c"
-    "src/target/spirv/profile.c"
-    "src/target/spirv/profile_rows.c"
-    "src/target/spirv/profile_rows.h"
-  DEPS
-    ::loomc
-    loom::error::error_defs
-    loom::target::arch::spirv::cooperative_properties
-    loom::target::arch::spirv::features
-    loom::target::arch::spirv::profile
-    loom::target::arch::spirv::provider
-    loom::target::arch::spirv::target_records
-    loom::target::emit::spirv::module_emitter
-    loom::target::types
-  ALWAYSLINK
-  INCLUDES
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-loom_cc_library(
-  NAME
-    loomc_target_spirv_vulkaninfo
-  HDRS
-    "include/loomc/target/spirv/vulkaninfo.h"
-  SRCS
-    "src/target/spirv/vulkaninfo.c"
-  DEPS
-    ::loomc
-    ::loomc_target_spirv
-    iree::base::internal::json
-  ALWAYSLINK
-  INCLUDES
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
-set(_loomc_target_spirv_vulkan_platform_deps "")
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
-  list(APPEND _loomc_target_spirv_vulkan_platform_deps iree::third_party::vulkan_headers)
-endif()
-loom_cc_library(
-  NAME
-    loomc_target_spirv_vulkan
-  HDRS
-    "include/loomc/target/spirv/vulkan.h"
-  SRCS
-    "src/target/spirv/vulkan.c"
-  DEPS
-    ::loomc
-    ::loomc_target_spirv
-    iree::base::internal
-    ${_loomc_target_spirv_vulkan_platform_deps}
-  ALWAYSLINK
-  INCLUDES
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
-  PUBLIC
-)
-endif()
-
-loom_cc_library(
-  NAME
-    loomc_target_iree_hal
-  HDRS
-    "include/loomc/target/iree_hal.h"
-  SRCS
-    "src/target/iree_hal.c"
-  DEPS
-    ::loomc
-    iree::hal
-  ALWAYSLINK
-  INCLUDES
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
-  PUBLIC
-)
-
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
-loom_cc_library(
-  NAME
-    loomc_target_spirv_iree_hal
-  HDRS
-    "include/loomc/target/spirv/iree_hal.h"
-  SRCS
-    "src/target/spirv/iree_hal.c"
-  DEPS
-    ::loomc
-    ::loomc_target_iree_hal
-    ::loomc_target_spirv
-    iree::hal
-  ALWAYSLINK
-  INCLUDES
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/.>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
-  PUBLIC
-)
-endif()
-
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 loom_cc_library(
   NAME
@@ -285,11 +150,11 @@ loom_cc_library(
     "include/loomc/workspace.h"
   DEPS
     ::loomc
-    ::loomc_target_iree_hal
-    ::loomc_target_spirv
-    ::loomc_target_spirv_iree_hal
-    ::loomc_target_spirv_vulkan
-    ::loomc_target_spirv_vulkaninfo
+    loom::binding::c::target::iree_hal
+    loom::binding::c::target::spirv
+    loom::binding::c::target::spirv::iree_hal
+    loom::binding::c::target::spirv::vulkan
+    loom::binding::c::target::spirv::vulkaninfo
   INCLUDES
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/.>"
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/.>"

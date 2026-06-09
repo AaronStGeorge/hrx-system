@@ -1412,7 +1412,7 @@ class BuildFileFunctions(object):
         if self._should_skip_target(**kwargs):
             return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        hdrs_block = self._convert_string_list_block("HDRS", hdrs, sort=True)
+        hdrs_block = self._convert_srcs_block(hdrs, block_name="HDRS")
         textual_hdrs_block = self._convert_srcs_block(
             textual_hdrs, block_name="TEXTUAL_HDRS"
         )
@@ -1506,7 +1506,7 @@ class BuildFileFunctions(object):
                     resource_group = tag[len("resource_group:") :]
                     break
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        hdrs_block = self._convert_string_list_block("HDRS", hdrs, sort=True)
+        hdrs_block = self._convert_srcs_block(hdrs, block_name="HDRS")
         srcs_block = self._convert_srcs_block(srcs)
         copts_block, platform_copts_block = self._convert_platform_select_strings(
             name, "COPTS", copts, sort=False
