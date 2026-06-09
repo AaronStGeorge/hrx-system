@@ -1648,16 +1648,16 @@ static iree_status_t loom_builder_allocate_op_storage(
       (iree_host_size_t)operand_count * sizeof(loom_value_id_t);
   iree_host_size_t results_size =
       (iree_host_size_t)result_count * sizeof(loom_value_id_t);
-  iree_host_size_t tied_size =
-      (iree_host_size_t)tied_result_count * sizeof(loom_tied_result_t);
   iree_host_size_t operand_use_indices_size =
       (iree_host_size_t)operand_count * sizeof(loom_use_index_t);
+  iree_host_size_t tied_size =
+      (iree_host_size_t)tied_result_count * sizeof(loom_tied_result_t);
   iree_host_size_t operand_segment_counts_size =
       (iree_host_size_t)operand_segment_count * sizeof(uint16_t);
 
   iree_host_size_t before_attrs = sizeof(loom_op_t) + successors_size +
                                   regions_size + operands_size + results_size +
-                                  tied_size + operand_use_indices_size;
+                                  operand_use_indices_size + tied_size;
   iree_host_size_t aligned_before_attrs =
       (attribute_count > 0 || operand_segment_count > 0)
           ? iree_host_align(before_attrs, iree_alignof(loom_attribute_t))
@@ -1843,14 +1843,14 @@ iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,
   op->result_count = kept_count;
   op->tied_result_count = kept_tied_count;
 
-  if (kept_tied_count > 0) {
-    memmove(loom_op_tied_results(op), kept_tied_results,
-            (iree_host_size_t)kept_tied_count * sizeof(*kept_tied_results));
-  }
   if (op->operand_count > 0) {
     memmove(
         loom_op_operand_use_indices(op), old_operand_use_indices,
         (iree_host_size_t)op->operand_count * sizeof(*old_operand_use_indices));
+  }
+  if (kept_tied_count > 0) {
+    memmove(loom_op_tied_results(op), kept_tied_results,
+            (iree_host_size_t)kept_tied_count * sizeof(*kept_tied_results));
   }
   if (op->attribute_count > 0) {
     memmove(loom_op_attrs(op), old_attrs,

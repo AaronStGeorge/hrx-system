@@ -1393,8 +1393,8 @@ typedef struct loom_op_t {
   //   loom_region_t*     regions[region_count]
   //   loom_value_id_t    operands[operand_count]
   //   loom_value_id_t    results[result_count]
-  //   loom_tied_result_t tied_results[tied_result_count]
   //   loom_use_index_t   operand_use_indices[operand_count]
+  //   loom_tied_result_t tied_results[tied_result_count]
   //   <padding to alignof(loom_attribute_t)>
   //   loom_attribute_t   attributes[attribute_count]
   //   uint16_t           operand_segment_counts[operand_descriptor_count]
@@ -1414,8 +1414,8 @@ static_assert(sizeof(loom_op_t) == 64, "loom_op_t must be 64 bytes");
 //   loom_region_t*     regions[region_count]       (8 bytes each, aligned)
 //   loom_value_id_t    operands[operand_count]     (4 bytes each)
 //   loom_value_id_t    results[result_count]        (4 bytes each)
-//   loom_tied_result_t tied_results[tied_result_count]
 //   loom_use_index_t   operand_use_indices[operand_count]
+//   loom_tied_result_t tied_results[tied_result_count]
 //   <padding to alignof(loom_attribute_t)>
 //   loom_attribute_t   attributes[attribute_count]  (16 bytes each)
 //   uint16_t           operand_segment_counts[]     (segmented ops only)
@@ -1455,25 +1455,27 @@ static inline const loom_value_id_t* loom_op_const_results(
   return loom_op_const_operands(op) + op->operand_count;
 }
 
-// Returns a pointer to the tied result binding array (after results).
-static inline loom_tied_result_t* loom_op_tied_results(const loom_op_t* op) {
-  return (loom_tied_result_t*)(loom_op_results(op) + op->result_count);
-}
-
-// Returns a pointer to the per-operand use-list index array (after tied
-// results). Each entry gives the operand's current position in the referenced
-// value's use list, enabling O(1) use removal.
+// Returns a pointer to the per-operand use-list index array (after results).
+// Each entry gives the operand's current position in the referenced value's use
+// list, enabling O(1) use removal.
 static inline loom_use_index_t* loom_op_operand_use_indices(
     const loom_op_t* op) {
-  return (loom_use_index_t*)(loom_op_tied_results(op) + op->tied_result_count);
+  return (loom_use_index_t*)(loom_op_results(op) + op->result_count);
+}
+
+// Returns a pointer to the tied result binding array (after operand use
+// indices).
+static inline loom_tied_result_t* loom_op_tied_results(const loom_op_t* op) {
+  return (loom_tied_result_t*)(loom_op_operand_use_indices(op) +
+                               op->operand_count);
 }
 
 // Returns a pointer to the attribute array. Aligned to
 // alignof(loom_attribute_t) because the union contains int64_t/double.
 static inline loom_attribute_t* loom_op_attrs(const loom_op_t* op) {
-  uintptr_t after_use_indices =
-      (uintptr_t)(loom_op_operand_use_indices(op) + op->operand_count);
-  return (loom_attribute_t*)iree_host_align(after_use_indices,
+  uintptr_t after_tied_results =
+      (uintptr_t)(loom_op_tied_results(op) + op->tied_result_count);
+  return (loom_attribute_t*)iree_host_align(after_tied_results,
                                             iree_alignof(loom_attribute_t));
 }
 // Returns a const pointer to the attribute array.

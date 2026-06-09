@@ -684,14 +684,20 @@ TEST_F(BuilderTest, RegionAccessor) {
   EXPECT_EQ(loom_test_map_body(op), &sentinel_region);
 }
 
-TEST_F(BuilderTest, AttributeAlignment) {
-  // Allocate an op with tied results followed by attributes.
-  // Verify the attribute array is 8-byte aligned.
+TEST_F(BuilderTest, TrailingStorageAlignment) {
+  // Allocate an op with an odd tied-result count. This exercises the boundary
+  // between the 4-byte use-index array and 2-byte tied-result records.
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_builder_allocate_op(&builder_, LOOM_OP_TEST_CMP, 2, 1, 0,
                                           1, 1, LOOM_LOCATION_UNKNOWN, &op));
+  loom_use_index_t* operand_use_indices = loom_op_operand_use_indices(op);
+  EXPECT_EQ((uintptr_t)operand_use_indices % iree_alignof(loom_use_index_t), 0u)
+      << "Operand use-index array must be 4-byte aligned";
+  loom_tied_result_t* tied_results = loom_op_tied_results(op);
+  EXPECT_EQ((uintptr_t)tied_results % iree_alignof(loom_tied_result_t), 0u)
+      << "Tied-result array must be 2-byte aligned";
   loom_attribute_t* attrs = loom_op_attrs(op);
-  EXPECT_EQ((uintptr_t)attrs % 8, 0u)
+  EXPECT_EQ((uintptr_t)attrs % iree_alignof(loom_attribute_t), 0u)
       << "Attribute array must be 8-byte aligned";
 }
 
