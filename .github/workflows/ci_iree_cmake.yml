@@ -62,14 +62,8 @@ jobs:
         include:
           - name: Linux / CPU
             command: iree-cmake-cpu
-          - name: Linux / CPU / ASAN
-            command: iree-cmake-cpu-asan
-          - name: Linux / CPU / MSAN
-            command: iree-cmake-cpu-msan
-          - name: Linux / CPU / TSAN
-            command: iree-cmake-cpu-tsan
-          - name: Linux / CPU / UBSAN
-            command: iree-cmake-cpu-ubsan
+          - name: Linux / CPU / Sanitizer Smoke
+            command: iree-cmake-sanitizer-smoke
     env:
       HRX_ARTIFACT_SET: core
       HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake/downloads
@@ -118,8 +112,6 @@ jobs:
         include:
           - name: Linux / Vulkan
             command: iree-cmake-vulkan
-          - name: Linux / Vulkan / Sanitizers
-            command: iree-cmake-vulkan-sanitizers
     env:
       HRX_ARTIFACT_SET: core
       HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake-vulkan/downloads
@@ -171,8 +163,6 @@ jobs:
         include:
           - name: Linux / AMDGPU
             command: iree-cmake-amdgpu
-          - name: Linux / AMDGPU / Sanitizers
-            command: iree-cmake-amdgpu-sanitizers
     env:
       HRX_ARTIFACT_SET: core
       HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake-gpu/downloads

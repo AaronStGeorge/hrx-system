@@ -19,6 +19,19 @@ IREE_TARGET_DIRECTORIES = ("runtime", "loom")
 SANITIZER_TEST_CONFIGS = ("asan", "ubsan", "tsan")
 SANITIZER_BUILD_CONFIGS = ("msan",)
 
+CMAKE_SANITIZER_SMOKE_TEST_BUILD_TARGETS = (
+    "iree::base::status_test",
+    "loom::format::bytecode::varint_test",
+)
+CMAKE_SANITIZER_SMOKE_LIBRARY_BUILD_TARGETS = (
+    "iree::base",
+    "loom::format::bytecode::varint",
+)
+CMAKE_SANITIZER_SMOKE_CTEST_REGEXES = (
+    "^iree/base/status_test$",
+    "^loom/format/bytecode/varint_test$",
+)
+
 
 @dataclass(frozen=True)
 class TestXfail:

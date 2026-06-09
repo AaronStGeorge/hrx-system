@@ -72,6 +72,7 @@ CMAKE_COMMANDS = {
     "iree-cmake-vulkan-ubsan": ("vulkan", "ubsan"),
     "iree-cmake-vulkan-sanitizers": ("vulkan", "all"),
 }
+CMAKE_SANITIZER_SMOKE_COMMAND = "iree-cmake-sanitizer-smoke"
 if __package__:
     from . import ci_config
 else:
@@ -197,9 +198,12 @@ def cmake_configure_step(
     *,
     enabled_drivers: tuple[str, ...] = (),
     sanitizer: str | None = None,
+    build_tests: bool | None = None,
 ) -> CiStep:
     enabled_driver_set = validate_enabled_drivers(enabled_drivers)
-    tests_enabled = cmake_tests_enabled(sanitizer)
+    tests_enabled = (
+        cmake_tests_enabled(sanitizer) if build_tests is None else build_tests
+    )
     command = [
         "configure",
         "--fresh",
@@ -543,7 +547,57 @@ def cmake_sanitizer_steps(prefix: str, target_group: str) -> list[CiStep]:
     return steps
 
 
+def cmake_sanitizer_smoke_steps() -> list[CiStep]:
+    steps = []
+    test_regex = combine_ctest_regex(*ci_config.CMAKE_SANITIZER_SMOKE_CTEST_REGEXES)
+    for config in ci_config.SANITIZER_TEST_CONFIGS:
+        command_name = f"{CMAKE_SANITIZER_SMOKE_COMMAND}-{config}"
+        steps.extend(
+            [
+                cmake_configure_step(
+                    command_name,
+                    sanitizer=config,
+                    build_tests=True,
+                ),
+                cmake_build_step(
+                    command_name,
+                    f"Build IREE CMake sanitizer smoke with {config.upper()}",
+                    ci_config.CMAKE_SANITIZER_SMOKE_TEST_BUILD_TARGETS,
+                ),
+                cmake_test_step(
+                    command_name,
+                    f"Test IREE CMake sanitizer smoke with {config.upper()}",
+                    regex=test_regex,
+                    env=sanitizer_env(config),
+                    parallelism=2,
+                ),
+            ]
+        )
+    for config in ci_config.SANITIZER_BUILD_CONFIGS:
+        command_name = f"{CMAKE_SANITIZER_SMOKE_COMMAND}-{config}"
+        steps.extend(
+            [
+                cmake_configure_step(
+                    command_name,
+                    sanitizer=config,
+                    build_tests=False,
+                ),
+                cmake_build_step(
+                    command_name,
+                    f"Build IREE CMake sanitizer smoke with {config.upper()}",
+                    ci_config.CMAKE_SANITIZER_SMOKE_LIBRARY_BUILD_TARGETS,
+                ),
+            ]
+        )
+    return steps
+
+
 def steps_from_args(args: argparse.Namespace) -> list[CiStep]:
+    if args.command == CMAKE_SANITIZER_SMOKE_COMMAND:
+        if args.target:
+            raise ValueError("--target is only supported for Bazel CI commands")
+        return cmake_sanitizer_smoke_steps()
+
     if args.command in CMAKE_COMMANDS:
         if args.target:
             raise ValueError("--target is only supported for Bazel CI commands")
@@ -688,6 +742,7 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         choices=(
             *BAZEL_COMMANDS,
             *CMAKE_COMMANDS,
+            CMAKE_SANITIZER_SMOKE_COMMAND,
         ),
         help="CI command group to run.",
     )
