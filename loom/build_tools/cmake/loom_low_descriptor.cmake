@@ -41,6 +41,10 @@ function(loom_low_descriptor_data_archive)
       ${_RULE_URLS}
     URL_HASH
       "SHA256=${_RULE_SHA256}"
+    DOWNLOAD_NO_PROGRESS
+      TRUE
+    DOWNLOAD_EXTRACT_TIMESTAMP
+      FALSE
     SOURCE_DIR
       "${_RULE_SOURCE_DIR}"
   )
@@ -61,6 +65,9 @@ function(loom_target_table_cc_library)
 
   if(NOT _RULE_NAME)
     message(FATAL_ERROR "loom_target_table_cc_library requires NAME")
+  endif()
+  if(_RULE_TESTONLY AND NOT IREE_BUILD_TESTS)
+    return()
   endif()
   if(NOT _RULE_SOURCE)
     set(_RULE_SOURCE "${_RULE_NAME}.c")
@@ -188,11 +195,15 @@ function(loom_low_descriptor_cc_library)
     ${ARGN}
   )
 
-  loom_target_table_cc_library(${ARGN})
-
   if(NOT _RULE_NAME)
     message(FATAL_ERROR "loom_low_descriptor_cc_library requires NAME")
   endif()
+  if(_RULE_TESTONLY AND NOT IREE_BUILD_TESTS)
+    return()
+  endif()
+
+  loom_target_table_cc_library(${ARGN})
+
   if(NOT _RULE_HEADER)
     set(_RULE_HEADER "${_RULE_NAME}.h")
   endif()
