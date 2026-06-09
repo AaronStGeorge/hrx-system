@@ -6,8 +6,8 @@
 
 // AMDGPU descriptor-set-local register-class helpers.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_REGISTER_CLASS_H_
-#define LOOM_TARGET_ARCH_AMDGPU_REGISTER_CLASS_H_
+#ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_REGISTER_CLASS_H_
+#define LOOM_TARGET_EMIT_NATIVE_AMDGPU_REGISTER_CLASS_H_
 
 #include <stdint.h>
 
@@ -50,4 +50,4 @@ static inline bool loom_amdgpu_register_class_is_m0(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_REGISTER_CLASS_H_
+#endif  // LOOM_TARGET_EMIT_NATIVE_AMDGPU_REGISTER_CLASS_H_

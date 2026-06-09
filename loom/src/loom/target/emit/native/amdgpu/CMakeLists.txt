@@ -12,12 +12,25 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
+    register_class
+  HDRS
+    "register_class.h"
+  DEPS
+    loom::codegen::low::descriptors
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_library(
+  NAME
     assembly
   HDRS
     "assembly.h"
   SRCS
     "assembly.c"
   DEPS
+    ::register_class
     ::storage_layout
     iree::base
     iree::base::internal::arena
@@ -31,7 +44,6 @@ loom_cc_library(
     loom::target::arch::amdgpu::encoding
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::refs::target_refs
-    loom::target::arch::amdgpu::register_class
     loom::target::arch::amdgpu::target_info
     loom::target::emit::native::assembly
   PUBLIC
@@ -237,6 +249,7 @@ loom_cc_library(
   SRCS
     "encoding.c"
   DEPS
+    ::register_class
     ::storage_layout
     iree::base
     iree::base::internal::arena
@@ -250,7 +263,6 @@ loom_cc_library(
     loom::target::arch::amdgpu::encoding
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::refs::target_refs
-    loom::target::arch::amdgpu::register_class
     loom::target::arch::amdgpu::target_info
     loom::target::emit::native::fragment
   PUBLIC
@@ -295,11 +307,11 @@ loom_cc_library(
   SRCS
     "preflight.c"
   DEPS
+    ::register_class
     iree::base
     loom::codegen::low::allocation
     loom::codegen::low::schedule
     loom::target::arch::amdgpu::refs::target_refs
-    loom::target::arch::amdgpu::register_class
     loom::target::emit::native::fragment
   PUBLIC
 )

@@ -174,18 +174,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    register_class
-  HDRS
-    "register_class.h"
-  DEPS
-    loom::codegen::low::descriptors
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     math_policy
   HDRS
     "math_policy.h"

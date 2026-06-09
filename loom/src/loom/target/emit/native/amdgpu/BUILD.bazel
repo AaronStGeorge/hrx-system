@@ -31,10 +31,17 @@ _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 #===------------------------------------------------------------------------===#
 
 loom_cc_library(
+    name = "register_class",
+    hdrs = ["register_class.h"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_library(
     name = "assembly",
     srcs = ["assembly.c"],
     hdrs = ["assembly.h"],
     deps = [
+        ":register_class",
         ":storage_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:descriptors",
@@ -43,7 +50,6 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target/arch/amdgpu:register_class",
         "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/arch/amdgpu/encoding",
         "//loom/src/loom/target/arch/amdgpu/planning:packet_plan",
@@ -171,6 +177,7 @@ loom_cc_library(
     srcs = ["encoding.c"],
     hdrs = ["encoding.h"],
     deps = [
+        ":register_class",
         ":storage_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:descriptors",
@@ -179,7 +186,6 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target/arch/amdgpu:register_class",
         "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/arch/amdgpu/encoding",
         "//loom/src/loom/target/arch/amdgpu/planning:packet_plan",
@@ -219,9 +225,9 @@ loom_cc_library(
     srcs = ["preflight.c"],
     hdrs = ["preflight.h"],
     deps = [
+        ":register_class",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/target/arch/amdgpu:register_class",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/target/emit/native:fragment",
         "//runtime/src/iree/base",

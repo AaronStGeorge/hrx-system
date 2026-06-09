@@ -205,13 +205,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "register_class",
-    hdrs = ["register_class.h"],
-    visibility = _AMDGPU_NATIVE_VISIBILITY,
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_cc_library(
     name = "math_policy",
     srcs = ["math_policy.c"],
     hdrs = ["math_policy.h"],
