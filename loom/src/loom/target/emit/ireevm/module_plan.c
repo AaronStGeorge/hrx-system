@@ -12,7 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/ireevm/descriptors.h"
+#include "loom/target/arch/ireevm/descriptors/descriptors.h"
 #include "loom/target/function_contract.h"
 #include "loom/target/registers.h"
 

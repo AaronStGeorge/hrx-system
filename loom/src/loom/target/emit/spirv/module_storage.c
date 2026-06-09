@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/descriptors/descriptors.h"
 #include "loom/target/arch/spirv/isa.h"
 #include "loom/target/arch/spirv/registers.h"
 #include "loom/target/registers.h"

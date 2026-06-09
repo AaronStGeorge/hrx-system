@@ -12,7 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/spirv/abi.h"
-#include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/descriptors/descriptors.h"
 #include "loom/target/arch/spirv/registers.h"
 #include "loom/target/arch/spirv/scalar_types.h"
 #include "loom/target/emit/spirv/binary_format.h"

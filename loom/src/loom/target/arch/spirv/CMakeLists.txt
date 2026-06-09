@@ -34,19 +34,6 @@ loom_generated_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_SPIRV)
-loom_low_descriptor_cc_library(
-  NAME
-    descriptors
-  GENERATOR
-    loom::py::loom::gen::spirv_low_descriptor_shard
-  ARGS
-    "--descriptor-set=spirv_logical_core"
-  DEPS
-    loom::codegen::low::descriptors
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     isa
@@ -160,10 +147,10 @@ loom_cc_library(
   SRCS
     "packet_rows.c"
   DEPS
-    ::descriptors
     ::isa
     ::value_types
     iree::base
+    loom::target::arch::spirv::descriptors
   PUBLIC
 )
 endif()
@@ -177,11 +164,11 @@ loom_cc_library(
   SRCS
     "registers.c"
   DEPS
-    ::descriptors_ids
     ::scalar_types
     ::value_types
     iree::base
     loom::codegen::low::descriptors
+    loom::target::arch::spirv::descriptors::descriptors_ids
   PUBLIC
 )
 endif()
@@ -210,11 +197,11 @@ loom_cc_library(
   SRCS
     "cooperative_properties.c"
   DEPS
-    ::descriptors_ids
     ::features
     ::scalar_types
     iree::base
     loom::analysis::policy
+    loom::target::arch::spirv::descriptors::descriptors_ids
     loom::util::numeric_format
   PUBLIC
 )
@@ -253,24 +240,6 @@ endif()
 if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
-    low_registry
-  HDRS
-    "low_registry.h"
-  SRCS
-    "low_registry.c"
-  DEPS
-    ::descriptors
-    iree::base
-    loom::codegen::low::descriptors
-    loom::target::low_descriptor_registry
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-loom_cc_library(
-  NAME
     module_contract
   HDRS
     "module_contract.h"
@@ -294,7 +263,6 @@ loom_cc_library(
     "low_verify.c"
   DEPS
     ::abi
-    ::descriptors
     ::error_defs
     ::module_contract
     ::packet_rows
@@ -306,6 +274,7 @@ loom_cc_library(
     loom::codegen::low::verify
     loom::ir
     loom::ops::low
+    loom::target::arch::spirv::descriptors
     loom::target::registers
     loom::target::types
   PUBLIC
@@ -321,10 +290,10 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
-    ::low_registry
     ::low_verify
     ::math_policy
     iree::base
+    loom::target::arch::spirv::descriptors::low_registry
     loom::target::arch::spirv::lower
     loom::target::arch::spirv::ops
     loom::target::provider
@@ -340,10 +309,10 @@ loom_cc_test(
     "cooperative_properties_test.cc"
   DEPS
     ::cooperative_properties
-    ::descriptors_ids
     ::features
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::target::arch::spirv::descriptors::descriptors_ids
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
 )
@@ -387,11 +356,11 @@ loom_cc_test(
   SRCS
     "registers_test.cc"
   DEPS
-    ::descriptors
     ::registers
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
+    loom::target::arch::spirv::descriptors
     loom::target::arch::spirv::records::target_records
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"

@@ -10,7 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/descriptors/descriptors.h"
 #include "loom/target/arch/spirv/records/target_records.h"
 
 namespace {

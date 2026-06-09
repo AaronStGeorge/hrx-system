@@ -36,7 +36,7 @@ loom_target_table_cc_library(
     loom::ops::index
     loom::ops::scalar
     loom::ops::vector
-    loom::target::arch::wasm::descriptors_ids
+    loom::target::arch::wasm::descriptors::descriptors_ids
 )
 endif()
 

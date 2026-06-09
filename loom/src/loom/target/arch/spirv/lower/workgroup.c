@@ -14,7 +14,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/spirv/abi.h"
-#include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/descriptors/descriptors.h"
 #include "loom/target/arch/spirv/registers.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/math.h"

@@ -39,7 +39,7 @@ loom_target_table_cc_library(
     loom::ops::scf
     loom::ops::vector
     loom::ops::view
-    loom::target::arch::spirv::descriptors_ids
+    loom::target::arch::spirv::descriptors::descriptors_ids
 )
 endif()
 

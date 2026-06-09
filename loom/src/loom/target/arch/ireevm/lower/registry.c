@@ -8,7 +8,7 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/target/arch/ireevm/contracts/core.h"
 #include "loom/target/arch/ireevm/contracts/core_lower_rules.h"
-#include "loom/target/arch/ireevm/descriptors.h"
+#include "loom/target/arch/ireevm/descriptors/descriptors.h"
 #include "loom/target/arch/ireevm/lower/lower.h"
 #include "loom/target/arch/ireevm/ops/ops.h"
 

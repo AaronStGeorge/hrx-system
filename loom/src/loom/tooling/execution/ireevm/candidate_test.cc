@@ -21,7 +21,7 @@
 #include "iree/vm/native_module.h"
 #include "iree/vm/shims.h"
 #include "loom/ops/op_registry.h"
-#include "loom/target/arch/ireevm/descriptors.h"
+#include "loom/target/arch/ireevm/descriptors/descriptors.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/target/arch/ireevm/provider.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"

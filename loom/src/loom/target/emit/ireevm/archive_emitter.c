@@ -14,7 +14,7 @@
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
-#include "loom/target/arch/ireevm/descriptors.h"
+#include "loom/target/arch/ireevm/descriptors/descriptors.h"
 #include "loom/target/arch/ireevm/provider.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"

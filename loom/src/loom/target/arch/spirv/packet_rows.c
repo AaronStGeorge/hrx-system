@@ -6,7 +6,7 @@
 
 #include "loom/target/arch/spirv/packet_rows.h"
 
-#include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/descriptors/descriptors.h"
 #include "loom/target/arch/spirv/isa.h"
 #include "loom/target/arch/spirv/packet_rows_tables.inl"
 

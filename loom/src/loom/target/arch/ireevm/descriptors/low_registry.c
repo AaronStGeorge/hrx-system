@@ -4,15 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/wasm/low_registry.h"
+#include "loom/target/arch/ireevm/descriptors/low_registry.h"
 
-#include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/arch/ireevm/descriptors/descriptors.h"
 
 static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
-    loom_wasm_core_simd128_descriptor_set,
+    loom_ireevm_core_descriptor_set,
 };
 
-void loom_wasm_low_descriptor_registry_initialize(
+void loom_ireevm_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry) {
   loom_target_low_descriptor_registry_initialize_from_tables(
       out_registry, kLowDescriptorSetProviders,

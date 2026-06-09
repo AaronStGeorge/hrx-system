@@ -6,8 +6,8 @@
 
 // Wasm target-low registry package.
 
-#ifndef LOOM_TARGET_ARCH_WASM_LOW_REGISTRY_H_
-#define LOOM_TARGET_ARCH_WASM_LOW_REGISTRY_H_
+#ifndef LOOM_TARGET_ARCH_WASM_DESCRIPTORS_LOW_REGISTRY_H_
+#define LOOM_TARGET_ARCH_WASM_DESCRIPTORS_LOW_REGISTRY_H_
 
 #include "loom/target/arch/wasm/records/target_records.h"
 #include "loom/target/low_descriptor_registry.h"
@@ -23,4 +23,4 @@ void loom_wasm_low_descriptor_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_WASM_LOW_REGISTRY_H_
+#endif  // LOOM_TARGET_ARCH_WASM_DESCRIPTORS_LOW_REGISTRY_H_

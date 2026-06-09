@@ -10,7 +10,6 @@ load(
     "loom_cc_test",
     "loom_generated_cc_library",
     "loom_generated_textual_header",
-    "loom_low_descriptor_cc_library",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
@@ -24,8 +23,6 @@ package(
 )
 
 _SPIRV_CHECK_PACKAGE_VISIBILITY = ["//loom/src/loom/target/arch/spirv/check:__pkg__"]
-
-_SPIRV_CONTRACT_VISIBILITY = ["//loom/src/loom/target/arch/spirv/contracts:__pkg__"]
 
 _SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
@@ -48,12 +45,6 @@ _SPIRV_TOOLING_VISIBILITY = [
     "//loom/src/loom/tooling/target/spirv/execution:__pkg__",
 ]
 
-_SPIRV_DESCRIPTOR_VISIBILITY = (
-    _SPIRV_CONTRACT_VISIBILITY +
-    _SPIRV_EMIT_VISIBILITY +
-    _SPIRV_LOWER_VISIBILITY
-)
-
 #===------------------------------------------------------------------------===#
 # SPIR-V low descriptors
 #===------------------------------------------------------------------------===#
@@ -73,14 +64,6 @@ loom_generated_cc_library(
     generator = "//loom/py/loom/gen:c_errors",
     source = "error_catalog.c",
     deps = ["//loom/src/loom/error:error_defs"],
-)
-
-loom_low_descriptor_cc_library(
-    name = "descriptors",
-    args = ["--descriptor-set=spirv_logical_core"],
-    generator = "//loom/py/loom/gen:spirv_low_descriptor_shard",
-    visibility = _SPIRV_DESCRIPTOR_VISIBILITY,
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
 loom_cc_library(
@@ -158,9 +141,9 @@ loom_cc_library(
     textual_hdrs = [":packet_rows_tables.inl"],
     visibility = _SPIRV_EMIT_VISIBILITY,
     deps = [
-        ":descriptors",
         ":isa",
         ":value_types",
+        "//loom/src/loom/target/arch/spirv/descriptors",
         "//runtime/src/iree/base",
     ],
 )
@@ -171,10 +154,10 @@ loom_cc_library(
     hdrs = ["registers.h"],
     visibility = _SPIRV_EMIT_VISIBILITY + _SPIRV_LOWER_VISIBILITY,
     deps = [
-        ":descriptors_ids",
         ":scalar_types",
         ":value_types",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target/arch/spirv/descriptors:descriptors_ids",
         "//runtime/src/iree/base",
     ],
 )
@@ -193,10 +176,10 @@ loom_cc_library(
     textual_hdrs = [":cooperative_properties_tables.inl"],
     visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_LOWER_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
-        ":descriptors_ids",
         ":features",
         ":scalar_types",
         "//loom/src/loom/analysis:policy",
+        "//loom/src/loom/target/arch/spirv/descriptors:descriptors_ids",
         "//loom/src/loom/util:numeric_format",
         "//runtime/src/iree/base",
     ],
@@ -224,20 +207,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "low_registry",
-    srcs = ["low_registry.c"],
-    hdrs = ["low_registry.h"],
-    visibility = _SPIRV_TOOLING_VISIBILITY,
-    deps = [
-        ":descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "module_contract",
     srcs = ["module_contract.c"],
     hdrs = ["module_contract.h"],
@@ -256,7 +225,6 @@ loom_cc_library(
     visibility = _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":abi",
-        ":descriptors",
         ":error_defs",
         ":module_contract",
         ":packet_rows",
@@ -268,6 +236,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/spirv/descriptors",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -279,10 +248,10 @@ loom_cc_library(
     hdrs = ["provider.h"],
     visibility = _SPIRV_PROVIDER_VISIBILITY,
     deps = [
-        ":low_registry",
         ":low_verify",
         ":math_policy",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/spirv/descriptors:low_registry",
         "//loom/src/loom/target/arch/spirv/lower",
         "//loom/src/loom/target/arch/spirv/ops",
         "//runtime/src/iree/base",
@@ -294,8 +263,8 @@ loom_cc_test(
     srcs = ["cooperative_properties_test.cc"],
     deps = [
         ":cooperative_properties",
-        ":descriptors_ids",
         ":features",
+        "//loom/src/loom/target/arch/spirv/descriptors:descriptors_ids",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -326,9 +295,9 @@ loom_cc_test(
     name = "registers_test",
     srcs = ["registers_test.cc"],
     deps = [
-        ":descriptors",
         ":registers",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target/arch/spirv/descriptors",
         "//loom/src/loom/target/arch/spirv/records:target_records",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

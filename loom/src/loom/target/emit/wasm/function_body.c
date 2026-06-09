@@ -14,7 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/arch/wasm/descriptors/descriptors.h"
 #include "loom/target/emit/wasm/binary_writer.h"
 #include "loom/target/emit/wasm/types.h"
 

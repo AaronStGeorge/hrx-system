@@ -21,7 +21,7 @@ loom_cc_library(
     iree::base
     loom::codegen::low::lower
     loom::ir
-    loom::target::arch::wasm::descriptors_ids
+    loom::target::arch::wasm::descriptors::descriptors_ids
     loom::target::emit::wasm::contracts
     loom::target::emit::wasm::error_defs
   PUBLIC

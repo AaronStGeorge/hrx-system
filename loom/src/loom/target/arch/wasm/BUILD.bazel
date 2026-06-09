@@ -8,7 +8,6 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_low_descriptor_cc_library",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
@@ -23,12 +22,6 @@ package(
 
 _WASM_CHECK_PACKAGE_VISIBILITY = ["//loom/src/loom/target/arch/wasm/check:__pkg__"]
 
-_WASM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/emit/wasm/contracts:__pkg__"]
-
-_WASM_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/wasm:__pkg__"]
-
-_WASM_LOWER_VISIBILITY = ["//loom/src/loom/target/emit/wasm/lower:__pkg__"]
-
 _WASM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
@@ -37,15 +30,6 @@ _WASM_PROVIDER_VISIBILITY = [
 #===------------------------------------------------------------------------===#
 # Wasm low descriptors
 #===------------------------------------------------------------------------===#
-
-loom_low_descriptor_cc_library(
-    name = "descriptors",
-    args = ["--descriptor-set=wasm_core_simd128"],
-    generator = "//loom/py/loom/gen:wasm_low_descriptor_shard",
-    ids_visibility = _WASM_CONTRACT_VISIBILITY + _WASM_EMIT_VISIBILITY + _WASM_LOWER_VISIBILITY,
-    visibility = _WASM_CONTRACT_VISIBILITY + _WASM_EMIT_VISIBILITY,
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
 
 loom_cc_library(
     name = "math_policy",
@@ -59,31 +43,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "low_registry",
-    srcs = ["low_registry.c"],
-    hdrs = ["low_registry.h"],
-    deps = [
-        ":descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/target/arch/wasm/records:target_records",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "low_verify",
     srcs = ["low_verify.c"],
     hdrs = ["low_verify.h"],
     deps = [
-        ":descriptors_ids",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/wasm/descriptors:descriptors_ids",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -95,10 +65,10 @@ loom_cc_library(
     hdrs = ["provider.h"],
     visibility = _WASM_PROVIDER_VISIBILITY,
     deps = [
-        ":low_registry",
         ":low_verify",
         ":math_policy",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/wasm/descriptors:low_registry",
         "//loom/src/loom/target/arch/wasm/ops",
         "//loom/src/loom/target/emit/wasm/lower",
         "//runtime/src/iree/base",
@@ -109,9 +79,9 @@ loom_cc_test(
     name = "registers_test",
     srcs = ["registers_test.cc"],
     deps = [
-        ":descriptors",
         "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/wasm/descriptors",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

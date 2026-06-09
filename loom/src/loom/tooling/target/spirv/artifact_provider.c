@@ -6,7 +6,7 @@
 
 #include "loom/tooling/target/spirv/artifact_provider.h"
 
-#include "loom/target/arch/spirv/low_registry.h"
+#include "loom/target/arch/spirv/descriptors/low_registry.h"
 #include "loom/target/arch/spirv/low_verify.h"
 #include "loom/target/emit/spirv/module_builder.h"
 #include "loom/target/emit/spirv/module_emitter.h"

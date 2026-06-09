@@ -10,38 +10,6 @@
 iree_add_all_subdirs()
 
 if(LOOM_TARGET_ARCH_IREE_VM)
-loom_low_descriptor_cc_library(
-  NAME
-    descriptors
-  GENERATOR
-    loom::py::loom::gen::ireevm_low_descriptor_shard
-  ARGS
-    "--descriptor-set=ireevm_core"
-  DEPS
-    loom::codegen::low::descriptors
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-loom_cc_library(
-  NAME
-    low_registry
-  HDRS
-    "low_registry.h"
-  SRCS
-    "low_registry.c"
-  DEPS
-    ::descriptors
-    iree::base
-    loom::codegen::low::descriptors
-    loom::target::arch::ireevm::records::target_records
-    loom::target::low_descriptor_registry
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
 loom_cc_library(
   NAME
     math_policy
@@ -101,11 +69,11 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
-    ::low_registry
     ::math_policy
     ::pass_registry
     iree::base
     loom::pass::builder
+    loom::target::arch::ireevm::descriptors::low_registry
     loom::target::arch::ireevm::lower
     loom::target::arch::ireevm::ops
     loom::target::provider

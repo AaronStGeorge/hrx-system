@@ -8,7 +8,7 @@
 
 #include <inttypes.h>
 
-#include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/arch/wasm/descriptors/descriptors.h"
 
 iree_status_t loom_wasm_value_type_from_descriptor_register_class(
     uint16_t descriptor_reg_class_id, loom_wasm_value_type_t* out_value_type) {

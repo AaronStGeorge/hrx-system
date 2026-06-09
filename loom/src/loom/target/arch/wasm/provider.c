@@ -6,7 +6,7 @@
 
 #include "loom/target/arch/wasm/provider.h"
 
-#include "loom/target/arch/wasm/low_registry.h"
+#include "loom/target/arch/wasm/descriptors/low_registry.h"
 #include "loom/target/arch/wasm/low_verify.h"
 #include "loom/target/arch/wasm/math_policy.h"
 #include "loom/target/arch/wasm/ops/registry.h"

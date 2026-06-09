@@ -12,7 +12,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/arch/wasm/descriptors/descriptors.h"
 #include "loom/target/registers.h"
 
 typedef struct loom_wasm_low_verify_state_t {

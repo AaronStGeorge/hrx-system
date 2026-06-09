@@ -131,7 +131,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ops::op_registry
-    loom::target::arch::ireevm::low_registry
+    loom::target::arch::ireevm::descriptors::low_registry
     loom::target::arch::ireevm::ops
     loom::tooling::execution::session
   LABELS

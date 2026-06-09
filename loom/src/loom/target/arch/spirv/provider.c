@@ -6,7 +6,7 @@
 
 #include "loom/target/arch/spirv/provider.h"
 
-#include "loom/target/arch/spirv/low_registry.h"
+#include "loom/target/arch/spirv/descriptors/low_registry.h"
 #include "loom/target/arch/spirv/low_verify.h"
 #include "loom/target/arch/spirv/lower/lower.h"
 #include "loom/target/arch/spirv/math_policy.h"

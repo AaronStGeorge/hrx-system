@@ -6,7 +6,7 @@
 
 #include "loom/target/arch/spirv/registers.h"
 
-#include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/descriptors/descriptors.h"
 
 uint16_t loom_spirv_ptr_workgroup_reg_class_id(
     loom_spirv_scalar_type_t scalar_type) {

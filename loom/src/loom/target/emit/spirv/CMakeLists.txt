@@ -127,7 +127,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::target::arch::spirv::abi
-    loom::target::arch::spirv::descriptors_ids
+    loom::target::arch::spirv::descriptors::descriptors_ids
     loom::target::arch::spirv::registers
     loom::target::arch::spirv::scalar_types
     loom::target::arch::spirv::value_types
@@ -187,7 +187,7 @@ loom_cc_library(
     loom::error::emitter
     loom::ir
     loom::ops::low
-    loom::target::arch::spirv::descriptors_ids
+    loom::target::arch::spirv::descriptors::descriptors_ids
     loom::target::arch::spirv::features
     loom::target::arch::spirv::module_contract
     loom::target::arch::spirv::packet_rows

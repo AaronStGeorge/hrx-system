@@ -17,6 +17,7 @@ package(
 
 _WASM_TARGET_RECORDS_VISIBILITY = [
     "//loom/src/loom/target/arch/wasm:__pkg__",
+    "//loom/src/loom/target/arch/wasm/descriptors:__pkg__",
     "//loom/src/loom/target/arch/wasm/ops:__pkg__",
 ]
 

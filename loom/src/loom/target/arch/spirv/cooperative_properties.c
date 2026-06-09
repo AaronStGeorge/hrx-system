@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-#include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/descriptors/descriptors.h"
 
 #define MATRIX_LAYOUT_ANY                               \
   (LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT | \

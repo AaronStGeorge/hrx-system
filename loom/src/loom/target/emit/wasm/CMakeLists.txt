@@ -57,7 +57,7 @@ loom_cc_library(
     "types.c"
   DEPS
     iree::base
-    loom::target::arch::wasm::descriptors_ids
+    loom::target::arch::wasm::descriptors::descriptors_ids
   PUBLIC
 )
 endif()

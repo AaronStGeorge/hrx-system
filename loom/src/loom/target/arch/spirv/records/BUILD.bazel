@@ -18,6 +18,7 @@ package(
 _SPIRV_TARGET_RECORDS_VISIBILITY = [
     "//loom/binding/c/target/spirv:__pkg__",
     "//loom/src/loom/target/arch/spirv:__pkg__",
+    "//loom/src/loom/target/arch/spirv/descriptors:__pkg__",
     "//loom/src/loom/target/arch/spirv/ops:__pkg__",
     "//loom/src/loom/target/emit/spirv:__pkg__",
     "//loom/src/loom/tooling/target/spirv:__pkg__",

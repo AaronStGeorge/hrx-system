@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef LOOM_TARGET_ARCH_SPIRV_LOW_REGISTRY_H_
-#define LOOM_TARGET_ARCH_SPIRV_LOW_REGISTRY_H_
+#ifndef LOOM_TARGET_ARCH_SPIRV_DESCRIPTORS_LOW_REGISTRY_H_
+#define LOOM_TARGET_ARCH_SPIRV_DESCRIPTORS_LOW_REGISTRY_H_
 
 #include "loom/target/low_descriptor_registry.h"
 
@@ -21,4 +21,4 @@ void loom_spirv_low_descriptor_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_SPIRV_LOW_REGISTRY_H_
+#endif  // LOOM_TARGET_ARCH_SPIRV_DESCRIPTORS_LOW_REGISTRY_H_

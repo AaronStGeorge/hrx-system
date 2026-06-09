@@ -10,19 +10,6 @@
 iree_add_all_subdirs()
 
 if(LOOM_TARGET_ARCH_WASM)
-loom_low_descriptor_cc_library(
-  NAME
-    descriptors
-  GENERATOR
-    loom::py::loom::gen::wasm_low_descriptor_shard
-  ARGS
-    "--descriptor-set=wasm_core_simd128"
-  DEPS
-    loom::codegen::low::descriptors
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     math_policy
@@ -42,32 +29,12 @@ endif()
 if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
-    low_registry
-  HDRS
-    "low_registry.h"
-  SRCS
-    "low_registry.c"
-  DEPS
-    ::descriptors
-    iree::base
-    loom::codegen::low::descriptors
-    loom::target::arch::wasm::records::target_records
-    loom::target::low_descriptor_registry
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM)
-loom_cc_library(
-  NAME
     low_verify
   HDRS
     "low_verify.h"
   SRCS
     "low_verify.c"
   DEPS
-    ::descriptors_ids
     iree::base
     iree::base::internal::arena
     loom::codegen::low::diagnostics
@@ -75,6 +42,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::ir
     loom::ops::low
+    loom::target::arch::wasm::descriptors::descriptors_ids
     loom::target::registers
   PUBLIC
 )
@@ -89,10 +57,10 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
-    ::low_registry
     ::low_verify
     ::math_policy
     iree::base
+    loom::target::arch::wasm::descriptors::low_registry
     loom::target::arch::wasm::ops
     loom::target::emit::wasm::lower
     loom::target::provider
@@ -107,10 +75,10 @@ loom_cc_test(
   SRCS
     "registers_test.cc"
   DEPS
-    ::descriptors
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::target_binding
+    loom::target::arch::wasm::descriptors
     loom::target::registers
   LABELS
     "iree-build-requirement=loom.target.arch.wasm"

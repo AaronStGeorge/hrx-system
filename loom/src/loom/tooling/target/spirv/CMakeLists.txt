@@ -20,7 +20,7 @@ loom_cc_library(
   DEPS
     ::vulkan_profile
     iree::base
-    loom::target::arch::spirv::low_registry
+    loom::target::arch::spirv::descriptors::low_registry
     loom::target::arch::spirv::low_verify
     loom::target::compile_report
     loom::target::emit::spirv::module_builder
@@ -94,7 +94,7 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::op_registry
-    loom::target::arch::spirv::low_registry
+    loom::target::arch::spirv::descriptors::low_registry
     loom::target::arch::spirv::ops
     loom::target::types
     loom::testing::module_ptr

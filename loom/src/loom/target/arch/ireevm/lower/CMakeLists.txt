@@ -25,7 +25,7 @@ loom_cc_library(
     loom::ops::low
     loom::ops::scalar
     loom::target::arch::ireevm::contracts
-    loom::target::arch::ireevm::descriptors_ids
+    loom::target::arch::ireevm::descriptors::descriptors_ids
     loom::target::arch::ireevm::ops
   PUBLIC
 )

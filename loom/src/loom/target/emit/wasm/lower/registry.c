@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ir/module.h"
-#include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/arch/wasm/descriptors/descriptors.h"
 #include "loom/target/emit/wasm/contracts/core_simd128.h"
 #include "loom/target/emit/wasm/contracts/core_simd128_lower_rules.h"
 #include "loom/target/emit/wasm/error_catalog.h"

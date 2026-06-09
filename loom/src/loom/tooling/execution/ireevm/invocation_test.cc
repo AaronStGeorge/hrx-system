@@ -11,7 +11,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ops/op_registry.h"
-#include "loom/target/arch/ireevm/low_registry.h"
+#include "loom/target/arch/ireevm/descriptors/low_registry.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/tooling/execution/ireevm/candidate.h"
 #include "loom/tooling/execution/session.h"
