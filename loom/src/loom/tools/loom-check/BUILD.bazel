@@ -1,7 +1,6 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
-    "loom_assert_no_dependencies",
     "loom_cc_binary",
     "loom_cc_library",
     "loom_cc_test",
@@ -11,25 +10,6 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "core_no_test_dependencies",
-    dependencies = [
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/target:low_descriptor_registry_core_test",
-    ],
-    targets = [
-        ":execute",
-        ":file",
-        ":main",
-        ":output",
-        ":provider",
-    ],
 )
 
 _EMIT_AMDGPU_CHECK_COPTS = iree_select({

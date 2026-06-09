@@ -88,7 +88,7 @@ endfunction()
 function(loom_generated_cc_library)
   cmake_parse_arguments(
     _RULE
-    ""
+    "TESTONLY"
     "NAME;GENERATOR;SOURCE"
     "SRCS;GENERATED_SRC_FLAGS;GENERATED_SRCS;HDRS;GENERATED_HDR_FLAGS;GENERATED_HDRS;ARGS;INPUTS;EXTRA_OUTPUT_FLAGS;EXTRA_OUTPUTS;DEPS"
     ${ARGN}
@@ -202,6 +202,11 @@ function(loom_generated_cc_library)
     DEPENDS
       ${_OUTPUTS}
   )
+  if(_RULE_TESTONLY)
+    set(_TESTONLY_ARG TESTONLY)
+  else()
+    set(_TESTONLY_ARG)
+  endif()
 
   loom_cc_library(
     NAME
@@ -214,6 +219,7 @@ function(loom_generated_cc_library)
       ${_GENERATED_SRCS}
     DEPS
       ${_RULE_DEPS}
+    ${_TESTONLY_ARG}
     PUBLIC
   )
 endfunction()

@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_test",
     "loom_generated_cc_library",
 )
@@ -18,27 +17,12 @@ package(
 )
 
 #===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "production_interfaces_no_test_dialect_dep",
-    dependencies = ["//loom/src/loom/ops/test"],
-    targets = [
-        "//loom/src/loom/format/bytecode:reader",
-        "//loom/src/loom/format/bytecode:writer",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/format/text:printer",
-        "//loom/src/loom/ops:op_registry",
-    ],
-)
-
-#===------------------------------------------------------------------------===#
 # Synthetic test dialect
 #===------------------------------------------------------------------------===#
 
 loom_generated_cc_library(
     name = "test",
+    testonly = True,
     srcs = [
         "canonicalize.c",
         "facts.c",

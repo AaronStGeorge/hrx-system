@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_low_descriptor_cc_library",
 )
@@ -18,24 +17,12 @@ package(
 )
 
 #===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "core_target_registry_no_test_target_dep",
-    dependencies = [":low_registry"],
-    targets = [
-        "//loom/src/loom/target/all:low_registry",
-        "//loom/src/loom/target:low_descriptor_registry",
-    ],
-)
-
-#===------------------------------------------------------------------------===#
 # Backend-independent low test descriptors
 #===------------------------------------------------------------------------===#
 
 loom_low_descriptor_cc_library(
     name = "descriptors",
+    testonly = True,
     args = ["--descriptor-set=test_low_core"],
     generator = "//loom/py/loom/gen:test_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
@@ -43,6 +30,7 @@ loom_low_descriptor_cc_library(
 
 loom_low_descriptor_cc_library(
     name = "alt_descriptors",
+    testonly = True,
     args = ["--descriptor-set=test_low_alt"],
     generator = "//loom/py/loom/gen:test_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
@@ -50,6 +38,7 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
     name = "target_record_table",
+    testonly = True,
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
     deps = [
@@ -60,6 +49,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "low_registry",
+    testonly = True,
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
     deps = [
@@ -73,6 +63,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "lower",
+    testonly = True,
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [

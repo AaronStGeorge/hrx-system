@@ -53,7 +53,7 @@ endfunction()
 function(loom_target_table_cc_library)
   cmake_parse_arguments(
     _RULE
-    "EXCLUDE_FROM_ALL;HEADER_ONLY"
+    "EXCLUDE_FROM_ALL;HEADER_ONLY;TESTONLY"
     "NAME;GENERATOR;SOURCE;HEADER"
     "ARGS;INPUTS;DEPS;GENERATED_HDR_FLAGS;GENERATED_HDRS;IDS_DEPS"
     ${ARGN}
@@ -67,6 +67,11 @@ function(loom_target_table_cc_library)
   endif()
   if(NOT _RULE_HEADER)
     set(_RULE_HEADER "${_RULE_NAME}.h")
+  endif()
+  if(_RULE_TESTONLY)
+    set(_TESTONLY_ARG TESTONLY)
+  else()
+    set(_TESTONLY_ARG)
   endif()
 
   set(_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_SOURCE}")
@@ -112,6 +117,7 @@ function(loom_target_table_cc_library)
         "${_HEADER}"
       DEPS
         ${_RULE_DEPS}
+      ${_TESTONLY_ARG}
       PUBLIC
     )
     add_dependencies(
@@ -164,6 +170,7 @@ function(loom_target_table_cc_library)
       "${_SOURCE}"
     DEPS
       ${_RULE_DEPS}
+    ${_TESTONLY_ARG}
     PUBLIC
   )
 
@@ -175,7 +182,7 @@ endfunction()
 function(loom_low_descriptor_cc_library)
   cmake_parse_arguments(
     _RULE
-    "EXCLUDE_FROM_ALL;HEADER_ONLY"
+    "EXCLUDE_FROM_ALL;HEADER_ONLY;TESTONLY"
     "NAME;HEADER"
     "DEPS;IDS_DEPS"
     ${ARGN}
@@ -192,6 +199,11 @@ function(loom_low_descriptor_cc_library)
   if(NOT _RULE_IDS_DEPS)
     set(_RULE_IDS_DEPS ${_RULE_DEPS})
   endif()
+  if(_RULE_TESTONLY)
+    set(_TESTONLY_ARG TESTONLY)
+  else()
+    set(_TESTONLY_ARG)
+  endif()
 
   set(_HEADER "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_HEADER}")
   iree_package_name(_PACKAGE_NAME)
@@ -202,6 +214,7 @@ function(loom_low_descriptor_cc_library)
       "${_HEADER}"
     DEPS
       ${_RULE_IDS_DEPS}
+    ${_TESTONLY_ARG}
     PUBLIC
   )
   add_dependencies(

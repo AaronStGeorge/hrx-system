@@ -373,6 +373,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             "EXTRA_OUTPUTS", extra_outputs or None, sort=False
         )
         deps_block = self._convert_target_list_block("DEPS", deps)
+        testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
@@ -391,6 +392,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             f"{extra_output_flags_block}"
             f"{extra_outputs_block}"
             f"{deps_block}"
+            f"{testonly_block}"
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
@@ -482,6 +484,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             "EXCLUDE_FROM_ALL", exclude_from_cmake_all
         )
         header_only_block = self._convert_option_block("HEADER_ONLY", header_only)
+        testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._converter.body += (
             f"{cmake_rule_name}(\n"
@@ -497,6 +500,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             f"{ids_deps_block}"
             f"{exclude_from_all_block}"
             f"{header_only_block}"
+            f"{testonly_block}"
             f")\n\n"
         )
 
@@ -539,6 +543,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             deps=deps,
             ids_deps=ids_deps,
             exclude_from_cmake_all=exclude_from_cmake_all,
+            testonly=testonly,
             cmake_rule_name="loom_target_table_cc_library",
         )
         self._emit_platform_guard_end(target_compatible_with)
@@ -582,6 +587,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             deps=deps,
             ids_deps=ids_deps,
             exclude_from_cmake_all=exclude_from_cmake_all,
+            testonly=testonly,
             cmake_rule_name="loom_low_descriptor_cc_library",
         )
         self._emit_platform_guard_end(target_compatible_with)

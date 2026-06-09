@@ -18,6 +18,7 @@ loom_low_descriptor_cc_library(
     "--descriptor-set=test_low_core"
   DEPS
     loom::codegen::low::descriptors
+  TESTONLY
 )
 
 loom_low_descriptor_cc_library(
@@ -29,6 +30,7 @@ loom_low_descriptor_cc_library(
     "--descriptor-set=test_low_alt"
   DEPS
     loom::codegen::low::descriptors
+  TESTONLY
 )
 
 loom_cc_library(
@@ -41,6 +43,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::target::types
+  TESTONLY
   PUBLIC
 )
 
@@ -57,6 +60,7 @@ loom_cc_library(
     loom::codegen::low::descriptors
     loom::target::low_descriptor_registry
     loom::target::types
+  TESTONLY
   PUBLIC
 )
 
@@ -76,6 +80,7 @@ loom_cc_library(
     loom::target::registers
     loom::target::test::contracts::core
     loom::target::test::contracts::core_lower_rules
+  TESTONLY
   PUBLIC
 )
 

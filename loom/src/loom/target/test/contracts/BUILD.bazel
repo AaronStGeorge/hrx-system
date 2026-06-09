@@ -17,6 +17,7 @@ package(
 
 loom_target_table_cc_library(
     name = "core",
+    testonly = True,
     args = ["--contract-fragment=test_low_core"],
     generator = "//loom/py/loom/gen:test_low_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
@@ -24,6 +25,7 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
     name = "core_lower_rules",
+    testonly = True,
     args = ["--contract-fragment=test_low_core"],
     generator = "//loom/py/loom/gen:test_low_lower_rule_shard",
     deps = [

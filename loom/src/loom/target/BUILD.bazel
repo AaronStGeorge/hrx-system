@@ -380,6 +380,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "low_descriptor_registry_core_test",
+    testonly = True,
     srcs = ["low_descriptor_registry_core_test.c"],
     hdrs = ["low_descriptor_registry_core_test.h"],
     deps = [

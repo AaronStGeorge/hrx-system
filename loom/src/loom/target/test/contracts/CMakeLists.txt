@@ -18,6 +18,7 @@ loom_target_table_cc_library(
     "--contract-fragment=test_low_core"
   DEPS
     loom::target::contract
+  TESTONLY
 )
 
 loom_target_table_cc_library(
@@ -34,6 +35,7 @@ loom_target_table_cc_library(
     loom::ops::scalar
     loom::ops::vector
     loom::target::test::descriptors
+  TESTONLY
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
