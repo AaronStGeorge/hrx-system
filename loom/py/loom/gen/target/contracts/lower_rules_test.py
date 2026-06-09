@@ -10,7 +10,7 @@ from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
-from loom.gen.target_lower_rules import generate_lower_rule_set
+from loom.gen.target.contracts.lower_rules import generate_lower_rule_set
 from loom.target.contracts import (
     ContractFragment,
     DescriptorAccumulatorSeed,

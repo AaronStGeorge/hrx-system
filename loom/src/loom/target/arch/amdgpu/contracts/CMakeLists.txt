@@ -14,7 +14,7 @@ loom_target_table_cc_library(
   NAME
     arithmetic
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.arithmetic"
   DEPS
@@ -27,7 +27,7 @@ loom_target_table_cc_library(
   NAME
     arithmetic_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.arithmetic"
   DEPS
@@ -45,7 +45,7 @@ loom_target_table_cc_library(
   NAME
     async
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.async"
   DEPS
@@ -58,7 +58,7 @@ loom_target_table_cc_library(
   NAME
     async_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.async"
   DEPS
@@ -72,7 +72,7 @@ loom_target_table_cc_library(
   NAME
     buffer
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.buffer"
   DEPS
@@ -85,7 +85,7 @@ loom_target_table_cc_library(
   NAME
     buffer_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.buffer"
   DEPS
@@ -99,7 +99,7 @@ loom_target_table_cc_library(
   NAME
     compare
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.compare"
   DEPS
@@ -112,7 +112,7 @@ loom_target_table_cc_library(
   NAME
     compare_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.compare"
   DEPS
@@ -128,7 +128,7 @@ loom_target_table_cc_library(
   NAME
     dot
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.dot"
   DEPS
@@ -141,7 +141,7 @@ loom_target_table_cc_library(
   NAME
     dot_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.dot"
   DEPS
@@ -156,7 +156,7 @@ loom_target_table_cc_library(
   NAME
     integer
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.integer"
   DEPS
@@ -169,7 +169,7 @@ loom_target_table_cc_library(
   NAME
     integer_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.integer"
   DEPS
@@ -185,7 +185,7 @@ loom_target_table_cc_library(
   NAME
     matrix
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.matrix"
   DEPS
@@ -198,7 +198,7 @@ loom_target_table_cc_library(
   NAME
     reduce
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.reduce"
   DEPS
@@ -211,7 +211,7 @@ loom_target_table_cc_library(
   NAME
     reduce_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.reduce"
   DEPS
@@ -227,7 +227,7 @@ loom_target_table_cc_library(
   NAME
     view
   GENERATOR
-    loom::py::loom::gen::amdgpu_contract_fragment
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
   ARGS
     "--contract-fragment=amdgpu.view"
   DEPS
@@ -240,7 +240,7 @@ loom_target_table_cc_library(
   NAME
     view_lower_rules
   GENERATOR
-    loom::py::loom::gen::amdgpu_lower_rule_shard
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
   ARGS
     "--contract-fragment=amdgpu.view"
   DEPS

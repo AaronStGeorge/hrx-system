@@ -19,14 +19,14 @@ package(
 loom_target_table_cc_library(
     name = "core_simd128",
     args = ["--contract-fragment=wasm.core.simd128"],
-    generator = "//loom/py/loom/gen:wasm_contract_fragment",
+    generator = "//loom/py/loom/gen/target/contracts:wasm_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
 )
 
 loom_target_table_cc_library(
     name = "core_simd128_lower_rules",
     args = ["--contract-fragment=wasm.core.simd128"],
-    generator = "//loom/py/loom/gen:wasm_lower_rule_shard",
+    generator = "//loom/py/loom/gen/target/contracts:wasm_lower_rule_shard",
     deps = [
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",

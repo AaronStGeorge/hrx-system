@@ -119,7 +119,7 @@ def _generate_header(
     lines.extend(
         line_comment_header(
             "//",
-            generator="loom/py/loom/gen/target_contract_fragments.py",
+            generator="loom/py/loom/gen/target/contracts/contract_fragments.py",
         )
     )
     lines.extend(
@@ -161,7 +161,7 @@ def _generate_source(
     lines.extend(
         line_comment_header(
             "//",
-            generator="loom/py/loom/gen/target_contract_fragments.py",
+            generator="loom/py/loom/gen/target/contracts/contract_fragments.py",
         )
     )
     lines.extend(

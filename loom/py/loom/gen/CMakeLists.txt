@@ -67,47 +67,6 @@ iree_py_test(
 
 iree_py_library(
   NAME
-    target_contract_fragments
-  SRCS
-    "target_contract_fragments.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::support::c
-    loom::py::loom::gen::support::generated_file
-    loom::py::loom::target::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    target_lower_rules
-  SRCS
-    "target_lower_rules.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::support::generated_file
-    loom::py::loom::target::low_descriptors
-    loom::py::loom::target::contracts::contracts
-)
-
-iree_py_test(
-  NAME
-    target_lower_rules_test
-  SRCS
-    "../tools/pytest_style_runner.py"
-  ARGS
-    "loom.gen.target_lower_rules_test"
-  DEPS
-    loom::py::loom::gen::target_lower_rules
-    loom::py::loom::dialect::scalar::scalar
-    loom::py::loom::target::contracts::contracts
-    loom::py::loom::target::test::descriptors
-  PACKAGE_DIRS
-    "${PROJECT_SOURCE_DIR}/loom/py"
-    "${PROJECT_BINARY_DIR}/loom/py"
-)
-
-iree_py_library(
-  NAME
     c_errors
   MAIN
     "c_errors.py"
@@ -147,19 +106,6 @@ iree_py_library(
   DEPS
     loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::target_info
-)
-
-iree_py_library(
-  NAME
-    ireevm_lower_rule_shard
-  MAIN
-    "target_lower_rule_shard.py"
-  SRCS
-    "target_lower_rule_shard.py"
-  DEPS
-    loom::py::loom::gen::target_lower_rules
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::ireevm::contracts::contracts
 )
 
 iree_py_library(
@@ -254,58 +200,6 @@ iree_py_test(
 
 iree_py_library(
   NAME
-    spirv_contract_fragment
-  MAIN
-    "target_contract_fragment.py"
-  SRCS
-    "target_contract_fragment.py"
-  DEPS
-    loom::py::loom::gen::target_contract_fragments
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::spirv::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    spirv_lower_rule_shard
-  MAIN
-    "target_lower_rule_shard.py"
-  SRCS
-    "target_lower_rule_shard.py"
-  DEPS
-    loom::py::loom::gen::target_lower_rules
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::spirv::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    ireevm_contract_fragment
-  MAIN
-    "target_contract_fragment.py"
-  SRCS
-    "target_contract_fragment.py"
-  DEPS
-    loom::py::loom::gen::target_contract_fragments
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::ireevm::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    wasm_lower_rule_shard
-  MAIN
-    "target_lower_rule_shard.py"
-  SRCS
-    "target_lower_rule_shard.py"
-  DEPS
-    loom::py::loom::gen::target_lower_rules
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::emit::wasm::contracts
-)
-
-iree_py_library(
-  NAME
     x86_low_descriptor_shard
   MAIN
     "x86_descriptors.py"
@@ -358,71 +252,6 @@ iree_py_test(
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
-)
-
-iree_py_library(
-  NAME
-    wasm_contract_fragment
-  MAIN
-    "target_contract_fragment.py"
-  SRCS
-    "target_contract_fragment.py"
-  DEPS
-    loom::py::loom::gen::target_contract_fragments
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::emit::wasm::contracts
-)
-
-iree_py_library(
-  NAME
-    x86_lower_rule_shard
-  MAIN
-    "target_lower_rule_shard.py"
-  SRCS
-    "target_lower_rule_shard.py"
-  DEPS
-    loom::py::loom::gen::target_lower_rules
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::x86::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    x86_contract_fragment
-  MAIN
-    "target_contract_fragment.py"
-  SRCS
-    "target_contract_fragment.py"
-  DEPS
-    loom::py::loom::gen::target_contract_fragments
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::x86::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    test_low_contract_fragment
-  MAIN
-    "target_contract_fragment.py"
-  SRCS
-    "target_contract_fragment.py"
-  DEPS
-    loom::py::loom::gen::target_contract_fragments
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::test::contracts
-)
-
-iree_py_library(
-  NAME
-    test_low_lower_rule_shard
-  MAIN
-    "target_lower_rule_shard.py"
-  SRCS
-    "target_lower_rule_shard.py"
-  DEPS
-    loom::py::loom::gen::target_lower_rules
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::test::contracts
 )
 
 iree_py_library(
@@ -572,32 +401,6 @@ iree_py_library(
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::isa_xml
     loom::py::loom::target::arch::amdgpu::target_info
-)
-
-iree_py_library(
-  NAME
-    amdgpu_contract_fragment
-  MAIN
-    "target_contract_fragment.py"
-  SRCS
-    "target_contract_fragment.py"
-  DEPS
-    loom::py::loom::gen::target_contract_fragments
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::amdgpu::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    amdgpu_lower_rule_shard
-  MAIN
-    "target_lower_rule_shard.py"
-  SRCS
-    "target_lower_rule_shard.py"
-  DEPS
-    loom::py::loom::gen::target_lower_rules
-    loom::py::loom::target::contract_fragments
-    loom::py::loom::target::arch::amdgpu::contracts::contracts
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

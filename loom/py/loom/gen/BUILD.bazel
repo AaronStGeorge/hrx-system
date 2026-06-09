@@ -63,44 +63,6 @@ iree_py_test(
     ],
 )
 
-iree_py_library(
-    name = "target_contract_fragments",
-    srcs = ["target_contract_fragments.py"],
-    deps = [
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen/support:c",
-        "//loom/py/loom/gen/support:generated_file",
-        "//loom/py/loom/target/contracts",
-    ],
-)
-
-iree_py_library(
-    name = "target_lower_rules",
-    srcs = ["target_lower_rules.py"],
-    deps = [
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen/support:generated_file",
-        "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/contracts",
-    ],
-)
-
-iree_py_test(
-    name = "target_lower_rules_test",
-    srcs = [
-        "target_lower_rules_test.py",
-        "//loom/py/loom/tools:pytest_style_runner.py",
-    ],
-    args = ["loom.gen.target_lower_rules_test"],
-    main = "pytest_style_runner.py",
-    deps = [
-        ":target_lower_rules",
-        "//loom/py/loom/dialect/scalar",
-        "//loom/py/loom/target/contracts",
-        "//loom/py/loom/target/test:descriptors",
-    ],
-)
-
 iree_py_binary(
     name = "c_errors",
     srcs = ["c_errors.py"],
@@ -137,17 +99,6 @@ iree_py_binary(
     deps = [
         "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target/arch/amdgpu:target_info",
-    ],
-)
-
-iree_py_binary(
-    name = "ireevm_lower_rule_shard",
-    srcs = ["target_lower_rule_shard.py"],
-    main = "target_lower_rule_shard.py",
-    deps = [
-        ":target_lower_rules",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/ireevm/contracts",
     ],
 )
 
@@ -233,50 +184,6 @@ iree_py_test(
 )
 
 iree_py_binary(
-    name = "spirv_contract_fragment",
-    srcs = ["target_contract_fragment.py"],
-    main = "target_contract_fragment.py",
-    deps = [
-        ":target_contract_fragments",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/spirv/contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "spirv_lower_rule_shard",
-    srcs = ["target_lower_rule_shard.py"],
-    main = "target_lower_rule_shard.py",
-    deps = [
-        ":target_lower_rules",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/spirv/contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "ireevm_contract_fragment",
-    srcs = ["target_contract_fragment.py"],
-    main = "target_contract_fragment.py",
-    deps = [
-        ":target_contract_fragments",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/ireevm/contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "wasm_lower_rule_shard",
-    srcs = ["target_lower_rule_shard.py"],
-    main = "target_lower_rule_shard.py",
-    deps = [
-        ":target_lower_rules",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/emit/wasm:contracts",
-    ],
-)
-
-iree_py_binary(
     name = "x86_low_descriptor_shard",
     srcs = ["x86_descriptors.py"],
     main = "x86_descriptors.py",
@@ -322,61 +229,6 @@ iree_py_test(
     main = "pytest_style_runner.py",
     deps = [
         ":x86_low_descriptor_shard",
-    ],
-)
-
-iree_py_binary(
-    name = "wasm_contract_fragment",
-    srcs = ["target_contract_fragment.py"],
-    main = "target_contract_fragment.py",
-    deps = [
-        ":target_contract_fragments",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/emit/wasm:contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "x86_lower_rule_shard",
-    srcs = ["target_lower_rule_shard.py"],
-    main = "target_lower_rule_shard.py",
-    deps = [
-        ":target_lower_rules",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/x86/contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "x86_contract_fragment",
-    srcs = ["target_contract_fragment.py"],
-    main = "target_contract_fragment.py",
-    deps = [
-        ":target_contract_fragments",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/x86/contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "test_low_contract_fragment",
-    srcs = ["target_contract_fragment.py"],
-    main = "target_contract_fragment.py",
-    deps = [
-        ":target_contract_fragments",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/test:contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "test_low_lower_rule_shard",
-    srcs = ["target_lower_rule_shard.py"],
-    main = "target_lower_rule_shard.py",
-    deps = [
-        ":target_lower_rules",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/test:contracts",
     ],
 )
 
@@ -510,27 +362,5 @@ iree_py_binary(
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",
         "//loom/py/loom/target/arch/amdgpu:target_info",
-    ],
-)
-
-iree_py_binary(
-    name = "amdgpu_contract_fragment",
-    srcs = ["target_contract_fragment.py"],
-    main = "target_contract_fragment.py",
-    deps = [
-        ":target_contract_fragments",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/amdgpu/contracts",
-    ],
-)
-
-iree_py_binary(
-    name = "amdgpu_lower_rule_shard",
-    srcs = ["target_lower_rule_shard.py"],
-    main = "target_lower_rule_shard.py",
-    deps = [
-        ":target_lower_rules",
-        "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/arch/amdgpu/contracts",
     ],
 )

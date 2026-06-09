@@ -277,7 +277,7 @@ def _generate_header(*, header_guard: str, symbol_name: str) -> str:
     lines.extend(
         line_comment_header(
             "//",
-            generator="loom/py/loom/gen/target_lower_rules.py",
+            generator="loom/py/loom/gen/target/contracts/lower_rules.py",
         )
     )
     lines.extend(
@@ -317,7 +317,7 @@ def _generate_source(
     lines.extend(
         line_comment_header(
             "//",
-            generator="loom/py/loom/gen/target_lower_rules.py",
+            generator="loom/py/loom/gen/target/contracts/lower_rules.py",
         )
     )
     lines.extend(

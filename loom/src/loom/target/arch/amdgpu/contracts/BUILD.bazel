@@ -16,9 +16,9 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_CONTRACT_FRAGMENT_GENERATOR = "//loom/py/loom/gen:amdgpu_contract_fragment"
+_AMDGPU_CONTRACT_FRAGMENT_GENERATOR = "//loom/py/loom/gen/target/contracts:amdgpu_contract_fragment"
 
-_AMDGPU_LOWER_RULE_GENERATOR = "//loom/py/loom/gen:amdgpu_lower_rule_shard"
+_AMDGPU_LOWER_RULE_GENERATOR = "//loom/py/loom/gen/target/contracts:amdgpu_lower_rule_shard"
 
 loom_target_table_cc_library(
     name = "arithmetic",

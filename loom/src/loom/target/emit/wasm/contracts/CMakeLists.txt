@@ -14,7 +14,7 @@ loom_target_table_cc_library(
   NAME
     core_simd128
   GENERATOR
-    loom::py::loom::gen::wasm_contract_fragment
+    loom::py::loom::gen::target::contracts::wasm_contract_fragment
   ARGS
     "--contract-fragment=wasm.core.simd128"
   DEPS
@@ -27,7 +27,7 @@ loom_target_table_cc_library(
   NAME
     core_simd128_lower_rules
   GENERATOR
-    loom::py::loom::gen::wasm_lower_rule_shard
+    loom::py::loom::gen::target::contracts::wasm_lower_rule_shard
   ARGS
     "--contract-fragment=wasm.core.simd128"
   DEPS

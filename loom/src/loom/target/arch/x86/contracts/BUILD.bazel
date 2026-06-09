@@ -19,14 +19,14 @@ package(
 loom_target_table_cc_library(
     name = "scalar",
     args = ["--contract-fragment=x86.scalar"],
-    generator = "//loom/py/loom/gen:x86_contract_fragment",
+    generator = "//loom/py/loom/gen/target/contracts:x86_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
 )
 
 loom_target_table_cc_library(
     name = "scalar_lower_rules",
     args = ["--contract-fragment=x86.scalar"],
-    generator = "//loom/py/loom/gen:x86_lower_rule_shard",
+    generator = "//loom/py/loom/gen/target/contracts:x86_lower_rule_shard",
     deps = [
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",
@@ -39,14 +39,14 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "avx2",
     args = ["--contract-fragment=x86.avx2"],
-    generator = "//loom/py/loom/gen:x86_contract_fragment",
+    generator = "//loom/py/loom/gen/target/contracts:x86_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
 )
 
 loom_target_table_cc_library(
     name = "avx2_lower_rules",
     args = ["--contract-fragment=x86.avx2"],
-    generator = "//loom/py/loom/gen:x86_lower_rule_shard",
+    generator = "//loom/py/loom/gen/target/contracts:x86_lower_rule_shard",
     deps = [
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",
@@ -60,14 +60,14 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "avx512",
     args = ["--contract-fragment=x86.avx512"],
-    generator = "//loom/py/loom/gen:x86_contract_fragment",
+    generator = "//loom/py/loom/gen/target/contracts:x86_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
 )
 
 loom_target_table_cc_library(
     name = "avx512_lower_rules",
     args = ["--contract-fragment=x86.avx512"],
-    generator = "//loom/py/loom/gen:x86_lower_rule_shard",
+    generator = "//loom/py/loom/gen/target/contracts:x86_lower_rule_shard",
     deps = [
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",
@@ -81,14 +81,14 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "packed_dot",
     args = ["--contract-fragment=x86.packed_dot"],
-    generator = "//loom/py/loom/gen:x86_contract_fragment",
+    generator = "//loom/py/loom/gen/target/contracts:x86_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
 )
 
 loom_target_table_cc_library(
     name = "packed_dot_lower_rules",
     args = ["--contract-fragment=x86.packed_dot"],
-    generator = "//loom/py/loom/gen:x86_lower_rule_shard",
+    generator = "//loom/py/loom/gen/target/contracts:x86_lower_rule_shard",
     deps = [
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/vector",

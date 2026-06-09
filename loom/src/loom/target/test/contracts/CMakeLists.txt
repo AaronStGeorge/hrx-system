@@ -13,7 +13,7 @@ loom_target_table_cc_library(
   NAME
     core
   GENERATOR
-    loom::py::loom::gen::test_low_contract_fragment
+    loom::py::loom::gen::target::contracts::test_low_contract_fragment
   ARGS
     "--contract-fragment=test_low_core"
   DEPS
@@ -25,7 +25,7 @@ loom_target_table_cc_library(
   NAME
     core_lower_rules
   GENERATOR
-    loom::py::loom::gen::test_low_lower_rule_shard
+    loom::py::loom::gen::target::contracts::test_low_lower_rule_shard
   ARGS
     "--contract-fragment=test_low_core"
   DEPS

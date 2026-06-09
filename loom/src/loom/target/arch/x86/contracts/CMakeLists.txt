@@ -14,7 +14,7 @@ loom_target_table_cc_library(
   NAME
     scalar
   GENERATOR
-    loom::py::loom::gen::x86_contract_fragment
+    loom::py::loom::gen::target::contracts::x86_contract_fragment
   ARGS
     "--contract-fragment=x86.scalar"
   DEPS
@@ -27,7 +27,7 @@ loom_target_table_cc_library(
   NAME
     scalar_lower_rules
   GENERATOR
-    loom::py::loom::gen::x86_lower_rule_shard
+    loom::py::loom::gen::target::contracts::x86_lower_rule_shard
   ARGS
     "--contract-fragment=x86.scalar"
   DEPS
@@ -44,7 +44,7 @@ loom_target_table_cc_library(
   NAME
     avx2
   GENERATOR
-    loom::py::loom::gen::x86_contract_fragment
+    loom::py::loom::gen::target::contracts::x86_contract_fragment
   ARGS
     "--contract-fragment=x86.avx2"
   DEPS
@@ -57,7 +57,7 @@ loom_target_table_cc_library(
   NAME
     avx2_lower_rules
   GENERATOR
-    loom::py::loom::gen::x86_lower_rule_shard
+    loom::py::loom::gen::target::contracts::x86_lower_rule_shard
   ARGS
     "--contract-fragment=x86.avx2"
   DEPS
@@ -75,7 +75,7 @@ loom_target_table_cc_library(
   NAME
     avx512
   GENERATOR
-    loom::py::loom::gen::x86_contract_fragment
+    loom::py::loom::gen::target::contracts::x86_contract_fragment
   ARGS
     "--contract-fragment=x86.avx512"
   DEPS
@@ -88,7 +88,7 @@ loom_target_table_cc_library(
   NAME
     avx512_lower_rules
   GENERATOR
-    loom::py::loom::gen::x86_lower_rule_shard
+    loom::py::loom::gen::target::contracts::x86_lower_rule_shard
   ARGS
     "--contract-fragment=x86.avx512"
   DEPS
@@ -106,7 +106,7 @@ loom_target_table_cc_library(
   NAME
     packed_dot
   GENERATOR
-    loom::py::loom::gen::x86_contract_fragment
+    loom::py::loom::gen::target::contracts::x86_contract_fragment
   ARGS
     "--contract-fragment=x86.packed_dot"
   DEPS
@@ -119,7 +119,7 @@ loom_target_table_cc_library(
   NAME
     packed_dot_lower_rules
   GENERATOR
-    loom::py::loom::gen::x86_lower_rule_shard
+    loom::py::loom::gen::target::contracts::x86_lower_rule_shard
   ARGS
     "--contract-fragment=x86.packed_dot"
   DEPS
