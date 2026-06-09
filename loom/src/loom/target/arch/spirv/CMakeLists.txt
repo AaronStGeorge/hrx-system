@@ -391,8 +391,7 @@ loom_cc_library(
     loom::ops::kernel
     loom::ops::low
     loom::ops::vector
-    loom::target::arch::spirv::contracts::logical_core
-    loom::target::arch::spirv::contracts::logical_core_lower_rules
+    loom::target::arch::spirv::contracts
     loom::target::registers
     loom::util::fact_table
     loom::util::math

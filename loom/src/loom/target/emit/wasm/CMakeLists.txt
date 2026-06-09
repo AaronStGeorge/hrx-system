@@ -163,8 +163,7 @@ loom_cc_library(
     loom::codegen::low::lower
     loom::ir
     loom::target::arch::wasm::descriptors_ids
-    loom::target::emit::wasm::contracts::core_simd128
-    loom::target::emit::wasm::contracts::core_simd128_lower_rules
+    loom::target::emit::wasm::contracts
   PUBLIC
 )
 endif()

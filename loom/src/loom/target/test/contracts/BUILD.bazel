@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_target_table_cc_library",
 )
 
@@ -35,5 +36,18 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/test:descriptors",
+    ],
+)
+
+loom_cc_library(
+    name = "contracts",
+    testonly = True,
+    hdrs = [
+        "core.h",
+        "core_lower_rules.h",
+    ],
+    deps = [
+        ":core",
+        ":core_lower_rules",
     ],
 )

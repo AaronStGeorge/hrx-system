@@ -43,4 +43,18 @@ loom_target_table_cc_library(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_SPIRV)
+loom_cc_library(
+  NAME
+    contracts
+  HDRS
+    "logical_core.h"
+    "logical_core_lower_rules.h"
+  DEPS
+    ::logical_core
+    ::logical_core_lower_rules
+  PUBLIC
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

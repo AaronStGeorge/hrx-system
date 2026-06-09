@@ -78,8 +78,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::ir
     loom::target::registers
-    loom::target::test::contracts::core
-    loom::target::test::contracts::core_lower_rules
+    loom::target::test::contracts
   TESTONLY
   PUBLIC
 )

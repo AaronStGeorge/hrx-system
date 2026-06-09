@@ -128,4 +128,30 @@ loom_target_table_cc_library(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_X86)
+loom_cc_library(
+  NAME
+    contracts
+  HDRS
+    "avx2.h"
+    "avx2_lower_rules.h"
+    "avx512.h"
+    "avx512_lower_rules.h"
+    "packed_dot.h"
+    "packed_dot_lower_rules.h"
+    "scalar.h"
+    "scalar_lower_rules.h"
+  DEPS
+    ::avx2
+    ::avx2_lower_rules
+    ::avx512
+    ::avx512_lower_rules
+    ::packed_dot
+    ::packed_dot_lower_rules
+    ::scalar
+    ::scalar_lower_rules
+  PUBLIC
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

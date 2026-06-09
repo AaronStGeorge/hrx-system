@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_target_table_cc_library",
 )
 
@@ -91,5 +92,29 @@ loom_target_table_cc_library(
     deps = [
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/vector",
+    ],
+)
+
+loom_cc_library(
+    name = "contracts",
+    hdrs = [
+        "avx2.h",
+        "avx2_lower_rules.h",
+        "avx512.h",
+        "avx512_lower_rules.h",
+        "packed_dot.h",
+        "packed_dot_lower_rules.h",
+        "scalar.h",
+        "scalar_lower_rules.h",
+    ],
+    deps = [
+        ":avx2",
+        ":avx2_lower_rules",
+        ":avx512",
+        ":avx512_lower_rules",
+        ":packed_dot",
+        ":packed_dot_lower_rules",
+        ":scalar",
+        ":scalar_lower_rules",
     ],
 )

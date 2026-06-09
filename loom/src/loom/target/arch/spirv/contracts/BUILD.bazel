@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_target_table_cc_library",
 )
 
@@ -36,5 +37,17 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
         "//loom/src/loom/target/arch/spirv:descriptors_ids",
+    ],
+)
+
+loom_cc_library(
+    name = "contracts",
+    hdrs = [
+        "logical_core.h",
+        "logical_core_lower_rules.h",
+    ],
+    deps = [
+        ":logical_core",
+        ":logical_core_lower_rules",
     ],
 )

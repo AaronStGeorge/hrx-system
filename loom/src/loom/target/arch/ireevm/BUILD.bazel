@@ -131,8 +131,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/arch/ireevm/contracts:core",
-        "//loom/src/loom/target/arch/ireevm/contracts:core_lower_rules",
+        "//loom/src/loom/target/arch/ireevm/contracts",
         "//runtime/src/iree/base",
     ],
 )

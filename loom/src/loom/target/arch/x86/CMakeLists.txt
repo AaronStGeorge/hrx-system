@@ -341,14 +341,7 @@ loom_cc_library(
     loom::codegen::low::lower
     loom::error::error_defs
     loom::ir
-    loom::target::arch::x86::contracts::avx2
-    loom::target::arch::x86::contracts::avx2_lower_rules
-    loom::target::arch::x86::contracts::avx512
-    loom::target::arch::x86::contracts::avx512_lower_rules
-    loom::target::arch::x86::contracts::packed_dot
-    loom::target::arch::x86::contracts::packed_dot_lower_rules
-    loom::target::arch::x86::contracts::scalar
-    loom::target::arch::x86::contracts::scalar_lower_rules
+    loom::target::arch::x86::contracts
   PUBLIC
 )
 endif()

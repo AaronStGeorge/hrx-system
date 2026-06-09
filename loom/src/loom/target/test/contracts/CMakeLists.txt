@@ -38,4 +38,17 @@ loom_target_table_cc_library(
   TESTONLY
 )
 
+loom_cc_library(
+  NAME
+    contracts
+  HDRS
+    "core.h"
+    "core_lower_rules.h"
+  DEPS
+    ::core
+    ::core_lower_rules
+  TESTONLY
+  PUBLIC
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -89,8 +89,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::ops::scalar
-    loom::target::arch::ireevm::contracts::core
-    loom::target::arch::ireevm::contracts::core_lower_rules
+    loom::target::arch::ireevm::contracts
   PUBLIC
 )
 endif()

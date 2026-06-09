@@ -40,4 +40,18 @@ loom_target_table_cc_library(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
+loom_cc_library(
+  NAME
+    contracts
+  HDRS
+    "core_simd128.h"
+    "core_simd128_lower_rules.h"
+  DEPS
+    ::core_simd128
+    ::core_simd128_lower_rules
+  PUBLIC
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

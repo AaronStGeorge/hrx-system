@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_target_table_cc_library",
 )
 
@@ -33,5 +34,17 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/arch/wasm:descriptors_ids",
+    ],
+)
+
+loom_cc_library(
+    name = "contracts",
+    hdrs = [
+        "core_simd128.h",
+        "core_simd128_lower_rules.h",
+    ],
+    deps = [
+        ":core_simd128",
+        ":core_simd128_lower_rules",
     ],
 )
