@@ -6,8 +6,8 @@
 
 // AMDGPU target-record identity and AMDHSA target-id formatting.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_TARGET_ID_H_
-#define LOOM_TARGET_ARCH_AMDGPU_TARGET_ID_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_TARGET_ID_TARGET_ID_H_
+#define LOOM_TARGET_ARCH_AMDGPU_TARGET_ID_TARGET_ID_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -53,4 +53,4 @@ iree_status_t loom_amdgpu_amdhsa_target_id_format(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_TARGET_ID_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_TARGET_ID_TARGET_ID_H_

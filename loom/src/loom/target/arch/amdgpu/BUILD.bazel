@@ -42,6 +42,8 @@ _AMDGPU_PLANNING_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/planning:__pk
 
 _AMDGPU_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/records:__pkg__"]
 
+_AMDGPU_TARGET_ID_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/target_id:__pkg__"]
+
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
 _AMDGPU_PROVIDER_VISIBILITY = [
@@ -126,6 +128,7 @@ loom_target_table_cc_library(
         _AMDGPU_OPS_VISIBILITY +
         _AMDGPU_PLANNING_VISIBILITY +
         _AMDGPU_RECORDS_VISIBILITY +
+        _AMDGPU_TARGET_ID_VISIBILITY +
         _AMDGPU_TOOLING_VISIBILITY
     ),
     deps = [
@@ -154,26 +157,6 @@ loom_cc_test(
         "//loom/src/loom/target/arch/amdgpu/planning:occupancy_tables",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
-    name = "target_id",
-    srcs = ["target_id.c"],
-    hdrs = ["target_id.h"],
-    visibility = (
-        _AMDGPU_LOWER_VISIBILITY +
-        _AMDGPU_NATIVE_VISIBILITY +
-        _AMDGPU_PLANNING_VISIBILITY +
-        _AMDGPU_TOOLING_VISIBILITY
-    ),
-    deps = [
-        ":target_info",
-        "//loom/src/loom/codegen/low:target_binding",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target/arch/amdgpu/ops",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

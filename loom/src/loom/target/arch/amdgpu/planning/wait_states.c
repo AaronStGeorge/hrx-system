@@ -19,7 +19,7 @@
 #include "loom/target/arch/amdgpu/planning/descriptor_semantics.h"
 #include "loom/target/arch/amdgpu/planning/matrix_wait_states.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
-#include "loom/target/arch/amdgpu/target_id.h"
+#include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"

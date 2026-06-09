@@ -13,7 +13,7 @@
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/target/arch/amdgpu/planning/occupancy_tables.h"
-#include "loom/target/arch/amdgpu/target_id.h"
+#include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/launch.h"
 #include "loom/target/types.h"
 #include "loom/util/json.h"

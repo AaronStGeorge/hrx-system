@@ -12,7 +12,7 @@
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/target_id.h"
+#include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/emit/native/amdgpu/preflight.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/launch.h"

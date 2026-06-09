@@ -121,25 +121,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    target_id
-  HDRS
-    "target_id.h"
-  SRCS
-    "target_id.c"
-  DEPS
-    ::target_info
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::target_binding
-    loom::ir
-    loom::target::arch::amdgpu::ops
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     math_policy
   HDRS
     "math_policy.h"
