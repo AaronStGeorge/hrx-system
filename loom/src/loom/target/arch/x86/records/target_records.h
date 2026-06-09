@@ -6,8 +6,8 @@
 
 // x86 target-family records.
 
-#ifndef LOOM_TARGET_ARCH_X86_TARGET_RECORDS_H_
-#define LOOM_TARGET_ARCH_X86_TARGET_RECORDS_H_
+#ifndef LOOM_TARGET_ARCH_X86_RECORDS_TARGET_RECORDS_H_
+#define LOOM_TARGET_ARCH_X86_RECORDS_TARGET_RECORDS_H_
 
 #include "loom/target/types.h"
 
@@ -21,4 +21,4 @@ extern const loom_target_bundle_table_t loom_x86_target_bundles;
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_X86_TARGET_RECORDS_H_
+#endif  // LOOM_TARGET_ARCH_X86_RECORDS_TARGET_RECORDS_H_

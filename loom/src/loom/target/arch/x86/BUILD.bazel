@@ -9,7 +9,6 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
-    "loom_generated_textual_header",
     "loom_low_descriptor_cc_library",
 )
 load(
@@ -31,7 +30,7 @@ _X86_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/x86/lower:__pkg__"]
 
 _X86_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
 
-_X86_OPS_VISIBILITY = ["//loom/src/loom/target/arch/x86/ops:__pkg__"]
+_X86_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/x86/records:__pkg__"]
 
 _X86_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
@@ -45,28 +44,8 @@ _X86_PROVIDER_VISIBILITY = [
 loom_cc_library(
     name = "feature_bits",
     hdrs = ["feature_bits.h"],
-    visibility = _X86_LLVMIR_VISIBILITY,
+    visibility = _X86_LLVMIR_VISIBILITY + _X86_RECORDS_VISIBILITY,
     deps = ["//runtime/src/iree/base"],
-)
-
-loom_generated_textual_header(
-    name = "target_profiles_gen",
-    generator = "//loom/py/loom/gen:x86_target_profiles",
-    output = "target_profiles.inl",
-    output_flag = "--native-output",
-)
-
-loom_cc_library(
-    name = "target_records",
-    srcs = ["target_records.c"],
-    hdrs = ["target_records.h"],
-    textual_hdrs = [":target_profiles.inl"],
-    visibility = _X86_OPS_VISIBILITY,
-    deps = [
-        ":feature_bits",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
 )
 
 loom_cc_library(
@@ -252,10 +231,10 @@ loom_cc_library(
         ":packed_dot_descriptors",
         ":scalar_descriptors",
         ":simd128_descriptors",
-        ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/x86/records:target_records",
         "//runtime/src/iree/base",
     ],
 )

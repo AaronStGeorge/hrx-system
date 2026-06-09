@@ -38,7 +38,7 @@ loom_generated_cc_library(
     loom::ops::function_contract_verify
     loom::ops::op_defs
     loom::ops::target
-    loom::target::arch::ireevm::target_records
+    loom::target::arch::ireevm::records::target_records
     loom::target::types
 )
 endif()

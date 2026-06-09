@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_ARCH_WASM_LOW_REGISTRY_H_
 #define LOOM_TARGET_ARCH_WASM_LOW_REGISTRY_H_
 
-#include "loom/target/arch/wasm/target_records.h"
+#include "loom/target/arch/wasm/records/target_records.h"
 #include "loom/target/low_descriptor_registry.h"
 
 #ifdef __cplusplus

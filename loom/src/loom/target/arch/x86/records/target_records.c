@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/x86/target_records.h"
+#include "loom/target/arch/x86/records/target_records.h"
 
 #include <stdint.h>
 
@@ -34,7 +34,7 @@
                                        snapshot_name, descriptor_set_key, \
                                        feature_bits)                      \
   LOOM_X86_LOW_SNAPSHOT(kX86##symbol_suffix##Snapshot, snapshot_name);
-#include "loom/target/arch/x86/target_profiles.inl"
+#include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_NATIVE_TARGET_PROFILE
 #undef LOOM_X86_LOW_SNAPSHOT
 
@@ -52,7 +52,7 @@ static const loom_target_export_plan_t kX86_64ObjectExportPlan = {
       .contract_set_key = IREE_SVL(descriptor_set_key),                   \
       .contract_feature_bits = feature_bits,                              \
   };
-#include "loom/target/arch/x86/target_profiles.inl"
+#include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_NATIVE_TARGET_PROFILE
 
 #define LOOM_X86_NATIVE_TARGET_PROFILE(symbol_suffix, native_bundle_key,   \
@@ -64,7 +64,7 @@ static const loom_target_export_plan_t kX86_64ObjectExportPlan = {
       .export_plan = &kX86_64ObjectExportPlan,                             \
       .config = &kX86##symbol_suffix##Config,                              \
   };
-#include "loom/target/arch/x86/target_profiles.inl"
+#include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_NATIVE_TARGET_PROFILE
 
 static const loom_target_bundle_t* const kX86TargetBundleValues[] = {
@@ -73,7 +73,7 @@ static const loom_target_bundle_t* const kX86TargetBundleValues[] = {
                                        snapshot_name, descriptor_set_key, \
                                        feature_bits)                      \
   &kX86LowTargetBundle##symbol_suffix,
-#include "loom/target/arch/x86/target_profiles.inl"
+#include "loom/target/arch/x86/records/target_profiles.inl"
 #undef LOOM_X86_NATIVE_TARGET_PROFILE
 };
 

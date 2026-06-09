@@ -66,7 +66,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/spirv:cooperative_properties",
         "//loom/src/loom/target/arch/spirv:features",
         "//loom/src/loom/target/arch/spirv:profile",
-        "//loom/src/loom/target/arch/spirv:target_records",
+        "//loom/src/loom/target/arch/spirv/records:target_records",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/vulkan",

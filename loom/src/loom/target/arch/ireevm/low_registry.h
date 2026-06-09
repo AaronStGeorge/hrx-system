@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_ARCH_IREEVM_LOW_REGISTRY_H_
 #define LOOM_TARGET_ARCH_IREEVM_LOW_REGISTRY_H_
 
-#include "loom/target/arch/ireevm/target_records.h"
+#include "loom/target/arch/ireevm/records/target_records.h"
 #include "loom/target/low_descriptor_registry.h"
 
 #ifdef __cplusplus

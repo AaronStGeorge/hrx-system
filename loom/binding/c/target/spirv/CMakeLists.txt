@@ -30,7 +30,7 @@ loom_cc_library(
     loom::target::arch::spirv::features
     loom::target::arch::spirv::profile
     loom::target::arch::spirv::provider
-    loom::target::arch::spirv::target_records
+    loom::target::arch::spirv::records::target_records
     loom::target::emit::spirv::module_emitter
     loom::target::types
   ALWAYSLINK

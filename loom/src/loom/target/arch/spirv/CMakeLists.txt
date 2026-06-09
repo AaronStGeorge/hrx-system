@@ -236,22 +236,6 @@ endif()
 if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
-    target_records
-  HDRS
-    "target_records.h"
-  SRCS
-    "target_records.c"
-  DEPS
-    ::features
-    iree::base
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-loom_cc_library(
-  NAME
     math_policy
   HDRS
     "math_policy.h"
@@ -373,9 +357,9 @@ loom_cc_test(
     "features_test.cc"
   DEPS
     ::features
-    ::target_records
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::target::arch::spirv::records::target_records
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
 )
@@ -405,10 +389,10 @@ loom_cc_test(
   DEPS
     ::descriptors
     ::registers
-    ::target_records
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
+    loom::target::arch::spirv::records::target_records
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
 )

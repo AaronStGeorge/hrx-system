@@ -30,8 +30,6 @@ _IREEVM_EXECUTION_VISIBILITY = ["//loom/src/loom/tooling/execution/ireevm:__pkg_
 
 _IREEVM_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/lower:__pkg__"]
 
-_IREEVM_OPS_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/ops:__pkg__"]
-
 _IREEVM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
@@ -59,30 +57,16 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
-    name = "target_records",
-    srcs = ["target_records.c"],
-    hdrs = [
-        "feature_bits.h",
-        "target_records.h",
-    ],
-    visibility = _IREEVM_OPS_VISIBILITY,
-    deps = [
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
     visibility = _IREEVM_EXECUTION_VISIBILITY,
     deps = [
         ":descriptors",
-        ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/ireevm/records:target_records",
         "//runtime/src/iree/base",
     ],
 )

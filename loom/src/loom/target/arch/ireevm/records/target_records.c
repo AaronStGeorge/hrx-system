@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/ireevm/target_records.h"
+#include "loom/target/arch/ireevm/records/target_records.h"
 
 #include <stdint.h>
 
-#include "loom/target/arch/ireevm/feature_bits.h"
+#include "loom/target/arch/ireevm/records/feature_bits.h"
 
 static const loom_target_snapshot_t kIreeVmSnapshot = {
     .name = IREE_SVL("iree-vm"),

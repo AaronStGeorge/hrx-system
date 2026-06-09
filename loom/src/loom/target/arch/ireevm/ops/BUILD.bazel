@@ -51,7 +51,7 @@ loom_generated_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
-        "//loom/src/loom/target/arch/ireevm:target_records",
+        "//loom/src/loom/target/arch/ireevm/records:target_records",
         "//runtime/src/iree/base",
     ],
 )

@@ -13,7 +13,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/target/arch/spirv/target_records.h"
+#include "loom/target/arch/spirv/records/target_records.h"
 #include "loom/target/emit/spirv/binary_format.h"
 
 namespace {

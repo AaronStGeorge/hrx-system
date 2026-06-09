@@ -10,7 +10,7 @@
 
 #include "loom/target/arch/spirv/cooperative_properties.h"
 #include "loom/target/arch/spirv/features.h"
-#include "loom/target/arch/spirv/target_records.h"
+#include "loom/target/arch/spirv/records/target_records.h"
 
 typedef struct loom_spirv_vulkan_hal_feature_row_t {
   // HAL device-query key under the vulkan.feature category.

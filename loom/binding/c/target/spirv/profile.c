@@ -13,7 +13,7 @@
 #include "loom/target/arch/spirv/cooperative_properties.h"
 #include "loom/target/arch/spirv/features.h"
 #include "loom/target/arch/spirv/profile.h"
-#include "loom/target/arch/spirv/target_records.h"
+#include "loom/target/arch/spirv/records/target_records.h"
 #include "loomc/iree.h"
 #include "profile_rows.h"
 #include "result.h"

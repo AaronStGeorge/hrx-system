@@ -13,8 +13,8 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
+#include "loom/target/arch/spirv/records/target_records.h"
 #include "loom/target/arch/spirv/scalar_types.h"
-#include "loom/target/arch/spirv/target_records.h"
 #include "loom/target/emit/spirv/module_builder.h"
 
 namespace loom {

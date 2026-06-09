@@ -246,7 +246,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::target::arch::spirv::features
-    loom::target::arch::spirv::target_records
+    loom::target::arch::spirv::records::target_records
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
@@ -268,8 +268,8 @@ loom_cc_test(
     loom::ir
     loom::ops::op_defs
     loom::ops::test
+    loom::target::arch::spirv::records::target_records
     loom::target::arch::spirv::scalar_types
-    loom::target::arch::spirv::target_records
   LABELS
     "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"

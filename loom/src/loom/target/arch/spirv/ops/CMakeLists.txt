@@ -34,7 +34,7 @@ loom_generated_cc_library(
     loom::ir
     loom::ops::op_defs
     loom::ops::target
-    loom::target::arch::spirv::target_records
+    loom::target::arch::spirv::records::target_records
     loom::target::types
 )
 endif()

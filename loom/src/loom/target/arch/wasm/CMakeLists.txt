@@ -25,21 +25,6 @@ endif()
 if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
-    target_records
-  HDRS
-    "target_records.h"
-  SRCS
-    "target_records.c"
-  DEPS
-    iree::base
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM)
-loom_cc_library(
-  NAME
     math_policy
   HDRS
     "math_policy.h"
@@ -64,9 +49,9 @@ loom_cc_library(
     "low_registry.c"
   DEPS
     ::descriptors
-    ::target_records
     iree::base
     loom::codegen::low::descriptors
+    loom::target::arch::wasm::records::target_records
     loom::target::low_descriptor_registry
     loom::target::types
   PUBLIC

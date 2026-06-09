@@ -25,22 +25,6 @@ endif()
 if(LOOM_TARGET_ARCH_IREE_VM)
 loom_cc_library(
   NAME
-    target_records
-  HDRS
-    "feature_bits.h"
-    "target_records.h"
-  SRCS
-    "target_records.c"
-  DEPS
-    iree::base
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-loom_cc_library(
-  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -48,9 +32,9 @@ loom_cc_library(
     "low_registry.c"
   DEPS
     ::descriptors
-    ::target_records
     iree::base
     loom::codegen::low::descriptors
+    loom::target::arch::ireevm::records::target_records
     loom::target::low_descriptor_registry
     loom::target::types
   PUBLIC

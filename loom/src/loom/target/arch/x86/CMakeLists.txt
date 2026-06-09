@@ -22,37 +22,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86)
-loom_generated_textual_header(
-  NAME
-    target_profiles_gen
-  GENERATOR
-    loom::py::loom::gen::x86_target_profiles
-  OUTPUT
-    "target_profiles.inl"
-  OUTPUT_FLAG
-    "--native-output"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_cc_library(
-  NAME
-    target_records
-  HDRS
-    "target_records.h"
-  TEXTUAL_HDRS
-    "target_profiles.inl"
-  SRCS
-    "target_records.c"
-  DEPS
-    ::feature_bits
-    iree::base
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     math_policy
@@ -270,9 +239,9 @@ loom_cc_library(
     ::packed_dot_descriptors
     ::scalar_descriptors
     ::simd128_descriptors
-    ::target_records
     iree::base
     loom::codegen::low::descriptors
+    loom::target::arch::x86::records::target_records
     loom::target::low_descriptor_registry
     loom::target::types
   PUBLIC

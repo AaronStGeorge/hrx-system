@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef LOOM_TARGET_ARCH_SPIRV_TARGET_RECORDS_H_
-#define LOOM_TARGET_ARCH_SPIRV_TARGET_RECORDS_H_
+#ifndef LOOM_TARGET_ARCH_SPIRV_RECORDS_TARGET_RECORDS_H_
+#define LOOM_TARGET_ARCH_SPIRV_RECORDS_TARGET_RECORDS_H_
 
 #include "loom/target/arch/spirv/features.h"
 #include "loom/target/types.h"
@@ -24,4 +24,4 @@ extern const loom_target_bundle_t loom_spirv_low_target_bundle_vulkan1_3;
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_SPIRV_TARGET_RECORDS_H_
+#endif  // LOOM_TARGET_ARCH_SPIRV_RECORDS_TARGET_RECORDS_H_

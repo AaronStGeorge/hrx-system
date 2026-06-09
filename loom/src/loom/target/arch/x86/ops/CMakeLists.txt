@@ -34,7 +34,7 @@ loom_generated_cc_library(
     loom::ir
     loom::ops::op_defs
     loom::ops::target
-    loom::target::arch::x86::target_records
+    loom::target::arch::x86::records::target_records
     loom::target::types
 )
 endif()

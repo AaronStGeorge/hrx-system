@@ -68,7 +68,7 @@ loom_cc_library(
     loom::target::arch::spirv::cooperative_properties
     loom::target::arch::spirv::features
     loom::target::arch::spirv::profile
-    loom::target::arch::spirv::target_records
+    loom::target::arch::spirv::records::target_records
     loom::target::types
   PUBLIC
 )

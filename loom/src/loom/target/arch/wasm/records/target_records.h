@@ -6,8 +6,8 @@
 
 // Wasm target-family records.
 
-#ifndef LOOM_TARGET_ARCH_WASM_TARGET_RECORDS_H_
-#define LOOM_TARGET_ARCH_WASM_TARGET_RECORDS_H_
+#ifndef LOOM_TARGET_ARCH_WASM_RECORDS_TARGET_RECORDS_H_
+#define LOOM_TARGET_ARCH_WASM_RECORDS_TARGET_RECORDS_H_
 
 #include "loom/target/types.h"
 
@@ -23,4 +23,4 @@ extern const loom_target_bundle_table_t loom_wasm_target_bundles;
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_WASM_TARGET_RECORDS_H_
+#endif  // LOOM_TARGET_ARCH_WASM_RECORDS_TARGET_RECORDS_H_
