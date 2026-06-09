@@ -32,7 +32,9 @@ void loom_test_gen_initialize_fuzz(const uint8_t* data, iree_host_size_t size,
   // fallback behavior when fuzz bytes are exhausted.
   uint64_t seed = 0;
   iree_host_size_t seed_bytes = size < 8 ? size : 8;
-  memcpy(&seed, data, seed_bytes);
+  if (seed_bytes > 0) {
+    memcpy(&seed, data, seed_bytes);
+  }
   iree_prng_xoroshiro128_initialize(seed, &out_gen->prng);
   out_gen->fuzz_data = data;
   out_gen->fuzz_remaining = size;
@@ -48,7 +50,9 @@ static uint64_t loom_test_gen_consume_fuzz(loom_test_gen_t* gen,
   uint64_t result = 0;
   iree_host_size_t available =
       gen->fuzz_remaining < count ? gen->fuzz_remaining : count;
-  memcpy(&result, gen->fuzz_data, available);
+  if (available > 0) {
+    memcpy(&result, gen->fuzz_data, available);
+  }
   gen->fuzz_data += available;
   gen->fuzz_remaining -= available;
   if (gen->fuzz_remaining == 0) {

@@ -59,6 +59,7 @@ static iree_status_t loom_bytecode_page_writer_flush(
 static iree_status_t loom_bytecode_page_writer_write(
     loom_bytecode_page_writer_t* writer, const void* data,
     iree_host_size_t length) {
+  if (length == 0) return iree_ok_status();
   writer->total_written += length;
   const uint8_t* source = (const uint8_t*)data;
 

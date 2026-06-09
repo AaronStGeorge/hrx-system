@@ -1664,8 +1664,8 @@ static iree_status_t loom_bytecode_reader_read_types(
               reader, IREE_SV("group_scope"), scope, LOOM_GROUP_SCOPE_COUNT_,
               scope_offset);
         }
-        type.header = loom_type_make_header(
-            LOOM_TYPE_GROUP, (loom_scalar_type_t)scope, 0,
+        type.header = loom_type_make_raw_header(
+            LOOM_TYPE_GROUP, scope, 0,
             LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
         break;
       }

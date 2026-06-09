@@ -226,13 +226,13 @@ static inline loom_value_id_t loom_dim_value_id(uint64_t packed) {
 // Arena-allocated array, pointed to by dims[0] in the type struct.
 typedef uint64_t loom_overflow_dim_t;
 
-// Type kind tag.
+// Type kind tag constants.
 //
-// These are internal compiler values. The bytecode format has its own
-// wire enum (loom_bytecode_type_kind_t in format.h) with independent
-// versioning. Keep this enum append-only and map values explicitly in the
-// bytecode reader/writer when the wire format diverges.
-typedef enum loom_type_kind_e {
+// These are internal compiler values. The bytecode format has its own wire enum
+// (loom_bytecode_type_kind_t in format.h) with independent versioning. Keep
+// these constants append-only and map values explicitly in the bytecode
+// reader/writer when the wire format diverges.
+enum loom_type_kind_e {
   LOOM_TYPE_NONE = 0,       // Absence of a type (no-result ops).
   LOOM_TYPE_SCALAR = 1,     // f32, i8, index, etc.
   LOOM_TYPE_TILE = 2,       // tile<[%M]x4xf32>
@@ -248,7 +248,9 @@ typedef enum loom_type_kind_e {
   LOOM_TYPE_REGISTER = 12,  // reg<amdgpu.vgpr x4> (target-owned low payload)
   LOOM_TYPE_STORAGE = 13,   // low.storage<workgroup> (function-local storage)
   LOOM_TYPE_COUNT_,
-} loom_type_kind_t;
+};
+
+typedef uint8_t loom_type_kind_t;
 
 // Returns true if |kind| names a real type kind. The LOOM_TYPE_COUNT_
 // sentinel is not a type and must not be serialized or interpreted.
@@ -258,18 +260,20 @@ static inline bool loom_type_kind_is_valid(loom_type_kind_t kind) {
 
 // Group scope kind. Stored in the element_type byte of the type header
 // for LOOM_TYPE_GROUP (that byte is unused for non-shaped types).
-typedef enum loom_group_scope_e {
+enum loom_group_scope_e {
   LOOM_GROUP_SCOPE_WORKGROUP = 0,
   LOOM_GROUP_SCOPE_SUBGROUP = 1,
   LOOM_GROUP_SCOPE_COUNT_,
-} loom_group_scope_t;
+};
+// Raw group-scope storage.
+typedef uint8_t loom_group_scope_t;
 
 // Returns the name string for a group scope kind, or NULL if invalid.
 const char* loom_group_scope_name(loom_group_scope_t scope);
 
 // Semantic encoding role. Stored in the element_type byte of the type header
 // for LOOM_TYPE_ENCODING.
-typedef enum loom_encoding_role_e {
+enum loom_encoding_role_e {
   // Role is intentionally unspecified.
   LOOM_ENCODING_ROLE_UNKNOWN = 0,
   // Address-layout mapping for view address arithmetic.
@@ -281,7 +285,10 @@ typedef enum loom_encoding_role_e {
   // Numeric transform descriptor applied by explicit transform ops.
   LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM = 4,
   LOOM_ENCODING_ROLE_COUNT_,
-} loom_encoding_role_t;
+};
+// Raw encoding-role storage. Bytecode validation may inspect future role
+// ordinals before rejecting them, so storage cannot use a C enum type.
+typedef uint8_t loom_encoding_role_t;
 
 // Returns true if |role| names a real encoding role.
 static inline bool loom_encoding_role_is_valid(loom_encoding_role_t role) {
@@ -297,7 +304,7 @@ bool loom_encoding_role_parse(iree_string_view_t text,
 
 // Function-local storage space. Stored in the element_type byte of the type
 // header for LOOM_TYPE_STORAGE.
-typedef enum loom_storage_space_e {
+enum loom_storage_space_e {
   // Host stack-frame storage.
   LOOM_STORAGE_SPACE_STACK = 0,
   // Per-lane spill/scratch storage.
@@ -307,7 +314,9 @@ typedef enum loom_storage_space_e {
   // Workgroup-local shared storage.
   LOOM_STORAGE_SPACE_WORKGROUP = 3,
   LOOM_STORAGE_SPACE_COUNT_,
-} loom_storage_space_t;
+};
+// Raw function-local storage-space storage.
+typedef uint8_t loom_storage_space_t;
 
 // Returns true if |space| names a real storage space.
 static inline bool loom_storage_space_is_valid(loom_storage_space_t space) {
@@ -447,11 +456,17 @@ static inline loom_storage_space_t loom_type_storage_space(loom_type_t type) {
   return (loom_storage_space_t)((type.header >> 8) & 0xFF);
 }
 
+static inline uint32_t loom_type_make_raw_header(loom_type_kind_t kind,
+                                                 uint8_t payload, uint8_t rank,
+                                                 uint8_t flags) {
+  return ((uint32_t)kind & 0xFF) | (((uint32_t)payload & 0xFF) << 8) |
+         (((uint32_t)rank & 0xF) << 16) | (((uint32_t)flags & 0xF) << 20);
+}
+
 static inline uint32_t loom_type_make_header(loom_type_kind_t kind,
                                              loom_scalar_type_t element_type,
                                              uint8_t rank, uint8_t flags) {
-  return ((uint32_t)kind & 0xFF) | (((uint32_t)element_type & 0xFF) << 8) |
-         (((uint32_t)rank & 0xF) << 16) | (((uint32_t)flags & 0xF) << 20);
+  return loom_type_make_raw_header(kind, element_type, rank, flags);
 }
 
 // --- Dim accessors ---
@@ -729,9 +744,8 @@ static inline uint16_t loom_type_encoding_value_id(loom_type_t type) {
 static inline loom_type_t loom_type_encoding_with_role(
     loom_encoding_role_t role) {
   loom_type_t type = {0};
-  type.header =
-      loom_type_make_header(LOOM_TYPE_ENCODING, (loom_scalar_type_t)role, 0,
-                            LOOM_TYPE_FLAG_INLINE_DIMS);
+  type.header = loom_type_make_raw_header(LOOM_TYPE_ENCODING, role, 0,
+                                          LOOM_TYPE_FLAG_INLINE_DIMS);
   return type;
 }
 
@@ -743,8 +757,8 @@ static inline loom_type_t loom_type_encoding(void) {
 // Creates a buffer type used as an opaque storage identity for views.
 static inline loom_type_t loom_type_buffer(void) {
   loom_type_t type = {0};
-  type.header = loom_type_make_header(
-      LOOM_TYPE_BUFFER, (loom_scalar_type_t)0, 0,
+  type.header = loom_type_make_raw_header(
+      LOOM_TYPE_BUFFER, 0, 0,
       LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
   return type;
 }
@@ -754,8 +768,8 @@ static inline loom_type_t loom_type_buffer(void) {
 static inline loom_type_t loom_type_register_payload(uint64_t payload0,
                                                      uint64_t payload1) {
   loom_type_t type = {0};
-  type.header = loom_type_make_header(
-      LOOM_TYPE_REGISTER, (loom_scalar_type_t)0, 0,
+  type.header = loom_type_make_raw_header(
+      LOOM_TYPE_REGISTER, 0, 0,
       LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
   type.dims[0] = payload0;
   type.dims[1] = payload1;
@@ -766,8 +780,8 @@ static inline loom_type_t loom_type_register_payload(uint64_t payload0,
 static inline loom_type_t loom_type_storage(loom_storage_space_t space) {
   IREE_ASSERT(loom_storage_space_is_valid(space), "invalid storage space");
   loom_type_t type = {0};
-  type.header = loom_type_make_header(
-      LOOM_TYPE_STORAGE, (loom_scalar_type_t)space, 0,
+  type.header = loom_type_make_raw_header(
+      LOOM_TYPE_STORAGE, space, 0,
       LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
   return type;
 }
@@ -789,8 +803,7 @@ static inline loom_type_t loom_type_pool(uint64_t block_size_dim) {
   uint8_t flags = LOOM_TYPE_FLAG_INLINE_DIMS;
   if (!loom_dim_is_dynamic(block_size_dim)) flags |= LOOM_TYPE_FLAG_ALL_STATIC;
   loom_type_t type = {0};
-  type.header =
-      loom_type_make_header(LOOM_TYPE_POOL, (loom_scalar_type_t)0, 1, flags);
+  type.header = loom_type_make_raw_header(LOOM_TYPE_POOL, 0, 1, flags);
   type.dims[0] = block_size_dim;
   return type;
 }
@@ -857,8 +870,7 @@ static inline loom_type_t loom_type_shaped_2d(loom_type_kind_t kind,
 // is responsible for populating the types[] array before use.
 static inline loom_type_t loom_type_function(loom_func_type_data_t* func_data) {
   loom_type_t type = {0};
-  type.header =
-      loom_type_make_header(LOOM_TYPE_FUNCTION, (loom_scalar_type_t)0, 0, 0);
+  type.header = loom_type_make_raw_header(LOOM_TYPE_FUNCTION, 0, 0, 0);
   type.dims[0] = (uint64_t)(uintptr_t)func_data;
   return type;
 }
@@ -888,8 +900,8 @@ iree_status_t loom_type_function_build(const loom_type_t* arg_types,
 // hal.buffer that have no interior syntax.
 static inline loom_type_t loom_type_dialect_opaque(loom_string_id_t name_id) {
   loom_type_t type = {0};
-  type.header = loom_type_make_header(LOOM_TYPE_DIALECT, (loom_scalar_type_t)0,
-                                      0, LOOM_TYPE_FLAG_INLINE_DIMS);
+  type.header = loom_type_make_raw_header(LOOM_TYPE_DIALECT, 0, 0,
+                                          LOOM_TYPE_FLAG_INLINE_DIMS);
   type.encoding_flags = 0;
   type.dims[1] = name_id;
   return type;
@@ -901,8 +913,8 @@ static inline loom_type_t loom_type_dialect(loom_string_id_t name_id,
                                             uint16_t param_count,
                                             const loom_type_t* params) {
   loom_type_t type = {0};
-  type.header = loom_type_make_header(LOOM_TYPE_DIALECT, (loom_scalar_type_t)0,
-                                      0, LOOM_TYPE_FLAG_INLINE_DIMS);
+  type.header = loom_type_make_raw_header(LOOM_TYPE_DIALECT, 0, 0,
+                                          LOOM_TYPE_FLAG_INLINE_DIMS);
   type.encoding_flags = param_count;
   type.dims[0] = (uint64_t)(uintptr_t)params;
   type.dims[1] = name_id;

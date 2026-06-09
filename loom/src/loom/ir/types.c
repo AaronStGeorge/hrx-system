@@ -109,9 +109,13 @@ iree_status_t loom_type_function_build(const loom_type_t* arg_types,
   data->arg_count = arg_count;
   data->result_count = result_count;
   data->reserved = 0;
-  memcpy(data->types, arg_types, arg_count * sizeof(loom_type_t));
-  memcpy(data->types + arg_count, result_types,
-         result_count * sizeof(loom_type_t));
+  if (arg_count > 0) {
+    memcpy(data->types, arg_types, arg_count * sizeof(loom_type_t));
+  }
+  if (result_count > 0) {
+    memcpy(data->types + arg_count, result_types,
+           result_count * sizeof(loom_type_t));
+  }
   *out_type = loom_type_function(data);
   return iree_ok_status();
 }

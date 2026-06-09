@@ -21,7 +21,7 @@ extern "C" {
 // Scalar element type kind.
 //
 // Ordered: address types, integers by width, floats by width.
-typedef enum loom_scalar_type_e {
+enum loom_scalar_type_e {
   // Signed target-width integer for loop bounds, dimension sizes, and general
   // indexing arithmetic. Arithmetic follows signed semantics.
   LOOM_SCALAR_TYPE_INDEX = 0,
@@ -51,7 +51,10 @@ typedef enum loom_scalar_type_e {
   // IEEE 754 binary64 double-precision.
   LOOM_SCALAR_TYPE_F64 = 12,
   LOOM_SCALAR_TYPE_COUNT_,
-} loom_scalar_type_t;
+};
+// Raw scalar type storage. Parsed and bytecode-loaded types may carry invalid
+// ordinals until validation reports them.
+typedef uint8_t loom_scalar_type_t;
 
 // Returns the name string for a scalar type (e.g., "f32", "index").
 // Returns NULL if |type| is out of range.

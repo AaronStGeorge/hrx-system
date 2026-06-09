@@ -653,11 +653,11 @@ static iree_status_t loom_parse_group_type(loom_parser_t* parser,
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &scope_token);
   loom_type_t type = {0};
   if (iree_string_view_equal(scope_token.text, IREE_SV("workgroup"))) {
-    type.header = loom_type_make_header(
-        LOOM_TYPE_GROUP, (loom_scalar_type_t)LOOM_GROUP_SCOPE_WORKGROUP, 0, 0);
+    type.header = loom_type_make_raw_header(LOOM_TYPE_GROUP,
+                                            LOOM_GROUP_SCOPE_WORKGROUP, 0, 0);
   } else if (iree_string_view_equal(scope_token.text, IREE_SV("subgroup"))) {
-    type.header = loom_type_make_header(
-        LOOM_TYPE_GROUP, (loom_scalar_type_t)LOOM_GROUP_SCOPE_SUBGROUP, 0, 0);
+    type.header = loom_type_make_raw_header(LOOM_TYPE_GROUP,
+                                            LOOM_GROUP_SCOPE_SUBGROUP, 0, 0);
   } else {
     loom_diagnostic_param_t params[] = {
         loom_param_string(IREE_SV("group scope")),

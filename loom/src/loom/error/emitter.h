@@ -27,14 +27,17 @@ typedef struct loom_diagnostic_param_t loom_diagnostic_param_t;
 // Structured reference to an op field associated with a diagnostic parameter or
 // related-op note. This lives in the lightweight emitter layer so IR headers
 // can carry emitter callbacks without depending on the generated error catalog.
-typedef enum loom_diagnostic_field_kind_e {
+enum loom_diagnostic_field_kind_e {
   LOOM_DIAGNOSTIC_FIELD_NONE = 0,
   LOOM_DIAGNOSTIC_FIELD_OPERAND = 1,
   LOOM_DIAGNOSTIC_FIELD_RESULT = 2,
   LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE = 3,
   LOOM_DIAGNOSTIC_FIELD_REGION = 4,
   LOOM_DIAGNOSTIC_FIELD_SUCCESSOR = 5,
-} loom_diagnostic_field_kind_t;
+};
+// Raw diagnostic field-kind storage. Diagnostic sinks intentionally validate
+// and render unknown field kinds, so storage cannot use a C enum type.
+typedef uint8_t loom_diagnostic_field_kind_t;
 
 // A zero-based |occurrence| disambiguates repeated source spellings of the
 // same logical field, such as an operand that appears once in the callee

@@ -2422,8 +2422,7 @@ static uint32_t loom_function_type_hash(const loom_type_t* arg_types,
                                         const loom_type_t* result_types,
                                         uint16_t result_count) {
   uint32_t hash = 2166136261u;
-  uint32_t header =
-      loom_type_make_header(LOOM_TYPE_FUNCTION, (loom_scalar_type_t)0, 0, 0);
+  uint32_t header = loom_type_make_raw_header(LOOM_TYPE_FUNCTION, 0, 0, 0);
   hash = loom_hash_u32_extend(hash, header);
   hash = loom_hash_u16_extend(hash, 0);
   hash = loom_hash_u16_extend(hash, 0);

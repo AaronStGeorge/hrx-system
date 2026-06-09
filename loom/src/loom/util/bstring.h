@@ -81,8 +81,9 @@ static inline iree_string_view_t loom_bstring_view(loom_bstring_t bstring) {
 // which would call strlen on every comparison.
 static inline bool loom_bstring_equal(loom_bstring_t bstring,
                                       iree_string_view_t view) {
-  return view.size == bstring[0] &&
-         memcmp(view.data, bstring + 1, bstring[0]) == 0;
+  uint8_t length = bstring[0];
+  if (view.size != length) return false;
+  return length == 0 || memcmp(view.data, bstring + 1, length) == 0;
 }
 
 // Returns whether |offset| names a complete B-string inside |table|.
