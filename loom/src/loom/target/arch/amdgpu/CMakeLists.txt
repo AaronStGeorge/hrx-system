@@ -139,16 +139,16 @@ loom_cc_test(
   SRCS
     "registers_test.cc"
   DEPS
-    ::cdna3_descriptors
-    ::cdna4_descriptors
     ::occupancy_tables
-    ::rdna3_descriptors
-    ::rdna4_descriptors
-    ::rdna4_gfx125x_descriptors
     ::target_info
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
+    loom::target::arch::amdgpu::descriptors::cdna3
+    loom::target::arch::amdgpu::descriptors::cdna4
+    loom::target::arch::amdgpu::descriptors::rdna3
+    loom::target::arch::amdgpu::descriptors::rdna4
+    loom::target::arch::amdgpu::descriptors::rdna4_gfx125x
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )
@@ -461,96 +461,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_low_descriptor_cc_library(
-  NAME
-    cdna3_descriptors
-  GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
-  ARGS
-    "--target=cdna3"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    loom::codegen::low::descriptors
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_low_descriptor_cc_library(
-  NAME
-    rdna3_descriptors
-  GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
-  ARGS
-    "--target=rdna3"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    loom::codegen::low::descriptors
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_low_descriptor_cc_library(
-  NAME
-    rdna4_descriptors
-  GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
-  ARGS
-    "--target=rdna4"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    loom::codegen::low::descriptors
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_low_descriptor_cc_library(
-  NAME
-    rdna4_gfx125x_descriptors
-  GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
-  ARGS
-    "--target=rdna4_gfx125x"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    loom::codegen::low::descriptors
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_low_descriptor_cc_library(
-  NAME
-    cdna4_descriptors
-  GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
-  ARGS
-    "--target=cdna4"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    loom::codegen::low::descriptors
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
 loom_generated_textual_header(
   NAME
     target_records_tables_gen
@@ -576,28 +486,6 @@ loom_cc_library(
   DEPS
     ::target_info
     iree::base
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    low_registry
-  HDRS
-    "low_registry.h"
-  SRCS
-    "low_registry.c"
-  DEPS
-    ::cdna3_descriptors
-    ::cdna4_descriptors
-    ::rdna3_descriptors
-    ::rdna4_descriptors
-    ::rdna4_gfx125x_descriptors
-    iree::base
-    loom::codegen::low::descriptors
-    loom::target::low_descriptor_registry
     loom::target::types
   PUBLIC
 )
@@ -911,7 +799,6 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::legalization
-    ::low_registry
     ::lower
     ::math_policy
     ::ops
@@ -919,6 +806,7 @@ loom_cc_library(
     ::pass_registry
     iree::base
     loom::pass::builder
+    loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::provider
   PUBLIC
 )
@@ -4491,7 +4379,6 @@ loom_cc_test(
   SRCS
     "storage_lease_test.cc"
   DEPS
-    ::cdna3_descriptors
     ::storage_lease
     ::target_refs
     ::wait_plan
@@ -4500,6 +4387,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
     loom::codegen::low::storage_lease
+    loom::target::arch::amdgpu::descriptors::cdna3
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )
@@ -4540,13 +4428,6 @@ loom_cc_library(
     loom::util::json
     loom::util::stream
   PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_low_descriptor_exclude_from_all(
-  CC_LIBRARIES
-    "low_registry"
 )
 endif()
 

@@ -69,7 +69,7 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::op_registry
-    loom::target::arch::amdgpu::low_registry
+    loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::target_info
     loom::target::arch::amdgpu::target_record_table

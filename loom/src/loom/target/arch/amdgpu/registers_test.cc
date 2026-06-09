@@ -8,12 +8,12 @@
 
 #include "iree/testing/gtest.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/target/arch/amdgpu/cdna3_descriptors.h"
-#include "loom/target/arch/amdgpu/cdna4_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/cdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/cdna4_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/rdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/rdna4_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/rdna4_gfx125x_descriptors.h"
 #include "loom/target/arch/amdgpu/occupancy_tables.h"
-#include "loom/target/arch/amdgpu/rdna3_descriptors.h"
-#include "loom/target/arch/amdgpu/rdna4_descriptors.h"
-#include "loom/target/arch/amdgpu/rdna4_gfx125x_descriptors.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 namespace {

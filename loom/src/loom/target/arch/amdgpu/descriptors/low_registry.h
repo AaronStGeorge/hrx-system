@@ -6,8 +6,8 @@
 
 // AMDGPU target-low registry package.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_LOW_REGISTRY_H_
-#define LOOM_TARGET_ARCH_AMDGPU_LOW_REGISTRY_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_DESCRIPTORS_LOW_REGISTRY_H_
+#define LOOM_TARGET_ARCH_AMDGPU_DESCRIPTORS_LOW_REGISTRY_H_
 
 #include "loom/target/low_descriptor_registry.h"
 
@@ -22,4 +22,4 @@ void loom_amdgpu_low_descriptor_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_LOW_REGISTRY_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_DESCRIPTORS_LOW_REGISTRY_H_

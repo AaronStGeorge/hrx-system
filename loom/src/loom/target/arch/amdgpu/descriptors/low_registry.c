@@ -4,13 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 
-#include "loom/target/arch/amdgpu/cdna3_descriptors.h"
-#include "loom/target/arch/amdgpu/cdna4_descriptors.h"
-#include "loom/target/arch/amdgpu/rdna3_descriptors.h"
-#include "loom/target/arch/amdgpu/rdna4_descriptors.h"
-#include "loom/target/arch/amdgpu/rdna4_gfx125x_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/cdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/cdna4_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/rdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/rdna4_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/rdna4_gfx125x_descriptors.h"
 
 // clang-format off
 static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {

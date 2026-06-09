@@ -13,7 +13,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/rdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/rdna3_descriptors.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 
 namespace loom {

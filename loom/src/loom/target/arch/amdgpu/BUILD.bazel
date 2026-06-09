@@ -12,9 +12,7 @@ load(
     "loom_cc_test",
     "loom_generated_cc_library",
     "loom_generated_textual_header",
-    "loom_low_descriptor_cc_library",
     "loom_low_descriptor_data_archive",
-    "loom_low_descriptor_exclude_from_cmake_all",
     "loom_target_table_cc_library",
 )
 load(
@@ -34,7 +32,7 @@ package(
 
 loom_assert_no_dependencies(
     name = "amdgpu_lightweight_analysis_no_low_registry_dep",
-    dependencies = [":low_registry"],
+    dependencies = ["//loom/src/loom/target/arch/amdgpu/descriptors:low_registry"],
     targets = [
         ":address_state",
         ":occupancy",
@@ -54,23 +52,23 @@ loom_assert_no_dependencies(
     name = "amdgpu_descriptor_shards_no_matrix_contract_dep",
     dependencies = ["//loom/src/loom/target/arch/amdgpu/matrix:contract"],
     targets = [
-        ":cdna3_descriptors",
-        ":cdna4_descriptors",
-        ":rdna3_descriptors",
-        ":rdna4_gfx125x_descriptors",
-        ":rdna4_descriptors",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4",
     ],
 )
 
 loom_assert_no_dependencies(
     name = "core_target_interfaces_no_amdgpu_target_deps",
     dependencies = [
-        ":cdna3_descriptors",
-        ":cdna4_descriptors",
-        ":rdna3_descriptors",
-        ":rdna4_gfx125x_descriptors",
-        ":rdna4_descriptors",
-        ":low_registry",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         ":math_policy",
         ":packet_diagnostics",
         ":provider",
@@ -88,9 +86,9 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_target_refs_no_descriptor_shard_deps",
     dependencies = [
-        ":cdna3_descriptors",
-        ":rdna3_descriptors",
-        ":cdna4_descriptors",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
     ],
     targets = [
         ":target_refs",
@@ -101,10 +99,10 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_lower_no_registry_or_descriptor_deps",
     dependencies = [
-        ":cdna3_descriptors",
-        ":rdna3_descriptors",
-        ":cdna4_descriptors",
-        ":low_registry",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
     ],
     targets = [":lower"],
 )
@@ -112,12 +110,12 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_abi_no_backend_runtime_or_descriptor_deps",
     dependencies = [
-        ":cdna3_descriptors_ids",
-        ":cdna4_descriptors_ids",
-        ":rdna3_descriptors_ids",
-        ":rdna4_gfx125x_descriptors_ids",
-        ":rdna4_descriptors_ids",
-        ":low_registry",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3_ids",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4_ids",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3_ids",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x_ids",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_ids",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
     ],
@@ -127,10 +125,10 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_binding_materialization_no_backend_runtime_or_descriptor_deps",
     dependencies = [
-        ":cdna3_descriptors",
-        ":rdna3_descriptors",
-        ":cdna4_descriptors",
-        ":low_registry",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
     ],
@@ -143,7 +141,7 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "core_tools_no_amdgpu_check_deps",
     dependencies = [
-        ":low_registry",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         ":packet_diagnostics",
         ":provider",
         "//loom/src/loom/target/arch/amdgpu/check:provider",
@@ -251,14 +249,14 @@ loom_cc_test(
     name = "registers_test",
     srcs = ["registers_test.cc"],
     deps = [
-        ":cdna3_descriptors",
-        ":cdna4_descriptors",
         ":occupancy_tables",
-        ":rdna3_descriptors",
-        ":rdna4_descriptors",
-        ":rdna4_gfx125x_descriptors",
         ":target_info",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -311,8 +309,6 @@ loom_cc_library(
         "//runtime/src/iree/base/internal:arena",
     ],
 )
-
-_AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptors"
 
 _AMDGPU_TARGET_REF_GENERATOR = "//loom/py/loom/gen:amdgpu_target_refs"
 
@@ -516,66 +512,6 @@ loom_cc_library(
     ],
 )
 
-loom_low_descriptor_cc_library(
-    name = "cdna3_descriptors",
-    args = [
-        "--target=cdna3",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml"],
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_low_descriptor_cc_library(
-    name = "rdna3_descriptors",
-    args = [
-        "--target=rdna3",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml"],
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_low_descriptor_cc_library(
-    name = "rdna4_descriptors",
-    args = [
-        "--target=rdna4",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_low_descriptor_cc_library(
-    name = "rdna4_gfx125x_descriptors",
-    args = [
-        "--target=rdna4_gfx125x",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_low_descriptor_cc_library(
-    name = "cdna4_descriptors",
-    args = [
-        "--target=cdna4",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml"],
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
 loom_generated_textual_header(
     name = "target_records_tables_gen",
     generator = _AMDGPU_TARGET_RECORDS_GENERATOR,
@@ -590,23 +526,6 @@ loom_cc_library(
     textual_hdrs = [":target_records_tables.inl"],
     deps = [
         ":target_info",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "low_registry",
-    srcs = ["low_registry.c"],
-    hdrs = ["low_registry.h"],
-    deps = [
-        ":cdna3_descriptors",
-        ":cdna4_descriptors",
-        ":rdna3_descriptors",
-        ":rdna4_descriptors",
-        ":rdna4_gfx125x_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -875,7 +794,6 @@ loom_cc_library(
     hdrs = ["provider.h"],
     deps = [
         ":legalization",
-        ":low_registry",
         ":lower",
         ":math_policy",
         ":ops",
@@ -883,6 +801,7 @@ loom_cc_library(
         ":pass_registry",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//runtime/src/iree/base",
     ],
 )
@@ -1092,12 +1011,12 @@ loom_cc_test(
     name = "storage_lease_test",
     srcs = ["storage_lease_test.cc"],
     deps = [
-        ":cdna3_descriptors",
         ":storage_lease",
         ":target_refs",
         ":wait_plan",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:storage_lease",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -1132,10 +1051,6 @@ loom_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
-)
-
-loom_low_descriptor_exclude_from_cmake_all(
-    cc_libraries = ["low_registry"],
 )
 
 #===------------------------------------------------------------------------===#

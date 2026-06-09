@@ -7,8 +7,8 @@
 #include "loom/target/arch/amdgpu/provider.h"
 
 #include "loom/pass/builder.h"
+#include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/legalization.h"
-#include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/amdgpu/math_policy.h"
 #include "loom/target/arch/amdgpu/ops/registry.h"
