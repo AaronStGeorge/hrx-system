@@ -71,7 +71,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -84,7 +84,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly_wmma.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -97,7 +97,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_plan.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -110,7 +110,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_states.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )

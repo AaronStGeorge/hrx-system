@@ -293,7 +293,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -306,7 +306,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/cfg.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -319,7 +319,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/intrinsics.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -332,7 +332,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/lowering_errors.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -345,7 +345,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/memory.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -358,7 +358,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/packed_dot.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -371,7 +371,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/scalar_index.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -384,7 +384,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/target_projection.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -397,7 +397,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/toolchain.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -410,7 +410,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/vector_core.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )

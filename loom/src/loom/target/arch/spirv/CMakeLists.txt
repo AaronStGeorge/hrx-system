@@ -510,7 +510,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/barrier.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -523,7 +523,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/baseline.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -536,7 +536,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_verify_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -549,7 +549,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -562,7 +562,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -575,7 +575,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_control.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -588,7 +588,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_legalize.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -601,7 +601,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/workgroup_storage.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )

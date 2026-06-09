@@ -104,22 +104,6 @@ loom_assert_no_dependencies(
     ],
 )
 
-loom_assert_no_dependencies(
-    name = "core_tools_no_amdgpu_check_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-        ":packet_diagnostics",
-        ":provider",
-        "//loom/src/loom/target/arch/amdgpu/check:provider",
-    ],
-    targets = [
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:loom-check-test",
-        "//loom/src/loom/tools/loom-check:main",
-        "//loom/src/loom/tools/loom-check:provider",
-    ],
-)
-
 #===------------------------------------------------------------------------===#
 # AMDGPU low descriptors
 #===------------------------------------------------------------------------===#

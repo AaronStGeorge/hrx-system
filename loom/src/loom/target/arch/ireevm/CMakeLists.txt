@@ -210,7 +210,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/import_decl.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -223,7 +223,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/import_decl_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -236,7 +236,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/ref_lifetime.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -249,7 +249,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/allocation.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -262,7 +262,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/pass_source_low.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -275,7 +275,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )
@@ -288,7 +288,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   LABELS
     "loom-check"
 )

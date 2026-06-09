@@ -26,7 +26,7 @@ loom_assert_no_dependencies(
     targets = [
         "//loom/src/loom/tools/iree-run-loom",
         "//loom/src/loom/tools/iree-run-loom:main",
-        "//loom/src/loom/tools/loom-check",
+        "//loom/src/loom/tools/loom-check/full:loom-check",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:main",
         "//loom/src/loom/tools/loom-check:provider",

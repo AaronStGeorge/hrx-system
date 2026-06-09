@@ -318,14 +318,8 @@ loom_cc_library(
     provider
   HDRS
     "provider.h"
-  SRCS
-    "provider.c"
   DEPS
-    ::main
     iree::base
-    loom::codegen::low::lower
-    loom::ir
-    loom::target::math_policy
     loom::target::provider
   TESTONLY
   PUBLIC
@@ -346,69 +340,6 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::util::stream
-)
-
-set(_loom_check_platform_copts "")
-if(LOOM_EMIT_AMDGPU)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_AMDGPU=1")
-endif()
-if(LOOM_TARGET_ARCH_IREE_VM)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_IREE_VM=1")
-endif()
-if(LOOM_EMIT_LLVMIR)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_LLVMIR=1")
-endif()
-if(LOOM_TARGET_ARCH_SPIRV)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_SPIRV=1")
-endif()
-if(LOOM_EMIT_SPIRV)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_SPIRV=1")
-endif()
-if(LOOM_TARGET_ARCH_WASM)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_WASM=1")
-endif()
-if(LOOM_EMIT_WASM)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_WASM=1")
-endif()
-if(LOOM_TARGET_ARCH_X86)
-  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_X86=1")
-endif()
-set(_loom_check_platform_deps "")
-if(LOOM_EMIT_AMDGPU)
-  list(APPEND _loom_check_platform_deps loom::target::arch::amdgpu::check::provider)
-endif()
-if(LOOM_TARGET_ARCH_IREE_VM)
-  list(APPEND _loom_check_platform_deps loom::target::arch::ireevm::check_provider)
-endif()
-if(LOOM_EMIT_LLVMIR)
-  list(APPEND _loom_check_platform_deps loom::target::emit::llvmir::check_provider)
-endif()
-if(LOOM_TARGET_ARCH_SPIRV)
-  list(APPEND _loom_check_platform_deps loom::target::arch::spirv::check_provider)
-endif()
-if(LOOM_EMIT_SPIRV)
-  list(APPEND _loom_check_platform_deps loom::target::emit::spirv::check_provider)
-endif()
-if(LOOM_TARGET_ARCH_WASM)
-  list(APPEND _loom_check_platform_deps loom::target::arch::wasm::check_provider)
-endif()
-if(LOOM_EMIT_WASM)
-  list(APPEND _loom_check_platform_deps loom::target::emit::wasm::check_provider)
-endif()
-if(LOOM_TARGET_ARCH_X86)
-  list(APPEND _loom_check_platform_deps loom::target::arch::x86::check_provider)
-endif()
-loom_cc_binary(
-  NAME
-    loom-check
-  SRCS
-    "loom-check.c"
-  COPTS
-    ${_loom_check_platform_copts}
-  DEPS
-    ::provider
-    ${_loom_check_platform_deps}
-  TESTONLY
 )
 
 loom_cc_binary(

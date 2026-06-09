@@ -44,7 +44,7 @@ Build the core Loom tools and the smallest C API examples:
 
 ```bash
 python dev.py bazel build \
-  //loom/src/loom/tools/loom-check:loom-check \
+  //loom/src/loom/tools/loom-check/full:loom-check \
   //loom/src/loom/tools/loom-compile:loom-compile \
   //loom/src/loom/tools/loom-link:loom-link \
   //loom/src/loom/tools/iree-test-loom:iree-test-loom \

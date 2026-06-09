@@ -425,7 +425,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/allocation.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -443,7 +443,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -461,7 +461,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx2.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -479,7 +479,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx512_packed_dot.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -497,7 +497,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx_vnni.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -515,7 +515,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -533,7 +533,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_addressing.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -551,7 +551,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_arithmetic.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -569,7 +569,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_bitwise.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -587,7 +587,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_compare.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -605,7 +605,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_control.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -623,7 +623,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -641,7 +641,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_f32.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -659,7 +659,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_i64.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -677,7 +677,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_memory.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
@@ -695,7 +695,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_v4.loom-test"
   SRC
-    loom::tools::loom-check
+    loom::tools::loom-check::full::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
