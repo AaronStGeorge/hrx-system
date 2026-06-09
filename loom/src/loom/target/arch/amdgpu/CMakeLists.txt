@@ -3673,25 +3673,4 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
-    storage_lease_test
-  SRCS
-    "storage_lease_test.cc"
-  DEPS
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::codegen::low::descriptors
-    loom::codegen::low::storage_lease
-    loom::target::arch::amdgpu::descriptors::shards_for_testing
-    loom::target::arch::amdgpu::planning::storage_lease
-    loom::target::arch::amdgpu::planning::wait_plan
-    loom::target::arch::amdgpu::refs::target_refs
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -207,6 +207,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "storage_lease_test",
+    srcs = ["storage_lease_test.cc"],
+    deps = [
+        ":storage_lease",
+        ":wait_plan",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:storage_lease",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_target_table_cc_library(
     name = "occupancy_tables",
     generator = _AMDGPU_OCCUPANCY_TABLE_GENERATOR,

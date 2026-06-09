@@ -230,6 +230,27 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    storage_lease_test
+  SRCS
+    "storage_lease_test.cc"
+  DEPS
+    ::storage_lease
+    ::wait_plan
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::descriptors
+    loom::codegen::low::storage_lease
+    loom::target::arch::amdgpu::descriptors::shards_for_testing
+    loom::target::arch::amdgpu::refs::target_refs
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     occupancy_tables

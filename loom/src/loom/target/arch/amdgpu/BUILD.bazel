@@ -356,22 +356,6 @@ loom_check_test_suite(
     test_name_prefix_to_strip = "test/source_low/",
 )
 
-loom_cc_test(
-    name = "storage_lease_test",
-    srcs = ["storage_lease_test.cc"],
-    deps = [
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:storage_lease",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
-        "//loom/src/loom/target/arch/amdgpu/planning:storage_lease",
-        "//loom/src/loom/target/arch/amdgpu/planning:wait_plan",
-        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 #===------------------------------------------------------------------------===#
 # AMDGPU matrix contracts
 #===------------------------------------------------------------------------===#

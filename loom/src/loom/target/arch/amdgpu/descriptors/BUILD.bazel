@@ -27,6 +27,7 @@ _AMDGPU_LOW_REGISTRY_VISIBILITY = [
 
 _AMDGPU_DESCRIPTOR_TEST_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",
     "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
     "//loom/src/loom/tooling/target/amdgpu:__pkg__",
 ]
