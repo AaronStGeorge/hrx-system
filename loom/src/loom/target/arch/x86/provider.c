@@ -6,7 +6,7 @@
 
 #include "loom/target/arch/x86/provider.h"
 
-#include "loom/target/arch/x86/low_registry.h"
+#include "loom/target/arch/x86/descriptors/low_registry.h"
 #include "loom/target/arch/x86/lower/lower.h"
 #include "loom/target/arch/x86/math_policy.h"
 #include "loom/target/arch/x86/ops/registry.h"

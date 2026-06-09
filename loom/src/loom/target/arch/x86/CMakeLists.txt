@@ -39,216 +39,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    scalar_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    simd128_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx2_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx512_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    packed_dot_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx512_vnni_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx512_bf16_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx_vnni_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx_vnni_int8_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx_vnni_int16_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx10_2_descriptors
-  DEPS
-    ::avx512_packed_dot_descriptors
-    loom::codegen::low::descriptors
-  IDS_DEPS
-    loom::codegen::low::descriptors
-  HEADER_ONLY
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_low_descriptor_cc_library(
-  NAME
-    avx512_packed_dot_descriptors
-  GENERATOR
-    loom::py::loom::gen::x86_low_descriptor_shard
-  GENERATED_HDR_FLAGS
-    "--view-header=scalar"
-    "--view-header=simd128"
-    "--view-header=avx2"
-    "--view-header=avx512"
-    "--view-header=packed_dot"
-    "--view-header=avx512_vnni"
-    "--view-header=avx512_bf16"
-    "--view-header=avx_vnni"
-    "--view-header=avx_vnni_int8"
-    "--view-header=avx_vnni_int16"
-    "--view-header=avx10_2"
-  GENERATED_HDRS
-    "scalar_descriptors.h"
-    "simd128_descriptors.h"
-    "avx2_descriptors.h"
-    "avx512_descriptors.h"
-    "packed_dot_descriptors.h"
-    "avx512_vnni_descriptors.h"
-    "avx512_bf16_descriptors.h"
-    "avx_vnni_descriptors.h"
-    "avx_vnni_int8_descriptors.h"
-    "avx_vnni_int16_descriptors.h"
-    "avx10_2_descriptors.h"
-  ARGS
-    "--target=avx512_packed_dot"
-  DEPS
-    loom::codegen::low::descriptors
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-loom_cc_library(
-  NAME
-    low_registry
-  HDRS
-    "low_registry.h"
-  SRCS
-    "low_registry.c"
-  DEPS
-    ::avx10_2_descriptors
-    ::avx2_descriptors
-    ::avx512_bf16_descriptors
-    ::avx512_descriptors
-    ::avx512_packed_dot_descriptors
-    ::avx512_vnni_descriptors
-    ::avx_vnni_descriptors
-    ::avx_vnni_int16_descriptors
-    ::avx_vnni_int8_descriptors
-    ::packed_dot_descriptors
-    ::scalar_descriptors
-    ::simd128_descriptors
-    iree::base
-    loom::codegen::low::descriptors
-    loom::target::arch::x86::records::target_records
-    loom::target::low_descriptor_registry
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     register_classes
@@ -270,22 +60,11 @@ loom_cc_test(
   SRCS
     "register_classes_test.cc"
   DEPS
-    ::avx10_2_descriptors
-    ::avx2_descriptors
-    ::avx512_bf16_descriptors
-    ::avx512_descriptors
-    ::avx512_packed_dot_descriptors
-    ::avx512_vnni_descriptors
-    ::avx_vnni_descriptors
-    ::avx_vnni_int16_descriptors
-    ::avx_vnni_int8_descriptors
-    ::packed_dot_descriptors
     ::register_classes
-    ::scalar_descriptors
-    ::simd128_descriptors
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
+    loom::target::arch::x86::descriptors::shards_for_testing
   LABELS
     "iree-build-requirement=loom.target.arch.x86"
 )
@@ -300,9 +79,9 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
-    ::low_registry
     ::math_policy
     iree::base
+    loom::target::arch::x86::descriptors::low_registry
     loom::target::arch::x86::lower
     loom::target::arch::x86::ops
     loom::target::provider

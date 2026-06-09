@@ -651,10 +651,12 @@ X86_SCALAR_DESCRIPTOR_SET = DescriptorSet(
     key="x86.scalar.core",
     target_key="x86",
     feature_key="x86.scalar.v1",
-    c_header_path=Path("loom/src/loom/target/arch/x86/scalar_descriptors.h"),
+    c_header_path=Path(
+        "loom/src/loom/target/arch/x86/descriptors/scalar_descriptors.h"
+    ),
     c_source_path=Path("loom/src/loom/target/arch/x86/scalar_descriptors.c"),
     header_guard="LOOM_TARGET_ARCH_X86_SCALAR_DESCRIPTORS_H_",
-    public_header="loom/target/arch/x86/scalar_descriptors.h",
+    public_header="loom/target/arch/x86/descriptors/scalar_descriptors.h",
     function_name="loom_x86_scalar_core_descriptor_set",
     c_table_prefix="X86ScalarCore",
     c_enum_prefix="X86_SCALAR_CORE",

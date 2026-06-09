@@ -26,13 +26,13 @@ loom_cc_library(
     loom::codegen::low::schedule
     loom::ir
     loom::ops::low
-    loom::target::arch::x86::avx2_descriptors_ids
-    loom::target::arch::x86::avx512_descriptors_ids
-    loom::target::arch::x86::avx512_packed_dot_descriptors_ids
-    loom::target::arch::x86::packed_dot_descriptors_ids
+    loom::target::arch::x86::descriptors::avx2_descriptors_ids
+    loom::target::arch::x86::descriptors::avx512_descriptors_ids
+    loom::target::arch::x86::descriptors::avx512_packed_dot_descriptors_ids
+    loom::target::arch::x86::descriptors::packed_dot_descriptors_ids
+    loom::target::arch::x86::descriptors::scalar_descriptors_ids
+    loom::target::arch::x86::descriptors::simd128_descriptors_ids
     loom::target::arch::x86::register_classes
-    loom::target::arch::x86::scalar_descriptors_ids
-    loom::target::arch::x86::simd128_descriptors_ids
     loom::target::emit::native::assembly
   PUBLIC
 )

@@ -97,10 +97,12 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="x86.avx512.core",
     target_key="x86",
     feature_key="x86.avx512.v1",
-    c_header_path=Path("loom/src/loom/target/arch/x86/avx512_descriptors.h"),
+    c_header_path=Path(
+        "loom/src/loom/target/arch/x86/descriptors/avx512_descriptors.h"
+    ),
     c_source_path=Path("loom/src/loom/target/arch/x86/avx512_descriptors.c"),
     header_guard="LOOM_TARGET_ARCH_X86_AVX512_DESCRIPTORS_H_",
-    public_header="loom/target/arch/x86/avx512_descriptors.h",
+    public_header="loom/target/arch/x86/descriptors/avx512_descriptors.h",
     function_name="loom_x86_avx512_core_descriptor_set",
     c_table_prefix="X86Avx512Core",
     c_enum_prefix="X86_AVX512_CORE",
