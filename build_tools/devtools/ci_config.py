@@ -109,6 +109,12 @@ NON_CPU_HAL_DRIVER_CTEST_REGEX = (
 
 AMDGPU_BAZEL_DRIVER_TARGETS = ("//runtime/src/iree/hal/drivers/amdgpu/...",)
 AMDGPU_CMAKE_DRIVER_TARGETS = ("runtime/src/iree/hal/drivers/amdgpu/all",)
+AMDGPU_CMAKE_RESOURCE_TEST_TARGETS = (
+    "loom_tools_iree-test-loom_amdgpu_execution_test_test_deps",
+)
+AMDGPU_CMAKE_BUILD_TARGETS = (
+    AMDGPU_CMAKE_DRIVER_TARGETS + AMDGPU_CMAKE_RESOURCE_TEST_TARGETS
+)
 AMDGPU_TARGET_SELECTOR = "gfx942"
 RUNTIME_AMDGPU_RESOURCE_TAG = "iree-run-requirement=runtime.resource.amd_gpu"
 LOOM_AMDGPU_RESOURCE_TAG = "iree-run-requirement=loom.resource.amd_gpu"

@@ -583,6 +583,8 @@ class CiTest(unittest.TestCase):
         build_steps = [step for step in steps if step.name.startswith("Build IREE")]
         for target in ci_config.AMDGPU_CMAKE_DRIVER_TARGETS:
             self.assertTrue(any(target in step.argv for step in build_steps))
+        for target in ci_config.AMDGPU_CMAKE_RESOURCE_TEST_TARGETS:
+            self.assertTrue(any(target in step.argv for step in build_steps))
         self.assertTrue(
             any("-R '^iree/hal/drivers/amdgpu/'" in line for line in command_lines)
         )

@@ -442,7 +442,7 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
         cmake_build_step(
             command_name,
             f"Build IREE CMake AMDGPU{sanitizer_name}",
-            ci_config.AMDGPU_CMAKE_DRIVER_TARGETS,
+            ci_config.AMDGPU_CMAKE_BUILD_TARGETS,
         ),
     ]
     if sanitizer == "msan":
