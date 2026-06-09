@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 
-from loom.gen.spirv_features import generate_tables
+from loom.gen.target.arch.spirv.spirv_features import generate_tables
 from loom.target.arch.spirv.features import (
     FEATURE_ATOMS,
     FEATURE_PROFILES,

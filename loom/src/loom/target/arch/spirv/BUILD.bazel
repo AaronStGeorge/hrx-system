@@ -75,7 +75,7 @@ loom_cc_library(
 loom_generated_textual_header(
     name = "features_gen",
     args = ["--isa-header=$(location isa.h)"],
-    generator = "//loom/py/loom/gen:spirv_features",
+    generator = "//loom/py/loom/gen/target/arch/spirv:features",
     inputs = ["isa.h"],
     output = "features_tables.inl",
     output_flag = "--tables",
@@ -129,7 +129,7 @@ loom_cc_library(
 
 loom_generated_textual_header(
     name = "packet_rows_tables_gen",
-    generator = "//loom/py/loom/gen:spirv_packet_rows",
+    generator = "//loom/py/loom/gen/target/arch/spirv:packet_rows",
     output = "packet_rows_tables.inl",
     output_flag = "--tables",
 )
@@ -164,7 +164,7 @@ loom_cc_library(
 
 loom_generated_textual_header(
     name = "cooperative_properties_tables_gen",
-    generator = "//loom/py/loom/gen:spirv_cooperative_properties",
+    generator = "//loom/py/loom/gen/target/arch/spirv:cooperative_properties",
     output = "cooperative_properties_tables.inl",
     output_flag = "--tables",
 )

@@ -17,7 +17,7 @@ from typing import Protocol
 
 
 def _ensure_runtime_py_on_path() -> None:
-    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py = Path(__file__).resolve().parents[5]
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
         sys.path.insert(0, runtime_py_string)
@@ -171,7 +171,7 @@ def generate_tables() -> str:
         "// See https://llvm.org/LICENSE.txt for license information.",
         "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
         "",
-        *line_comment_header("//", generator="loom.gen.spirv_cooperative_properties"),
+        *line_comment_header("//", generator="loom.gen.target.arch.spirv.spirv_cooperative_properties"),
         "",
         ("static const loom_spirv_cooperative_matrix_property_t kCooperativeMatrixProperties[] = {"),
     ]

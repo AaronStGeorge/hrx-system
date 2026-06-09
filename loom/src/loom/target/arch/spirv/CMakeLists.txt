@@ -50,7 +50,7 @@ loom_generated_textual_header(
   NAME
     features_gen
   GENERATOR
-    loom::py::loom::gen::spirv_features
+    loom::py::loom::gen::target::arch::spirv::features
   OUTPUT
     "features_tables.inl"
   OUTPUT_FLAG
@@ -128,7 +128,7 @@ loom_generated_textual_header(
   NAME
     packet_rows_tables_gen
   GENERATOR
-    loom::py::loom::gen::spirv_packet_rows
+    loom::py::loom::gen::target::arch::spirv::packet_rows
   OUTPUT
     "packet_rows_tables.inl"
   OUTPUT_FLAG
@@ -178,7 +178,7 @@ loom_generated_textual_header(
   NAME
     cooperative_properties_tables_gen
   GENERATOR
-    loom::py::loom::gen::spirv_cooperative_properties
+    loom::py::loom::gen::target::arch::spirv::cooperative_properties
   OUTPUT
     "cooperative_properties_tables.inl"
   OUTPUT_FLAG

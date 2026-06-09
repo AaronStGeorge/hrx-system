@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from loom.gen.spirv_cooperative_properties import (
+from loom.gen.target.arch.spirv.spirv_cooperative_properties import (
     _descriptor_ref_constant_name,
     _mul_add_descriptor_key,
     generate_tables,
