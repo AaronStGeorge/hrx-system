@@ -583,7 +583,7 @@ class CiTest(unittest.TestCase):
         build_steps = [step for step in steps if step.name.startswith("Build IREE")]
         for target in ci_config.AMDGPU_CMAKE_DRIVER_TARGETS:
             self.assertTrue(any(target in step.argv for step in build_steps))
-        for target in ci_config.AMDGPU_CMAKE_RESOURCE_TEST_TARGETS:
+        for target in ci_config.AMDGPU_CMAKE_RESOURCE_TEST_BUILD_TARGETS:
             self.assertTrue(any(target in step.argv for step in build_steps))
         self.assertTrue(
             any("-R '^iree/hal/drivers/amdgpu/'" in line for line in command_lines)
@@ -644,6 +644,24 @@ class CiTest(unittest.TestCase):
                 for line in command_lines
             )
         )
+
+    def test_cmake_amdgpu_msan_builds_driver_targets_without_test_deps(self):
+        args = ci.parse_arguments(["iree-cmake-amdgpu-msan"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertTrue(any("-DIREE_ENABLE_MSAN=ON" in line for line in command_lines))
+        self.assertTrue(any("-DIREE_BUILD_TESTS=OFF" in line for line in command_lines))
+        self.assertTrue(
+            any("-DIREE_BUILD_BENCHMARKS=OFF" in line for line in command_lines)
+        )
+        build_steps = [step for step in steps if step.name.startswith("Build IREE")]
+        for target in ci_config.AMDGPU_CMAKE_DRIVER_TARGETS:
+            self.assertTrue(any(target in step.argv for step in build_steps))
+        for target in ci_config.AMDGPU_CMAKE_RESOURCE_TEST_BUILD_TARGETS:
+            self.assertFalse(any(target in step.argv for step in build_steps))
+        self.assertFalse(any("Test IREE CMake AMDGPU" in step.name for step in steps))
 
     def test_cmake_vulkan_command_scopes_build_and_tests_to_vulkan(self):
         args = ci.parse_arguments(["iree-cmake-vulkan"])

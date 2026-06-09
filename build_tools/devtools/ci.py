@@ -123,6 +123,16 @@ def sanitizer_env(config: str | None) -> tuple[tuple[str, str], ...]:
     return (("TSAN_OPTIONS", f"suppressions={TSAN_SUPPRESSIONS_FILE}"),)
 
 
+def cmake_tests_enabled(sanitizer: str | None) -> bool:
+    if sanitizer is None:
+        return True
+    if sanitizer in ci_config.SANITIZER_TEST_CONFIGS:
+        return True
+    if sanitizer in ci_config.SANITIZER_BUILD_CONFIGS:
+        return False
+    raise ValueError(f"unknown CMake sanitizer config: {sanitizer}")
+
+
 def cmake_dev_command(command_name: str, *args: str) -> tuple[str, ...]:
     build_dir = CMAKE_CI_BUILD_ROOT / command_name
     return dev_command("--cmake-build-dir", str(build_dir), "cmake", *args)
@@ -189,13 +199,14 @@ def cmake_configure_step(
     sanitizer: str | None = None,
 ) -> CiStep:
     enabled_driver_set = validate_enabled_drivers(enabled_drivers)
+    tests_enabled = cmake_tests_enabled(sanitizer)
     command = [
         "configure",
         "--fresh",
         "-GNinja",
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-        f"-DIREE_BUILD_TESTS={'OFF' if sanitizer == 'msan' else 'ON'}",
-        f"-DIREE_BUILD_BENCHMARKS={'OFF' if sanitizer == 'msan' else 'ON'}",
+        f"-DIREE_BUILD_TESTS={'ON' if tests_enabled else 'OFF'}",
+        f"-DIREE_BUILD_BENCHMARKS={'ON' if tests_enabled else 'OFF'}",
         "-DIREE_ENABLE_LIBBACKTRACE=OFF",
         "-DLIBHRX_BUILD=OFF",
     ]
@@ -399,6 +410,7 @@ def vulkan_config_steps(targets: tuple[str, ...], config: str) -> list[CiStep]:
 
 def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     sanitizer_name = f" with {sanitizer.upper()}" if sanitizer is not None else ""
+    tests_enabled = cmake_tests_enabled(sanitizer)
     xfail_regex = (
         ci_config.CPU_SANITIZERS_CTEST_EXCLUDE_REGEX
         if sanitizer is not None
@@ -412,7 +424,7 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
         cmake_configure_step(command_name, sanitizer=sanitizer),
         cmake_build_step(command_name, f"Build IREE CMake{sanitizer_name}"),
     ]
-    if sanitizer != "msan":
+    if tests_enabled:
         steps.append(
             cmake_test_step(
                 command_name,
@@ -427,12 +439,18 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
 
 def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     sanitizer_name = f" with {sanitizer.upper()}" if sanitizer is not None else ""
+    tests_enabled = cmake_tests_enabled(sanitizer)
     if sanitizer == "tsan":
         xfail_regex = ci_config.AMDGPU_TSAN_SANITIZERS_CTEST_EXCLUDE_REGEX
     elif sanitizer is not None:
         xfail_regex = ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX
     else:
         xfail_regex = ci_config.AMDGPU_CTEST_EXCLUDE_REGEX
+    build_targets = (
+        ci_config.AMDGPU_CMAKE_TEST_BUILD_TARGETS
+        if tests_enabled
+        else ci_config.AMDGPU_CMAKE_DRIVER_TARGETS
+    )
     steps = [
         cmake_configure_step(
             command_name,
@@ -442,10 +460,10 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
         cmake_build_step(
             command_name,
             f"Build IREE CMake AMDGPU{sanitizer_name}",
-            ci_config.AMDGPU_CMAKE_BUILD_TARGETS,
+            build_targets,
         ),
     ]
-    if sanitizer == "msan":
+    if not tests_enabled:
         return steps
 
     steps.append(
@@ -477,6 +495,7 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
 
 def cmake_vulkan_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     sanitizer_name = f" with {sanitizer.upper()}" if sanitizer is not None else ""
+    tests_enabled = cmake_tests_enabled(sanitizer)
     steps = [
         cmake_configure_step(
             command_name,
@@ -489,7 +508,7 @@ def cmake_vulkan_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
             ci_config.VULKAN_CMAKE_DRIVER_TARGETS,
         ),
     ]
-    if sanitizer != "msan":
+    if tests_enabled:
         steps.append(
             cmake_test_step(
                 command_name,
