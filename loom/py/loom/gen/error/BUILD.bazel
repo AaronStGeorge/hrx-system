@@ -7,9 +7,17 @@
 load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/py/loom/gen:__subpackages__"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+GENERATOR_VISIBILITY = [
+    "//loom/py/loom/gen:__subpackages__",
+    "//loom/src/loom/error:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu:__pkg__",
+    "//loom/src/loom/target/arch/spirv:__pkg__",
+    "//loom/src/loom/target/emit/wasm:__pkg__",
+]
 
 iree_py_binary(
     name = "c_errors",
@@ -18,6 +26,7 @@ iree_py_binary(
         "c_errors.py",
     ],
     main = "c_errors.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         "//loom/py/loom:core",
         "//loom/py/loom/error",

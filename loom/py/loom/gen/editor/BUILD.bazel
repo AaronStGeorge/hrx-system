@@ -7,7 +7,7 @@
 load("//build_tools/bazel:python.bzl", "iree_py_library", "iree_py_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/py/loom/gen:__subpackages__"],
     licenses = ["notice"],  # Apache 2.0
 )
 

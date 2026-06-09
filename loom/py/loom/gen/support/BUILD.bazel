@@ -7,9 +7,14 @@
 load("//build_tools/bazel:python.bzl", "iree_py_library", "iree_py_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/py/loom/gen:__subpackages__"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+GENERATED_FILE_VISIBILITY = [
+    "//loom/py/loom/gen:__subpackages__",
+    "//loom/py/loom/tools:__pkg__",
+]
 
 iree_py_library(
     name = "c",
@@ -41,6 +46,7 @@ iree_py_library(
         "__init__.py",
         "generated_file.py",
     ],
+    visibility = GENERATED_FILE_VISIBILITY,
     deps = [
         "//loom/py/loom:core",
         "//loom/py/loom/gen:package",

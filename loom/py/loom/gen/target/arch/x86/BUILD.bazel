@@ -7,9 +7,17 @@
 load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/py/loom/gen:__subpackages__"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+GENERATOR_VISIBILITY = [
+    "//loom/py/loom/gen:__subpackages__",
+    "//loom/src/loom/target/arch/x86:__pkg__",
+    "//loom/src/loom/target/arch/x86/descriptors:__pkg__",
+    "//loom/src/loom/target/arch/x86/records:__pkg__",
+    "//loom/src/loom/target/emit/llvmir/x86:__pkg__",
+]
 
 iree_py_binary(
     name = "low_descriptor_shard",
@@ -18,6 +26,7 @@ iree_py_binary(
         "x86_descriptors.py",
     ],
     main = "x86_descriptors.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         "//loom/py/loom/gen/target/low:low_descriptors",
         "//loom/py/loom/target:descriptor_sets",
@@ -46,6 +55,7 @@ iree_py_binary(
         "x86_target_profiles.py",
     ],
     main = "x86_target_profiles.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         "//loom/py/loom/gen/support:c",
         "//loom/py/loom/gen/support:files",
@@ -62,6 +72,7 @@ iree_py_binary(
         "x86_packed_dot_contract.py",
     ],
     main = "x86_packed_dot_contract.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",

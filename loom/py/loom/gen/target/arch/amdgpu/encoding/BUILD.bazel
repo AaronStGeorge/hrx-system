@@ -7,9 +7,15 @@
 load("//build_tools/bazel:python.bzl", "iree_py_binary")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/py/loom/gen:__subpackages__"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+GENERATOR_VISIBILITY = [
+    "//loom/py/loom/gen:__subpackages__",
+    "//loom/src/loom/target/arch/amdgpu:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu:__subpackages__",
+]
 
 iree_py_binary(
     name = "encoding_tables",
@@ -18,6 +24,7 @@ iree_py_binary(
         "amdgpu_encoding_tables.py",
     ],
     main = "amdgpu_encoding_tables.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",

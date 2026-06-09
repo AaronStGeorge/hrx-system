@@ -7,9 +7,19 @@
 load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_library", "iree_py_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/py/loom/gen:__subpackages__"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+GENERATOR_VISIBILITY = [
+    "//loom/py/loom/gen:__subpackages__",
+    "//loom/src/loom/target/arch/amdgpu/contracts:__pkg__",
+    "//loom/src/loom/target/arch/ireevm/contracts:__pkg__",
+    "//loom/src/loom/target/arch/spirv/contracts:__pkg__",
+    "//loom/src/loom/target/arch/x86/contracts:__pkg__",
+    "//loom/src/loom/target/emit/wasm/contracts:__pkg__",
+    "//loom/src/loom/target/test/contracts:__pkg__",
+]
 
 CONTRACT_FRAGMENT_DEPS = [
     "//loom/py/loom:core",
@@ -80,6 +90,7 @@ iree_py_binary(
         "contract_fragment.py",
     ],
     main = "contract_fragment.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":contract_fragment",
         "//loom/py/loom/target/arch/amdgpu/contracts",
@@ -93,6 +104,7 @@ iree_py_binary(
         "lower_rule_shard.py",
     ],
     main = "lower_rule_shard.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":lower_rule_shard",
         "//loom/py/loom/target/arch/amdgpu/contracts",
@@ -106,6 +118,7 @@ iree_py_binary(
         "contract_fragment.py",
     ],
     main = "contract_fragment.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":contract_fragment",
         "//loom/py/loom/target/arch/ireevm/contracts",
@@ -119,6 +132,7 @@ iree_py_binary(
         "lower_rule_shard.py",
     ],
     main = "lower_rule_shard.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":lower_rule_shard",
         "//loom/py/loom/target/arch/ireevm/contracts",
@@ -132,6 +146,7 @@ iree_py_binary(
         "contract_fragment.py",
     ],
     main = "contract_fragment.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":contract_fragment",
         "//loom/py/loom/target/arch/spirv/contracts",
@@ -145,6 +160,7 @@ iree_py_binary(
         "lower_rule_shard.py",
     ],
     main = "lower_rule_shard.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":lower_rule_shard",
         "//loom/py/loom/target/arch/spirv/contracts",
@@ -158,6 +174,7 @@ iree_py_binary(
         "contract_fragment.py",
     ],
     main = "contract_fragment.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":contract_fragment",
         "//loom/py/loom/target/test:contracts",
@@ -171,6 +188,7 @@ iree_py_binary(
         "lower_rule_shard.py",
     ],
     main = "lower_rule_shard.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":lower_rule_shard",
         "//loom/py/loom/target/test:contracts",
@@ -184,6 +202,7 @@ iree_py_binary(
         "contract_fragment.py",
     ],
     main = "contract_fragment.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":contract_fragment",
         "//loom/py/loom/target/emit/wasm:contracts",
@@ -197,6 +216,7 @@ iree_py_binary(
         "lower_rule_shard.py",
     ],
     main = "lower_rule_shard.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":lower_rule_shard",
         "//loom/py/loom/target/emit/wasm:contracts",
@@ -210,6 +230,7 @@ iree_py_binary(
         "contract_fragment.py",
     ],
     main = "contract_fragment.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":contract_fragment",
         "//loom/py/loom/target/arch/x86/contracts",
@@ -223,6 +244,7 @@ iree_py_binary(
         "lower_rule_shard.py",
     ],
     main = "lower_rule_shard.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = [
         ":lower_rule_shard",
         "//loom/py/loom/target/arch/x86/contracts",

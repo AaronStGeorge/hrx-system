@@ -7,9 +7,20 @@
 load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_library", "iree_py_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//loom/py/loom/gen:__subpackages__"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+GENERATOR_VISIBILITY = [
+    "//loom/py/loom/gen:__subpackages__",
+    "//loom/src/loom/ops:__pkg__",
+    "//loom/src/loom/ops:__subpackages__",
+    "//loom/src/loom/target/arch/amdgpu/ops:__pkg__",
+    "//loom/src/loom/target/arch/ireevm/ops:__pkg__",
+    "//loom/src/loom/target/arch/spirv/ops:__pkg__",
+    "//loom/src/loom/target/arch/wasm/ops:__pkg__",
+    "//loom/src/loom/target/arch/x86/ops:__pkg__",
+]
 
 C_TABLE_MODEL_DEPS = [
     "//loom/py/loom:core",
@@ -55,6 +66,7 @@ iree_py_binary(
         "c_tables.py",
     ],
     main = "c_tables.py",
+    visibility = GENERATOR_VISIBILITY,
     deps = C_TABLES_DEPS,
 )
 
