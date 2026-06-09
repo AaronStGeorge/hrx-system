@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
-from loom.gen.generated_file import GENERATED_FILE_MARKER
 from loom.gen.package_inits import PackageInit, generate_package_init_files
+from loom.gen.support.generated_file import GENERATED_FILE_MARKER
 
 
 def test_generates_canonical_package_sentinel() -> None:

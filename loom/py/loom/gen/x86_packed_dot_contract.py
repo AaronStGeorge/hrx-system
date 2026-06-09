@@ -25,7 +25,7 @@ def _ensure_runtime_py_on_path() -> Path:
 
 REPO_ROOT = _ensure_runtime_py_on_path()
 
-from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.x86.packed_dot_data import X86_PACKED_DOT_DESCRIPTORS  # noqa: E402
 from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 

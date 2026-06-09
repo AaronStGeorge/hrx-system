@@ -23,7 +23,12 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
-from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.gen.support.c import c_string_view as _c_string_view  # noqa: E402
+from loom.gen.support.files import (  # noqa: E402
+    read_optional_text_file as _read_optional_text,
+)
+from loom.gen.support.files import write_text_file as _write_text  # noqa: E402
+from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.spirv.features import (  # noqa: E402
     FEATURE_ATOMS,
     FEATURE_PROFILES,
@@ -32,14 +37,6 @@ from loom.target.arch.spirv.features import (  # noqa: E402
     parse_isa_symbols,
     validate_feature_catalog,
 )
-
-
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
-
-
-def _c_string_view(value: str) -> str:
-    return f'IREE_SVL("{_c_string_literal(value)}")'
 
 
 def _c_identifier_suffix(key: str) -> str:
@@ -207,15 +204,6 @@ def _parse_arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     if not args.check and args.tables is None:
         parser.error("--tables is required unless --check is used")
     return args
-
-
-def _write_text(path: Path, contents: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(contents, encoding="utf-8")
-
-
-def _read_optional_text(path: Path | None) -> str | None:
-    return path.read_text(encoding="utf-8") if path is not None else None
 
 
 def main(argv: Sequence[str] | None = None) -> int:

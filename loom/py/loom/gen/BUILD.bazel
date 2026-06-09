@@ -12,18 +12,15 @@ package(
 )
 
 iree_py_library(
-    name = "generated_file",
-    srcs = [
-        "__init__.py",
-        "generated_file.py",
-    ],
+    name = "package",
+    srcs = ["__init__.py"],
 )
 
 iree_py_library(
     name = "low_descriptors",
     srcs = ["low_descriptors.py"],
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
     ],
 )
@@ -49,11 +46,11 @@ iree_py_test(
     main = "pytest_style_runner.py",
     deps = [
         ":c_tables",
-        ":generated_file",
         ":low_descriptors",
         "//loom/py/loom:core",
         "//loom/py/loom/dialect:package",
         "//loom/py/loom/error",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:descriptor_sets",
         "//loom/py/loom/target/test:descriptors",
     ],
@@ -66,8 +63,8 @@ iree_py_library(
         "package_inits.py",
     ],
     deps = [
-        ":generated_file",
         "//loom/py/loom:core",
+        "//loom/py/loom/gen/support:generated_file",
     ],
 )
 
@@ -80,8 +77,8 @@ iree_py_test(
     args = ["loom.gen.package_inits_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":generated_file",
         ":package_inits",
+        "//loom/py/loom/gen/support:generated_file",
     ],
 )
 
@@ -89,8 +86,9 @@ iree_py_library(
     name = "target_contract_fragments",
     srcs = ["target_contract_fragments.py"],
     deps = [
-        ":generated_file",
         "//loom/py/loom:core",
+        "//loom/py/loom/gen/support:c",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target/contracts",
     ],
 )
@@ -99,8 +97,8 @@ iree_py_library(
     name = "target_lower_rules",
     srcs = ["target_lower_rules.py"],
     deps = [
-        ":generated_file",
         "//loom/py/loom:core",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/contracts",
     ],
@@ -123,9 +121,9 @@ iree_py_test(
 )
 
 C_TABLES_DEPS = [
-    ":generated_file",
     "//loom/py/loom:core",
     "//loom/py/loom/dialect:package",
+    "//loom/py/loom/gen/support:generated_file",
     "//loom/py/loom/target/arch/amdgpu:dialect",
     "//loom/py/loom/target/arch/ireevm:dialect",
     "//loom/py/loom/target/arch/spirv:dialect",
@@ -171,9 +169,10 @@ iree_py_binary(
     srcs = ["c_errors.py"],
     main = "c_errors.py",
     deps = [
-        ":generated_file",
         "//loom/py/loom:core",
         "//loom/py/loom/error",
+        "//loom/py/loom/gen/support:files",
+        "//loom/py/loom/gen/support:generated_file",
     ],
 )
 
@@ -187,9 +186,10 @@ iree_py_test(
     args = ["loom.gen.c_errors_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":generated_file",
         "//loom/py/loom:core",
         "//loom/py/loom/error",
+        "//loom/py/loom/gen/support:files",
+        "//loom/py/loom/gen/support:generated_file",
     ],
 )
 
@@ -198,7 +198,7 @@ iree_py_binary(
     srcs = ["amdgpu_occupancy_tables.py"],
     main = "amdgpu_occupancy_tables.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target/arch/amdgpu:target_info",
     ],
 )
@@ -252,7 +252,9 @@ iree_py_binary(
     srcs = ["spirv_features.py"],
     main = "spirv_features.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:c",
+        "//loom/py/loom/gen/support:files",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target/arch/spirv:features",
     ],
 )
@@ -262,7 +264,7 @@ iree_py_binary(
     srcs = ["spirv_packet_rows.py"],
     main = "spirv_packet_rows.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/spirv:builtins",
         "//loom/py/loom/target/arch/spirv:cooperative_matrix",
@@ -278,7 +280,7 @@ iree_py_binary(
     srcs = ["spirv_cooperative_properties.py"],
     main = "spirv_cooperative_properties.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/spirv:cooperative_matrix",
         "//loom/py/loom/target/arch/spirv:cooperative_vector",
@@ -387,7 +389,9 @@ iree_py_binary(
     srcs = ["x86_target_profiles.py"],
     main = "x86_target_profiles.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:c",
+        "//loom/py/loom/gen/support:files",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target/arch/x86:target_info",
         "//loom/py/loom/target/emit/llvmir/x86:target_info",
     ],
@@ -398,7 +402,7 @@ iree_py_binary(
     srcs = ["x86_packed_dot_contract.py"],
     main = "x86_packed_dot_contract.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/x86:target_info",
     ],
@@ -488,7 +492,8 @@ iree_py_binary(
     srcs = ["amdgpu_target_info.py"],
     main = "amdgpu_target_info.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:c",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",
         "//loom/py/loom/target/arch/amdgpu:target_info",
@@ -500,7 +505,7 @@ iree_py_binary(
     srcs = ["amdgpu_target_records.py"],
     main = "amdgpu_target_records.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target/arch/amdgpu:target_info",
     ],
 )
@@ -541,7 +546,7 @@ iree_py_binary(
     srcs = ["amdgpu_target_refs.py"],
     main = "amdgpu_target_refs.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",
@@ -554,7 +559,7 @@ iree_py_binary(
     srcs = ["amdgpu_atomic_candidates.py"],
     main = "amdgpu_atomic_candidates.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
     ],
@@ -565,9 +570,9 @@ iree_py_binary(
     srcs = ["amdgpu_compare_candidates.py"],
     main = "amdgpu_compare_candidates.py",
     deps = [
-        ":generated_file",
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
     ],
@@ -578,7 +583,7 @@ iree_py_binary(
     srcs = ["amdgpu_matrix_contract_tables.py"],
     main = "amdgpu_matrix_contract_tables.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:matrix_contracts",
@@ -595,7 +600,7 @@ iree_py_test(
     args = ["loom.gen.amdgpu_matrix_contract_tables_test"],
     main = "pytest_style_runner.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:matrix_contracts",
@@ -607,7 +612,7 @@ iree_py_binary(
     srcs = ["amdgpu_encoding_tables.py"],
     main = "amdgpu_encoding_tables.py",
     deps = [
-        ":generated_file",
+        "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
         "//loom/py/loom/target/arch/amdgpu:isa_xml",

@@ -24,7 +24,7 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
-from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
     AmdgpuAtomicDescriptorCandidate,
     amdgpu_atomic_descriptor_candidates,

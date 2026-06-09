@@ -11,10 +11,9 @@ iree_add_all_subdirs()
 
 iree_py_library(
   NAME
-    generated_file
+    package
   SRCS
     "__init__.py"
-    "generated_file.py"
 )
 
 iree_py_library(
@@ -23,7 +22,7 @@ iree_py_library(
   SRCS
     "low_descriptors.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
 )
 
@@ -39,11 +38,11 @@ iree_py_test(
     "loom.gen.textmate_test"
   DEPS
     loom::py::loom::gen::c_tables
-    loom::py::loom::gen::generated_file
     loom::py::loom::gen::low_descriptors
     loom::py::loom::core
     loom::py::loom::dialect::package
     loom::py::loom::error::error
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::descriptor_sets
     loom::py::loom::target::test::descriptors
   PACKAGE_DIRS
@@ -58,8 +57,8 @@ iree_py_library(
     "bootstrap.py"
     "package_inits.py"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::core
+    loom::py::loom::gen::support::generated_file
 )
 
 iree_py_test(
@@ -70,8 +69,8 @@ iree_py_test(
   ARGS
     "loom.gen.package_inits_test"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::gen::package_inits
+    loom::py::loom::gen::support::generated_file
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -83,8 +82,9 @@ iree_py_library(
   SRCS
     "target_contract_fragments.py"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::core
+    loom::py::loom::gen::support::c
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::contracts::contracts
 )
 
@@ -94,8 +94,8 @@ iree_py_library(
   SRCS
     "target_lower_rules.py"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::core
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::contracts::contracts
 )
@@ -124,9 +124,9 @@ iree_py_library(
     "bootstrap.py"
     "c_tables.py"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::core
     loom::py::loom::dialect::package
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::dialect
     loom::py::loom::target::arch::ireevm::dialect
     loom::py::loom::target::arch::spirv::dialect
@@ -143,9 +143,9 @@ iree_py_library(
     "bootstrap.py"
     "c_tables.py"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::core
     loom::py::loom::dialect::package
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::dialect
     loom::py::loom::target::arch::ireevm::dialect
     loom::py::loom::target::arch::spirv::dialect
@@ -176,9 +176,10 @@ iree_py_library(
   SRCS
     "c_errors.py"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::core
     loom::py::loom::error::error
+    loom::py::loom::gen::support::files
+    loom::py::loom::gen::support::generated_file
 )
 
 iree_py_test(
@@ -189,9 +190,10 @@ iree_py_test(
   ARGS
     "loom.gen.c_errors_test"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::core
     loom::py::loom::error::error
+    loom::py::loom::gen::support::files
+    loom::py::loom::gen::support::generated_file
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -205,7 +207,7 @@ iree_py_library(
   SRCS
     "amdgpu_occupancy_tables.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::target_info
 )
 
@@ -269,7 +271,9 @@ iree_py_library(
   SRCS
     "spirv_features.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::c
+    loom::py::loom::gen::support::files
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::spirv::features
 )
 
@@ -281,7 +285,7 @@ iree_py_library(
   SRCS
     "spirv_packet_rows.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::spirv::builtins
     loom::py::loom::target::arch::spirv::cooperative_matrix
@@ -299,7 +303,7 @@ iree_py_library(
   SRCS
     "spirv_cooperative_properties.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::spirv::cooperative_matrix
     loom::py::loom::target::arch::spirv::cooperative_vector
@@ -423,7 +427,9 @@ iree_py_library(
   SRCS
     "x86_target_profiles.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::c
+    loom::py::loom::gen::support::files
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::x86::target_info
     loom::py::loom::target::emit::llvmir::x86::target_info
 )
@@ -436,7 +442,7 @@ iree_py_library(
   SRCS
     "x86_packed_dot_contract.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::x86::target_info
 )
@@ -541,7 +547,8 @@ iree_py_library(
   SRCS
     "amdgpu_target_info.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::c
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::isa_xml
     loom::py::loom::target::arch::amdgpu::target_info
@@ -555,7 +562,7 @@ iree_py_library(
   SRCS
     "amdgpu_target_records.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::target_info
 )
 
@@ -600,7 +607,7 @@ iree_py_library(
   SRCS
     "amdgpu_target_refs.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::isa_xml
@@ -615,7 +622,7 @@ iree_py_library(
   SRCS
     "amdgpu_atomic_candidates.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
 )
@@ -628,9 +635,9 @@ iree_py_library(
   SRCS
     "amdgpu_compare_candidates.py"
   DEPS
-    loom::py::loom::gen::generated_file
     loom::py::loom::dialect::scalar::scalar
     loom::py::loom::dialect::vector::vector
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
 )
@@ -643,7 +650,7 @@ iree_py_library(
   SRCS
     "amdgpu_matrix_contract_tables.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::matrix_contracts
@@ -657,7 +664,7 @@ iree_py_test(
   ARGS
     "loom.gen.amdgpu_matrix_contract_tables_test"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::matrix_contracts
@@ -674,7 +681,7 @@ iree_py_library(
   SRCS
     "amdgpu_encoding_tables.py"
   DEPS
-    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::isa_xml

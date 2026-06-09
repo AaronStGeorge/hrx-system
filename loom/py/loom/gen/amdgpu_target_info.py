@@ -24,7 +24,9 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
-from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.gen.support.c import c_string_arg as _c_string_arg  # noqa: E402
+from loom.gen.support.c import c_string_literal as _c_string_literal  # noqa: E402
+from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     AmdgpuIsaFactSource,
     parse_amdgpu_isa_xml_path,
@@ -70,14 +72,6 @@ class _AmdgpuDescriptorSetRow:
     s_branch_opcode: int
     s_cbranch_scc0_opcode: int
     s_cbranch_scc1_opcode: int
-
-
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
-
-
-def _c_string_arg(value: str) -> str:
-    return f'"{_c_string_literal(value)}"'
 
 
 def _bool_literal(value: bool) -> str:

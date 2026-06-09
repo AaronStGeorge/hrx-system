@@ -26,7 +26,7 @@ from loom.builder_model import (
 from loom.builders import default_ops
 from loom.dsl import Op
 from loom.gen import bootstrap as _bootstrap
-from loom.gen.generated_file import line_comment_header
+from loom.gen.support.generated_file import line_comment_header
 
 type CategoryGroups = Mapping[str, Sequence[tuple[Any, Sequence[Op]]]]
 

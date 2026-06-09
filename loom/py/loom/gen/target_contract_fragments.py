@@ -8,13 +8,14 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from loom.dsl import Op
-from loom.gen.generated_file import line_comment_header
+from loom.gen.support.c import c_identifier as _c_identifier
+from loom.gen.support.c import c_pascal_identifier as _pascal_identifier
+from loom.gen.support.generated_file import line_comment_header
 from loom.target.contracts import (
     CONTRACT_ROW_NONE,
     CompiledContractFragment,
@@ -289,21 +290,3 @@ def _generated_table_prefix(table: ContractFragment) -> str:
 
 def _header_guard_from_public_header(public_header: str) -> str:
     return _c_identifier(public_header).upper() + "_"
-
-
-def _pascal_identifier(value: str) -> str:
-    return "".join(part[:1].upper() + part[1:] for part in _identifier_parts(value))
-
-
-def _c_identifier(value: str) -> str:
-    parts = _identifier_parts(value)
-    if not parts:
-        return "_"
-    identifier = "_".join(parts)
-    if identifier[0].isdigit():
-        return "_" + identifier
-    return identifier
-
-
-def _identifier_parts(value: str) -> tuple[str, ...]:
-    return tuple(part for part in re.split(r"[^0-9A-Za-z]+", value) if part)

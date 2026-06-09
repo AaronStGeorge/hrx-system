@@ -24,7 +24,9 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
-from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.gen.support.c import c_string_literal as _c_string_literal  # noqa: E402
+from loom.gen.support.files import write_text_file as _write_text  # noqa: E402
+from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.x86.packed_dot_data import (  # noqa: E402
     FEATURE_AVX10_2,
     FEATURE_AVX512_BF16,
@@ -54,10 +56,6 @@ _FEATURE_BIT_C_NAMES = (
     (FEATURE_AVX10_2, "LOOM_X86_FEATURE_AVX10_2"),
     (FEATURE_AVX512_BF16, "LOOM_X86_FEATURE_AVX512_BF16"),
 )
-
-
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
 
 def _c_arg(value: str) -> str:
@@ -172,11 +170,6 @@ def _parse_arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     if not args.check and args.native_output is None and args.llvmir_output is None:
         parser.error("at least one output flag is required unless --check is used")
     return args
-
-
-def _write_text(path: Path, contents: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(contents, encoding="utf-8")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -40,7 +40,8 @@ def _ensure_runtime_py_on_path() -> None:
 _ensure_runtime_py_on_path()
 
 from loom.errors import Emitter, ErrorDef, ErrorDomain, ParamKind, Severity  # noqa: E402
-from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.gen.support.files import write_text_file as _write_text  # noqa: E402
+from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 
 # Maps Python ParamKind to C enum name.
 PARAM_KIND_MAP: dict[ParamKind, str] = {
@@ -415,11 +416,6 @@ def generate_error_catalog_json(errors: list[ErrorDef]) -> str:
         catalog.append(entry)
 
     return json.dumps(catalog, indent=2, ensure_ascii=False) + "\n"
-
-
-def _write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
 
 
 _OPTIONAL_TARGET_DOMAINS = frozenset(

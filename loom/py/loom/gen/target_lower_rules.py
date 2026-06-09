@@ -15,7 +15,7 @@ from pathlib import Path
 
 from loom.dsl import Op
 from loom.errors import ErrorDef, ErrorDomain
-from loom.gen.generated_file import line_comment_header
+from loom.gen.support.generated_file import line_comment_header
 from loom.target.contracts import (
     LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE,
     LOWER_EMIT_FLAG_ACCUMULATE_SKIP_FIRST_LANE,

@@ -26,7 +26,7 @@ def _ensure_runtime_py_on_path() -> None:
 _ensure_runtime_py_on_path()
 
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate  # noqa: E402
-from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.descriptors import amdgpu_descriptor_ref_keys  # noqa: E402
 from loom.target.low_descriptors import target_relative_name  # noqa: E402
 

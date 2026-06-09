@@ -28,7 +28,7 @@ from loom.dsl import Op, TypeDef
 from loom.errors import ErrorDomain
 from loom.gen import bootstrap as _bootstrap
 from loom.gen.c_tables import KEYWORD_MAP
-from loom.gen.generated_file import generated_comment
+from loom.gen.support.generated_file import generated_comment
 
 
 def _regex_alternation(literals: Sequence[str]) -> str:

@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from loom.gen import bootstrap as _bootstrap
-from loom.gen.generated_file import line_comment_header
+from loom.gen.support.generated_file import line_comment_header
 
 
 @dataclass(frozen=True, slots=True)
