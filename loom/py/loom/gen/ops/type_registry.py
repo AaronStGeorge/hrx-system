@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any
 
 from loom.dsl import ContractFamily, TypeDef, TypeSemantic
@@ -40,7 +41,7 @@ _IR_KIND_MAP: dict[str, str] = {
 _C_SYMBOL_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def _contract_family_mask(contracts: list[ContractFamily]) -> str:
+def _contract_family_mask(contracts: Sequence[ContractFamily]) -> str:
     """Returns a stable C bitmask expression for contract families."""
 
     unique_contracts = set(contracts)
