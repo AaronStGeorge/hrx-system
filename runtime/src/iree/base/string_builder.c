@@ -169,8 +169,12 @@ IREE_API_EXPORT iree_status_t iree_string_builder_append_string(
     }
     IREE_RETURN_IF_ERROR(
         iree_string_builder_reserve(builder, required_capacity));
-    // Only copy the bytes if we are not doing a size calculation.
-    memcpy(builder->buffer + builder->size, value.data, value.size);
+    // Only copy bytes when there are bytes to copy. Empty string views may have
+    // a NULL data pointer and C library routines still require non-NULL
+    // arguments for zero-length operations.
+    if (!iree_string_view_is_empty(value)) {
+      memcpy(builder->buffer + builder->size, value.data, value.size);
+    }
     builder->buffer[builder->size + value.size] = 0;  // NUL
   }
   builder->size += value.size;

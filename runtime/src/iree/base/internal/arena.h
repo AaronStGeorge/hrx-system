@@ -66,8 +66,10 @@ typedef struct iree_arena_block_pool_t {
 
 // Initializes a new block pool in |out_block_pool|.
 // |block_allocator| will be used to allocate and free blocks for the pool.
-// Each block allocated will be |total_block_size| but have a slightly smaller
-// usable size due to the tracking overhead. Prefer powers of two.
+// Each block allocated will be at least |total_block_size| but have a slightly
+// smaller usable size due to the tracking overhead. The block size is aligned
+// upward during initialization so the trailer remains naturally aligned. Prefer
+// powers of two.
 void iree_arena_block_pool_initialize(iree_host_size_t total_block_size,
                                       iree_allocator_t block_allocator,
                                       iree_arena_block_pool_t* out_block_pool);

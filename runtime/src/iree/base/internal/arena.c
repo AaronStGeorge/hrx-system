@@ -33,6 +33,15 @@ void iree_arena_block_pool_initialize(iree_host_size_t total_block_size,
                                       iree_arena_block_pool_t* out_block_pool) {
   IREE_TRACE_ZONE_BEGIN(z0);
 
+  iree_host_size_t aligned_total_block_size = 0;
+  const bool can_align_total_block_size = iree_host_size_checked_align(
+      total_block_size, iree_alignof(iree_arena_block_t),
+      &aligned_total_block_size);
+  IREE_ASSERT(can_align_total_block_size, "block size too large");
+  if (IREE_LIKELY(can_align_total_block_size)) {
+    total_block_size = aligned_total_block_size;
+  }
+
   memset(out_block_pool, 0, sizeof(*out_block_pool));
   IREE_ASSERT(total_block_size >= sizeof(iree_arena_block_t),
               "block size too small for header");
