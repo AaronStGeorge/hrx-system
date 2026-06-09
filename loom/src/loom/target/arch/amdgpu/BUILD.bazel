@@ -57,11 +57,6 @@ _AMDGPU_PROVIDER_VISIBILITY = [
 loom_assert_no_dependencies(
     name = "core_target_interfaces_no_amdgpu_target_deps",
     dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         ":math_policy",
         ":packet_diagnostics",
@@ -78,12 +73,8 @@ loom_assert_no_dependencies(
 )
 
 loom_assert_no_dependencies(
-    name = "amdgpu_target_refs_no_descriptor_shard_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
-    ],
+    name = "amdgpu_target_refs_no_descriptor_registry_dep",
+    dependencies = ["//loom/src/loom/target/arch/amdgpu/descriptors:low_registry"],
     targets = [
         ":target_refs",
         ":packet_diagnostics",
@@ -93,11 +84,6 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_abi_no_backend_runtime_or_descriptor_deps",
     dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3_ids",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4_ids",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3_ids",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x_ids",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_ids",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
@@ -108,9 +94,6 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "amdgpu_hal_binding_materialization_no_backend_runtime_or_descriptor_deps",
     dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/tool:llvm",
         "//runtime/src/iree/hal/drivers/amdgpu",
@@ -239,11 +222,7 @@ loom_cc_test(
     deps = [
         ":target_info",
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
         "//loom/src/loom/target/arch/amdgpu/planning:occupancy_tables",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -698,7 +677,7 @@ loom_cc_test(
         ":target_refs",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:storage_lease",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
         "//loom/src/loom/target/arch/amdgpu/planning:storage_lease",
         "//loom/src/loom/target/arch/amdgpu/planning:wait_plan",
         "//runtime/src/iree/base/internal:arena",

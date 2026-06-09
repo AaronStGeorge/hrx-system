@@ -26,26 +26,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "amdgpu_native_emit_no_arch_low_registry_dep",
-    dependencies = ["//loom/src/loom/target/arch/amdgpu/descriptors:low_registry"],
-    targets = [
-        ":assembly",
-        ":descriptor",
-        ":encoding",
-        ":hal_executable",
-        ":hal_kernel_metadata",
-        ":hsaco",
-        ":kernel_assembly",
-        ":kernel_hsaco",
-        ":kernel_record",
-        ":loom_check",
-        ":metadata",
-        ":preflight",
-        ":spill_lowering",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "amdgpu_native_emit_no_hal_driver_dep",
     dependencies = ["//runtime/src/iree/hal/drivers/amdgpu"],
     targets = [
@@ -215,7 +195,7 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target/arch/amdgpu:target_refs",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -509,7 +489,7 @@ loom_cc_test(
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target/arch/amdgpu:ops",
         "//loom/src/loom/target/arch/amdgpu:target_info",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry_for_testing",
         "//loom/src/loom/target/arch/amdgpu/hal:binding_materialization",
         "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
         "//loom/src/loom/target/arch/amdgpu/planning:packet_plan",

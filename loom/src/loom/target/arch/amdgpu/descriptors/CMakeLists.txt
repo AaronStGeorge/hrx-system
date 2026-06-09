@@ -139,6 +139,27 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
+    shards_for_testing
+  HDRS
+    ":cdna3_descriptors.h"
+    ":cdna4_descriptors.h"
+    ":rdna3_descriptors.h"
+    ":rdna4_descriptors.h"
+    ":rdna4_gfx125x_descriptors.h"
+  DEPS
+    ::cdna3
+    ::cdna4
+    ::rdna3
+    ::rdna4
+    ::rdna4_gfx125x
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -154,6 +175,19 @@ loom_cc_library(
     loom::codegen::low::descriptors
     loom::target::low_descriptor_registry
     loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
+    low_registry_for_testing
+  HDRS
+    "low_registry.h"
+  DEPS
+    ::low_registry
+  TESTONLY
   PUBLIC
 )
 endif()

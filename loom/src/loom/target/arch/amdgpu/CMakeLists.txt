@@ -128,11 +128,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
-    loom::target::arch::amdgpu::descriptors::cdna3
-    loom::target::arch::amdgpu::descriptors::cdna4
-    loom::target::arch::amdgpu::descriptors::rdna3
-    loom::target::arch::amdgpu::descriptors::rdna4
-    loom::target::arch::amdgpu::descriptors::rdna4_gfx125x
+    loom::target::arch::amdgpu::descriptors::shards_for_testing
     loom::target::arch::amdgpu::planning::occupancy_tables
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
@@ -3980,7 +3976,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
     loom::codegen::low::storage_lease
-    loom::target::arch::amdgpu::descriptors::cdna3
+    loom::target::arch::amdgpu::descriptors::shards_for_testing
     loom::target::arch::amdgpu::planning::storage_lease
     loom::target::arch::amdgpu::planning::wait_plan
   LABELS

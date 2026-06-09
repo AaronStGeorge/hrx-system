@@ -220,7 +220,7 @@ loom_cc_test(
     loom::codegen::low::builder
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::descriptors::rdna3
+    loom::target::arch::amdgpu::descriptors::shards_for_testing
     loom::target::arch::amdgpu::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
@@ -598,7 +598,7 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::descriptors::low_registry_for_testing
     loom::target::arch::amdgpu::hal::binding_materialization
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::ops
