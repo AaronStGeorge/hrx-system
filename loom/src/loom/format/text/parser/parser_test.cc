@@ -16,7 +16,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser/context.h"
 #include "loom/format/text/parser/diagnostics.h"
-#include "loom/format/text/printer/printer.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"

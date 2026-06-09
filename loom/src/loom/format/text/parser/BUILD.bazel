@@ -7,7 +7,7 @@
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_benchmark", "loom_cc_library", "loom_cc_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
@@ -46,6 +46,7 @@ loom_cc_library(
         "scope.h",
         "types.h",
     ],
+    visibility = ["//loom/src/loom/format/text:__pkg__"],
     deps = [
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
@@ -69,7 +70,7 @@ loom_cc_test(
         ":parser_impl",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text/printer:printer_impl",
+        "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/test",

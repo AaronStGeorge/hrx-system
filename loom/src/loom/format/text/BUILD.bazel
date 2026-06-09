@@ -26,28 +26,6 @@ loom_assert_no_dependencies(
     targets = [
         ":parser",
         ":printer",
-        "//loom/src/loom/format/text/parser:parser_impl",
-        "//loom/src/loom/format/text/printer:printer_impl",
-    ],
-)
-
-loom_assert_no_dependencies(
-    name = "text_parser_no_printer_deps",
-    dependencies = [
-        "//loom/src/loom/format/text/printer:printer_impl",
-    ],
-    targets = [
-        "//loom/src/loom/format/text/parser:parser_impl",
-    ],
-)
-
-loom_assert_no_dependencies(
-    name = "text_printer_no_parser_deps",
-    dependencies = [
-        "//loom/src/loom/format/text/parser:parser_impl",
-    ],
-    targets = [
-        "//loom/src/loom/format/text/printer:printer_impl",
     ],
 )
 
@@ -102,7 +80,7 @@ loom_cc_fuzz(
 )
 
 #===------------------------------------------------------------------------===#
-# Public compatibility facades
+# Public parser/printer facades
 #===------------------------------------------------------------------------===#
 
 loom_cc_library(

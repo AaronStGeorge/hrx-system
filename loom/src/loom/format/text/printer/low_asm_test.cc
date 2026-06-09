@@ -10,7 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm.h"
-#include "loom/format/text/parser/parser.h"
+#include "loom/format/text/parser.h"
 #include "loom/format/text/printer/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"

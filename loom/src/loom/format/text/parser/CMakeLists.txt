@@ -70,7 +70,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::error::diagnostic
     loom::error::error_defs
-    loom::format::text::printer::printer_impl
+    loom::format::text::printer
     loom::ir
     loom::ops::op_defs
     loom::ops::test

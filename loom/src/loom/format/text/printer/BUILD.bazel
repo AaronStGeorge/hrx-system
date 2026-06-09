@@ -7,7 +7,7 @@
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
@@ -38,6 +38,7 @@ loom_cc_library(
         "printer.h",
         "regions.h",
     ],
+    visibility = ["//loom/src/loom/format/text:__pkg__"],
     deps = [
         "//loom/src/loom/format/text:low_asm",
         "//loom/src/loom/ir",
@@ -72,7 +73,7 @@ loom_cc_test(
     deps = [
         ":printer_impl",
         "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/format/text/parser:parser_impl",
+        "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/test",

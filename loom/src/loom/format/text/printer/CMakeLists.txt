@@ -74,7 +74,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::text_asm
-    loom::format::text::parser::parser_impl
+    loom::format::text::parser
     loom::ir
     loom::ops::low
     loom::ops::test
