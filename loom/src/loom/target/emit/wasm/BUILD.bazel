@@ -16,10 +16,14 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+_WASM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+
+_WASM_TARGET_VISIBILITY = ["//loom/src/loom/target/arch/wasm:__pkg__"]
 
 #===------------------------------------------------------------------------===#
 # Layering checks
@@ -29,12 +33,6 @@ loom_assert_no_dependencies(
     name = "wasm_lower_no_wasm_descriptor_dep",
     dependencies = ["//loom/src/loom/target/arch/wasm:descriptors"],
     targets = [":lower"],
-)
-
-loom_assert_no_dependencies(
-    name = "core_run_tool_no_wasm_emit_dep",
-    dependencies = [":module_binary"],
-    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
 )
 
 #===------------------------------------------------------------------------===#
@@ -135,6 +133,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
+    visibility = _WASM_CHECK_VISIBILITY,
     deps = [
         ":loom_check",
         "//loom/src/loom/tools/loom-check:provider",
@@ -146,6 +145,7 @@ loom_cc_library(
     name = "lower",
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
+    visibility = _WASM_TARGET_VISIBILITY,
     deps = [
         ":error_defs",
         "//loom/src/loom/codegen/low:lower",

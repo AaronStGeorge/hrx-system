@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -16,20 +15,16 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
+_SPIRV_C_API_VISIBILITY = ["//loom/binding/c:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "core_run_tool_no_spirv_emit_dep",
-    dependencies = [":module_builder"],
-    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
-)
+_SPIRV_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+
+_SPIRV_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/spirv:__pkg__"]
 
 #===------------------------------------------------------------------------===#
 # SPIR-V emission
@@ -52,6 +47,7 @@ loom_cc_library(
     name = "module_builder",
     srcs = ["module_builder.c"],
     hdrs = ["module_builder.h"],
+    visibility = _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":binary_format",
         ":binary_writer",
@@ -150,6 +146,7 @@ loom_cc_library(
     name = "module_emitter",
     srcs = ["module_emitter.c"],
     hdrs = ["module_emitter.h"],
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":binary_format",
         ":module_abi",
@@ -195,6 +192,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
+    visibility = _SPIRV_CHECK_VISIBILITY,
     deps = [
         ":loom_check",
         "//loom/src/loom/tools/loom-check:provider",

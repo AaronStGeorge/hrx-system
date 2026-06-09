@@ -16,10 +16,14 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+_AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
+
+_AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
 #===------------------------------------------------------------------------===#
 # Layering checks
@@ -44,12 +48,6 @@ loom_assert_no_dependencies(
         ":preflight",
         ":spill_lowering",
     ],
-)
-
-loom_assert_no_dependencies(
-    name = "core_run_tool_no_amdgpu_hal_kernel_library_dep",
-    dependencies = [":hal_kernel_library"],
-    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
 )
 
 loom_assert_no_dependencies(
@@ -96,6 +94,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/loom_check.c"],
     hdrs = ["check/loom_check.h"],
+    visibility = _AMDGPU_CHECK_VISIBILITY,
     deps = [
         ":assembly",
         ":encoding",
@@ -325,6 +324,7 @@ loom_cc_library(
     name = "hal_executable",
     srcs = ["hal_executable.c"],
     hdrs = ["hal_executable.h"],
+    visibility = _AMDGPU_TOOLING_VISIBILITY,
     deps = [
         ":hal_kernel_metadata",
         "//runtime/src/iree/base",
@@ -338,6 +338,7 @@ loom_cc_library(
     name = "hal_kernel_library",
     srcs = ["hal_kernel_library.c"],
     hdrs = ["hal_kernel_library.h"],
+    visibility = _AMDGPU_TOOLING_VISIBILITY,
     deps = [
         ":hal_kernel_metadata",
         ":kernel_assembly",

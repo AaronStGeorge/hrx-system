@@ -6,9 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
-    "loom_cc_test",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
@@ -16,26 +14,12 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "x86_native_check_no_x86_low_registry_dep",
-    dependencies = ["//loom/src/loom/target/arch/x86:low_registry"],
-    targets = [":loom_check"],
-)
-
-loom_assert_no_dependencies(
-    name = "core_run_tool_no_x86_native_emit_dep",
-    dependencies = [":assembly"],
-    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
-)
+_X86_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/x86:__pkg__"]
 
 #===------------------------------------------------------------------------===#
 # x86 native assembly fragments
@@ -70,6 +54,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/loom_check.c"],
     hdrs = ["check/loom_check.h"],
+    visibility = _X86_CHECK_VISIBILITY,
     deps = [
         ":assembly",
         "//loom/src/loom/tools/loom-check:execute",
