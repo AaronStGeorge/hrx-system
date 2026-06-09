@@ -87,7 +87,7 @@ loom_cc_test(
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/spirv:low_registry",
-        "//loom/src/loom/target/arch/spirv:ops",
+        "//loom/src/loom/target/arch/spirv/ops",
         "//loom/src/loom/testing:module_ptr",
         "//loom/src/loom/tooling/execution/hal:artifact",
         "//loom/src/loom/tooling/execution/hal:runtime",

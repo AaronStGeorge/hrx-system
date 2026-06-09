@@ -8,7 +8,6 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_generated_cc_library",
     "loom_low_descriptor_cc_library",
 )
 load(
@@ -29,6 +28,8 @@ _WASM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/emit/wasm/contracts:__pkg__
 _WASM_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/wasm:__pkg__"]
 
 _WASM_LOWER_VISIBILITY = ["//loom/src/loom/target/emit/wasm/lower:__pkg__"]
+
+_WASM_OPS_VISIBILITY = ["//loom/src/loom/target/arch/wasm/ops:__pkg__"]
 
 _WASM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
@@ -52,6 +53,7 @@ loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
+    visibility = _WASM_OPS_VISIBILITY,
     deps = [
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
@@ -65,36 +67,6 @@ loom_cc_library(
     textual_hdrs = ["math_policy_tables.inl"],
     deps = [
         "//loom/src/loom/target:math_policy",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_generated_cc_library(
-    name = "ops",
-    srcs = [
-        "ops/registry.c",
-    ],
-    hdrs = [
-        "ops/ops.h",
-        "ops/registry.h",
-    ],
-    args = ["--dialect=wasm"],
-    generated_src_flags = [
-        "--builders",
-        "--tables",
-    ],
-    generated_srcs = [
-        "ops/builders.c",
-        "ops/tables.c",
-    ],
-    generator = "//loom/py/loom/gen:c_tables_generator",
-    deps = [
-        ":target_records",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
 )
@@ -139,8 +111,8 @@ loom_cc_library(
         ":low_registry",
         ":low_verify",
         ":math_policy",
-        ":ops",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/wasm/ops",
         "//loom/src/loom/target/emit/wasm/lower",
         "//runtime/src/iree/base",
     ],

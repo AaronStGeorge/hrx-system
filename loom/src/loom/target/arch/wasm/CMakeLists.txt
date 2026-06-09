@@ -55,36 +55,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_WASM)
-loom_generated_cc_library(
-  NAME
-    ops
-  GENERATOR
-    loom::py::loom::gen::c_tables_generator
-  SRCS
-    "ops/registry.c"
-  GENERATED_SRC_FLAGS
-    "--builders"
-    "--tables"
-  GENERATED_SRCS
-    "ops/builders.c"
-    "ops/tables.c"
-  HDRS
-    "ops/ops.h"
-    "ops/registry.h"
-  ARGS
-    "--dialect=wasm"
-  DEPS
-    ::target_records
-    iree::base
-    loom::error::error_defs
-    loom::ir
-    loom::ops::op_defs
-    loom::ops::target
-    loom::target::types
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     low_registry
@@ -137,8 +107,8 @@ loom_cc_library(
     ::low_registry
     ::low_verify
     ::math_policy
-    ::ops
     iree::base
+    loom::target::arch::wasm::ops
     loom::target::emit::wasm::lower
     loom::target::provider
   PUBLIC

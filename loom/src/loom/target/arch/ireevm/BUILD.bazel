@@ -7,7 +7,6 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
-    "loom_generated_cc_library",
     "loom_low_descriptor_cc_library",
 )
 load(
@@ -28,6 +27,8 @@ _IREEVM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/contracts:__p
 _IREEVM_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/ireevm:__pkg__"]
 
 _IREEVM_EXECUTION_VISIBILITY = ["//loom/src/loom/tooling/execution/ireevm:__pkg__"]
+
+_IREEVM_OPS_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/ops:__pkg__"]
 
 _IREEVM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
@@ -53,42 +54,8 @@ loom_cc_library(
         "feature_bits.h",
         "target_records.h",
     ],
+    visibility = _IREEVM_OPS_VISIBILITY,
     deps = [
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_generated_cc_library(
-    name = "ops",
-    srcs = [
-        "ops/registry.c",
-        "ops/verify.c",
-    ],
-    hdrs = [
-        "ops/ops.h",
-        "ops/registry.h",
-    ],
-    args = ["--dialect=ireevm"],
-    generated_src_flags = [
-        "--builders",
-        "--tables",
-    ],
-    generated_srcs = [
-        "ops/builders.c",
-        "ops/tables.c",
-    ],
-    generator = "//loom/py/loom/gen:c_tables_generator",
-    visibility = _IREEVM_EXECUTION_VISIBILITY,
-    deps = [
-        ":target_records",
-        "//loom/src/loom/error:emitter",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:func_symbol_facts",
-        "//loom/src/loom/ops:function_contract_verify",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -100,13 +67,13 @@ loom_cc_library(
     hdrs = ["lower.h"],
     deps = [
         ":descriptors_ids",
-        ":ops",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/arch/ireevm/contracts",
+        "//loom/src/loom/target/arch/ireevm/ops",
         "//runtime/src/iree/base",
     ],
 )
@@ -142,10 +109,10 @@ loom_cc_library(
     srcs = ["ref_lifetime_pass.c"],
     hdrs = ["ref_lifetime_pass.h"],
     deps = [
-        ":ops",
         "//loom/src/loom/analysis:ownership_lifetime",
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:types",
+        "//loom/src/loom/target/arch/ireevm/ops",
         "//runtime/src/iree/base",
     ],
 )
@@ -170,10 +137,10 @@ loom_cc_library(
         ":low_registry",
         ":lower",
         ":math_policy",
-        ":ops",
         ":pass_registry",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/ireevm/ops",
         "//runtime/src/iree/base",
     ],
 )

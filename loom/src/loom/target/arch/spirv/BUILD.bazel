@@ -31,6 +31,8 @@ _SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
 _SPIRV_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/spirv:__pkg__"]
 
+_SPIRV_OPS_VISIBILITY = ["//loom/src/loom/target/arch/spirv/ops:__pkg__"]
+
 _SPIRV_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
@@ -206,40 +208,9 @@ loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
-    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_EMIT_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_EMIT_VISIBILITY + _SPIRV_OPS_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":features",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_generated_cc_library(
-    name = "ops",
-    srcs = [
-        "ops/registry.c",
-    ],
-    hdrs = [
-        "ops/ops.h",
-        "ops/registry.h",
-    ],
-    args = ["--dialect=spirv"],
-    generated_src_flags = [
-        "--builders",
-        "--tables",
-    ],
-    generated_srcs = [
-        "ops/builders.c",
-        "ops/tables.c",
-    ],
-    generator = "//loom/py/loom/gen:c_tables_generator",
-    visibility = _SPIRV_TOOLING_VISIBILITY,
-    deps = [
-        ":target_records",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -356,8 +327,8 @@ loom_cc_library(
         ":low_verify",
         ":lower",
         ":math_policy",
-        ":ops",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/spirv/ops",
         "//runtime/src/iree/base",
     ],
 )

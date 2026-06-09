@@ -29,6 +29,8 @@ _X86_LLVMIR_VISIBILITY = ["//loom/src/loom/target/emit/llvmir/x86:__pkg__"]
 
 _X86_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
 
+_X86_OPS_VISIBILITY = ["//loom/src/loom/target/arch/x86/ops:__pkg__"]
+
 _X86_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
@@ -57,38 +59,9 @@ loom_cc_library(
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
     textual_hdrs = [":target_profiles.inl"],
+    visibility = _X86_OPS_VISIBILITY,
     deps = [
         ":feature_bits",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_generated_cc_library(
-    name = "ops",
-    srcs = [
-        "ops/registry.c",
-    ],
-    hdrs = [
-        "ops/ops.h",
-        "ops/registry.h",
-    ],
-    args = ["--dialect=x86"],
-    generated_src_flags = [
-        "--builders",
-        "--tables",
-    ],
-    generated_srcs = [
-        "ops/builders.c",
-        "ops/tables.c",
-    ],
-    generator = "//loom/py/loom/gen:c_tables_generator",
-    deps = [
-        ":target_records",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -349,8 +322,8 @@ loom_cc_library(
         ":low_registry",
         ":lower",
         ":math_policy",
-        ":ops",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/x86/ops",
         "//runtime/src/iree/base",
     ],
 )

@@ -39,40 +39,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_IREE_VM)
-loom_generated_cc_library(
-  NAME
-    ops
-  GENERATOR
-    loom::py::loom::gen::c_tables_generator
-  SRCS
-    "ops/registry.c"
-    "ops/verify.c"
-  GENERATED_SRC_FLAGS
-    "--builders"
-    "--tables"
-  GENERATED_SRCS
-    "ops/builders.c"
-    "ops/tables.c"
-  HDRS
-    "ops/ops.h"
-    "ops/registry.h"
-  ARGS
-    "--dialect=ireevm"
-  DEPS
-    ::target_records
-    iree::base
-    loom::error::emitter
-    loom::error::error_defs
-    loom::ir
-    loom::ops::func_symbol_facts
-    loom::ops::function_contract_verify
-    loom::ops::op_defs
-    loom::ops::target
-    loom::target::types
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
 loom_cc_library(
   NAME
     lower
@@ -82,7 +48,6 @@ loom_cc_library(
     "lower/registry.c"
   DEPS
     ::descriptors_ids
-    ::ops
     iree::base
     loom::codegen::low::lower
     loom::error::error_defs
@@ -90,6 +55,7 @@ loom_cc_library(
     loom::ops::low
     loom::ops::scalar
     loom::target::arch::ireevm::contracts
+    loom::target::arch::ireevm::ops
   PUBLIC
 )
 endif()
@@ -139,11 +105,11 @@ loom_cc_library(
   SRCS
     "ref_lifetime_pass.c"
   DEPS
-    ::ops
     iree::base
     loom::analysis::ownership_lifetime
     loom::ir
     loom::pass::types
+    loom::target::arch::ireevm::ops
   PUBLIC
 )
 endif()
@@ -176,10 +142,10 @@ loom_cc_library(
     ::low_registry
     ::lower
     ::math_policy
-    ::ops
     ::pass_registry
     iree::base
     loom::pass::builder
+    loom::target::arch::ireevm::ops
     loom::target::provider
   PUBLIC
 )

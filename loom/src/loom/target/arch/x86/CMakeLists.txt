@@ -53,36 +53,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86)
-loom_generated_cc_library(
-  NAME
-    ops
-  GENERATOR
-    loom::py::loom::gen::c_tables_generator
-  SRCS
-    "ops/registry.c"
-  GENERATED_SRC_FLAGS
-    "--builders"
-    "--tables"
-  GENERATED_SRCS
-    "ops/builders.c"
-    "ops/tables.c"
-  HDRS
-    "ops/ops.h"
-    "ops/registry.h"
-  ARGS
-    "--dialect=x86"
-  DEPS
-    ::target_records
-    iree::base
-    loom::error::error_defs
-    loom::ir
-    loom::ops::op_defs
-    loom::ops::target
-    loom::target::types
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     math_policy
@@ -386,8 +356,8 @@ loom_cc_library(
     ::low_registry
     ::lower
     ::math_policy
-    ::ops
     iree::base
+    loom::target::arch::x86::ops
     loom::target::provider
   PUBLIC
 )
