@@ -25,6 +25,7 @@ def _ensure_runtime_py_on_path() -> Path:
 
 REPO_ROOT = _ensure_runtime_py_on_path()
 
+from loom.gen.support.c import c_string_literal as _c_string_literal  # noqa: E402
 from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.x86.packed_dot_data import X86_PACKED_DOT_DESCRIPTORS  # noqa: E402
 from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
@@ -32,10 +33,6 @@ from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 
 def _join_source(lines: Sequence[str]) -> str:
     return "\n".join(lines)
-
-
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
 
 def _hex_u64_literal(value: int) -> str:

@@ -18,6 +18,7 @@ iree_py_library(
     "__init__.py"
     "amdgpu_target_records.py"
   DEPS
+    loom::py::loom::gen::support::c
     loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::target_info
 )

@@ -8,13 +8,15 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from loom.dsl import Op
 from loom.errors import ErrorDef, ErrorDomain
+from loom.gen.support.c import c_identifier as _c_identifier
+from loom.gen.support.c import c_identifier_parts as _identifier_parts
+from loom.gen.support.c import c_string_literal as _c_string_literal
 from loom.gen.support.generated_file import line_comment_header
 from loom.target.contracts import (
     LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE,
@@ -1162,24 +1164,6 @@ def _c_expression(value: int | str) -> str:
 
 def _header_guard_from_public_header(public_header: str) -> str:
     return _c_identifier(public_header).upper() + "_"
-
-
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
-
-
-def _c_identifier(value: str) -> str:
-    parts = _identifier_parts(value)
-    if not parts:
-        return "_"
-    identifier = "_".join(parts)
-    if identifier[0].isdigit():
-        return "_" + identifier
-    return identifier
-
-
-def _identifier_parts(value: str) -> tuple[str, ...]:
-    return tuple(part for part in re.split(r"[^0-9A-Za-z]+", value) if part)
 
 
 def _pascal_identifier(value: str) -> str:

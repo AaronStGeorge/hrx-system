@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
@@ -23,6 +22,7 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
+from loom.gen.support.c import CIdentifierCase, c_identifier  # noqa: E402
 from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.spirv.builtins import (  # noqa: E402
     BUILTIN_DIMENSIONS,
@@ -62,12 +62,7 @@ from loom.target.low_descriptors import descriptor_set_relative_name  # noqa: E4
 
 
 def _c_identifier(value: str) -> str:
-    identifier = re.sub(r"[^0-9A-Za-z_]", "_", value).strip("_")
-    if not identifier:
-        return "empty"
-    if identifier[0].isdigit():
-        identifier = "_" + identifier
-    return identifier.lower()
+    return c_identifier(value, case=CIdentifierCase.LOWER, empty="empty")
 
 
 def _descriptor_ref_constant_name(descriptor_key: str) -> str:

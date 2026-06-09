@@ -42,6 +42,7 @@ iree_py_library(
     "lower_rules.py"
   DEPS
     loom::py::loom::core
+    loom::py::loom::gen::support::c
     loom::py::loom::gen::support::generated_file
     loom::py::loom::gen::target::package
     loom::py::loom::target::low_descriptors

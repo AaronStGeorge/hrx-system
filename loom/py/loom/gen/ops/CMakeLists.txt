@@ -36,6 +36,7 @@ iree_py_library(
     loom::py::loom::core
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::c
     loom::py::loom::gen::support::files
     loom::py::loom::gen::support::generated_file
 )
@@ -53,6 +54,7 @@ iree_py_library(
     loom::py::loom::core
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::c
     loom::py::loom::gen::support::files
     loom::py::loom::gen::support::generated_file
 )

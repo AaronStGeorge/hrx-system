@@ -102,6 +102,8 @@ from loom.gen.ops.model import (
     load_dialect_generation,
     load_generation_model,
 )
+from loom.gen.support.c import c_identifier as _c_identifier
+from loom.gen.support.c import c_string_literal as _c_string_literal
 from loom.gen.support.files import write_text_file as _write_file
 from loom.gen.support.generated_file import line_comment_header
 
@@ -410,11 +412,6 @@ def _c_prefix(op: Op) -> str:
     test.addi -> loom_test_addi
     """
     return "loom_" + op.name.replace(".", "_")
-
-
-def _c_identifier(value: str) -> str:
-    """Returns a C identifier fragment for a DSL key."""
-    return re.sub(r"[^0-9A-Za-z_]", "_", value)
 
 
 def _c_enum_name(op: Op) -> str:
@@ -3230,10 +3227,6 @@ def _generate_builder_implementation(
 # ============================================================================
 # B-string encoding
 # ============================================================================
-
-
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
 
 def _bstring_expr(value: str) -> str:

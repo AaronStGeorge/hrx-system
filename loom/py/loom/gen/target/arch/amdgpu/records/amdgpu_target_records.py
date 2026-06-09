@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -25,6 +24,8 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
+from loom.gen.support.c import c_pascal_identifier  # noqa: E402
+from loom.gen.support.c import c_string_arg as _c_string_arg  # noqa: E402
 from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
@@ -46,14 +47,6 @@ class _AmdgpuTargetRecordRow:
     descriptor_set_ordinal: int
 
 
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
-
-
-def _c_string_arg(value: str) -> str:
-    return f'"{_c_string_literal(value)}"'
-
-
 def _u16_expr(value: int) -> str:
     return f"UINT16_C({value})"
 
@@ -63,10 +56,10 @@ def _u32_expr(value: int) -> str:
 
 
 def _c_symbol_suffix(value: str) -> str:
-    pieces = tuple(piece for piece in re.split(r"[^0-9A-Za-z]+", value) if piece)
-    if not pieces:
+    suffix = c_pascal_identifier(value)
+    if not suffix:
         raise ValueError("empty AMDGPU target-record symbol suffix")
-    return "".join(piece[:1].upper() + piece[1:] for piece in pieces)
+    return suffix
 
 
 def _target_bundle_name(generator_target: str) -> str:
