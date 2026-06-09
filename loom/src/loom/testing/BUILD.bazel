@@ -13,15 +13,6 @@ package(
 )
 
 loom_cc_library(
-    name = "diff",
-    srcs = ["diff.c"],
-    hdrs = ["diff.h"],
-    deps = [
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "context",
     testonly = True,
     srcs = ["context.c"],
@@ -53,16 +44,6 @@ loom_cc_library(
     hdrs = ["module_ptr.h"],
     deps = [
         "//loom/src/loom/ir",
-    ],
-)
-
-loom_cc_test(
-    name = "diff_test",
-    srcs = ["diff_test.cc"],
-    deps = [
-        ":diff",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

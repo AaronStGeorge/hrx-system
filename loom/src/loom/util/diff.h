@@ -29,8 +29,8 @@
 // Callers can either format the diff directly as text with loom_diff(), or
 // compute a structured result and format/serialize it themselves.
 
-#ifndef LOOM_TESTING_DIFF_H_
-#define LOOM_TESTING_DIFF_H_
+#ifndef LOOM_UTIL_DIFF_H_
+#define LOOM_UTIL_DIFF_H_
 
 #include "iree/base/api.h"
 
@@ -123,4 +123,4 @@ iree_status_t loom_diff(iree_string_view_t expected, iree_string_view_t actual,
 }
 #endif
 
-#endif  // LOOM_TESTING_DIFF_H_
+#endif  // LOOM_UTIL_DIFF_H_

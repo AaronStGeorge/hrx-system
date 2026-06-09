@@ -32,6 +32,29 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    diff
+  HDRS
+    "diff.h"
+  SRCS
+    "diff.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    diff_test
+  SRCS
+    "diff_test.cc"
+  DEPS
+    ::diff
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     json
   HDRS
     "json.h"

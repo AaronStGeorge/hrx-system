@@ -90,9 +90,9 @@ loom_cc_library(
     loom::target::math_policy
     loom::target::predicate
     loom::target::types
-    loom::testing::diff
     loom::tooling::compile::pipeline
     loom::tools::loom-format::convert
+    loom::util::diff
     loom::util::json
     loom::util::stream
     loom::verify

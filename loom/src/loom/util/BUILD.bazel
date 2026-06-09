@@ -31,6 +31,25 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "diff",
+    srcs = ["diff.c"],
+    hdrs = ["diff.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "diff_test",
+    srcs = ["diff_test.cc"],
+    deps = [
+        ":diff",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "json",
     srcs = ["json.c"],
     hdrs = ["json.h"],
