@@ -11,7 +11,11 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = [
+        "//loom/src/loom/pass:__pkg__",
+        "//loom/src/loom/pass/test:__pkg__",
+        "//loom/src/loom/target/arch/amdgpu:__pkg__",
+    ],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
