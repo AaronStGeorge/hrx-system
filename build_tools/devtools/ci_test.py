@@ -454,6 +454,55 @@ class CiTest(unittest.TestCase):
         self.assertNotIn("mesa-vulkan-drivers", preflight)
         self.assertNotIn("vulkan-loader", preflight)
 
+    def test_cpu_sanitizer_workflows_are_split_by_configuration(self):
+        for path, job_name, command_prefix in (
+            (".github/workflows/ci_iree_bazel.yml", "linux_bazel_cpu", "iree-bazel"),
+            (".github/workflows/ci_iree_cmake.yml", "linux_cmake_cpu", "iree-cmake"),
+        ):
+            with self.subTest(path=path):
+                block = self.workflow_job_block(path, job_name)
+                self.assertIn("name: Linux / CPU", block)
+                for sanitizer in ("ASAN", "MSAN", "TSAN", "UBSAN"):
+                    self.assertIn(f"name: Linux / CPU / {sanitizer}", block)
+                    self.assertIn(
+                        f"command: {command_prefix}-cpu-{sanitizer.lower()}",
+                        block,
+                    )
+                self.assertNotIn(f"command: {command_prefix}-cpu-sanitizers", block)
+
+    def test_gpu_sanitizer_workflows_stay_batched(self):
+        for path, jobs, command_prefix in (
+            (
+                ".github/workflows/ci_iree_bazel.yml",
+                ("linux_bazel_amdgpu", "linux_bazel_vulkan"),
+                "iree-bazel",
+            ),
+            (
+                ".github/workflows/ci_iree_cmake.yml",
+                ("linux_cmake_amdgpu", "linux_cmake_vulkan"),
+                "iree-cmake",
+            ),
+        ):
+            for job_name in jobs:
+                with self.subTest(path=path, job=job_name):
+                    block = self.workflow_job_block(path, job_name)
+                    self.assertIn("/ Sanitizers", block)
+                    self.assertRegex(
+                        block,
+                        rf"command: {re.escape(command_prefix)}-(amdgpu|vulkan)-sanitizers",
+                    )
+
+    def test_iree_workflows_do_not_trigger_on_libhrx_only_paths(self):
+        for path in (
+            ".github/workflows/ci_iree_bazel.yml",
+            ".github/workflows/ci_iree_cmake.yml",
+        ):
+            with self.subTest(path=path):
+                text = Path(path).read_text()
+                self.assertIn('- "runtime/**"', text)
+                self.assertIn('- "loom/**"', text)
+                self.assertNotIn('- "libhrx/**"', text)
+
     def test_xfails_project_to_ctest_regexes(self):
         self.assertIn(
             "^iree/tokenizer/",

@@ -62,8 +62,14 @@ jobs:
         include:
           - name: Linux / CPU
             command: iree-cmake-cpu
-          - name: Linux / CPU / Sanitizers
-            command: iree-cmake-cpu-sanitizers
+          - name: Linux / CPU / ASAN
+            command: iree-cmake-cpu-asan
+          - name: Linux / CPU / MSAN
+            command: iree-cmake-cpu-msan
+          - name: Linux / CPU / TSAN
+            command: iree-cmake-cpu-tsan
+          - name: Linux / CPU / UBSAN
+            command: iree-cmake-cpu-ubsan
     env:
       HRX_ARTIFACT_SET: core
       HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake/downloads
