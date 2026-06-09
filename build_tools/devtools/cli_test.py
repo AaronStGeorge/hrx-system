@@ -268,9 +268,9 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
-        self.assertIn(".iree-bazel-try/run-<pid>/BUILD.bazel", description)
+        self.assertIn(".tmp/iree-bazel-try/run-<pid>/BUILD.bazel", description)
         self.assertIn("bazel build", description)
-        self.assertIn("//.iree-bazel-try/run-<pid>:snippet", description)
+        self.assertIn("//.tmp/iree-bazel-try/run-<pid>:snippet", description)
         self.assertIn("# compile only", description)
 
     def test_cmake_try_generates_scratch_build(self):
@@ -289,7 +289,7 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
-        self.assertIn(".iree-cmake-try/run-<pid>/try.cmake", description)
+        self.assertIn(".tmp/iree-cmake-try/run-<pid>/try.cmake", description)
         self.assertIn("cmake -S", description)
         self.assertIn("--target iree_cmake_try_snippet", description)
         self.assertIn("# compile only", description)
@@ -355,6 +355,84 @@ class CliTest(unittest.TestCase):
         self.assertIn("bazel build --config=fuzzer", description)
         self.assertIn("exec '<built fuzzer>' '<corpus>'", description)
 
+    def test_bazel_compile_commands_defaults_to_repo_roots(self):
+        args = cli.parse_arguments(["bazel", "compile-commands"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("# bazel compile-commands", description)
+        self.assertIn("bazel build", description)
+        self.assertIn(
+            "--aspects=//build_tools/bazel:compile_commands.bzl%collect_compile_commands_aspect",
+            description,
+        )
+        self.assertIn("--output_groups=iree_compile_commands_fragments", description)
+        self.assertIn("--build_event_json_file=", description)
+        self.assertIn("merge compile command fragments", description)
+        self.assertIn("//runtime/...", description)
+        self.assertIn("//libhrx/...", description)
+        self.assertIn("//loom/...", description)
+        self.assertIn("compile_commands.json", description)
+        self.assertNotIn("--check_visibility=false", description)
+
+    def test_bazel_compile_commands_accepts_options_and_target_patterns(self):
+        args = cli.parse_arguments(
+            [
+                "bazel",
+                "compile-commands",
+                "--config=asan",
+                "-o",
+                "out/compile_commands.json",
+                "//runtime/...",
+                "-//runtime/src/iree/hal/drivers/cuda/...",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--config=asan", description)
+        self.assertIn("out/compile_commands.json", description)
+        self.assertIn("//runtime/...", description)
+        self.assertIn("-//runtime/src/iree/hal/drivers/cuda/...", description)
+
+    def test_cmake_compile_commands_prints_configured_database_path(self):
+        args = cli.parse_arguments(
+            [
+                "--cmake-build-dir",
+                "build/cmake-debug",
+                "cmake",
+                "compile-commands",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("# cmake compile-commands", description)
+        self.assertIn("build/cmake-debug/compile_commands.json", description)
+        self.assertIn("print", description)
+
+    def test_cmake_compile_commands_accepts_output_path(self):
+        args = cli.parse_arguments(
+            [
+                "--cmake-build-dir",
+                "build/cmake-debug",
+                "cmake",
+                "compile-commands",
+                "-o",
+                "out/cmake_compile_commands.json",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("build/cmake-debug/compile_commands.json", description)
+        self.assertIn("out/cmake_compile_commands.json", description)
+        self.assertIn("cp", description)
+
     def test_bazel_fuzz_normalizes_signal_exit_codes(self):
         self.assertEqual(bazel_dev.process_exit_code(-2), 130)
         self.assertEqual(bazel_dev.process_exit_code(7), 7)
@@ -365,6 +443,7 @@ class CliTest(unittest.TestCase):
             aliases.BAZEL_ALIASES["iree-bazel-cquery"], ["bazel", "cquery"]
         )
         self.assertEqual(aliases.BAZEL_ALIASES["iree-bazel-info"], ["bazel", "info"])
+        self.assertNotIn("iree-bazel-compile-commands", aliases.BAZEL_ALIASES)
 
     def test_cmake_aliases_include_fuzz(self):
         self.assertEqual(aliases.CMAKE_ALIASES["iree-cmake-fuzz"], ["cmake", "fuzz"])
@@ -514,7 +593,7 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("## iree-bazel-try", try_output)
         self.assertIn("one-shot C/C++ probes", try_output)
-        self.assertIn(".iree-bazel-try/", try_output)
+        self.assertIn(".tmp/iree-bazel-try/", try_output)
         self.assertNotIn("## iree-bazel-fuzz", try_output)
 
         self.assertIn("## iree-bazel-fuzz", fuzz_output)
@@ -527,7 +606,7 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("## iree-cmake-try", output)
         self.assertIn("one-shot C/C++ probes", output)
-        self.assertIn(".iree-cmake-try/", output)
+        self.assertIn(".tmp/iree-cmake-try/", output)
         self.assertNotIn("## iree-cmake-run", output)
 
     def test_cmake_fuzz_agents_md_is_focused(self):
@@ -790,8 +869,10 @@ class CliTest(unittest.TestCase):
         self.assertIn("Common build-system commands", output)
         self.assertIn("python dev.py bazel precommit", output)
         self.assertIn("python dev.py bazel run", output)
+        self.assertIn("python dev.py bazel compile-commands", output)
         self.assertIn("python dev.py cmake precommit", output)
         self.assertIn("python dev.py cmake run", output)
+        self.assertIn("python dev.py cmake compile-commands", output)
 
     def test_bazel_build_help_explains_default_targets(self):
         output = self.parse_help(["bazel", "build", "--help"])

@@ -27,6 +27,7 @@ ROOT_COMMAND_EPILOG = """Common build-system commands:
   python dev.py bazel run
   python dev.py bazel try
   python dev.py bazel fuzz
+  python dev.py bazel compile-commands
 
   python dev.py cmake configure
   python dev.py cmake build
@@ -36,6 +37,10 @@ ROOT_COMMAND_EPILOG = """Common build-system commands:
   python dev.py cmake run
   python dev.py cmake try
   python dev.py cmake fuzz
+  python dev.py cmake compile-commands
+
+Most developer scratch/state defaults under .tmp/. Set IREE_DEVTOOLS_TMP to
+redirect scratch that does not need to be a Bazel workspace package.
 
 Use `python dev.py bazel --help` or `python dev.py cmake --help` for the full
 subcommand list for that build system."""
@@ -208,6 +213,34 @@ cquery evaluates select(), platform constraints, and configured target state."""
   python dev.py bazel info execution_root
   python dev.py bazel info bazel-bin""",
         )
+    if command == "compile-commands":
+        if lane == "bazel":
+            return CommandHelp(
+                description="Generate a Bazel-backed compile_commands.json.",
+                arguments="Bazel target patterns and build options.",
+                epilog="""Examples:
+  python dev.py bazel compile-commands
+  python dev.py bazel compile-commands //runtime/src/iree/base/...
+  python dev.py bazel compile-commands --config=asan //runtime/...
+  python dev.py bazel compile-commands -o .cache/compile_commands/runtime.json //runtime/...
+
+With no explicit targets, this generates compile commands for //runtime/...,
+//libhrx/..., and //loom/.... The wrapper builds the compile-command aspect
+output group, reads the Bazel build event stream to find generated fragments,
+and merges them into one local database. The default output is
+compile_commands.json at the repository root.""",
+            )
+        return CommandHelp(
+            description="Print or copy the configured CMake compile_commands.json path.",
+            arguments="Optional -o/--output path.",
+            epilog="""Examples:
+  python dev.py cmake compile-commands
+  python dev.py cmake compile-commands -o .cache/compile_commands/cmake.json
+
+CMake writes compile_commands.json during configure. This command resolves the
+configured build directory, prints that file path by default, and copies it to
+the requested output path when -o/--output is supplied.""",
+        )
     if command == "presubmit":
         return CommandHelp(
             description=f"Run CI-shaped acceptance checks for {build_system_name}.",
@@ -312,9 +345,9 @@ while the binary runs.""",
   python dev.py bazel try -k -e 'int main() { return 0; }'
   python dev.py bazel try -c -o build/snippet -e 'int main() { return 0; }'
 
-Temporary packages are written under .iree-bazel-try/. The tool infers common
-deps from quoted iree/..., loom/..., and loomc/... includes and accepts
-explicit --dep labels.""",
+Temporary packages are written under .tmp/iree-bazel-try/ so Bazel can address
+them as // workspace labels. The tool infers common deps from quoted iree/...,
+loom/..., and loomc/... includes and accepts explicit --dep labels.""",
         )
     if command == "try" and lane == "cmake":
         return CommandHelp(
@@ -328,7 +361,8 @@ explicit --dep labels.""",
   python dev.py cmake try --compile-only --output build/snippet -e 'int main() { return 0; }'
 
 This derives a temporary build tree from the configured CMake build tree and
-injects one generated CMake file into the real repository configure. Run
+injects one generated CMake file into the real repository configure. The
+temporary root defaults under .tmp/ and follows IREE_DEVTOOLS_TMP when set. Run
 iree-cmake-configure first. Quoted iree/... and hrx_... includes infer common
 deps; add --dep TARGET for anything inference misses.""",
         )
@@ -397,8 +431,12 @@ def agent_markdown(lanes: tuple[str, ...], *, command: str | None = None) -> str
 
 def command_agent_markdown(lane: str, command: str) -> str:
     if lane == "bazel":
+        if command == "compile-commands":
+            return bazel_command_agent_markdown(command)
         return with_common_wrapper_flags(bazel_command_agent_markdown(command))
     if lane == "cmake":
+        if command == "compile-commands":
+            return cmake_command_agent_markdown(command)
         return with_common_wrapper_flags(cmake_command_agent_markdown(command))
     raise ValueError(f"unknown lane: {lane}")
 
@@ -445,6 +483,7 @@ iree-bazel-build [targets...]
 iree-bazel-test [targets...]
 iree-bazel-query 'deps(//runtime/src/iree/base)'
 iree-bazel-cquery --output=files //runtime/src/iree/base
+python dev.py bazel compile-commands
 iree-bazel-info execution_root
 iree-bazel-dev precommit [paths...]
 iree-bazel-dev presubmit
@@ -454,7 +493,8 @@ iree-bazel-dev presubmit
 `iree-bazel-cquery` when select() resolution, platform constraints, or output
 files matter. `iree-bazel-run` executes built binaries without holding the Bazel
 lock. More specialized tools are available: `iree-bazel-try` for scratch C/C++
-builds and `iree-bazel-fuzz` for fuzzing sessions.
+builds and `iree-bazel-fuzz` for fuzzing sessions. Use
+`python dev.py bazel compile-commands` for clang tooling.
 
 Outputs: `bazel-bin/`, `bazel-testlogs/`, and `bazel-out/`."""
 
@@ -475,6 +515,7 @@ iree-cmake-build hrx::hrx
 iree-cmake-test -R hrx
 iree-cmake-run iree::tools::iree-run-module -- --help
 iree-cmake-fuzz iree::tokenizer::special_tokens_fuzz -- -max_total_time=60
+python dev.py cmake compile-commands
 iree-cmake-dev precommit
 iree-cmake-dev presubmit
 ```
@@ -484,7 +525,8 @@ affected project CMake/CTest checks. `iree-cmake-dev presubmit` is the
 full-tree CI-shaped check. `iree-cmake-run` resolves an already-built
 executable and does not build implicitly. `iree-cmake-try` builds temporary
 C/C++ snippets against the configured tree. `iree-cmake-fuzz` builds and execs
-a configured libFuzzer target."""
+a configured libFuzzer target. `python dev.py cmake compile-commands` prints
+the configured compile database path for clang tooling."""
 
 
 def bazel_command_agent_markdown(command: str) -> str:
@@ -582,6 +624,26 @@ iree-bazel-info bazel-bin
 Use this instead of guessing output roots when debugging generated files,
 execution roots, or wrapper-resolved binary paths."""
 
+    if command == "compile-commands":
+        return """## python dev.py bazel compile-commands
+
+Generate a `compile_commands.json` from the configured Bazel graph. This is the
+entry point for clangd, clang-tidy, and other compile-database consumers that
+need Bazel's actual configured C/C++ flags.
+
+```bash
+python dev.py bazel compile-commands
+python dev.py bazel compile-commands //runtime/src/iree/base/...
+python dev.py bazel compile-commands --config=asan //runtime/...
+python dev.py bazel compile-commands -o .cache/compile_commands/runtime.json //runtime/...
+```
+
+With no explicit targets, this covers `//runtime/...`, `//libhrx/...`, and
+`//loom/...`. The wrapper builds the compile-command aspect output group, reads
+the Bazel build event stream to find generated fragments, and merges them into
+the requested output path. Use `-k/--keep` to inspect the captured build event
+stream."""
+
     if command == "run":
         return """## iree-bazel-run
 
@@ -605,9 +667,10 @@ it."""
         return """## iree-bazel-try
 
 Use `iree-bazel-try` for one-shot C/C++ probes without creating a permanent
-BUILD target. It writes a temporary package under `.iree-bazel-try/`, builds it
-with Bazel, then execs the snippet unless `--compile-only` is used. The scratch
-package is removed by default.
+BUILD target. It writes a temporary package under `.tmp/iree-bazel-try/` so the
+snippet has a valid Bazel workspace label, builds it with Bazel, then execs the
+snippet unless `--compile-only` is used. The scratch package is removed by
+default.
 
 ```bash
 iree-bazel-try -e 'int main() { return 0; }'
@@ -645,6 +708,21 @@ Corpus and artifact directories live under
 
 
 def cmake_command_agent_markdown(command: str) -> str:
+    if command == "compile-commands":
+        return """## python dev.py cmake compile-commands
+
+Print or copy the configured CMake `compile_commands.json`.
+
+```bash
+python dev.py cmake configure
+python dev.py cmake compile-commands
+python dev.py cmake compile-commands -o .cache/compile_commands/cmake.json
+```
+
+CMake writes the compile database during configure. This command resolves the
+recorded build directory, prints the compile database path by default, and
+copies it when `-o/--output` is supplied."""
+
     if command == "configure":
         return """## iree-cmake-configure
 
@@ -711,10 +789,10 @@ without running it."""
         return """## iree-cmake-try
 
 Use `iree-cmake-try` for one-shot C/C++ probes against the configured CMake
-tree. It creates a temporary build under `.iree-cmake-try/`, copies the existing
-cache configuration, injects one generated CMake file into the real repository
-configure, builds the snippet target, then runs it unless `--compile-only` is
-used.
+tree. It creates a temporary build under `.tmp/iree-cmake-try/` by default,
+copies the existing cache configuration, injects one generated CMake file into
+the real repository configure, builds the snippet target, then runs it unless
+`--compile-only` is used. Set `IREE_DEVTOOLS_TMP` to redirect the scratch root.
 
 ```bash
 iree-cmake-configure

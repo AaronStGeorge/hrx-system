@@ -33,6 +33,7 @@ py_library(
         "smoke_test_lib.py",
         "source_lock.py",
     ],
+    deps = ["//build_tools/bazel:compile_commands_merge_lib"],
 )
 
 py_binary(
@@ -114,6 +115,7 @@ py_test(
         "setup.py",
     ],
     main = "cli_test.py",
+    deps = ["//build_tools/bazel:compile_commands_merge_lib"],
 )
 
 py_test(

@@ -35,9 +35,22 @@ BAZEL_TARGET_PATTERN_PREFIXES = ("//", "@", ":", "...")
 BAZEL_NEGATIVE_TARGET_PATTERN_PREFIXES = ("-//", "-@")
 PASSTHROUGH_COMMANDS = {
     "bazel": frozenset(
-        ("configure", "build", "test", "query", "cquery", "info", "run", "try", "fuzz")
+        (
+            "configure",
+            "build",
+            "test",
+            "query",
+            "cquery",
+            "info",
+            "run",
+            "try",
+            "fuzz",
+            "compile-commands",
+        )
     ),
-    "cmake": frozenset(("configure", "build", "test", "run", "try", "fuzz")),
+    "cmake": frozenset(
+        ("configure", "build", "test", "run", "try", "fuzz", "compile-commands")
+    ),
 }
 HELP_FLAGS = frozenset(("-h", "--help"))
 AGENT_MD_FLAGS = frozenset(("--agent-md", "--agent_md", "--agents-md", "--agents_md"))
@@ -579,6 +592,39 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
                 backend_command=command_name,
             )
 
+        command_help = help_text.lane_command_help(lane, "compile-commands")
+        command_parser = add_subparser(
+            lane_subparsers,
+            "compile-commands",
+            command_help=command_help,
+            help="Generate a Bazel compile_commands.json.",
+        )
+        command_parser.add_argument(
+            "args", nargs=argparse.REMAINDER, help=command_help.arguments
+        )
+        command_parser.set_defaults(
+            handler=handle_bazel_compile_commands,
+            lane=lane,
+            backend_command="compile-commands",
+        )
+
+    if lane == "cmake":
+        command_help = help_text.lane_command_help(lane, "compile-commands")
+        command_parser = add_subparser(
+            lane_subparsers,
+            "compile-commands",
+            command_help=command_help,
+            help="Print or copy the configured CMake compile_commands.json path.",
+        )
+        command_parser.add_argument(
+            "args", nargs=argparse.REMAINDER, help=command_help.arguments
+        )
+        command_parser.set_defaults(
+            handler=handle_cmake_compile_commands,
+            lane=lane,
+            backend_command="compile-commands",
+        )
+
     precommit_parser = add_subparser(
         lane_subparsers,
         "precommit",
@@ -831,6 +877,33 @@ def handle_bazel_direct_command(args: argparse.Namespace) -> CommandPlan:
                 label=f"bazel {args.backend_command}",
             )
         ]
+    )
+
+
+def handle_bazel_compile_commands(args: argparse.Namespace) -> CommandPlan:
+    tool_env = existing_or_system_environment(args)
+    command = bazel_dev.parse_bazel_compile_commands_args(
+        forwarded_args(args.args),
+        run_cwd=Path.cwd(),
+    )
+    return CommandPlan(
+        [
+            bazel_dev.BazelCompileCommandsStep(
+                tool_env.tool("bazel"),
+                command,
+                env=tool_env.path_env(),
+            )
+        ]
+    )
+
+
+def handle_cmake_compile_commands(args: argparse.Namespace) -> CommandPlan:
+    tool_env = existing_or_system_environment(args)
+    return cmake_dev.compile_commands_plan(
+        tool_env,
+        configured_build_dir=getattr(args, "cmake_build_dir", None),
+        backend_args=forwarded_args(args.args),
+        run_cwd=Path.cwd(),
     )
 
 
