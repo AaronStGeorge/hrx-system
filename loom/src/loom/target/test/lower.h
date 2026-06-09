@@ -15,8 +15,8 @@
 #define LOOM_TARGET_TEST_LOWER_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/lower.h"
-#include "loom/codegen/low/lower_rules.h"
+#include "loom/codegen/low/lower/lower.h"
+#include "loom/codegen/low/lower/lower_rules.h"
 
 #ifdef __cplusplus
 extern "C" {

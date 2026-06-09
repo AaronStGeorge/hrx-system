@@ -28,7 +28,7 @@ loom_target_table_cc_library(
     args = ["--contract-fragment=x86.scalar"],
     generator = "//loom/py/loom/gen:x86_lower_rule_shard",
     deps = [
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
@@ -48,7 +48,7 @@ loom_target_table_cc_library(
     args = ["--contract-fragment=x86.avx2"],
     generator = "//loom/py/loom/gen:x86_lower_rule_shard",
     deps = [
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
@@ -69,7 +69,7 @@ loom_target_table_cc_library(
     args = ["--contract-fragment=x86.avx512"],
     generator = "//loom/py/loom/gen:x86_lower_rule_shard",
     deps = [
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
@@ -90,7 +90,7 @@ loom_target_table_cc_library(
     args = ["--contract-fragment=x86.packed_dot"],
     generator = "//loom/py/loom/gen:x86_lower_rule_shard",
     deps = [
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/vector",
     ],
 )

@@ -13,8 +13,8 @@
 // descriptor choices and type mappings through callbacks so this library never
 // links concrete backend descriptor tables.
 
-#ifndef LOOM_CODEGEN_LOW_LOWER_H_
-#define LOOM_CODEGEN_LOW_LOWER_H_
+#ifndef LOOM_CODEGEN_LOW_LOWER_LOWER_H_
+#define LOOM_CODEGEN_LOW_LOWER_LOWER_H_
 
 #include "iree/base/api.h"
 #include "loom/analysis/contract_vector.h"
@@ -862,4 +862,4 @@ iree_status_t loom_low_lower_emit_error_ref(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_LOWER_H_
+#endif  // LOOM_CODEGEN_LOW_LOWER_LOWER_H_

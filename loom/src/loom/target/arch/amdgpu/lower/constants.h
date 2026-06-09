@@ -11,7 +11,7 @@
 
 #include <stdint.h>
 
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"

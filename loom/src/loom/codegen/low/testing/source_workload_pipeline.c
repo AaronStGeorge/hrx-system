@@ -11,9 +11,9 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/function.h"
+#include "loom/codegen/low/lower/source_selection.h"
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/pipeline.h"
-#include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"

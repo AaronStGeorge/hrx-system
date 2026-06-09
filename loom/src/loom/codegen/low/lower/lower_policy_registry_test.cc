@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "iree/testing/gtest.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/target/test/lower.h"
 
 namespace loom {

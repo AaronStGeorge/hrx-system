@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_PREAMBLE_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_PREAMBLE_H_
 
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus

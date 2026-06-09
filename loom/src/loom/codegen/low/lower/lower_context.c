@@ -7,7 +7,7 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include "loom/codegen/low/lower_internal.h"
+#include "loom/codegen/low/lower/lower_internal.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"

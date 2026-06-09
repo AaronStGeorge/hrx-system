@@ -30,7 +30,7 @@ loom_target_table_cc_library(
     args = ["--contract-fragment=test_low_core"],
     generator = "//loom/py/loom/gen:test_low_lower_rule_shard",
     deps = [
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",

@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_BITFIELD_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_BITFIELD_H_
 
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/target/arch/amdgpu/lower/plan.h"
 
 #ifdef __cplusplus

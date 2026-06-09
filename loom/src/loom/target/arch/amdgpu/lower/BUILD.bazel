@@ -38,7 +38,7 @@ loom_cc_library(
     visibility = _AMDGPU_CONTRACT_VISIBILITY,
     deps = [
         ":kinds",
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
     ],
 )
 
@@ -119,8 +119,8 @@ loom_cc_library(
         "//loom/src/loom/analysis:view_regions",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/codegen/low:source_memory_plan",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:atomic",

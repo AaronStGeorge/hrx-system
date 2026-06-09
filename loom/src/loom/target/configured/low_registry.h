@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_CONFIGURED_LOW_REGISTRY_H_
 #define LOOM_TARGET_CONFIGURED_LOW_REGISTRY_H_
 
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/target/legalization.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"

@@ -17,7 +17,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/context.h"
 #include "loom/ir/ir.h"

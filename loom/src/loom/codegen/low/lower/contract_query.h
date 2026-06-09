@@ -12,11 +12,11 @@
 // diagnostics or lowering IR. Callers provide bridges for source-value register
 // metadata and optional materialization predicates.
 
-#ifndef LOOM_CODEGEN_LOW_CONTRACT_QUERY_H_
-#define LOOM_CODEGEN_LOW_CONTRACT_QUERY_H_
+#ifndef LOOM_CODEGEN_LOW_LOWER_CONTRACT_QUERY_H_
+#define LOOM_CODEGEN_LOW_LOWER_CONTRACT_QUERY_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/lower_rules.h"
+#include "loom/codegen/low/lower/lower_rules.h"
 #include "loom/ir/ir.h"
 #include "loom/target/contract.h"
 
@@ -91,4 +91,4 @@ iree_status_t loom_low_lower_query_target_contract(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_CONTRACT_QUERY_H_
+#endif  // LOOM_CODEGEN_LOW_LOWER_CONTRACT_QUERY_H_

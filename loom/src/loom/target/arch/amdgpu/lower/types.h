@@ -13,7 +13,7 @@
 
 #include "loom/analysis/view_regions.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"

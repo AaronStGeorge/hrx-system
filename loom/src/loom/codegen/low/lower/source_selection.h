@@ -12,13 +12,13 @@
 // lowerer. The selected target comes from each func contract, never from a
 // target record pointing back at a source func.
 
-#ifndef LOOM_CODEGEN_LOW_SOURCE_SELECTION_H_
-#define LOOM_CODEGEN_LOW_SOURCE_SELECTION_H_
+#ifndef LOOM_CODEGEN_LOW_LOWER_SOURCE_SELECTION_H_
+#define LOOM_CODEGEN_LOW_LOWER_SOURCE_SELECTION_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/target/types.h"
@@ -110,4 +110,4 @@ iree_status_t loom_low_select_source_funcs(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_SOURCE_SELECTION_H_
+#endif  // LOOM_CODEGEN_LOW_LOWER_SOURCE_SELECTION_H_

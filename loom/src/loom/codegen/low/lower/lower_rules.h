@@ -12,11 +12,11 @@
 // mechanics so target packages can grow generated .rodata instead of per-op
 // callback dispatchers.
 
-#ifndef LOOM_CODEGEN_LOW_LOWER_RULES_H_
-#define LOOM_CODEGEN_LOW_LOWER_RULES_H_
+#ifndef LOOM_CODEGEN_LOW_LOWER_LOWER_RULES_H_
+#define LOOM_CODEGEN_LOW_LOWER_LOWER_RULES_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/ir.h"
@@ -767,4 +767,4 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_LOWER_RULES_H_
+#endif  // LOOM_CODEGEN_LOW_LOWER_LOWER_RULES_H_

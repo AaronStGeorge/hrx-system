@@ -6,15 +6,15 @@
 
 // Private state shared by source-to-target-low lowering implementation files.
 
-#ifndef LOOM_CODEGEN_LOW_LOWER_INTERNAL_H_
-#define LOOM_CODEGEN_LOW_LOWER_INTERNAL_H_
+#ifndef LOOM_CODEGEN_LOW_LOWER_LOWER_INTERNAL_H_
+#define LOOM_CODEGEN_LOW_LOWER_LOWER_INTERNAL_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/view_regions.h"
 #include "loom/codegen/low/builder.h"
-#include "loom/codegen/low/lower.h"
-#include "loom/codegen/low/lower_rules.h"
+#include "loom/codegen/low/lower/lower.h"
+#include "loom/codegen/low/lower/lower_rules.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
@@ -197,4 +197,4 @@ iree_status_t loom_low_lower_copy_value_name(loom_low_lower_context_t* context,
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_LOWER_INTERNAL_H_
+#endif  // LOOM_CODEGEN_LOW_LOWER_LOWER_INTERNAL_H_

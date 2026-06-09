@@ -51,7 +51,7 @@ loom_cc_library(
     target_compatible_with = ALL_TARGETS_ENABLED,
     deps = [
         ":provider",
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/target:legalization",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",

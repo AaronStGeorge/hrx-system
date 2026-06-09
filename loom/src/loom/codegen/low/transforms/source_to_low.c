@@ -8,8 +8,8 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/lower/source_selection.h"
 #include "loom/codegen/low/pass_environment.h"
-#include "loom/codegen/low/source_selection.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"

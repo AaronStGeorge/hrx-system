@@ -101,7 +101,7 @@ loom_cc_library(
     deps = [
         ":descriptors_ids",
         ":ops",
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",

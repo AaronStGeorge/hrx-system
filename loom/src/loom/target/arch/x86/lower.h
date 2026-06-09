@@ -12,7 +12,7 @@
 #ifndef LOOM_TARGET_ARCH_X86_LOWER_H_
 #define LOOM_TARGET_ARCH_X86_LOWER_H_
 
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 
 #ifdef __cplusplus
 extern "C" {

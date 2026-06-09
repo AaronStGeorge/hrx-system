@@ -28,7 +28,7 @@ loom_target_table_cc_library(
     args = ["--contract-fragment=ireevm.core"],
     generator = "//loom/py/loom/gen:ireevm_lower_rule_shard",
     deps = [
-        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/target/arch/ireevm:descriptors_ids",
     ],

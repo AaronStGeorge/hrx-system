@@ -10,7 +10,7 @@
 #define LOOM_CODEGEN_LOW_TRANSFORMS_SOURCE_TO_LOW_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/pass/types.h"
 
 #ifdef __cplusplus

@@ -10,7 +10,7 @@
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_MATRIX_H_
 
 #include "loom/analysis/contract_vector.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus

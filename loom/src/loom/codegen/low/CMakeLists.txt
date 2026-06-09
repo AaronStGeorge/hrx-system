@@ -583,70 +583,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    lower
-  HDRS
-    "contract_query.h"
-    "lower.h"
-    "lower_internal.h"
-    "lower_rules.h"
-  SRCS
-    "contract_query.c"
-    "lower.c"
-    "lower_context.c"
-    "lower_policy.c"
-    "lower_rules.c"
-  DEPS
-    ::builder
-    ::descriptors
-    ::memory_access
-    ::source_memory_plan
-    iree::base
-    iree::base::internal::arena
-    loom::analysis::contract_vector
-    loom::analysis::kernel_async_legality
-    loom::analysis::vector_memory_footprint
-    loom::analysis::view_regions
-    loom::error::emitter
-    loom::error::error_defs
-    loom::ir
-    loom::ir::facts
-    loom::ops::buffer
-    loom::ops::cfg
-    loom::ops::encoding
-    loom::ops::func
-    loom::ops::kernel
-    loom::ops::low
-    loom::ops::op_defs
-    loom::ops::scf
-    loom::ops::target
-    loom::ops::vector
-    loom::target::contract
-    loom::target::low_descriptor_registry
-    loom::target::low_legality
-    loom::target::registers
-    loom::target::types
-    loom::util::fact_table
-    loom::util::math
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    contract_query_test
-  SRCS
-    "contract_query_test.cc"
-  DEPS
-    ::lower
-    iree::base
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::error::error_defs
-    loom::ir
-)
-
-loom_cc_library(
-  NAME
     source_memory_plan
   HDRS
     "source_memory_plan.h"
@@ -725,28 +661,6 @@ loom_cc_fuzz(
 
 loom_cc_library(
   NAME
-    source_selection
-  HDRS
-    "source_selection.h"
-  SRCS
-    "source_selection.c"
-  DEPS
-    ::descriptors
-    ::lower
-    iree::base
-    iree::base::internal::arena
-    loom::analysis::symbol_facts
-    loom::error::emitter
-    loom::ir
-    loom::ops::func_symbol_facts
-    loom::ops::target
-    loom::target::function_contract
-    loom::target::types
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     verify
   HDRS
     "verify.h"
@@ -788,19 +702,6 @@ loom_cc_test(
     loom::target::test::target_record_table
     loom::testing::diagnostic_matchers
     loom::testing::module_ptr
-)
-
-loom_cc_test(
-  NAME
-    lower_policy_registry_test
-  SRCS
-    "lower_policy_registry_test.cc"
-  DEPS
-    ::lower
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::ops::scalar
-    loom::target::test::lower
 )
 
 loom_cc_test(

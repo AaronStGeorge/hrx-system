@@ -10,7 +10,7 @@
 #define LOOM_TARGET_ARCH_SPIRV_LOWER_MATRIX_H_
 
 #include "loom/analysis/contract_vector.h"
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 
 #ifdef __cplusplus
 extern "C" {

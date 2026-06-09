@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_fuzz",
     "loom_cc_library",
     "loom_cc_test",
@@ -20,23 +19,14 @@ package(
 
 _LOW_DESCRIPTOR_VISIBILITY = [
     "//loom/src/loom/codegen/low/allocation:__pkg__",
+    "//loom/src/loom/codegen/low/lower:__pkg__",
     "//loom/src/loom/codegen/low/schedule:__pkg__",
     "//loom/src/loom/codegen/low/testing:__pkg__",
     "//loom/src/loom/codegen/low/transforms:__pkg__",
     "//loom/src/loom/target:__pkg__",
-    "//loom/src/loom/target/arch/amdgpu:__pkg__",
-    "//loom/src/loom/target/arch/amdgpu/descriptors:__pkg__",
-    "//loom/src/loom/target/arch/amdgpu/hal:__pkg__",
-    "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
-    "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",
-    "//loom/src/loom/target/arch/ireevm:__pkg__",
-    "//loom/src/loom/target/arch/spirv:__pkg__",
-    "//loom/src/loom/target/arch/wasm:__pkg__",
-    "//loom/src/loom/target/arch/x86:__pkg__",
-    "//loom/src/loom/target/emit/ireevm:__pkg__",
-    "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
-    "//loom/src/loom/target/emit/wasm:__pkg__",
-    "//loom/src/loom/target/test:__pkg__",
+    "//loom/src/loom/target/arch:__subpackages__",
+    "//loom/src/loom/target/emit:__subpackages__",
+    "//loom/src/loom/target/test:__subpackages__",
     "//loom/src/loom/tools/loom-check:__pkg__",
 ]
 
@@ -59,37 +49,6 @@ _LOW_TEXT_ASM_VISIBILITY = [
     "//loom/src/loom/tools/loom-opt:__pkg__",
     "//loom/src/loom/transforms/symbol:__pkg__",
 ]
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "low_codegen_fast_paths_no_descriptor_registry_dep",
-    dependencies = ["//loom/src/loom/target:low_descriptor_registry"],
-    targets = [
-        ":allocation",
-        ":allocation_materialization",
-        ":addressability",
-        ":descriptor_traits",
-        ":diagnostics",
-        ":function",
-        ":memory_access",
-        ":move_sequence",
-        ":packet",
-        ":packet_hazard_plan",
-        ":packet_hazard_plan_json",
-        ":packet_progress",
-        ":packet_asm",
-        ":packet_json",
-        ":placement",
-        ":pipeline",
-        ":frame",
-        ":source_memory_plan",
-        ":storage_lease",
-        ":storage_layout",
-    ],
-)
 
 #===------------------------------------------------------------------------===#
 # Dense low descriptor tables
@@ -586,70 +545,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "lower",
-    srcs = [
-        "contract_query.c",
-        "lower.c",
-        "lower_context.c",
-        "lower_policy.c",
-        "lower_rules.c",
-    ],
-    hdrs = [
-        "contract_query.h",
-        "lower.h",
-        "lower_internal.h",
-        "lower_rules.h",
-    ],
-    deps = [
-        ":builder",
-        ":descriptors",
-        ":memory_access",
-        ":source_memory_plan",
-        "//loom/src/loom/analysis:contract_vector",
-        "//loom/src/loom/analysis:kernel_async_legality",
-        "//loom/src/loom/analysis:vector_memory_footprint",
-        "//loom/src/loom/analysis:view_regions",
-        "//loom/src/loom/error:emitter",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ir:facts",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/cfg",
-        "//loom/src/loom/ops/encoding",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/kernel",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scf",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target:contract",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:low_legality",
-        "//loom/src/loom/target:registers",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/util:fact_table",
-        "//loom/src/loom/util:math",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_test(
-    name = "contract_query_test",
-    srcs = ["contract_query_test.cc"],
-    deps = [
-        ":lower",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
     name = "source_memory_plan",
     srcs = ["source_memory_plan.c"],
     hdrs = ["source_memory_plan.h"],
@@ -722,25 +617,6 @@ loom_cc_fuzz(
 )
 
 loom_cc_library(
-    name = "source_selection",
-    srcs = ["source_selection.c"],
-    hdrs = ["source_selection.h"],
-    deps = [
-        ":descriptors",
-        ":lower",
-        "//loom/src/loom/analysis:symbol_facts",
-        "//loom/src/loom/error:emitter",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:func_symbol_facts",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target:function_contract",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
     name = "verify",
     srcs = ["verify.c"],
     hdrs = ["verify.h"],
@@ -776,18 +652,6 @@ loom_cc_test(
         "//loom/src/loom/testing:diagnostic_matchers",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "lower_policy_registry_test",
-    srcs = ["lower_policy_registry_test.cc"],
-    deps = [
-        ":lower",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/test:lower",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

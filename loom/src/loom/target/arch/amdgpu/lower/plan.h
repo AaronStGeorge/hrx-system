@@ -15,7 +15,7 @@
 
 #include <stdint.h>
 
-#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower/lower.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/kernel/ops.h"

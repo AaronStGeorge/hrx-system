@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/contract_query.h"
+#include "loom/codegen/low/lower/contract_query.h"
 
 #include "iree/base/internal/arena.h"
 #include "loom/error/error_catalog.h"
