@@ -6,8 +6,8 @@
 
 // AMDGPU target record rows.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_TARGET_RECORDS_H_
-#define LOOM_TARGET_ARCH_AMDGPU_TARGET_RECORDS_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_RECORDS_TARGET_RECORDS_H_
+#define LOOM_TARGET_ARCH_AMDGPU_RECORDS_TARGET_RECORDS_H_
 
 #include <stdint.h>
 
@@ -52,4 +52,4 @@ const loom_target_bundle_t* loom_amdgpu_target_bundle_for_descriptor_set(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_TARGET_RECORDS_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_RECORDS_TARGET_RECORDS_H_

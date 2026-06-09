@@ -178,12 +178,12 @@ loom_generated_cc_library(
   DEPS
     ::error_defs
     ::target_info
-    ::target_record_table
     iree::base
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs
     loom::ops::target
+    loom::target::arch::amdgpu::records::target_records
     loom::target::types
 )
 endif()
@@ -456,37 +456,6 @@ loom_cc_library(
     ::rdna4_gfx125x_encoding_tables
     ::target_info
     iree::base
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_generated_textual_header(
-  NAME
-    target_records_tables_gen
-  GENERATOR
-    loom::py::loom::gen::amdgpu_target_records
-  OUTPUT
-    "target_records_tables.inl"
-  OUTPUT_FLAG
-    "--tables"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    target_record_table
-  HDRS
-    "target_records.h"
-  TEXTUAL_HDRS
-    "target_records_tables.inl"
-  SRCS
-    "target_records.c"
-  DEPS
-    ::target_info
-    iree::base
-    loom::target::types
   PUBLIC
 )
 endif()

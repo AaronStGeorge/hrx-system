@@ -603,9 +603,9 @@ loom_cc_test(
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::packet_plan
+    loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::storage_lease
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_record_table
     loom::target::low_descriptor_registry
   LABELS
     "driver=amdgpu"

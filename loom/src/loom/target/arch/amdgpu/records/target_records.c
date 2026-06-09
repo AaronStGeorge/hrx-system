@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/target_records.h"
+#include "loom/target/arch/amdgpu/records/target_records.h"
 
 #include <stdint.h>
 
@@ -40,7 +40,7 @@
                                           snapshot_name, key, wavefront_size) \
   LOOM_AMDGPU_LOW_SNAPSHOT(kAmdgpu##symbol_suffix##Snapshot, snapshot_name, \
                            wavefront_size);
-#include "loom/target/arch/amdgpu/target_records_tables.inl"
+#include "loom/target/arch/amdgpu/records/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_DESCRIPTOR_SET
 
 static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
@@ -64,7 +64,7 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
 #define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(symbol_suffix, bundle_name, \
                                           snapshot_name, key, wavefront_size) \
   LOOM_AMDGPU_LOW_CONFIG(kAmdgpu##symbol_suffix##Config, key);
-#include "loom/target/arch/amdgpu/target_records_tables.inl"
+#include "loom/target/arch/amdgpu/records/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_DESCRIPTOR_SET
 
 #define LOOM_AMDGPU_TARGET_DESCRIPTOR_SET(symbol_suffix, bundle_name, \
@@ -75,7 +75,7 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
     .export_plan = &kAmdgpuHalExportPlan, \
     .config = &kAmdgpu##symbol_suffix##Config, \
   };
-#include "loom/target/arch/amdgpu/target_records_tables.inl"
+#include "loom/target/arch/amdgpu/records/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_DESCRIPTOR_SET
 
 #define LOOM_AMDGPU_TARGET_RECORD_INFO(record_suffix, target_kind_value, \
@@ -88,7 +88,7 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
           .descriptor_set_ordinal = descriptor_set_ordinal_value, \
           .bundle = &kAmdgpuLowTargetBundle##bundle_suffix##Core, \
       };
-#include "loom/target/arch/amdgpu/target_records_tables.inl"
+#include "loom/target/arch/amdgpu/records/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_RECORD_INFO
 
 static const loom_target_bundle_t* const kAmdgpuTargetBundleValues[] = {
@@ -97,7 +97,7 @@ static const loom_target_bundle_t* const kAmdgpuTargetBundleValues[] = {
                                        processor_name, descriptor_set_ordinal_value, \
                                        bundle_suffix) \
   &kAmdgpuLowTargetBundle##bundle_suffix##Core,
-#include "loom/target/arch/amdgpu/target_records_tables.inl"
+#include "loom/target/arch/amdgpu/records/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_RECORD_INFO
 };
 
@@ -112,7 +112,7 @@ static const loom_amdgpu_target_record_info_t* const kAmdgpuTargetRecordInfos[] 
                                        processor_name, descriptor_set_ordinal_value, \
                                        bundle_suffix) \
   &kAmdgpuTargetRecordInfo##record_suffix,
-#include "loom/target/arch/amdgpu/target_records_tables.inl"
+#include "loom/target/arch/amdgpu/records/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_RECORD_INFO
 };
 
@@ -121,7 +121,7 @@ static const loom_amdgpu_target_record_info_t* const
 #define LOOM_AMDGPU_TARGET_RECORD_DEFAULT(descriptor_set_ordinal, record_suffix) \
   &kAmdgpuTargetRecordInfo##record_suffix,
 #define LOOM_AMDGPU_TARGET_RECORD_DEFAULT_ABSENT(descriptor_set_ordinal) NULL,
-#include "loom/target/arch/amdgpu/target_records_tables.inl"
+#include "loom/target/arch/amdgpu/records/target_records_tables.inl"
 #undef LOOM_AMDGPU_TARGET_RECORD_DEFAULT
 #undef LOOM_AMDGPU_TARGET_RECORD_DEFAULT_ABSENT
 };

@@ -11,7 +11,6 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
-    "loom_generated_textual_header",
     "loom_low_descriptor_data_archive",
     "loom_target_table_cc_library",
 )
@@ -160,8 +159,6 @@ loom_assert_no_dependencies(
 
 _AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen:amdgpu_target_info"
 
-_AMDGPU_TARGET_RECORDS_GENERATOR = "//loom/py/loom/gen:amdgpu_target_records"
-
 loom_generated_cc_library(
     name = "error_defs",
     args = [
@@ -286,12 +283,12 @@ loom_generated_cc_library(
     deps = [
         ":error_defs",
         ":target_info",
-        ":target_record_table",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/amdgpu/records:target_records",
         "//runtime/src/iree/base",
     ],
 )
@@ -508,25 +505,6 @@ loom_cc_library(
         ":rdna4_encoding_tables",
         ":rdna4_gfx125x_encoding_tables",
         ":target_info",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_generated_textual_header(
-    name = "target_records_tables_gen",
-    generator = _AMDGPU_TARGET_RECORDS_GENERATOR,
-    output = "target_records_tables.inl",
-    output_flag = "--tables",
-)
-
-loom_cc_library(
-    name = "target_record_table",
-    srcs = ["target_records.c"],
-    hdrs = ["target_records.h"],
-    textual_hdrs = [":target_records_tables.inl"],
-    deps = [
-        ":target_info",
-        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
 )

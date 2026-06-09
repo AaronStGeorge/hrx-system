@@ -12,7 +12,7 @@
 #include "loom/ops/target/ops.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
-#include "loom/target/arch/amdgpu/target_records.h"
+#include "loom/target/arch/amdgpu/records/target_records.h"
 
 static iree_string_view_t loom_amdgpu_target_record_symbol_name(
     const loom_module_t* module, const loom_op_t* target_op) {
