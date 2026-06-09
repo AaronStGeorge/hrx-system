@@ -30,6 +30,8 @@ iree_py_library(
     c_tables
   SRCS
     "__init__.py"
+    "c_enums.py"
+    "c_names.py"
     "c_tables.py"
     "keywords.py"
     "type_registry.py"
@@ -48,6 +50,8 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_enums.py"
+    "c_names.py"
     "c_tables.py"
     "keywords.py"
     "type_registry.py"

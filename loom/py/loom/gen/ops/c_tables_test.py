@@ -73,8 +73,8 @@ from loom.dsl import (
     UnpackedPayloadBitCountMatchesStorage,
 )
 from loom.gen.ops import model as c_table_model
+from loom.gen.ops.c_enums import TYPE_CONSTRAINT_MAP
 from loom.gen.ops.c_tables import (
-    TYPE_CONSTRAINT_MAP,
     generate_builders_c,
     generate_ops_h,
     generate_sharded_tables_c,
