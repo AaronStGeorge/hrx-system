@@ -443,6 +443,7 @@ def loom_low_descriptor_cc_library(
         inputs = [],
         deps = [],
         ids_deps = None,
+        ids_visibility = None,
         exclude_from_cmake_all = False,
         tags = [],
         testonly = False,
@@ -465,6 +466,8 @@ def loom_low_descriptor_cc_library(
       deps: Runtime C library dependencies.
       ids_deps: Runtime C library dependencies for the generated _ids target.
         Defaults to deps.
+      ids_visibility: Visibility for the generated _ids target. Defaults to
+        visibility.
       exclude_from_cmake_all: Excludes the generated C library from CMake all.
       tags: Additional Bazel tags for the internal generator action.
       testonly: Passed through to the runtime C libraries.
@@ -499,7 +502,7 @@ def loom_low_descriptor_cc_library(
         hdrs = [generated_header],
         deps = ids_deps if ids_deps != None else deps,
         testonly = testonly,
-        visibility = visibility,
+        visibility = ids_visibility if ids_visibility != None else visibility,
     )
 
 def loom_low_descriptor_exclude_from_cmake_all(

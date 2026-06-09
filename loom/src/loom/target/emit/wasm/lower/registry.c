@@ -9,7 +9,7 @@
 #include "loom/target/emit/wasm/contracts/core_simd128.h"
 #include "loom/target/emit/wasm/contracts/core_simd128_lower_rules.h"
 #include "loom/target/emit/wasm/error_catalog.h"
-#include "loom/target/emit/wasm/lower.h"
+#include "loom/target/emit/wasm/lower/lower.h"
 
 static bool loom_wasm_type_is_i32_register(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {

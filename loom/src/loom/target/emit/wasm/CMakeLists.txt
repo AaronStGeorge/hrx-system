@@ -150,25 +150,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
-loom_cc_library(
-  NAME
-    lower
-  HDRS
-    "lower.h"
-  SRCS
-    "lower/registry.c"
-  DEPS
-    ::error_defs
-    iree::base
-    loom::codegen::low::lower
-    loom::ir
-    loom::target::arch::wasm::descriptors_ids
-    loom::target::emit::wasm::contracts
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 iree_native_test(
   NAME
     "assembly"

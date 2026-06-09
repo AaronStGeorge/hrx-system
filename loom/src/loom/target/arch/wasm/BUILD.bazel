@@ -28,6 +28,8 @@ _WASM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/emit/wasm/contracts:__pkg__
 
 _WASM_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/wasm:__pkg__"]
 
+_WASM_LOWER_VISIBILITY = ["//loom/src/loom/target/emit/wasm/lower:__pkg__"]
+
 _WASM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
@@ -41,6 +43,7 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=wasm_core_simd128"],
     generator = "//loom/py/loom/gen:wasm_low_descriptor_shard",
+    ids_visibility = _WASM_CONTRACT_VISIBILITY + _WASM_EMIT_VISIBILITY + _WASM_LOWER_VISIBILITY,
     visibility = _WASM_CONTRACT_VISIBILITY + _WASM_EMIT_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
@@ -138,7 +141,7 @@ loom_cc_library(
         ":math_policy",
         ":ops",
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/emit/wasm:lower",
+        "//loom/src/loom/target/emit/wasm/lower",
         "//runtime/src/iree/base",
     ],
 )

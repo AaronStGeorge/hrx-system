@@ -11,8 +11,8 @@
 // descriptor knowledge from leaking into the target-independent codegen/low
 // layer.
 
-#ifndef LOOM_TARGET_EMIT_WASM_LOWER_H_
-#define LOOM_TARGET_EMIT_WASM_LOWER_H_
+#ifndef LOOM_TARGET_EMIT_WASM_LOWER_LOWER_H_
+#define LOOM_TARGET_EMIT_WASM_LOWER_LOWER_H_
 
 #include "loom/codegen/low/lower.h"
 
@@ -40,4 +40,4 @@ void loom_wasm_low_lower_policy_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_WASM_LOWER_H_
+#endif  // LOOM_TARGET_EMIT_WASM_LOWER_LOWER_H_

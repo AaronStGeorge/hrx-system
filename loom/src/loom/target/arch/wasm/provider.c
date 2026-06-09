@@ -10,7 +10,7 @@
 #include "loom/target/arch/wasm/low_verify.h"
 #include "loom/target/arch/wasm/math_policy.h"
 #include "loom/target/arch/wasm/ops/registry.h"
-#include "loom/target/emit/wasm/lower.h"
+#include "loom/target/emit/wasm/lower/lower.h"
 
 static const loom_low_verify_provider_t* const kLoomWasmLowVerifyProviders[] = {
     &loom_wasm_low_verify_provider,

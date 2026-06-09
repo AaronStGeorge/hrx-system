@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_generated_cc_library",
 )
@@ -22,18 +21,6 @@ package(
 )
 
 _WASM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
-
-_WASM_TARGET_VISIBILITY = ["//loom/src/loom/target/arch/wasm:__pkg__"]
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "wasm_lower_no_wasm_descriptor_dep",
-    dependencies = ["//loom/src/loom/target/arch/wasm:descriptors"],
-    targets = [":lower"],
-)
 
 #===------------------------------------------------------------------------===#
 # Wasm emission
@@ -53,6 +40,7 @@ loom_generated_cc_library(
     generated_hdrs = ["error_catalog.h"],
     generator = "//loom/py/loom/gen:c_errors",
     source = "error_catalog.c",
+    visibility = ["//loom/src/loom/target/emit/wasm/lower:__pkg__"],
     deps = ["//loom/src/loom/error:error_defs"],
 )
 
@@ -137,21 +125,6 @@ loom_cc_library(
     deps = [
         ":loom_check",
         "//loom/src/loom/tools/loom-check:provider",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "lower",
-    srcs = ["lower/registry.c"],
-    hdrs = ["lower.h"],
-    visibility = _WASM_TARGET_VISIBILITY,
-    deps = [
-        ":error_defs",
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target/arch/wasm:descriptors_ids",
-        "//loom/src/loom/target/emit/wasm/contracts",
         "//runtime/src/iree/base",
     ],
 )
