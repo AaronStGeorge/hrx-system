@@ -11,12 +11,16 @@
         ]
       },
       "stdout": {
-        "contains": [
-          "\"format\":\"loom.test.v0\"",
-          { "regex": "\"case\":\"store_i32_case\"[^}]*\"passed\":true" },
-          { "regex": "\"case\":\"store_then_double_i32_case\"[^}]*\"passed\":true" },
-          "\"failed_sample_count\":0"
-        ]
+        "contains": {
+          "unordered": [
+            "\"format\":\"loom.test.v0\"",
+            { "regex": "\"case\":\"store_i32_case\"[^}]*\"passed\":true" },
+            {
+              "regex": "\"case\":\"store_then_double_i32_case\"[^}]*\"passed\":true"
+            },
+            "\"failed_sample_count\":0"
+          ]
+        }
       }
     }
   ]
