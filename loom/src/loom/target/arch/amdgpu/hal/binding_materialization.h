@@ -20,7 +20,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/ir/ir.h"
-#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus

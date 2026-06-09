@@ -278,7 +278,7 @@ loom_cc_library(
     loom::codegen::low::schedule
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::hal_kernel_abi
+    loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
     loom::target::launch
@@ -320,7 +320,7 @@ loom_cc_library(
     iree::base
     loom::codegen::low::allocation
     loom::codegen::low::schedule
-    loom::target::arch::amdgpu::hal_kernel_abi
+    loom::target::arch::amdgpu::hal::kernel_abi
   PUBLIC
 )
 endif()
@@ -342,7 +342,7 @@ loom_cc_library(
     iree::io::stream
     loom::codegen::low::allocation
     loom::codegen::low::schedule
-    loom::target::arch::amdgpu::hal_kernel_abi
+    loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::packet_plan
   PUBLIC
 )
@@ -428,7 +428,7 @@ loom_cc_library(
     loom::ops::target
     loom::target::arch::amdgpu::address_state
     loom::target::arch::amdgpu::error_defs
-    loom::target::arch::amdgpu::hal_kernel_abi
+    loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::occupancy
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::packet_plan
@@ -598,8 +598,8 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::hal_binding_materialization
-    loom::target::arch::amdgpu::hal_kernel_abi
+    loom::target::arch::amdgpu::hal::binding_materialization
+    loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::low_registry
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::packet_plan

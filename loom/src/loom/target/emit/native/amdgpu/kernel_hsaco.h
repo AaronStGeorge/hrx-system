@@ -18,7 +18,7 @@
 #include "iree/io/stream.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
-#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 #include "loom/target/emit/native/amdgpu/hsaco.h"
 
 #ifdef __cplusplus

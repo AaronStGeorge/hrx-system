@@ -692,7 +692,6 @@ loom_cc_library(
     ::atomic_candidates
     ::compare_candidates
     ::error_defs
-    ::hal_kernel_abi
     ::lower_kinds
     ::lower_materializers
     ::matrix_contract
@@ -741,6 +740,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::contracts::reduce_lower_rules
     loom::target::arch::amdgpu::contracts::view
     loom::target::arch::amdgpu::contracts::view_lower_rules
+    loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::low_legality
     loom::target::registers
     loom::util::fact_table
@@ -975,93 +975,17 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    hal_kernel_abi
-  HDRS
-    "hal_binding_descriptor.h"
-    "hal_kernel_abi.h"
-  SRCS
-    "hal_kernel_abi.c"
-  DEPS
-    ::error_defs
-    ::target_info
-    ::target_refs
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::function
-    loom::codegen::low::target_binding
-    loom::error::emitter
-    loom::ir
-    loom::ops::low
-    loom::target::registers
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    hal_binding_materialization
-  HDRS
-    "hal_binding_materialization.h"
-  SRCS
-    "hal_binding_materialization.c"
-  DEPS
-    ::hal_kernel_abi
-    ::target_info
-    ::target_refs
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::builder
-    loom::codegen::low::descriptors
-    loom::codegen::low::function
-    loom::ir
-    loom::ops::low
-    loom::rewrite::rewriter
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    hal_binding_materialization_pass
-  HDRS
-    "hal_binding_materialization_pass.h"
-  SRCS
-    "hal_binding_materialization_pass.c"
-  DEPS
-    ::hal_binding_materialization
-    ::hal_kernel_abi
-    ::ops
-    iree::base
-    loom::codegen::low::function
-    loom::codegen::low::pass_environment
-    loom::codegen::low::target_binding
-    loom::ir
-    loom::ops::low
-    loom::pass::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     pass_registry
   HDRS
     "pass_registry.h"
   SRCS
     "pass_registry.c"
   DEPS
-    ::hal_binding_materialization_pass
     iree::base
     loom::codegen::low::pass_environment
     loom::codegen::low::pass_requirements
     loom::pass::registry
+    loom::target::arch::amdgpu::hal::binding_materialization_pass
   PUBLIC
 )
 endif()

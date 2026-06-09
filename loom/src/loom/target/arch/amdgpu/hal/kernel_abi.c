@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 
 #include <inttypes.h>
 #include <string.h>
@@ -14,7 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
-#include "loom/target/arch/amdgpu/hal_binding_descriptor.h"
+#include "loom/target/arch/amdgpu/hal/binding_descriptor.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/registers.h"

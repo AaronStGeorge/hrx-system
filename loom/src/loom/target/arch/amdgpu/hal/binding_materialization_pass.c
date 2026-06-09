@@ -4,14 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/hal_binding_materialization_pass.h"
+#include "loom/target/arch/amdgpu/hal/binding_materialization_pass.h"
 
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/hal_binding_materialization.h"
-#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/hal/binding_materialization.h"
+#include "loom/target/arch/amdgpu/hal/kernel_abi.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_STATISTICS(V, statistics_type) \
