@@ -14,7 +14,7 @@ loom_generated_cc_library(
   NAME
     ops
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_generator
   SRCS
     "registry.c"
     "target.c"

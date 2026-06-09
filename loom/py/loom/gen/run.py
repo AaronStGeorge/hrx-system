@@ -29,7 +29,7 @@ import bootstrap  # type: ignore[import-not-found]
 GENERATORS = {
     "builders_pyi": "loom.gen.builders_pyi",
     "c_errors": "loom.gen.c_errors",
-    "c_tables": "loom.gen.c_tables",
+    "c_tables": "loom.gen.ops.c_tables",
     "low_descriptors": "loom.gen.low_descriptors",
     "package_inits": "loom.gen.package_inits",
     "textmate": "loom.gen.textmate",

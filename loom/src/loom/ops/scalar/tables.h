@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // GENERATED FILE: DO NOT EDIT.
-// Generator: loom.gen.c_tables.
+// Generator: loom.gen.ops.c_tables.
 
 #ifndef LOOM_OPS_SCALAR_TABLES_H_
 #define LOOM_OPS_SCALAR_TABLES_H_

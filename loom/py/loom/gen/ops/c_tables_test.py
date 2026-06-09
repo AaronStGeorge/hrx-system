@@ -72,8 +72,8 @@ from loom.dsl import (
     TypeSemantic,
     UnpackedPayloadBitCountMatchesStorage,
 )
-from loom.gen import c_table_model
-from loom.gen.c_tables import (
+from loom.gen.ops import model as c_table_model
+from loom.gen.ops.c_tables import (
     TYPE_CONSTRAINT_MAP,
     generate_builders_c,
     generate_ops_h,

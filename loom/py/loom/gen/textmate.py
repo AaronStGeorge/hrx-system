@@ -27,7 +27,7 @@ from pathlib import Path
 from loom.dsl import Op, TypeDef
 from loom.errors import ErrorDomain
 from loom.gen import bootstrap as _bootstrap
-from loom.gen.assembly_tokens import KEYWORD_MAP
+from loom.gen.assembly.tokens import KEYWORD_MAP
 from loom.gen.support.generated_file import generated_comment
 
 

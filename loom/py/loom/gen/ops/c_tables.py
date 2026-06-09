@@ -18,7 +18,7 @@ and editor/search ergonomics. Bulky generated C table sources are build outputs.
 Usage:
     python3 loom/py/loom/gen/run.py c_tables --check
     python3 loom/py/loom/gen/run.py c_tables --in-place
-    bazel run //loom/py/loom/gen:c_tables_generator -- --dialect=check --builders=/tmp/builders.c --tables=/tmp/tables.c
+    bazel run //loom/py/loom/gen/ops:c_tables_generator -- --dialect=check --builders=/tmp/builders.c --tables=/tmp/tables.c
 """
 
 from __future__ import annotations
@@ -95,8 +95,8 @@ from loom.dsl import (
 )
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
-from loom.gen.assembly_tokens import KEYWORD_MAP, REGION_SYNTAX_MAP
-from loom.gen.c_table_model import (
+from loom.gen.assembly.tokens import KEYWORD_MAP, REGION_SYNTAX_MAP
+from loom.gen.ops.model import (
     DialectGeneration,
     GenerationModel,
     load_dialect_generation,
@@ -396,7 +396,7 @@ COPYRIGHT = """\
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 """
 
-GENERATED_HEADER = COPYRIGHT + "\n" + "\n".join(line_comment_header("//", generator="loom.gen.c_tables")) + "\n// clang-format off"
+GENERATED_HEADER = COPYRIGHT + "\n" + "\n".join(line_comment_header("//", generator="loom.gen.ops.c_tables")) + "\n// clang-format off"
 
 
 # ============================================================================
@@ -3275,7 +3275,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
     lines.extend(
         line_comment_header(
             "//",
-            generator="loom.gen.c_tables",
+            generator="loom.gen.ops.c_tables",
             regenerate="python3 loom/py/loom/gen/run.py c_tables --in-place",
         )
     )
@@ -3575,7 +3575,7 @@ def generate_tables_c(
     ops_by_name = {op.name: op for op in ops}
 
     lines.append(COPYRIGHT)
-    lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
+    lines.extend(line_comment_header("//", generator="loom.gen.ops.c_tables"))
     lines.append("// clang-format off")
     lines.append("")
     include_path = include_path or f"loom/ops/{dialect_name}"
@@ -4033,7 +4033,7 @@ def generate_tables_h(dialect_name: str, ops: Sequence[Op], *, include_path: str
     lines: list[str] = []
 
     lines.append(COPYRIGHT)
-    lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
+    lines.extend(line_comment_header("//", generator="loom.gen.ops.c_tables"))
     lines.append("")
     lines.append(f"#ifndef {guard}")
     lines.append(f"#define {guard}")
@@ -4068,7 +4068,7 @@ def generate_tables_aggregator_c(
     lines: list[str] = []
 
     lines.append(COPYRIGHT)
-    lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
+    lines.extend(line_comment_header("//", generator="loom.gen.ops.c_tables"))
     lines.append("// clang-format off")
     lines.append("")
     include_path = include_path or f"loom/ops/{dialect_name}"
@@ -4155,7 +4155,7 @@ def generate_builders_c(dialect_name: str, ops: Sequence[Op], *, include_path: s
     shared_enums = _collect_shared_enums(dialect_name, ops)
 
     lines.append(COPYRIGHT)
-    lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
+    lines.extend(line_comment_header("//", generator="loom.gen.ops.c_tables"))
     lines.append("// clang-format off")
     lines.append("")
     include_path = include_path or f"loom/ops/{dialect_name}"

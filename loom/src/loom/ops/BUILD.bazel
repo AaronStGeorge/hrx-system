@@ -134,7 +134,7 @@ loom_generated_cc_library(
     args = ["--registry"],
     generated_src_flags = ["--op-registry-source"],
     generated_srcs = ["op_registry.c"],
-    generator = "//loom/py/loom/gen:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_generator",
     deps = [
         ":op_defs",
         "//loom/src/loom/ir",
@@ -181,7 +181,7 @@ loom_generated_cc_library(
     args = ["--registry"],
     generated_src_flags = ["--type-registry-source"],
     generated_srcs = ["type_registry.c"],
-    generator = "//loom/py/loom/gen:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_generator",
     deps = [
         ":op_defs",
         ":storage_facts",

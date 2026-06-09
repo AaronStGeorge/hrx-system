@@ -17,11 +17,6 @@ iree_py_library(
 )
 
 iree_py_library(
-    name = "assembly_tokens",
-    srcs = ["assembly_tokens.py"],
-)
-
-iree_py_library(
     name = "bootstrap",
     srcs = ["bootstrap.py"],
 )
@@ -56,12 +51,12 @@ iree_py_test(
     ],
     main = "pytest_style_runner.py",
     deps = [
-        ":assembly_tokens",
         ":bootstrap",
         ":low_descriptors",
         "//loom/py/loom:core",
         "//loom/py/loom/dialect:package",
         "//loom/py/loom/error",
+        "//loom/py/loom/gen/assembly:tokens",
         "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:descriptor_sets",
         "//loom/py/loom/target/test:descriptors",
@@ -127,59 +122,6 @@ iree_py_test(
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/target/contracts",
         "//loom/py/loom/target/test:descriptors",
-    ],
-)
-
-C_TABLE_MODEL_DEPS = [
-    "//loom/py/loom:core",
-    "//loom/py/loom/dialect:package",
-    "//loom/py/loom/target/arch/amdgpu:dialect",
-    "//loom/py/loom/target/arch/ireevm:dialect",
-    "//loom/py/loom/target/arch/spirv:dialect",
-    "//loom/py/loom/target/arch/wasm:dialect",
-    "//loom/py/loom/target/arch/x86:dialect",
-]
-
-iree_py_library(
-    name = "c_table_model",
-    srcs = ["c_table_model.py"],
-    deps = C_TABLE_MODEL_DEPS,
-)
-
-C_TABLES_DEPS = [
-    ":assembly_tokens",
-    ":bootstrap",
-    ":c_table_model",
-    "//loom/py/loom:core",
-    "//loom/py/loom/gen/support:files",
-    "//loom/py/loom/gen/support:generated_file",
-]
-
-iree_py_library(
-    name = "c_tables",
-    srcs = ["c_tables.py"],
-    deps = C_TABLES_DEPS,
-)
-
-iree_py_binary(
-    name = "c_tables_generator",
-    srcs = ["c_tables.py"],
-    main = "c_tables.py",
-    deps = C_TABLES_DEPS,
-)
-
-iree_py_test(
-    name = "c_tables_test",
-    srcs = [
-        "c_tables_test.py",
-        "//loom/py/loom/tools:pytest_style_runner.py",
-    ],
-    args = ["loom.gen.c_tables_test"],
-    main = "pytest_style_runner.py",
-    deps = [
-        ":c_table_model",
-        ":c_tables",
-        "//loom/py/loom/error",
     ],
 )
 

@@ -152,7 +152,7 @@ loom_generated_cc_library(
   NAME
     op_registry
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_generator
   GENERATED_SRC_FLAGS
     "--op-registry-source"
   GENERATED_SRCS
@@ -207,7 +207,7 @@ loom_generated_cc_library(
   NAME
     type_registry
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_generator
   GENERATED_SRC_FLAGS
     "--type-registry-source"
   GENERATED_SRCS
