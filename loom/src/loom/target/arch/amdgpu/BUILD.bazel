@@ -20,10 +20,35 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+_AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
+
+_AMDGPU_HAL_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/hal:__pkg__"]
+
+_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
+
+_AMDGPU_MATRIX_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/matrix:__pkg__"]
+
+_AMDGPU_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/amdgpu:__pkg__"]
+
+_AMDGPU_PLANNING_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/planning:__pkg__"]
+
+_AMDGPU_RECORDS_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/records:__pkg__"]
+
+_AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
+
+_AMDGPU_PROVIDER_VISIBILITY = [
+    "//loom/src/loom/target/all:__pkg__",
+    "//loom/src/loom/target/configured:__pkg__",
+    "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
+    "//loom/src/loom/tools/iree-benchmark-loom:__pkg__",
+    "//loom/src/loom/tools/loom-compile:__pkg__",
+    "//loom/src/loom/tooling/target/amdgpu/execution:__pkg__",
+] + _AMDGPU_CHECK_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # Layering checks
@@ -155,6 +180,7 @@ loom_generated_cc_library(
     generated_hdrs = ["error_catalog.h"],
     generator = "//loom/py/loom/gen:c_errors",
     source = "error_catalog.c",
+    visibility = _AMDGPU_HAL_VISIBILITY + _AMDGPU_LOWER_VISIBILITY + _AMDGPU_NATIVE_VISIBILITY,
     deps = ["//loom/src/loom/error:error_defs"],
 )
 
@@ -168,6 +194,13 @@ loom_low_descriptor_data_archive(
 loom_cc_library(
     name = "target_info_defs",
     hdrs = ["target_info_defs.h"],
+    visibility = (
+        _AMDGPU_MATRIX_VISIBILITY +
+        _AMDGPU_PLANNING_VISIBILITY +
+        _AMDGPU_TOOLING_VISIBILITY + [
+            "//loom/src/loom/target/emit/llvmir/amdgpu:__pkg__",
+        ]
+    ),
     deps = ["//runtime/src/iree/base"],
 )
 
@@ -186,6 +219,15 @@ loom_target_table_cc_library(
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
     ],
+    visibility = (
+        _AMDGPU_HAL_VISIBILITY +
+        _AMDGPU_LOWER_VISIBILITY +
+        _AMDGPU_MATRIX_VISIBILITY +
+        _AMDGPU_NATIVE_VISIBILITY +
+        _AMDGPU_PLANNING_VISIBILITY +
+        _AMDGPU_RECORDS_VISIBILITY +
+        _AMDGPU_TOOLING_VISIBILITY
+    ),
     deps = [
         ":target_info_defs",
         "//runtime/src/iree/base",
@@ -252,6 +294,7 @@ loom_generated_cc_library(
         "ops/tables.c",
     ],
     generator = "//loom/py/loom/gen:c_tables_generator",
+    visibility = _AMDGPU_HAL_VISIBILITY + _AMDGPU_NATIVE_VISIBILITY + _AMDGPU_TOOLING_VISIBILITY,
     deps = [
         ":error_defs",
         ":target_info",
@@ -269,6 +312,12 @@ loom_cc_library(
     name = "target_id",
     srcs = ["target_id.c"],
     hdrs = ["target_id.h"],
+    visibility = (
+        _AMDGPU_LOWER_VISIBILITY +
+        _AMDGPU_NATIVE_VISIBILITY +
+        _AMDGPU_PLANNING_VISIBILITY +
+        _AMDGPU_TOOLING_VISIBILITY
+    ),
     deps = [
         ":ops",
         ":target_info",
@@ -296,6 +345,7 @@ loom_cc_library(
 loom_cc_library(
     name = "register_class",
     hdrs = ["register_class.h"],
+    visibility = _AMDGPU_NATIVE_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -315,6 +365,14 @@ loom_target_table_cc_library(
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
     ],
+    visibility = (
+        _AMDGPU_HAL_VISIBILITY +
+        _AMDGPU_LOWER_VISIBILITY +
+        _AMDGPU_MATRIX_VISIBILITY +
+        _AMDGPU_NATIVE_VISIBILITY +
+        _AMDGPU_PLANNING_VISIBILITY +
+        _AMDGPU_TOOLING_VISIBILITY
+    ),
     deps = [
         "//loom/src/loom/codegen/low:descriptors",
     ],
@@ -323,6 +381,7 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "atomic_candidates",
     generator = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR,
+    visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
         ":target_refs",
         "//loom/src/loom/ops:atomic",
@@ -335,6 +394,7 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
     name = "compare_candidates",
     generator = _AMDGPU_COMPARE_CANDIDATE_GENERATOR,
+    visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
         ":target_refs",
         "//loom/src/loom/ir",
@@ -433,6 +493,7 @@ loom_cc_library(
     name = "encoding",
     srcs = ["encoding.c"],
     hdrs = ["encoding.h"],
+    visibility = _AMDGPU_NATIVE_VISIBILITY + _AMDGPU_PLANNING_VISIBILITY,
     deps = [
         ":cdna3_encoding_tables",
         ":cdna4_encoding_tables",
@@ -489,6 +550,7 @@ loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
+    visibility = _AMDGPU_PROVIDER_VISIBILITY,
     deps = [
         ":legalization",
         ":math_policy",
