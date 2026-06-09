@@ -28,7 +28,7 @@ import bootstrap  # type: ignore[import-not-found]
 
 GENERATORS = {
     "builders_pyi": "loom.gen.python.builders_pyi",
-    "c_errors": "loom.gen.c_errors",
+    "c_errors": "loom.gen.error.c_errors",
     "c_tables": "loom.gen.ops.c_tables",
     "low_descriptors": "loom.gen.target.low.low_descriptors",
     "package_inits": "loom.gen.python.package_inits",

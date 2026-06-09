@@ -53,7 +53,7 @@ loom_generated_cc_library(
   NAME
     error_defs
   GENERATOR
-    loom::py::loom::gen::c_errors
+    loom::py::loom::gen::error::c_errors
   SOURCE
     "error_catalog.c"
   HDRS

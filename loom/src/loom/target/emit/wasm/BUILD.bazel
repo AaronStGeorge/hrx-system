@@ -38,7 +38,7 @@ loom_generated_cc_library(
     ],
     generated_hdr_flags = ["--header"],
     generated_hdrs = ["error_catalog.h"],
-    generator = "//loom/py/loom/gen:c_errors",
+    generator = "//loom/py/loom/gen/error:c_errors",
     source = "error_catalog.c",
     visibility = ["//loom/src/loom/target/emit/wasm/lower:__pkg__"],
     deps = ["//loom/src/loom/error:error_defs"],

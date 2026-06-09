@@ -18,7 +18,7 @@ of truth.
 
 Usage:
     python3 loom/py/loom/gen/run.py c_errors --check
-    bazel run //loom/py/loom/gen:c_errors -- --source=/tmp/error_catalog.c
+    bazel run //loom/py/loom/gen/error:c_errors -- --source=/tmp/error_catalog.c
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from pathlib import Path
 
 
 def _ensure_runtime_py_on_path() -> None:
-    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py = Path(__file__).resolve().parents[3]
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
         sys.path.insert(0, runtime_py_string)
@@ -147,7 +147,7 @@ def generate_error_catalog_c(
     lines = [
         *line_comment_header(
             "//",
-            generator="loom.gen.c_errors",
+            generator="loom.gen.error.c_errors",
             regenerate="build the owning loom_generated_cc_library target",
         ),
         "",
@@ -331,7 +331,7 @@ def generate_error_catalog_h(errors: list[ErrorDef], *, catalog_symbol: str, pub
     lines = [
         *line_comment_header(
             "//",
-            generator="loom.gen.c_errors",
+            generator="loom.gen.error.c_errors",
             regenerate="build the owning loom_generated_cc_library target",
         ),
         "",

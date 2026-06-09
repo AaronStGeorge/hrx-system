@@ -25,37 +25,6 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    c_errors
-  MAIN
-    "c_errors.py"
-  SRCS
-    "c_errors.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::error::error
-    loom::py::loom::gen::support::files
-    loom::py::loom::gen::support::generated_file
-)
-
-iree_py_test(
-  NAME
-    c_errors_test
-  SRCS
-    "../tools/pytest_style_runner.py"
-  ARGS
-    "loom.gen.c_errors_test"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::error::error
-    loom::py::loom::gen::support::files
-    loom::py::loom::gen::support::generated_file
-  PACKAGE_DIRS
-    "${PROJECT_SOURCE_DIR}/loom/py"
-    "${PROJECT_BINARY_DIR}/loom/py"
-)
-
-iree_py_library(
-  NAME
     amdgpu_occupancy_tables
   MAIN
     "amdgpu_occupancy_tables.py"

@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from loom.error.type import ERR_TYPE_001
-from loom.gen.c_errors import generate_error_catalog_c, generate_error_catalog_h
+from loom.gen.error.c_errors import generate_error_catalog_c, generate_error_catalog_h
 
 
 def test_generate_error_catalog_exports_canonical_definitions() -> None:
