@@ -33,7 +33,6 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
-    loom::codegen::low::descriptors_manifest
 )
 
 loom_cc_library(

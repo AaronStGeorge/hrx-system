@@ -4,14 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/low_descriptor_registry_manifest.h"
+#include "loom/tools/loom-check/target_low_registry_manifest.h"
 
 #include <inttypes.h>
 
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
-static iree_status_t loom_target_low_manifest_write_string_field(
+static iree_status_t loom_check_target_low_manifest_write_string_field(
     loom_output_stream_t* stream, const char* field_name,
     iree_string_view_t value) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
@@ -20,7 +20,8 @@ static iree_status_t loom_target_low_manifest_write_string_field(
   return loom_json_write_escaped_string(stream, value);
 }
 
-static iree_status_t loom_target_low_manifest_write_descriptor_set_summary(
+static iree_status_t
+loom_check_target_low_manifest_write_descriptor_set_summary(
     loom_output_stream_t* stream,
     const loom_low_descriptor_set_t* descriptor_set) {
   iree_string_view_t key = loom_low_descriptor_set_string(
@@ -32,12 +33,12 @@ static iree_status_t loom_target_low_manifest_write_descriptor_set_summary(
 
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '{'));
   IREE_RETURN_IF_ERROR(
-      loom_target_low_manifest_write_string_field(stream, "key", key));
+      loom_check_target_low_manifest_write_string_field(stream, "key", key));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_manifest_write_string_field(stream, "target", target));
+  IREE_RETURN_IF_ERROR(loom_check_target_low_manifest_write_string_field(
+      stream, "target", target));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
+  IREE_RETURN_IF_ERROR(loom_check_target_low_manifest_write_string_field(
       stream, "feature_namespace", feature_namespace));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
@@ -64,7 +65,7 @@ static iree_status_t loom_target_low_manifest_write_descriptor_set_summary(
   return iree_ok_status();
 }
 
-iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
+iree_status_t loom_check_target_low_registry_format_manifest_json(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_builder_t* builder) {
   loom_output_stream_t stream;
@@ -80,8 +81,9 @@ iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
     }
     const loom_low_descriptor_set_t* descriptor_set =
         loom_low_descriptor_registry_descriptor_set_at(&registry->registry, i);
-    IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_descriptor_set_summary(
-        &stream, descriptor_set));
+    IREE_RETURN_IF_ERROR(
+        loom_check_target_low_manifest_write_descriptor_set_summary(
+            &stream, descriptor_set));
   }
   return loom_output_stream_write_cstring(&stream, "]}");
 }

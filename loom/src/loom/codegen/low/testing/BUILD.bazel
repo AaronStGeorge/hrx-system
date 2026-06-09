@@ -33,7 +33,6 @@ loom_cc_test(
     deps = [
         ":descriptors_verify",
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:descriptors_manifest",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

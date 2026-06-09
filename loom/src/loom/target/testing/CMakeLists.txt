@@ -51,7 +51,6 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::requirements
     loom::target::low_descriptor_registry_core_test
-    loom::target::low_descriptor_registry_manifest
 )
 
 loom_cc_test(

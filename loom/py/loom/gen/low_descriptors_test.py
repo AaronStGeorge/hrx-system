@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import replace
 from typing import cast
@@ -125,16 +124,11 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
         TEST_LOW_CORE_DESCRIPTOR_SET,
         DescriptorAllowlist(keys=("test.add.i32",)),
     )
-    manifest = json.loads(generated.manifest_json)
 
-    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["test.add.i32"]
-    assert manifest["table_counts"]["descriptors"] == 1
-    assert manifest["table_counts"]["descriptor_refs"] == 1
-    assert manifest["table_counts"]["asm_forms"] == 1
-    assert manifest["table_counts"]["reg_classes"] == len(TEST_LOW_CORE_DESCRIPTOR_SET.reg_classes)
-    assert manifest["table_counts"]["reg_class_alts"] == 1
-    assert manifest["table_counts"]["schedule_classes"] == 1
-    assert manifest["table_counts"]["resources"] == 1
+    assert '"test.add.i32"' in generated.source
+    assert '"test.i32"' in generated.source
+    assert '"test.scalar.alu"' in generated.source
+    assert '"test.scalar"' in generated.source
     assert "test.call.i32" not in generated.source
 
 
@@ -171,17 +165,9 @@ def test_allowlist_closes_over_operand_form_replacements() -> None:
         descriptor_set,
         DescriptorAllowlist(keys=(source_descriptor.key,)),
     )
-    manifest = json.loads(generated.manifest_json)
 
-    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == [
-        source_descriptor.key,
-        replacement_descriptor.key,
-    ]
-    assert manifest["table_counts"]["operand_forms"] == 1
-    assert manifest["table_counts"]["operand_form_matches"] == 1
-    assert manifest["table_counts"]["operand_form_operand_indices"] == 1
-    assert manifest["descriptors"][0]["operand_forms"] == 1
-    assert manifest["descriptors"][1]["operand_forms"] == 0
+    assert source_descriptor.key in generated.source
+    assert replacement_descriptor.key in generated.source
     assert ".match_kind = LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64" in generated.source
 
 
@@ -254,13 +240,11 @@ def test_shared_source_emits_sibling_view_descriptor_surfaces() -> None:
 
 def test_generate_test_low_core_descriptor_set() -> None:
     generated = generate_descriptor_set(TEST_LOW_CORE_DESCRIPTOR_SET)
-    manifest = json.loads(generated.manifest_json)
 
-    assert manifest["key"] == "test.low.core"
-    assert manifest["target"] == "test.low"
-    assert manifest["table_counts"]["asm_forms"] >= 13
-    assert any(descriptor["key"] == "test.spv.op_iadd.i32" for descriptor in manifest["descriptors"])
-    assert any(form["mnemonic"] == "OpIAdd" for form in manifest["asm_forms"])
+    assert '"test.low.core"' in generated.source
+    assert '"test.low"' in generated.source
+    assert '"test.spv.op_iadd.i32"' in generated.source
+    assert '"OpIAdd"' in generated.source
 
 
 def test_generator_resolves_symbolic_hazard_resources() -> None:
@@ -290,9 +274,7 @@ def test_generator_resolves_symbolic_hazard_resources() -> None:
         descriptor_set,
         DescriptorAllowlist(keys=("test.add.i32",)),
     )
-    manifest = json.loads(generated.manifest_json)
 
-    assert manifest["table_counts"]["hazards"] == 1
     assert ".reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE" in generated.source
     assert ".reference_id = 0" in generated.source
 
@@ -352,9 +334,9 @@ def test_allowlist_accepts_semantic_tags() -> None:
         TEST_LOW_CORE_DESCRIPTOR_SET,
         DescriptorAllowlist(semantic_tags=("control.return.void",)),
     )
-    manifest = json.loads(generated.manifest_json)
 
-    assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["test.return.void"]
+    assert "test.return.void" in generated.source
+    assert "test.add.i32" not in generated.source
 
 
 def test_allowlist_rejects_unknown_descriptor_key() -> None:
@@ -407,9 +389,9 @@ def test_generator_accepts_asm_form_implicit_packet_operand() -> None:
     descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
     generated = generate_descriptor_set(descriptor_set)
-    manifest = json.loads(generated.manifest_json)
 
-    assert manifest["asm_forms"][0]["operands"] == ["lhs", "rhs"]
+    assert "LOOM_LOW_OPERAND_FLAG_IMPLICIT" in generated.source
+    assert ".operand_index_count = 2," in generated.source
 
 
 def test_generator_rejects_ambiguous_asm_mnemonics() -> None:
@@ -529,14 +511,11 @@ def test_generator_emits_enum_immediate_domains() -> None:
     )
 
     generated = generate_descriptor_set(descriptor_set)
-    manifest = json.loads(generated.manifest_json)
 
     assert "loom_low_enum_domain_t" in generated.source
     assert "test.condition" in generated.source
     assert "eq" in generated.source
     assert "ne" in generated.source
-    assert manifest["table_counts"]["enum_domains"] == 1
-    assert manifest["table_counts"]["enum_values"] == 2
 
 
 def test_generator_rejects_missing_enum_immediate_domain() -> None:

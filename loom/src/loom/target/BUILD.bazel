@@ -168,20 +168,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "low_descriptor_registry_manifest",
-    srcs = ["low_descriptor_registry_manifest.c"],
-    hdrs = ["low_descriptor_registry_manifest.h"],
-    deps = [
-        ":low_descriptor_registry",
-        ":types",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "contract",
     srcs = ["contract.c"],
     hdrs = ["contract.h"],

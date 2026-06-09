@@ -8,13 +8,11 @@
 
 The generator consumes a rich, explicit Python schema and emits compact
 runtime tables under loom/src/loom. The C build only sees dense .rodata
-arrays; Python owns source readability, validation, allowlist closure, and
-manifest emission.
+arrays; Python owns source readability, validation, and allowlist closure.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -23,7 +21,6 @@ from pathlib import Path
 from loom.gen.generated_file import line_comment_header
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
-    LOW_DESCRIPTOR_SET_ABI_VERSION,
     LOW_DESCRIPTOR_SET_ORDINAL_NONE,
     AsmForm,
     CEnum,
@@ -77,7 +74,6 @@ class DescriptorAllowlist:
 class GeneratedDescriptorSet:
     header: str
     source: str
-    manifest_json: str
 
 
 @dataclass(slots=True)
@@ -2380,99 +2376,6 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
     )
 
 
-def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
-    spec = compiled.spec
-    descriptors = []
-    for i, descriptor in enumerate(compiled.descriptors):
-        descriptors.append(
-            {
-                "ordinal": i,
-                "stable_id": f"0x{descriptor_stable_id(descriptor.key):016x}",
-                "key": descriptor.key,
-                "mnemonic": descriptor.mnemonic or "",
-                "semantic_tag": descriptor.semantic_tag or "",
-                "encoding_format": descriptor.encoding_format_id,
-                "encoding": descriptor.encoding_id,
-                "schedule_class": compiled.schedule_class_ids[descriptor.schedule_class],
-                "operands": compiled.descriptor_rows[i]["operand_count"],
-                "results": compiled.descriptor_rows[i]["result_count"],
-                "immediates": compiled.descriptor_rows[i]["immediate_count"],
-                "fixed_encoding_fields": [
-                    {
-                        "encoding_field": field_value.encoding_field_id,
-                        "value": field_value.value,
-                    }
-                    for field_value in descriptor.encoding_field_values
-                ],
-                "effects": compiled.descriptor_rows[i]["effect_count"],
-                "storage_leases": compiled.descriptor_rows[i]["storage_lease_count"],
-                "operand_forms": compiled.descriptor_rows[i]["operand_form_count"],
-                "asm_forms": sum(1 for asm_form in compiled.asm_forms if asm_form.descriptor_ordinal == i),
-                "flags": [flag.c_name for flag in descriptor.flags],
-            }
-        )
-    asm_forms = []
-    for i, asm_form in enumerate(compiled.asm_forms):
-        descriptor = compiled.descriptors[asm_form.descriptor_ordinal]
-        asm_forms.append(
-            {
-                "ordinal": i,
-                "mnemonic": asm_form.mnemonic,
-                "descriptor": asm_form.descriptor_ordinal,
-                "descriptor_key": descriptor.key,
-                "results": [descriptor.operands[operand_index].field_name for operand_index in asm_form.result_indices],
-                "operands": [descriptor.operands[operand_index].field_name for operand_index in asm_form.operand_indices],
-                "immediates": [
-                    {
-                        "field": descriptor.immediates[immediate.immediate_index].field_name,
-                        "name": immediate.name or "",
-                    }
-                    for immediate in asm_form.immediates
-                ],
-            }
-        )
-    manifest = {
-        "key": spec.key,
-        "target": spec.target_key or "",
-        "feature_namespace": spec.feature_key or "",
-        "abi_version": LOW_DESCRIPTOR_SET_ABI_VERSION,
-        "generator_version": spec.generator_version,
-        "stable_id": descriptor_stable_id(spec.key),
-        "target_stable_id": descriptor_stable_id(spec.target_key) if spec.target_key is not None else 0,
-        "table_counts": {
-            "descriptors": len(compiled.descriptors),
-            "descriptor_refs": len(compiled.descriptor_refs),
-            "operands": len(compiled.operands),
-            "immediates": len(compiled.immediates),
-            "immediate_encoding_slices": len(compiled.immediate_encoding_slices),
-            "enum_domains": len(compiled.enum_domains),
-            "enum_values": len(compiled.enum_values),
-            "effects": len(compiled.effects),
-            "constraints": len(compiled.constraints),
-            "storage_leases": len(compiled.storage_leases),
-            "reg_classes": len(compiled.reg_classes),
-            "register_parts": len(compiled.register_parts),
-            "reg_class_alts": len(compiled.reg_class_alts),
-            "schedule_classes": len(compiled.schedule_classes),
-            "issue_uses": len(compiled.issue_uses),
-            "resources": len(compiled.resources),
-            "hazards": len(compiled.hazards),
-            "pressure_deltas": len(compiled.pressure_deltas),
-            "feature_mask_words": len(compiled.feature_mask_words),
-            "encoding_field_values": len(compiled.encoding_field_values),
-            "operand_forms": len(compiled.operand_forms),
-            "operand_form_matches": len(compiled.operand_form_matches),
-            "operand_form_operand_indices": len(compiled.operand_form_operand_indices),
-            "asm_forms": len(compiled.asm_forms),
-            "asm_operand_indices": len(compiled.asm_operand_indices),
-            "asm_immediates": len(compiled.asm_immediates),
-        },
-        "asm_forms": asm_forms,
-        "descriptors": descriptors,
-    }
-    return json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-
-
 def generate_descriptor_set(
     spec: DescriptorSet,
     allowlist: DescriptorAllowlist | None = None,
@@ -2481,7 +2384,6 @@ def generate_descriptor_set(
     return GeneratedDescriptorSet(
         header=_emit_header(compiled),
         source=_emit_source(compiled),
-        manifest_json=_emit_manifest_json(compiled),
     )
 
 

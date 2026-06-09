@@ -27,19 +27,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    descriptors_manifest
-  HDRS
-    "descriptors_manifest.h"
-  SRCS
-    "descriptors_manifest.c"
-  DEPS
-    ::descriptors
-    iree::base
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     descriptor_traits
   HDRS
     "descriptor_traits.h"

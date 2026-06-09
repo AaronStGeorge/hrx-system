@@ -72,16 +72,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "descriptors_manifest",
-    srcs = ["descriptors_manifest.c"],
-    hdrs = ["descriptors_manifest.h"],
-    deps = [
-        ":descriptors",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "descriptor_traits",
     srcs = ["descriptor_traits.c"],
     hdrs = ["descriptor_traits.h"],

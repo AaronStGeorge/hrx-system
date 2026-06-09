@@ -11,7 +11,6 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/codegen/low/descriptors_manifest.h"
 
 namespace loom {
 namespace {
@@ -1479,19 +1478,6 @@ TEST(LowDescriptorsTest, RejectsAsmFormImmediateOutOfRange) {
                         loom_low_descriptor_set_verify(&tables.set));
 }
 
-TEST(LowDescriptorsTest, FormatsManifestJsonWithAsmForms) {
-  TestTables tables;
-  InitializeTestTables(&tables);
-  AddAsmForms(&tables);
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(&tables.set, &builder));
-  EXPECT_NE(iree_string_builder_size(&builder), 0u);
-  iree_string_builder_deinitialize(&builder);
-}
-
 TEST(LowDescriptorsTest, RejectsRegisterClassWithoutStorageKind) {
   TestTables tables;
   InitializeTestTables(&tables);
@@ -1747,34 +1733,6 @@ TEST(LowDescriptorsTest, RejectsZeroIssueUseUnits) {
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_low_descriptor_set_verify(&tables.set));
-}
-
-TEST(LowDescriptorsTest, FormatsManifestJson) {
-  TestTables tables;
-  InitializeTestTables(&tables);
-  AddAddDescriptorConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
-  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
-                         LOOM_LOW_MEMORY_SPACE_GENERIC);
-  tables.descriptors[1].encoding_id = LOOM_LOW_ID_NONE;
-  tables.descriptors[1].flags =
-      LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE | LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO;
-  tables.operands[3].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
-  tables.operands[3].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
-  tables.effects[0].flags = LOOM_LOW_EFFECT_FLAG_DEPENDENCY;
-  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
-  tables.schedule_classes[1].hazard_start = 0;
-  tables.schedule_classes[1].hazard_count = 1;
-  tables.schedule_classes[1].pressure_delta_start = 0;
-  tables.schedule_classes[1].pressure_delta_count = 1;
-  tables.set.hazard_count = 1;
-  tables.set.pressure_delta_count = 1;
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(&tables.set, &builder));
-  EXPECT_NE(iree_string_builder_size(&builder), 0u);
-  iree_string_builder_deinitialize(&builder);
 }
 
 }  // namespace

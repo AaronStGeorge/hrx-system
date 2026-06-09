@@ -31,8 +31,7 @@
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
 //   // RUN: emit <target>   Parse -> emit analysis or target-structured
 //                           output -> compare. Core targets include
-//                           low-descriptor-manifest,
-//                           target-low-registry-manifest, and source-low.
+//                           target-low-registry-manifest and source-low.
 //                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function [strategy=...]
 //                           [diagnostics=...] [cliff=<reg-class>:...],

@@ -12,7 +12,6 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/codegen/low/descriptors_manifest.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet_json.h"
@@ -31,24 +30,23 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/entry_selection.h"
-#include "loom/target/low_descriptor_registry_manifest.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/low_emit.h"
+#include "loom/tools/loom-check/target_low_registry_manifest.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
 typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LIVENESS_JSON = 0,
   LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON = 1,
-  LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST = 2,
-  LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 3,
-  LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 4,
-  LOOM_CHECK_EMIT_LOW_ALLOCATION_SUMMARY = 5,
-  LOOM_CHECK_EMIT_LOW_PACKET_JSON = 6,
-  LOOM_CHECK_EMIT_SOURCE_LOW_TEXT = 7,
+  LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 2,
+  LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 3,
+  LOOM_CHECK_EMIT_LOW_ALLOCATION_SUMMARY = 4,
+  LOOM_CHECK_EMIT_LOW_PACKET_JSON = 5,
+  LOOM_CHECK_EMIT_SOURCE_LOW_TEXT = 6,
 } loom_check_emit_format_t;
 
 typedef enum loom_check_emit_source_low_output_e {
@@ -89,21 +87,12 @@ typedef struct loom_check_emit_low_allocation_summary_row_t {
 } loom_check_emit_low_allocation_summary_row_t;
 
 static const iree_string_view_t kLoomCheckEmitCoreTargetNames[] = {
-    IREE_SVL("liveness-json"),
-    IREE_SVL("liveness"),
-    IREE_SVL("low-schedule-json"),
-    IREE_SVL("low-schedule"),
-    IREE_SVL("low-allocation-json"),
-    IREE_SVL("low-allocation-summary"),
-    IREE_SVL("low-allocation"),
-    IREE_SVL("low-packet-json"),
-    IREE_SVL("low-packet"),
-    IREE_SVL("low-descriptor-manifest"),
-    IREE_SVL("low-descriptor-json"),
-    IREE_SVL("target-low-registry-manifest"),
-    IREE_SVL("target-low-registry-json"),
-    IREE_SVL("source-low"),
-    IREE_SVL("source-to-low"),
+    IREE_SVL("liveness-json"),       IREE_SVL("liveness"),
+    IREE_SVL("low-schedule-json"),   IREE_SVL("low-schedule"),
+    IREE_SVL("low-allocation-json"), IREE_SVL("low-allocation-summary"),
+    IREE_SVL("low-allocation"),      IREE_SVL("low-packet-json"),
+    IREE_SVL("low-packet"),          IREE_SVL("target-low-registry-manifest"),
+    IREE_SVL("source-low"),          IREE_SVL("source-to-low"),
 };
 
 typedef struct loom_check_emit_request_t {
@@ -113,10 +102,6 @@ typedef struct loom_check_emit_request_t {
   iree_string_view_t emit_target_name;
   // Module-local function symbol name used by analysis dumps.
   iree_string_view_t analysis_symbol_name;
-  // Low descriptor set used by descriptor-manifest dumps.
-  const loom_low_descriptor_set_t* low_descriptor_set;
-  // Low descriptor-set key used by descriptor-manifest dumps.
-  iree_string_view_t low_descriptor_set_key;
   // Low allocation budget overrides parsed from the RUN line.
   loom_low_allocation_budget_t
       low_allocation_budgets[LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS];
@@ -633,8 +618,6 @@ static iree_status_t loom_check_emit_parse_request(
       .format = LOOM_CHECK_EMIT_LIVENESS_JSON,
       .emit_target_name = IREE_SV("emit"),
       .analysis_symbol_name = iree_string_view_empty(),
-      .low_descriptor_set = NULL,
-      .low_descriptor_set_key = iree_string_view_empty(),
       .low_allocation_budget_count = 0,
       .low_allocation_fixed_value_spec_count = 0,
       .low_allocation_diagnostic_flags = 0,
@@ -747,20 +730,7 @@ static iree_status_t loom_check_emit_parse_request(
     out_request->format = LOOM_CHECK_EMIT_LOW_PACKET_JSON;
     return iree_ok_status();
   } else if (iree_string_view_equal(target_name,
-                                    IREE_SV("low-descriptor-manifest")) ||
-             iree_string_view_equal(target_name,
-                                    IREE_SV("low-descriptor-json"))) {
-    if (iree_string_view_is_empty(target_options)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "low descriptor set key is required");
-    }
-    out_request->format = LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST;
-    out_request->low_descriptor_set_key = target_options;
-    return iree_ok_status();
-  } else if (iree_string_view_equal(target_name,
-                                    IREE_SV("target-low-registry-manifest")) ||
-             iree_string_view_equal(target_name,
-                                    IREE_SV("target-low-registry-json"))) {
+                                    IREE_SV("target-low-registry-manifest"))) {
     if (!iree_string_view_is_empty(target_options)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -1529,28 +1499,12 @@ iree_status_t loom_check_execute_emit(
         .emit_target_name = provider_target_name,
     };
   }
-  if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST ||
-      request.format == LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST) {
+  if (request.format == LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST) {
     loom_target_low_descriptor_registry_t registry = {0};
     status = loom_check_environment_initialize_low_descriptor_registry(
         environment, &registry);
-    if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST) {
-      if (iree_status_is_ok(status)) {
-        request.low_descriptor_set = loom_low_descriptor_registry_lookup(
-            &registry.registry, request.low_descriptor_set_key);
-      }
-      if (iree_status_is_ok(status) && request.low_descriptor_set == NULL) {
-        status = iree_make_status(IREE_STATUS_NOT_FOUND,
-                                  "unknown low descriptor set '%.*s'",
-                                  (int)request.low_descriptor_set_key.size,
-                                  request.low_descriptor_set_key.data);
-      }
-      if (iree_status_is_ok(status)) {
-        status = loom_low_descriptor_set_format_manifest_json(
-            request.low_descriptor_set, &result->actual_output);
-      }
-    } else if (iree_status_is_ok(status)) {
-      status = loom_target_low_descriptor_registry_format_manifest_json(
+    if (iree_status_is_ok(status)) {
+      status = loom_check_target_low_registry_format_manifest_json(
           &registry, &result->actual_output);
     }
     if (!iree_status_is_ok(status)) {

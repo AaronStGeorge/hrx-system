@@ -1173,36 +1173,6 @@ TEST_F(ExecuteTest, XfailDoesNotHideRequiresHarnessFailure) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsKnownSetFields) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit low-descriptor-manifest test.low.core\n"
-                   "func.def @unused() {\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  const std::string actual_output = ActualOutputString(result);
-  EXPECT_NE(actual_output.find("\"key\":\"test.low.core\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"target\":\"test.low\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"table_counts\":{\"descriptors\":"),
-            std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit low-descriptor-manifest definitely.missing\n"
-                   "func.def @unused() {\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("NOT_FOUND"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
 TEST_F(ExecuteTest, EmitTargetLowRegistryManifestReportsDescriptorSets) {
   loom_check_result_t result;
   IREE_ASSERT_OK(

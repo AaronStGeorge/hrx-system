@@ -175,23 +175,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    low_descriptor_registry_manifest
-  HDRS
-    "low_descriptor_registry_manifest.h"
-  SRCS
-    "low_descriptor_registry_manifest.c"
-  DEPS
-    ::low_descriptor_registry
-    ::types
-    iree::base
-    loom::codegen::low::descriptors
-    loom::util::json
-    loom::util::stream
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     contract
   HDRS
     "contract.h"

@@ -10,7 +10,6 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
-#include "loom/target/low_descriptor_registry_manifest.h"
 
 namespace loom {
 namespace {
@@ -78,18 +77,6 @@ TEST(LowDescriptorRegistryTest, RegistrySatisfiesTargetLowFoundation) {
   IREE_ASSERT_OK(loom_low_descriptor_registry_verify_requirements(
       &registry.registry,
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
-}
-
-TEST(LowDescriptorRegistryTest, FormatsRegistryManifestJson) {
-  loom_target_low_descriptor_registry_t registry = {};
-  loom_target_core_test_low_descriptor_registry_initialize(&registry);
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_target_low_descriptor_registry_format_manifest_json(
-      &registry, &builder));
-  EXPECT_NE(iree_string_builder_size(&builder), 0u);
-  iree_string_builder_deinitialize(&builder);
 }
 
 TEST(LowDescriptorRegistryTest, MissingKeyReturnsNullDescriptorSet) {

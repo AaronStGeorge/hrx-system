@@ -26,6 +26,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    target_low_registry_manifest
+  HDRS
+    "target_low_registry_manifest.h"
+  SRCS
+    "target_low_registry_manifest.c"
+  DEPS
+    iree::base
+    loom::codegen::low::descriptors
+    loom::target::low_descriptor_registry
+    loom::util::json
+    loom::util::stream
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     execute
   HDRS
     "diagnostics.h"
@@ -43,6 +60,7 @@ loom_cc_library(
   DEPS
     ::check
     ::report
+    ::target_low_registry_manifest
     ::update
     iree::base
     iree::base::internal::arena
@@ -53,7 +71,6 @@ loom_cc_library(
     loom::codegen::low::allocation
     loom::codegen::low::allocation_json
     loom::codegen::low::descriptors
-    loom::codegen::low::descriptors_manifest
     loom::codegen::low::frame
     loom::codegen::low::function
     loom::codegen::low::lower
@@ -84,7 +101,6 @@ loom_cc_library(
     loom::target::entry_selection
     loom::target::legalization
     loom::target::low_descriptor_registry
-    loom::target::low_descriptor_registry_manifest
     loom::target::low_legality
     loom::target::low_packet_diagnostics
     loom::target::math_policy
