@@ -17,7 +17,7 @@ from typing import TypeVar
 
 
 def _ensure_runtime_py_on_path() -> None:
-    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py = Path(__file__).resolve().parents[5]
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
         sys.path.insert(0, runtime_py_string)

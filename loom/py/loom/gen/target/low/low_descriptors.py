@@ -2449,7 +2449,7 @@ def write_descriptor_set_to_paths(
 
 
 def main() -> None:
-    from loom.gen.x86_packed_dot_contract import write_x86_packed_dot_contract_header
+    from loom.gen.target.arch.x86.x86_packed_dot_contract import write_x86_packed_dot_contract_header
     from loom.target.descriptor_sets import iter_checked_in_c_descriptor_sets
 
     descriptor_sets = tuple(iter_checked_in_c_descriptor_sets())

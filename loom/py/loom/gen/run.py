@@ -33,8 +33,8 @@ GENERATORS = {
     "low_descriptors": "loom.gen.target.low.low_descriptors",
     "package_inits": "loom.gen.python.package_inits",
     "textmate": "loom.gen.editor.textmate",
-    "x86_packed_dot_contract": "loom.gen.x86_packed_dot_contract",
-    "x86_target_profiles": "loom.gen.x86_target_profiles",
+    "x86_packed_dot_contract": "loom.gen.target.arch.x86.x86_packed_dot_contract",
+    "x86_target_profiles": "loom.gen.target.arch.x86.x86_target_profiles",
 }
 
 ARGUMENT_GENERATORS: set[str] = {

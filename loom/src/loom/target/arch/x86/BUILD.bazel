@@ -138,7 +138,7 @@ loom_generated_cc_library(
         "packed_dot_contract.h",
         "packed_dot_contract_data.h",
     ],
-    generator = "//loom/py/loom/gen:x86_packed_dot_contract",
+    generator = "//loom/py/loom/gen/target/arch/x86:packed_dot_contract",
     source = "packed_dot_contract_data.c",
     deps = [
         ":feature_bits",

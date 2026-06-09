@@ -37,62 +37,6 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    x86_low_descriptor_shard
-  MAIN
-    "x86_descriptors.py"
-  SRCS
-    "x86_descriptors.py"
-  DEPS
-    loom::py::loom::gen::target::low::low_descriptors
-    loom::py::loom::target::descriptor_sets
-    loom::py::loom::target::arch::x86::descriptors
-    loom::py::loom::target::arch::x86::target_info
-)
-
-iree_py_library(
-  NAME
-    x86_target_profiles
-  MAIN
-    "x86_target_profiles.py"
-  SRCS
-    "x86_target_profiles.py"
-  DEPS
-    loom::py::loom::gen::support::c
-    loom::py::loom::gen::support::files
-    loom::py::loom::gen::support::generated_file
-    loom::py::loom::target::arch::x86::target_info
-    loom::py::loom::target::emit::llvmir::x86::target_info
-)
-
-iree_py_library(
-  NAME
-    x86_packed_dot_contract
-  MAIN
-    "x86_packed_dot_contract.py"
-  SRCS
-    "x86_packed_dot_contract.py"
-  DEPS
-    loom::py::loom::gen::support::generated_file
-    loom::py::loom::target::low_descriptors
-    loom::py::loom::target::arch::x86::target_info
-)
-
-iree_py_test(
-  NAME
-    x86_descriptors_test
-  SRCS
-    "../tools/pytest_style_runner.py"
-  ARGS
-    "loom.gen.x86_descriptors_test"
-  DEPS
-    loom::py::loom::gen::x86_low_descriptor_shard
-  PACKAGE_DIRS
-    "${PROJECT_SOURCE_DIR}/loom/py"
-    "${PROJECT_BINARY_DIR}/loom/py"
-)
-
-iree_py_library(
-  NAME
     amdgpu_target_info
   MAIN
     "amdgpu_target_info.py"

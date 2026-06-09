@@ -157,7 +157,7 @@ loom_low_descriptor_cc_library(
   NAME
     avx512_packed_dot_descriptors
   GENERATOR
-    loom::py::loom::gen::x86_low_descriptor_shard
+    loom::py::loom::gen::target::arch::x86::low_descriptor_shard
   GENERATED_HDR_FLAGS
     "--view-header=scalar"
     "--view-header=simd128"

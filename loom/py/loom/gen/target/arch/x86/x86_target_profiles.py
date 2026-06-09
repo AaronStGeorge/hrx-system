@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 def _ensure_runtime_py_on_path() -> None:
-    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py = Path(__file__).resolve().parents[5]
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
         sys.path.insert(0, runtime_py_string)
@@ -97,7 +97,7 @@ def _native_target_profiles() -> tuple[X86TargetProfileInfo, ...]:
 
 def _emit_native_profiles_inl(profiles: tuple[X86TargetProfileInfo, ...]) -> str:
     lines = [
-        *line_comment_header("//", generator="loom.gen.x86_target_profiles"),
+        *line_comment_header("//", generator="loom.gen.target.arch.x86.x86_target_profiles"),
         "// clang-format off",
         "",
         "#ifdef LOOM_X86_NATIVE_TARGET_PROFILE",
@@ -122,7 +122,7 @@ def _emit_llvmir_profiles_inl(
     projections: tuple[X86LlvmirProjectionInfo, ...],
 ) -> str:
     lines = [
-        *line_comment_header("//", generator="loom.gen.x86_target_profiles"),
+        *line_comment_header("//", generator="loom.gen.target.arch.x86.x86_target_profiles"),
         "// clang-format off",
         "",
         "#ifdef LOOM_LLVMIR_X86_TARGET_PROFILE",

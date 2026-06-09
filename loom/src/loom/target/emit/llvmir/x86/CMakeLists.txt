@@ -29,7 +29,7 @@ loom_generated_textual_header(
   NAME
     target_profiles_gen
   GENERATOR
-    loom::py::loom::gen::x86_target_profiles
+    loom::py::loom::gen::target::arch::x86::target_profiles
   OUTPUT
     "target_profiles.inl"
   OUTPUT_FLAG

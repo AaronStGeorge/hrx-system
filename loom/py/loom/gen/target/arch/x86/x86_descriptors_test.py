@@ -12,7 +12,7 @@ from re import Pattern
 from tempfile import TemporaryDirectory
 from types import TracebackType
 
-from loom.gen import x86_descriptors
+from loom.gen.target.arch.x86 import x86_descriptors
 from loom.target.arch.x86 import descriptors as x86_descriptor_data
 
 

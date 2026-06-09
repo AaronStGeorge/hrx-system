@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def _ensure_runtime_py_on_path() -> Path:
-    repo_root = Path(__file__).resolve().parents[4]
+    repo_root = Path(__file__).resolve().parents[7]
     runtime_py = repo_root / "loom/py"
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
@@ -52,7 +52,7 @@ def _emit_header() -> str:
         "",
         *line_comment_header(
             "//",
-            generator="loom.gen.x86_packed_dot_contract",
+            generator="loom.gen.target.arch.x86.x86_packed_dot_contract",
         ),
         "// Regenerate:",
         "//   python3 loom/py/loom/gen/run.py x86_packed_dot_contract --in-place",
@@ -88,7 +88,7 @@ def _emit_source() -> str:
         "// See https://llvm.org/LICENSE.txt for license information.",
         "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
         "",
-        *line_comment_header("//", generator="loom.gen.x86_packed_dot_contract"),
+        *line_comment_header("//", generator="loom.gen.target.arch.x86.x86_packed_dot_contract"),
         "",
         '#include "loom/target/arch/x86/packed_dot_contract_data.h"',
         "",

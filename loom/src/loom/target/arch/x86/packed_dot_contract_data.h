@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // GENERATED FILE: DO NOT EDIT.
-// Generator: loom.gen.x86_packed_dot_contract.
+// Generator: loom.gen.target.arch.x86.x86_packed_dot_contract.
 // Regenerate:
 //   python3 loom/py/loom/gen/run.py x86_packed_dot_contract --in-place
 
