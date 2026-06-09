@@ -119,40 +119,6 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_generated_cc_library(
-  NAME
-    ops
-  GENERATOR
-    loom::py::loom::gen::c_tables_generator
-  SRCS
-    "ops/registry.c"
-    "ops/target.c"
-  GENERATED_SRC_FLAGS
-    "--builders"
-    "--tables"
-  GENERATED_SRCS
-    "ops/builders.c"
-    "ops/tables.c"
-  HDRS
-    "ops/ops.h"
-    "ops/registry.h"
-    "ops/target.h"
-  ARGS
-    "--dialect=amdgpu"
-  DEPS
-    ::error_defs
-    ::target_info
-    iree::base
-    loom::error::error_defs
-    loom::ir
-    loom::ops::op_defs
-    loom::ops::target
-    loom::target::arch::amdgpu::records::target_records
-    loom::target::types
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     target_id
@@ -161,12 +127,12 @@ loom_cc_library(
   SRCS
     "target_id.c"
   DEPS
-    ::ops
     ::target_info
     iree::base
     iree::base::internal::arena
     loom::codegen::low::target_binding
     loom::ir
+    loom::target::arch::amdgpu::ops
   PUBLIC
 )
 endif()
@@ -221,13 +187,13 @@ loom_cc_library(
   DEPS
     ::legalization
     ::math_policy
-    ::ops
     ::pass_registry
     iree::base
     loom::pass::builder
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::diagnostics::packet_diagnostics
     loom::target::arch::amdgpu::lower
+    loom::target::arch::amdgpu::ops
     loom::target::provider
   PUBLIC
 )
