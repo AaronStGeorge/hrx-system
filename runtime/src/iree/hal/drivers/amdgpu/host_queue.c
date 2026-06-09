@@ -616,7 +616,7 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
   // Initialize the AQL ring from the hardware queue.
   if (iree_status_is_ok(status)) {
     out_queue->hardware_queue = hardware_queue;
-    iree_hal_amdgpu_aql_ring_initialize((iree_amd_queue_t*)hardware_queue,
+    iree_hal_amdgpu_aql_ring_initialize(libhsa, (iree_amd_queue_t*)hardware_queue,
                                         &out_queue->aql_ring);
   }
 
