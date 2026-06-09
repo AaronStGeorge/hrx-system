@@ -41,6 +41,18 @@ iree_py_library(
     deps = C_TABLE_MODEL_DEPS,
 )
 
+iree_py_library(
+    name = "keywords",
+    srcs = [
+        "__init__.py",
+        "keywords.py",
+    ],
+    deps = [
+        "//loom/py/loom:core",
+        "//loom/py/loom/gen/assembly:tokens",
+    ],
+)
+
 TYPE_REGISTRY_DEPS = [
     "//loom/py/loom:core",
     "//loom/py/loom/gen/assembly:tokens",
@@ -57,6 +69,7 @@ iree_py_library(
 )
 
 C_TABLES_DEPS = [
+    ":keywords",
     ":model",
     ":type_registry",
     "//loom/py/loom:core",

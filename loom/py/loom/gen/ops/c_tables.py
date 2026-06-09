@@ -94,6 +94,7 @@ from loom.dsl import (
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
 from loom.gen.assembly.tokens import KEYWORD_MAP, REGION_SYNTAX_MAP
+from loom.gen.ops.keywords import generate_keyword_enum_inc, generate_keyword_table_inc
 from loom.gen.ops.model import (
     DialectGeneration,
     GenerationModel,
@@ -4353,42 +4354,6 @@ def _target_like_bundle_table_symbols(ops: Sequence[Op]) -> list[str]:
             continue
         symbols.add(_normalize_c_symbol_reference(iface.bundle_table))
     return sorted(symbols)
-
-
-# ============================================================================
-# Keyword definitions
-# ============================================================================
-
-
-def generate_keyword_enum_inc() -> str:
-    """Generate keyword_enum.inc — the enum body for loom_keyword_id_e.
-
-    Ordinals are assigned by position in KEYWORD_MAP. The generated
-    file is #included from op_defs.h inside the enum typedef.
-    """
-    lines = [COPYRIGHT, "// clang-format off", ""]
-    for ordinal, (text, c_name) in enumerate(KEYWORD_MAP.items()):
-        # Escape backslashes and quotes for the comment.
-        display = text.replace("\\", "\\\\").replace('"', '\\"')
-        lines.append(f'  {c_name} = {ordinal},  // "{display}"')
-    lines.append("")
-    return "\n".join(lines)
-
-
-def generate_keyword_table_inc() -> str:
-    """Generate keyword_table.inc — bstring initializers for keyword_bstrings.
-
-    The generated file is #included from op_defs.c inside the array
-    initializer.
-    """
-    lines = [COPYRIGHT, "// clang-format off", ""]
-    for text, c_name in KEYWORD_MAP.items():
-        text_length = len(text)
-        # Escape the text for C string literals.
-        c_text = text.replace("\\", "\\\\").replace('"', '\\"')
-        lines.append(f'    [{c_name}] = (const uint8_t*)"\\x{text_length:02x}" "{c_text}",')
-    lines.append("")
-    return "\n".join(lines)
 
 
 # ============================================================================
