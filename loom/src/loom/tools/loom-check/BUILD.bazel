@@ -21,7 +21,7 @@ _EMIT_AMDGPU_CHECK_COPTS = iree_select({
 
 _EMIT_AMDGPU_CHECK_DEPS = iree_select({
     "//loom/config/emit:amdgpu": [
-        "//loom/src/loom/target/arch/amdgpu:check_provider",
+        "//loom/src/loom/target/arch/amdgpu/check:provider",
     ],
     "//conditions:default": [],
 })

@@ -949,29 +949,6 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-loom_cc_library(
-  NAME
-    check_provider
-  HDRS
-    "check/occupancy.h"
-    "check/provider.h"
-  SRCS
-    "check/occupancy.c"
-    "check/provider.c"
-  DEPS
-    ::occupancy
-    ::provider
-    ::storage_lease
-    iree::base
-    loom::target::emit::native::amdgpu::loom_check
-    loom::tools::loom-check::execute
-    loom::tools::loom-check::provider
-  TESTONLY
-  PUBLIC
-)
-endif()
-
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME

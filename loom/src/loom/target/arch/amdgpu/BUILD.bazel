@@ -145,10 +145,10 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "core_tools_no_amdgpu_check_deps",
     dependencies = [
-        ":check_provider",
         ":low_registry",
         ":packet_diagnostics",
         ":provider",
+        "//loom/src/loom/target/arch/amdgpu/check:provider",
     ],
     targets = [
         "//loom/src/loom/tools/loom-check:execute",
@@ -908,32 +908,6 @@ loom_cc_test(
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    testonly = True,
-    srcs = [
-        "check/occupancy.c",
-        "check/provider.c",
-    ],
-    hdrs = [
-        "check/occupancy.h",
-        "check/provider.h",
-    ],
-    target_compatible_with = select({
-        "//loom/config/emit:amdgpu": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
-    deps = [
-        ":occupancy",
-        ":provider",
-        ":storage_lease",
-        "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:provider",
-        "//runtime/src/iree/base",
     ],
 )
 
