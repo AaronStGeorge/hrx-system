@@ -30,6 +30,7 @@ iree_py_library(
   DEPS
     loom::py::loom::core
     loom::py::loom::dialect::target::target
+    loom::py::loom::target::arch::amdgpu::target_info
 )
 
 iree_py_library(

@@ -78,6 +78,11 @@ typedef void (*loom_run_hal_deinitialize_device_target_fn_t)(
     const loom_run_hal_artifact_provider_t* provider,
     loom_run_hal_device_target_t* target, iree_allocator_t allocator);
 
+typedef iree_status_t (*loom_run_hal_resolve_device_target_ref_fn_t)(
+    const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
+    const loom_run_hal_device_target_t* target,
+    loom_symbol_ref_t* out_target_ref);
+
 typedef iree_status_t (*loom_run_hal_emit_artifact_fn_t)(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
     const loom_run_hal_device_target_t* target,
@@ -106,6 +111,9 @@ struct loom_run_hal_artifact_provider_t {
   loom_run_hal_select_device_target_fn_t select_device_target;
   // Releases storage owned by a target returned from |select_device_target|.
   loom_run_hal_deinitialize_device_target_fn_t deinitialize_device_target;
+  // Resolves or materializes an in-module target record for a selected device.
+  // Called lazily only when a private compile module has targetless kernels.
+  loom_run_hal_resolve_device_target_ref_fn_t resolve_device_target_ref;
   // Emits a prepared target-low Loom module to a HAL loadable artifact.
   loom_run_hal_emit_artifact_fn_t emit_artifact;
   // Releases storage owned by an artifact returned from |emit_artifact|.

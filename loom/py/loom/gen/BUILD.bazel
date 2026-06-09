@@ -464,6 +464,16 @@ iree_py_binary(
 )
 
 iree_py_binary(
+    name = "amdgpu_target_records",
+    srcs = ["amdgpu_target_records.py"],
+    main = "amdgpu_target_records.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
     name = "amdgpu_descriptors",
     srcs = ["amdgpu_descriptors.py"],
     main = "amdgpu_descriptors.py",

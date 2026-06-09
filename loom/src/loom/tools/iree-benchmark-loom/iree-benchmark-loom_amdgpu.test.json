@@ -23,7 +23,7 @@
         "contains": [
           "\"row\":\"plan\"",
           "\"benchmark\":\"store_i32\"",
-          { "regex": "\"case\":\"store_i32_(cdna3|rdna3)_case\"" },
+          { "regex": "\"case\":\"store_i32_case\"" },
           "\"measure\":\"dispatch_complete\"",
           "\"driver\":\"amdgpu\"",
           "\"provider\":\"amdgpu-hal\"",
@@ -57,7 +57,7 @@
         "contains": [
           "\"row\":\"plan\"",
           "\"benchmark\":\"store_then_double_i32\"",
-          { "regex": "\"case\":\"store_then_double_i32_(cdna3|rdna3)_case\"" },
+          { "regex": "\"case\":\"store_then_double_i32_case\"" },
           "\"actual_invocation_count\":2",
           "\"driver\":\"amdgpu\"",
           "\"provider\":\"amdgpu-hal\"",

@@ -14,25 +14,6 @@
 #include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/target_records.h"
 
-static iree_string_view_t loom_amdgpu_target_record_default_processor_name(
-    loom_amdgpu_target_kind_t kind) {
-  switch (kind) {
-    case LOOM_AMDGPU_TARGET_KIND_GFX942:
-      return IREE_SV("gfx942");
-    case LOOM_AMDGPU_TARGET_KIND_GFX950:
-      return IREE_SV("gfx950");
-    case LOOM_AMDGPU_TARGET_KIND_GFX1100:
-      return IREE_SV("gfx1100");
-    case LOOM_AMDGPU_TARGET_KIND_GFX1200:
-      return IREE_SV("gfx1200");
-    case LOOM_AMDGPU_TARGET_KIND_GFX1250:
-      return IREE_SV("gfx1250");
-    case LOOM_AMDGPU_TARGET_KIND_COUNT_:
-      break;
-  }
-  return iree_string_view_empty();
-}
-
 static iree_string_view_t loom_amdgpu_target_record_symbol_name(
     const loom_module_t* module, const loom_op_t* target_op) {
   loom_symbol_ref_t symbol_ref = loom_amdgpu_target_symbol(target_op);
@@ -128,14 +109,64 @@ iree_string_view_t loom_amdgpu_target_record_processor_name(
   if (!iree_string_view_is_empty(explicit_processor)) {
     return explicit_processor;
   }
-  return loom_amdgpu_target_record_default_processor_name(
-      loom_amdgpu_target_kind(target_op));
+  const loom_amdgpu_target_record_info_t* target_info =
+      loom_amdgpu_target_record_info_for_kind(
+          (uint32_t)loom_amdgpu_target_kind(target_op));
+  return target_info != NULL ? target_info->default_processor_name
+                             : iree_string_view_empty();
 }
 
 const loom_amdgpu_processor_info_t* loom_amdgpu_target_record_processor(
     const loom_module_t* module, const loom_op_t* target_op) {
   return loom_amdgpu_target_info_find_processor(
       loom_amdgpu_target_record_processor_name(module, target_op));
+}
+
+iree_status_t loom_amdgpu_target_record_build_for_processor(
+    loom_builder_t* builder, const loom_amdgpu_processor_info_t* processor,
+    loom_symbol_ref_t symbol, loom_location_id_t location,
+    loom_op_t** out_target_op) {
+  if (builder == NULL || out_target_op == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU target record builder requires non-NULL "
+                            "builder and output pointers");
+  }
+  *out_target_op = NULL;
+  if (processor == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU target record builder requires a "
+                            "processor row");
+  }
+
+  const loom_amdgpu_target_record_info_t* target_record =
+      loom_amdgpu_target_record_info_for_processor(processor->processor);
+  if (target_record == NULL) {
+    target_record = loom_amdgpu_target_record_default_info_for_descriptor_set(
+        processor->descriptor_set_ordinal);
+  }
+  if (target_record == NULL) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "AMDGPU processor '%.*s' has unsupported descriptor set ordinal %u",
+        (int)processor->processor.size, processor->processor.data,
+        (unsigned)processor->descriptor_set_ordinal);
+  }
+
+  loom_amdgpu_target_build_flags_t build_flags = 0;
+  loom_string_id_t processor_id = LOOM_STRING_ID_INVALID;
+  if (!iree_string_view_equal(processor->processor,
+                              target_record->default_processor_name)) {
+    IREE_RETURN_IF_ERROR(loom_module_intern_string(
+        builder->module, processor->processor, &processor_id));
+    build_flags |= LOOM_AMDGPU_TARGET_BUILD_FLAG_HAS_PROCESSOR;
+  }
+
+  return loom_amdgpu_target_build(
+      builder, build_flags,
+      (loom_amdgpu_target_kind_t)target_record->target_kind, symbol, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      LOOM_STRING_ID_INVALID, 0, 0, LOOM_STRING_ID_INVALID, 0, processor_id,
+      location, out_target_op);
 }
 
 static uint32_t loom_amdgpu_target_record_default_wavefront_size(
@@ -201,8 +232,11 @@ iree_status_t loom_amdgpu_target_record_verify(
   }
 
   const loom_amdgpu_target_kind_t kind = loom_amdgpu_target_kind(op);
+  const loom_amdgpu_target_record_info_t* target_info =
+      loom_amdgpu_target_record_info_for_kind((uint32_t)kind);
   const iree_string_view_t default_processor_name =
-      loom_amdgpu_target_record_default_processor_name(kind);
+      target_info != NULL ? target_info->default_processor_name
+                          : iree_string_view_empty();
   const loom_amdgpu_processor_info_t* default_processor =
       loom_amdgpu_target_info_find_processor(default_processor_name);
   if (default_processor == NULL) {

@@ -85,6 +85,27 @@ iree_status_t loom_run_hal_testbench_count_actual_invocations(
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t* out_actual_invocation_count);
 
+typedef struct loom_run_hal_targetless_kernel_assignment_result_t {
+  // Target record assigned to targetless kernels, or null when unchanged.
+  loom_symbol_ref_t target_ref;
+  // Number of top-level kernel.def ops that had no target attr.
+  uint32_t targetless_kernel_count;
+  // Number of top-level kernel.def ops updated by the assignment.
+  uint32_t assigned_kernel_count;
+  // True when at least one kernel.def target attr was assigned.
+  bool changed;
+} loom_run_hal_targetless_kernel_assignment_result_t;
+
+// Assigns |device_target| to every targetless top-level kernel.def in |module|.
+//
+// The artifact provider is called only when at least one targetless kernel is
+// present. Explicit kernel targets are preserved. The resolved target ref must
+// name a valid target-like op in |module|.
+iree_status_t loom_run_hal_testbench_assign_targetless_kernel_targets(
+    const loom_run_hal_artifact_provider_t* artifact_provider,
+    const loom_run_hal_device_target_t* device_target, loom_module_t* module,
+    loom_run_hal_targetless_kernel_assignment_result_t* out_result);
+
 typedef struct loom_run_hal_testbench_actual_provider_options_t {
   // Shared HAL context used to prepare and dispatch the candidate.
   loom_run_hal_testbench_context_t* context;

@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ir/ir.h"
+#include "loom/ops/op_defs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 #ifdef __cplusplus
@@ -24,6 +25,16 @@ iree_string_view_t loom_amdgpu_target_record_processor_name(
 // Returns the AMDGPU processor row selected by |target_op|, or NULL.
 const loom_amdgpu_processor_info_t* loom_amdgpu_target_record_processor(
     const loom_module_t* module, const loom_op_t* target_op);
+
+// Builds a compact AMDGPU target record for |processor|.
+//
+// The target kind is derived from the processor descriptor-set family. When
+// |processor| is not the family default, the target record stores an explicit
+// processor override so later verification still checks the family invariant.
+iree_status_t loom_amdgpu_target_record_build_for_processor(
+    loom_builder_t* builder, const loom_amdgpu_processor_info_t* processor,
+    loom_symbol_ref_t symbol, loom_location_id_t location,
+    loom_op_t** out_target_op);
 
 // Sets the target-record processor override attr to |processor|.
 iree_status_t loom_amdgpu_target_record_set_processor(

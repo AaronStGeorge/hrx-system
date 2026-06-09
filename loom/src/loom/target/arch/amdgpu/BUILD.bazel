@@ -11,6 +11,7 @@ load(
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
+    "loom_generated_textual_header",
     "loom_low_descriptor_cc_library",
     "loom_low_descriptor_data_archive",
     "loom_low_descriptor_exclude_from_cmake_all",
@@ -162,6 +163,8 @@ loom_assert_no_dependencies(
 #===------------------------------------------------------------------------===#
 
 _AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen:amdgpu_target_info"
+
+_AMDGPU_TARGET_RECORDS_GENERATOR = "//loom/py/loom/gen:amdgpu_target_records"
 
 loom_generated_cc_library(
     name = "error_defs",
@@ -577,10 +580,18 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
+loom_generated_textual_header(
+    name = "target_records_tables_gen",
+    generator = _AMDGPU_TARGET_RECORDS_GENERATOR,
+    output = "target_records_tables.inl",
+    output_flag = "--tables",
+)
+
 loom_cc_library(
     name = "target_record_table",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
+    textual_hdrs = [":target_records_tables.inl"],
     deps = [
         ":target_info",
         "//loom/src/loom/target:types",

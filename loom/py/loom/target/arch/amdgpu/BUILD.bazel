@@ -33,6 +33,7 @@ iree_py_library(
     deps = [
         "//loom/py/loom:core",
         "//loom/py/loom/dialect/target",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
     ],
 )
 

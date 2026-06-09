@@ -20,6 +20,7 @@ from loom.dsl import (
     SymbolDefinition,
     TargetLikeInterface,
 )
+from loom.target.arch.amdgpu.target_info import sorted_target_record_infos
 
 amdgpu_ops = Dialect(
     "amdgpu",
@@ -33,11 +34,8 @@ amdgpu_ops = Dialect(
 AmdgpuTargetKind = EnumDef(
     "AmdgpuTargetKind",
     [
-        EnumCase("gfx942", 1, doc="CDNA 3 gfx942 target row."),
-        EnumCase("gfx950", 2, doc="CDNA 4 gfx950 target row."),
-        EnumCase("gfx1100", 3, doc="RDNA 3 gfx1100 target row."),
-        EnumCase("gfx1200", 4, doc="RDNA 4 gfx1200 target row."),
-        EnumCase("gfx1250", 5, doc="RDNA 4 gfx1250 target row."),
+        EnumCase(info.processor, info.enum_value, doc=info.doc)
+        for info in sorted_target_record_infos()
     ],
     doc="AMDGPU target row selected by amdgpu.target.",
 )

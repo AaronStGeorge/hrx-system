@@ -551,11 +551,26 @@ loom_low_descriptor_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    target_records_tables_gen
+  GENERATOR
+    loom::py::loom::gen::amdgpu_target_records
+  OUTPUT
+    "target_records_tables.inl"
+  OUTPUT_FLAG
+    "--tables"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     target_record_table
   HDRS
     "target_records.h"
+  TEXTUAL_HDRS
+    "target_records_tables.inl"
   SRCS
     "target_records.c"
   DEPS

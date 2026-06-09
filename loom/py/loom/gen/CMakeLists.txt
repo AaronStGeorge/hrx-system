@@ -524,6 +524,18 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    amdgpu_target_records
+  MAIN
+    "amdgpu_target_records.py"
+  SRCS
+    "amdgpu_target_records.py"
+  DEPS
+    loom::py::loom::gen::generated_file
+    loom::py::loom::target::arch::amdgpu::target_info
+)
+
+iree_py_library(
+  NAME
     amdgpu_descriptors
   MAIN
     "amdgpu_descriptors.py"

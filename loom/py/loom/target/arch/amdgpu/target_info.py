@@ -119,6 +119,14 @@ class AmdgpuProcessorInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuTargetRecordInfo:
+    processor: str
+    enum_value: int
+    doc: str
+    default_for_descriptor_set: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuOccupancyRegisterClassInfo:
     register_class: str
     pool_units: int
@@ -510,6 +518,40 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
 )
 
 
+AMDGPU_TARGET_RECORD_INFOS: tuple[AmdgpuTargetRecordInfo, ...] = (
+    AmdgpuTargetRecordInfo(
+        processor="gfx942",
+        enum_value=1,
+        doc="CDNA 3 gfx942 target row.",
+        default_for_descriptor_set=True,
+    ),
+    AmdgpuTargetRecordInfo(
+        processor="gfx950",
+        enum_value=2,
+        doc="CDNA 4 gfx950 target row.",
+        default_for_descriptor_set=True,
+    ),
+    AmdgpuTargetRecordInfo(
+        processor="gfx1100",
+        enum_value=3,
+        doc="RDNA 3 gfx1100 target row.",
+        default_for_descriptor_set=True,
+    ),
+    AmdgpuTargetRecordInfo(
+        processor="gfx1200",
+        enum_value=4,
+        doc="RDNA 4 gfx1200 target row.",
+        default_for_descriptor_set=True,
+    ),
+    AmdgpuTargetRecordInfo(
+        processor="gfx1250",
+        enum_value=5,
+        doc="RDNA 4 gfx1250 target row.",
+        default_for_descriptor_set=True,
+    ),
+)
+
+
 AMDGPU_OCCUPANCY_MODEL_INFOS: tuple[AmdgpuOccupancyModelInfo, ...] = (
     AmdgpuOccupancyModelInfo(
         descriptor_set_key="amdgpu.cdna3.core",
@@ -596,6 +638,10 @@ def amdgpu_descriptor_set_ordinal(key: str) -> int:
 
 def sorted_processor_infos() -> tuple[AmdgpuProcessorInfo, ...]:
     return tuple(sorted(AMDGPU_PROCESSOR_INFOS, key=lambda info: info.processor))
+
+
+def sorted_target_record_infos() -> tuple[AmdgpuTargetRecordInfo, ...]:
+    return tuple(sorted(AMDGPU_TARGET_RECORD_INFOS, key=lambda info: info.enum_value))
 
 
 def sorted_occupancy_model_infos() -> tuple[AmdgpuOccupancyModelInfo, ...]:

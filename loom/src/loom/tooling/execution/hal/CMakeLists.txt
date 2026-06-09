@@ -110,6 +110,7 @@ loom_cc_library(
     loom::ops::op_defs
     loom::ops::special_values
     loom::pass::types
+    loom::rewrite::rewriter
     loom::target::provider
     loom::target::types
     loom::tooling::compile::pipeline
@@ -214,9 +215,16 @@ loom_cc_test(
     ::invocation
     ::testbench_actual
     iree::base
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
+    loom::format::text::parser
+    loom::ir
+    loom::ops::index
+    loom::ops::kernel
+    loom::ops::test
+    loom::testing::module_ptr
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

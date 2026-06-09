@@ -19,6 +19,9 @@ loom_cc_library(
     "artifact_provider.c"
   DEPS
     iree::base
+    loom::ir
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
     loom::target::arch::amdgpu::target_record_table
