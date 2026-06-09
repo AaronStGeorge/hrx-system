@@ -24,7 +24,7 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
-from loom.gen.low_descriptors import (  # noqa: E402
+from loom.gen.target.low.low_descriptors import (  # noqa: E402
     generate_descriptor_set,
     generate_descriptor_set_shared_source,
     write_descriptor_set_to_paths,

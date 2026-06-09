@@ -13,7 +13,7 @@ loom_low_descriptor_cc_library(
   NAME
     descriptors
   GENERATOR
-    loom::py::loom::gen::test_low_descriptor_shard
+    loom::py::loom::gen::target::low::test_low_descriptor_shard
   ARGS
     "--descriptor-set=test_low_core"
   DEPS
@@ -25,7 +25,7 @@ loom_low_descriptor_cc_library(
   NAME
     alt_descriptors
   GENERATOR
-    loom::py::loom::gen::test_low_descriptor_shard
+    loom::py::loom::gen::target::low::test_low_descriptor_shard
   ARGS
     "--descriptor-set=test_low_alt"
   DEPS

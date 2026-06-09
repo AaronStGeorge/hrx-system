@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.gen.low_descriptor_shard import main
+from loom.gen.target.low.low_descriptor_shard import main
 from loom.target.descriptor_sets import (
     descriptor_set_names,
     iter_checked_in_c_descriptor_sets,

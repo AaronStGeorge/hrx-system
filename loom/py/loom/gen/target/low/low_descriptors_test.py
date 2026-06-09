@@ -12,7 +12,7 @@ from typing import cast
 
 import pytest
 
-from loom.gen.low_descriptors import (
+from loom.gen.target.low.low_descriptors import (
     DescriptorAllowlist,
     generate_descriptor_set,
     generate_descriptor_set_shared_source,

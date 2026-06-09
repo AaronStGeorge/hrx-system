@@ -23,17 +23,6 @@ iree_py_library(
     "bootstrap.py"
 )
 
-iree_py_library(
-  NAME
-    low_descriptors
-  SRCS
-    "low_descriptors.py"
-  DEPS
-    loom::py::loom::gen::bootstrap
-    loom::py::loom::gen::support::generated_file
-    loom::py::loom::target::low_descriptors
-)
-
 iree_py_test(
   NAME
     gen_test
@@ -41,15 +30,10 @@ iree_py_test(
     "../tools/pytest_style_runner.py"
   ARGS
     "loom.gen.builders_pyi_test"
-    "loom.gen.low_descriptor_shard_test"
-    "loom.gen.low_descriptors_test"
   DEPS
     loom::py::loom::gen::bootstrap
-    loom::py::loom::gen::low_descriptors
     loom::py::loom::core
     loom::py::loom::gen::support::generated_file
-    loom::py::loom::target::descriptor_sets
-    loom::py::loom::target::test::descriptors
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
@@ -167,19 +151,6 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    ireevm_low_descriptor_shard
-  MAIN
-    "low_descriptor_shard.py"
-  SRCS
-    "low_descriptor_shard.py"
-  DEPS
-    loom::py::loom::gen::low_descriptors
-    loom::py::loom::target::descriptor_sets
-    loom::py::loom::target::arch::ireevm::descriptors
-)
-
-iree_py_library(
-  NAME
     ireevm_lower_rule_shard
   MAIN
     "target_lower_rule_shard.py"
@@ -189,32 +160,6 @@ iree_py_library(
     loom::py::loom::gen::target_lower_rules
     loom::py::loom::target::contract_fragments
     loom::py::loom::target::arch::ireevm::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    wasm_low_descriptor_shard
-  MAIN
-    "low_descriptor_shard.py"
-  SRCS
-    "low_descriptor_shard.py"
-  DEPS
-    loom::py::loom::gen::low_descriptors
-    loom::py::loom::target::descriptor_sets
-    loom::py::loom::target::arch::wasm::descriptors
-)
-
-iree_py_library(
-  NAME
-    spirv_low_descriptor_shard
-  MAIN
-    "low_descriptor_shard.py"
-  SRCS
-    "low_descriptor_shard.py"
-  DEPS
-    loom::py::loom::gen::low_descriptors
-    loom::py::loom::target::descriptor_sets
-    loom::py::loom::target::arch::spirv::descriptors
 )
 
 iree_py_library(
@@ -367,7 +312,7 @@ iree_py_library(
   SRCS
     "x86_descriptors.py"
   DEPS
-    loom::py::loom::gen::low_descriptors
+    loom::py::loom::gen::target::low::low_descriptors
     loom::py::loom::target::descriptor_sets
     loom::py::loom::target::arch::x86::descriptors
     loom::py::loom::target::arch::x86::target_info
@@ -439,19 +384,6 @@ iree_py_library(
     loom::py::loom::gen::target_lower_rules
     loom::py::loom::target::contract_fragments
     loom::py::loom::target::arch::x86::contracts::contracts
-)
-
-iree_py_library(
-  NAME
-    test_low_descriptor_shard
-  MAIN
-    "low_descriptor_shard.py"
-  SRCS
-    "low_descriptor_shard.py"
-  DEPS
-    loom::py::loom::gen::low_descriptors
-    loom::py::loom::target::descriptor_sets
-    loom::py::loom::target::test::descriptors
 )
 
 iree_py_library(
@@ -528,7 +460,7 @@ iree_py_library(
   SRCS
     "amdgpu_descriptors.py"
   DEPS
-    loom::py::loom::gen::low_descriptors
+    loom::py::loom::gen::target::low::low_descriptors
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::isa_xml
@@ -543,7 +475,7 @@ iree_py_test(
   ARGS
     "loom.gen.amdgpu_descriptors_test"
   DEPS
-    loom::py::loom::gen::low_descriptors
+    loom::py::loom::gen::target::low::low_descriptors
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::isa_xml

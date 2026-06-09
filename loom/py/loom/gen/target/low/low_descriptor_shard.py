@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def _ensure_runtime_py_on_path() -> None:
-    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py = Path(__file__).resolve().parents[4]
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
         sys.path.insert(0, runtime_py_string)
@@ -23,7 +23,7 @@ def _ensure_runtime_py_on_path() -> None:
 
 _ensure_runtime_py_on_path()
 
-from loom.gen.low_descriptors import write_descriptor_set_to_paths  # noqa: E402
+from loom.gen.target.low.low_descriptors import write_descriptor_set_to_paths  # noqa: E402
 from loom.target.descriptor_sets import resolve_descriptor_set  # noqa: E402
 
 
