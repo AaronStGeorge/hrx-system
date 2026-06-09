@@ -11,7 +11,7 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
@@ -87,6 +87,7 @@ loom_cc_library(
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     copts = _CONFIGURED_TARGET_COPTS,
+    visibility = ["//loom/src/loom/tools/loom-opt:__pkg__"],
     deps = [
         "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",

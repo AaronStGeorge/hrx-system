@@ -6,32 +6,13 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "core_tools_no_all_low_registry_dep",
-    dependencies = [":low_registry"],
-    targets = [
-        "//loom/src/loom/tools/iree-run-loom",
-        "//loom/src/loom/tools/iree-run-loom:main",
-        "//loom/src/loom/tools/loom-check/full:loom-check",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:main",
-        "//loom/src/loom/tools/loom-check:provider",
-        "//loom/src/loom/tools/loom-opt",
-    ],
 )
 
 #===------------------------------------------------------------------------===#
