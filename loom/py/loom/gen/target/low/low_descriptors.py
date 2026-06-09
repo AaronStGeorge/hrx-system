@@ -13,18 +13,18 @@ arrays; Python owns source readability, validation, and allowlist closure.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from loom.gen.support.c import CIdentifierCase, c_identifier, c_string_literal
+from loom.gen.support.c import c_string_literal
 from loom.gen.support.generated_file import line_comment_header
 from loom.gen.support.string_pool import CStringPool
+from loom.gen.target.low import c_spelling
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     LOW_DESCRIPTOR_SET_ORDINAL_NONE,
     AsmForm,
-    CEnum,
     Constraint,
     ConstraintKind,
     Descriptor,
@@ -56,7 +56,6 @@ from loom.target.low_descriptors import (
     ScheduleClass,
     StorageLease,
     StorageLeaseAttachment,
-    descriptor_set_relative_name,
     descriptor_stable_id,
 )
 
@@ -181,10 +180,6 @@ class _CompiledOperandForm:
     operand_map_count: int
 
 
-def _c_identifier(value: str) -> str:
-    return c_identifier(value, case=CIdentifierCase.LOWER, empty="empty")
-
-
 def _dedupe_by_name[T](items: Sequence[T], get_name: Callable[[T], str]) -> dict[str, T]:
     result: dict[str, T] = {}
     for item in items:
@@ -195,83 +190,10 @@ def _dedupe_by_name[T](items: Sequence[T], get_name: Callable[[T], str]) -> dict
     return result
 
 
-def _flag_expr(flags: Iterable[CEnum]) -> str:
-    names = [flag.c_name for flag in flags]
-    return " | ".join(names) if names else "0"
-
-
-def _optional_string_expr(string_pool: CStringPool, label: str | None) -> str:
-    if label is None:
-        return "LOOM_LOW_STRING_OFFSET_NONE"
-    return string_pool.ref(label)
-
-
-def _i64_literal(value: int) -> str:
-    if value == -(1 << 63):
-        return "INT64_MIN"
-    if value < 0:
-        return f"(-INT64_C({abs(value)}))"
-    return f"INT64_C({value})"
-
-
-def _u64_literal(value: int) -> str:
-    return f"UINT64_C({value})"
-
-
-def _hex_u64_literal(value: int) -> str:
-    return f"UINT64_C(0x{value:x})"
-
-
-def _hex_u32_literal(value: int) -> str:
-    return f"UINT32_C(0x{value:x})"
-
-
-def _u16_literal(value: int) -> str:
-    return f"UINT16_C({value})"
-
-
-def _descriptor_ref_constant_name(spec: DescriptorSet, descriptor_key: str) -> str:
-    descriptor_name = descriptor_set_relative_name(spec, descriptor_key)
-    return f"{spec.c_enum_prefix}_DESCRIPTOR_REF_{_c_identifier(descriptor_name).upper()}"
-
-
-def _descriptor_ref_define(spec: DescriptorSet, descriptor_key: str, descriptor_ordinal: int) -> str:
-    return f"#define {_descriptor_ref_constant_name(spec, descriptor_key)} {descriptor_ordinal}u"
-
-
-def _reg_class_id_constant_name(spec: DescriptorSet, reg_class_name: str) -> str:
-    reg_class_name = descriptor_set_relative_name(spec, reg_class_name)
-    return f"{spec.c_enum_prefix}_REG_CLASS_ID_{_c_identifier(reg_class_name).upper()}"
-
-
-def _register_part_id_constant_name(spec: DescriptorSet, part_name: str) -> str:
-    part_name = descriptor_set_relative_name(spec, part_name)
-    return f"{spec.c_enum_prefix}_REGISTER_PART_ID_{_c_identifier(part_name).upper()}"
-
-
-def _emit_id_enum(typedef_name: str, entries: Sequence[tuple[str, int]]) -> list[str]:
-    if not entries:
-        return []
-    lines = [f"typedef enum {typedef_name}_e {{"]
-    lines.extend(f"  {name} = {value}u," for name, value in entries)
-    lines.append(f"}} {typedef_name}_t;")
-    return lines
-
-
 def _register_part_id_expr(compiled: _CompiledDescriptorSet, part_name: str | None) -> str:
     if part_name is None:
         return "LOOM_LOW_REGISTER_PART_NONE"
     return str(compiled.register_part_ids[part_name])
-
-
-def _encoding_id_expr(value: int) -> str:
-    return "LOOM_LOW_ID_NONE" if value == LOW_DESCRIPTOR_ENCODING_ID_NONE else str(value)
-
-
-def _canonical_asm_form_ordinal_expr(value: int | None) -> str:
-    if value is None:
-        return "LOOM_LOW_ASM_FORM_ORDINAL_NONE"
-    return str(value)
 
 
 def _hazard_reference_kind(hazard: Hazard) -> HazardReferenceKind:
@@ -1357,10 +1279,10 @@ def _emit_header_for_spec(
         '#include "loom/codegen/low/descriptors.h"',
         "",
     ]
-    lines.extend(_descriptor_ref_define(header_spec, descriptor.key, i) for i, descriptor in enumerate(header_spec.descriptors))
+    lines.extend(c_spelling.descriptor_ref_define(header_spec, descriptor.key, i) for i, descriptor in enumerate(header_spec.descriptors))
     lines.append(f"#define {header_spec.c_enum_prefix}_DESCRIPTOR_SET_ID UINT64_C(0x{descriptor_stable_id(header_spec.key):016x})")
     lines.append(
-        f"#define {header_spec.c_enum_prefix}_DESCRIPTOR_SET_ORDINAL {_u16_literal(header_spec.descriptor_set_ordinal if header_spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)}"
+        f"#define {header_spec.c_enum_prefix}_DESCRIPTOR_SET_ORDINAL {c_spelling.u16_literal(header_spec.descriptor_set_ordinal if header_spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)}"
     )
     if header_spec.target_key is not None:
         lines.append(f"#define {header_spec.c_enum_prefix}_TARGET_ID UINT64_C(0x{descriptor_stable_id(header_spec.target_key):016x})")
@@ -1371,11 +1293,11 @@ def _emit_header_for_spec(
     if header_reg_class_ids:
         lines.append("")
         lines.extend(
-            _emit_id_enum(
+            c_spelling.emit_id_enum(
                 f"{header_spec.c_enum_prefix.lower()}_reg_class_id",
                 [
                     (
-                        _reg_class_id_constant_name(header_spec, reg_class.name),
+                        c_spelling.reg_class_id_constant_name(header_spec, reg_class.name),
                         reg_class_id,
                     )
                     for reg_class, reg_class_id in header_reg_class_ids
@@ -1386,11 +1308,11 @@ def _emit_header_for_spec(
     if header_register_part_ids:
         lines.append("")
         lines.extend(
-            _emit_id_enum(
+            c_spelling.emit_id_enum(
                 f"{header_spec.c_enum_prefix.lower()}_register_part_id",
                 [
                     (
-                        _register_part_id_constant_name(header_spec, part.name),
+                        c_spelling.register_part_id_constant_name(header_spec, part.name),
                         part_id,
                     )
                     for part, part_id in header_register_part_ids
@@ -1481,7 +1403,7 @@ def _emit_array(
 def _metadata_string_label(storage_spec: DescriptorSet, view_spec: DescriptorSet, field_name: str) -> str:
     if view_spec.key == storage_spec.key and view_spec.target_key == storage_spec.target_key and view_spec.feature_key == storage_spec.feature_key:
         return field_name
-    return f"{field_name}_{_c_identifier(view_spec.key)}"
+    return f"{field_name}_{c_spelling.c_identifier(view_spec.key)}"
 
 
 def _descriptor_refs_for_ordinals(
@@ -1686,15 +1608,15 @@ def _descriptor_row_lines(
     return [
         [
             f".key_string_offset = {pool.ref(f'descriptor_{descriptor.key}')},",
-            f".stable_id = {_hex_u64_literal(descriptor_stable_id(descriptor.key))},",
-            f".mnemonic_string_offset = {_optional_string_expr(pool, f'mnemonic_{descriptor.key}' if descriptor.mnemonic is not None else None)},",
-            f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
+            f".stable_id = {c_spelling.hex_u64_literal(descriptor_stable_id(descriptor.key))},",
+            f".mnemonic_string_offset = {c_spelling.optional_string_expr(pool, f'mnemonic_{descriptor.key}' if descriptor.mnemonic is not None else None)},",
+            f".semantic_tag_string_offset = {c_spelling.optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
             f".feature_mask_word_start = {descriptor_rows[i]['feature_mask_word_start']},",
             f".feature_mask_word_count = {descriptor_rows[i]['feature_mask_word_count']},",
             f".encoding_field_value_start = {descriptor_rows[i]['encoding_field_value_start']},",
             f".encoding_field_value_count = {descriptor_rows[i]['encoding_field_value_count']},",
             f".encoding_format_id = {descriptor.encoding_format_id},",
-            f".encoding_id = {_encoding_id_expr(descriptor.encoding_id)},",
+            f".encoding_id = {c_spelling.encoding_id_expr(descriptor.encoding_id)},",
             f".operand_start = {descriptor_rows[i]['operand_start']},",
             f".operand_count = {descriptor_rows[i]['operand_count']},",
             f".result_count = {descriptor_rows[i]['result_count']},",
@@ -1709,8 +1631,8 @@ def _descriptor_row_lines(
             f".operand_form_start = {descriptor_rows[i]['operand_form_start']},",
             f".operand_form_count = {descriptor_rows[i]['operand_form_count']},",
             f".schedule_class_id = {compiled.schedule_class_ids[descriptor.schedule_class]},",
-            f".flags = {_flag_expr(descriptor.flags)},",
-            f".canonical_asm_form_ordinal = {_canonical_asm_form_ordinal_expr(canonical_asm_form_ordinals[i])},",
+            f".flags = {c_spelling.flag_expr(descriptor.flags)},",
+            f".canonical_asm_form_ordinal = {c_spelling.canonical_asm_form_ordinal_expr(canonical_asm_form_ordinals[i])},",
         ]
         for i, descriptor in enumerate(descriptors)
     ]
@@ -1732,7 +1654,7 @@ def _storage_lease_row_lines(compiled: _CompiledDescriptorSet) -> list[list[str]
             f".release_action_name_string_offset = {pool.ref(f'storage_lease_{descriptor_key}_{lease_index}_action')},",
             f".release_reason_id = {lease.release_reason_id},",
             f".release_reason_name_string_offset = {pool.ref(f'storage_lease_{descriptor_key}_{lease_index}_reason')},",
-            f".flags = {_flag_expr(lease.flags)},",
+            f".flags = {c_spelling.flag_expr(lease.flags)},",
         ]
         for (descriptor_key, lease_index), lease in zip(compiled.storage_lease_labels, compiled.storage_leases, strict=True)
     ]
@@ -1817,12 +1739,12 @@ def _emit_source_for_views(
             [
                 f".name_string_offset = {pool.ref(f'reg_{reg_class.name}')},",
                 f".target_bank_id = {reg_class.target_bank_id},",
-                f".flags = {_flag_expr(reg_class.flags)},",
+                f".flags = {c_spelling.flag_expr(reg_class.flags)},",
                 f".alloc_unit_bits = {reg_class.alloc_unit_bits},",
                 f".allocatable_count = {reg_class.allocatable_count},",
                 f".alias_set_id = {reg_class.alias_set_id},",
                 ".spill_class_id = " + ("LOOM_LOW_REG_CLASS_NONE" if reg_class.spill_class is None else str(compiled.reg_class_ids[reg_class.spill_class])) + ",",
-                f".full_register_part_mask = {_hex_u32_literal(reg_class.full_register_part_mask)},",
+                f".full_register_part_mask = {c_spelling.hex_u32_literal(reg_class.full_register_part_mask)},",
                 f".spill_slot_space = {reg_class.spill_slot_space.c_name},",
             ]
             for reg_class in compiled.reg_classes
@@ -1838,7 +1760,7 @@ def _emit_source_for_views(
                 f".name_string_offset = {pool.ref(f'register_part_{part.name}')},",
                 f".reg_class_id = {compiled.reg_class_ids[part.reg_class]},",
                 ".reserved = 0,",
-                f".mask = {_hex_u32_literal(part.mask)},",
+                f".mask = {c_spelling.hex_u32_literal(part.mask)},",
             ]
             for part in compiled.register_parts
         ],
@@ -1851,7 +1773,7 @@ def _emit_source_for_views(
         [
             [
                 ".reg_class_id = " + ("LOOM_LOW_REG_CLASS_NONE" if reg_class_id is None else str(reg_class_id)) + ",",
-                f".flags = {_flag_expr(flags)},",
+                f".flags = {c_spelling.flag_expr(flags)},",
             ]
             for reg_class_id, flags in compiled.reg_class_alts
         ],
@@ -1865,7 +1787,7 @@ def _emit_source_for_views(
             [
                 f".field_name_string_offset = {pool.ref(f'field_{operand.field_name}')},",
                 f".role = {operand.role.c_name},",
-                f".flags = {_flag_expr(operand.flags)},",
+                f".flags = {c_spelling.flag_expr(operand.flags)},",
                 f".reg_class_alt_start = {compiled.operand_alt_starts[i]},",
                 f".reg_class_alt_count = {len(operand.reg_alts)},",
                 f".unit_count = {operand.unit_count},",
@@ -1890,15 +1812,15 @@ def _emit_source_for_views(
                 f".field_name_string_offset = {pool.ref(f'immediate_{immediate.field_name}')},",
                 f".encoding_slice_start = {compiled.immediate_encoding_slice_starts[i]},",
                 f".kind = {immediate.kind.c_name},",
-                f".flags = {_flag_expr(immediate.flags)},",
+                f".flags = {c_spelling.flag_expr(immediate.flags)},",
                 f".bit_width = {immediate.bit_width},",
                 f".encoding_field_id = {immediate.encoding_field_id},",
                 f".encoding_slice_count = {len(immediate.encoding_slices)},",
                 ".enum_domain_id = " + ("LOOM_LOW_ENUM_DOMAIN_NONE" if compiled.immediate_enum_domain_ids[i] is None else str(compiled.immediate_enum_domain_ids[i])) + ",",
                 f".encoding_id = {immediate.encoding_id},",
-                f".signed_min = {_i64_literal(immediate.signed_min)},",
-                f".unsigned_max = {_u64_literal(immediate.unsigned_max)},",
-                f".default_value = {_i64_literal(immediate.default_value)},",
+                f".signed_min = {c_spelling.i64_literal(immediate.signed_min)},",
+                f".unsigned_max = {c_spelling.u64_literal(immediate.unsigned_max)},",
+                f".default_value = {c_spelling.i64_literal(immediate.default_value)},",
             ]
             for i, immediate in enumerate(compiled.immediates)
         ],
@@ -1939,7 +1861,7 @@ def _emit_source_for_views(
         [
             [
                 f".token_string_offset = {pool.ref(f'enum_value_{domain.name}_{value.token}')},",
-                f".value = {_i64_literal(value.value)},",
+                f".value = {c_spelling.i64_literal(value.value)},",
             ]
             for domain in compiled.enum_domains
             for value in _validate_enum_domain(domain)
@@ -1955,7 +1877,7 @@ def _emit_source_for_views(
                 f".kind = {effect.kind.c_name},",
                 f".memory_space = {effect.memory_space.c_name},",
                 f".scope_id = {effect.scope_id},",
-                f".flags = {_flag_expr(effect.flags)},",
+                f".flags = {c_spelling.flag_expr(effect.flags)},",
                 f".counter_id = {effect.counter_id},",
                 f".width_bits = {effect.width_bits},",
             ]
@@ -1972,7 +1894,7 @@ def _emit_source_for_views(
                 f".kind = {constraint.kind.c_name},",
                 f".lhs_operand_index = {constraint.lhs_operand_index},",
                 ".rhs_operand_index = " + ("LOOM_LOW_ID_NONE" if constraint.rhs_operand_index is None else str(constraint.rhs_operand_index)) + ",",
-                f".flags = {_flag_expr(constraint.flags)},",
+                f".flags = {c_spelling.flag_expr(constraint.flags)},",
             ]
             for constraint in compiled.constraints
         ],
@@ -1993,7 +1915,7 @@ def _emit_source_for_views(
             [
                 f".name_string_offset = {pool.ref(f'resource_{resource.name}')},",
                 f".capacity_per_cycle = {resource.capacity_per_cycle},",
-                f".flags = {_flag_expr(resource.flags)},",
+                f".flags = {c_spelling.flag_expr(resource.flags)},",
                 f".kind = {resource.kind.c_name},",
                 f".contention_group_id = {resource.contention_group_id},",
             ]
@@ -2028,7 +1950,7 @@ def _emit_source_for_views(
                 f".producer_stage = {hazard.producer_stage},",
                 f".consumer_stage = {hazard.consumer_stage},",
                 f".distance = {hazard.distance},",
-                f".flags = {_flag_expr(hazard.flags)},",
+                f".flags = {c_spelling.flag_expr(hazard.flags)},",
             ]
             for hazard in compiled.hazards
         ],
@@ -2060,7 +1982,7 @@ def _emit_source_for_views(
                 f".issue_use_count = {compiled.schedule_rows[i]['issue_use_count']},",
                 f".hazard_start = {compiled.schedule_rows[i]['hazard_start']},",
                 f".hazard_count = {compiled.schedule_rows[i]['hazard_count']},",
-                f".flags = {_flag_expr(schedule_class.flags)},",
+                f".flags = {c_spelling.flag_expr(schedule_class.flags)},",
                 f".model_quality = {schedule_class.model_quality.c_name},",
                 f".pressure_delta_start = {compiled.schedule_rows[i]['pressure_delta_start']},",
                 f".pressure_delta_count = {compiled.schedule_rows[i]['pressure_delta_count']},",
@@ -2070,7 +1992,7 @@ def _emit_source_for_views(
     )
     if compiled.feature_mask_words:
         lines.append(f"static const uint64_t k{spec.c_table_prefix}FeatureMaskWords[] = {{")
-        lines.extend(f"    {_hex_u64_literal(word)}," for word in compiled.feature_mask_words)
+        lines.extend(f"    {c_spelling.hex_u64_literal(word)}," for word in compiled.feature_mask_words)
         lines.append("};")
         lines.append("")
     _emit_array(
@@ -2082,7 +2004,7 @@ def _emit_source_for_views(
             [
                 f".encoding_field_id = {field_value.encoding_field_id},",
                 ".reserved = 0,",
-                f".value = {_u64_literal(field_value.value)},",
+                f".value = {c_spelling.u64_literal(field_value.value)},",
             ]
             for field_value in compiled.encoding_field_values
         ],
@@ -2104,7 +2026,7 @@ def _emit_source_for_views(
                 f".source_operand_index = {match.source_operand_index},",
                 f".source_packet_operand_index = {match.source_packet_operand_index},",
                 f".match_kind = {match.match_kind.c_name},",
-                f".match_i64 = {_i64_literal(match.match_i64)},",
+                f".match_i64 = {c_spelling.i64_literal(match.match_i64)},",
             ]
             for match in compiled.operand_form_matches
         ],
@@ -2176,7 +2098,7 @@ def _emit_source_for_views(
         [
             [
                 f".immediate_index = {immediate.immediate_index},",
-                f".name_string_offset = {_optional_string_expr(pool, immediate.name_label)},",
+                f".name_string_offset = {c_spelling.optional_string_expr(pool, immediate.name_label)},",
             ]
             for immediate in compiled.asm_immediates
         ],
@@ -2241,11 +2163,11 @@ def _emit_source_for_views(
             "    .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,",
             f"    .generator_version = {view_spec.generator_version},",
             f"    .stable_id = UINT64_C(0x{descriptor_stable_id(view_spec.key):016x}),",
-            f"    .target_stable_id = {_hex_u64_literal(descriptor_stable_id(view_spec.target_key)) if view_spec.target_key is not None else 'LOOM_LOW_STABLE_ID_NONE'},",
-            f"    .descriptor_set_ordinal = {_u16_literal(view_spec.descriptor_set_ordinal if view_spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)},",
+            f"    .target_stable_id = {c_spelling.hex_u64_literal(descriptor_stable_id(view_spec.target_key)) if view_spec.target_key is not None else 'LOOM_LOW_STABLE_ID_NONE'},",
+            f"    .descriptor_set_ordinal = {c_spelling.u16_literal(view_spec.descriptor_set_ordinal if view_spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)},",
             f"    .key_string_offset = {pool.ref(_metadata_string_label(spec, view_spec, 'set_key'))},",
-            f"    .target_key_string_offset = {_optional_string_expr(pool, _metadata_string_label(spec, view_spec, 'target_key') if view_spec.target_key is not None else None)},",
-            f"    .feature_key_string_offset = {_optional_string_expr(pool, _metadata_string_label(spec, view_spec, 'feature_key') if view_spec.feature_key is not None else None)},",
+            f"    .target_key_string_offset = {c_spelling.optional_string_expr(pool, _metadata_string_label(spec, view_spec, 'target_key') if view_spec.target_key is not None else None)},",
+            f"    .feature_key_string_offset = {c_spelling.optional_string_expr(pool, _metadata_string_label(spec, view_spec, 'feature_key') if view_spec.feature_key is not None else None)},",
             "    .string_table =",
             "        {",
             f"            .data = k{spec.c_table_prefix}StringData,",
