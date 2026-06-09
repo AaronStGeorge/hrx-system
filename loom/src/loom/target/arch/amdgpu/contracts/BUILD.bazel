@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_target_table_cc_library",
 )
 
@@ -35,8 +36,8 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/arch/amdgpu:lower_kinds",
-        "//loom/src/loom/target/arch/amdgpu:lower_materializers",
+        "//loom/src/loom/target/arch/amdgpu/lower:kinds",
+        "//loom/src/loom/target/arch/amdgpu/lower:materializers",
     ],
 )
 
@@ -89,7 +90,7 @@ loom_target_table_cc_library(
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/arch/amdgpu:lower_materializers",
+        "//loom/src/loom/target/arch/amdgpu/lower:materializers",
     ],
 )
 
@@ -107,7 +108,7 @@ loom_target_table_cc_library(
     deps = [
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/arch/amdgpu:lower_kinds",
+        "//loom/src/loom/target/arch/amdgpu/lower:kinds",
     ],
 )
 
@@ -126,7 +127,7 @@ loom_target_table_cc_library(
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/arch/amdgpu:lower_materializers",
+        "//loom/src/loom/target/arch/amdgpu/lower:materializers",
     ],
 )
 
@@ -151,8 +152,8 @@ loom_target_table_cc_library(
     deps = [
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/arch/amdgpu:lower_kinds",
-        "//loom/src/loom/target/arch/amdgpu:lower_materializers",
+        "//loom/src/loom/target/arch/amdgpu/lower:kinds",
+        "//loom/src/loom/target/arch/amdgpu/lower:materializers",
     ],
 )
 
@@ -170,5 +171,47 @@ loom_target_table_cc_library(
     deps = [
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops/view",
+    ],
+)
+
+loom_cc_library(
+    name = "contracts",
+    hdrs = [
+        "arithmetic.h",
+        "arithmetic_lower_rules.h",
+        "async.h",
+        "async_lower_rules.h",
+        "buffer.h",
+        "buffer_lower_rules.h",
+        "compare.h",
+        "compare_lower_rules.h",
+        "dot.h",
+        "dot_lower_rules.h",
+        "integer.h",
+        "integer_lower_rules.h",
+        "matrix.h",
+        "reduce.h",
+        "reduce_lower_rules.h",
+        "view.h",
+        "view_lower_rules.h",
+    ],
+    deps = [
+        ":arithmetic",
+        ":arithmetic_lower_rules",
+        ":async",
+        ":async_lower_rules",
+        ":buffer",
+        ":buffer_lower_rules",
+        ":compare",
+        ":compare_lower_rules",
+        ":dot",
+        ":dot_lower_rules",
+        ":integer",
+        ":integer_lower_rules",
+        ":matrix",
+        ":reduce",
+        ":reduce_lower_rules",
+        ":view",
+        ":view_lower_rules",
     ],
 )

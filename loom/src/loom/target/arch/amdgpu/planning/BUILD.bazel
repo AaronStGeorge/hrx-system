@@ -21,6 +21,8 @@ _AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_occupancy_tables"
 
 _AMDGPU_ROOT_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu:__pkg__"]
 
+_AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
+
 _AMDGPU_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/amdgpu:__pkg__"]
 
 _AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
@@ -115,7 +117,7 @@ loom_cc_library(
     name = "wait_plan",
     srcs = ["wait_plan.c"],
     hdrs = ["wait_plan.h"],
-    visibility = _AMDGPU_ROOT_VISIBILITY,
+    visibility = _AMDGPU_ROOT_VISIBILITY + _AMDGPU_LOWER_VISIBILITY,
     deps = [
         ":descriptor_semantics",
         "//loom/src/loom/codegen/low:allocation",
@@ -138,7 +140,7 @@ loom_cc_library(
     name = "wait_packets",
     srcs = ["wait_packets.c"],
     hdrs = ["wait_packets.h"],
-    visibility = _AMDGPU_ROOT_VISIBILITY,
+    visibility = _AMDGPU_ROOT_VISIBILITY + _AMDGPU_LOWER_VISIBILITY,
     deps = [
         ":wait_plan",
         "//loom/src/loom/codegen/low:descriptors",

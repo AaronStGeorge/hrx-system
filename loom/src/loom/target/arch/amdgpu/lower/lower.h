@@ -11,8 +11,8 @@
 // native assembly and LLVMIR emission so the same low representation can feed
 // every later AMDGPU backend path.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_H_
-#define LOOM_TARGET_ARCH_AMDGPU_LOWER_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_LOWER_H_
+#define LOOM_TARGET_ARCH_AMDGPU_LOWER_LOWER_H_
 
 #include "loom/codegen/low/lower.h"
 
@@ -48,4 +48,4 @@ void loom_amdgpu_low_lower_policy_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_LOWER_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_LOWER_LOWER_H_

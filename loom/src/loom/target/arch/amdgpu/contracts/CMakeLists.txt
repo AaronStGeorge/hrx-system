@@ -35,8 +35,8 @@ loom_target_table_cc_library(
     loom::ops::index
     loom::ops::scalar
     loom::ops::vector
-    loom::target::arch::amdgpu::lower_kinds
-    loom::target::arch::amdgpu::lower_materializers
+    loom::target::arch::amdgpu::lower::kinds
+    loom::target::arch::amdgpu::lower::materializers
 )
 endif()
 
@@ -119,7 +119,7 @@ loom_target_table_cc_library(
     loom::codegen::low::lower
     loom::ops::index
     loom::ops::scalar
-    loom::target::arch::amdgpu::lower_materializers
+    loom::target::arch::amdgpu::lower::materializers
 )
 endif()
 
@@ -147,7 +147,7 @@ loom_target_table_cc_library(
   DEPS
     loom::codegen::low::lower
     loom::ops::vector
-    loom::target::arch::amdgpu::lower_kinds
+    loom::target::arch::amdgpu::lower::kinds
 )
 endif()
 
@@ -176,7 +176,7 @@ loom_target_table_cc_library(
     loom::codegen::low::lower
     loom::ops::index
     loom::ops::scalar
-    loom::target::arch::amdgpu::lower_materializers
+    loom::target::arch::amdgpu::lower::materializers
 )
 endif()
 
@@ -217,8 +217,8 @@ loom_target_table_cc_library(
   DEPS
     loom::codegen::low::lower
     loom::ops::vector
-    loom::target::arch::amdgpu::lower_kinds
-    loom::target::arch::amdgpu::lower_materializers
+    loom::target::arch::amdgpu::lower::kinds
+    loom::target::arch::amdgpu::lower::materializers
 )
 endif()
 
@@ -246,6 +246,50 @@ loom_target_table_cc_library(
   DEPS
     loom::codegen::low::lower
     loom::ops::view
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
+    contracts
+  HDRS
+    "arithmetic.h"
+    "arithmetic_lower_rules.h"
+    "async.h"
+    "async_lower_rules.h"
+    "buffer.h"
+    "buffer_lower_rules.h"
+    "compare.h"
+    "compare_lower_rules.h"
+    "dot.h"
+    "dot_lower_rules.h"
+    "integer.h"
+    "integer_lower_rules.h"
+    "matrix.h"
+    "reduce.h"
+    "reduce_lower_rules.h"
+    "view.h"
+    "view_lower_rules.h"
+  DEPS
+    ::arithmetic
+    ::arithmetic_lower_rules
+    ::async
+    ::async_lower_rules
+    ::buffer
+    ::buffer_lower_rules
+    ::compare
+    ::compare_lower_rules
+    ::dot
+    ::dot_lower_rules
+    ::integer
+    ::integer_lower_rules
+    ::matrix
+    ::reduce
+    ::reduce_lower_rules
+    ::view
+    ::view_lower_rules
+  PUBLIC
 )
 endif()
 

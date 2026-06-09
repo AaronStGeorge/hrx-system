@@ -207,31 +207,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    lower_kinds
-  HDRS
-    "lower/kinds.h"
-  DEPS
-
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    lower_materializers
-  HDRS
-    "lower/materializers.h"
-  DEPS
-    ::lower_kinds
-    loom::codegen::low::lower
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     register_class
   HDRS
     "register_class.h"
@@ -271,10 +246,10 @@ loom_target_table_cc_library(
   GENERATOR
     loom::py::loom::gen::amdgpu_atomic_candidates
   DEPS
-    ::lower_kinds
     ::target_refs
     iree::base
     loom::ops::atomic
+    loom::target::arch::amdgpu::lower::kinds
     loom::util::fact_table
 )
 endif()
@@ -440,135 +415,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    lower
-  HDRS
-    "lower.h"
-    "lower/abi.h"
-    "lower/async.h"
-    "lower/bitfield.h"
-    "lower/bitpack.h"
-    "lower/buffer.h"
-    "lower/collective_combine.h"
-    "lower/collective_payload.h"
-    "lower/constants.h"
-    "lower/control.h"
-    "lower/dot.h"
-    "lower/emit.h"
-    "lower/legality.h"
-    "lower/mask.h"
-    "lower/matrix.h"
-    "lower/matrix_fragment.h"
-    "lower/memory.h"
-    "lower/plan.h"
-    "lower/preamble.h"
-    "lower/structural.h"
-    "lower/subgroup.h"
-    "lower/sync.h"
-    "lower/table.h"
-    "lower/topology.h"
-    "lower/types.h"
-    "lower/values.h"
-    "lower/workgroup.h"
-  TEXTUAL_HDRS
-    "lower/registry_tables.inl"
-  SRCS
-    "lower/abi.c"
-    "lower/async.c"
-    "lower/atomic.c"
-    "lower/bitfield.c"
-    "lower/bitpack.c"
-    "lower/buffer.c"
-    "lower/collective_combine.c"
-    "lower/collective_payload.c"
-    "lower/collective_reduce.c"
-    "lower/collective_scan.c"
-    "lower/control.c"
-    "lower/dot.c"
-    "lower/emit_support.c"
-    "lower/lds_layout.c"
-    "lower/mask.c"
-    "lower/matrix.c"
-    "lower/matrix_fragment.c"
-    "lower/memory.c"
-    "lower/memory_cache.c"
-    "lower/memory_diagnostics.c"
-    "lower/memory_emit.c"
-    "lower/memory_legality.c"
-    "lower/preamble.c"
-    "lower/prefetch.c"
-    "lower/registry.c"
-    "lower/structural.c"
-    "lower/subgroup_broadcast.c"
-    "lower/subgroup_mask.c"
-    "lower/subgroup_shuffle.c"
-    "lower/support.c"
-    "lower/sync.c"
-    "lower/table.c"
-    "lower/values.c"
-  DEPS
-    ::atomic_candidates
-    ::compare_candidates
-    ::error_defs
-    ::lower_kinds
-    ::lower_materializers
-    ::target_id
-    ::target_info
-    ::target_refs
-    iree::base
-    loom::analysis::contract_vector
-    loom::analysis::view_regions
-    loom::codegen::low::descriptors
-    loom::codegen::low::function
-    loom::codegen::low::lower
-    loom::codegen::low::source_memory_plan
-    loom::ir
-    loom::ir::facts
-    loom::ops::atomic
-    loom::ops::buffer
-    loom::ops::cache
-    loom::ops::cfg
-    loom::ops::combining
-    loom::ops::encoding
-    loom::ops::index
-    loom::ops::kernel
-    loom::ops::low
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::vector
-    loom::ops::view
-    loom::target::arch::amdgpu::contracts::arithmetic
-    loom::target::arch::amdgpu::contracts::arithmetic_lower_rules
-    loom::target::arch::amdgpu::contracts::async
-    loom::target::arch::amdgpu::contracts::async_lower_rules
-    loom::target::arch::amdgpu::contracts::buffer
-    loom::target::arch::amdgpu::contracts::buffer_lower_rules
-    loom::target::arch::amdgpu::contracts::compare
-    loom::target::arch::amdgpu::contracts::compare_lower_rules
-    loom::target::arch::amdgpu::contracts::dot
-    loom::target::arch::amdgpu::contracts::dot_lower_rules
-    loom::target::arch::amdgpu::contracts::integer
-    loom::target::arch::amdgpu::contracts::integer_lower_rules
-    loom::target::arch::amdgpu::contracts::matrix
-    loom::target::arch::amdgpu::contracts::reduce
-    loom::target::arch::amdgpu::contracts::reduce_lower_rules
-    loom::target::arch::amdgpu::contracts::view
-    loom::target::arch::amdgpu::contracts::view_lower_rules
-    loom::target::arch::amdgpu::hal::kernel_abi
-    loom::target::arch::amdgpu::matrix::contract
-    loom::target::arch::amdgpu::matrix::projection
-    loom::target::arch::amdgpu::planning::wait_packets
-    loom::target::arch::amdgpu::planning::wait_plan
-    loom::target::low_legality
-    loom::target::registers
-    loom::util::fact_table
-    loom::util::math
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     math_policy
   HDRS
     "math_policy.h"
@@ -615,7 +461,6 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::legalization
-    ::lower
     ::math_policy
     ::ops
     ::packet_diagnostics
@@ -623,6 +468,7 @@ loom_cc_library(
     iree::base
     loom::pass::builder
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::lower
     loom::target::provider
   PUBLIC
 )
