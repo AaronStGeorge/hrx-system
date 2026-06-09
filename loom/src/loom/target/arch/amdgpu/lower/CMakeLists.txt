@@ -127,11 +127,11 @@ loom_cc_library(
     loom::ops::scf
     loom::ops::vector
     loom::ops::view
-    loom::target::arch::amdgpu::atomic_candidates
-    loom::target::arch::amdgpu::compare_candidates
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::hal::kernel_abi
+    loom::target::arch::amdgpu::lower::candidates::atomic_candidates
+    loom::target::arch::amdgpu::lower::candidates::compare_candidates
     loom::target::arch::amdgpu::matrix::contract
     loom::target::arch::amdgpu::matrix::projection
     loom::target::arch::amdgpu::planning::wait_packets

@@ -224,7 +224,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--public-header",
-        default="loom/target/arch/amdgpu/compare_candidates.h",
+        default="loom/target/arch/amdgpu/lower/candidates/compare_candidates.h",
         help="Public include path for the generated header.",
     )
     args = parser.parse_args(argv)

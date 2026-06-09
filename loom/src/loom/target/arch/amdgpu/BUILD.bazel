@@ -204,41 +204,11 @@ loom_cc_library(
     ],
 )
 
-_AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidates"
-
-_AMDGPU_COMPARE_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_compare_candidates"
-
 loom_cc_library(
     name = "register_class",
     hdrs = ["register_class.h"],
     visibility = _AMDGPU_NATIVE_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_target_table_cc_library(
-    name = "atomic_candidates",
-    generator = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR,
-    visibility = _AMDGPU_LOWER_VISIBILITY,
-    deps = [
-        "//loom/src/loom/ops:atomic",
-        "//loom/src/loom/target/arch/amdgpu/lower:kinds",
-        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
-        "//loom/src/loom/util:fact_table",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "compare_candidates",
-    generator = _AMDGPU_COMPARE_CANDIDATE_GENERATOR,
-    visibility = _AMDGPU_LOWER_VISIBILITY,
-    deps = [
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
-        "//runtime/src/iree/base",
-    ],
 )
 
 loom_cc_library(

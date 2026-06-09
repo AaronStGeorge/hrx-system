@@ -13,7 +13,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/target/arch/amdgpu/compare_candidates.h"
+#include "loom/target/arch/amdgpu/lower/candidates/compare_candidates.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"

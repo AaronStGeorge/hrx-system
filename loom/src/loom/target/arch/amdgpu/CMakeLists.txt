@@ -184,36 +184,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    atomic_candidates
-  GENERATOR
-    loom::py::loom::gen::amdgpu_atomic_candidates
-  DEPS
-    iree::base
-    loom::ops::atomic
-    loom::target::arch::amdgpu::lower::kinds
-    loom::target::arch::amdgpu::refs::target_refs
-    loom::util::fact_table
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    compare_candidates
-  GENERATOR
-    loom::py::loom::gen::amdgpu_compare_candidates
-  DEPS
-    iree::base
-    loom::ir
-    loom::ops::scalar
-    loom::ops::vector
-    loom::target::arch::amdgpu::refs::target_refs
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     math_policy

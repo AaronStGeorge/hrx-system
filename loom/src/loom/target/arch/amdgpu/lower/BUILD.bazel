@@ -17,11 +17,14 @@ package(
 
 _AMDGPU_ROOT_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu:__pkg__"]
 
+_AMDGPU_CANDIDATE_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower/candidates:__pkg__"]
+
 _AMDGPU_CONTRACT_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu/contracts:__pkg__",
 ]
 
 _AMDGPU_LOWER_TABLE_VISIBILITY = (
+    _AMDGPU_CANDIDATE_VISIBILITY +
     _AMDGPU_ROOT_VISIBILITY +
     _AMDGPU_CONTRACT_VISIBILITY
 )
@@ -138,13 +141,13 @@ loom_cc_library(
         "//loom/src/loom/ops/view",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:registers",
-        "//loom/src/loom/target/arch/amdgpu:atomic_candidates",
-        "//loom/src/loom/target/arch/amdgpu:compare_candidates",
         "//loom/src/loom/target/arch/amdgpu:error_defs",
         "//loom/src/loom/target/arch/amdgpu:target_id",
         "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/arch/amdgpu/contracts",
         "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
+        "//loom/src/loom/target/arch/amdgpu/lower/candidates:atomic_candidates",
+        "//loom/src/loom/target/arch/amdgpu/lower/candidates:compare_candidates",
         "//loom/src/loom/target/arch/amdgpu/matrix:contract",
         "//loom/src/loom/target/arch/amdgpu/matrix:projection",
         "//loom/src/loom/target/arch/amdgpu/planning:wait_packets",

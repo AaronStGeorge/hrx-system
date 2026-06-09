@@ -12,7 +12,7 @@
 #include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/view/ops.h"
-#include "loom/target/arch/amdgpu/atomic_candidates.h"
+#include "loom/target/arch/amdgpu/lower/candidates/atomic_candidates.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
