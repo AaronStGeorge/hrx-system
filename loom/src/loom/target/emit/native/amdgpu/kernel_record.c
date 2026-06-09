@@ -67,11 +67,17 @@ static iree_status_t loom_amdgpu_kernel_record_concat3(
   char* data = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate(arena, length, (void**)&data));
   char* cursor = data;
-  memcpy(cursor, a.data, a.size);
-  cursor += a.size;
-  memcpy(cursor, b.data, b.size);
-  cursor += b.size;
-  memcpy(cursor, c.data, c.size);
+  if (!iree_string_view_is_empty(a)) {
+    memcpy(cursor, a.data, a.size);
+    cursor += a.size;
+  }
+  if (!iree_string_view_is_empty(b)) {
+    memcpy(cursor, b.data, b.size);
+    cursor += b.size;
+  }
+  if (!iree_string_view_is_empty(c)) {
+    memcpy(cursor, c.data, c.size);
+  }
   *out_value = iree_make_string_view(data, length);
   return iree_ok_status();
 }
