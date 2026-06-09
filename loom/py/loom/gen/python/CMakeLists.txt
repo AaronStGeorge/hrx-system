@@ -11,10 +11,11 @@ iree_add_all_subdirs()
 
 iree_py_library(
   NAME
-    builders_pyi
+    python
   SRCS
     "__init__.py"
     "builders_pyi.py"
+    "package_inits.py"
   DEPS
     loom::py::loom::core
     loom::py::loom::gen::bootstrap
@@ -29,22 +30,10 @@ iree_py_test(
   ARGS
     "loom.gen.python.builders_pyi_test"
   DEPS
-    loom::py::loom::gen::python::builders_pyi
+    loom::py::loom::gen::python::python
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"
-)
-
-iree_py_library(
-  NAME
-    package_inits
-  SRCS
-    "__init__.py"
-    "package_inits.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::bootstrap
-    loom::py::loom::gen::support::support
 )
 
 iree_py_test(
@@ -55,7 +44,7 @@ iree_py_test(
   ARGS
     "loom.gen.python.package_inits_test"
   DEPS
-    loom::py::loom::gen::python::package_inits
+    loom::py::loom::gen::python::python
     loom::py::loom::gen::support::support
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
