@@ -26,6 +26,8 @@ package(
 
 _AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
 
+_AMDGPU_ENCODING_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/encoding:__pkg__"]
+
 _AMDGPU_HAL_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/hal:__pkg__"]
 
 _AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
@@ -109,6 +111,7 @@ loom_target_table_cc_library(
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
     ],
     visibility = (
+        _AMDGPU_ENCODING_VISIBILITY +
         _AMDGPU_HAL_VISIBILITY +
         _AMDGPU_LOWER_VISIBILITY +
         _AMDGPU_MATRIX_VISIBILITY +
@@ -127,18 +130,6 @@ loom_cc_test(
     name = "target_info_test",
     srcs = ["target_info_test.cc"],
     deps = [
-        ":target_info",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "encoding_test",
-    srcs = ["encoding_test.cc"],
-    deps = [
-        ":encoding",
-        ":rdna3_encoding_tables",
         ":target_info",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -217,14 +208,6 @@ _AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidate
 
 _AMDGPU_COMPARE_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_compare_candidates"
 
-_AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
-
-loom_cc_library(
-    name = "encoding_defs",
-    hdrs = ["encoding.h"],
-    deps = ["//runtime/src/iree/base"],
-)
-
 loom_cc_library(
     name = "register_class",
     hdrs = ["register_class.h"],
@@ -254,108 +237,6 @@ loom_target_table_cc_library(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "cdna3_encoding_tables",
-    args = [
-        "--target=cdna3",
-        "--descriptor-set-key=amdgpu.cdna3.core",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
-        "--public-header=loom/target/arch/amdgpu/cdna3_encoding_tables.h",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml"],
-    deps = [
-        ":encoding_defs",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "rdna3_encoding_tables",
-    args = [
-        "--target=rdna3",
-        "--descriptor-set-key=amdgpu.rdna3.core",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
-        "--public-header=loom/target/arch/amdgpu/rdna3_encoding_tables.h",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml"],
-    deps = [
-        ":encoding_defs",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "rdna4_encoding_tables",
-    args = [
-        "--target=rdna4",
-        "--descriptor-set-key=amdgpu.rdna4.core",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-        "--public-header=loom/target/arch/amdgpu/rdna4_encoding_tables.h",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    deps = [
-        ":encoding_defs",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "rdna4_gfx125x_encoding_tables",
-    args = [
-        "--target=rdna4_gfx125x",
-        "--descriptor-set-key=amdgpu.rdna4.gfx125x.core",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-        "--public-header=loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
-    deps = [
-        ":encoding_defs",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "cdna4_encoding_tables",
-    args = [
-        "--target=cdna4",
-        "--descriptor-set-key=amdgpu.cdna4.core",
-        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
-        "--public-header=loom/target/arch/amdgpu/cdna4_encoding_tables.h",
-    ],
-    exclude_from_cmake_all = True,
-    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
-    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml"],
-    deps = [
-        ":encoding_defs",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "encoding",
-    srcs = ["encoding.c"],
-    hdrs = ["encoding.h"],
-    visibility = _AMDGPU_NATIVE_VISIBILITY + _AMDGPU_PLANNING_VISIBILITY,
-    deps = [
-        ":cdna3_encoding_tables",
-        ":cdna4_encoding_tables",
-        ":encoding_defs",
-        ":rdna3_encoding_tables",
-        ":rdna4_encoding_tables",
-        ":rdna4_gfx125x_encoding_tables",
-        ":target_info",
         "//runtime/src/iree/base",
     ],
 )

@@ -11,8 +11,8 @@
 // Loom; vendor XML encoding names stay in the generator layer instead of being
 // linked into native emitters as strings.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_ENCODING_H_
-#define LOOM_TARGET_ARCH_AMDGPU_ENCODING_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_ENCODING_ENCODING_H_
+#define LOOM_TARGET_ARCH_AMDGPU_ENCODING_ENCODING_H_
 
 #include "iree/base/api.h"
 
@@ -344,4 +344,4 @@ iree_status_t loom_amdgpu_encoding_pack_vopdxy_literal(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_ENCODING_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_ENCODING_ENCODING_H_

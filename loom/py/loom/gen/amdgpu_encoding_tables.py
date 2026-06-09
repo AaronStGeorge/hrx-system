@@ -333,7 +333,7 @@ def _emit_header(
         f"#ifndef {header_guard}",
         f"#define {header_guard}",
         "",
-        '#include "loom/target/arch/amdgpu/encoding.h"',
+        '#include "loom/target/arch/amdgpu/encoding/encoding.h"',
         "",
         "#ifdef __cplusplus",
         'extern "C" {',

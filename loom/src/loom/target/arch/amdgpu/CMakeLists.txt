@@ -103,23 +103,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_test(
   NAME
-    encoding_test
-  SRCS
-    "encoding_test.cc"
-  DEPS
-    ::encoding
-    ::rdna3_encoding_tables
-    ::target_info
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
     registers_test
   SRCS
     "registers_test.cc"
@@ -191,18 +174,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    encoding_defs
-  HDRS
-    "encoding.h"
-  DEPS
-    iree::base
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     register_class
   HDRS
     "register_class.h"
@@ -239,132 +210,6 @@ loom_target_table_cc_library(
     loom::ops::scalar
     loom::ops::vector
     loom::target::arch::amdgpu::refs::target_refs
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    cdna3_encoding_tables
-  GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
-  ARGS
-    "--target=cdna3"
-    "--descriptor-set-key=amdgpu.cdna3.core"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
-    "--public-header=loom/target/arch/amdgpu/cdna3_encoding_tables.h"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    ::encoding_defs
-    iree::base
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    rdna3_encoding_tables
-  GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
-  ARGS
-    "--target=rdna3"
-    "--descriptor-set-key=amdgpu.rdna3.core"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
-    "--public-header=loom/target/arch/amdgpu/rdna3_encoding_tables.h"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    ::encoding_defs
-    iree::base
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    rdna4_encoding_tables
-  GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
-  ARGS
-    "--target=rdna4"
-    "--descriptor-set-key=amdgpu.rdna4.core"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "--public-header=loom/target/arch/amdgpu/rdna4_encoding_tables.h"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    ::encoding_defs
-    iree::base
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    rdna4_gfx125x_encoding_tables
-  GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
-  ARGS
-    "--target=rdna4_gfx125x"
-    "--descriptor-set-key=amdgpu.rdna4.gfx125x.core"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "--public-header=loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    ::encoding_defs
-    iree::base
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    cdna4_encoding_tables
-  GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
-  ARGS
-    "--target=cdna4"
-    "--descriptor-set-key=amdgpu.cdna4.core"
-    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
-    "--public-header=loom/target/arch/amdgpu/cdna4_encoding_tables.h"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
-    "loom_amdgpu_isa_xml"
-  DEPS
-    ::encoding_defs
-    iree::base
-  EXCLUDE_FROM_ALL
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    encoding
-  HDRS
-    "encoding.h"
-  SRCS
-    "encoding.c"
-  DEPS
-    ::cdna3_encoding_tables
-    ::cdna4_encoding_tables
-    ::encoding_defs
-    ::rdna3_encoding_tables
-    ::rdna4_encoding_tables
-    ::rdna4_gfx125x_encoding_tables
-    ::target_info
-    iree::base
-  PUBLIC
 )
 endif()
 

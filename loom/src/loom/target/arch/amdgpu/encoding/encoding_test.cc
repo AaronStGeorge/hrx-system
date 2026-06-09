@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/encoding.h"
+#include "loom/target/arch/amdgpu/encoding/encoding.h"
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/target/arch/amdgpu/rdna3_encoding_tables.h"
+#include "loom/target/arch/amdgpu/encoding/rdna3_encoding_tables.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 namespace {

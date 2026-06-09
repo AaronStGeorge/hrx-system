@@ -4,15 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/encoding.h"
+#include "loom/target/arch/amdgpu/encoding/encoding.h"
 
 #include <inttypes.h>
 
-#include "loom/target/arch/amdgpu/cdna3_encoding_tables.h"
-#include "loom/target/arch/amdgpu/cdna4_encoding_tables.h"
-#include "loom/target/arch/amdgpu/rdna3_encoding_tables.h"
-#include "loom/target/arch/amdgpu/rdna4_encoding_tables.h"
-#include "loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h"
+#include "loom/target/arch/amdgpu/encoding/cdna3_encoding_tables.h"
+#include "loom/target/arch/amdgpu/encoding/cdna4_encoding_tables.h"
+#include "loom/target/arch/amdgpu/encoding/rdna3_encoding_tables.h"
+#include "loom/target/arch/amdgpu/encoding/rdna4_encoding_tables.h"
+#include "loom/target/arch/amdgpu/encoding/rdna4_gfx125x_encoding_tables.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 static uint64_t loom_amdgpu_encoding_u64_mask(uint8_t bit_count) {
