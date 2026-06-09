@@ -17,9 +17,20 @@ iree_py_library(
 )
 
 iree_py_library(
+    name = "assembly_tokens",
+    srcs = ["assembly_tokens.py"],
+)
+
+iree_py_library(
+    name = "bootstrap",
+    srcs = ["bootstrap.py"],
+)
+
+iree_py_library(
     name = "low_descriptors",
     srcs = ["low_descriptors.py"],
     deps = [
+        ":bootstrap",
         "//loom/py/loom/gen/support:generated_file",
         "//loom/py/loom/target:low_descriptors",
     ],
@@ -45,7 +56,8 @@ iree_py_test(
     ],
     main = "pytest_style_runner.py",
     deps = [
-        ":c_tables",
+        ":assembly_tokens",
+        ":bootstrap",
         ":low_descriptors",
         "//loom/py/loom:core",
         "//loom/py/loom/dialect:package",
@@ -58,11 +70,9 @@ iree_py_test(
 
 iree_py_library(
     name = "package_inits",
-    srcs = [
-        "bootstrap.py",
-        "package_inits.py",
-    ],
+    srcs = ["package_inits.py"],
     deps = [
+        ":bootstrap",
         "//loom/py/loom:core",
         "//loom/py/loom/gen/support:generated_file",
     ],
@@ -137,6 +147,8 @@ iree_py_library(
 )
 
 C_TABLES_DEPS = [
+    ":assembly_tokens",
+    ":bootstrap",
     ":c_table_model",
     "//loom/py/loom:core",
     "//loom/py/loom/gen/support:files",
@@ -145,19 +157,13 @@ C_TABLES_DEPS = [
 
 iree_py_library(
     name = "c_tables",
-    srcs = [
-        "bootstrap.py",
-        "c_tables.py",
-    ],
+    srcs = ["c_tables.py"],
     deps = C_TABLES_DEPS,
 )
 
 iree_py_binary(
     name = "c_tables_generator",
-    srcs = [
-        "bootstrap.py",
-        "c_tables.py",
-    ],
+    srcs = ["c_tables.py"],
     main = "c_tables.py",
     deps = C_TABLES_DEPS,
 )

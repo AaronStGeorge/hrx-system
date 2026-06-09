@@ -18,10 +18,25 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    assembly_tokens
+  SRCS
+    "assembly_tokens.py"
+)
+
+iree_py_library(
+  NAME
+    bootstrap
+  SRCS
+    "bootstrap.py"
+)
+
+iree_py_library(
+  NAME
     low_descriptors
   SRCS
     "low_descriptors.py"
   DEPS
+    loom::py::loom::gen::bootstrap
     loom::py::loom::gen::support::generated_file
     loom::py::loom::target::low_descriptors
 )
@@ -37,7 +52,8 @@ iree_py_test(
     "loom.gen.low_descriptors_test"
     "loom.gen.textmate_test"
   DEPS
-    loom::py::loom::gen::c_tables
+    loom::py::loom::gen::assembly_tokens
+    loom::py::loom::gen::bootstrap
     loom::py::loom::gen::low_descriptors
     loom::py::loom::core
     loom::py::loom::dialect::package
@@ -54,9 +70,9 @@ iree_py_library(
   NAME
     package_inits
   SRCS
-    "bootstrap.py"
     "package_inits.py"
   DEPS
+    loom::py::loom::gen::bootstrap
     loom::py::loom::core
     loom::py::loom::gen::support::generated_file
 )
@@ -136,9 +152,10 @@ iree_py_library(
   NAME
     c_tables
   SRCS
-    "bootstrap.py"
     "c_tables.py"
   DEPS
+    loom::py::loom::gen::assembly_tokens
+    loom::py::loom::gen::bootstrap
     loom::py::loom::gen::c_table_model
     loom::py::loom::core
     loom::py::loom::gen::support::files
@@ -151,9 +168,10 @@ iree_py_library(
   MAIN
     "c_tables.py"
   SRCS
-    "bootstrap.py"
     "c_tables.py"
   DEPS
+    loom::py::loom::gen::assembly_tokens
+    loom::py::loom::gen::bootstrap
     loom::py::loom::gen::c_table_model
     loom::py::loom::core
     loom::py::loom::gen::support::files
