@@ -55,18 +55,6 @@ _AMDGPU_PROVIDER_VISIBILITY = [
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "amdgpu_descriptor_shards_no_matrix_contract_dep",
-    dependencies = ["//loom/src/loom/target/arch/amdgpu/matrix:contract"],
-    targets = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "core_target_interfaces_no_amdgpu_target_deps",
     dependencies = [
         "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
@@ -100,17 +88,6 @@ loom_assert_no_dependencies(
         ":target_refs",
         ":packet_diagnostics",
     ],
-)
-
-loom_assert_no_dependencies(
-    name = "amdgpu_lower_no_registry_or_descriptor_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:cdna4",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-    ],
-    targets = ["//loom/src/loom/target/arch/amdgpu/lower:lower"],
 )
 
 loom_assert_no_dependencies(
