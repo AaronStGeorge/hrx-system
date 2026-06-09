@@ -17,50 +17,16 @@ GENERATED_FILE_VISIBILITY = [
 ]
 
 iree_py_library(
-    name = "c",
+    name = "support",
     srcs = [
         "__init__.py",
         "c.py",
-    ],
-    deps = [
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen:package",
-    ],
-)
-
-iree_py_library(
-    name = "files",
-    srcs = [
-        "__init__.py",
         "files.py",
-    ],
-    deps = [
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen:package",
-    ],
-)
-
-iree_py_library(
-    name = "generated_file",
-    srcs = [
-        "__init__.py",
         "generated_file.py",
+        "string_pool.py",
     ],
     visibility = GENERATED_FILE_VISIBILITY,
     deps = [
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen:package",
-    ],
-)
-
-iree_py_library(
-    name = "string_pool",
-    srcs = [
-        "__init__.py",
-        "string_pool.py",
-    ],
-    deps = [
-        ":c",
         "//loom/py/loom:core",
         "//loom/py/loom/gen:package",
     ],
@@ -82,10 +48,5 @@ iree_py_test(
         "loom.gen.support.string_pool_test",
     ],
     main = "pytest_style_runner.py",
-    deps = [
-        ":c",
-        ":files",
-        ":generated_file",
-        ":string_pool",
-    ],
+    deps = [":support"],
 )

@@ -30,8 +30,7 @@ iree_py_binary(
     deps = [
         "//loom/py/loom:core",
         "//loom/py/loom/error",
-        "//loom/py/loom/gen/support:files",
-        "//loom/py/loom/gen/support:generated_file",
+        "//loom/py/loom/gen/support",
     ],
 )
 

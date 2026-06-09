@@ -47,9 +47,7 @@ iree_py_library(
     "__init__.py"
     "x86_target_profiles.py"
   DEPS
-    loom::py::loom::gen::support::c
-    loom::py::loom::gen::support::files
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
     loom::py::loom::target::arch::x86::target_info
     loom::py::loom::target::emit::llvmir::x86::target_info
 )
@@ -63,8 +61,7 @@ iree_py_library(
     "__init__.py"
     "x86_packed_dot_contract.py"
   DEPS
-    loom::py::loom::gen::support::c
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::x86::target_info
 )

@@ -26,7 +26,7 @@ iree_py_binary(
     main = "amdgpu_atomic_candidates.py",
     visibility = GENERATOR_VISIBILITY,
     deps = [
-        "//loom/py/loom/gen/support:generated_file",
+        "//loom/py/loom/gen/support",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
     ],
@@ -43,7 +43,7 @@ iree_py_binary(
     deps = [
         "//loom/py/loom/dialect/scalar",
         "//loom/py/loom/dialect/vector",
-        "//loom/py/loom/gen/support:generated_file",
+        "//loom/py/loom/gen/support",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch/amdgpu:descriptors",
     ],

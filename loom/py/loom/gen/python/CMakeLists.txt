@@ -18,7 +18,7 @@ iree_py_library(
   DEPS
     loom::py::loom::core
     loom::py::loom::gen::bootstrap
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
 )
 
 iree_py_test(
@@ -44,7 +44,7 @@ iree_py_library(
   DEPS
     loom::py::loom::core
     loom::py::loom::gen::bootstrap
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
 )
 
 iree_py_test(
@@ -56,7 +56,7 @@ iree_py_test(
     "loom.gen.python.package_inits_test"
   DEPS
     loom::py::loom::gen::python::package_inits
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"

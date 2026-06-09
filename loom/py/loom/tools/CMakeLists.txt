@@ -16,7 +16,7 @@ iree_py_library(
     "__init__.py"
     "source_surface.py"
   DEPS
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
 )
 
 iree_py_library(

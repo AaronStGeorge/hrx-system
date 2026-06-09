@@ -23,8 +23,7 @@ GENERATOR_VISIBILITY = [
 
 CONTRACT_FRAGMENT_DEPS = [
     "//loom/py/loom:core",
-    "//loom/py/loom/gen/support:c",
-    "//loom/py/loom/gen/support:generated_file",
+    "//loom/py/loom/gen/support",
     "//loom/py/loom/gen/target:package",
     "//loom/py/loom/target/contracts",
 ]
@@ -54,8 +53,7 @@ iree_py_library(
 
 LOWER_RULE_DEPS = [
     "//loom/py/loom:core",
-    "//loom/py/loom/gen/support:c",
-    "//loom/py/loom/gen/support:generated_file",
+    "//loom/py/loom/gen/support",
     "//loom/py/loom/gen/target:package",
     "//loom/py/loom/target:low_descriptors",
     "//loom/py/loom/target/contracts",

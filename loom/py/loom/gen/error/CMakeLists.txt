@@ -20,8 +20,7 @@ iree_py_library(
   DEPS
     loom::py::loom::core
     loom::py::loom::error::error
-    loom::py::loom::gen::support::files
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
 )
 
 iree_py_test(

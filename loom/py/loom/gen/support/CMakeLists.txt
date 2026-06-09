@@ -11,45 +11,14 @@ iree_add_all_subdirs()
 
 iree_py_library(
   NAME
-    c
+    support
   SRCS
     "__init__.py"
     "c.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::package
-)
-
-iree_py_library(
-  NAME
-    files
-  SRCS
-    "__init__.py"
     "files.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::package
-)
-
-iree_py_library(
-  NAME
-    generated_file
-  SRCS
-    "__init__.py"
     "generated_file.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::package
-)
-
-iree_py_library(
-  NAME
-    string_pool
-  SRCS
-    "__init__.py"
     "string_pool.py"
   DEPS
-    loom::py::loom::gen::support::c
     loom::py::loom::core
     loom::py::loom::gen::package
 )
@@ -65,10 +34,7 @@ iree_py_test(
     "loom.gen.support.generated_file_test"
     "loom.gen.support.string_pool_test"
   DEPS
-    loom::py::loom::gen::support::c
-    loom::py::loom::gen::support::files
-    loom::py::loom::gen::support::generated_file
-    loom::py::loom::gen::support::string_pool
+    loom::py::loom::gen::support::support
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"

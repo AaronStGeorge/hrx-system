@@ -20,7 +20,7 @@ iree_py_library(
     loom::py::loom::error::error
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::assembly::tokens
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
 )
 
 iree_py_test(

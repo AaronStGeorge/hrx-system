@@ -18,7 +18,7 @@ iree_py_library(
     "__init__.py"
     "amdgpu_atomic_candidates.py"
   DEPS
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
 )
@@ -34,7 +34,7 @@ iree_py_library(
   DEPS
     loom::py::loom::dialect::scalar::scalar
     loom::py::loom::dialect::vector::vector
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::amdgpu::descriptors
 )

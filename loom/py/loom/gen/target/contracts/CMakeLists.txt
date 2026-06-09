@@ -17,8 +17,7 @@ iree_py_library(
     "contract_fragments.py"
   DEPS
     loom::py::loom::core
-    loom::py::loom::gen::support::c
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
     loom::py::loom::gen::target::package
     loom::py::loom::target::contracts::contracts
 )
@@ -42,8 +41,7 @@ iree_py_library(
     "lower_rules.py"
   DEPS
     loom::py::loom::core
-    loom::py::loom::gen::support::c
-    loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::support
     loom::py::loom::gen::target::package
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::contracts::contracts
