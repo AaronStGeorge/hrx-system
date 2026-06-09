@@ -1167,13 +1167,11 @@ static iree_status_t loom_low_target_legalize_function(
     const loom_value_fact_table_t* final_facts = NULL;
     status = loom_low_target_legalize_acquire_final_facts(
         pass, module, selection, &rewrite_driver, &final_facts);
-    if (!iree_status_is_ok(status)) {
-      goto cleanup;
+    if (iree_status_is_ok(status)) {
+      status = loom_low_target_legalize_verify_final(
+          module, &state, pass_state, final_facts, &final_error_count);
     }
-    status = loom_low_target_legalize_verify_final(
-        module, &state, pass_state, final_facts, &final_error_count);
   }
-cleanup:
   loom_low_target_legalize_destroy_query_scope(&state);
   loom_greedy_rewrite_driver_deinitialize(&rewrite_driver);
   iree_arena_deinitialize(&rewrite_arena);
