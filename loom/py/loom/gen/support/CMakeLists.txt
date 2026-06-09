@@ -42,6 +42,18 @@ iree_py_library(
     loom::py::loom::gen::package
 )
 
+iree_py_library(
+  NAME
+    string_pool
+  SRCS
+    "__init__.py"
+    "string_pool.py"
+  DEPS
+    loom::py::loom::gen::support::c
+    loom::py::loom::core
+    loom::py::loom::gen::package
+)
+
 iree_py_test(
   NAME
     support_test
@@ -51,10 +63,12 @@ iree_py_test(
     "loom.gen.support.c_test"
     "loom.gen.support.files_test"
     "loom.gen.support.generated_file_test"
+    "loom.gen.support.string_pool_test"
   DEPS
     loom::py::loom::gen::support::c
     loom::py::loom::gen::support::files
     loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::string_pool
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"

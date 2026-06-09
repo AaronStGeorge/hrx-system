@@ -53,23 +53,39 @@ iree_py_library(
     ],
 )
 
+iree_py_library(
+    name = "string_pool",
+    srcs = [
+        "__init__.py",
+        "string_pool.py",
+    ],
+    deps = [
+        ":c",
+        "//loom/py/loom:core",
+        "//loom/py/loom/gen:package",
+    ],
+)
+
 iree_py_test(
     name = "support_test",
     srcs = [
         "c_test.py",
         "files_test.py",
         "generated_file_test.py",
+        "string_pool_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
         "loom.gen.support.c_test",
         "loom.gen.support.files_test",
         "loom.gen.support.generated_file_test",
+        "loom.gen.support.string_pool_test",
     ],
     main = "pytest_style_runner.py",
     deps = [
         ":c",
         ":files",
         ":generated_file",
+        ":string_pool",
     ],
 )

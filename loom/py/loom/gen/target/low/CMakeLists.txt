@@ -17,7 +17,9 @@ iree_py_library(
     "low_descriptors.py"
   DEPS
     loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::support::c
     loom::py::loom::gen::support::generated_file
+    loom::py::loom::gen::support::string_pool
     loom::py::loom::gen::target::package
     loom::py::loom::target::low_descriptors
 )

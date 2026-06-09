@@ -13,12 +13,13 @@ arrays; Python owns source readability, validation, and allowlist closure.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
+from loom.gen.support.c import CIdentifierCase, c_identifier, c_string_literal
 from loom.gen.support.generated_file import line_comment_header
+from loom.gen.support.string_pool import CStringPool
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     LOW_DESCRIPTOR_SET_ORDINAL_NONE,
@@ -77,49 +78,6 @@ class GeneratedDescriptorSet:
 
 
 @dataclass(slots=True)
-class _StringEntry:
-    label: str
-    value: str
-    offset: int
-
-
-@dataclass(slots=True)
-class _StringPool:
-    c_enum_prefix: str
-    entries: list[_StringEntry] = field(default_factory=list)
-    value_to_label: dict[str, str] = field(default_factory=dict)
-    label_to_primary: dict[str, str] = field(default_factory=dict)
-    next_offset: int = 0
-
-    def intern(self, label: str, value: str) -> str:
-        if len(value.encode()) > 255:
-            raise ValueError(f"B-string '{value}' exceeds 255 bytes")
-        label = _c_identifier(label)
-        if label in self.label_to_primary:
-            primary_label = self.label_to_primary[label]
-            if self.entries_by_label[primary_label].value != value:
-                raise ValueError(f"string label '{label}' was reused for different values")
-            return primary_label
-        if value in self.value_to_label:
-            primary_label = self.value_to_label[value]
-            self.label_to_primary[label] = primary_label
-            return primary_label
-        self.entries.append(_StringEntry(label, value, self.next_offset))
-        self.value_to_label[value] = label
-        self.label_to_primary[label] = label
-        self.next_offset += len(value.encode()) + 1
-        return label
-
-    @property
-    def entries_by_label(self) -> dict[str, _StringEntry]:
-        return {entry.label: entry for entry in self.entries}
-
-    def ref(self, label: str) -> str:
-        primary_label = self.label_to_primary[_c_identifier(label)]
-        return f"{self.c_enum_prefix}_STRING_{primary_label}"
-
-
-@dataclass(slots=True)
 class _CompiledDescriptorSet:
     spec: DescriptorSet
     descriptors: list[Descriptor]
@@ -133,7 +91,7 @@ class _CompiledDescriptorSet:
     resource_ids: dict[str, int]
     schedule_class_ids: dict[str, int]
     enum_domain_ids: dict[str, int]
-    string_pool: _StringPool
+    string_pool: CStringPool
     reg_class_alts: list[tuple[int | None, tuple[RegClassAltFlag, ...]]]
     operands: list[Operand]
     operand_alt_starts: list[int]
@@ -224,12 +182,7 @@ class _CompiledOperandForm:
 
 
 def _c_identifier(value: str) -> str:
-    identifier = re.sub(r"[^0-9A-Za-z_]", "_", value).strip("_")
-    if not identifier:
-        return "empty"
-    if identifier[0].isdigit():
-        identifier = "_" + identifier
-    return identifier.lower()
+    return c_identifier(value, case=CIdentifierCase.LOWER, empty="empty")
 
 
 def _dedupe_by_name[T](items: Sequence[T], get_name: Callable[[T], str]) -> dict[str, T]:
@@ -247,7 +200,7 @@ def _flag_expr(flags: Iterable[CEnum]) -> str:
     return " | ".join(names) if names else "0"
 
 
-def _optional_string_expr(string_pool: _StringPool, label: str | None) -> str:
+def _optional_string_expr(string_pool: CStringPool, label: str | None) -> str:
     if label is None:
         return "LOOM_LOW_STRING_OFFSET_NONE"
     return string_pool.ref(label)
@@ -835,7 +788,7 @@ def _validate_unique_asm_fields(descriptor: Descriptor, asm_form: AsmForm, mnemo
 
 
 def _compile_asm_form(
-    string_pool: _StringPool,
+    string_pool: CStringPool,
     descriptor: Descriptor,
     descriptor_ordinal: int,
     asm_form: AsmForm,
@@ -910,7 +863,7 @@ def _compile_asm_form(
 
 
 def _compile_asm_forms(
-    string_pool: _StringPool,
+    string_pool: CStringPool,
     descriptors: Sequence[Descriptor],
     *,
     allow_ambiguous_mnemonics: bool = False,
@@ -1116,7 +1069,7 @@ def _compile_descriptor_set(
     schedule_class_ids = {schedule_class.name: i for i, schedule_class in enumerate(schedule_classes)}
     enum_domain_ids = {domain.name: i for i, domain in enumerate(enum_domains)}
 
-    string_pool = _StringPool(spec.c_enum_prefix)
+    string_pool = CStringPool(spec.c_enum_prefix)
     string_pool.intern("empty", "")
     string_pool.intern("set_key", spec.key)
     if spec.target_key is not None:
@@ -1478,7 +1431,7 @@ def _emit_string_table(compiled: _CompiledDescriptorSet, lines: list[str]) -> No
     )
     for entry in pool.entries:
         length = len(entry.value.encode())
-        escaped = _c_string_literal(entry.value)
+        escaped = c_string_literal(entry.value)
         lines.append(f'    LOOM_BSTRING_LITERAL({length}, "{escaped}")')
     lines[-1] += ";"
     lines.append("// clang-format on")
@@ -1493,22 +1446,18 @@ def _emit_string_table(compiled: _CompiledDescriptorSet, lines: list[str]) -> No
         else:
             previous_entry = entries_by_label[previous_label]
             previous_enum_name = f"{pool.c_enum_prefix}_STRING_{previous_label}"
-            lines.append(f'  {enum_name} = {previous_enum_name} + sizeof("{_c_string_literal(previous_entry.value)}"),')
+            lines.append(f'  {enum_name} = {previous_enum_name} + sizeof("{c_string_literal(previous_entry.value)}"),')
         previous_label = entry.label
     if previous_label is None:
         lines.append(f"  {pool.c_enum_prefix}_STRING_END = 0,")
     else:
         previous_entry = entries_by_label[previous_label]
         previous_enum_name = f"{pool.c_enum_prefix}_STRING_{previous_label}"
-        lines.append(f'  {pool.c_enum_prefix}_STRING_END = {previous_enum_name} + sizeof("{_c_string_literal(previous_entry.value)}"),')
+        lines.append(f'  {pool.c_enum_prefix}_STRING_END = {previous_enum_name} + sizeof("{c_string_literal(previous_entry.value)}"),')
     lines.append("};")
     lines.append("")
     lines.append(f'static_assert({pool.c_enum_prefix}_STRING_END == sizeof(k{spec.c_table_prefix}StringData) - 1, "descriptor string offsets must cover the table payload");')
     lines.append("")
-
-
-def _c_string_literal(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
 
 def _emit_array(
