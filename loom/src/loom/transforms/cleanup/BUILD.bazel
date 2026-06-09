@@ -16,6 +16,10 @@ loom_cc_library(
     name = "canonicalize",
     srcs = ["canonicalize.c"],
     hdrs = ["canonicalize.h"],
+    visibility = [
+        "//loom/src/loom/pass:__pkg__",
+        "//loom/src/loom/transforms/symbol:__pkg__",
+    ],
     deps = [
         "//loom/src/loom/analysis:condition_facts",
         "//loom/src/loom/analysis:symbolic_expr",

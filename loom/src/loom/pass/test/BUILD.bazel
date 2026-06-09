@@ -4,26 +4,16 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
-    "loom_cc_library",
-    "loom_cc_test",
-)
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = [
+        "//loom/src/loom/pass:__pkg__",
+        "//loom/src/loom/pass/testing:__pkg__",
+        "//loom/src/loom/tools/loom-check:__pkg__",
+    ],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-loom_assert_no_dependencies(
-    name = "registry_no_production_pass_deps",
-    dependencies = [
-        "//loom/src/loom/pass:builtin_registry",
-        "//loom/src/loom/transforms/cleanup:canonicalize",
-    ],
-    targets = [":registry"],
 )
 
 loom_cc_library(

@@ -217,6 +217,13 @@ loom_cc_library(
     name = "builtin_registry",
     srcs = ["builtin_registry.c"],
     hdrs = ["builtin_registry.h"],
+    visibility = [
+        "//loom/binding/c:__pkg__",
+        "//loom/src/loom/codegen/low:__pkg__",
+        "//loom/src/loom/tooling/compile:__pkg__",
+        "//loom/src/loom/tools/loom-check:__pkg__",
+        "//loom/src/loom/tools/loom-opt:__pkg__",
+    ],
     deps = [
         ":registry",
         "//loom/src/loom/codegen/low:pass_environment",
