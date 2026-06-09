@@ -18,26 +18,6 @@ package(
 )
 
 loom_assert_no_dependencies(
-    name = "low_transforms_no_target_implementation_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
-        "//loom/src/loom/target/arch/spirv:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-        "//loom/src/loom/target/test:low_registry",
-    ],
-    targets = [
-        ":allocation",
-        ":dce",
-        ":operand_forms",
-        ":source_to_low",
-        ":target_legalize",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "low_transform_fast_paths_no_descriptor_registry_dep",
     dependencies = ["//loom/src/loom/target:low_descriptor_registry"],
     targets = [

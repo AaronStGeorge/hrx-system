@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
@@ -19,55 +18,31 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
+_SPIRV_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "core_target_interfaces_no_spirv_target_deps",
-    dependencies = [
-        ":abi",
-        ":cooperative_properties",
-        ":descriptors",
-        ":features",
-        ":isa",
-        ":lower",
-        ":low_verify",
-        ":low_registry",
-        ":math_policy",
-        ":module_contract",
-        ":packet_rows",
-        ":provider",
-        ":registers",
-        ":scalar_types",
-        ":target_records",
-        ":value_types",
-    ],
-    targets = [
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:provider",
-    ],
-)
+_SPIRV_CONTRACT_VISIBILITY = ["//loom/src/loom/target/arch/spirv/contracts:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "core_tools_no_spirv_target_provider_deps",
-    dependencies = [
-        ":low_registry",
-        ":provider",
-    ],
-    targets = [
-        "//loom/src/loom/tools/iree-run-loom:main",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:loom-check-test",
-        "//loom/src/loom/tools/loom-check:main",
-        "//loom/src/loom/tools/loom-check:provider",
-    ],
-)
+_SPIRV_C_API_VISIBILITY = ["//loom/binding/c:__pkg__"]
+
+_SPIRV_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/spirv:__pkg__"]
+
+_SPIRV_PROVIDER_VISIBILITY = [
+    "//loom/src/loom/target/all:__pkg__",
+    "//loom/src/loom/target/configured:__pkg__",
+    "//loom/src/loom/tools/iree-benchmark-loom:__pkg__",
+    "//loom/src/loom/tools/loom-compile:__pkg__",
+    "//loom/src/loom/tooling/target/spirv/execution:__pkg__",
+] + _SPIRV_C_API_VISIBILITY
+
+_SPIRV_TOOLING_VISIBILITY = [
+    "//loom/src/loom/tooling/target/spirv:__pkg__",
+    "//loom/src/loom/tooling/target/spirv/execution:__pkg__",
+]
 
 #===------------------------------------------------------------------------===#
 # SPIR-V low descriptors
@@ -94,12 +69,14 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=spirv_logical_core"],
     generator = "//loom/py/loom/gen:spirv_low_descriptor_shard",
+    visibility = _SPIRV_CONTRACT_VISIBILITY + _SPIRV_EMIT_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
 loom_cc_library(
     name = "isa",
     hdrs = ["isa.h"],
+    visibility = _SPIRV_EMIT_VISIBILITY,
 )
 
 loom_generated_textual_header(
@@ -116,6 +93,7 @@ loom_cc_library(
     srcs = ["features.c"],
     hdrs = ["features.h"],
     textual_hdrs = [":features_tables.inl"],
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_EMIT_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":isa",
         "//runtime/src/iree/base",
@@ -126,6 +104,7 @@ loom_cc_library(
     name = "scalar_types",
     srcs = ["scalar_types.c"],
     hdrs = ["scalar_types.h"],
+    visibility = _SPIRV_EMIT_VISIBILITY,
     deps = [
         ":features",
         "//loom/src/loom/util:numeric_format",
@@ -136,6 +115,7 @@ loom_cc_library(
 loom_cc_library(
     name = "abi",
     hdrs = ["abi.h"],
+    visibility = _SPIRV_EMIT_VISIBILITY,
     deps = [
         ":value_types",
         "//loom/src/loom/ir",
@@ -146,6 +126,7 @@ loom_cc_library(
 loom_cc_library(
     name = "value_types",
     hdrs = ["value_types.h"],
+    visibility = _SPIRV_EMIT_VISIBILITY,
     deps = [
         ":isa",
         ":scalar_types",
@@ -165,6 +146,7 @@ loom_cc_library(
     srcs = ["packet_rows.c"],
     hdrs = ["packet_rows.h"],
     textual_hdrs = [":packet_rows_tables.inl"],
+    visibility = _SPIRV_EMIT_VISIBILITY,
     deps = [
         ":descriptors",
         ":isa",
@@ -177,6 +159,7 @@ loom_cc_library(
     name = "registers",
     srcs = ["registers.c"],
     hdrs = ["registers.h"],
+    visibility = _SPIRV_EMIT_VISIBILITY,
     deps = [
         ":descriptors_ids",
         ":scalar_types",
@@ -198,6 +181,7 @@ loom_cc_library(
     srcs = ["cooperative_properties.c"],
     hdrs = ["cooperative_properties.h"],
     textual_hdrs = [":cooperative_properties_tables.inl"],
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":descriptors_ids",
         ":features",
@@ -211,6 +195,7 @@ loom_cc_library(
 loom_cc_library(
     name = "profile",
     hdrs = ["profile.h"],
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":cooperative_properties",
         "//runtime/src/iree/base",
@@ -221,6 +206,7 @@ loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_EMIT_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":features",
         "//loom/src/loom/target:types",
@@ -247,6 +233,7 @@ loom_generated_cc_library(
         "ops/tables.c",
     ],
     generator = "//loom/py/loom/gen:c_tables_generator",
+    visibility = _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":target_records",
         "//loom/src/loom/error:error_defs",
@@ -273,6 +260,7 @@ loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
+    visibility = _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":descriptors",
         "//loom/src/loom/codegen/low:descriptors",
@@ -286,6 +274,7 @@ loom_cc_library(
     name = "module_contract",
     srcs = ["module_contract.c"],
     hdrs = ["module_contract.h"],
+    visibility = _SPIRV_EMIT_VISIBILITY,
     deps = [
         "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/target:types",
@@ -297,6 +286,7 @@ loom_cc_library(
     name = "low_verify",
     srcs = ["low_verify.c"],
     hdrs = ["low_verify.h"],
+    visibility = _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":abi",
         ":descriptors",
@@ -360,6 +350,7 @@ loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
+    visibility = _SPIRV_PROVIDER_VISIBILITY,
     deps = [
         ":low_registry",
         ":low_verify",
@@ -376,6 +367,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
+    visibility = _SPIRV_CHECK_VISIBILITY,
     deps = [
         ":provider",
         "//loom/src/loom/tools/loom-check:provider",

@@ -23,47 +23,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "low_codegen_no_target_implementation_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
-        "//loom/src/loom/target/arch/spirv:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-        "//loom/src/loom/target/test:low_registry",
-    ],
-    targets = [
-        ":allocation",
-        ":allocation_materialization",
-        ":addressability",
-        ":descriptors",
-        ":descriptor_traits",
-        ":descriptors_manifest",
-        ":diagnostics",
-        ":function",
-        ":lower",
-        ":memory_access",
-        ":move_sequence",
-        ":packet",
-        ":packet_hazard_plan",
-        ":packet_hazard_plan_json",
-        ":packet_progress",
-        ":packet_asm",
-        ":packet_json",
-        ":placement",
-        ":frame",
-        ":pipeline",
-        ":pass_environment",
-        ":source_memory_plan",
-        ":source_selection",
-        ":storage_lease",
-        ":storage_layout",
-        ":text_asm",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "low_codegen_fast_paths_no_descriptor_registry_dep",
     dependencies = ["//loom/src/loom/target:low_descriptor_registry"],
     targets = [

@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -16,77 +15,17 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
+_LLVMIR_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "llvmir_core_no_target_specific_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
-        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
-    ],
-    targets = [":core"],
-)
-
-loom_assert_no_dependencies(
-    name = "core_target_interfaces_no_llvmir_deps",
-    dependencies = [
-        ":llvmir",
-        "//loom/src/loom/ops/llvmir",
-    ],
-    targets = [
-        "//loom/src/loom/target:artifact_plan",
-        "//loom/src/loom/target:contract",
-        "//loom/src/loom/target:function_contract",
-        "//loom/src/loom/target:launch",
-        "//loom/src/loom/target:low_legality",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:math_policy",
-        "//loom/src/loom/target:types",
-    ],
-)
-
-loom_assert_no_dependencies(
-    name = "core_tools_no_llvmir_tooling_deps",
-    dependencies = [
-        ":core",
-        ":loom_check",
-        ":target_registry",
-        "//loom/src/loom/target/tool:llvm",
-    ],
-    targets = [
-        "//loom/src/loom/tools/iree-run-loom",
-        "//loom/src/loom/tools/iree-run-loom:main",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:loom-check-test",
-        "//loom/src/loom/tools/loom-check:main",
-        "//loom/src/loom/tools/loom-check:provider",
-    ],
-)
-
-loom_assert_no_dependencies(
-    name = "llvmir_lowering_no_target_specific_provider_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/x86:packed_dot_vector",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:legality",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
-        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
-        "//loom/src/loom/target/emit/llvmir/x86:legality",
-    ],
-    targets = [
-        ":legality",
-        ":lower",
-    ],
-)
+_LLVMIR_TARGET_VISIBILITY = [
+    "//loom/src/loom/target/emit/llvmir/amdgpu:__pkg__",
+    "//loom/src/loom/target/emit/llvmir/x86:__pkg__",
+]
 
 #===------------------------------------------------------------------------===#
 # Target-neutral LLVMIR core
@@ -117,6 +56,7 @@ loom_cc_library(
         "text_writer.h",
         "verify.h",
     ],
+    visibility = _LLVMIR_TARGET_VISIBILITY,
     deps = [
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
@@ -129,6 +69,7 @@ loom_cc_library(
     name = "target_env",
     srcs = ["target_env.c"],
     hdrs = ["target_env.h"],
+    visibility = _LLVMIR_TARGET_VISIBILITY,
     deps = [
         ":core",
         "//loom/src/loom/target:launch",
@@ -141,6 +82,7 @@ loom_cc_library(
     name = "target_presets",
     srcs = ["target_presets.c"],
     hdrs = ["target_presets.h"],
+    visibility = _LLVMIR_TARGET_VISIBILITY,
     deps = [
         ":target_env",
         "//loom/src/loom/target:types",
@@ -159,9 +101,6 @@ loom_cc_library(
     ],
 )
 
-# Compatibility umbrella for developer tools and legacy callers that want every
-# built-in LLVMIR provider. Embedders that care about target bloat should depend
-# on :core plus explicit provider packages instead.
 loom_cc_library(
     name = "llvmir",
     hdrs = ["intrinsics.h"],
@@ -218,6 +157,7 @@ loom_cc_library(
         "lower.h",
         "lower/internal.h",
     ],
+    visibility = _LLVMIR_TARGET_VISIBILITY,
     deps = [
         ":core",
         ":target_env",
@@ -246,6 +186,7 @@ loom_cc_library(
     name = "legality",
     srcs = ["legality.c"],
     hdrs = ["legality.h"],
+    visibility = _LLVMIR_TARGET_VISIBILITY,
     deps = [
         ":target_env",
         "//loom/src/loom/ir",
@@ -313,6 +254,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
+    visibility = _LLVMIR_CHECK_VISIBILITY,
     deps = [
         ":loom_check",
         "//loom/src/loom/tools/loom-check:provider",

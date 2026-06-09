@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -15,43 +14,6 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-loom_assert_no_dependencies(
-    name = "allocation_no_target_implementation_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
-        "//loom/src/loom/target/arch/spirv:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-        "//loom/src/loom/target/test:low_registry",
-    ],
-    targets = [
-        ":active_set",
-        ":active_unit",
-        ":assignment",
-        ":assignment_map",
-        ":coalescing",
-        ":copy_decision",
-        ":diagnostics",
-        ":edge_copy",
-        ":interval_assignment",
-        ":interval_order",
-        ":live_range",
-        ":move_topology",
-        ":packet_move",
-        ":search",
-        ":spill_plan",
-        ":spill_traffic",
-        ":storage",
-        ":storage_lease",
-        ":table",
-        ":target_constraints",
-        ":unit_location",
-        ":unit_liveness",
-    ],
 )
 
 loom_cc_library(

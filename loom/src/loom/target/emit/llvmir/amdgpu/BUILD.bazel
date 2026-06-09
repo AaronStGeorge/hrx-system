@@ -7,15 +7,18 @@
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+_LLVMIR_VISIBILITY = ["//loom/src/loom/target/emit/llvmir:__pkg__"]
 
 loom_cc_library(
     name = "intrinsics",
     srcs = ["intrinsics.c"],
     hdrs = ["intrinsics.h"],
+    visibility = _LLVMIR_VISIBILITY,
     deps = [
         "//loom/src/loom/target/emit/llvmir:core",
         "//runtime/src/iree/base",
@@ -26,6 +29,7 @@ loom_cc_library(
     name = "lower",
     srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
+    visibility = _LLVMIR_VISIBILITY,
     deps = [
         ":intrinsics",
         "//loom/src/loom/ops/llvmir",
@@ -38,6 +42,7 @@ loom_cc_library(
     name = "legality",
     srcs = ["legality.c"],
     hdrs = ["legality.h"],
+    visibility = _LLVMIR_VISIBILITY,
     deps = [
         "//loom/src/loom/ops/llvmir",
         "//loom/src/loom/target/emit/llvmir:legality",
@@ -49,6 +54,7 @@ loom_cc_library(
     name = "target_env",
     srcs = ["target_env.c"],
     hdrs = ["target_env.h"],
+    visibility = _LLVMIR_VISIBILITY,
     deps = [
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/amdgpu:target_info_defs",

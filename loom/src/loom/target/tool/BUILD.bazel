@@ -6,37 +6,20 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
+_LLVM_TOOL_VISIBILITY = ["//loom/src/loom/target/emit/llvmir:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "tool_runners_no_target_implementation_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-        "//loom/src/loom/target/arch/spirv:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/emit/llvmir:core",
-    ],
-    targets = [
-        ":llvm",
-        ":process",
-        ":spirv",
-        ":wasm",
-    ],
-)
+_SPIRV_TOOL_VISIBILITY = ["//loom/src/loom/target/emit/spirv:__pkg__"]
+
+_WASM_TOOL_VISIBILITY = ["//loom/src/loom/target/emit/wasm:__pkg__"]
 
 #===------------------------------------------------------------------------===#
 # External tool runners
@@ -55,6 +38,7 @@ loom_cc_library(
     name = "llvm",
     srcs = ["llvm.c"],
     hdrs = ["llvm.h"],
+    visibility = _LLVM_TOOL_VISIBILITY,
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:path",
@@ -67,6 +51,7 @@ loom_cc_library(
     name = "spirv",
     srcs = ["spirv.c"],
     hdrs = ["spirv.h"],
+    visibility = _SPIRV_TOOL_VISIBILITY,
     deps = [
         ":process",
         "//runtime/src/iree/base",
@@ -79,6 +64,7 @@ loom_cc_library(
     name = "wasm",
     srcs = ["wasm.c"],
     hdrs = ["wasm.h"],
+    visibility = _WASM_TOOL_VISIBILITY,
     deps = [
         ":process",
         "//runtime/src/iree/base",

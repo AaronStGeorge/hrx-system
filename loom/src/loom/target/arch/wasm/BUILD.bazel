@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
@@ -18,46 +17,21 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
+_WASM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "core_target_interfaces_no_wasm_target_deps",
-    dependencies = [
-        ":descriptors",
-        ":low_verify",
-        ":low_registry",
-        ":math_policy",
-        ":provider",
-        ":target_records",
-    ],
-    targets = [
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:low_legality",
-        "//loom/src/loom/target:provider",
-    ],
-)
+_WASM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/emit/wasm/contracts:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "core_tools_no_wasm_target_provider_deps",
-    dependencies = [
-        ":low_registry",
-        ":provider",
-    ],
-    targets = [
-        "//loom/src/loom/tools/iree-run-loom:main",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:loom-check-test",
-        "//loom/src/loom/tools/loom-check:main",
-        "//loom/src/loom/tools/loom-check:provider",
-    ],
-)
+_WASM_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/wasm:__pkg__"]
+
+_WASM_PROVIDER_VISIBILITY = [
+    "//loom/src/loom/target/all:__pkg__",
+    "//loom/src/loom/target/configured:__pkg__",
+]
 
 #===------------------------------------------------------------------------===#
 # Wasm low descriptors
@@ -67,6 +41,7 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=wasm_core_simd128"],
     generator = "//loom/py/loom/gen:wasm_low_descriptor_shard",
+    visibility = _WASM_CONTRACT_VISIBILITY + _WASM_EMIT_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -156,6 +131,7 @@ loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
+    visibility = _WASM_PROVIDER_VISIBILITY,
     deps = [
         ":low_registry",
         ":low_verify",
@@ -172,6 +148,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
+    visibility = _WASM_CHECK_VISIBILITY,
     deps = [
         ":provider",
         "//loom/src/loom/tools/loom-check:provider",

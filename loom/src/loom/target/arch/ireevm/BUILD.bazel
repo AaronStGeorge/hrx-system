@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_generated_cc_library",
     "loom_low_descriptor_cc_library",
@@ -17,49 +16,23 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
+_IREEVM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "core_target_interfaces_no_ireevm_target_deps",
-    dependencies = [
-        ":descriptors",
-        ":lower",
-        ":low_registry",
-        ":math_policy",
-        ":ops",
-        ":pass_registry",
-        ":provider",
-        ":ref_lifetime_pass",
-        ":target_records",
-    ],
-    targets = [
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:low_legality",
-        "//loom/src/loom/target:math_policy",
-        "//loom/src/loom/target:provider",
-    ],
-)
+_IREEVM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/contracts:__pkg__"]
 
-loom_assert_no_dependencies(
-    name = "core_tools_no_ireevm_target_provider_deps",
-    dependencies = [
-        ":low_registry",
-        ":provider",
-    ],
-    targets = [
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:loom-check-test",
-        "//loom/src/loom/tools/loom-check:main",
-        "//loom/src/loom/tools/loom-check:provider",
-    ],
-)
+_IREEVM_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/ireevm:__pkg__"]
+
+_IREEVM_EXECUTION_VISIBILITY = ["//loom/src/loom/tooling/execution/ireevm:__pkg__"]
+
+_IREEVM_PROVIDER_VISIBILITY = [
+    "//loom/src/loom/target/all:__pkg__",
+    "//loom/src/loom/target/configured:__pkg__",
+] + _IREEVM_EMIT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # IREE VM low descriptors
@@ -69,6 +42,7 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=ireevm_core"],
     generator = "//loom/py/loom/gen:ireevm_low_descriptor_shard",
+    visibility = _IREEVM_CONTRACT_VISIBILITY + _IREEVM_EMIT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -105,6 +79,7 @@ loom_generated_cc_library(
         "ops/tables.c",
     ],
     generator = "//loom/py/loom/gen:c_tables_generator",
+    visibility = _IREEVM_EXECUTION_VISIBILITY,
     deps = [
         ":target_records",
         "//loom/src/loom/error:emitter",
@@ -140,6 +115,7 @@ loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
+    visibility = _IREEVM_EXECUTION_VISIBILITY,
     deps = [
         ":descriptors",
         ":target_records",
@@ -189,6 +165,7 @@ loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
+    visibility = _IREEVM_PROVIDER_VISIBILITY,
     deps = [
         ":low_registry",
         ":lower",
@@ -206,6 +183,7 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
+    visibility = _IREEVM_CHECK_VISIBILITY,
     deps = [
         ":provider",
         "//loom/src/loom/tools/loom-check:provider",
