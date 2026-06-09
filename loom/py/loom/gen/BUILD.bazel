@@ -123,6 +123,7 @@ iree_py_test(
 C_TABLES_DEPS = [
     "//loom/py/loom:core",
     "//loom/py/loom/dialect:package",
+    "//loom/py/loom/gen/support:files",
     "//loom/py/loom/gen/support:generated_file",
     "//loom/py/loom/target/arch/amdgpu:dialect",
     "//loom/py/loom/target/arch/ireevm:dialect",

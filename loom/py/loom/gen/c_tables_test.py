@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import argparse
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -72,6 +73,7 @@ from loom.dsl import (
     TypeSemantic,
     UnpackedPayloadBitCountMatchesStorage,
 )
+from loom.gen import c_tables
 from loom.gen.c_tables import (
     TYPE_CONSTRAINT_MAP,
     generate_builders_c,
@@ -92,6 +94,36 @@ def _raises_value_error(pattern: str) -> Iterator[None]:
             raise AssertionError(f"{exc!s} did not match {pattern!r}") from exc
     else:
         raise AssertionError(f"expected ValueError matching {pattern!r}")
+
+
+def test_load_dialect_generation_calls_only_requested_loader() -> None:
+    calls: list[str] = []
+    expected = c_tables.DialectGeneration(dialect=object(), ops=[], table_shards=None)
+    other = c_tables.DialectGeneration(dialect=object(), ops=[], table_shards=None)
+
+    def load_other() -> c_tables.DialectGeneration:
+        calls.append("other")
+        return other
+
+    def load_wanted() -> c_tables.DialectGeneration:
+        calls.append("wanted")
+        return expected
+
+    original_loaders = c_tables._DIALECT_GENERATION_LOADERS
+    try:
+        c_tables._DIALECT_GENERATION_LOADERS = (
+            ("other", load_other),
+            ("wanted", load_wanted),
+        )
+        actual = c_tables._load_dialect_generation(
+            argparse.ArgumentParser(),
+            "wanted",
+        )
+    finally:
+        c_tables._DIALECT_GENERATION_LOADERS = original_loaders
+
+    assert actual is expected
+    assert calls == ["wanted"]
 
 
 def test_type_constraint_map_covers_every_constraint() -> None:

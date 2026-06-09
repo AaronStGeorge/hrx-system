@@ -126,6 +126,7 @@ iree_py_library(
   DEPS
     loom::py::loom::core
     loom::py::loom::dialect::package
+    loom::py::loom::gen::support::files
     loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::dialect
     loom::py::loom::target::arch::ireevm::dialect
@@ -145,6 +146,7 @@ iree_py_library(
   DEPS
     loom::py::loom::core
     loom::py::loom::dialect::package
+    loom::py::loom::gen::support::files
     loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::dialect
     loom::py::loom::target::arch::ireevm::dialect
