@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/matrix_contract_projection.h"
+#include "loom/target/arch/amdgpu/matrix/projection.h"
 
 #include "loom/analysis/contract_storage.h"
 

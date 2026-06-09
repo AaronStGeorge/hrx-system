@@ -52,7 +52,7 @@ loom_assert_no_dependencies(
 
 loom_assert_no_dependencies(
     name = "amdgpu_descriptor_shards_no_matrix_contract_dep",
-    dependencies = [":matrix_contract"],
+    dependencies = ["//loom/src/loom/target/arch/amdgpu/matrix:contract"],
     targets = [
         ":cdna3_descriptors",
         ":cdna4_descriptors",
@@ -71,8 +71,6 @@ loom_assert_no_dependencies(
         ":rdna4_gfx125x_descriptors",
         ":rdna4_descriptors",
         ":low_registry",
-        ":matrix_contract",
-        ":matrix_contract_projection",
         ":math_policy",
         ":packet_diagnostics",
         ":provider",
@@ -321,8 +319,6 @@ _AMDGPU_TARGET_REF_GENERATOR = "//loom/py/loom/gen:amdgpu_target_refs"
 _AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidates"
 
 _AMDGPU_COMPARE_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_compare_candidates"
-
-_AMDGPU_MATRIX_CONTRACT_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_matrix_contract_tables"
 
 _AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
 
@@ -703,8 +699,6 @@ loom_cc_library(
         ":error_defs",
         ":lower_kinds",
         ":lower_materializers",
-        ":matrix_contract",
-        ":matrix_contract_projection",
         ":target_id",
         ":target_info",
         ":target_refs",
@@ -751,6 +745,8 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu/contracts:view",
         "//loom/src/loom/target/arch/amdgpu/contracts:view_lower_rules",
         "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
+        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
+        "//loom/src/loom/target/arch/amdgpu/matrix:projection",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
@@ -797,7 +793,6 @@ loom_cc_library(
     deps = [
         ":descriptor_semantics",
         ":encoding",
-        ":matrix_contract",
         ":matrix_wait_states",
         ":target_id",
         ":target_info",
@@ -811,6 +806,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
@@ -1145,75 +1141,3 @@ loom_low_descriptor_exclude_from_cmake_all(
 #===------------------------------------------------------------------------===#
 # AMDGPU matrix contracts
 #===------------------------------------------------------------------------===#
-
-loom_cc_library(
-    name = "matrix_contract_types",
-    hdrs = ["matrix_contract_types.h"],
-    deps = [
-        ":target_info_defs",
-        ":target_refs",
-        "//loom/src/loom/analysis:contract_roles",
-        "//loom/src/loom/analysis:matrix_fragment_layout",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "matrix_contract_tables",
-    args = ["--public-header=loom/target/arch/amdgpu/matrix_contract_tables.h"],
-    generator = _AMDGPU_MATRIX_CONTRACT_TABLE_GENERATOR,
-    deps = [
-        ":matrix_contract_types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "matrix_contract",
-    srcs = ["matrix_contract.c"],
-    hdrs = ["matrix_contract.h"],
-    deps = [
-        ":matrix_contract_tables",
-        ":matrix_contract_types",
-        ":target_info",
-        ":target_info_defs",
-        ":target_refs",
-        "//loom/src/loom/analysis:contract_roles",
-        "//loom/src/loom/analysis:matrix_fragment_layout",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "matrix_contract_projection",
-    srcs = ["matrix_contract_projection.c"],
-    hdrs = ["matrix_contract_projection.h"],
-    deps = [
-        ":matrix_contract",
-        "//loom/src/loom/analysis:contract",
-        "//loom/src/loom/analysis:contract_storage",
-    ],
-)
-
-loom_cc_test(
-    name = "matrix_contract_test",
-    srcs = ["matrix_contract_test.cc"],
-    deps = [
-        ":matrix_contract",
-        ":target_refs",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "matrix_contract_projection_test",
-    srcs = ["matrix_contract_projection_test.cc"],
-    deps = [
-        ":matrix_contract",
-        ":matrix_contract_projection",
-        "//loom/src/loom/analysis:contract_storage",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)

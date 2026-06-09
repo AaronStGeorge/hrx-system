@@ -13,8 +13,8 @@
 // requirements without hard-coding AMDGPU intrinsic names throughout generic
 // tile/vector passes.
 
-#ifndef LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_TYPES_H_
-#define LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_TYPES_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_MATRIX_TYPES_H_
+#define LOOM_TARGET_ARCH_AMDGPU_MATRIX_TYPES_H_
 
 #include "iree/base/api.h"
 #include "loom/analysis/contract_roles.h"
@@ -402,4 +402,4 @@ typedef struct loom_amdgpu_matrix_contract_match_diagnostic_t {
 }
 #endif
 
-#endif  // LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_TYPES_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_MATRIX_TYPES_H_

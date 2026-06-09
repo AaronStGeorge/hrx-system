@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/matrix_contract.h"
+#include "loom/target/arch/amdgpu/matrix/contract.h"
 
-#include "loom/target/arch/amdgpu/matrix_contract_tables.h"
+#include "loom/target/arch/amdgpu/matrix/contract_tables.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 #define MATRIX_TILE_SHAPE(row_count_value, column_count_value, \

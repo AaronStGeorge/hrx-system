@@ -6,11 +6,11 @@
 
 // Projection from generic Loom contract requests to AMDGPU matrix contracts.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_PROJECTION_H_
-#define LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_PROJECTION_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_MATRIX_PROJECTION_H_
+#define LOOM_TARGET_ARCH_AMDGPU_MATRIX_PROJECTION_H_
 
 #include "loom/analysis/contract.h"
-#include "loom/target/arch/amdgpu/matrix_contract.h"
+#include "loom/target/arch/amdgpu/matrix/contract.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,4 +31,4 @@ bool loom_amdgpu_matrix_contract_match_request_from_contract(
 }
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_PROJECTION_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_MATRIX_PROJECTION_H_

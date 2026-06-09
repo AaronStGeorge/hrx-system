@@ -694,8 +694,6 @@ loom_cc_library(
     ::error_defs
     ::lower_kinds
     ::lower_materializers
-    ::matrix_contract
-    ::matrix_contract_projection
     ::target_id
     ::target_info
     ::target_refs
@@ -741,6 +739,8 @@ loom_cc_library(
     loom::target::arch::amdgpu::contracts::view
     loom::target::arch::amdgpu::contracts::view_lower_rules
     loom::target::arch::amdgpu::hal::kernel_abi
+    loom::target::arch::amdgpu::matrix::contract
+    loom::target::arch::amdgpu::matrix::projection
     loom::target::low_legality
     loom::target::registers
     loom::util::fact_table
@@ -809,7 +809,6 @@ loom_cc_library(
   DEPS
     ::descriptor_semantics
     ::encoding
-    ::matrix_contract
     ::matrix_wait_states
     ::target_id
     ::target_info
@@ -825,6 +824,7 @@ loom_cc_library(
     loom::codegen::low::schedule
     loom::ir
     loom::ops::low
+    loom::target::arch::amdgpu::matrix::contract
     loom::util::json
     loom::util::stream
   PUBLIC
@@ -4547,106 +4547,6 @@ if(LOOM_TARGET_ARCH_AMDGPU)
 loom_low_descriptor_exclude_from_all(
   CC_LIBRARIES
     "low_registry"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    matrix_contract_types
-  HDRS
-    "matrix_contract_types.h"
-  DEPS
-    ::target_info_defs
-    ::target_refs
-    iree::base
-    loom::analysis::contract_roles
-    loom::analysis::matrix_fragment_layout
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    matrix_contract_tables
-  GENERATOR
-    loom::py::loom::gen::amdgpu_matrix_contract_tables
-  ARGS
-    "--public-header=loom/target/arch/amdgpu/matrix_contract_tables.h"
-  DEPS
-    ::matrix_contract_types
-    iree::base
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    matrix_contract
-  HDRS
-    "matrix_contract.h"
-  SRCS
-    "matrix_contract.c"
-  DEPS
-    ::matrix_contract_tables
-    ::matrix_contract_types
-    ::target_info
-    ::target_info_defs
-    ::target_refs
-    iree::base
-    loom::analysis::contract_roles
-    loom::analysis::matrix_fragment_layout
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    matrix_contract_projection
-  HDRS
-    "matrix_contract_projection.h"
-  SRCS
-    "matrix_contract_projection.c"
-  DEPS
-    ::matrix_contract
-    loom::analysis::contract
-    loom::analysis::contract_storage
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
-    matrix_contract_test
-  SRCS
-    "matrix_contract_test.cc"
-  DEPS
-    ::matrix_contract
-    ::target_refs
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
-    matrix_contract_projection_test
-  SRCS
-    "matrix_contract_projection_test.cc"
-  DEPS
-    ::matrix_contract
-    ::matrix_contract_projection
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::analysis::contract_storage
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
 )
 endif()
 

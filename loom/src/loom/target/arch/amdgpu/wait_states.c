@@ -16,7 +16,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_semantics.h"
 #include "loom/target/arch/amdgpu/encoding.h"
-#include "loom/target/arch/amdgpu/matrix_contract.h"
+#include "loom/target/arch/amdgpu/matrix/contract.h"
 #include "loom/target/arch/amdgpu/matrix_wait_states.h"
 #include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"

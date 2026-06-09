@@ -11,8 +11,8 @@
 #include "loom/analysis/contract_vector.h"
 #include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
-#include "loom/target/arch/amdgpu/matrix_contract.h"
-#include "loom/target/arch/amdgpu/matrix_contract_projection.h"
+#include "loom/target/arch/amdgpu/matrix/contract.h"
+#include "loom/target/arch/amdgpu/matrix/projection.h"
 #include "loom/target/arch/amdgpu/target_id.h"
 
 typedef struct loom_amdgpu_matrix_target_facts_t {

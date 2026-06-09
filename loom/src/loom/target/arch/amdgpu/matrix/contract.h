@@ -13,10 +13,10 @@
 // requirements without hard-coding AMDGPU intrinsic names throughout generic
 // tile/vector passes.
 
-#ifndef LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_H_
-#define LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_H_
+#define LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_H_
 
-#include "loom/target/arch/amdgpu/matrix_contract_types.h"
+#include "loom/target/arch/amdgpu/matrix/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -95,4 +95,4 @@ loom_amdgpu_matrix_contract_select(
 }
 #endif
 
-#endif  // LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_H_

@@ -28,7 +28,7 @@ package(
 loom_assert_no_dependencies(
     name = "llvmir_core_no_target_specific_deps",
     dependencies = [
-        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
         "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
         "//loom/src/loom/target/emit/llvmir/x86:intrinsics",

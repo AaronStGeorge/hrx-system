@@ -434,10 +434,10 @@ def _emit_header() -> str:
         "",
         "// AMDGPU matrix contract descriptor tables.",
         "",
-        "#ifndef LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_TABLES_H_",
-        "#define LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_TABLES_H_",
+        "#ifndef LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_TABLES_H_",
+        "#define LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_TABLES_H_",
         "",
-        '#include "loom/target/arch/amdgpu/matrix_contract_types.h"',
+        '#include "loom/target/arch/amdgpu/matrix/types.h"',
         "",
         "#ifdef __cplusplus",
         'extern "C" {',
@@ -451,7 +451,7 @@ def _emit_header() -> str:
         '}  // extern "C"',
         "#endif",
         "",
-        "#endif  // LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_TABLES_H_",
+        "#endif  // LOOM_TARGET_ARCH_AMDGPU_MATRIX_CONTRACT_TABLES_H_",
     ]
     return "\n".join(lines) + "\n"
 
@@ -508,7 +508,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--public-header",
-        default="loom/target/arch/amdgpu/matrix_contract_tables.h",
+        default="loom/target/arch/amdgpu/matrix/contract_tables.h",
         help="Public include path for the generated header.",
     )
     args = parser.parse_args(argv)
