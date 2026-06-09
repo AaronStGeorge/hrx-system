@@ -7,7 +7,7 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/../iree-test-loom/testdata/amdgpu_hal_actual.loom",
-          "--benchmark=@store_i32",
+          "--benchmark=@store_i32_latency",
           "--device=amdgpu",
           "--measure=dispatch_complete",
           "--iterations=1",
@@ -22,7 +22,7 @@
       "stdout": {
         "contains": [
           "\"row\":\"plan\"",
-          "\"benchmark\":\"store_i32\"",
+          "\"benchmark\":\"store_i32_latency\"",
           { "regex": "\"case\":\"store_i32_case\"" },
           "\"measure\":\"dispatch_complete\"",
           "\"driver\":\"amdgpu\"",
@@ -41,7 +41,7 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/../iree-test-loom/testdata/amdgpu_hal_actual.loom",
-          "--benchmark=@store_then_double_i32",
+          "--benchmark=@store_then_double_i32_latency",
           "--device=amdgpu",
           "--measure=dispatch_complete",
           "--iterations=1",
@@ -56,7 +56,7 @@
       "stdout": {
         "contains": [
           "\"row\":\"plan\"",
-          "\"benchmark\":\"store_then_double_i32\"",
+          "\"benchmark\":\"store_then_double_i32_latency\"",
           { "regex": "\"case\":\"store_then_double_i32_case\"" },
           "\"actual_invocation_count\":2",
           "\"driver\":\"amdgpu\"",

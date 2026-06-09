@@ -42,6 +42,6 @@ check.case @store_then_double_i32_case {
   check.return
 }
 
-check.benchmark<@store_i32_case> @store_i32
+check.benchmark<@store_i32_case> @store_i32_latency
 
-check.benchmark<@store_then_double_i32_case> @store_then_double_i32
+check.benchmark<@store_then_double_i32_case> @store_then_double_i32_latency
