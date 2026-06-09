@@ -54,7 +54,7 @@ def _token_boundary_pattern() -> str:
 
 def _generated_comment() -> str:
     return generated_comment(
-        generator="loom.gen.textmate",
+        generator="loom.gen.editor.textmate",
         regenerate="python3 loom/py/loom/gen/run.py textmate",
     )
 

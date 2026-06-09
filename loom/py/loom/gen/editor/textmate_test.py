@@ -28,7 +28,7 @@ from loom.dialect.scf import ALL_SCF_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.view import ALL_VIEW_OPS
-from loom.gen.textmate import (
+from loom.gen.editor.textmate import (
     generate_all_grammars,
     generate_loom_grammar,
     generate_loom_test_grammar,

@@ -43,14 +43,10 @@ iree_py_test(
     "loom.gen.builders_pyi_test"
     "loom.gen.low_descriptor_shard_test"
     "loom.gen.low_descriptors_test"
-    "loom.gen.textmate_test"
   DEPS
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::low_descriptors
     loom::py::loom::core
-    loom::py::loom::dialect::package
-    loom::py::loom::error::error
-    loom::py::loom::gen::assembly::tokens
     loom::py::loom::gen::support::generated_file
     loom::py::loom::target::descriptor_sets
     loom::py::loom::target::test::descriptors
