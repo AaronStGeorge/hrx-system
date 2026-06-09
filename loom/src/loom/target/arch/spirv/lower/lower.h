@@ -6,8 +6,8 @@
 
 // SPIR-V source-to-low lowering policy.
 
-#ifndef LOOM_TARGET_ARCH_SPIRV_LOWER_H_
-#define LOOM_TARGET_ARCH_SPIRV_LOWER_H_
+#ifndef LOOM_TARGET_ARCH_SPIRV_LOWER_LOWER_H_
+#define LOOM_TARGET_ARCH_SPIRV_LOWER_LOWER_H_
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower/lower.h"
@@ -27,4 +27,4 @@ void loom_spirv_low_lower_policy_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_SPIRV_LOWER_H_
+#endif  // LOOM_TARGET_ARCH_SPIRV_LOWER_LOWER_H_

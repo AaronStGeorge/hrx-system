@@ -41,28 +41,6 @@ endif()
 if(LOOM_TARGET_ARCH_IREE_VM)
 loom_cc_library(
   NAME
-    lower
-  HDRS
-    "lower.h"
-  SRCS
-    "lower/registry.c"
-  DEPS
-    ::descriptors_ids
-    iree::base
-    loom::codegen::low::lower
-    loom::error::error_defs
-    loom::ir
-    loom::ops::low
-    loom::ops::scalar
-    loom::target::arch::ireevm::contracts
-    loom::target::arch::ireevm::ops
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
-loom_cc_library(
-  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -140,11 +118,11 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
-    ::lower
     ::math_policy
     ::pass_registry
     iree::base
     loom::pass::builder
+    loom::target::arch::ireevm::lower
     loom::target::arch::ireevm::ops
     loom::target::provider
   PUBLIC

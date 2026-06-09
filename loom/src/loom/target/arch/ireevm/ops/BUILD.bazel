@@ -17,6 +17,8 @@ package(
 
 _IREEVM_EXECUTION_VISIBILITY = ["//loom/src/loom/tooling/execution/ireevm:__pkg__"]
 
+_IREEVM_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/lower:__pkg__"]
+
 _IREEVM_ROOT_VISIBILITY = ["//loom/src/loom/target/arch/ireevm:__pkg__"]
 
 loom_generated_cc_library(
@@ -39,7 +41,7 @@ loom_generated_cc_library(
         "tables.c",
     ],
     generator = "//loom/py/loom/gen:c_tables_generator",
-    visibility = _IREEVM_ROOT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY,
+    visibility = _IREEVM_ROOT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY + _IREEVM_LOWER_VISIBILITY,
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

@@ -28,12 +28,22 @@ _IREEVM_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/ireevm:__pkg__"]
 
 _IREEVM_EXECUTION_VISIBILITY = ["//loom/src/loom/tooling/execution/ireevm:__pkg__"]
 
+_IREEVM_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/lower:__pkg__"]
+
 _IREEVM_OPS_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/ops:__pkg__"]
 
 _IREEVM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
 ] + _IREEVM_CHECK_PACKAGE_VISIBILITY + _IREEVM_EMIT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY
+
+_IREEVM_DESCRIPTOR_VISIBILITY = (
+    _IREEVM_CONTRACT_VISIBILITY +
+    _IREEVM_EMIT_VISIBILITY +
+    _IREEVM_EXECUTION_VISIBILITY
+)
+
+_IREEVM_DESCRIPTOR_IDS_VISIBILITY = _IREEVM_DESCRIPTOR_VISIBILITY + _IREEVM_LOWER_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # IREE VM low descriptors
@@ -43,7 +53,8 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=ireevm_core"],
     generator = "//loom/py/loom/gen:ireevm_low_descriptor_shard",
-    visibility = _IREEVM_CONTRACT_VISIBILITY + _IREEVM_EMIT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY,
+    ids_visibility = _IREEVM_DESCRIPTOR_IDS_VISIBILITY,
+    visibility = _IREEVM_DESCRIPTOR_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -57,23 +68,6 @@ loom_cc_library(
     visibility = _IREEVM_OPS_VISIBILITY,
     deps = [
         "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "lower",
-    srcs = ["lower/registry.c"],
-    hdrs = ["lower.h"],
-    deps = [
-        ":descriptors_ids",
-        "//loom/src/loom/codegen/low/lower",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/arch/ireevm/contracts",
-        "//loom/src/loom/target/arch/ireevm/ops",
         "//runtime/src/iree/base",
     ],
 )
@@ -135,11 +129,11 @@ loom_cc_library(
     visibility = _IREEVM_PROVIDER_VISIBILITY,
     deps = [
         ":low_registry",
-        ":lower",
         ":math_policy",
         ":pass_registry",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/ireevm/lower",
         "//loom/src/loom/target/arch/ireevm/ops",
         "//runtime/src/iree/base",
     ],

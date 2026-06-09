@@ -9,7 +9,7 @@
 #include "loom/target/arch/ireevm/contracts/core.h"
 #include "loom/target/arch/ireevm/contracts/core_lower_rules.h"
 #include "loom/target/arch/ireevm/descriptors.h"
-#include "loom/target/arch/ireevm/lower.h"
+#include "loom/target/arch/ireevm/lower/lower.h"
 #include "loom/target/arch/ireevm/ops/ops.h"
 
 static iree_string_view_t loom_ireevm_lower_module_string(

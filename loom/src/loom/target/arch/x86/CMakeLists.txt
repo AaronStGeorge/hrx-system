@@ -295,28 +295,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86)
-loom_cc_library(
-  NAME
-    lower
-  HDRS
-    "lower.h"
-    "lower/internal.h"
-  SRCS
-    "lower/packed_dot.c"
-    "lower/registry.c"
-  DEPS
-    ::register_classes
-    iree::base
-    loom::codegen::low::descriptors
-    loom::codegen::low::lower
-    loom::error::error_defs
-    loom::ir
-    loom::target::arch::x86::contracts
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
 loom_cc_test(
   NAME
     register_classes_test
@@ -354,9 +332,9 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
-    ::lower
     ::math_policy
     iree::base
+    loom::target::arch::x86::lower
     loom::target::arch::x86::ops
     loom::target::provider
   PUBLIC

@@ -7,7 +7,7 @@
 #include "loom/target/arch/ireevm/provider.h"
 
 #include "loom/target/arch/ireevm/low_registry.h"
-#include "loom/target/arch/ireevm/lower.h"
+#include "loom/target/arch/ireevm/lower/lower.h"
 #include "loom/target/arch/ireevm/math_policy.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/target/arch/ireevm/pass_registry.h"

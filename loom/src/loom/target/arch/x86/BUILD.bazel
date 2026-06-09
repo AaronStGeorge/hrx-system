@@ -27,6 +27,8 @@ _X86_CHECK_PACKAGE_VISIBILITY = ["//loom/src/loom/target/arch/x86/check:__pkg__"
 
 _X86_LLVMIR_VISIBILITY = ["//loom/src/loom/target/emit/llvmir/x86:__pkg__"]
 
+_X86_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/x86/lower:__pkg__"]
+
 _X86_NATIVE_VISIBILITY = ["//loom/src/loom/target/emit/native/x86:__pkg__"]
 
 _X86_OPS_VISIBILITY = ["//loom/src/loom/target/arch/x86/ops:__pkg__"]
@@ -262,30 +264,9 @@ loom_cc_library(
     name = "register_classes",
     srcs = ["register_classes.c"],
     hdrs = ["register_classes.h"],
-    visibility = _X86_NATIVE_VISIBILITY,
+    visibility = _X86_LOWER_VISIBILITY + _X86_NATIVE_VISIBILITY,
     deps = [
         "//loom/src/loom/codegen/low:descriptors",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "lower",
-    srcs = [
-        "lower/packed_dot.c",
-        "lower/registry.c",
-    ],
-    hdrs = [
-        "lower.h",
-        "lower/internal.h",
-    ],
-    deps = [
-        ":register_classes",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low/lower",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target/arch/x86/contracts",
         "//runtime/src/iree/base",
     ],
 )
@@ -320,9 +301,9 @@ loom_cc_library(
     visibility = _X86_PROVIDER_VISIBILITY,
     deps = [
         ":low_registry",
-        ":lower",
         ":math_policy",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/x86/lower",
         "//loom/src/loom/target/arch/x86/ops",
         "//runtime/src/iree/base",
     ],

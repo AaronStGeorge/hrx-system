@@ -31,6 +31,8 @@ _SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
 _SPIRV_EMIT_VISIBILITY = ["//loom/src/loom/target/emit/spirv:__pkg__"]
 
+_SPIRV_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/spirv/lower:__pkg__"]
+
 _SPIRV_OPS_VISIBILITY = ["//loom/src/loom/target/arch/spirv/ops:__pkg__"]
 
 _SPIRV_PROVIDER_VISIBILITY = [
@@ -45,6 +47,12 @@ _SPIRV_TOOLING_VISIBILITY = [
     "//loom/src/loom/tooling/target/spirv:__pkg__",
     "//loom/src/loom/tooling/target/spirv/execution:__pkg__",
 ]
+
+_SPIRV_DESCRIPTOR_VISIBILITY = (
+    _SPIRV_CONTRACT_VISIBILITY +
+    _SPIRV_EMIT_VISIBILITY +
+    _SPIRV_LOWER_VISIBILITY
+)
 
 #===------------------------------------------------------------------------===#
 # SPIR-V low descriptors
@@ -71,7 +79,7 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=spirv_logical_core"],
     generator = "//loom/py/loom/gen:spirv_low_descriptor_shard",
-    visibility = _SPIRV_CONTRACT_VISIBILITY + _SPIRV_EMIT_VISIBILITY,
+    visibility = _SPIRV_DESCRIPTOR_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -106,7 +114,7 @@ loom_cc_library(
     name = "scalar_types",
     srcs = ["scalar_types.c"],
     hdrs = ["scalar_types.h"],
-    visibility = _SPIRV_EMIT_VISIBILITY,
+    visibility = _SPIRV_EMIT_VISIBILITY + _SPIRV_LOWER_VISIBILITY,
     deps = [
         ":features",
         "//loom/src/loom/util:numeric_format",
@@ -117,7 +125,7 @@ loom_cc_library(
 loom_cc_library(
     name = "abi",
     hdrs = ["abi.h"],
-    visibility = _SPIRV_EMIT_VISIBILITY,
+    visibility = _SPIRV_EMIT_VISIBILITY + _SPIRV_LOWER_VISIBILITY,
     deps = [
         ":value_types",
         "//loom/src/loom/ir",
@@ -161,7 +169,7 @@ loom_cc_library(
     name = "registers",
     srcs = ["registers.c"],
     hdrs = ["registers.h"],
-    visibility = _SPIRV_EMIT_VISIBILITY,
+    visibility = _SPIRV_EMIT_VISIBILITY + _SPIRV_LOWER_VISIBILITY,
     deps = [
         ":descriptors_ids",
         ":scalar_types",
@@ -183,7 +191,7 @@ loom_cc_library(
     srcs = ["cooperative_properties.c"],
     hdrs = ["cooperative_properties.h"],
     textual_hdrs = [":cooperative_properties_tables.inl"],
-    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_LOWER_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":descriptors_ids",
         ":features",
@@ -197,7 +205,7 @@ loom_cc_library(
 loom_cc_library(
     name = "profile",
     hdrs = ["profile.h"],
-    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
+    visibility = _SPIRV_C_API_VISIBILITY + _SPIRV_LOWER_VISIBILITY + _SPIRV_TOOLING_VISIBILITY,
     deps = [
         ":cooperative_properties",
         "//runtime/src/iree/base",
@@ -278,46 +286,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "lower",
-    srcs = [
-        "lower/matrix.c",
-        "lower/registry.c",
-        "lower/workgroup.c",
-    ],
-    hdrs = [
-        "lower.h",
-        "lower/matrix.h",
-        "lower/workgroup.h",
-    ],
-    deps = [
-        ":abi",
-        ":cooperative_properties",
-        ":descriptors",
-        ":descriptors_ids",
-        ":profile",
-        ":registers",
-        ":scalar_types",
-        "//loom/src/loom/analysis:contract_vector",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:source_memory_plan",
-        "//loom/src/loom/codegen/low/lower",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ir:facts",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/kernel",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/target:registers",
-        "//loom/src/loom/target/arch/spirv/contracts",
-        "//loom/src/loom/util:fact_table",
-        "//loom/src/loom/util:math",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
@@ -325,9 +293,9 @@ loom_cc_library(
     deps = [
         ":low_registry",
         ":low_verify",
-        ":lower",
         ":math_policy",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/spirv/lower",
         "//loom/src/loom/target/arch/spirv/ops",
         "//runtime/src/iree/base",
     ],

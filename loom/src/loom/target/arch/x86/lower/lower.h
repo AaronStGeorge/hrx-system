@@ -9,8 +9,8 @@
 // The x86 arch package owns descriptor-level lowering decisions that should be
 // shared by native assembly, LLVMIR, and future direct object emitters.
 
-#ifndef LOOM_TARGET_ARCH_X86_LOWER_H_
-#define LOOM_TARGET_ARCH_X86_LOWER_H_
+#ifndef LOOM_TARGET_ARCH_X86_LOWER_LOWER_H_
+#define LOOM_TARGET_ARCH_X86_LOWER_LOWER_H_
 
 #include "loom/codegen/low/lower/lower.h"
 
@@ -60,4 +60,4 @@ void loom_x86_low_lower_policy_registry_initialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_X86_LOWER_H_
+#endif  // LOOM_TARGET_ARCH_X86_LOWER_LOWER_H_

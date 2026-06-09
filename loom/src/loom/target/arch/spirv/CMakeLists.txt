@@ -331,47 +331,6 @@ endif()
 if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
-    lower
-  HDRS
-    "lower.h"
-    "lower/matrix.h"
-    "lower/workgroup.h"
-  SRCS
-    "lower/matrix.c"
-    "lower/registry.c"
-    "lower/workgroup.c"
-  DEPS
-    ::abi
-    ::cooperative_properties
-    ::descriptors
-    ::descriptors_ids
-    ::profile
-    ::registers
-    ::scalar_types
-    iree::base
-    loom::analysis::contract_vector
-    loom::codegen::low::descriptors
-    loom::codegen::low::lower
-    loom::codegen::low::source_memory_plan
-    loom::error::error_defs
-    loom::ir
-    loom::ir::facts
-    loom::ops::buffer
-    loom::ops::func
-    loom::ops::kernel
-    loom::ops::low
-    loom::ops::vector
-    loom::target::arch::spirv::contracts
-    loom::target::registers
-    loom::util::fact_table
-    loom::util::math
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-loom_cc_library(
-  NAME
     provider
   HDRS
     "provider.h"
@@ -380,9 +339,9 @@ loom_cc_library(
   DEPS
     ::low_registry
     ::low_verify
-    ::lower
     ::math_policy
     iree::base
+    loom::target::arch::spirv::lower
     loom::target::arch::spirv::ops
     loom::target::provider
   PUBLIC

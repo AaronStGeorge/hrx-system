@@ -13,7 +13,7 @@
 #ifndef LOOM_TARGET_ARCH_X86_LOWER_INTERNAL_H_
 #define LOOM_TARGET_ARCH_X86_LOWER_INTERNAL_H_
 
-#include "loom/target/arch/x86/lower.h"
+#include "loom/target/arch/x86/lower/lower.h"
 #include "loom/target/arch/x86/register_classes.h"
 
 #ifdef __cplusplus
