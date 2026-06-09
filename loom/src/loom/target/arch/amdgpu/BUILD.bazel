@@ -232,8 +232,8 @@ loom_cc_library(
     srcs = ["pass_registry.c"],
     hdrs = ["pass_registry.h"],
     deps = [
-        "//loom/src/loom/codegen/low:pass_environment",
-        "//loom/src/loom/codegen/low:pass_requirements",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
+        "//loom/src/loom/codegen/low/pipeline:pass_requirements",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/target/arch/amdgpu/hal:binding_materialization_pass",
         "//runtime/src/iree/base",

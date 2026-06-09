@@ -18,7 +18,7 @@ loom_cc_binary(
     iree::base
     iree::base::tooling::flags
     iree::io::file_handle
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::codegen::low::text_asm
     loom::codegen::low::verify
     loom::error::diagnostic

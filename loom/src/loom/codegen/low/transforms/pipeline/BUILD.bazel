@@ -23,9 +23,9 @@ loom_cc_library(
     visibility = _PIPELINE_VISIBILITY,
     deps = [
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:pass_environment",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/codegen/low/lower:source_selection",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:pipeline",
         "//loom/src/loom/pass:registry",
@@ -43,9 +43,9 @@ loom_cc_library(
     visibility = _PIPELINE_VISIBILITY,
     deps = [
         "//loom/src/loom/analysis:contract",
-        "//loom/src/loom/codegen/low:pass_environment",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/codegen/low/lower:source_selection",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -71,9 +71,9 @@ loom_cc_test(
     srcs = ["source_to_low_test.cc"],
     deps = [
         ":source_to_low",
-        "//loom/src/loom/codegen/low:pass_environment",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/codegen/low/lower:source_selection",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",

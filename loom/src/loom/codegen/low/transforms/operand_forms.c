@@ -9,7 +9,7 @@
 #include <inttypes.h>
 
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"

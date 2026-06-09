@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 
-#include "loom/codegen/low/pass_requirements.h"
+#include "loom/codegen/low/pipeline/pass_requirements.h"
 
 static bool loom_low_pass_capability_satisfies_requirement(
     const loom_pass_environment_capability_t* capability,

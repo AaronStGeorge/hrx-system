@@ -58,7 +58,7 @@ loom_cc_library(
     loom::codegen::low::function
     loom::codegen::low::lower
     loom::codegen::low::packet_json
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::codegen::low::schedule
     loom::codegen::low::target_binding
     loom::codegen::low::text_asm

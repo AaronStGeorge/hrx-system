@@ -11,8 +11,8 @@
 // use the registry and policy tables here, then resolve each function's
 // concrete target record from IR facts.
 
-#ifndef LOOM_CODEGEN_LOW_PASS_ENVIRONMENT_H_
-#define LOOM_CODEGEN_LOW_PASS_ENVIRONMENT_H_
+#ifndef LOOM_CODEGEN_LOW_PIPELINE_PASS_ENVIRONMENT_H_
+#define LOOM_CODEGEN_LOW_PIPELINE_PASS_ENVIRONMENT_H_
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
@@ -130,4 +130,4 @@ loom_target_selection_t loom_low_pass_capability_target_selection(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_PASS_ENVIRONMENT_H_
+#endif  // LOOM_CODEGEN_LOW_PIPELINE_PASS_ENVIRONMENT_H_

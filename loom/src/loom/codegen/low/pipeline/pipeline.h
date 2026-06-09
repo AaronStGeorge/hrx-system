@@ -9,8 +9,8 @@
 // These helpers append ordinary pass IR into a caller-owned pass.pipeline.
 // They do not compile, interpret, or execute pass programs.
 
-#ifndef LOOM_CODEGEN_LOW_PIPELINE_H_
-#define LOOM_CODEGEN_LOW_PIPELINE_H_
+#ifndef LOOM_CODEGEN_LOW_PIPELINE_PIPELINE_H_
+#define LOOM_CODEGEN_LOW_PIPELINE_PIPELINE_H_
 
 #include "iree/base/api.h"
 #include "loom/pass/builder.h"
@@ -28,4 +28,4 @@ iree_status_t loom_low_pipeline_build_packetization_preparation(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_CODEGEN_LOW_PIPELINE_H_
+#endif  // LOOM_CODEGEN_LOW_PIPELINE_PIPELINE_H_

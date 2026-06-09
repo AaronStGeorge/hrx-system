@@ -85,64 +85,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    pass_requirements
-  HDRS
-    "pass_requirements.h"
-  DEPS
-
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    pass_environment
-  HDRS
-    "pass_environment.h"
-  SRCS
-    "pass_environment.c"
-  DEPS
-    ::descriptors
-    ::pass_requirements
-    iree::base
-    loom::pass::environment
-    loom::pass::types
-    loom::target::math_policy
-    loom::target::types
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    pipeline
-  HDRS
-    "pipeline.h"
-  SRCS
-    "pipeline.c"
-  DEPS
-    iree::base
-    loom::pass::builder
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    pipeline_test
-  SRCS
-    "pipeline_test.cc"
-  DEPS
-    ::pipeline
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::ir
-    loom::ops::op_registry
-    loom::ops::pass
-    loom::pass::builder
-    loom::testing::module_ptr
-)
-
-loom_cc_library(
-  NAME
     text_asm
   HDRS
     "text_asm.h"

@@ -8,8 +8,8 @@
 
 #include <stdint.h>
 
-#include "loom/codegen/low/pass_environment.h"
-#include "loom/codegen/low/pass_requirements.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_requirements.h"
 #include "loom/codegen/low/transforms/allocation.h"
 #include "loom/codegen/low/transforms/dce.h"
 #include "loom/codegen/low/transforms/operand_forms.h"

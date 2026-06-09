@@ -21,7 +21,7 @@ loom_cc_library(
     loom::codegen::low::descriptors
     loom::codegen::low::lower
     loom::codegen::low::lower::source_selection
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::ir
     loom::pass::pipeline
     loom::pass::registry
@@ -44,7 +44,7 @@ loom_cc_library(
     loom::analysis::contract
     loom::codegen::low::lower
     loom::codegen::low::lower::source_selection
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs
@@ -75,7 +75,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::lower
     loom::codegen::low::lower::source_selection
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::format::text::parser
     loom::ir
     loom::ops::func

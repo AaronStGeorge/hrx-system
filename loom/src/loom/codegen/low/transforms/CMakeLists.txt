@@ -23,7 +23,7 @@ loom_cc_library(
     loom::codegen::low::allocation_materialization
     loom::codegen::low::descriptors
     loom::codegen::low::function
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::ir
     loom::ops::low
     loom::pass::pipeline
@@ -43,7 +43,7 @@ loom_cc_library(
     iree::base
     loom::codegen::low::descriptors
     loom::codegen::low::function
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::codegen::low::target_binding
     loom::error::emitter
     loom::ir
@@ -66,7 +66,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::codegen::low::descriptors
     loom::codegen::low::function
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::codegen::low::target_binding
     loom::ir
     loom::ops::low

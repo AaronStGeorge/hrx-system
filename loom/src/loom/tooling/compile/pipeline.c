@@ -6,7 +6,7 @@
 
 #include "loom/tooling/compile/pipeline.h"
 
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/error/diagnostic.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/pass/registry.h"

@@ -259,8 +259,8 @@ loom_cc_library(
     "builtin_registry.c"
   DEPS
     ::registry
-    loom::codegen::low::pass_environment
-    loom::codegen::low::pass_requirements
+    loom::codegen::low::pipeline::pass_environment
+    loom::codegen::low::pipeline::pass_requirements
     loom::codegen::low::transforms::allocation
     loom::codegen::low::transforms::dce
     loom::codegen::low::transforms::operand_forms
@@ -384,7 +384,7 @@ loom_cc_test(
     ::registry
     iree::testing::gtest
     iree::testing::gtest_main
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::pass::testing::registry_verify
 )
 

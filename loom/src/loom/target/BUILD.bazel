@@ -305,7 +305,7 @@ loom_cc_library(
     deps = [
         ":pipeline_options",
         ":provider",
-        "//loom/src/loom/codegen/low:pipeline",
+        "//loom/src/loom/codegen/low/pipeline",
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/pass:environment",

@@ -215,8 +215,8 @@ loom_cc_library(
     "pass_registry.c"
   DEPS
     iree::base
-    loom::codegen::low::pass_environment
-    loom::codegen::low::pass_requirements
+    loom::codegen::low::pipeline::pass_environment
+    loom::codegen::low::pipeline::pass_requirements
     loom::pass::registry
     loom::target::arch::amdgpu::hal::binding_materialization_pass
   PUBLIC

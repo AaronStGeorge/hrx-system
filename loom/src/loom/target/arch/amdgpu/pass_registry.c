@@ -6,8 +6,8 @@
 
 #include "loom/target/arch/amdgpu/pass_registry.h"
 
-#include "loom/codegen/low/pass_environment.h"
-#include "loom/codegen/low/pass_requirements.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_requirements.h"
 #include "loom/target/arch/amdgpu/hal/binding_materialization_pass.h"
 
 static const loom_pass_requirement_def_t

@@ -127,9 +127,9 @@ loom_cc_library(
         "src",
     ],
     deps = [
-        "//loom/src/loom/codegen/low:pass_environment",
         "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:renderer",

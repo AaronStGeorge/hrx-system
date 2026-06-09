@@ -7,7 +7,7 @@
 #include "loom/codegen/low/transforms/dce.h"
 
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"

@@ -226,8 +226,8 @@ loom_cc_library(
     ],
     deps = [
         ":registry",
-        "//loom/src/loom/codegen/low:pass_environment",
-        "//loom/src/loom/codegen/low:pass_requirements",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
+        "//loom/src/loom/codegen/low/pipeline:pass_requirements",
         "//loom/src/loom/codegen/low/transforms:allocation",
         "//loom/src/loom/codegen/low/transforms:dce",
         "//loom/src/loom/codegen/low/transforms:operand_forms",
@@ -341,7 +341,7 @@ loom_cc_test(
     deps = [
         ":builtin_registry",
         ":registry",
-        "//loom/src/loom/codegen/low:pass_environment",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
         "//loom/src/loom/pass/testing:registry_verify",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

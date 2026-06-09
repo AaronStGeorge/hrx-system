@@ -13,7 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower/lower_rules.h"
 #include "loom/codegen/low/lower/source_selection.h"
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"

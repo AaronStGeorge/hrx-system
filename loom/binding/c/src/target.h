@@ -7,7 +7,7 @@
 #ifndef LOOMC_TARGET_STORAGE_H_
 #define LOOMC_TARGET_STORAGE_H_
 
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/pass/registry.h"
 #include "loom/target/provider.h"
 #include "loom/target/types.h"

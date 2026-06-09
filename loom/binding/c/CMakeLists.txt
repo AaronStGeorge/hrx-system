@@ -71,7 +71,7 @@ loom_cc_library(
     iree::base::internal::arena
     iree::io::file_handle
     iree::io::stream
-    loom::codegen::low::pass_environment
+    loom::codegen::low::pipeline::pass_environment
     loom::codegen::low::target_binding
     loom::codegen::low::text_asm
     loom::error::diagnostic

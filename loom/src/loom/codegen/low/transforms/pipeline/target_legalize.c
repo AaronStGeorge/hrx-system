@@ -10,7 +10,7 @@
 
 #include "loom/analysis/contract.h"
 #include "loom/codegen/low/lower/source_selection.h"
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ops/op_defs.h"

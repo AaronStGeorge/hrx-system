@@ -6,8 +6,8 @@
 
 // Shared pass-environment requirement keys for target-low codegen passes.
 
-#ifndef LOOM_CODEGEN_LOW_PASS_REQUIREMENTS_H_
-#define LOOM_CODEGEN_LOW_PASS_REQUIREMENTS_H_
+#ifndef LOOM_CODEGEN_LOW_PIPELINE_PASS_REQUIREMENTS_H_
+#define LOOM_CODEGEN_LOW_PIPELINE_PASS_REQUIREMENTS_H_
 
 // Pass requirement satisfied when the pass environment provides a target-low
 // descriptor registry for low-codegen passes.
@@ -19,4 +19,4 @@
 #define LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_LOWER_POLICY_REGISTRY \
   "target.low-lower-policy-registry"
 
-#endif  // LOOM_CODEGEN_LOW_PASS_REQUIREMENTS_H_
+#endif  // LOOM_CODEGEN_LOW_PIPELINE_PASS_REQUIREMENTS_H_

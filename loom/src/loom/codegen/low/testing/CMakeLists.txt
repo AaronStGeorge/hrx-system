@@ -78,8 +78,8 @@ loom_cc_library(
     loom::codegen::low::function
     loom::codegen::low::lower
     loom::codegen::low::lower::source_selection
-    loom::codegen::low::pass_environment
     loom::codegen::low::pipeline
+    loom::codegen::low::pipeline::pass_environment
     loom::codegen::low::verify
     loom::ir
     loom::ops::func

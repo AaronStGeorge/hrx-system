@@ -20,6 +20,7 @@ package(
 _LOW_DESCRIPTOR_VISIBILITY = [
     "//loom/src/loom/codegen/low/allocation:__pkg__",
     "//loom/src/loom/codegen/low/lower:__pkg__",
+    "//loom/src/loom/codegen/low/pipeline:__pkg__",
     "//loom/src/loom/codegen/low/schedule:__pkg__",
     "//loom/src/loom/codegen/low/testing:__pkg__",
     "//loom/src/loom/codegen/low/transforms:__subpackages__",
@@ -113,52 +114,6 @@ loom_cc_library(
     deps = [
         ":descriptors",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "pass_requirements",
-    hdrs = ["pass_requirements.h"],
-)
-
-loom_cc_library(
-    name = "pass_environment",
-    srcs = ["pass_environment.c"],
-    hdrs = ["pass_environment.h"],
-    deps = [
-        ":descriptors",
-        ":pass_requirements",
-        "//loom/src/loom/pass:environment",
-        "//loom/src/loom/pass:types",
-        "//loom/src/loom/target:math_policy",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "pipeline",
-    srcs = ["pipeline.c"],
-    hdrs = ["pipeline.h"],
-    deps = [
-        "//loom/src/loom/pass:builder",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "pipeline_test",
-    srcs = ["pipeline_test.cc"],
-    deps = [
-        ":pipeline",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/pass",
-        "//loom/src/loom/pass:builder",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

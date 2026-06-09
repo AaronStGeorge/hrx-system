@@ -11,7 +11,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/ops/low/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"

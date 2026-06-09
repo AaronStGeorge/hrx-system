@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/pipeline.h"
+#include "loom/codegen/low/pipeline/pipeline.h"
 
 iree_status_t loom_low_pipeline_build_packetization_preparation(
     loom_builder_t* builder) {

@@ -11,7 +11,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
-#include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"

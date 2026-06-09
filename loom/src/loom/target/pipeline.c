@@ -6,7 +6,7 @@
 
 #include "loom/target/pipeline.h"
 
-#include "loom/codegen/low/pipeline.h"
+#include "loom/codegen/low/pipeline/pipeline.h"
 #include "loom/pass/builder.h"
 
 typedef struct loom_target_pipeline_build_context_t {
