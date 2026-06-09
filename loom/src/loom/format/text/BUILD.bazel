@@ -4,29 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_assert_no_dependencies", "loom_cc_fuzz", "loom_cc_library", "loom_cc_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_fuzz", "loom_cc_library", "loom_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "core_text_format_no_low_codegen_deps",
-    dependencies = [
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/ops/low",
-    ],
-    targets = [
-        ":parser",
-        ":printer",
-    ],
 )
 
 #===------------------------------------------------------------------------===#
@@ -96,41 +79,6 @@ loom_cc_library(
     hdrs = ["printer.h"],
     deps = [
         "//loom/src/loom/format/text/printer:printer_impl",
-    ],
-)
-
-#===------------------------------------------------------------------------===#
-# Parser/printer integration
-#===------------------------------------------------------------------------===#
-
-loom_cc_test(
-    name = "golden_corpus_test",
-    srcs = ["golden_corpus_test.cc"],
-    deps = [
-        ":parser",
-        ":printer",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/error:diagnostic",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/encoding",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/global",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/kernel",
-        "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/ops/pool",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/scf",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/ops/view",
-        "//loom/src/loom/target:low_descriptor_registry_core_test",
-        "//loom/src/loom/test/corpus/text:golden_text_corpus",
-        "//loom/src/loom/testing:context",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

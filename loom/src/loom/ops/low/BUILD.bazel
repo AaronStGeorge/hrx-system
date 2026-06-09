@@ -12,6 +12,36 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_LOW_OPS_VISIBILITY = [
+    "//loom/binding/c:__pkg__",
+    "//loom/src/loom/analysis:__pkg__",
+    "//loom/src/loom/codegen/low:__pkg__",
+    "//loom/src/loom/codegen/low/allocation:__pkg__",
+    "//loom/src/loom/codegen/low/schedule:__pkg__",
+    "//loom/src/loom/codegen/low/testing:__pkg__",
+    "//loom/src/loom/codegen/low/transforms:__pkg__",
+    "//loom/src/loom/format/text/parser:__pkg__",
+    "//loom/src/loom/format/text/printer:__pkg__",
+    "//loom/src/loom/ops:__pkg__",
+    "//loom/src/loom/target:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu/hal:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu/lower:__pkg__",
+    "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",
+    "//loom/src/loom/target/arch/ireevm:__pkg__",
+    "//loom/src/loom/target/arch/spirv:__pkg__",
+    "//loom/src/loom/target/arch/wasm:__pkg__",
+    "//loom/src/loom/target/emit/ireevm:__pkg__",
+    "//loom/src/loom/target/emit/native:__pkg__",
+    "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
+    "//loom/src/loom/target/emit/native/x86:__pkg__",
+    "//loom/src/loom/target/emit/spirv:__pkg__",
+    "//loom/src/loom/target/emit/wasm:__pkg__",
+    "//loom/src/loom/tools/loom-check:__pkg__",
+    "//loom/src/loom/transforms/cfg:__pkg__",
+    "//loom/src/loom/transforms/symbol:__pkg__",
+    "//loom/src/loom/verify:__pkg__",
+]
+
 loom_generated_cc_library(
     name = "low",
     srcs = [
@@ -34,6 +64,7 @@ loom_generated_cc_library(
         "tables.c",
     ],
     generator = "//loom/py/loom/gen:c_tables_generator",
+    visibility = _LOW_OPS_VISIBILITY,
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

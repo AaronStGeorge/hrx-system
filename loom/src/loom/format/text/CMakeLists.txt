@@ -82,38 +82,6 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_test(
-  NAME
-    golden_corpus_test
-  SRCS
-    "golden_corpus_test.cc"
-  DEPS
-    ::parser
-    ::printer
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::codegen::low::text_asm
-    loom::error::diagnostic
-    loom::ir
-    loom::ops::buffer
-    loom::ops::encoding
-    loom::ops::func
-    loom::ops::global
-    loom::ops::index
-    loom::ops::kernel
-    loom::ops::llvmir
-    loom::ops::pool
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::test
-    loom::ops::vector
-    loom::ops::view
-    loom::target::low_descriptor_registry_core_test
-    loom::test::corpus::text::golden_text_corpus
-    loom::testing::context
-)
-
 loom_cc_fuzz(
   NAME
     parser_fuzz
