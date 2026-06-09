@@ -44,6 +44,10 @@ PACKAGE_POLICIES = [
         build_requirements = [TARGET_ARCH_AMDGPU],
     ),
     package_policy(
+        packages = ["loom/src/loom/target/arch/amdgpu/hal"],
+        forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
+    ),
+    package_policy(
         packages = ["loom/src/loom/target/arch/ireevm/..."],
         build_requirements = [TARGET_ARCH_IREE_VM],
     ),
@@ -70,6 +74,15 @@ PACKAGE_POLICIES = [
     package_policy(
         packages = ["loom/src/loom/target/emit/native/amdgpu/..."],
         build_requirements = [TARGET_ARCH_AMDGPU, EMIT_AMDGPU],
+        forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/target/emit/native/amdgpu"],
+        forbidden_deps = [
+            "//runtime/src/iree/base/internal/flatcc:building",
+            "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
+            "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
+        ],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/x86/..."],
@@ -155,8 +168,8 @@ PACKAGE_POLICIES = [
 def _current_policy():
     return collect_package_policy(native.package_name(), PACKAGE_POLICIES)
 
-def apply_loom_target_policy(kwargs):
-    return apply_target_policy(kwargs, _current_policy())
+def apply_loom_target_policy(kwargs, name = None):
+    return apply_target_policy(kwargs, _current_policy(), name = name)
 
-def apply_loom_test_policy(kwargs):
-    return apply_test_policy(kwargs, _current_policy())
+def apply_loom_test_policy(kwargs, name = None):
+    return apply_test_policy(kwargs, _current_policy(), name = name)

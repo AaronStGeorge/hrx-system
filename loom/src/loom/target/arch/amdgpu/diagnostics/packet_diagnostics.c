@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/packet_diagnostics.h"
+#include "loom/target/arch/amdgpu/diagnostics/packet_diagnostics.h"
 
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 static bool loom_amdgpu_packet_diagnostics_is_crosslane(
     const loom_low_descriptor_set_t* descriptor_set,

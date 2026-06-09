@@ -28,8 +28,8 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::error_defs
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_refs
     loom::target::registers
     loom::target::types
   PUBLIC
@@ -55,8 +55,8 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::rewrite::rewriter
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_refs
     loom::target::types
   PUBLIC
 )

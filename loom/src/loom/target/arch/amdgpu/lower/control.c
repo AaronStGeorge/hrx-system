@@ -11,7 +11,7 @@
 #include "loom/ops/cfg/ops.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 enum {
   LOOM_AMDGPU_BRANCH_PLAN_THEN_MASKED_REGION = 0,

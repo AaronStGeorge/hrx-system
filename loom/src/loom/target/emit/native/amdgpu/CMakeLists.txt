@@ -30,9 +30,9 @@ loom_cc_library(
     loom::ops::low
     loom::target::arch::amdgpu::encoding
     loom::target::arch::amdgpu::planning::packet_plan
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::register_class
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_refs
     loom::target::emit::native::assembly
   PUBLIC
 )
@@ -200,7 +200,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::rewrite::rewriter
-    loom::target::arch::amdgpu::target_refs
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   PUBLIC
 )
@@ -221,7 +221,7 @@ loom_cc_test(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::descriptors::shards_for_testing
-    loom::target::arch::amdgpu::target_refs
+    loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
@@ -249,9 +249,9 @@ loom_cc_library(
     loom::ops::low
     loom::target::arch::amdgpu::encoding
     loom::target::arch::amdgpu::planning::packet_plan
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::register_class
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_refs
     loom::target::emit::native::fragment
   PUBLIC
 )
@@ -298,8 +298,8 @@ loom_cc_library(
     iree::base
     loom::codegen::low::allocation
     loom::codegen::low::schedule
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::register_class
-    loom::target::arch::amdgpu::target_refs
     loom::target::emit::native::fragment
   PUBLIC
 )
@@ -377,24 +377,6 @@ loom_cc_library(
   DEPS
     iree::base
     loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-loom_cc_library(
-  NAME
-    hal_executable
-  HDRS
-    "hal_executable.h"
-  SRCS
-    "hal_executable.c"
-  DEPS
-    ::hal_kernel_metadata
-    iree::base
-    iree::base::internal::flatcc::building
-    iree::schemas::amdgpu_executable_def_c_fbs
-    iree::schemas::executable_debug_info_c_fbs
   PUBLIC
 )
 endif()
@@ -546,26 +528,6 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::target::emit::native::elf
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-    "iree-build-requirement=loom.emit.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-loom_cc_test(
-  NAME
-    hal_executable_test
-  SRCS
-    "hal_executable_test.cc"
-  DEPS
-    ::hal_executable
-    iree::base
-    iree::hal::utils::executable_header
-    iree::schemas::amdgpu_executable_def_c_fbs
-    iree::schemas::executable_debug_info_c_fbs
-    iree::testing::gtest
-    iree::testing::gtest_main
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"

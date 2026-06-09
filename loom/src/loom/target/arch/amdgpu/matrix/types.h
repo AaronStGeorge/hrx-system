@@ -19,8 +19,8 @@
 #include "iree/base/api.h"
 #include "loom/analysis/contract_roles.h"
 #include "loom/analysis/matrix_fragment_layout.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 
 #ifdef __cplusplus
 extern "C" {

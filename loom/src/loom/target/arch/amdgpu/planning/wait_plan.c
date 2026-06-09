@@ -15,8 +15,8 @@
 #include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/planning/descriptor_semantics.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_id.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 
 #define LOOM_AMDGPU_WAIT_COUNTER_COUNT 5
 #define LOOM_AMDGPU_WAIT_TRANS_RESULT_MAX_VALU_INTERVAL 5u

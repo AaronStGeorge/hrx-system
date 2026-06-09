@@ -210,9 +210,6 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             ),
         )
 
-    def loom_assert_no_dependencies(self, **kwargs):
-        pass
-
     def _cmake_identifier(self, name):
         return re.sub(r"[^A-Za-z0-9_]", "_", name)
 

@@ -10,7 +10,7 @@
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 static bool loom_amdgpu_prefetch_static_offset_split(
     const loom_amdgpu_descriptor_offset_immediate_info_t* offset_info,

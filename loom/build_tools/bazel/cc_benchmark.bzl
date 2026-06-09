@@ -23,7 +23,10 @@ def _loom_cc_benchmark_impl(
         cxxopts,
         deps,
         **kwargs):
-    kwargs = apply_loom_test_policy(kwargs)
+    policy_kwargs = dict(kwargs)
+    policy_kwargs["deps"] = [] if deps == None else deps
+    kwargs = apply_loom_test_policy(policy_kwargs, name = name)
+    kwargs.pop("deps")
     if deps == None:
         deps = []
     compiler_options = loom_cc_attrs.with_loom_compiler_options(

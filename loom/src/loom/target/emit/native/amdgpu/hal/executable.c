@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/native/amdgpu/hal_executable.h"
+#include "loom/target/emit/native/amdgpu/hal/executable.h"
 
 #include <string.h>
 

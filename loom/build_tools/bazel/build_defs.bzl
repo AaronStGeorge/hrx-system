@@ -14,7 +14,6 @@ machine-readable data.
 
 load("//build_tools/bazel:cmake.bzl", _iree_cmake_extra_content = "iree_cmake_extra_content")
 load("//build_tools/bazel:generate.bzl", "iree_generated_files")
-load("//build_tools/bazel:query.bzl", _iree_assert_no_dependency = "iree_assert_no_dependency")
 load("//build_tools/bazel:select.bzl", _iree_select = "iree_select")
 load(
     "//loom/requirements:package_policy.bzl",
@@ -118,69 +117,6 @@ def loom_generated_textual_header(
         output_args = _loom_output_args([output_flag], [output]),
         tool = generator,
         **rule_kwargs
-    )
-
-def _loom_canonical_query_labels(labels):
-    canonical_labels = []
-    package_name = native.package_name()
-    for label in labels:
-        if label.startswith(":"):
-            canonical_labels.append("//%s%s" % (package_name, label))
-        else:
-            canonical_labels.append(label)
-    return canonical_labels
-
-def _loom_dependency_test_name(name, target, dependency):
-    return "%s_%s_no_%s" % (
-        name,
-        target.replace("//", "").replace(":", "_").replace("/", "_").replace("-", "_").replace(".", "_"),
-        dependency.replace("//", "").replace(":", "_").replace("/", "_").replace("-", "_").replace(".", "_"),
-    )
-
-def loom_assert_no_dependencies(
-        name,
-        targets,
-        dependencies,
-        tags = [],
-        **kwargs):
-    """Asserts that target boundary labels do not depend on forbidden labels.
-
-    This is the Loom package-boundary form of iree_assert_no_dependency. Use it
-    for architectural isolation checks over public/interface targets, not for
-    duplicating every private rule edge in a package. Each target/dependency
-    pair is a configured analysis test so disabled select() branches do not
-    force their providers to resolve.
-
-    Args:
-      name: Test target name.
-      targets: Boundary target labels that must remain independent.
-      dependencies: Forbidden dependency labels.
-      tags: Additional tags for the test target.
-      **kwargs: Additional arguments forwarded to each analysis test.
-    """
-    if len(targets) == 0:
-        fail("targets must not be empty")
-    if len(dependencies) == 0:
-        fail("dependencies must not be empty")
-
-    canonical_targets = _loom_canonical_query_labels(targets)
-    canonical_dependencies = _loom_canonical_query_labels(dependencies)
-    tests = []
-    for target in canonical_targets:
-        for dependency in canonical_dependencies:
-            test_name = _loom_dependency_test_name(name, target, dependency)
-            tests.append(test_name)
-            _iree_assert_no_dependency(
-                name = test_name,
-                dependency = dependency,
-                tags = tags,
-                target = target,
-                **kwargs
-            )
-    native.test_suite(
-        name = name,
-        tags = tags,
-        tests = tests,
     )
 
 def loom_low_descriptor_data_archive(

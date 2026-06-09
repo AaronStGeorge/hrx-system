@@ -18,8 +18,8 @@
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 
 typedef uint32_t loom_amdgpu_atomic_rejection_flags_t;
 

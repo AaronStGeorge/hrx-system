@@ -29,7 +29,7 @@ loom_cc_library(
     loom::ops::low
     loom::ops::op_defs
     loom::target::arch::amdgpu::encoding
-    loom::target::arch::amdgpu::target_refs
+    loom::target::arch::amdgpu::refs::target_refs
   PUBLIC
 )
 endif()
@@ -46,7 +46,7 @@ loom_cc_library(
     iree::base
     loom::codegen::low::descriptors
     loom::target::arch::amdgpu::encoding
-    loom::target::arch::amdgpu::target_refs
+    loom::target::arch::amdgpu::refs::target_refs
   PUBLIC
 )
 endif()
@@ -105,9 +105,9 @@ loom_cc_library(
     loom::ops::low
     loom::target::arch::amdgpu::encoding
     loom::target::arch::amdgpu::matrix::contract
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_refs
     loom::util::json
     loom::util::stream
   PUBLIC
@@ -135,8 +135,8 @@ loom_cc_library(
     loom::codegen::low::schedule
     loom::ir
     loom::ops::low
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_id
-    loom::target::arch::amdgpu::target_refs
   PUBLIC
 )
 endif()
@@ -157,8 +157,8 @@ loom_cc_library(
     loom::codegen::low::function
     loom::ir
     loom::ops::low
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_refs
     loom::util::json
     loom::util::stream
   PUBLIC
@@ -185,8 +185,8 @@ loom_cc_library(
     loom::codegen::low::schedule
     loom::ir
     loom::ops::low
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
-    loom::target::arch::amdgpu::target_refs
   PUBLIC
 )
 endif()

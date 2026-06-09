@@ -18,7 +18,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/registers.h"
 

@@ -13,8 +13,8 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 
 typedef struct loom_amdgpu_vopd_candidate_component_t {
   // VOPD operation id encoded in this component slot.

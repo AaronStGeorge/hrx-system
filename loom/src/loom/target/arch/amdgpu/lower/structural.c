@@ -13,7 +13,7 @@
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 static bool loom_amdgpu_vector_bitcast_storage_shape(
     loom_type_t type, uint32_t* out_payload_bit_count,

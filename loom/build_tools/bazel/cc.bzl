@@ -25,7 +25,10 @@ def _loom_cc_library_impl(
         cxxopts,
         deps,
         **kwargs):
-    kwargs = apply_loom_target_policy(kwargs)
+    policy_kwargs = dict(kwargs)
+    policy_kwargs["deps"] = [] if deps == None else deps
+    kwargs = apply_loom_target_policy(policy_kwargs, name = name)
+    kwargs.pop("deps")
     compiler_options = loom_cc_attrs.with_loom_compiler_options(
         copts = copts,
         conlyopts = conlyopts,
@@ -61,7 +64,10 @@ def _loom_cc_binary_impl(
         cxxopts,
         deps,
         **kwargs):
-    kwargs = apply_loom_target_policy(kwargs)
+    policy_kwargs = dict(kwargs)
+    policy_kwargs["deps"] = [] if deps == None else deps
+    kwargs = apply_loom_target_policy(policy_kwargs, name = name)
+    kwargs.pop("deps")
     compiler_options = loom_cc_attrs.with_loom_compiler_options(
         copts = copts,
         conlyopts = conlyopts,

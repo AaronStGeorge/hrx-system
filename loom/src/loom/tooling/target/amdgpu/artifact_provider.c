@@ -13,7 +13,7 @@
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/emit/native/amdgpu/hal_executable.h"
+#include "loom/target/emit/native/amdgpu/hal/executable.h"
 #include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
 #include "loom/tooling/execution/hal/runtime.h"
 

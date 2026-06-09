@@ -11,7 +11,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/target/arch/amdgpu/descriptors/cdna3_descriptors.h"
 #include "loom/target/arch/amdgpu/planning/wait_plan.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 namespace loom {
 namespace {

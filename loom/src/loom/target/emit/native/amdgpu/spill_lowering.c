@@ -14,7 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/rewrite/rewriter.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/registers.h"
 

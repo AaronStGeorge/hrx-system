@@ -128,8 +128,8 @@ def _emit_header() -> str:
         "",
         *line_comment_header("//", generator="loom.gen.amdgpu_target_refs"),
         "",
-        "#ifndef LOOM_TARGET_ARCH_AMDGPU_TARGET_REFS_H_",
-        "#define LOOM_TARGET_ARCH_AMDGPU_TARGET_REFS_H_",
+        "#ifndef LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
+        "#define LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
         "",
         "#include <stdint.h>",
         "",
@@ -165,7 +165,7 @@ def _emit_header() -> str:
             '}  // extern "C"',
             "#endif",
             "",
-            "#endif  // LOOM_TARGET_ARCH_AMDGPU_TARGET_REFS_H_",
+            "#endif  // LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -261,7 +261,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--public-header",
-        default="loom/target/arch/amdgpu/target_refs.h",
+        default="loom/target/arch/amdgpu/refs/target_refs.h",
         help="Public include path for the generated header.",
     )
     parser.add_argument(

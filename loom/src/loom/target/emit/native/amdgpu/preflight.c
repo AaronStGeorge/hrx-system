@@ -8,8 +8,8 @@
 
 #include <inttypes.h>
 
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/register_class.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/emit/native/fragment.h"
 
 // AMDGPU unspillable physical classes model singleton architectural state such

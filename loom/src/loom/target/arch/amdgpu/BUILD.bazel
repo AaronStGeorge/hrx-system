@@ -7,7 +7,6 @@
 load("//loom/build_tools/amdgpu/isa_xml:archive.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
     "loom_generated_cc_library",
@@ -49,42 +48,6 @@ _AMDGPU_PROVIDER_VISIBILITY = [
     "//loom/src/loom/tools/loom-compile:__pkg__",
     "//loom/src/loom/tooling/target/amdgpu/execution:__pkg__",
 ] + _AMDGPU_CHECK_VISIBILITY
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "amdgpu_target_refs_no_descriptor_registry_dep",
-    dependencies = ["//loom/src/loom/target/arch/amdgpu/descriptors:low_registry"],
-    targets = [
-        ":target_refs",
-        ":packet_diagnostics",
-    ],
-)
-
-loom_assert_no_dependencies(
-    name = "amdgpu_hal_abi_no_backend_runtime_or_descriptor_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-        "//loom/src/loom/target/tool:llvm",
-        "//runtime/src/iree/hal/drivers/amdgpu",
-    ],
-    targets = ["//loom/src/loom/target/arch/amdgpu/hal:kernel_abi"],
-)
-
-loom_assert_no_dependencies(
-    name = "amdgpu_hal_binding_materialization_no_backend_runtime_or_descriptor_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
-        "//loom/src/loom/target/tool:llvm",
-        "//runtime/src/iree/hal/drivers/amdgpu",
-    ],
-    targets = [
-        "//loom/src/loom/target/arch/amdgpu/hal:binding_materialization",
-        "//loom/src/loom/target/arch/amdgpu/hal:binding_materialization_pass",
-    ],
-)
 
 #===------------------------------------------------------------------------===#
 # AMDGPU low descriptors
@@ -250,8 +213,6 @@ loom_cc_library(
     ],
 )
 
-_AMDGPU_TARGET_REF_GENERATOR = "//loom/py/loom/gen:amdgpu_target_refs"
-
 _AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidates"
 
 _AMDGPU_COMPARE_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_compare_candidates"
@@ -272,42 +233,13 @@ loom_cc_library(
 )
 
 loom_target_table_cc_library(
-    name = "target_refs",
-    args = [
-        "--isa-xml=cdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
-        "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
-        "--isa-xml=rdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
-        "--isa-xml=rdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
-        "--public-header=loom/target/arch/amdgpu/target_refs.h",
-    ],
-    generator = _AMDGPU_TARGET_REF_GENERATOR,
-    inputs = [
-        "@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml",
-        "@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml",
-        "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
-        "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
-    ],
-    visibility = (
-        _AMDGPU_HAL_VISIBILITY +
-        _AMDGPU_LOWER_VISIBILITY +
-        _AMDGPU_MATRIX_VISIBILITY +
-        _AMDGPU_NATIVE_VISIBILITY +
-        _AMDGPU_PLANNING_VISIBILITY +
-        _AMDGPU_TOOLING_VISIBILITY
-    ),
-    deps = [
-        "//loom/src/loom/codegen/low:descriptors",
-    ],
-)
-
-loom_target_table_cc_library(
     name = "atomic_candidates",
     generator = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR,
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
-        ":target_refs",
         "//loom/src/loom/ops:atomic",
         "//loom/src/loom/target/arch/amdgpu/lower:kinds",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
@@ -318,10 +250,10 @@ loom_target_table_cc_library(
     generator = _AMDGPU_COMPARE_CANDIDATE_GENERATOR,
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
-        ":target_refs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base",
     ],
 )
@@ -429,18 +361,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "packet_diagnostics",
-    srcs = ["packet_diagnostics.c"],
-    hdrs = ["packet_diagnostics.h"],
-    deps = [
-        ":target_refs",
-        "//loom/src/loom/codegen/low:packet",
-        "//loom/src/loom/target:low_packet_diagnostics",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "math_policy",
     srcs = ["math_policy.c"],
     hdrs = ["math_policy.h"],
@@ -477,11 +397,11 @@ loom_cc_library(
         ":legalization",
         ":math_policy",
         ":ops",
-        ":packet_diagnostics",
         ":pass_registry",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/diagnostics:packet_diagnostics",
         "//loom/src/loom/target/arch/amdgpu/lower",
         "//runtime/src/iree/base",
     ],
@@ -640,12 +560,12 @@ loom_cc_test(
     name = "storage_lease_test",
     srcs = ["storage_lease_test.cc"],
     deps = [
-        ":target_refs",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:storage_lease",
         "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
         "//loom/src/loom/target/arch/amdgpu/planning:storage_lease",
         "//loom/src/loom/target/arch/amdgpu/planning:wait_plan",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

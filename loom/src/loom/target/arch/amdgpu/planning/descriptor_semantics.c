@@ -7,7 +7,7 @@
 #include "loom/target/arch/amdgpu/planning/descriptor_semantics.h"
 
 #include "loom/target/arch/amdgpu/encoding.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 static bool loom_amdgpu_descriptor_matches_ref(
     const loom_low_descriptor_set_t* descriptor_set,

@@ -1,0 +1,47 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+_AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
+
+loom_cc_library(
+    name = "executable",
+    srcs = ["executable.c"],
+    hdrs = ["executable.h"],
+    visibility = _AMDGPU_TOOLING_VISIBILITY,
+    deps = [
+        "//loom/src/loom/target/emit/native/amdgpu:hal_kernel_metadata",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal/flatcc:building",
+        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
+        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
+    ],
+)
+
+loom_cc_test(
+    name = "executable_test",
+    srcs = ["executable_test.cc"],
+    deps = [
+        ":executable",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/utils:executable_header",
+        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
+        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

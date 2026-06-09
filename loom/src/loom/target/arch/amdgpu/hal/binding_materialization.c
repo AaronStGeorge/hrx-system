@@ -15,8 +15,8 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/target/arch/amdgpu/hal/binding_descriptor.h"
 #include "loom/target/arch/amdgpu/hal/kernel_abi.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 
 #define LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_POINTER_HIGH_MASK UINT32_C(0x0000FFFF)
 #define LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_ENABLE_BIT \

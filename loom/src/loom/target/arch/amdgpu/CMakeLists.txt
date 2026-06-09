@@ -215,37 +215,14 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
-    target_refs
-  GENERATOR
-    loom::py::loom::gen::amdgpu_target_refs
-  ARGS
-    "--isa-xml=cdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
-    "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
-    "--isa-xml=rdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
-    "--isa-xml=rdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-    "--public-header=loom/target/arch/amdgpu/target_refs.h"
-  INPUTS
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
-    "loom_amdgpu_isa_xml"
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
-    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
-  DEPS
-    loom::codegen::low::descriptors
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
     atomic_candidates
   GENERATOR
     loom::py::loom::gen::amdgpu_atomic_candidates
   DEPS
-    ::target_refs
     iree::base
     loom::ops::atomic
     loom::target::arch::amdgpu::lower::kinds
+    loom::target::arch::amdgpu::refs::target_refs
     loom::util::fact_table
 )
 endif()
@@ -257,11 +234,11 @@ loom_target_table_cc_library(
   GENERATOR
     loom::py::loom::gen::amdgpu_compare_candidates
   DEPS
-    ::target_refs
     iree::base
     loom::ir
     loom::ops::scalar
     loom::ops::vector
+    loom::target::arch::amdgpu::refs::target_refs
 )
 endif()
 
@@ -394,23 +371,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    packet_diagnostics
-  HDRS
-    "packet_diagnostics.h"
-  SRCS
-    "packet_diagnostics.c"
-  DEPS
-    ::target_refs
-    iree::base
-    loom::codegen::low::packet
-    loom::target::low_packet_diagnostics
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     math_policy
   HDRS
     "math_policy.h"
@@ -459,11 +419,11 @@ loom_cc_library(
     ::legalization
     ::math_policy
     ::ops
-    ::packet_diagnostics
     ::pass_registry
     iree::base
     loom::pass::builder
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::diagnostics::packet_diagnostics
     loom::target::arch::amdgpu::lower
     loom::target::provider
   PUBLIC
@@ -3970,7 +3930,6 @@ loom_cc_test(
   SRCS
     "storage_lease_test.cc"
   DEPS
-    ::target_refs
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
@@ -3979,6 +3938,7 @@ loom_cc_test(
     loom::target::arch::amdgpu::descriptors::shards_for_testing
     loom::target::arch::amdgpu::planning::storage_lease
     loom::target::arch::amdgpu::planning::wait_plan
+    loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )

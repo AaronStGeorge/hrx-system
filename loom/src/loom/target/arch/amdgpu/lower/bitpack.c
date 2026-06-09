@@ -13,7 +13,7 @@
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 typedef enum loom_amdgpu_bitpack_rejection_e {
   LOOM_AMDGPU_BITPACK_REJECTION_NONE = 0,

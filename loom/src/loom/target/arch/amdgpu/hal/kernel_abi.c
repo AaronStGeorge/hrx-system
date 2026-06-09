@@ -15,8 +15,8 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/hal/binding_descriptor.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/registers.h"
 
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT 3u

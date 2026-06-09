@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -23,43 +22,9 @@ package(
 
 _AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
 
+_AMDGPU_HAL_VISIBILITY = ["//loom/src/loom/target/emit/native/amdgpu/hal:__pkg__"]
+
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "amdgpu_native_emit_no_hal_driver_dep",
-    dependencies = ["//runtime/src/iree/hal/drivers/amdgpu"],
-    targets = [
-        ":assembly",
-        ":descriptor",
-        ":encoding",
-        ":hal_executable",
-        ":hal_kernel_metadata",
-        ":hsaco",
-        ":kernel_assembly",
-        ":kernel_hsaco",
-        ":kernel_record",
-        ":loom_check",
-        ":metadata",
-        ":hal_kernel_library",
-        ":preflight",
-        ":spill_lowering",
-    ],
-)
-
-loom_assert_no_dependencies(
-    name = "amdgpu_hal_kernel_library_no_hal_package_deps",
-    dependencies = [
-        ":hal_executable",
-        "//runtime/src/iree/base/internal/flatcc:building",
-        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
-        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
-    ],
-    targets = [":hal_kernel_library"],
-)
 
 #===------------------------------------------------------------------------===#
 # AMDGPU native assembly fragments
@@ -81,8 +46,8 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu:encoding",
         "//loom/src/loom/target/arch/amdgpu:register_class",
         "//loom/src/loom/target/arch/amdgpu:target_info",
-        "//loom/src/loom/target/arch/amdgpu:target_refs",
         "//loom/src/loom/target/arch/amdgpu/planning:packet_plan",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/target/emit/native:assembly",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -179,7 +144,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/target:registers",
-        "//loom/src/loom/target/arch/amdgpu:target_refs",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -193,8 +158,8 @@ loom_cc_test(
         "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target/arch/amdgpu:target_refs",
         "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -217,8 +182,8 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu:encoding",
         "//loom/src/loom/target/arch/amdgpu:register_class",
         "//loom/src/loom/target/arch/amdgpu:target_info",
-        "//loom/src/loom/target/arch/amdgpu:target_refs",
         "//loom/src/loom/target/arch/amdgpu/planning:packet_plan",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/target/emit/native:fragment",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -257,7 +222,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/target/arch/amdgpu:register_class",
-        "//loom/src/loom/target/arch/amdgpu:target_refs",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/target/emit/native:fragment",
         "//runtime/src/iree/base",
     ],
@@ -314,23 +279,10 @@ loom_cc_library(
 loom_cc_library(
     name = "hal_kernel_metadata",
     hdrs = ["hal_kernel_metadata.h"],
+    visibility = _AMDGPU_HAL_VISIBILITY,
     deps = [
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "hal_executable",
-    srcs = ["hal_executable.c"],
-    hdrs = ["hal_executable.h"],
-    visibility = _AMDGPU_TOOLING_VISIBILITY,
-    deps = [
-        ":hal_kernel_metadata",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal/flatcc:building",
-        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
-        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
     ],
 )
 
@@ -448,20 +400,6 @@ loom_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "hal_executable_test",
-    srcs = ["hal_executable_test.cc"],
-    deps = [
-        ":hal_executable",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/utils:executable_header",
-        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
-        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -18,8 +18,8 @@
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_id.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 
 #define LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_BITS 10u
 #define LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_MASK 0x3FFu

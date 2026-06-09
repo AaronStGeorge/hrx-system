@@ -21,7 +21,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/target/arch/amdgpu/lower/kinds.h"
 #include "loom/target/arch/amdgpu/matrix/contract.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -13,7 +13,7 @@
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/planning/wait_packets.h"
 #include "loom/target/arch/amdgpu/planning/wait_plan.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 static bool loom_amdgpu_kernel_barrier_is_workgroup_acq_rel(
     const loom_op_t* source_op) {

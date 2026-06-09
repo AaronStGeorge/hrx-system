@@ -8,11 +8,11 @@
 
 #include "loom/pass/builder.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
+#include "loom/target/arch/amdgpu/diagnostics/packet_diagnostics.h"
 #include "loom/target/arch/amdgpu/legalization.h"
 #include "loom/target/arch/amdgpu/lower/lower.h"
 #include "loom/target/arch/amdgpu/math_policy.h"
 #include "loom/target/arch/amdgpu/ops/registry.h"
-#include "loom/target/arch/amdgpu/packet_diagnostics.h"
 #include "loom/target/arch/amdgpu/pass_registry.h"
 
 static const loom_target_low_legality_provider_t*

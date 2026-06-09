@@ -43,7 +43,7 @@ def loom_check_test(
       **kwargs: Additional attributes passed to native_test.
     """
     _loom_check_test_base_name(src)
-    kwargs = apply_loom_test_policy(kwargs)
+    kwargs = apply_loom_test_policy(kwargs, name = name)
     policy_tags = kwargs.pop("tags", [])
     resource_group = kwargs.pop("resource_group", None)
     iree_executable_test(

@@ -120,9 +120,11 @@ def run_requirement(id: str, label: str, cmake_label: str, skip_contract: str):
 def package_policy(
     packages,
     build_requirements=None,
+    forbidden_deps=None,
     run_requirements=None,
     resource_group=None,
 ):
+    del forbidden_deps
     return PackagePolicy(
         packages=list(packages),
         build_requirements=list(build_requirements or []),

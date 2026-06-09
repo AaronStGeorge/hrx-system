@@ -12,7 +12,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 #define LOOM_AMDGPU_DOTF_RELAXED_FOREST_MAX_ACCUMULATORS 4u
 

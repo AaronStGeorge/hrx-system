@@ -15,7 +15,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/arch/amdgpu/encoding.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 typedef struct loom_amdgpu_vgpr_msb_mode_requirement_t {
   // Two-bit S_SET_VGPR_MSB slot mask in low-immediate layout.

@@ -19,8 +19,8 @@ loom_cc_library(
     iree::base
     loom::analysis::contract_roles
     loom::analysis::matrix_fragment_layout
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info_defs
-    loom::target::arch::amdgpu::target_refs
   PUBLIC
 )
 endif()
@@ -53,9 +53,9 @@ loom_cc_library(
     iree::base
     loom::analysis::contract_roles
     loom::analysis::matrix_fragment_layout
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
     loom::target::arch::amdgpu::target_info_defs
-    loom::target::arch::amdgpu::target_refs
   PUBLIC
 )
 endif()
@@ -86,7 +86,7 @@ loom_cc_test(
     ::contract
     iree::testing::gtest
     iree::testing::gtest_main
-    loom::target::arch::amdgpu::target_refs
+    loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )

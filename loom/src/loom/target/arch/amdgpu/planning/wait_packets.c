@@ -12,8 +12,8 @@
 #include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
