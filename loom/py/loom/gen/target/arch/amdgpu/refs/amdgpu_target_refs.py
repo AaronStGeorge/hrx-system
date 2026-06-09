@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 def _ensure_runtime_py_on_path() -> None:
-    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py = Path(__file__).resolve().parents[6]
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
         sys.path.insert(0, runtime_py_string)
@@ -126,7 +126,7 @@ def _emit_header() -> str:
         "// See https://llvm.org/LICENSE.txt for license information.",
         "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
         "",
-        *line_comment_header("//", generator="loom.gen.amdgpu_target_refs"),
+        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.refs.amdgpu_target_refs"),
         "",
         "#ifndef LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
         "#define LOOM_TARGET_ARCH_AMDGPU_REFS_TARGET_REFS_H_",
@@ -184,7 +184,7 @@ def _emit_source(
         "// See https://llvm.org/LICENSE.txt for license information.",
         "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
         "",
-        *line_comment_header("//", generator="loom.gen.amdgpu_target_refs"),
+        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.refs.amdgpu_target_refs"),
         "",
         f'#include "{public_header}"',
         "",

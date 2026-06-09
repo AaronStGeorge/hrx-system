@@ -59,7 +59,7 @@ _AMDGPU_PROVIDER_VISIBILITY = [
 # AMDGPU low descriptors
 #===------------------------------------------------------------------------===#
 
-_AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen:amdgpu_target_info"
+_AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu:target_info"
 
 loom_generated_cc_library(
     name = "error_defs",

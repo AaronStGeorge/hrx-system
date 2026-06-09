@@ -17,7 +17,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_TARGET_REF_GENERATOR = "//loom/py/loom/gen:amdgpu_target_refs"
+_AMDGPU_TARGET_REF_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/refs:target_refs"
 
 _AMDGPU_TARGET_REFS_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu:__pkg__",

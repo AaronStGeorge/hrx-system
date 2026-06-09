@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from loom.gen import amdgpu_matrix_contract_tables
+from loom.gen.target.arch.amdgpu.matrix import amdgpu_matrix_contract_tables
 from loom.target.arch.amdgpu.matrix_contracts import (
     AMDGPU_MATRIX_CONTRACTS,
     AmdgpuMatrixContract,

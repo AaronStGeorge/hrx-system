@@ -43,7 +43,7 @@ loom_target_table_cc_library(
   NAME
     cdna3_encoding_tables
   GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
+    loom::py::loom::gen::target::arch::amdgpu::encoding::encoding_tables
   ARGS
     "--target=cdna3"
     "--descriptor-set-key=amdgpu.cdna3.core"
@@ -64,7 +64,7 @@ loom_target_table_cc_library(
   NAME
     rdna3_encoding_tables
   GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
+    loom::py::loom::gen::target::arch::amdgpu::encoding::encoding_tables
   ARGS
     "--target=rdna3"
     "--descriptor-set-key=amdgpu.rdna3.core"
@@ -85,7 +85,7 @@ loom_target_table_cc_library(
   NAME
     rdna4_encoding_tables
   GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
+    loom::py::loom::gen::target::arch::amdgpu::encoding::encoding_tables
   ARGS
     "--target=rdna4"
     "--descriptor-set-key=amdgpu.rdna4.core"
@@ -106,7 +106,7 @@ loom_target_table_cc_library(
   NAME
     rdna4_gfx125x_encoding_tables
   GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
+    loom::py::loom::gen::target::arch::amdgpu::encoding::encoding_tables
   ARGS
     "--target=rdna4_gfx125x"
     "--descriptor-set-key=amdgpu.rdna4.gfx125x.core"
@@ -127,7 +127,7 @@ loom_target_table_cc_library(
   NAME
     cdna4_encoding_tables
   GENERATOR
-    loom::py::loom::gen::amdgpu_encoding_tables
+    loom::py::loom::gen::target::arch::amdgpu::encoding::encoding_tables
   ARGS
     "--target=cdna4"
     "--descriptor-set-key=amdgpu.cdna4.core"

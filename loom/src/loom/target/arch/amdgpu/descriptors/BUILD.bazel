@@ -19,7 +19,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom/gen:amdgpu_descriptors"
+_AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/descriptors:descriptors"
 
 _AMDGPU_LOW_REGISTRY_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu:__pkg__",

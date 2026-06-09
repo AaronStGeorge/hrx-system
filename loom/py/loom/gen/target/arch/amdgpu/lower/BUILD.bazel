@@ -15,8 +15,3 @@ iree_py_library(
     name = "package",
     srcs = ["__init__.py"],
 )
-
-iree_py_library(
-    name = "bootstrap",
-    srcs = ["bootstrap.py"],
-)

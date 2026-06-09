@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def _ensure_runtime_py_on_path() -> None:
-    runtime_py = Path(__file__).resolve().parents[2]
+    runtime_py = Path(__file__).resolve().parents[6]
     runtime_py_string = str(runtime_py)
     if runtime_py_string not in sys.path:
         sys.path.insert(0, runtime_py_string)
@@ -328,7 +328,7 @@ def _emit_header(
         "// See https://llvm.org/LICENSE.txt for license information.",
         "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
         "",
-        *line_comment_header("//", generator="loom.gen.amdgpu_encoding_tables"),
+        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.encoding.amdgpu_encoding_tables"),
         "",
         f"#ifndef {header_guard}",
         f"#define {header_guard}",
@@ -560,7 +560,7 @@ def _emit_source(
         "// See https://llvm.org/LICENSE.txt for license information.",
         "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
         "",
-        *line_comment_header("//", generator="loom.gen.amdgpu_encoding_tables"),
+        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.encoding.amdgpu_encoding_tables"),
         "",
         f'#include "{public_header}"',
         "",

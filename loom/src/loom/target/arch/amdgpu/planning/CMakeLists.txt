@@ -255,7 +255,7 @@ loom_target_table_cc_library(
   NAME
     occupancy_tables
   GENERATOR
-    loom::py::loom::gen::amdgpu_occupancy_tables
+    loom::py::loom::gen::target::arch::amdgpu::planning::occupancy_tables
   DEPS
     iree::base
     loom::target::arch::amdgpu::target_info

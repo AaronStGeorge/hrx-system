@@ -30,7 +30,7 @@ loom_target_table_cc_library(
   NAME
     contract_tables
   GENERATOR
-    loom::py::loom::gen::amdgpu_matrix_contract_tables
+    loom::py::loom::gen::target::arch::amdgpu::matrix::contract_tables
   ARGS
     "--public-header=loom/target/arch/amdgpu/matrix/contract_tables.h"
   DEPS

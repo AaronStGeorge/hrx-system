@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import mock
 
-from loom.gen import amdgpu_descriptors
+from loom.gen.target.arch.amdgpu.descriptors import amdgpu_descriptors
 from loom.target.arch.amdgpu.target_info import AmdgpuDescriptorSetInfo
 from loom.target.low_descriptors import Descriptor, DescriptorSet
 

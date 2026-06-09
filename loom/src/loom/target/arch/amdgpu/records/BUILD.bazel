@@ -16,7 +16,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_TARGET_RECORDS_GENERATOR = "//loom/py/loom/gen:amdgpu_target_records"
+_AMDGPU_TARGET_RECORDS_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/records:target_records"
 
 _AMDGPU_TARGET_RECORDS_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu:__pkg__",
