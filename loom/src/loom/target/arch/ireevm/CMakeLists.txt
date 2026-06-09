@@ -152,23 +152,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_IREE_VM)
-loom_cc_library(
-  NAME
-    check_provider
-  HDRS
-    "check/provider.h"
-  SRCS
-    "check/provider.c"
-  DEPS
-    ::provider
-    iree::base
-    loom::tools::loom-check::provider
-  TESTONLY
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_IREE_VM)
 iree_native_test(
   NAME
     "test_import_decl"

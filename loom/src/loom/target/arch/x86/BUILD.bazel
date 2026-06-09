@@ -23,7 +23,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_X86_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+_X86_CHECK_PACKAGE_VISIBILITY = ["//loom/src/loom/target/arch/x86/check:__pkg__"]
 
 _X86_LLVMIR_VISIBILITY = ["//loom/src/loom/target/emit/llvmir/x86:__pkg__"]
 
@@ -34,7 +34,7 @@ _X86_OPS_VISIBILITY = ["//loom/src/loom/target/arch/x86/ops:__pkg__"]
 _X86_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
-]
+] + _X86_CHECK_PACKAGE_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # x86 low descriptors
@@ -324,20 +324,6 @@ loom_cc_library(
         ":math_policy",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/x86/ops",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    testonly = True,
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
-    visibility = _X86_CHECK_VISIBILITY,
-    deps = [
-        ":provider",
-        "//loom/src/loom/target/emit/native/x86:loom_check",
-        "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
 )

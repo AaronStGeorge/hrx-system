@@ -19,7 +19,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_X86_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/x86:__pkg__"]
+_X86_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/x86/check:__pkg__"]
 
 #===------------------------------------------------------------------------===#
 # x86 native assembly fragments

@@ -20,7 +20,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_IREEVM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+_IREEVM_CHECK_PACKAGE_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/check:__pkg__"]
 
 _IREEVM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/contracts:__pkg__"]
 
@@ -33,7 +33,7 @@ _IREEVM_OPS_VISIBILITY = ["//loom/src/loom/target/arch/ireevm/ops:__pkg__"]
 _IREEVM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
-] + _IREEVM_EMIT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY
+] + _IREEVM_CHECK_PACKAGE_VISIBILITY + _IREEVM_EMIT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # IREE VM low descriptors
@@ -141,19 +141,6 @@ loom_cc_library(
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/ireevm/ops",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    testonly = True,
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
-    visibility = _IREEVM_CHECK_VISIBILITY,
-    deps = [
-        ":provider",
-        "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
 )

@@ -364,24 +364,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86)
-loom_cc_library(
-  NAME
-    check_provider
-  HDRS
-    "check/provider.h"
-  SRCS
-    "check/provider.c"
-  DEPS
-    ::provider
-    iree::base
-    loom::target::emit::native::x86::loom_check
-    loom::tools::loom-check::provider
-  TESTONLY
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "allocation"

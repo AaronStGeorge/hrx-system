@@ -21,7 +21,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_WASM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+_WASM_CHECK_PACKAGE_VISIBILITY = ["//loom/src/loom/target/arch/wasm/check:__pkg__"]
 
 _WASM_CONTRACT_VISIBILITY = ["//loom/src/loom/target/emit/wasm/contracts:__pkg__"]
 
@@ -34,7 +34,7 @@ _WASM_OPS_VISIBILITY = ["//loom/src/loom/target/arch/wasm/ops:__pkg__"]
 _WASM_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
-]
+] + _WASM_CHECK_PACKAGE_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # Wasm low descriptors
@@ -114,19 +114,6 @@ loom_cc_library(
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/wasm/ops",
         "//loom/src/loom/target/emit/wasm/lower",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    testonly = True,
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
-    visibility = _WASM_CHECK_VISIBILITY,
-    deps = [
-        ":provider",
-        "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
 )

@@ -40,7 +40,7 @@ _TARGET_IREE_VM_CHECK_COPTS = iree_select({
 
 _TARGET_IREE_VM_CHECK_DEPS = iree_select({
     "//loom/config/target/arch:iree_vm": [
-        "//loom/src/loom/target/arch/ireevm:check_provider",
+        "//loom/src/loom/target/arch/ireevm/check:check_provider",
     ],
     "//conditions:default": [],
 })
@@ -68,7 +68,7 @@ _TARGET_SPIRV_CHECK_COPTS = iree_select({
 
 _TARGET_SPIRV_CHECK_DEPS = iree_select({
     "//loom/config/target/arch:spirv": [
-        "//loom/src/loom/target/arch/spirv:check_provider",
+        "//loom/src/loom/target/arch/spirv/check:check_provider",
     ],
     "//conditions:default": [],
 })
@@ -96,7 +96,7 @@ _TARGET_WASM_CHECK_COPTS = iree_select({
 
 _TARGET_WASM_CHECK_DEPS = iree_select({
     "//loom/config/target/arch:wasm": [
-        "//loom/src/loom/target/arch/wasm:check_provider",
+        "//loom/src/loom/target/arch/wasm/check:check_provider",
     ],
     "//conditions:default": [],
 })
@@ -124,7 +124,7 @@ _TARGET_X86_CHECK_COPTS = iree_select({
 
 _TARGET_X86_CHECK_DEPS = iree_select({
     "//loom/config/target/arch:x86": [
-        "//loom/src/loom/target/arch/x86:check_provider",
+        "//loom/src/loom/target/arch/x86/check:check_provider",
     ],
     "//conditions:default": [],
 })
