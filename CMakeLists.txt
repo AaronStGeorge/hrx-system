@@ -105,16 +105,19 @@ hrx_fix_ndebug()
 
 list(APPEND CMAKE_MODULE_PATH
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
+  "${CMAKE_CURRENT_LIST_DIR}/build_tools/sanitizer"
 )
 
 include("${CMAKE_CURRENT_LIST_DIR}/MODULE.cmake.lock")
 
 include("${CMAKE_CURRENT_LIST_DIR}/runtime/project.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/libhrx/project.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/loom/project.cmake")
 
 # Shared repository CMake primitives.
 include(iree_macros)
 include(iree_copts)
+include(iree_sanitizer_suppressions)
 include(iree_cc_binary)
 include(iree_cc_library)
 include(iree_cc_test)
@@ -125,6 +128,7 @@ include(iree_c_embed_data)
 include(iree_add_all_subdirs)
 include(iree_configure_testing)
 include(iree_native_test)
+include(iree_execution_test_suite)
 include(iree_cc_binary_benchmark)
 include(iree_genrule)
 include(iree_python)
@@ -165,6 +169,7 @@ if(LIBHRX_BUILD AND LIBHRX_BUILD_CTS)
 endif()
 iree_runtime_configure_project()
 libhrx_configure_project()
+loom_configure_project()
 
 message(STATUS "HRX/IREE HAL drivers:")
 if(IREE_HAL_DRIVER_AMDGPU)
@@ -188,6 +193,12 @@ endif()
 
 add_subdirectory(build_tools/embed_data)
 add_subdirectory(runtime/src)
+
+if(LOOM_BUILD)
+  add_subdirectory(loom/py/loom)
+  add_subdirectory(loom/src)
+  add_subdirectory(loom/binding/c)
+endif()
 
 if(LIBHRX_BUILD)
   add_subdirectory(libhrx)

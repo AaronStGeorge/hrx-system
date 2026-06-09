@@ -1,0 +1,156 @@
+// RUN: emit llvmir-body
+
+// Memory intrinsics preserve volatile operands and declaration signatures.
+func.def public @source_memory_intrinsics(%target: buffer, %source: buffer, %length: offset) {
+  %fill_value = scalar.constant 0 : i8
+  %is_volatile = scalar.constant false : i1
+  %lifetime_size = scalar.constant 16 : i64
+  llvmir.intrinsic<llvm.lifetime.start> (%lifetime_size, %target) : (i64, buffer)
+  llvmir.intrinsic<llvm.memset> (%target, %fill_value, %length, %is_volatile) : (buffer, i8, offset, i1)
+  llvmir.intrinsic<llvm.memcpy> (%target, %source, %length, %is_volatile) : (buffer, buffer, offset, i1)
+  llvmir.intrinsic<llvm.memcpy> (%target, %source, %length, %is_volatile) : (buffer, buffer, offset, i1)
+  llvmir.intrinsic<llvm.lifetime.end> (%lifetime_size, %target) : (i64, buffer)
+  func.return
+}
+
+// ----
+define dso_local void @source_memory_intrinsics(ptr %target, ptr %source, i64 %length) {
+entry:
+  call void @llvm.lifetime.start.p0(i64 16, ptr %target)
+  call void @llvm.memset.p0.i64(ptr %target, i8 0, i64 %length, i1 0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %target, ptr %source, i64 %length, i1 0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %target, ptr %source, i64 %length, i1 0)
+  call void @llvm.lifetime.end.p0(i64 16, ptr %target)
+  ret void
+}
+
+declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
+
+declare void @llvm.memset.p0.i64(ptr nocapture writeonly, i8, i64, i1 immarg)
+
+declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg)
+
+declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
+
+// ====
+
+// Inline assembly keeps flags, template, constraints, and operand order intact.
+func.def public @inline_asm_add(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = llvmir.inline_asm<sideeffect> "addl $2, $0", "=r,0,r"(%lhs, %rhs) : (i32, i32) -> i32
+  func.return %sum : i32
+}
+
+// ----
+define dso_local i32 @inline_asm_add(i32 %lhs, i32 %rhs) {
+entry:
+  %sum = call i32 asm sideeffect "addl $2, $0", "=r,0,r"(i32 %lhs, i32 %rhs)
+  ret i32 %sum
+}
+
+// ====
+
+// RUN: emit llvmir-body x86_64-object
+
+// X86 intrinsics lower to declarations and calls without synthetic wrappers.
+func.def public @read_tsc() -> (i64) {
+  llvmir.intrinsic<llvm.x86.sse2.pause> () : ()
+  %ignored = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
+  %ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
+  func.return %ticks : i64
+}
+
+// ----
+define dso_local i64 @read_tsc() {
+entry:
+  call void @llvm.x86.sse2.pause()
+  %ignored = call i64 @llvm.x86.rdtsc()
+  %ticks = call i64 @llvm.x86.rdtsc()
+  ret i64 %ticks
+}
+
+declare void @llvm.x86.sse2.pause()
+
+declare i64 @llvm.x86.rdtsc()
+
+// ====
+
+// RUN: emit llvmir-body amdgpu-hal
+
+// AMDGPU workitem intrinsics use the target profile's kernel ABI.
+func.def public device @dispatch() {
+  %tid_x = llvmir.intrinsic<llvm.amdgcn.workitem.id.x> () : () -> i32
+  %tid_y = llvmir.intrinsic<llvm.amdgcn.workitem.id.y> () : () -> i32
+  %tid_z = llvmir.intrinsic<llvm.amdgcn.workitem.id.z> () : () -> i32
+  func.return
+}
+
+// ----
+define amdgpu_kernel void @dispatch() #0 {
+entry:
+  %tid_x = call i32 @llvm.amdgcn.workitem.id.x()
+  %tid_y = call i32 @llvm.amdgcn.workitem.id.y()
+  %tid_z = call i32 @llvm.amdgcn.workitem.id.z()
+  ret void
+}
+
+declare i32 @llvm.amdgcn.workitem.id.x()
+
+declare i32 @llvm.amdgcn.workitem.id.y()
+
+declare i32 @llvm.amdgcn.workitem.id.z()
+
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }
+
+// ====
+
+// RUN: emit llvmir-body amdgpu-hal
+
+// Public device signatures use the AMDGPU HAL binding ABI.
+func.def public device @dispatch_with_bindings(%input: buffer, %output: buffer, %n: index) {
+  func.return
+}
+
+// ----
+define amdgpu_kernel void @dispatch_with_bindings(ptr addrspace(1) inreg noundef %input, ptr addrspace(1) inreg noundef %output, i32 %n) #0 {
+entry:
+  ret void
+}
+
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }
+
+// ====
+
+// RUN: emit llvmir-body amdgpu-hal
+
+// AMDGPU HAL buffer arguments lower to global address-space pointers.
+func.def public device @vector_hal_kernel(%input: buffer, %output: buffer, %base: index) {
+  %zero = index.constant 0 : offset
+  %tid_x = llvmir.intrinsic<llvm.amdgcn.workitem.id.x> () : () -> i32
+  %tid_index = index.cast %tid_x : i32 to index
+  %element = index.add %base, %tid_index : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<1024xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1024xf32, #dense>
+  %loaded = vector.load %input_view[%element] : view<1024xf32, #dense> -> vector<4xf32>
+  %doubled = vector.addf<nnan> %loaded, %loaded : vector<4xf32>
+  vector.store %doubled, %output_view[%element] : vector<4xf32>, view<1024xf32, #dense>
+  func.return
+}
+
+// ----
+define amdgpu_kernel void @vector_hal_kernel(ptr addrspace(1) inreg noundef %input, ptr addrspace(1) inreg noundef %output, i32 %base) #0 {
+entry:
+  %tid_x = call i32 @llvm.amdgcn.workitem.id.x()
+  %element = add i32 %base, %tid_x
+  %input_view = getelementptr i8, ptr addrspace(1) %input, i64 0
+  %output_view = getelementptr i8, ptr addrspace(1) %output, i64 0
+  %v8 = getelementptr float, ptr addrspace(1) %input_view, i32 %element
+  %loaded = load <4 x float>, ptr addrspace(1) %v8
+  %doubled = fadd nnan <4 x float> %loaded, %loaded
+  %v11 = getelementptr float, ptr addrspace(1) %output_view, i32 %element
+  store <4 x float> %doubled, ptr addrspace(1) %v11
+  ret void
+}
+
+declare i32 @llvm.amdgcn.workitem.id.x()
+
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }

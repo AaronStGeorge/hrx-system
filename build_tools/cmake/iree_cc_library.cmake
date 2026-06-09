@@ -293,6 +293,7 @@ function(iree_cc_library)
     # problem. This is the CMake equivalent of Bazel's alwayslink = True.
     add_library(${_OBJECTS_NAME} OBJECT)
     add_library(${_NAME} INTERFACE)
+    add_dependencies(${_NAME} ${_OBJECTS_NAME})
 
     target_sources(${_OBJECTS_NAME}
       PRIVATE

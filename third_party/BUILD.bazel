@@ -8,6 +8,8 @@
 # CMake adapters live under build_tools/third_party/. See
 # build_tools/third_party/README.md for dependency ownership and update policy.
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
+
 package(default_visibility = ["//visibility:private"])
 
 package_group(
@@ -142,12 +144,18 @@ alias(
 
 alias(
     name = "hsa_runtime_headers",
-    actual = select({
-        "//runtime/config/hal:driver_amdgpu": "@hsa_runtime_headers//:hsa_runtime_headers",
+    actual = selects.with_or({
+        (
+            "//loom/config/target:amdgpu",
+            "//runtime/config/hal:driver_amdgpu",
+        ): "@hsa_runtime_headers//:hsa_runtime_headers",
         "//conditions:default": ":empty_hsa_runtime_headers",
     }),
     tags = ["manual"],
-    visibility = [":runtime_users"],
+    visibility = [
+        ":loom_users",
+        ":runtime_users",
+    ],
 )
 
 alias(
@@ -167,7 +175,10 @@ alias(
         "//conditions:default": ":empty_rccl_headers",
     }),
     tags = ["manual"],
-    visibility = [":runtime_users"],
+    visibility = [
+        ":loom_users",
+        ":runtime_users",
+    ],
 )
 
 alias(
@@ -177,5 +188,8 @@ alias(
         "//conditions:default": ":empty_vulkan_headers",
     }),
     tags = ["manual"],
-    visibility = [":runtime_users"],
+    visibility = [
+        ":loom_users",
+        ":runtime_users",
+    ],
 )

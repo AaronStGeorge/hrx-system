@@ -19,6 +19,19 @@ IREE_TARGET_DIRECTORIES = ("runtime", "loom")
 SANITIZER_TEST_CONFIGS = ("asan", "ubsan", "tsan")
 SANITIZER_BUILD_CONFIGS = ("msan",)
 
+CMAKE_SANITIZER_SMOKE_TEST_BUILD_TARGETS = (
+    "iree::base::status_test",
+    "loom::format::bytecode::varint_test",
+)
+CMAKE_SANITIZER_SMOKE_LIBRARY_BUILD_TARGETS = (
+    "iree::base",
+    "loom::format::bytecode::varint",
+)
+CMAKE_SANITIZER_SMOKE_CTEST_REGEXES = (
+    "^iree/base/status_test$",
+    "^loom/format/bytecode/varint_test$",
+)
+
 
 @dataclass(frozen=True)
 class TestXfail:
@@ -40,10 +53,18 @@ def ctest_xfail(regex: str) -> TestXfail:
 
 
 def bazel_pattern_to_ctest_regex(pattern: str) -> str:
-    if not pattern.startswith("//runtime/src/"):
+    path = None
+    for bazel_prefix, ctest_prefix in (
+        ("//runtime/src/", ""),
+        ("//loom/src/", ""),
+        ("//loom/", "loom/"),
+    ):
+        if pattern.startswith(bazel_prefix):
+            path = ctest_prefix + pattern.removeprefix(bazel_prefix)
+            break
+    if path is None:
         raise ValueError(f"cannot map Bazel pattern to CTest name: {pattern}")
 
-    path = pattern.removeprefix("//runtime/src/")
     if path.endswith("/..."):
         ctest_prefix = path.removesuffix("/...")
         return "^" + re.escape(ctest_prefix) + "/"
@@ -101,9 +122,25 @@ NON_CPU_HAL_DRIVER_CTEST_REGEX = (
 
 AMDGPU_BAZEL_DRIVER_TARGETS = ("//runtime/src/iree/hal/drivers/amdgpu/...",)
 AMDGPU_CMAKE_DRIVER_TARGETS = ("runtime/src/iree/hal/drivers/amdgpu/all",)
+AMDGPU_CMAKE_RESOURCE_TEST_BUILD_TARGETS = (
+    "loom_tools_iree-test-loom_amdgpu_execution_test_test_deps",
+)
+AMDGPU_CMAKE_TEST_BUILD_TARGETS = (
+    AMDGPU_CMAKE_DRIVER_TARGETS + AMDGPU_CMAKE_RESOURCE_TEST_BUILD_TARGETS
+)
 AMDGPU_TARGET_SELECTOR = "gfx942"
-AMDGPU_RESOURCE_TAG = "iree-run-requirement=runtime.resource.amd_gpu"
-AMDGPU_CTEST_RESOURCE_LABEL = "runtime-resource=amd-gpu"
+RUNTIME_AMDGPU_RESOURCE_TAG = "iree-run-requirement=runtime.resource.amd_gpu"
+LOOM_AMDGPU_RESOURCE_TAG = "iree-run-requirement=loom.resource.amd_gpu"
+AMDGPU_BAZEL_RESOURCE_SLICES = (
+    ("runtime", RUNTIME_AMDGPU_RESOURCE_TAG),
+    ("Loom", LOOM_AMDGPU_RESOURCE_TAG),
+)
+RUNTIME_CTEST_RESOURCE_LABEL_PREFIX = "runtime-resource="
+LOOM_CTEST_RESOURCE_LABEL_PREFIX = "loom-resource="
+CTEST_RESOURCE_LABEL_EXCLUDE_REGEX = (
+    RUNTIME_CTEST_RESOURCE_LABEL_PREFIX + "|" + LOOM_CTEST_RESOURCE_LABEL_PREFIX
+)
+AMDGPU_CTEST_RESOURCE_LABEL_REGEX = "runtime-resource=amd-gpu|loom-resource=amd-gpu"
 AMDGPU_XFAILS = (
     bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/cts/..."),
     bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:allocator_test"),

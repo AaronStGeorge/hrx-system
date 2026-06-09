@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "iree/base/internal/debugging.h"
 #include "iree/base/target_platform.h"
 
 #if defined(IREE_PLATFORM_WINDOWS)
@@ -2044,10 +2045,12 @@ static iree_status_t iree_hal_vulkan_logical_device_create_from_selection(
     VkDeviceCreateInfo device_create_info;
     iree_hal_vulkan_device_plan_make_create_info(&device_plan,
                                                  &device_create_info);
+    IREE_LEAK_CHECK_DISABLE_PUSH();
     status =
         iree_vkCreateDevice(IREE_VULKAN_INSTANCE(&device->instance.syms),
                             device->physical_device.handle, &device_create_info,
                             /*pAllocator=*/NULL, &device->logical_device);
+    IREE_LEAK_CHECK_DISABLE_POP();
   }
   if (iree_status_is_ok(status)) {
     device->owns_logical_device = true;

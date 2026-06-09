@@ -1,0 +1,20 @@
+test.target<low_core> @matmul_native_target
+
+target.artifact @matmul_native_object target(@matmul_native_target) {abi = object_file, artifact_format = elf}
+
+func.def target(@matmul_native_target) abi(object_function) export("matmul", {artifact = @matmul_native_object, linkage = "dso_local"}) @matmul_native() {
+  func.return
+}
+
+test.target<low_core> @matmul_hal_target {abi = hal_kernel}
+
+target.artifact @matmul_hal_executable target(@matmul_hal_target) {abi = hal_executable, artifact_format = elf}
+
+kernel.def target(@matmul_hal_target) export("matmul") artifact(@matmul_hal_executable) @matmul_hal() {
+  %c1 = index.constant 1 : index
+  %c16 = index.constant 16 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c16, %c4, %c1) : index
+} launch {
+  kernel.return
+}

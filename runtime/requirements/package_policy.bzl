@@ -80,8 +80,8 @@ PACKAGE_POLICIES = [
 def _current_policy():
     return collect_package_policy(native.package_name(), PACKAGE_POLICIES)
 
-def apply_runtime_target_policy(kwargs):
-    return apply_target_policy(kwargs, _current_policy())
+def apply_runtime_target_policy(kwargs, name = None):
+    return apply_target_policy(kwargs, _current_policy(), name = name)
 
-def apply_runtime_test_policy(kwargs):
-    return apply_test_policy(kwargs, _current_policy())
+def apply_runtime_test_policy(kwargs, name = None):
+    return apply_test_policy(kwargs, _current_policy(), name = name)

@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "iree/base/internal/debugging.h"
 #include "iree/hal/drivers/vulkan/executable.h"
 
 //===----------------------------------------------------------------------===//
@@ -87,9 +88,11 @@ iree_status_t iree_hal_vulkan_executable_cache_create(
   VkPipelineCacheCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
   };
+  IREE_LEAK_CHECK_DISABLE_PUSH();
   iree_status_t status = iree_vkCreatePipelineCache(
       IREE_VULKAN_DEVICE(syms), logical_device, &create_info,
       /*pAllocator=*/NULL, &executable_cache->pipeline_cache);
+  IREE_LEAK_CHECK_DISABLE_POP();
 
   if (iree_status_is_ok(status)) {
     *out_executable_cache = (iree_hal_executable_cache_t*)executable_cache;

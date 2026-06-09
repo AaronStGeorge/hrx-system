@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "lists registered passes",
+      "run": {
+        "tool": "loom-opt",
+        "args": ["--list-passes"]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "branch-fusion",
+            "canonicalize",
+            "cse",
+            "dce",
+            "source-to-low",
+            "symbol-dce",
+            "vector-to-scalar"
+          ]
+        }
+      }
+    },
+    {
+      "name": "prints pass help",
+      "run": {
+        "tool": "loom-opt",
+        "args": ["--pass-help=canonicalize"]
+      },
+      "stdout": {
+        "contains": [
+          "canonicalize",
+          "kind: func",
+          "options:",
+          "max-iterations: uint32 [1..4294967295]"
+        ]
+      }
+    },
+    {
+      "name": "runs canonicalize and dce pipeline",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pass=canonicalize{max-iterations=2}",
+          "--pass=dce"
+        ],
+        "stdin": {
+          "text": "func.def @dce_single(%x: i32) -> (i32) {\n  %dead = scalar.constant 42 : i32\n  func.return %x : i32\n}\n"
+        }
+      },
+      "stdout": {
+        "contains": [
+          "func.def @dce_single(%x: i32) -> (i32) {",
+          "func.return %x : i32"
+        ],
+        "not_contains": ["%dead"]
+      }
+    },
+    {
+      "name": "materializes config values",
+      "run": {
+        "tool": "loom-opt",
+        "args": ["--config=model36.model.hidden_size=4096"],
+        "stdin": {
+          "text": "config.decl @model36.model.hidden_size : index\n\nfunc.def @read_config() -> (index) {\n  %hidden = config.get @model36.model.hidden_size : index\n  func.return %hidden : index\n}\n"
+        }
+      },
+      "stdout": {
+        "contains": [
+          "config.def @model36.model.hidden_size = 4096 : index",
+          "%hidden = config.get @model36.model.hidden_size : index"
+        ],
+        "not_contains": ["config.decl @model36.model.hidden_size"]
+      }
+    },
+    {
+      "name": "rejects duplicate config binding",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--config=answer=40",
+          "--config=@answer=41",
+          "--output={tmp}/unused.loom"
+        ],
+        "stdin": {
+          "text": "config.decl @answer : index\n"
+        }
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": ["duplicate config binding for 'answer'"]
+      }
+    },
+    {
+      "name": "writes pass pipeline reproducer",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pipeline=@boom",
+          "--pass-reproducer={tmp}/pass.repro",
+          "--output={tmp}/unused.loom"
+        ],
+        "stdin": {
+          "text": "pass.pipeline<module> @boom pipeline {\n  fail \"boom\"\n}\n\nfunc.def @reproducer_input(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n"
+        }
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": [
+          "pass pipeline reproducer written to",
+          "boom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/pass.repro",
+          "non_empty": true
+        }
+      ]
+    }
+  ]
+}

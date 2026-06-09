@@ -60,6 +60,18 @@ class CiTest(unittest.TestCase):
             text,
         )
 
+    def test_bazel_default_targets_include_loom(self):
+        args = ci.parse_arguments(["iree-bazel-cpu"])
+
+        steps = ci.steps_from_args(args)
+        build_step = next(step for step in steps if step.name == "Build IREE")
+        test_step = next(step for step in steps if step.name == "Test IREE")
+
+        self.assertIn("//runtime/...", build_step.argv)
+        self.assertIn("//loom/...", build_step.argv)
+        self.assertIn("//runtime/...", test_step.argv)
+        self.assertIn("//loom/...", test_step.argv)
+
     def test_amdgpu_dry_run_does_not_embed_machine_paths(self):
         args = ci.parse_arguments(
             [
@@ -209,6 +221,8 @@ class CiTest(unittest.TestCase):
                 "iree-bazel-amdgpu",
                 "--target",
                 "//runtime/...",
+                "--target",
+                "//loom/...",
             ]
         )
 
@@ -220,19 +234,34 @@ class CiTest(unittest.TestCase):
             self.assertTrue(any(target in step.argv for step in build_steps))
         self.assertTrue(
             any(
-                "--test_tag_filters=" + ci_config.AMDGPU_RESOURCE_TAG in line
+                "--test_tag_filters=" + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG in line
                 for line in command_lines
             )
         )
-        resource_test = next(
-            step for step in steps if step.name == "Test IREE AMDGPU resources"
+        self.assertTrue(
+            any(
+                "--test_tag_filters=" + ci_config.LOOM_AMDGPU_RESOURCE_TAG in line
+                for line in command_lines
+            )
         )
-        self.assertIn("//runtime/...", resource_test.argv)
+        runtime_resource_test = next(
+            step for step in steps if step.name == "Test IREE AMDGPU runtime resources"
+        )
+        self.assertIn("//runtime/...", runtime_resource_test.argv)
+        self.assertIn("//loom/...", runtime_resource_test.argv)
         for target in ci_config.AMDGPU_XFAIL_TARGETS:
-            self.assertIn(target, resource_test.argv)
+            self.assertIn(target, runtime_resource_test.argv)
         self.assertNotIn(
             "-//runtime/src/iree/hal/drivers/amdgpu:system_test",
-            resource_test.argv,
+            runtime_resource_test.argv,
+        )
+        loom_resource_test = next(
+            step for step in steps if step.name == "Test IREE AMDGPU Loom resources"
+        )
+        self.assertIn("//loom/...", loom_resource_test.argv)
+        self.assertIn(
+            "--test_tag_filters=" + ci_config.LOOM_AMDGPU_RESOURCE_TAG,
+            loom_resource_test.argv,
         )
 
     def test_amdgpu_sanitizer_command_uses_amdgpu_sanitizer_xfails(self):
@@ -285,7 +314,15 @@ class CiTest(unittest.TestCase):
         self.assertTrue(
             any(
                 "bazel test --config=tsan --test_tag_filters="
-                + ci_config.AMDGPU_RESOURCE_TAG
+                + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG
+                in line
+                for line in command_lines
+            )
+        )
+        self.assertTrue(
+            any(
+                "bazel test --config=tsan --test_tag_filters="
+                + ci_config.LOOM_AMDGPU_RESOURCE_TAG
                 in line
                 for line in command_lines
             )
@@ -417,6 +454,58 @@ class CiTest(unittest.TestCase):
         self.assertNotIn("mesa-vulkan-drivers", preflight)
         self.assertNotIn("vulkan-loader", preflight)
 
+    def test_bazel_cpu_sanitizer_workflow_is_split_by_configuration(self):
+        block = self.workflow_job_block(
+            ".github/workflows/ci_iree_bazel.yml", "linux_bazel_cpu"
+        )
+        self.assertIn("name: Linux / CPU", block)
+        for sanitizer in ("ASAN", "MSAN", "TSAN", "UBSAN"):
+            self.assertIn(f"name: Linux / CPU / {sanitizer}", block)
+            self.assertIn(f"command: iree-bazel-cpu-{sanitizer.lower()}", block)
+        self.assertNotIn("command: iree-bazel-cpu-sanitizers", block)
+
+    def test_cmake_workflow_uses_sanitizer_smoke(self):
+        block = self.workflow_job_block(
+            ".github/workflows/ci_iree_cmake.yml", "linux_cmake_cpu"
+        )
+        self.assertIn("name: Linux / CPU", block)
+        self.assertIn("name: Linux / CPU / Sanitizer Smoke", block)
+        self.assertIn("command: iree-cmake-sanitizer-smoke", block)
+        for sanitizer in ("asan", "msan", "tsan", "ubsan"):
+            self.assertNotIn(f"command: iree-cmake-cpu-{sanitizer}", block)
+        self.assertNotIn("command: iree-cmake-cpu-sanitizers", block)
+
+        for job_name in ("linux_cmake_amdgpu", "linux_cmake_vulkan"):
+            with self.subTest(job=job_name):
+                block = self.workflow_job_block(
+                    ".github/workflows/ci_iree_cmake.yml", job_name
+                )
+                self.assertNotIn("/ Sanitizers", block)
+                self.assertNotIn("-sanitizers", block)
+
+    def test_bazel_gpu_sanitizer_workflows_stay_batched(self):
+        for job_name in ("linux_bazel_amdgpu", "linux_bazel_vulkan"):
+            with self.subTest(job=job_name):
+                block = self.workflow_job_block(
+                    ".github/workflows/ci_iree_bazel.yml", job_name
+                )
+                self.assertIn("/ Sanitizers", block)
+                self.assertRegex(
+                    block,
+                    r"command: iree-bazel-(amdgpu|vulkan)-sanitizers",
+                )
+
+    def test_iree_workflows_do_not_trigger_on_libhrx_only_paths(self):
+        for path in (
+            ".github/workflows/ci_iree_bazel.yml",
+            ".github/workflows/ci_iree_cmake.yml",
+        ):
+            with self.subTest(path=path):
+                text = Path(path).read_text()
+                self.assertIn('- "runtime/**"', text)
+                self.assertIn('- "loom/**"', text)
+                self.assertNotIn('- "libhrx/**"', text)
+
     def test_xfails_project_to_ctest_regexes(self):
         self.assertIn(
             "^iree/tokenizer/",
@@ -450,6 +539,16 @@ class CiTest(unittest.TestCase):
             "^iree/hal/drivers/amdgpu/util/pm4_dispatch_live_test$",
             ci_config.AMDGPU_TSAN_CTEST_EXCLUDE_REGEX,
         )
+        self.assertEqual(
+            ci_config.bazel_pattern_to_ctest_regex("//loom/src/loom/codegen/low:test"),
+            "^loom/codegen/low/test$",
+        )
+        self.assertEqual(
+            ci_config.bazel_pattern_to_ctest_regex(
+                "//loom/binding/c/example:emit_spirv_vulkan_test"
+            ),
+            "^loom/binding/c/example/emit_spirv_vulkan_test$",
+        )
 
     def test_cmake_cpu_sanitizer_command_uses_cmake_build_dir_and_xfails(self):
         args = ci.parse_arguments(["iree-cmake-cpu-ubsan"])
@@ -482,7 +581,12 @@ class CiTest(unittest.TestCase):
                 for step in test_steps
             )
         )
-        self.assertTrue(any("runtime-resource=" in step.argv for step in test_steps))
+        self.assertTrue(
+            any(
+                ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX in step.argv
+                for step in test_steps
+            )
+        )
 
     def test_cmake_cpu_sanitizers_command_runs_each_configuration(self):
         args = ci.parse_arguments(["iree-cmake-cpu-sanitizers"])
@@ -510,6 +614,87 @@ class CiTest(unittest.TestCase):
             any("Test IREE CMake with MSAN" in step.name for step in steps)
         )
 
+    def test_cmake_sanitizer_smoke_command_builds_minimal_targets(self):
+        args = ci.parse_arguments(["iree-cmake-sanitizer-smoke"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        for sanitizer in ("asan", "ubsan", "tsan", "msan"):
+            self.assertTrue(
+                any(
+                    f"--cmake-build-dir build/ci/iree-cmake-sanitizer-smoke-{sanitizer}"
+                    in line
+                    for line in command_lines
+                )
+            )
+            self.assertTrue(
+                any(
+                    f"-DIREE_ENABLE_{sanitizer.upper()}=ON" in line
+                    for line in command_lines
+                )
+            )
+        for sanitizer in ("asan", "ubsan", "tsan"):
+            self.assertTrue(
+                any(
+                    f"iree-cmake-sanitizer-smoke-{sanitizer}" in line
+                    and "-DIREE_BUILD_TESTS=ON" in line
+                    and "-DIREE_BUILD_BENCHMARKS=ON" in line
+                    for line in command_lines
+                )
+            )
+        self.assertTrue(
+            any(
+                "iree-cmake-sanitizer-smoke-msan" in line
+                and "-DIREE_BUILD_TESTS=OFF" in line
+                and "-DIREE_BUILD_BENCHMARKS=OFF" in line
+                for line in command_lines
+            )
+        )
+
+        build_steps = [step for step in steps if step.name.startswith("Build IREE")]
+        for target in ci_config.CMAKE_SANITIZER_SMOKE_TEST_BUILD_TARGETS:
+            self.assertTrue(
+                any(
+                    target in step.argv
+                    for step in build_steps
+                    if "MSAN" not in step.name
+                )
+            )
+        msan_build_step = next(step for step in build_steps if "MSAN" in step.name)
+        for target in ci_config.CMAKE_SANITIZER_SMOKE_LIBRARY_BUILD_TARGETS:
+            self.assertIn(target, msan_build_step.argv)
+        for target in ci_config.CMAKE_SANITIZER_SMOKE_TEST_BUILD_TARGETS:
+            self.assertNotIn(target, msan_build_step.argv)
+
+        self.assertEqual(len(build_steps), 4)
+        for step in build_steps:
+            expected_targets = (
+                ci_config.CMAKE_SANITIZER_SMOKE_LIBRARY_BUILD_TARGETS
+                if "MSAN" in step.name
+                else ci_config.CMAKE_SANITIZER_SMOKE_TEST_BUILD_TARGETS
+            )
+            self.assertEqual(
+                set(step.argv).intersection(expected_targets),
+                set(expected_targets),
+            )
+            self.assertNotIn("all", step.argv)
+
+        test_steps = [step for step in steps if step.name.startswith("Test IREE")]
+        self.assertEqual(len(test_steps), 3)
+        self.assertFalse(any("with MSAN" in step.name for step in test_steps))
+        for regex in ci_config.CMAKE_SANITIZER_SMOKE_CTEST_REGEXES:
+            self.assertTrue(
+                any(regex in arg for step in test_steps for arg in step.argv)
+            )
+        self.assertFalse(
+            any(
+                ci_config.CPU_SANITIZERS_CTEST_EXCLUDE_REGEX in arg
+                for step in test_steps
+                for arg in step.argv
+            )
+        )
+
     def test_cmake_amdgpu_command_scopes_build_and_tests_to_amdgpu(self):
         args = ci.parse_arguments(["iree-cmake-amdgpu"])
 
@@ -531,6 +716,8 @@ class CiTest(unittest.TestCase):
         build_steps = [step for step in steps if step.name.startswith("Build IREE")]
         for target in ci_config.AMDGPU_CMAKE_DRIVER_TARGETS:
             self.assertTrue(any(target in step.argv for step in build_steps))
+        for target in ci_config.AMDGPU_CMAKE_RESOURCE_TEST_BUILD_TARGETS:
+            self.assertTrue(any(target in step.argv for step in build_steps))
         self.assertTrue(
             any("-R '^iree/hal/drivers/amdgpu/'" in line for line in command_lines)
         )
@@ -547,7 +734,10 @@ class CiTest(unittest.TestCase):
             )
         )
         self.assertTrue(
-            any("-L runtime-resource=amd-gpu" in line for line in command_lines)
+            any(
+                ci_config.AMDGPU_CTEST_RESOURCE_LABEL_REGEX in step.argv
+                for step in steps
+            )
         )
 
     def test_cmake_amdgpu_tsan_uses_tsan_specific_xfails(self):
@@ -587,6 +777,24 @@ class CiTest(unittest.TestCase):
                 for line in command_lines
             )
         )
+
+    def test_cmake_amdgpu_msan_builds_driver_targets_without_test_deps(self):
+        args = ci.parse_arguments(["iree-cmake-amdgpu-msan"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertTrue(any("-DIREE_ENABLE_MSAN=ON" in line for line in command_lines))
+        self.assertTrue(any("-DIREE_BUILD_TESTS=OFF" in line for line in command_lines))
+        self.assertTrue(
+            any("-DIREE_BUILD_BENCHMARKS=OFF" in line for line in command_lines)
+        )
+        build_steps = [step for step in steps if step.name.startswith("Build IREE")]
+        for target in ci_config.AMDGPU_CMAKE_DRIVER_TARGETS:
+            self.assertTrue(any(target in step.argv for step in build_steps))
+        for target in ci_config.AMDGPU_CMAKE_RESOURCE_TEST_BUILD_TARGETS:
+            self.assertFalse(any(target in step.argv for step in build_steps))
+        self.assertFalse(any("Test IREE CMake AMDGPU" in step.name for step in steps))
 
     def test_cmake_vulkan_command_scopes_build_and_tests_to_vulkan(self):
         args = ci.parse_arguments(["iree-cmake-vulkan"])

@@ -72,6 +72,7 @@ CMAKE_COMMANDS = {
     "iree-cmake-vulkan-ubsan": ("vulkan", "ubsan"),
     "iree-cmake-vulkan-sanitizers": ("vulkan", "all"),
 }
+CMAKE_SANITIZER_SMOKE_COMMAND = "iree-cmake-sanitizer-smoke"
 if __package__:
     from . import ci_config
 else:
@@ -121,6 +122,16 @@ def sanitizer_env(config: str | None) -> tuple[tuple[str, str], ...]:
     if config != "tsan":
         return ()
     return (("TSAN_OPTIONS", f"suppressions={TSAN_SUPPRESSIONS_FILE}"),)
+
+
+def cmake_tests_enabled(sanitizer: str | None) -> bool:
+    if sanitizer is None:
+        return True
+    if sanitizer in ci_config.SANITIZER_TEST_CONFIGS:
+        return True
+    if sanitizer in ci_config.SANITIZER_BUILD_CONFIGS:
+        return False
+    raise ValueError(f"unknown CMake sanitizer config: {sanitizer}")
 
 
 def cmake_dev_command(command_name: str, *args: str) -> tuple[str, ...]:
@@ -187,15 +198,19 @@ def cmake_configure_step(
     *,
     enabled_drivers: tuple[str, ...] = (),
     sanitizer: str | None = None,
+    build_tests: bool | None = None,
 ) -> CiStep:
     enabled_driver_set = validate_enabled_drivers(enabled_drivers)
+    tests_enabled = (
+        cmake_tests_enabled(sanitizer) if build_tests is None else build_tests
+    )
     command = [
         "configure",
         "--fresh",
         "-GNinja",
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-        f"-DIREE_BUILD_TESTS={'OFF' if sanitizer == 'msan' else 'ON'}",
-        f"-DIREE_BUILD_BENCHMARKS={'OFF' if sanitizer == 'msan' else 'ON'}",
+        f"-DIREE_BUILD_TESTS={'ON' if tests_enabled else 'OFF'}",
+        f"-DIREE_BUILD_BENCHMARKS={'ON' if tests_enabled else 'OFF'}",
         "-DIREE_ENABLE_LIBBACKTRACE=OFF",
         "-DLIBHRX_BUILD=OFF",
     ]
@@ -300,11 +315,12 @@ def amdgpu_test_steps(
     config_name = f" and {config.upper()}" if config is not None else ""
     return [
         bazel_test_step(
-            f"Test IREE AMDGPU resources{config_name}",
+            f"Test IREE AMDGPU {slice_name} resources{config_name}",
             targets + xfail_targets,
             config=config,
-            test_tag_filters=(ci_config.AMDGPU_RESOURCE_TAG,),
-        ),
+            test_tag_filters=(resource_tag,),
+        )
+        for slice_name, resource_tag in ci_config.AMDGPU_BAZEL_RESOURCE_SLICES
     ]
 
 
@@ -398,6 +414,7 @@ def vulkan_config_steps(targets: tuple[str, ...], config: str) -> list[CiStep]:
 
 def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     sanitizer_name = f" with {sanitizer.upper()}" if sanitizer is not None else ""
+    tests_enabled = cmake_tests_enabled(sanitizer)
     xfail_regex = (
         ci_config.CPU_SANITIZERS_CTEST_EXCLUDE_REGEX
         if sanitizer is not None
@@ -411,14 +428,14 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
         cmake_configure_step(command_name, sanitizer=sanitizer),
         cmake_build_step(command_name, f"Build IREE CMake{sanitizer_name}"),
     ]
-    if sanitizer != "msan":
+    if tests_enabled:
         steps.append(
             cmake_test_step(
                 command_name,
                 f"Test IREE CMake{sanitizer_name}",
                 exclude_regex=exclude_regex,
                 env=sanitizer_env(sanitizer),
-                label_exclude_regex="runtime-resource=",
+                label_exclude_regex=ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX,
             )
         )
     return steps
@@ -426,12 +443,18 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
 
 def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     sanitizer_name = f" with {sanitizer.upper()}" if sanitizer is not None else ""
+    tests_enabled = cmake_tests_enabled(sanitizer)
     if sanitizer == "tsan":
         xfail_regex = ci_config.AMDGPU_TSAN_SANITIZERS_CTEST_EXCLUDE_REGEX
     elif sanitizer is not None:
         xfail_regex = ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX
     else:
         xfail_regex = ci_config.AMDGPU_CTEST_EXCLUDE_REGEX
+    build_targets = (
+        ci_config.AMDGPU_CMAKE_TEST_BUILD_TARGETS
+        if tests_enabled
+        else ci_config.AMDGPU_CMAKE_DRIVER_TARGETS
+    )
     steps = [
         cmake_configure_step(
             command_name,
@@ -441,10 +464,10 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
         cmake_build_step(
             command_name,
             f"Build IREE CMake AMDGPU{sanitizer_name}",
-            ci_config.AMDGPU_CMAKE_DRIVER_TARGETS,
+            build_targets,
         ),
     ]
-    if sanitizer == "msan":
+    if not tests_enabled:
         return steps
 
     steps.append(
@@ -465,7 +488,7 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
         cmake_test_step(
             command_name,
             f"Test IREE CMake AMDGPU resource tests{sanitizer_name}",
-            label_regex=ci_config.AMDGPU_CTEST_RESOURCE_LABEL,
+            label_regex=ci_config.AMDGPU_CTEST_RESOURCE_LABEL_REGEX,
             exclude_regex=resource_exclude_regex,
             env=sanitizer_env(sanitizer),
             parallelism=1,
@@ -476,6 +499,7 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
 
 def cmake_vulkan_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     sanitizer_name = f" with {sanitizer.upper()}" if sanitizer is not None else ""
+    tests_enabled = cmake_tests_enabled(sanitizer)
     steps = [
         cmake_configure_step(
             command_name,
@@ -488,7 +512,7 @@ def cmake_vulkan_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
             ci_config.VULKAN_CMAKE_DRIVER_TARGETS,
         ),
     ]
-    if sanitizer != "msan":
+    if tests_enabled:
         steps.append(
             cmake_test_step(
                 command_name,
@@ -523,7 +547,57 @@ def cmake_sanitizer_steps(prefix: str, target_group: str) -> list[CiStep]:
     return steps
 
 
+def cmake_sanitizer_smoke_steps() -> list[CiStep]:
+    steps = []
+    test_regex = combine_ctest_regex(*ci_config.CMAKE_SANITIZER_SMOKE_CTEST_REGEXES)
+    for config in ci_config.SANITIZER_TEST_CONFIGS:
+        command_name = f"{CMAKE_SANITIZER_SMOKE_COMMAND}-{config}"
+        steps.extend(
+            [
+                cmake_configure_step(
+                    command_name,
+                    sanitizer=config,
+                    build_tests=True,
+                ),
+                cmake_build_step(
+                    command_name,
+                    f"Build IREE CMake sanitizer smoke with {config.upper()}",
+                    ci_config.CMAKE_SANITIZER_SMOKE_TEST_BUILD_TARGETS,
+                ),
+                cmake_test_step(
+                    command_name,
+                    f"Test IREE CMake sanitizer smoke with {config.upper()}",
+                    regex=test_regex,
+                    env=sanitizer_env(config),
+                    parallelism=2,
+                ),
+            ]
+        )
+    for config in ci_config.SANITIZER_BUILD_CONFIGS:
+        command_name = f"{CMAKE_SANITIZER_SMOKE_COMMAND}-{config}"
+        steps.extend(
+            [
+                cmake_configure_step(
+                    command_name,
+                    sanitizer=config,
+                    build_tests=False,
+                ),
+                cmake_build_step(
+                    command_name,
+                    f"Build IREE CMake sanitizer smoke with {config.upper()}",
+                    ci_config.CMAKE_SANITIZER_SMOKE_LIBRARY_BUILD_TARGETS,
+                ),
+            ]
+        )
+    return steps
+
+
 def steps_from_args(args: argparse.Namespace) -> list[CiStep]:
+    if args.command == CMAKE_SANITIZER_SMOKE_COMMAND:
+        if args.target:
+            raise ValueError("--target is only supported for Bazel CI commands")
+        return cmake_sanitizer_smoke_steps()
+
     if args.command in CMAKE_COMMANDS:
         if args.target:
             raise ValueError("--target is only supported for Bazel CI commands")
@@ -668,6 +742,7 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         choices=(
             *BAZEL_COMMANDS,
             *CMAKE_COMMANDS,
+            CMAKE_SANITIZER_SMOKE_COMMAND,
         ),
         help="CI command group to run.",
     )

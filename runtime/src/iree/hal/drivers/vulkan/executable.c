@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/base/internal/atomics.h"
+#include "iree/base/internal/debugging.h"
 #include "iree/base/internal/flatcc/parsing.h"
 #include "iree/hal/drivers/vulkan/spirv.h"
 #include "iree/hal/utils/executable_debug_info.h"
@@ -885,9 +886,11 @@ static iree_status_t iree_hal_vulkan_create_shader_modules(
             flatbuffers_uint32_vec_len(spirv_code_vec) * sizeof(uint32_t),
         .pCode = (const uint32_t*)spirv_code_vec,
     };
+    IREE_LEAK_CHECK_DISABLE_PUSH();
     status = iree_vkCreateShaderModule(IREE_VULKAN_DEVICE(syms), logical_device,
                                        &create_info, /*pAllocator=*/NULL,
                                        &shader_modules[i]);
+    IREE_LEAK_CHECK_DISABLE_POP();
     if (!iree_status_is_ok(status)) {
       status = iree_status_annotate_f(status, "shader_modules[%" PRIhsz "]", i);
     }
@@ -1013,9 +1016,11 @@ static iree_status_t iree_hal_vulkan_create_descriptor_set_layouts(
           .bindingCount = (uint32_t)binding_count,
           .pBindings = bindings,
       };
+      IREE_LEAK_CHECK_DISABLE_PUSH();
       status = iree_vkCreateDescriptorSetLayout(
           IREE_VULKAN_DEVICE(syms), logical_device, &create_info,
           /*pAllocator=*/NULL, &descriptor_set_layouts[i]);
+      IREE_LEAK_CHECK_DISABLE_POP();
     }
 
     iree_allocator_free(host_allocator, bindings);
@@ -1081,9 +1086,11 @@ static iree_status_t iree_hal_vulkan_create_pipeline_layouts(
           .pushConstantRangeCount = (uint32_t)push_constant_range_count,
           .pPushConstantRanges = push_constant_ranges,
       };
+      IREE_LEAK_CHECK_DISABLE_PUSH();
       status = iree_vkCreatePipelineLayout(
           IREE_VULKAN_DEVICE(syms), logical_device, &create_info,
           /*pAllocator=*/NULL, &pipeline_layouts[i]);
+      IREE_LEAK_CHECK_DISABLE_POP();
     }
 
     iree_allocator_free(host_allocator, selected_descriptor_set_layouts);
@@ -1525,10 +1532,13 @@ static iree_status_t iree_hal_vulkan_create_compute_pipeline(
                          IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION)) {
     create_info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
   }
-  return iree_vkCreateComputePipelines(
+  IREE_LEAK_CHECK_DISABLE_PUSH();
+  iree_status_t status = iree_vkCreateComputePipelines(
       IREE_VULKAN_DEVICE(syms), logical_device, pipeline_cache,
       /*createInfoCount=*/1, &create_info, /*pAllocator=*/NULL,
       &out_pipeline->handle);
+  IREE_LEAK_CHECK_DISABLE_POP();
+  return status;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1758,9 +1768,11 @@ static iree_status_t iree_hal_vulkan_create_raw_bda_executable(
         .codeSize = executable_params->executable_data.data_length,
         .pCode = spirv_words,
     };
+    IREE_LEAK_CHECK_DISABLE_PUSH();
     status = iree_vkCreateShaderModule(IREE_VULKAN_DEVICE(syms), logical_device,
                                        &create_info,
                                        /*pAllocator=*/NULL, &shader_module);
+    IREE_LEAK_CHECK_DISABLE_POP();
   }
 
   if (iree_status_is_ok(status)) {
@@ -1782,9 +1794,11 @@ static iree_status_t iree_hal_vulkan_create_raw_bda_executable(
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &root_range,
     };
+    IREE_LEAK_CHECK_DISABLE_PUSH();
     status = iree_vkCreatePipelineLayout(
         IREE_VULKAN_DEVICE(syms), logical_device, &create_info,
         /*pAllocator=*/NULL, &executable->pipeline_layouts[0]);
+    IREE_LEAK_CHECK_DISABLE_POP();
   }
 
   VkSpecializationInfo specialization_info;
@@ -1834,10 +1848,12 @@ static iree_status_t iree_hal_vulkan_create_raw_bda_executable(
             IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION)) {
       create_info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
     }
+    IREE_LEAK_CHECK_DISABLE_PUSH();
     status = iree_vkCreateComputePipelines(
         IREE_VULKAN_DEVICE(syms), logical_device, pipeline_cache,
         /*createInfoCount=*/1, &create_info, /*pAllocator=*/NULL,
         &pipeline->handle);
+    IREE_LEAK_CHECK_DISABLE_POP();
     if (!iree_status_is_ok(status)) {
       status =
           iree_status_annotate_f(status, "raw BDA entry point '%.*s'",

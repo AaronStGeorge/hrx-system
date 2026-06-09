@@ -68,8 +68,14 @@ jobs:
         include:
           - name: Linux / CPU
             command: iree-bazel-cpu
-          - name: Linux / CPU / Sanitizers
-            command: iree-bazel-cpu-sanitizers
+          - name: Linux / CPU / ASAN
+            command: iree-bazel-cpu-asan
+          - name: Linux / CPU / MSAN
+            command: iree-bazel-cpu-msan
+          - name: Linux / CPU / TSAN
+            command: iree-bazel-cpu-tsan
+          - name: Linux / CPU / UBSAN
+            command: iree-bazel-cpu-ubsan
     env:
       HRX_ARTIFACT_SET: core
       HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-bazel/downloads
@@ -103,8 +109,8 @@ jobs:
 
       - name: Run IREE Bazel CI
         run: |
-          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going"
-          python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going
+          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going"
+          python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going
 
   linux_bazel_vulkan:
     name: ${{ matrix.name }}
@@ -210,5 +216,5 @@ jobs:
 
       - name: Run IREE Bazel CI
         run: |
-          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going"
-          python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going
+          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going"
+          python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going

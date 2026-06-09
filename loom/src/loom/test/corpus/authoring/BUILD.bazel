@@ -1,0 +1,106 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:executable.bzl", "iree_executable_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_config_compatible_with")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+exports_files([
+    "ffn_gate_up_swiglu_q6q8.loom",
+    "mlp_down_projection_residual_bf16.loom",
+])
+
+_AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/target:amdgpu_artifacts",
+])
+
+_AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/execute:amdgpu_hal",
+])
+
+iree_executable_test(
+    name = "ffn_gate_up_swiglu_q6q8_plan_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location ffn_gate_up_swiglu_q6q8.loom)",
+        "--dry_run",
+    ],
+    data = [
+        "ffn_gate_up_swiglu_q6q8.loom",
+    ],
+    tags = ["hostonly"],
+    target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
+)
+
+iree_executable_test(
+    name = "mlp_down_projection_residual_bf16_plan_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location mlp_down_projection_residual_bf16.loom)",
+        "--dry_run",
+    ],
+    data = [
+        "mlp_down_projection_residual_bf16.loom",
+    ],
+    tags = ["hostonly"],
+    target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
+)
+
+iree_executable_test(
+    name = "ffn_gate_up_swiglu_q6q8_amdgpu_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location ffn_gate_up_swiglu_q6q8.loom)",
+        "--device=amdgpu",
+        "--measure=dispatch_complete",
+        "--iterations=1",
+        "--warmup_iterations=0",
+        "--batch_size=1",
+        "--min_time_ms=0",
+        "--max_batches=1",
+        "--input_ring_count=1",
+    ],
+    data = [
+        "ffn_gate_up_swiglu_q6q8.loom",
+    ],
+    tags = [
+        "driver=amdgpu",
+        "manual",
+        "requires-gpu-amd",
+    ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
+)
+
+iree_executable_test(
+    name = "mlp_down_projection_residual_bf16_amdgpu_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location mlp_down_projection_residual_bf16.loom)",
+        "--device=amdgpu",
+        "--measure=dispatch_complete",
+        "--sample_compilation=per_sample",
+        "--iterations=1",
+        "--warmup_iterations=0",
+        "--batch_size=1",
+        "--min_time_ms=0",
+        "--max_batches=1",
+        "--input_ring_count=1",
+    ],
+    data = [
+        "mlp_down_projection_residual_bf16.loom",
+    ],
+    tags = [
+        "driver=amdgpu",
+        "manual",
+        "requires-gpu-amd",
+    ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
+)

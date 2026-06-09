@@ -1,0 +1,546 @@
+// RUN: pass legalize-math
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_logistic_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.logisticf %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_logistic_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %3 = vector.constant -1.4426950408889634 : vector<4xf32>
+  %4 = vector.constant 1.0 : vector<4xf32>
+  %5 = vector.mulf %input, %3 : vector<4xf32>
+  %6 = vector.exp2f %5 : vector<4xf32>
+  %7 = vector.addf %4, %6 : vector<4xf32>
+  %result = vector.divf<arcp> %4, %7 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_logistic_exp2(%input: f32) -> (f32) {
+  %result = scalar.logisticf<afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_logistic_exp2(%input: f32) -> (f32) {
+  %3 = scalar.constant -1.4426950408889634 : f32
+  %4 = scalar.constant 1.0 : f32
+  %5 = scalar.mulf<afn> %input, %3 : f32
+  %6 = scalar.exp2f<afn> %5 : f32
+  %7 = scalar.addf<afn> %4, %6 : f32
+  %result = scalar.divf<arcp|afn> %4, %7 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_exp_afn(%input: f32) -> (f32) {
+  %result = scalar.expf<afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_exp_afn(%input: f32) -> (f32) {
+  %3 = scalar.constant 1.4426950408889634 : f32
+  %4 = scalar.mulf<afn> %input, %3 : f32
+  %result = scalar.exp2f<afn> %4 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_silu_logistic(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.siluf<afn> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_silu_logistic(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %5 = vector.constant -1.4426950408889634 : vector<4xf32>
+  %6 = vector.constant 1.0 : vector<4xf32>
+  %7 = vector.mulf<afn> %input, %5 : vector<4xf32>
+  %8 = vector.exp2f<afn> %7 : vector<4xf32>
+  %9 = vector.addf<afn> %6, %8 : vector<4xf32>
+  %10 = vector.divf<arcp|afn> %6, %9 : vector<4xf32>
+  %result = vector.mulf<afn> %input, %10 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_softplus_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.softplusf<afn> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_softplus_exp2(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %3 = vector.constant 1.4426950408889634 : vector<4xf32>
+  %4 = vector.constant 0.69314718055994529 : vector<4xf32>
+  %5 = vector.constant 1.0 : vector<4xf32>
+  %6 = vector.mulf<afn> %input, %3 : vector<4xf32>
+  %7 = vector.exp2f<afn> %6 : vector<4xf32>
+  %8 = vector.addf<afn> %5, %7 : vector<4xf32>
+  %9 = vector.log2f<afn> %8 : vector<4xf32>
+  %result = vector.mulf<afn> %9, %4 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_gelu_logistic(%input: f32) -> (f32) {
+  %result = scalar.geluf<logistic, afn> %input {scale = 1.702} : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_gelu_logistic(%input: f32) -> (f32) {
+  %3 = scalar.constant 1.702 : f32
+  %4 = scalar.mulf<afn> %3, %input : f32
+  %7 = scalar.constant -1.4426950408889634 : f32
+  %8 = scalar.constant 1.0 : f32
+  %9 = scalar.mulf<afn> %4, %7 : f32
+  %10 = scalar.exp2f<afn> %9 : f32
+  %11 = scalar.addf<afn> %8, %10 : f32
+  %12 = scalar.divf<arcp|afn> %8, %11 : f32
+  %result = scalar.mulf<afn> %input, %12 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_gelu_tanh(%input: f32) -> (f32) {
+  %result = scalar.geluf<tanh, afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_gelu_tanh(%input: f32) -> (f32) {
+  %3 = scalar.constant 0.5 : f32
+  %4 = scalar.constant 1.0 : f32
+  %5 = scalar.constant 0.044715 : f32
+  %6 = scalar.constant 0.79788456080286544 : f32
+  %7 = scalar.mulf<afn> %input, %input : f32
+  %8 = scalar.mulf<afn> %7, %input : f32
+  %9 = scalar.mulf<afn> %5, %8 : f32
+  %10 = scalar.addf<afn> %input, %9 : f32
+  %11 = scalar.mulf<afn> %6, %10 : f32
+  %12 = scalar.tanhf<afn> %11 : f32
+  %13 = scalar.addf<afn> %4, %12 : f32
+  %14 = scalar.mulf<afn> %3, %input : f32
+  %result = scalar.mulf<afn> %14, %13 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @rejects_strict_exp(%input: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.expf", phase_name="legalize-math", policy_name="amdgpu-math", math_op="expf", lane_domain="scalar", element_type="f32", constraint_key="math.exp.exact_f32"}
+  %result = scalar.expf %input : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_erf_rational(%input: f32) -> (f32) {
+  %result = scalar.erff %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_erf_rational(%input: f32) -> (f32) {
+  %3 = scalar.constant -4.0 : f32
+  %4 = scalar.constant 4.0 : f32
+  %5 = scalar.clampf<ordered> %input, %3, %4 : f32
+  %6 = scalar.mulf %5, %5 : f32
+  %7 = scalar.constant -2.7261422580130599e-10 : f32
+  %8 = scalar.constant 2.7706814249590201e-08 : f32
+  %9 = scalar.fmaf %7, %6, %8 : f32
+  %10 = scalar.constant -2.1010240208250802e-06 : f32
+  %11 = scalar.fmaf %9, %6, %10 : f32
+  %12 = scalar.constant -5.69250639462346e-05 : f32
+  %13 = scalar.fmaf %11, %6, %12 : f32
+  %14 = scalar.constant -0.000734990630326855 : f32
+  %15 = scalar.fmaf %13, %6, %14 : f32
+  %16 = scalar.constant -0.00295459980854025 : f32
+  %17 = scalar.fmaf %15, %6, %16 : f32
+  %18 = scalar.constant -0.0160960333262415 : f32
+  %19 = scalar.fmaf %17, %6, %18 : f32
+  %20 = scalar.constant -1.4566071846499599e-05 : f32
+  %21 = scalar.constant -0.000213374055278905 : f32
+  %22 = scalar.fmaf %20, %6, %21 : f32
+  %23 = scalar.constant -0.00168282697438203 : f32
+  %24 = scalar.fmaf %22, %6, %23 : f32
+  %25 = scalar.constant -0.00737332916720468 : f32
+  %26 = scalar.fmaf %24, %6, %25 : f32
+  %27 = scalar.constant -0.0142647390514189 : f32
+  %28 = scalar.fmaf %26, %6, %27 : f32
+  %29 = scalar.mulf %5, %19 : f32
+  %30 = scalar.divf<arcp> %29, %28 : f32
+  %31 = scalar.constant -1.0 : f32
+  %32 = scalar.constant 1.0 : f32
+  %result = scalar.clampf<ordered> %30, %31, %32 : f32
+  func.return %result : f32
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_gelu_erf(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.geluf<erf> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_gelu_erf(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %3 = vector.constant 0.5 : vector<4xf32>
+  %4 = vector.constant 1.0 : vector<4xf32>
+  %5 = vector.constant 0.7071067811865476 : vector<4xf32>
+  %6 = vector.mulf %input, %5 : vector<4xf32>
+  %7 = vector.constant -4.0 : vector<4xf32>
+  %8 = vector.constant 4.0 : vector<4xf32>
+  %9 = vector.clampf<ordered> %6, %7, %8 : vector<4xf32>
+  %10 = vector.mulf %9, %9 : vector<4xf32>
+  %11 = vector.constant -2.7261422580130599e-10 : vector<4xf32>
+  %12 = vector.constant 2.7706814249590201e-08 : vector<4xf32>
+  %13 = vector.fmaf %11, %10, %12 : vector<4xf32>
+  %14 = vector.constant -2.1010240208250802e-06 : vector<4xf32>
+  %15 = vector.fmaf %13, %10, %14 : vector<4xf32>
+  %16 = vector.constant -5.69250639462346e-05 : vector<4xf32>
+  %17 = vector.fmaf %15, %10, %16 : vector<4xf32>
+  %18 = vector.constant -0.000734990630326855 : vector<4xf32>
+  %19 = vector.fmaf %17, %10, %18 : vector<4xf32>
+  %20 = vector.constant -0.00295459980854025 : vector<4xf32>
+  %21 = vector.fmaf %19, %10, %20 : vector<4xf32>
+  %22 = vector.constant -0.0160960333262415 : vector<4xf32>
+  %23 = vector.fmaf %21, %10, %22 : vector<4xf32>
+  %24 = vector.constant -1.4566071846499599e-05 : vector<4xf32>
+  %25 = vector.constant -0.000213374055278905 : vector<4xf32>
+  %26 = vector.fmaf %24, %10, %25 : vector<4xf32>
+  %27 = vector.constant -0.00168282697438203 : vector<4xf32>
+  %28 = vector.fmaf %26, %10, %27 : vector<4xf32>
+  %29 = vector.constant -0.00737332916720468 : vector<4xf32>
+  %30 = vector.fmaf %28, %10, %29 : vector<4xf32>
+  %31 = vector.constant -0.0142647390514189 : vector<4xf32>
+  %32 = vector.fmaf %30, %10, %31 : vector<4xf32>
+  %33 = vector.mulf %9, %23 : vector<4xf32>
+  %34 = vector.divf<arcp> %33, %32 : vector<4xf32>
+  %35 = vector.constant -1.0 : vector<4xf32>
+  %36 = vector.constant 1.0 : vector<4xf32>
+  %37 = vector.clampf<ordered> %34, %35, %36 : vector<4xf32>
+  %38 = vector.addf %4, %37 : vector<4xf32>
+  %39 = vector.mulf %3, %input : vector<4xf32>
+  %result = vector.mulf %39, %38 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_bf16_add_widen_round(%lhs: vector<3xbf16>, %rhs: vector<3xbf16>) -> (vector<3xbf16>) {
+  %result = vector.addf %lhs, %rhs : vector<3xbf16>
+  func.return %result : vector<3xbf16>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_bf16_add_widen_round(%lhs: vector<3xbf16>, %rhs: vector<3xbf16>) -> (vector<3xbf16>) {
+  %4 = vector.extf %lhs : vector<3xbf16> to vector<3xf32>
+  %5 = vector.extf %rhs : vector<3xbf16> to vector<3xf32>
+  %6 = vector.addf %4, %5 : vector<3xf32>
+  %result = vector.fptrunc %6 : vector<3xf32> to vector<3xbf16>
+  func.return %result : vector<3xbf16>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_bf16_mul_widen_round(%lhs: vector<3xbf16>, %rhs: vector<3xbf16>) -> (vector<3xbf16>) {
+  %result = vector.mulf %lhs, %rhs : vector<3xbf16>
+  func.return %result : vector<3xbf16>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_bf16_mul_widen_round(%lhs: vector<3xbf16>, %rhs: vector<3xbf16>) -> (vector<3xbf16>) {
+  %4 = vector.extf %lhs : vector<3xbf16> to vector<3xf32>
+  %5 = vector.extf %rhs : vector<3xbf16> to vector<3xf32>
+  %6 = vector.mulf %4, %5 : vector<3xf32>
+  %result = vector.fptrunc %6 : vector<3xf32> to vector<3xbf16>
+  func.return %result : vector<3xbf16>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_bf16_add_widen_round(%lhs: bf16, %rhs: bf16) -> (bf16) {
+  %result = scalar.addf %lhs, %rhs : bf16
+  func.return %result : bf16
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_bf16_add_widen_round(%lhs: bf16, %rhs: bf16) -> (bf16) {
+  %4 = scalar.extf %lhs : bf16 to f32
+  %5 = scalar.extf %rhs : bf16 to f32
+  %6 = scalar.addf %4, %5 : f32
+  %result = scalar.fptrunc %6 : f32 to bf16
+  func.return %result : bf16
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @rejects_non_f32_math(%input: f64) -> (f64) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.softplusf", phase_name="legalize-math", policy_name="amdgpu-math", math_op="softplusf", lane_domain="scalar", element_type="f64", constraint_key="math.element.f32"}
+  %result = scalar.softplusf %input : f64
+  func.return %result : f64
+}
+
+// ====
+
+// RUN: pass legalize-math,canonicalize,cse
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_erf_rational_constant_edges() -> (f32, f32, f32) {
+  %negative_saturation = scalar.constant -4.0 : f32
+  %origin = scalar.constant 0.0 : f32
+  %positive_saturation = scalar.constant 4.0 : f32
+  %negative = scalar.erff %negative_saturation : f32
+  %center = scalar.erff %origin : f32
+  %positive = scalar.erff %positive_saturation : f32
+  func.return %negative, %center, %positive : f32, f32, f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_erf_rational_constant_edges() -> (f32, f32, f32) {
+  %negative = scalar.constant -1.0 : f32
+  %center = scalar.constant 0.0 : f32
+  %positive = scalar.constant 1.0 : f32
+  func.return %negative, %center, %positive : f32, f32, f32
+}
+
+// ====
+
+// RUN: pass legalize-math,source-to-low,low-dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_erf_rational_source_low(%input: f32) -> (f32) {
+  %result = scalar.erff<nnan|ninf|nsz> %input : f32
+  func.return %result : f32
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) abi(hal_kernel) @scalar_erf_rational_source_low(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %38 = low.op<amdgpu.v_max_f32.lit>(%input) {imm32 = 3229614080} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %39 = low.op<amdgpu.v_min_f32.lit>(%38) {imm32 = 1082130432} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %40 = low.op<amdgpu.v_mul_f32>(%39, %39) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %41 = low.const<amdgpu.v_mov_b32> {imm32 = 2945834763} : reg<amdgpu.vgpr>
+  %42 = low.const<amdgpu.v_mov_b32> {imm32 = 854458350} : reg<amdgpu.vgpr>
+  %43 = low.op<amdgpu.v_fma_f32>(%41, %40, %42) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %44 = low.const<amdgpu.v_mov_b32> {imm32 = 3054305105} : reg<amdgpu.vgpr>
+  %45 = low.op<amdgpu.v_fma_f32>(%43, %40, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %46 = low.const<amdgpu.v_mov_b32> {imm32 = 3094266578} : reg<amdgpu.vgpr>
+  %47 = low.op<amdgpu.v_fma_f32>(%45, %40, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %48 = low.const<amdgpu.v_mov_b32> {imm32 = 3124800611} : reg<amdgpu.vgpr>
+  %49 = low.op<amdgpu.v_fma_f32>(%47, %40, %48) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %50 = low.const<amdgpu.v_mov_b32> {imm32 = 3141640694} : reg<amdgpu.vgpr>
+  %51 = low.op<amdgpu.v_fma_f32>(%49, %40, %50) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %52 = low.const<amdgpu.v_mov_b32> {imm32 = 3162758100} : reg<amdgpu.vgpr>
+  %53 = low.op<amdgpu.v_fma_f32>(%51, %40, %52) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %54 = low.const<amdgpu.v_mov_b32> {imm32 = 3077857485} : reg<amdgpu.vgpr>
+  %55 = low.const<amdgpu.v_mov_b32> {imm32 = 3110059305} : reg<amdgpu.vgpr>
+  %56 = low.op<amdgpu.v_fma_f32>(%54, %40, %55) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %57 = low.const<amdgpu.v_mov_b32> {imm32 = 3135017550} : reg<amdgpu.vgpr>
+  %58 = low.op<amdgpu.v_fma_f32>(%56, %40, %57) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %59 = low.const<amdgpu.v_mov_b32> {imm32 = 3153173496} : reg<amdgpu.vgpr>
+  %60 = low.op<amdgpu.v_fma_f32>(%58, %40, %59) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %61 = low.const<amdgpu.v_mov_b32> {imm32 = 3161044647} : reg<amdgpu.vgpr>
+  %62 = low.op<amdgpu.v_fma_f32>(%60, %40, %61) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %63 = low.op<amdgpu.v_mul_f32>(%39, %53) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %64 = low.op<amdgpu.v_rcp_f32>(%62) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %65 = low.op<amdgpu.v_mul_f32>(%63, %64) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %68 = low.op<amdgpu.v_max_f32.lit>(%65) {imm32 = 3212836864} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_min_f32.lit>(%68) {imm32 = 1065353216} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+// RUN: pass legalize-math,source-to-low,low-dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_bf16_mul_widen_round_source_low(%lhs: vector<2xbf16>, %rhs: vector<2xbf16>) -> (vector<2xbf16>) {
+  %result = vector.mulf %lhs, %rhs : vector<2xbf16>
+  func.return %result : vector<2xbf16>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) abi(hal_kernel) @vector_bf16_mul_widen_round_source_low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %11 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%lhs) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %12 = low.op<amdgpu.v_and_b32.lit>(%lhs) {imm32 = 4294901760} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %13 = low.concat(%11, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %14 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%rhs) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %15 = low.op<amdgpu.v_and_b32.lit>(%rhs) {imm32 = 4294901760} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %16 = low.concat(%14, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %17 = low.slice %13[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %18 = low.slice %16[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %19 = low.op<amdgpu.v_mul_f32>(%17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %20 = low.slice %13[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %21 = low.slice %16[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %22 = low.op<amdgpu.v_mul_f32>(%20, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %23 = low.concat(%19, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %24 = low.slice %23[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %25 = low.slice %23[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %26 = low.op<amdgpu.v_lshrrev_b32.src0_inline>(%24) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %27 = low.op<amdgpu.v_and_b32.src0_inline>(%26) {imm32 = 1} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_add_u32.lit>(%27) {imm32 = 32767} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %29 = low.op<amdgpu.v_add_u32>(%24, %28) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %30 = low.op<amdgpu.v_lshrrev_b32.src0_inline>(%29) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %31 = low.op<amdgpu.v_lshrrev_b32.src0_inline>(%25) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %32 = low.op<amdgpu.v_and_b32.src0_inline>(%31) {imm32 = 1} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %33 = low.op<amdgpu.v_add_u32.lit>(%32) {imm32 = 32767} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %34 = low.op<amdgpu.v_add_u32>(%25, %33) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %35 = low.op<amdgpu.v_lshrrev_b32.src0_inline>(%34) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_cvt_pk_u16_u32>(%30, %35) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+// RUN: pass legalize-math,canonicalize,cse,dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_log_afn(%input: f32) -> (f32) {
+  %result = scalar.logf<afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_log_afn(%input: f32) -> (f32) {
+  %3 = scalar.constant 0.69314718055994529 : f32
+  %4 = scalar.log2f<afn> %input : f32
+  %result = scalar.mulf<afn> %4, %3 : f32
+  func.return %result : f32
+}
+
+// ====
+
+// RUN: pass legalize-math,canonicalize,cse,dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_sin_project_turns(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %two_pi = vector.constant 6.283185307179586 : vector<4xf32>
+  %radians = vector.mulf<afn> %input, %two_pi : vector<4xf32>
+  %result = vector.sinf<afn> %radians : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_sin_project_turns(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.sinturnsf<afn> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+// RUN: pass legalize-math,canonicalize,cse,dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_cos_general_turns(%radians: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.cosf<afn> %radians : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_cos_general_turns(%radians: vector<4xf32>) -> (vector<4xf32>) {
+  %3 = vector.constant 0.15915494309189535 : vector<4xf32>
+  %4 = vector.mulf<afn> %radians, %3 : vector<4xf32>
+  %result = vector.costurnsf<afn> %4 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+// RUN: pass legalize-math,source-to-low,low-dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_box_muller_native_math(%u1: f32, %u2: f32) -> (f32, f32) {
+  %two_pi = scalar.constant 6.283185307179586 : f32
+  %radius_base = scalar.logf<afn> %u1 : f32
+  %negative_two = scalar.constant -2.0 : f32
+  %radius_squared = scalar.mulf<afn> %negative_two, %radius_base : f32
+  %radius = scalar.sqrtf<afn> %radius_squared : f32
+  %theta = scalar.mulf<afn> %u2, %two_pi : f32
+  %sine = scalar.sinf<afn> %theta : f32
+  %cosine = scalar.cosf<afn> %theta : f32
+  %z0 = scalar.mulf<afn> %radius, %cosine : f32
+  %z1 = scalar.mulf<afn> %radius, %sine : f32
+  func.return %z0, %z1 : f32, f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) abi(hal_kernel) @scalar_box_muller_native_math(%u1: reg<amdgpu.vgpr>, %u2: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) {
+  %23 = low.op<amdgpu.v_log_f32>(%u1) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %radius_base = low.op<amdgpu.v_mul_f32.lit>(%23) {imm32 = 1060205080} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %radius_squared = low.op<amdgpu.v_mul_f32.src0_inline>(%radius_base) {imm32 = 3221225472} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %radius = low.op<amdgpu.v_sqrt_f32>(%radius_squared) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %sine = low.op<amdgpu.v_sin_f32>(%u2) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %cosine = low.op<amdgpu.v_cos_f32>(%u2) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %z0 = low.op<amdgpu.v_mul_f32>(%radius, %cosine) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %z1 = low.op<amdgpu.v_mul_f32>(%radius, %sine) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %z0, %z1 : reg<amdgpu.vgpr>, reg<amdgpu.vgpr>
+}
+
+// ====
+
+// RUN: pass legalize-math,source-to-low,low-dce
+
+amdgpu.target<gfx942> @target
+func.def target(@target) @cdna3_native_turn_math(%input: f32) -> (f32, f32, f32) {
+  %log = scalar.log2f<afn> %input : f32
+  %sin = scalar.sinturnsf<afn> %input : f32
+  %cos = scalar.costurnsf<afn> %input : f32
+  func.return %log, %sin, %cos : f32, f32, f32
+}
+// ----
+amdgpu.target<gfx942> @target
+
+low.func.def target(@target) abi(hal_kernel) @cdna3_native_turn_math(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) {
+  %log = low.op<amdgpu.v_log_f32>(%input) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %sin = low.op<amdgpu.v_sin_f32>(%input) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %cos = low.op<amdgpu.v_cos_f32>(%input) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %log, %sin, %cos : reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>
+}

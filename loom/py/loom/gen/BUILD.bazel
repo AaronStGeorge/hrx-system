@@ -1,0 +1,633 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:python.bzl", "iree_py_binary", "iree_py_library", "iree_py_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_py_library(
+    name = "generated_file",
+    srcs = [
+        "__init__.py",
+        "generated_file.py",
+    ],
+)
+
+iree_py_library(
+    name = "low_descriptors",
+    srcs = ["low_descriptors.py"],
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+    ],
+)
+
+iree_py_test(
+    name = "gen_test",
+    srcs = [
+        "builders_pyi.py",
+        "builders_pyi_test.py",
+        "low_descriptor_shard.py",
+        "low_descriptor_shard_test.py",
+        "low_descriptors_test.py",
+        "textmate.py",
+        "textmate_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = [
+        "loom.gen.builders_pyi_test",
+        "loom.gen.low_descriptor_shard_test",
+        "loom.gen.low_descriptors_test",
+        "loom.gen.textmate_test",
+    ],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":c_tables",
+        ":generated_file",
+        ":low_descriptors",
+        "//loom/py/loom:core",
+        "//loom/py/loom/dialect:package",
+        "//loom/py/loom/error",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/test:descriptors",
+    ],
+)
+
+iree_py_library(
+    name = "package_inits",
+    srcs = [
+        "bootstrap.py",
+        "package_inits.py",
+    ],
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+    ],
+)
+
+iree_py_test(
+    name = "package_inits_test",
+    srcs = [
+        "package_inits_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.package_inits_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":generated_file",
+        ":package_inits",
+    ],
+)
+
+iree_py_library(
+    name = "target_contract_fragments",
+    srcs = ["target_contract_fragments.py"],
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/target/contracts",
+    ],
+)
+
+iree_py_library(
+    name = "target_lower_rules",
+    srcs = ["target_lower_rules.py"],
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/contracts",
+    ],
+)
+
+iree_py_test(
+    name = "target_lower_rules_test",
+    srcs = [
+        "target_lower_rules_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.target_lower_rules_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/target/contracts",
+        "//loom/py/loom/target/test:descriptors",
+    ],
+)
+
+C_TABLES_DEPS = [
+    ":generated_file",
+    "//loom/py/loom:core",
+    "//loom/py/loom/dialect:package",
+    "//loom/py/loom/target/arch/amdgpu:dialect",
+    "//loom/py/loom/target/arch/ireevm:dialect",
+    "//loom/py/loom/target/arch/spirv:dialect",
+    "//loom/py/loom/target/arch/wasm:dialect",
+    "//loom/py/loom/target/arch/x86:dialect",
+]
+
+iree_py_library(
+    name = "c_tables",
+    srcs = [
+        "bootstrap.py",
+        "c_tables.py",
+    ],
+    deps = C_TABLES_DEPS,
+)
+
+iree_py_binary(
+    name = "c_tables_generator",
+    srcs = [
+        "bootstrap.py",
+        "c_tables.py",
+    ],
+    main = "c_tables.py",
+    deps = C_TABLES_DEPS,
+)
+
+iree_py_test(
+    name = "c_tables_test",
+    srcs = [
+        "c_tables_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.c_tables_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":c_tables",
+        "//loom/py/loom/error",
+    ],
+)
+
+iree_py_binary(
+    name = "c_errors",
+    srcs = ["c_errors.py"],
+    main = "c_errors.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/error",
+    ],
+)
+
+iree_py_test(
+    name = "c_errors_test",
+    srcs = [
+        "c_errors.py",
+        "c_errors_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.c_errors_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom:core",
+        "//loom/py/loom/error",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_occupancy_tables",
+    srcs = ["amdgpu_occupancy_tables.py"],
+    main = "amdgpu_occupancy_tables.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "ireevm_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/arch/ireevm:descriptors",
+    ],
+)
+
+iree_py_binary(
+    name = "ireevm_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/ireevm/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "wasm_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/arch/wasm:descriptors",
+    ],
+)
+
+iree_py_binary(
+    name = "spirv_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/arch/spirv:descriptors",
+    ],
+)
+
+iree_py_binary(
+    name = "spirv_features",
+    srcs = ["spirv_features.py"],
+    main = "spirv_features.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/spirv:features",
+    ],
+)
+
+iree_py_binary(
+    name = "spirv_packet_rows",
+    srcs = ["spirv_packet_rows.py"],
+    main = "spirv_packet_rows.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/spirv:builtins",
+        "//loom/py/loom/target/arch/spirv:cooperative_matrix",
+        "//loom/py/loom/target/arch/spirv:descriptors",
+        "//loom/py/loom/target/arch/spirv:scalar_alu",
+        "//loom/py/loom/target/arch/spirv:scalar_conversion",
+        "//loom/py/loom/target/arch/spirv:scalar_memory",
+    ],
+)
+
+iree_py_binary(
+    name = "spirv_cooperative_properties",
+    srcs = ["spirv_cooperative_properties.py"],
+    main = "spirv_cooperative_properties.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/spirv:cooperative_matrix",
+        "//loom/py/loom/target/arch/spirv:cooperative_vector",
+        "//loom/py/loom/target/arch/spirv:descriptors",
+    ],
+)
+
+iree_py_test(
+    name = "spirv_packet_rows_test",
+    srcs = [
+        "spirv_packet_rows_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.spirv_packet_rows_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":spirv_packet_rows",
+    ],
+)
+
+iree_py_test(
+    name = "spirv_cooperative_properties_test",
+    srcs = [
+        "spirv_cooperative_properties_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.spirv_cooperative_properties_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":spirv_cooperative_properties",
+    ],
+)
+
+iree_py_test(
+    name = "spirv_features_test",
+    srcs = [
+        "spirv_features_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.spirv_features_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":spirv_features",
+        "//loom/py/loom/target/arch/spirv:features",
+    ],
+)
+
+iree_py_binary(
+    name = "spirv_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/spirv/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "spirv_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/spirv/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "ireevm_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/ireevm/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "wasm_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/emit/wasm:contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "x86_low_descriptor_shard",
+    srcs = ["x86_descriptors.py"],
+    main = "x86_descriptors.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "x86_target_profiles",
+    srcs = ["x86_target_profiles.py"],
+    main = "x86_target_profiles.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/x86:target_info",
+        "//loom/py/loom/target/emit/llvmir/x86:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "x86_packed_dot_contract",
+    srcs = ["x86_packed_dot_contract.py"],
+    main = "x86_packed_dot_contract.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/x86:target_info",
+    ],
+)
+
+iree_py_test(
+    name = "x86_descriptors_test",
+    srcs = [
+        "x86_descriptors_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.x86_descriptors_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":x86_low_descriptor_shard",
+    ],
+)
+
+iree_py_binary(
+    name = "wasm_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/emit/wasm:contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "x86_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/x86/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "test_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/test:descriptors",
+    ],
+)
+
+iree_py_binary(
+    name = "x86_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/x86/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "test_low_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/test:contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "test_low_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/test:contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_target_info",
+    srcs = ["amdgpu_target_info.py"],
+    main = "amdgpu_target_info.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_target_records",
+    srcs = ["amdgpu_target_records.py"],
+    main = "amdgpu_target_records.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_descriptors",
+    srcs = ["amdgpu_descriptors.py"],
+    main = "amdgpu_descriptors.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_test(
+    name = "amdgpu_descriptors_test",
+    srcs = [
+        "amdgpu_descriptors.py",
+        "amdgpu_descriptors_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.amdgpu_descriptors_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_target_refs",
+    srcs = ["amdgpu_target_refs.py"],
+    main = "amdgpu_target_refs.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_atomic_candidates",
+    srcs = ["amdgpu_atomic_candidates.py"],
+    main = "amdgpu_atomic_candidates.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_compare_candidates",
+    srcs = ["amdgpu_compare_candidates.py"],
+    main = "amdgpu_compare_candidates.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/dialect/vector",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_matrix_contract_tables",
+    srcs = ["amdgpu_matrix_contract_tables.py"],
+    main = "amdgpu_matrix_contract_tables.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:matrix_contracts",
+    ],
+)
+
+iree_py_test(
+    name = "amdgpu_matrix_contract_tables_test",
+    srcs = [
+        "amdgpu_matrix_contract_tables.py",
+        "amdgpu_matrix_contract_tables_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.amdgpu_matrix_contract_tables_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:matrix_contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_encoding_tables",
+    srcs = ["amdgpu_encoding_tables.py"],
+    main = "amdgpu_encoding_tables.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/amdgpu/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "amdgpu_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/amdgpu/contracts",
+    ],
+)

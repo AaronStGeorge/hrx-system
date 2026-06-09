@@ -749,6 +749,7 @@ def build_core(args: argparse.Namespace) -> None:
         f"CMAKE_BUILD_TYPE={args.build_type}",
         f"IREE_BUILD_TESTS={'ON' if ctest_enabled else 'OFF'}",
         "IREE_BUILD_BENCHMARKS=ON",
+        "LOOM_BUILD=OFF",
         f"LIBHRX_BUILD_CTS={'ON' if ctest_enabled else 'OFF'}",
         f"HRX_INSTALL_TESTS={'ON' if ctest_enabled else 'OFF'}",
         f"LIBHRX_BUILD_PASSTHROUGH={'ON' if args.passthrough else 'OFF'}",

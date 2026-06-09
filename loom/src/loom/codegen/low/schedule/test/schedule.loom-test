@@ -1,0 +1,10 @@
+// RUN: emit low-schedule-json @schedule
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @schedule(%value: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  return %value
+}
+
+// ----
+{"format":"loom.low.schedule.v0","function":"schedule","target":"test_target","descriptor_set":"test.low.core","block_count":1,"node_count":1,"dependency_count":0,"candidate_decision_count":0,"resource_use_count":0,"effect_use_count":0,"hazard_use_count":0,"hazard_gap_count":0,"model_summary_count":0,"resource_summary_count":0,"blocks":[{"index":0,"node_start":0,"node_count":1,"scheduled_node_start":0,"scheduled_node_count":1}],"nodes":[{"index":0,"block":0,"source_ordinal":0,"scheduled_ordinal":0,"kind":"terminator","op":"low.return","descriptor":null,"schedule_class":null,"latency_cycles":0,"latency_kind":0,"latency_kind_name":"unknown","model_quality":0,"model_quality_name":"unknown","issue_use_count":0,"hazard_count":0,"effect_count":0}],"scheduled_node_indices":[0],"dependencies":[],"liveness":{"format":"loom.liveness.v0","is_cfg":false,"block_count":1,"value_count":1,"blocks":[{"index":0,"label":null,"start_point":0,"end_point":1,"live_in":[],"live_out":[]}],"intervals":[{"value":{"id":0,"name":"value","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_descriptor_set":2548000952762826130,"register_class_id":0},"start_point":0,"end_point":1,"unit_count":1}],"pressure_summaries":[{"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_descriptor_set":2548000952762826130,"register_class_id":0},"peak_live_units":1,"peak_live_values":1,"peak_block":0,"peak_op":0,"peak_point":0}]}}

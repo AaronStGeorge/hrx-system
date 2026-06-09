@@ -1,0 +1,95 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_select",
+    "loom_cc_binary",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+_AMDGPU_COMPILE_COPTS = iree_select({
+    "//loom/config/target:amdgpu_artifacts": [
+        "-DLOOM_COMPILE_HAVE_AMDGPU=1",
+    ],
+    "//conditions:default": [],
+})
+
+_AMDGPU_COMPILE_DEPS = iree_select({
+    "//loom/config/target:amdgpu_artifacts": [
+        "//loom/src/loom/target/arch/amdgpu:provider",
+        "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_IREE_VM_COMPILE_COPTS = iree_select({
+    "//loom/config/emit:iree_vm": [
+        "-DLOOM_COMPILE_HAVE_IREE_VM=1",
+    ],
+    "//conditions:default": [],
+})
+
+_IREE_VM_COMPILE_DEPS = iree_select({
+    "//loom/config/emit:iree_vm": [
+        "//loom/src/loom/tooling/execution/ireevm:candidate",
+        "//loom/src/loom/tooling/execution/ireevm:provider",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_VULKAN_COMPILE_COPTS = iree_select({
+    "//loom/config/target:spirv_vulkan_artifacts": [
+        "-DLOOM_COMPILE_HAVE_SPIRV_VULKAN=1",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_VULKAN_COMPILE_DEPS = iree_select({
+    "//loom/config/target:spirv_vulkan_artifacts": [
+        "//loom/src/loom/target/arch/spirv:provider",
+        "//loom/src/loom/tooling/target/spirv:artifact_provider",
+    ],
+    "//conditions:default": [],
+})
+
+loom_cc_binary(
+    name = "loom-compile",
+    srcs = ["loom-compile.c"],
+    copts = _AMDGPU_COMPILE_COPTS + _IREE_VM_COMPILE_COPTS + _SPIRV_VULKAN_COMPILE_COPTS,
+    deps = [
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/tooling/compile:pipeline",
+        "//loom/src/loom/tooling/config",
+        "//loom/src/loom/tooling/execution:compile_options",
+        "//loom/src/loom/tooling/execution:compile_report_capture",
+        "//loom/src/loom/tooling/execution:execution_provider",
+        "//loom/src/loom/tooling/execution:session",
+        "//loom/src/loom/tooling/execution/hal:artifact",
+        "//loom/src/loom/tooling/execution/hal:candidate",
+        "//loom/src/loom/tooling/io:file",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/io:file_handle",
+    ] + _AMDGPU_COMPILE_DEPS + _IREE_VM_COMPILE_DEPS + _SPIRV_VULKAN_COMPILE_DEPS,
+)
+
+iree_execution_test_suite(
+    name = "execution_test",
+    manifests = ["loom-compile.test.json"],
+    tags = ["hostonly"],
+    tools = {
+        "iree-run-module": "//tools:iree-run-module",
+        "loom-compile": ":loom-compile",
+    },
+)

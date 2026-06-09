@@ -531,6 +531,9 @@ IREE_API_EXPORT IREE_MUST_USE_RESULT iree_status_t IREE_PRINTF_ATTRIBUTE(2, 3)
 // If |buffer_capacity| is insufficient, then |out_buffer_length| is the
 // number of characters that would have been written if |buffer_capacity|
 // had been sufficiently large, not counting the terminating null character.
+// Returns false when formatting fails or when |buffer| is non-NULL but
+// |buffer_capacity| is insufficient for the formatted status and a terminating
+// null character.
 IREE_API_EXPORT bool iree_status_format(iree_status_t status,
                                         iree_host_size_t buffer_capacity,
                                         char* buffer,

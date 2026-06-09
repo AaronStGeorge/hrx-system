@@ -885,10 +885,10 @@ static iree_status_t iree_hal_vulkan_spirv_verify_bda_root_struct_layout(
         }
         if (operands[0] != struct_type_id) break;
         has_struct_type = true;
-        if (word_count - 2 != IREE_HAL_VULKAN_SPIRV_BDA_ROOT_MEMBER_COUNT) {
+        if (word_count - 2 < IREE_HAL_VULKAN_SPIRV_BDA_ROOT_MEMBER_COUNT) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
-              "raw Vulkan BDA root has %u members but expected %u",
+              "raw Vulkan BDA root has %u members but expected at least %u",
               (uint32_t)(word_count - 2),
               IREE_HAL_VULKAN_SPIRV_BDA_ROOT_MEMBER_COUNT);
         }
@@ -920,9 +920,7 @@ static iree_status_t iree_hal_vulkan_spirv_verify_bda_root_struct_layout(
         }
         const uint32_t member_ordinal = operands[1];
         if (member_ordinal >= IREE_HAL_VULKAN_SPIRV_BDA_ROOT_MEMBER_COUNT) {
-          return iree_make_status(
-              IREE_STATUS_INVALID_ARGUMENT,
-              "raw Vulkan BDA root has an unexpected member offset decoration");
+          break;
         }
         has_member_offsets[member_ordinal] = true;
         member_offsets[member_ordinal] = operands[3];

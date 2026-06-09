@@ -42,6 +42,7 @@ CI_DRY_RUN_COMMANDS = (
     ("iree-cmake-cpu-tsan",),
     ("iree-cmake-cpu-ubsan",),
     ("iree-cmake-cpu-sanitizers",),
+    ("iree-cmake-sanitizer-smoke",),
     ("iree-cmake-amdgpu",),
     ("iree-cmake-amdgpu-asan",),
     ("iree-cmake-amdgpu-msan",),

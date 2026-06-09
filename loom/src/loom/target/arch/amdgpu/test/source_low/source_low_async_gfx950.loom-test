@@ -1,0 +1,190 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/async_gather.loom-test
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx950> @target
+kernel.def target(@target) @async_gather_dword(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x4xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x4xi8, #dense> -> view<1x4xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x4xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x4xi8, #dense> to view<64x1x4xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_dword() {
+  %source = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %16 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dword_saddr>(%18, %source, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx950> @target
+kernel.def target(@target) @async_gather_b128(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 1024 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x16xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x16xi8, #dense> -> view<1x16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x16xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x16xi8, #dense> to view<64x1x16xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_b128() {
+  %source = low.resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %16 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%18, %source, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx950> @target
+kernel.def target(@target) @async_gather_two_stage(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 2048 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x1x16xi8, #dense>
+  %source = view.subview %source_base[%tid, 0, 0] : view<64x1x16xi8, #dense> -> view<1x1x16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest_base = buffer.view %scratch[%zero] : buffer -> view<2x64x1x16xi8, #dense>
+  %dest0 = view.subview %dest_base[0, 0, 0, 0] : view<2x64x1x16xi8, #dense> -> view<1x64x1x16xi8, #dense>
+  %dest1 = view.subview %dest_base[1, 0, 0, 0] : view<2x64x1x16xi8, #dense> -> view<1x64x1x16xi8, #dense>
+  %copy0 = kernel.async.gather %source to %dest0 {cache_scope = device, cache_temporal = regular} : view<1x1x16xi8, #dense> to view<1x64x1x16xi8, #dense> -> kernel.async.token
+  %load0 = kernel.async.group %copy0 : kernel.async.token -> kernel.async.group
+  %copy1 = kernel.async.gather %source to %dest1 {cache_scope = device, cache_temporal = regular} : view<1x1x16xi8, #dense> to view<1x64x1x16xi8, #dense> -> kernel.async.token
+  %load1 = kernel.async.group %copy1 : kernel.async.token -> kernel.async.group
+  kernel.async.wait %load0 {newer_groups = 1} : kernel.async.group
+  kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_two_stage() {
+  %source = low.resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %20 = low.storage.reserve {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %23 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %24 = low.op<amdgpu.s_mov_b32_m0>(%23) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%22, %source, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %26 = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
+  %27 = low.op<amdgpu.s_mov_b32_m0>(%26) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%22, %source, %27) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 1} : ()
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx950> @target
+kernel.def target(@target) @async_gather_multi_packet_newer_group(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 3072 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x1x16xi8, #dense>
+  %source = view.subview %source_base[%tid, 0, 0] : view<64x1x16xi8, #dense> -> view<1x1x16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest_base = buffer.view %scratch[%zero] : buffer -> view<3x64x1x16xi8, #dense>
+  %dest0 = view.subview %dest_base[0, 0, 0, 0] : view<3x64x1x16xi8, #dense> -> view<1x64x1x16xi8, #dense>
+  %dest1a = view.subview %dest_base[1, 0, 0, 0] : view<3x64x1x16xi8, #dense> -> view<1x64x1x16xi8, #dense>
+  %dest1b = view.subview %dest_base[2, 0, 0, 0] : view<3x64x1x16xi8, #dense> -> view<1x64x1x16xi8, #dense>
+  %copy0 = kernel.async.gather %source to %dest0 {cache_scope = device, cache_temporal = regular} : view<1x1x16xi8, #dense> to view<1x64x1x16xi8, #dense> -> kernel.async.token
+  %load0 = kernel.async.group %copy0 : kernel.async.token -> kernel.async.group
+  %copy1a = kernel.async.gather %source to %dest1a {cache_scope = device, cache_temporal = regular} : view<1x1x16xi8, #dense> to view<1x64x1x16xi8, #dense> -> kernel.async.token
+  %copy1b = kernel.async.gather %source to %dest1b {cache_scope = device, cache_temporal = regular} : view<1x1x16xi8, #dense> to view<1x64x1x16xi8, #dense> -> kernel.async.token
+  %load1 = kernel.async.group %copy1a, %copy1b : kernel.async.token, kernel.async.token -> kernel.async.group
+  kernel.async.wait %load0 {newer_groups = 1} : kernel.async.group
+  kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_multi_packet_newer_group() {
+  %source = low.resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %22 = low.storage.reserve {byte_alignment = 16, byte_length = 3072} : low.storage<workgroup>
+  %24 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %25 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %26 = low.op<amdgpu.s_mov_b32_m0>(%25) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%24, %source, %26) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %28 = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
+  %29 = low.op<amdgpu.s_mov_b32_m0>(%28) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%24, %source, %29) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  %31 = low.const<amdgpu.s_mov_b32> {imm32 = 2048} : reg<amdgpu.sgpr>
+  %32 = low.op<amdgpu.s_mov_b32_m0>(%31) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%24, %source, %32) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 2} : ()
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx950> @target
+kernel.def target(@target) @async_gather_second_lds_slot(%input: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %pad_bytes = index.constant 256 : offset
+  %scratch_bytes = index.constant 1024 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x16xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x16xi8, #dense> -> view<1x16xi8, #dense>
+  %pad = buffer.alloca %pad_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch = buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x16xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x16xi8, #dense> to view<64x1x16xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @async_gather_second_lds_slot() {
+  %source = low.resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %18 = low.storage.reserve {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %20 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %21 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %22 = low.op<amdgpu.s_mov_b32_m0>(%21) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%20, %source, %22) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.return
+}
