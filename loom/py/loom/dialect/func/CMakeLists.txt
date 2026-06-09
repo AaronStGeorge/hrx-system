@@ -20,4 +20,22 @@ iree_py_library(
     loom::py::loom::dialect::target::target
 )
 
+iree_py_test(
+  NAME
+    func_ops_test
+  SRCS
+    "../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.dialect.func.func_ops_test"
+  DEPS
+    loom::py::loom::dialect::func::func
+    loom::py::loom::dialect::index::index
+    loom::py::loom::dialect::scalar::scalar
+    loom::py::loom::format::bytecode::bytecode
+    loom::py::loom::format::text::text
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -74,6 +74,7 @@ iree_py_test(
   SRCS
     "../../../tools/pytest_style_runner.py"
   ARGS
+    "loom.target.arch.amdgpu.isa_xml_test"
     "loom.target.arch.amdgpu.target_info_test"
   DEPS
     loom::py::loom::target::arch::amdgpu::target_info
@@ -88,6 +89,7 @@ iree_py_test(
   SRCS
     "../../../tools/pytest_style_runner.py"
   ARGS
+    "loom.target.arch.amdgpu.descriptor_overlay_test"
     "loom.target.arch.amdgpu.descriptors_test"
   DEPS
     loom::py::loom::target::arch::amdgpu::descriptors

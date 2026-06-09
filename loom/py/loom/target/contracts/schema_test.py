@@ -649,8 +649,8 @@ def test_descriptor_rule_rejects_undefined_temporary() -> None:
     with pytest.raises(
         ValueError,
         match=(
-            r"vector.reduce: descriptor operand 'lhs' temporary 'missing' "
-            r"is not defined"
+            r"vector.reduce: descriptor 'test.add.i32' operand 'lhs' "
+            r"temporary 'missing' is not defined"
         ),
     ):
         ContractFragment(
@@ -681,8 +681,8 @@ def test_descriptor_rule_rejects_temporary_result_without_type() -> None:
     with pytest.raises(
         ValueError,
         match=(
-            r"vector.reduce: descriptor result 'dst' temporary 'partial' "
-            r"needs an explicit result type binding"
+            r"vector.reduce: descriptor result 'dst' temporary 'partial' needs "
+            r"an explicit result type binding"
         ),
     ):
         ContractFragment(

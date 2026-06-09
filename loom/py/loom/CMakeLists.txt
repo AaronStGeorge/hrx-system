@@ -52,9 +52,13 @@ iree_py_test(
   SRCS
     "tools/pytest_style_runner.py"
   ARGS
+    "loom.assembly_test"
+    "loom.builder_test"
+    "loom.builders_test"
     "loom.diagnostics_test"
     "loom.dsl_test"
     "loom.fields_test"
+    "loom.ir_test"
     "loom.projected_region_test"
     "loom.verify_test"
   DEPS

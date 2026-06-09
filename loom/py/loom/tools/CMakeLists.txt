@@ -55,9 +55,11 @@ iree_py_test(
   ARGS
     "loom.tools.amdgpu_asm_test"
     "loom.tools.loom_opt_test"
+    "loom.tools.source_surface_test"
   DEPS
     loom::py::loom::tools::amdgpu_asm
     loom::py::loom::tools::loom_opt
+    loom::py::loom::tools::tools
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"
     "${PROJECT_BINARY_DIR}/loom/py"

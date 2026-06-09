@@ -52,14 +52,17 @@ iree_py_test(
         "amdgpu_asm_test.py",
         "loom_opt_test.py",
         "pytest_style_runner.py",
+        "source_surface_test.py",
     ],
     args = [
         "loom.tools.amdgpu_asm_test",
         "loom.tools.loom_opt_test",
+        "loom.tools.source_surface_test",
     ],
     main = "pytest_style_runner.py",
     deps = [
         ":amdgpu_asm",
         ":loom_opt",
+        ":tools",
     ],
 )

@@ -198,7 +198,7 @@ class TestCanonicalExamples:
         """Ops inside regions are indented by 2 spaces."""
         # Lines that are structural (closing brace, else separator) are
         # at the outer indentation level, not indented.
-        structural_prefixes = ("}", "} else {")
+        structural_prefixes = ("}", "} else {", "} launch {")
         for op in ALL_TEST_OPS:
             for example in op.examples:
                 lines = example.split("\n")

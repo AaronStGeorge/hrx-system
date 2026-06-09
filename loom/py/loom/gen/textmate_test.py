@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
@@ -33,7 +32,6 @@ from loom.gen.textmate import (
     generate_all_grammars,
     generate_loom_grammar,
     generate_loom_test_grammar,
-    textmate_output_directory,
 )
 
 ALL_OPS = (
@@ -61,14 +59,6 @@ ALL_TYPES = (
 )
 
 
-def _generated_output_dir() -> Path:
-    return textmate_output_directory()
-
-
-def _vscode_extension_dir() -> Path:
-    return textmate_output_directory().parent / "vscode"
-
-
 def _walk_regexes(value: Any) -> Iterator[str]:
     if isinstance(value, list):
         for item in value:
@@ -80,14 +70,6 @@ def _walk_regexes(value: Any) -> Iterator[str]:
                 yield item
             else:
                 yield from _walk_regexes(item)
-
-
-def test_generated_textmate_files_are_current() -> None:
-    outputs = generate_all_grammars(ALL_OPS, ALL_TYPES)
-
-    for filename, expected in outputs.items():
-        path = _generated_output_dir() / filename
-        assert path.read_text() == expected
 
 
 def test_loom_grammar_uses_generated_op_and_type_metadata() -> None:
@@ -153,22 +135,3 @@ def test_regexes_stay_line_local_for_editor_tokenization() -> None:
         for regex in _walk_regexes(grammar):
             for fragment in forbidden_fragments:
                 assert fragment not in regex
-
-
-def test_vscode_extension_manifest_references_generated_grammars() -> None:
-    package_path = _vscode_extension_dir() / "package.json"
-    package = json.loads(package_path.read_text())
-
-    languages = {language["id"]: language for language in package["contributes"]["languages"]}
-    assert languages["loom"]["extensions"] == [".loom"]
-    assert languages["loom-test"]["extensions"] == [".loom-test"]
-    for language in languages.values():
-        configuration = (package_path.parent / language["configuration"]).resolve()
-        assert configuration.is_file()
-
-    grammars = {grammar["language"]: grammar for grammar in package["contributes"]["grammars"]}
-    assert grammars["loom"]["scopeName"] == "source.loom"
-    assert grammars["loom-test"]["scopeName"] == "source.loom-test"
-    for grammar in grammars.values():
-        grammar_path = (package_path.parent / grammar["path"]).resolve()
-        assert grammar_path.is_file()

@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
@@ -29,11 +27,7 @@ from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.view import ALL_VIEW_OPS
 from loom.format.text.parser import ParseError, Parser
-from loom.format.text.printer import Printer
 from loom.ir import ENCODING_TYPE, I1, INDEX, Module, Operation
-
-_REPO_ROOT = Path(__file__).resolve().parents[5]
-_GOLDEN_ROOT = _REPO_ROOT / "loom/src/loom/test/corpus/text"
 
 _ALL_OPS = (
     *ALL_TEST_OPS,
@@ -61,26 +55,11 @@ _ALL_TYPES = (
 )
 
 
-def _golden_paths() -> list[Path]:
-    return sorted(_GOLDEN_ROOT.rglob("*.loom"))
-
-
-def _golden_id(path: Path) -> str:
-    return path.relative_to(_GOLDEN_ROOT).as_posix()
-
-
 def _parser() -> Parser:
     parser = Parser()
     parser.register_ops(_ALL_OPS)
     parser.register_types(_ALL_TYPES)
     return parser
-
-
-def _printer() -> Printer:
-    printer = Printer()
-    printer.register_ops(_ALL_OPS)
-    printer.register_types(_ALL_TYPES)
-    return printer
 
 
 def _first_body_op(module: Module, symbol_name: str, op_name: str) -> Operation:
@@ -93,17 +72,6 @@ def _first_body_op(module: Module, symbol_name: str, op_name: str) -> Operation:
                     if op.name == op_name:
                         return op
     raise AssertionError(f"{op_name} not found in @{symbol_name}")
-
-
-def test_golden_corpus_is_not_empty() -> None:
-    assert _golden_paths(), f"no .loom golden files under {_GOLDEN_ROOT}"
-
-
-@pytest.mark.parametrize("path", _golden_paths(), ids=_golden_id)
-def test_golden_text_roundtrip(path: Path) -> None:
-    source = path.read_text()
-    printed = _printer().print_module(_parser().parse(source))
-    assert printed == source
 
 
 def test_out_of_order_variadic_operands_parse_in_declared_order() -> None:

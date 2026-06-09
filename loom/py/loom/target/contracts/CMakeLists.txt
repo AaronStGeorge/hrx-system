@@ -41,9 +41,13 @@ iree_py_test(
   SRCS
     "../../tools/pytest_style_runner.py"
   ARGS
+    "loom.target.contracts.compile_test"
     "loom.target.contracts.lower_rules_test"
+    "loom.target.contracts.schema_test"
+    "loom.target.contracts.templates_test"
   DEPS
     loom::py::loom::target::contracts::contracts
+    loom::py::loom::dialect::shared
     loom::py::loom::dialect::scalar::scalar
     loom::py::loom::dialect::vector::vector
     loom::py::loom::target::test::descriptors

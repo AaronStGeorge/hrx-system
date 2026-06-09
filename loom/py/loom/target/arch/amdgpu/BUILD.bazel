@@ -74,10 +74,14 @@ iree_py_library(
 iree_py_test(
     name = "target_info_test",
     srcs = [
+        "isa_xml_test.py",
         "target_info_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
-    args = ["loom.target.arch.amdgpu.target_info_test"],
+    args = [
+        "loom.target.arch.amdgpu.isa_xml_test",
+        "loom.target.arch.amdgpu.target_info_test",
+    ],
     main = "pytest_style_runner.py",
     deps = [":target_info"],
 )
@@ -85,10 +89,15 @@ iree_py_test(
 iree_py_test(
     name = "descriptors_test",
     srcs = [
+        "descriptor_overlay_test.py",
         "descriptors_test.py",
+        "isa_xml_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
-    args = ["loom.target.arch.amdgpu.descriptors_test"],
+    args = [
+        "loom.target.arch.amdgpu.descriptor_overlay_test",
+        "loom.target.arch.amdgpu.descriptors_test",
+    ],
     main = "pytest_style_runner.py",
     deps = [
         ":descriptors",

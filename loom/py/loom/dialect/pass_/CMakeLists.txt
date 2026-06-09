@@ -19,4 +19,20 @@ iree_py_library(
     loom::py::loom::core
 )
 
+iree_py_test(
+  NAME
+    pass_ops_test
+  SRCS
+    "../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.dialect.pass_.pass_ops_test"
+  DEPS
+    loom::py::loom::dialect::pass_::pass_
+    loom::py::loom::format::bytecode::bytecode
+    loom::py::loom::format::text::text
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

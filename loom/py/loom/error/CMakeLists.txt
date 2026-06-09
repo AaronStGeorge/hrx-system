@@ -35,4 +35,19 @@ iree_py_library(
     loom::py::loom::core
 )
 
+iree_py_test(
+  NAME
+    error_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.error.error_test"
+  DEPS
+    loom::py::loom::error::error
+    loom::py::loom::package
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

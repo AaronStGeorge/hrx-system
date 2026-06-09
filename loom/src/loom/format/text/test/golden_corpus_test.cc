@@ -6,10 +6,9 @@
 
 // C parser/printer identity tests over the checked-in .loom text corpus.
 //
-// The Python parser/printer also round-trips this corpus. Keeping the same
-// corpus active in C catches drift in comments, locations, dialect
-// registration, type syntax, and format-element handling before cross-language
-// tests have to diagnose it indirectly.
+// Keeping the checked-in corpus active in C catches drift in comments,
+// locations, dialect registration, type syntax, and format-element handling
+// before cross-language tests have to diagnose it indirectly.
 
 #include <string>
 

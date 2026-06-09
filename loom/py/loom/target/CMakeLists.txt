@@ -39,6 +39,30 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    low_legality
+  SRCS
+    "low_legality.py"
+  DEPS
+    loom::py::loom::target::package
+    loom::py::loom::core
+)
+
+iree_py_test(
+  NAME
+    target_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.target.low_legality_test"
+  DEPS
+    loom::py::loom::target::low_legality
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+)
+
+iree_py_library(
+  NAME
     contract_fragments
   SRCS
     "contract_fragments.py"

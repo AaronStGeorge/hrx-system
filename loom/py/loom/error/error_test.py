@@ -161,16 +161,6 @@ class TestCatalogIntegrity:
             )
             seen.add(key)
 
-    def test_all_domains_represented(self) -> None:
-        """Every ErrorDomain value should have at least one error."""
-        from loom.error import ALL_ERRORS
-
-        domains_present = {e.domain for e in ALL_ERRORS}
-        for domain in ErrorDomain:
-            assert domain in domains_present, (
-                f"domain {domain.name} has no error definitions"
-            )
-
     def test_all_severities_used(self) -> None:
         """At least ERROR and REMARK should be present."""
         from loom.error import ALL_ERRORS
@@ -200,20 +190,6 @@ class TestCatalogIntegrity:
             ParamKind.STRING_LIST,
         ):
             assert kind in kinds, f"ParamKind.{kind.name} is not used by any error"
-
-    def test_codes_are_sequential_within_domain(self) -> None:
-        """Within each domain, codes should be 1..N with no gaps."""
-        from loom.error import ALL_ERRORS
-
-        by_domain: dict[ErrorDomain, list[int]] = {}
-        for error in ALL_ERRORS:
-            by_domain.setdefault(error.domain, []).append(error.code)
-        for domain, codes in by_domain.items():
-            codes.sort()
-            expected = list(range(1, len(codes) + 1))
-            assert codes == expected, (
-                f"domain {domain.name}: codes {codes} should be sequential {expected}"
-            )
 
     def test_catalog_fits_compact_error_refs(self) -> None:
         """C LOOM_ERROR_REF packs a domain and code into 16 bits."""

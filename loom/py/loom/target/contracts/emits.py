@@ -127,7 +127,7 @@ class EmitDescriptorOp:
             _require_input_descriptor_role(self.descriptor, operand)
             value_ref.validate(
                 source_op,
-                f"descriptor operand '{descriptor_field}'",
+                f"descriptor '{self.descriptor.key}' operand '{descriptor_field}'",
                 defined_temporaries=defined_temporaries,
             )
         produced_temporaries = []
@@ -161,7 +161,10 @@ class EmitDescriptorOp:
                     )
                 produced_temporaries.append(value_ref.field)
             else:
-                value_ref.validate(source_op, f"descriptor result '{descriptor_field}'")
+                value_ref.validate(
+                    source_op,
+                    f"descriptor '{self.descriptor.key}' result '{descriptor_field}'",
+                )
         for descriptor_field, binding in result_type_bindings.items():
             _require_descriptor_operand(
                 self.descriptor, descriptor_field, "descriptor result type binding"

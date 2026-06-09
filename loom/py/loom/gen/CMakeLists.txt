@@ -27,6 +27,30 @@ iree_py_library(
     loom::py::loom::target::low_descriptors
 )
 
+iree_py_test(
+  NAME
+    gen_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.builders_pyi_test"
+    "loom.gen.low_descriptor_shard_test"
+    "loom.gen.low_descriptors_test"
+    "loom.gen.textmate_test"
+  DEPS
+    loom::py::loom::gen::c_tables
+    loom::py::loom::gen::generated_file
+    loom::py::loom::gen::low_descriptors
+    loom::py::loom::core
+    loom::py::loom::dialect::package
+    loom::py::loom::error::error
+    loom::py::loom::target::descriptor_sets
+    loom::py::loom::target::test::descriptors
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+)
+
 iree_py_library(
   NAME
     package_inits
