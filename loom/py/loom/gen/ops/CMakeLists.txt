@@ -27,37 +27,14 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    keywords
-  SRCS
-    "__init__.py"
-    "keywords.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::assembly::tokens
-)
-
-iree_py_library(
-  NAME
-    type_registry
-  SRCS
-    "__init__.py"
-    "type_registry.py"
-  DEPS
-    loom::py::loom::core
-    loom::py::loom::gen::assembly::tokens
-    loom::py::loom::gen::support::generated_file
-)
-
-iree_py_library(
-  NAME
     c_tables
   SRCS
     "__init__.py"
     "c_tables.py"
+    "keywords.py"
+    "type_registry.py"
   DEPS
-    loom::py::loom::gen::ops::keywords
     loom::py::loom::gen::ops::model
-    loom::py::loom::gen::ops::type_registry
     loom::py::loom::core
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::assembly::tokens
@@ -74,10 +51,10 @@ iree_py_library(
   SRCS
     "__init__.py"
     "c_tables.py"
+    "keywords.py"
+    "type_registry.py"
   DEPS
-    loom::py::loom::gen::ops::keywords
     loom::py::loom::gen::ops::model
-    loom::py::loom::gen::ops::type_registry
     loom::py::loom::core
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::assembly::tokens

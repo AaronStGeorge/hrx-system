@@ -41,37 +41,8 @@ iree_py_library(
     deps = C_TABLE_MODEL_DEPS,
 )
 
-iree_py_library(
-    name = "keywords",
-    srcs = [
-        "__init__.py",
-        "keywords.py",
-    ],
-    deps = [
-        "//loom/py/loom:core",
-        "//loom/py/loom/gen/assembly:tokens",
-    ],
-)
-
-TYPE_REGISTRY_DEPS = [
-    "//loom/py/loom:core",
-    "//loom/py/loom/gen/assembly:tokens",
-    "//loom/py/loom/gen/support:generated_file",
-]
-
-iree_py_library(
-    name = "type_registry",
-    srcs = [
-        "__init__.py",
-        "type_registry.py",
-    ],
-    deps = TYPE_REGISTRY_DEPS,
-)
-
 C_TABLES_DEPS = [
-    ":keywords",
     ":model",
-    ":type_registry",
     "//loom/py/loom:core",
     "//loom/py/loom/gen:bootstrap",
     "//loom/py/loom/gen/assembly:tokens",
@@ -85,6 +56,8 @@ iree_py_library(
     srcs = [
         "__init__.py",
         "c_tables.py",
+        "keywords.py",
+        "type_registry.py",
     ],
     deps = C_TABLES_DEPS,
 )
@@ -94,6 +67,8 @@ iree_py_binary(
     srcs = [
         "__init__.py",
         "c_tables.py",
+        "keywords.py",
+        "type_registry.py",
     ],
     main = "c_tables.py",
     visibility = GENERATOR_VISIBILITY,
