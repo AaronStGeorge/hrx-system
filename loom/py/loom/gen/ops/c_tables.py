@@ -79,7 +79,6 @@ from loom.dsl import (
     LoopLikeInterface,
     MemoryAccessInterface,
     Op,
-    Operand,
     OperandOwnershipEffect,
     RegionBranchInterface,
     RegionDef,
@@ -91,6 +90,7 @@ from loom.dsl import (
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
 from loom.gen.assembly.tokens import KEYWORD_MAP, REGION_SYNTAX_MAP
+from loom.gen.ops import c_queries
 from loom.gen.ops.c_enums import (
     ATTR_KIND_MAP,
     CALL_LIKE_KIND_MAP,
@@ -175,82 +175,6 @@ def _emit_op_semantics(lines: list[str], op: Op) -> None:
     lines.append("    },")
 
 
-def _find_interface[T](op: Op, iface_class: type[T]) -> T | None:
-    """Returns the interface instance from op.interfaces matching |iface_class|, or None.
-
-    Generic over the interface class so callers retain type information
-    on the result. Used by both the per-op interface helpers below and
-    the table-driven interface vtable emitter (see _INTERFACES).
-    """
-    for iface in op.interfaces:
-        if isinstance(iface, iface_class):
-            return iface
-    return None
-
-
-def _func_args_are_operands(op: Op) -> bool:
-    """Returns true if FuncArgs should be stored in the op's operand array.
-
-    Bodyless func-like ops (func.decl, func.ukernel) have no entry block, so
-    their signature args live as op operands. Bodyful funcs keep signature args
-    as body entry block args and must not duplicate them as operands.
-    """
-    func_like_iface = _find_interface(op, FuncLikeInterface)
-    return bool(func_like_iface and func_like_iface.args_as_operands)
-
-
-def _func_args_field_name(op: Op) -> str:
-    """Returns the FuncArgs field name declared by a func-like op format."""
-
-    def _walk(elements: Sequence[FormatElement]) -> str | None:
-        for element in elements:
-            match element:
-                case FuncArgs(field=name):
-                    return name
-                case OptionalGroup(elements=inner) | Scope(elements=inner) | Clause(elements=inner):
-                    nested = _walk(inner)
-                    if nested is not None:
-                        return nested
-                case _:
-                    continue
-        return None
-
-    return _walk(op.format) or "args"
-
-
-def _func_args_field_names(op: Op) -> set[str]:
-    """Returns FuncArgs field names explicitly declared by an op format."""
-
-    names: set[str] = set()
-
-    def _walk(elements: Sequence[FormatElement]) -> None:
-        for element in elements:
-            match element:
-                case FuncArgs(field=name):
-                    names.add(name)
-                case OptionalGroup(elements=inner) | Scope(elements=inner) | Clause(elements=inner):
-                    _walk(inner)
-                case _:
-                    continue
-
-    _walk(op.format)
-    return names
-
-
-def _explicit_func_args_operand(op: Op) -> Operand | None:
-    """Returns the operand descriptor that backs FuncArgs, if declared."""
-    if not _func_args_are_operands(op):
-        return None
-    field_name = _func_args_field_name(op)
-    for operand in op.operands:
-        if operand.name != field_name:
-            continue
-        if not operand.variadic:
-            raise ValueError(f"Op '{op.name}': FuncArgs field '{field_name}' must be a variadic operand when declared explicitly")
-        return operand
-    return None
-
-
 # Maps Python symbol interface names to C interface flag constants.
 SYMBOL_INTERFACE_MAP: dict[str, str] = {
     "func_like": "LOOM_SYMBOL_INTERFACE_FUNC_LIKE",
@@ -283,231 +207,6 @@ def _constraint_arg_ref(
     if field_index > LOOM_FIELD_REF_MAX_INDEX:
         raise ValueError(f"Op '{op.name}' constraint {constraint_name}: field '{arg_name}' index {field_index} exceeds LOOM_FIELD_REF 6-bit max {LOOM_FIELD_REF_MAX_INDEX}")
     return f"LOOM_FIELD_REF({category}, {field_index})"
-
-
-TYPE_PROPAGATION_REFINABLE_CONSTRAINTS = frozenset(
-    {
-        TypeConstraint.TILE,
-        TypeConstraint.TENSOR,
-        TypeConstraint.VECTOR,
-        TypeConstraint.RANK_ONE_VECTOR,
-        TypeConstraint.VIEW,
-        TypeConstraint.INTEGER_ELEMENT,
-        TypeConstraint.FLOAT_ELEMENT,
-        TypeConstraint.INDEX_OR_NON_I1_INTEGER_ELEMENT,
-        TypeConstraint.I1_ELEMENT,
-        TypeConstraint.I8_ELEMENT,
-        TypeConstraint.I32_ELEMENT,
-        TypeConstraint.F16_OR_BF16_ELEMENT,
-        TypeConstraint.F32_ELEMENT,
-        TypeConstraint.ANY,
-        TypeConstraint.ANY_ENCODING,
-        TypeConstraint.ENCODING_LAYOUT,
-        TypeConstraint.ENCODING_SCHEMA,
-        TypeConstraint.ENCODING_STORAGE,
-        TypeConstraint.ENCODING_TRANSFORM,
-        TypeConstraint.POOL,
-    }
-)
-
-TYPE_PROPAGATION_RELATIONS = frozenset(
-    {
-        "LOOM_RELATION_PAIRWISE_EQ",
-        "LOOM_RELATION_ALL_SAME",
-        "LOOM_RELATION_REGION_ARG_MATCH",
-        "LOOM_RELATION_YIELD_MATCH",
-        "LOOM_RELATION_VARIADIC_MATCH",
-    }
-)
-
-TYPE_PROPAGATION_PROPERTIES = frozenset(
-    {
-        "LOOM_PROPERTY_TYPE",
-        "LOOM_PROPERTY_ENCODING",
-        "LOOM_PROPERTY_SHAPE",
-    }
-)
-
-TYPE_PROPAGATION_TYPE_NOOP_RELATIONS = frozenset(
-    {
-        "LOOM_RELATION_YIELD_MATCH",
-        "LOOM_RELATION_VARIADIC_MATCH",
-    }
-)
-
-
-def _op_value_type_constraints(op: Op) -> dict[str, TypeConstraint]:
-    constraints: dict[str, TypeConstraint] = {}
-    for operand in op.operands:
-        constraints[operand.name] = operand.type_constraint
-    if _func_args_are_operands(op) and _explicit_func_args_operand(op) is None:
-        constraints[_func_args_field_name(op)] = TypeConstraint.ANY
-    for result in op.results:
-        constraints[result.name] = result.type_constraint
-    return constraints
-
-
-def _constraint_arg_can_refine_type(
-    op: Op,
-    layout: FieldLayout,
-    value_type_constraints: Mapping[str, TypeConstraint],
-    arg_name: str,
-) -> bool:
-    field = layout.fields.get(arg_name)
-    if field is None:
-        return False
-    if field.kind == FieldKind.REGION:
-        return True
-    if field.kind not in (FieldKind.OPERAND, FieldKind.RESULT):
-        return False
-    type_constraint = value_type_constraints.get(arg_name)
-    return type_constraint in TYPE_PROPAGATION_REFINABLE_CONSTRAINTS
-
-
-def _op_has_type_propagation_candidate(op: Op, layout: FieldLayout) -> bool:
-    if op.type_transfer:
-        return True
-    value_type_constraints = _op_value_type_constraints(op)
-    for constraint in op.constraints:
-        constraint_entry = CONSTRAINT_MAP.get(constraint.name)
-        if constraint_entry is None:
-            continue
-        relation_name, property_name = constraint_entry
-        if property_name == "$data" or property_name == "$type_constraint_data":
-            continue
-        if relation_name not in TYPE_PROPAGATION_RELATIONS:
-            continue
-        if property_name not in TYPE_PROPAGATION_PROPERTIES:
-            continue
-        if property_name == "LOOM_PROPERTY_TYPE" and relation_name in TYPE_PROPAGATION_TYPE_NOOP_RELATIONS:
-            continue
-        if any(_constraint_arg_can_refine_type(op, layout, value_type_constraints, arg_name) for arg_name in constraint.args):
-            return True
-    return False
-
-
-def _resolve_attr_index(op: Op, attr_name: str | None, interface_name: str = "interface") -> int:
-    """Resolves an attr name to its non-flags attr index.
-
-    Returns 0xFF (LOOM_ATTR_INDEX_NONE) if attr_name is None.
-    Raises ValueError if the attr name is not found on the op.
-    |interface_name| is used in error messages to identify which
-    interface declaration is referencing this attr.
-    """
-    if attr_name is None:
-        return 0xFF
-    index = 0
-    for attr_def in op.attrs:
-        if attr_def.attr_type == ATTR_TYPE_FLAGS:
-            continue
-        if attr_def.name == attr_name:
-            return index
-        index += 1
-    raise ValueError(f"{interface_name} on {op.name!r}: attr {attr_name!r} not found. Available: {[a.name for a in op.attrs if a.attr_type != ATTR_TYPE_FLAGS]}")
-
-
-def _resolve_region_index(op: Op, region_name: str | None, interface_name: str = "interface") -> int:
-    """Resolves a region name to its region index.
-
-    Returns 0xFF (LOOM_REGION_INDEX_NONE) if region_name is None.
-    Raises ValueError if the region name is not found on the op.
-    |interface_name| is used in error messages.
-    """
-    if region_name is None:
-        return 0xFF
-    for i, region_def in enumerate(op.regions):
-        if region_def.name == region_name:
-            return i
-    raise ValueError(f"{interface_name} on {op.name!r}: region {region_name!r} not found. Available: {[r.name for r in op.regions]}")
-
-
-def _resolve_operand_index(op: Op, operand_name: str | None, interface_name: str = "interface") -> int:
-    """Resolves an operand name to its index in the op's operand list.
-
-    Returns 0xFF (LOOM_OPERAND_INDEX_NONE) if operand_name is None.
-    Raises ValueError if the operand name is not found on the op.
-    |interface_name| is used in error messages.
-
-    The returned index is the position in op.operands. This includes
-    fixed operands and the variadic operand (which always comes last
-    when present). For interfaces that need the offset of a variadic
-    operand specifically, the returned index is exactly that offset.
-    """
-    if operand_name is None:
-        return 0xFF
-    for i, operand in enumerate(op.operands):
-        if operand.name == operand_name:
-            return i
-    raise ValueError(f"{interface_name} on {op.name!r}: operand {operand_name!r} not found. Available: {[o.name for o in op.operands]}")
-
-
-def _resolve_successor_selector_operand_index(op: Op) -> int | None:
-    """Resolves the op-level successor selector operand index, if present."""
-    if op.successor_selector is None:
-        return None
-    index = _resolve_operand_index(op, op.successor_selector, "successor_selector")
-    if index > 0xFFFF:
-        raise ValueError(f"Op '{op.name}': successor_selector operand index {index} exceeds uint16_t range")
-    if len(op.successors) < 2:
-        raise ValueError(f"Op '{op.name}': successor_selector requires at least two successors")
-    return index
-
-
-def _resolve_result_index(op: Op, result_name: str | None, interface_name: str = "interface") -> int:
-    """Resolves a result name to its index in the op's result list.
-
-    Returns 0xFF (LOOM_RESULT_INDEX_NONE) if result_name is None.
-    Raises ValueError if the result name is not found on the op.
-    |interface_name| is used in error messages.
-
-    The returned index is the position in op.results. This includes
-    fixed results and the variadic result tail.
-    """
-    if result_name is None:
-        return 0xFF
-    for i, result in enumerate(op.results):
-        if result.name == result_name:
-            return i
-    raise ValueError(f"{interface_name} on {op.name!r}: result {result_name!r} not found. Available: {[r.name for r in op.results]}")
-
-
-def _resolve_ownership_source_operand_index(op: Op, operand_name: str) -> int:
-    index = _resolve_operand_index(op, operand_name, "ownership effect")
-    if index > 0xFE:
-        raise ValueError(f"ownership effect on {op.name!r}: source operand {operand_name!r} index {index} exceeds uint8_t range")
-    return index
-
-
-def _resolve_block_arg_index(
-    op: Op,
-    region_name: str,
-    arg_name: str | None,
-    interface_name: str = "interface",
-) -> int:
-    """Resolves a block argument name to its index in the entry block.
-
-    The lookup considers a region's implicit block arguments first
-    (declared via implicit_args=(("name", "type"),) on RegionDef),
-    then any block args derived from BindingList format elements
-    (which the format pipeline appends after implicit args).
-
-    Returns 0xFF (LOOM_BLOCK_ARG_INDEX_NONE) if arg_name is None.
-    Raises ValueError if the region or arg name is not found.
-    """
-    if arg_name is None:
-        return 0xFF
-    region_def: RegionDef | None = None
-    for r in op.regions:
-        if r.name == region_name:
-            region_def = r
-            break
-    if region_def is None:
-        raise ValueError(f"{interface_name} on {op.name!r}: region {region_name!r} not found. Available: {[r.name for r in op.regions]}")
-    # Implicit block args come first.
-    for i, (name, _type) in enumerate(region_def.implicit_args):
-        if name == arg_name:
-            return i
-    raise ValueError(f"{interface_name} on {op.name!r}: block arg {arg_name!r} not found in region {region_name!r}. Available implicit_args: {[name for name, _ in region_def.implicit_args]}")
 
 
 # ============================================================================
@@ -804,18 +503,18 @@ def _resolve_interface_field(
     if _interface_soft_default_is_absent(op, iface, field_spec, py_value):
         return "255"
     if field_spec.kind == "attr":
-        return str(_resolve_attr_index(op, py_value, interface_name))
+        return str(c_queries.resolve_attr_index(op, py_value, interface_name))
     if field_spec.kind == "region":
-        return str(_resolve_region_index(op, py_value, interface_name))
+        return str(c_queries.resolve_region_index(op, py_value, interface_name))
     if field_spec.kind == "operand":
-        return str(_resolve_operand_index(op, py_value, interface_name))
+        return str(c_queries.resolve_operand_index(op, py_value, interface_name))
     if field_spec.kind == "result":
-        return str(_resolve_result_index(op, py_value, interface_name))
+        return str(c_queries.resolve_result_index(op, py_value, interface_name))
     if field_spec.kind == "block_arg":
         if not field_spec.region_field:
             raise ValueError(f"{interface_name} field {field_spec.py_field!r}: kind='block_arg' requires region_field to name the region this block arg belongs to")
         region_value = getattr(iface, field_spec.region_field)
-        return str(_resolve_block_arg_index(op, region_value, py_value, interface_name))
+        return str(c_queries.resolve_block_arg_index(op, region_value, py_value, interface_name))
     if field_spec.kind == "bool":
         return "true" if py_value else "false"
     if field_spec.kind == "call_kind":
@@ -847,9 +546,9 @@ def _resolve_soft_memory_field(
     if _interface_soft_default_is_absent(op, iface, field_spec, py_value):
         return None
     if field_kind == "attr":
-        index = _resolve_attr_index(op, py_value, interface_name)
+        index = c_queries.resolve_attr_index(op, py_value, interface_name)
     elif field_kind == "operand":
-        index = _resolve_operand_index(op, py_value, interface_name)
+        index = c_queries.resolve_operand_index(op, py_value, interface_name)
     else:
         raise ValueError(f"unsupported MemoryAccessInterface field kind {field_kind!r}")
     return None if index == 0xFF else index
@@ -857,14 +556,14 @@ def _resolve_soft_memory_field(
 
 def _validate_call_like_interface(op: Op, iface: CallLikeInterface, interface_name: str) -> None:
     """Validates CallLikeInterface's trailing variadic slice contract."""
-    operand_index = _resolve_operand_index(op, iface.operands, interface_name)
+    operand_index = c_queries.resolve_operand_index(op, iface.operands, interface_name)
     operand = op.operands[operand_index]
     if not operand.variadic:
         raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.operands!r} must be variadic")
     if operand_index + 1 != len(op.operands):
         raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.operands!r} must be the trailing operand field")
 
-    result_index = _resolve_result_index(op, iface.results, interface_name)
+    result_index = c_queries.resolve_result_index(op, iface.results, interface_name)
     result = op.results[result_index]
     if not result.variadic:
         raise ValueError(f"{interface_name} on {op.name!r}: result {iface.results!r} must be variadic")
@@ -876,7 +575,7 @@ def _validate_memory_access_interface(op: Op, iface: MemoryAccessInterface, inte
     """Validates MemoryAccessInterface's optional role coherence."""
     if iface.view is None:
         raise ValueError(f"{interface_name} on {op.name!r}: view operand is required")
-    _resolve_operand_index(op, iface.view, interface_name)
+    c_queries.resolve_operand_index(op, iface.view, interface_name)
     indices_index = _resolve_soft_memory_field(op, iface, "indices", "operand", interface_name)
     if indices_index is not None:
         indices_operand = op.operands[indices_index]
@@ -906,7 +605,7 @@ def _target_like_projection_entries(op: Op) -> list[tuple[int, str, str]]:
         if projection is None:
             continue
         value_kind, storage_field = projection
-        attr_index = _resolve_attr_index(op, attr_def.name, "TargetLikeInterface")
+        attr_index = c_queries.resolve_attr_index(op, attr_def.name, "TargetLikeInterface")
         entries.append((attr_index, value_kind, storage_field))
     return entries
 
@@ -941,7 +640,7 @@ def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> Non
     resulting C initializer is pointed to from the main op vtable's
     cache line 3 slot named by spec.vtable_field.
     """
-    iface = _find_interface(op, spec.python_class)
+    iface = c_queries.find_interface(op, spec.python_class)
     if iface is None:
         return
     if isinstance(iface, CallLikeInterface):
@@ -967,7 +666,7 @@ def _interface_vtable_ptr(op: Op, spec: InterfaceSpec) -> str:
     Evaluates to `&<op>_<vtable_field>` when the op implements the
     interface, or `NULL` otherwise.
     """
-    if _find_interface(op, spec.python_class) is None:
+    if c_queries.find_interface(op, spec.python_class) is None:
         return "NULL"
     return f"&{_c_prefix(op)}_{spec.vtable_field}"
 
@@ -1103,7 +802,7 @@ def _translate_format_elements(
         if desc is None:
             raise ValueError(f"Op '{op.name}': format references undeclared field '{name}'")
         if desc.kind == FieldKind.ATTR:
-            return desc.kind, _resolve_attr_index(op, name, "format")
+            return desc.kind, c_queries.resolve_attr_index(op, name, "format")
         return desc.kind, desc.index
 
     def _resolve_region_syntax(syntax: str) -> str:
@@ -1211,7 +910,7 @@ def _translate_format_elements(
                     attr_index = 0
                     attr_dict_flags = "0"
                     if field_name:
-                        non_flags = _non_flags_attrs(op)
+                        non_flags = c_queries.non_flags_attrs(op)
                         for idx, ad in enumerate(non_flags):
                             if ad.name == field_name:
                                 attr_index = idx
@@ -1543,24 +1242,14 @@ def _trait_flags(op: Op) -> str:
 # ============================================================================
 
 
-def _has_flags_attr(op: Op) -> bool:
-    """Check if the op has any flags-typed attributes."""
-    return any(a.attr_type == ATTR_TYPE_FLAGS for a in op.attrs)
-
-
-def _non_flags_attrs(op: Op) -> list[AttrDef]:
-    """Return attributes that are not flags (regular attrs for the attribute array)."""
-    return [a for a in op.attrs if a.attr_type != ATTR_TYPE_FLAGS]
-
-
 def _detect_builder_pattern(op: Op) -> str | None:
     """Detects if an op matches a standard builder macro pattern.
 
     Returns the macro name suffix or None for complex ops.
     """
     layout = compute_layout(op)
-    non_flags = _non_flags_attrs(op)
-    has_flags = _has_flags_attr(op)
+    non_flags = c_queries.non_flags_attrs(op)
+    has_flags = c_queries.has_flags_attr(op)
     has_template_param = any(isinstance(e, TemplateParam | TemplateParamFlags) for e in _flatten_format(op.format))
     operand_names = tuple(operand.name for operand in op.operands)
 
@@ -1717,7 +1406,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                 "c_type": c_type,
                 "attr_type": attr_def.attr_type,
                 "optional": attr_def.optional,
-                "attr_index": _resolve_attr_index(op, name, "builder"),
+                "attr_index": c_queries.resolve_attr_index(op, name, "builder"),
             }
         )
         covered_attrs.add(name)
@@ -1748,7 +1437,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
     _pending_binding: dict[str, Any] | None = None
     # Track whether FuncArgs was seen (entry block args come from arg_types).
     _pending_func_args: bool = False
-    func_args_field_name = _func_args_field_name(op)
+    func_args_field_name = c_queries.func_args_field_name(op)
     func_like_body_region_name: str | None = None
     for interface in op.interfaces:
         if isinstance(interface, FuncLikeInterface):
@@ -1812,7 +1501,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                             "kind": "operand_dict",
                             "c_type": "const loom_named_value_t*",
                             "operand_index": layout.fields[operand_field].index,
-                            "names_attr_index": _resolve_attr_index(op, names_field, "builder"),
+                            "names_attr_index": c_queries.resolve_attr_index(op, names_field, "builder"),
                             "names_field": names_field,
                             "may_consume": has_result_type_list,
                         }
@@ -1866,7 +1555,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                             "name": name,
                             "kind": "symbol",
                             "c_type": "loom_symbol_ref_t",
-                            "attr_index": _resolve_attr_index(op, name, "builder"),
+                            "attr_index": c_queries.resolve_attr_index(op, name, "builder"),
                             "optional": (attr_def.optional if attr_def else False),
                         }
                     )
@@ -1880,7 +1569,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                             "kind": "index_list",
                             "dynamic_field": dynamic_field,
                             "static_field": static_field,
-                            "static_attr_index": (_resolve_attr_index(op, static_field, "builder") if static_desc else 0),
+                            "static_attr_index": (c_queries.resolve_attr_index(op, static_field, "builder") if static_desc else 0),
                         }
                     )
                     covered_attrs.add(static_field)
@@ -2015,7 +1704,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                                 "name": name,
                                 "kind": "predicate_list",
                                 "optional": attr_def.optional,
-                                "attr_index": _resolve_attr_index(op, name, "builder"),
+                                "attr_index": c_queries.resolve_attr_index(op, name, "builder"),
                             }
                         )
                         covered_attrs.add(name)
@@ -2044,8 +1733,8 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                             "kind": "descriptor_ref",
                             "c_type": _c_attr_param_type(op, attr_def, shared_enums),
                             "attr_type": attr_def.attr_type,
-                            "attr_index": _resolve_attr_index(op, name, "builder"),
-                            "ordinal_attr_index": _resolve_attr_index(op, ordinal, "builder"),
+                            "attr_index": c_queries.resolve_attr_index(op, name, "builder"),
+                            "ordinal_attr_index": c_queries.resolve_attr_index(op, ordinal, "builder"),
                         }
                     )
                     covered_attrs.add(name)
@@ -2061,8 +1750,8 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                             "kind": "stable_key_ref",
                             "c_type": _c_attr_param_type(op, attr_def, shared_enums),
                             "attr_type": attr_def.attr_type,
-                            "attr_index": _resolve_attr_index(op, name, "builder"),
-                            "stable_id_attr_index": _resolve_attr_index(op, stable_id, "builder"),
+                            "attr_index": c_queries.resolve_attr_index(op, name, "builder"),
+                            "stable_id_attr_index": c_queries.resolve_attr_index(op, stable_id, "builder"),
                         }
                     )
                     covered_attrs.add(name)
@@ -2303,7 +1992,7 @@ def _generate_builder_implementation(
     """Generates the C builder function implementation for a complex op."""
     params = _extract_c_params(op, shared_enums)
     layout = compute_layout(op)
-    func_args_are_operands = _func_args_are_operands(op)
+    func_args_are_operands = c_queries.func_args_are_operands(op)
     params_by_name = {str(param["name"]): param for param in params if "name" in param}
     lines: list[str] = []
 
@@ -2492,7 +2181,7 @@ def _generate_builder_implementation(
             lines.append("  }")
             previous_optional_flag = optional_flag
         region_count_expr = "region_count"
-    attr_count = len(_non_flags_attrs(op))
+    attr_count = len(c_queries.non_flags_attrs(op))
 
     # Compute tied result count expression.
     static_ties = _static_tied_results(op)
@@ -3301,8 +2990,8 @@ def generate_tables_c(
         prefix = _c_prefix(op)
         layout = compute_layout(op)
         elements = _translate_format_elements(op)
-        non_flags = _non_flags_attrs(op)
-        has_flags = _has_flags_attr(op)
+        non_flags = c_queries.non_flags_attrs(op)
+        has_flags = c_queries.has_flags_attr(op)
 
         # Format element array.
         if elements:
@@ -3312,11 +3001,11 @@ def generate_tables_c(
             lines.append("};")
 
         # Operand descriptors.
-        func_args_are_operands = _func_args_are_operands(op)
-        explicit_func_args_operand = _explicit_func_args_operand(op)
+        func_args_are_operands = c_queries.func_args_are_operands(op)
+        explicit_func_args_operand = c_queries.explicit_func_args_operand(op)
         synthesize_func_args_operand = func_args_are_operands and explicit_func_args_operand is None
         if op.operands or synthesize_func_args_operand:
-            func_args_name = _func_args_field_name(op) if synthesize_func_args_operand else ""
+            func_args_name = c_queries.func_args_field_name(op) if synthesize_func_args_operand else ""
             effect_map = {effect.operand: effect.kind for effect in op.effects}
             ownership_operand_map = {effect.operand: effect for effect in op.ownership_effects if isinstance(effect, OperandOwnershipEffect)}
             lines.append(f"static const loom_operand_descriptor_t {prefix}_operand_desc[] = {{")
@@ -3365,7 +3054,7 @@ def generate_tables_c(
                 if result_ownership_effect is not None:
                     ownership_effect_name = RESULT_OWNERSHIP_EFFECT_MAP[result_ownership_effect.kind]
                     if result_ownership_effect.source is not None:
-                        source_operand_index = str(_resolve_ownership_source_operand_index(op, result_ownership_effect.source))
+                        source_operand_index = str(c_queries.resolve_ownership_source_operand_index(op, result_ownership_effect.source))
                 else:
                     ownership_effect_name = "LOOM_RESULT_OWNERSHIP_NONE"
                 if result_ownership_effect is None:
@@ -3433,7 +3122,7 @@ def generate_tables_c(
         if op.regions:
             implicit_terminator = _implicit_terminator_kind(op, ops_by_name)
             lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
-            func_args_fields = _func_args_field_names(op)
+            func_args_fields = c_queries.func_args_field_names(op)
             for region_def in op.regions:
                 region_flags = []
                 if region_def.single_block:
@@ -3488,7 +3177,7 @@ def generate_tables_c(
                 lines.append(f"    {{{relation_name}, {property_name}, {len(constraint.args)}, 0, {{{args_str}}}, {error_ref}}},")
             lines.append("};")
 
-        target_like_iface = _find_interface(op, TargetLikeInterface)
+        target_like_iface = c_queries.find_interface(op, TargetLikeInterface)
         if target_like_iface is not None:
             _emit_target_like_descriptor(op, target_like_iface, lines)
 
@@ -3498,7 +3187,7 @@ def generate_tables_c(
 
         # Symbol definition descriptor.
         if op.symbol_def is not None:
-            attr_index = _resolve_attr_index(op, op.symbol_def.field, "symbol_def")
+            attr_index = c_queries.resolve_attr_index(op, op.symbol_def.field, "symbol_def")
             flags = _symbol_interface_flags(op.symbol_def.interfaces)
             fact_domain = _symbol_fact_domain_symbol(op)
             lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{")
@@ -3553,7 +3242,7 @@ def generate_tables_c(
         vtable_flag_bits: list[str] = []
         if layout.segmented_operands:
             vtable_flag_bits.append("LOOM_OP_VTABLE_SEGMENTED_OPERANDS")
-        elif layout.variadic_operand or _func_args_are_operands(op):
+        elif layout.variadic_operand or c_queries.func_args_are_operands(op):
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_OPERANDS")
         if layout.variadic_result:
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_RESULTS")
@@ -3561,7 +3250,7 @@ def generate_tables_c(
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_REGIONS")
         if has_flags:
             vtable_flag_bits.append("LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS")
-        if _op_has_type_propagation_candidate(op, layout):
+        if c_queries.op_has_type_propagation_candidate(op, layout):
             vtable_flag_bits.append("LOOM_OP_VTABLE_TYPE_PROPAGATION_CANDIDATE")
         vtable_flags_str = " | ".join(vtable_flag_bits) if vtable_flag_bits else "0"
 
@@ -3576,15 +3265,15 @@ def generate_tables_c(
         has_placement = any(trait.name in ("HasParent", "HasAncestor", "NoAncestor") for trait in op.traits)
         placement_ptr = f"&{prefix}_placement" if has_placement else "NULL"
         attr_desc_ptr = f"{prefix}_attr_desc" if non_flags else "NULL"
-        operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or _func_args_are_operands(op) else "NULL"
+        operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or c_queries.func_args_are_operands(op) else "NULL"
         operand_descriptor_count = len(op.operands)
-        if _func_args_are_operands(op) and _explicit_func_args_operand(op) is None:
+        if c_queries.func_args_are_operands(op) and c_queries.explicit_func_args_operand(op) is None:
             operand_descriptor_count += 1
-        successor_selector_operand_index = _resolve_successor_selector_operand_index(op)
+        successor_selector_operand_index = c_queries.resolve_successor_selector_operand_index(op)
         implied_operand_descriptor_count = layout.fixed_operand_count
         if layout.segmented_operands:
             implied_operand_descriptor_count = -1
-        elif layout.variadic_operand or _func_args_are_operands(op):
+        elif layout.variadic_operand or c_queries.func_args_are_operands(op):
             implied_operand_descriptor_count += 1
         result_desc_ptr = f"{prefix}_result_desc" if op.results else "NULL"
         region_desc_ptr = f"{prefix}_region_desc" if op.regions else "NULL"
@@ -4024,7 +3713,7 @@ def _interface_c_ptr_symbols(ops: Sequence[Op]) -> list[tuple[str, str]]:
     declarations: set[tuple[str, str]] = set()
     for op in ops:
         for spec in _INTERFACES:
-            iface = _find_interface(op, spec.python_class)
+            iface = c_queries.find_interface(op, spec.python_class)
             if iface is None:
                 continue
             for field_spec in spec.fields:
@@ -4046,7 +3735,7 @@ def _interface_c_ptr_symbols(ops: Sequence[Op]) -> list[tuple[str, str]]:
 def _target_like_bundle_table_symbols(ops: Sequence[Op]) -> list[str]:
     symbols: set[str] = set()
     for op in ops:
-        iface = _find_interface(op, TargetLikeInterface)
+        iface = c_queries.find_interface(op, TargetLikeInterface)
         if iface is None or iface.bundle_table is None:
             continue
         symbols.add(_normalize_c_symbol_reference(iface.bundle_table))
