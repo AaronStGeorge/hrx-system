@@ -79,6 +79,10 @@ iree_status_t loomc_benchmark_compile_pool_initialize_owning(
 
   iree_task_executor_options_t options;
   iree_task_executor_options_initialize(&options);
+  // Compiler workers run recursive IR analyses and lowering code, and
+  // sanitizer instrumentation can materially increase stack use. The task
+  // system default is sized for runtime work items, not compiler jobs.
+  options.worker_stack_size = 2 * 1024 * 1024;
   iree_task_executor_t* executor = NULL;
   iree_status_t status =
       iree_task_executor_create(options, &topology, host_allocator, &executor);
