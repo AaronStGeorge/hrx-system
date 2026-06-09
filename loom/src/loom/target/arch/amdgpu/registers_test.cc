@@ -13,7 +13,7 @@
 #include "loom/target/arch/amdgpu/descriptors/rdna3_descriptors.h"
 #include "loom/target/arch/amdgpu/descriptors/rdna4_descriptors.h"
 #include "loom/target/arch/amdgpu/descriptors/rdna4_gfx125x_descriptors.h"
-#include "loom/target/arch/amdgpu/occupancy_tables.h"
+#include "loom/target/arch/amdgpu/planning/occupancy_tables.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 namespace {

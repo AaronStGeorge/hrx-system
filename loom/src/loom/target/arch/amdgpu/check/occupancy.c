@@ -6,8 +6,8 @@
 
 #include "loom/target/arch/amdgpu/check/occupancy.h"
 
-#include "loom/target/arch/amdgpu/occupancy.h"
-#include "loom/target/arch/amdgpu/storage_lease.h"
+#include "loom/target/arch/amdgpu/planning/occupancy.h"
+#include "loom/target/arch/amdgpu/planning/storage_lease.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/low_emit.h"
 

@@ -123,7 +123,7 @@ def _validate_models(models: Sequence[AmdgpuOccupancyModelInfo]) -> None:
 
 
 def _emit_header() -> str:
-    guard = "LOOM_TARGET_ARCH_AMDGPU_OCCUPANCY_TABLES_H_"
+    guard = "LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_TABLES_H_"
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -215,7 +215,7 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
         "",
         *line_comment_header("//", generator="loom.gen.amdgpu_occupancy_tables"),
         "",
-        '#include "loom/target/arch/amdgpu/occupancy_tables.h"',
+        '#include "loom/target/arch/amdgpu/planning/occupancy_tables.h"',
         "",
         "// clang-format off",
     ]

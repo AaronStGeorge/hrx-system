@@ -13,7 +13,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/encoding.h"
-#include "loom/target/arch/amdgpu/packet_plan.h"
+#include "loom/target/arch/amdgpu/planning/packet_plan.h"
 #include "loom/target/arch/amdgpu/register_class.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_refs.h"

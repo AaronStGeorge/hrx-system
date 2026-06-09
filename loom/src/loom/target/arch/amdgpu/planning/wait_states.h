@@ -17,8 +17,8 @@
 // target-owned insertion points after scheduling and allocation, where physical
 // register identity is known.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_WAIT_STATES_H_
-#define LOOM_TARGET_ARCH_AMDGPU_WAIT_STATES_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_STATES_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_STATES_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -26,7 +26,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/packet_hazard_plan.h"
 #include "loom/codegen/low/schedule/types.h"
-#include "loom/target/arch/amdgpu/matrix_wait_states.h"
+#include "loom/target/arch/amdgpu/planning/matrix_wait_states.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -146,4 +146,4 @@ uint64_t loom_amdgpu_wait_state_plan_instruction_count(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_WAIT_STATES_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_STATES_H_

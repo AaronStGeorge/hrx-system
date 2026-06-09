@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/wait_packets.h"
+#include "loom/target/arch/amdgpu/planning/wait_packets.h"
 
 #include <inttypes.h>
 

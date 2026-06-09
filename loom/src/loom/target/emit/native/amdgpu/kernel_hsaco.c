@@ -8,7 +8,7 @@
 
 #include <inttypes.h>
 
-#include "loom/target/arch/amdgpu/packet_plan.h"
+#include "loom/target/arch/amdgpu/planning/packet_plan.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/emit/native/amdgpu/hsaco.h"
 #include "loom/target/emit/native/amdgpu/kernel_record.h"

@@ -13,17 +13,17 @@
 // boundary for those stream edits so native emitters do not grow one option per
 // hardware feature.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_PACKET_PLAN_H_
-#define LOOM_TARGET_ARCH_AMDGPU_PACKET_PLAN_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_PACKET_PLAN_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_PACKET_PLAN_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
-#include "loom/target/arch/amdgpu/vopd_plan.h"
-#include "loom/target/arch/amdgpu/wait_packets.h"
-#include "loom/target/arch/amdgpu/wait_plan.h"
-#include "loom/target/arch/amdgpu/wait_states.h"
+#include "loom/target/arch/amdgpu/planning/vopd_plan.h"
+#include "loom/target/arch/amdgpu/planning/wait_packets.h"
+#include "loom/target/arch/amdgpu/planning/wait_plan.h"
+#include "loom/target/arch/amdgpu/planning/wait_states.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,4 +68,4 @@ uint64_t loom_amdgpu_packet_plan_instruction_count(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_PACKET_PLAN_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_PACKET_PLAN_H_

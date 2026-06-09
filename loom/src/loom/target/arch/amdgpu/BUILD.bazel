@@ -30,24 +30,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "amdgpu_lightweight_analysis_no_low_registry_dep",
-    dependencies = ["//loom/src/loom/target/arch/amdgpu/descriptors:low_registry"],
-    targets = [
-        ":address_state",
-        ":occupancy",
-        ":occupancy_tables",
-        ":packet_plan",
-        ":packet_diagnostics",
-        ":storage_lease",
-        ":target_info",
-        ":vopd_plan",
-        ":wait_packets",
-        ":wait_plan",
-        ":wait_states",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "amdgpu_descriptor_shards_no_matrix_contract_dep",
     dependencies = ["//loom/src/loom/target/arch/amdgpu/matrix:contract"],
     targets = [
@@ -221,16 +203,6 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "matrix_wait_states_test",
-    srcs = ["matrix_wait_states_test.cc"],
-    deps = [
-        ":matrix_wait_states",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "encoding_test",
     srcs = ["encoding_test.cc"],
     deps = [
@@ -246,7 +218,6 @@ loom_cc_test(
     name = "registers_test",
     srcs = ["registers_test.cc"],
     deps = [
-        ":occupancy_tables",
         ":target_info",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
@@ -254,6 +225,7 @@ loom_cc_test(
         "//loom/src/loom/target/arch/amdgpu/descriptors:rdna3",
         "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4",
         "//loom/src/loom/target/arch/amdgpu/descriptors:rdna4_gfx125x",
+        "//loom/src/loom/target/arch/amdgpu/planning:occupancy_tables",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -315,8 +287,6 @@ _AMDGPU_COMPARE_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_compare_candida
 
 _AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
 
-_AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_occupancy_tables"
-
 loom_cc_library(
     name = "encoding_defs",
     hdrs = ["encoding.h"],
@@ -341,26 +311,6 @@ loom_cc_library(
     name = "register_class",
     hdrs = ["register_class.h"],
     deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_cc_library(
-    name = "address_state",
-    srcs = ["address_state.c"],
-    hdrs = ["address_state.h"],
-    deps = [
-        ":encoding",
-        ":target_refs",
-        "//loom/src/loom/codegen/low:allocation",
-        "//loom/src/loom/codegen/low:builder",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:frame",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/low",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
 )
 
 loom_target_table_cc_library(
@@ -599,8 +549,6 @@ loom_cc_library(
         ":target_id",
         ":target_info",
         ":target_refs",
-        ":wait_packets",
-        ":wait_plan",
         "//loom/src/loom/analysis:contract_vector",
         "//loom/src/loom/analysis:view_regions",
         "//loom/src/loom/codegen/low:descriptors",
@@ -644,20 +592,10 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
         "//loom/src/loom/target/arch/amdgpu/matrix:contract",
         "//loom/src/loom/target/arch/amdgpu/matrix:projection",
+        "//loom/src/loom/target/arch/amdgpu/planning:wait_packets",
+        "//loom/src/loom/target/arch/amdgpu/planning:wait_plan",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:math",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "descriptor_semantics",
-    srcs = ["descriptor_semantics.c"],
-    hdrs = ["descriptor_semantics.h"],
-    deps = [
-        ":encoding",
-        ":target_refs",
-        "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/base",
     ],
 )
@@ -670,82 +608,6 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/target:math_policy",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "matrix_wait_states",
-    srcs = ["matrix_wait_states.c"],
-    hdrs = ["matrix_wait_states.h"],
-    deps = [
-        ":target_info_defs",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "wait_states",
-    srcs = ["wait_states.c"],
-    hdrs = ["wait_states.h"],
-    deps = [
-        ":descriptor_semantics",
-        ":encoding",
-        ":matrix_wait_states",
-        ":target_id",
-        ":target_info",
-        ":target_refs",
-        "//loom/src/loom/codegen/low:allocation",
-        "//loom/src/loom/codegen/low:move_sequence",
-        "//loom/src/loom/codegen/low:packet",
-        "//loom/src/loom/codegen/low:packet_hazard_plan",
-        "//loom/src/loom/codegen/low:packet_hazard_plan_json",
-        "//loom/src/loom/codegen/low:packet_progress",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target/arch/amdgpu/matrix:contract",
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "vopd_plan",
-    srcs = ["vopd_plan.c"],
-    hdrs = ["vopd_plan.h"],
-    deps = [
-        ":target_info",
-        ":target_refs",
-        ":wait_packets",
-        ":wait_states",
-        "//loom/src/loom/codegen/low:allocation",
-        "//loom/src/loom/codegen/low:move_sequence",
-        "//loom/src/loom/codegen/low:packet",
-        "//loom/src/loom/codegen/low:packet_hazard_plan",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "packet_plan",
-    srcs = ["packet_plan.c"],
-    hdrs = ["packet_plan.h"],
-    deps = [
-        ":vopd_plan",
-        ":wait_packets",
-        ":wait_plan",
-        ":wait_states",
-        "//loom/src/loom/codegen/low:allocation",
-        "//loom/src/loom/codegen/low:packet",
-        "//loom/src/loom/codegen/low/schedule",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -933,101 +795,19 @@ loom_check_test_suite(
     test_name_prefix_to_strip = "test/source_low/",
 )
 
-loom_cc_library(
-    name = "wait_plan",
-    srcs = ["wait_plan.c"],
-    hdrs = ["wait_plan.h"],
-    deps = [
-        ":descriptor_semantics",
-        ":target_id",
-        ":target_refs",
-        "//loom/src/loom/codegen/low:allocation",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:packet",
-        "//loom/src/loom/codegen/low:packet_hazard_plan",
-        "//loom/src/loom/codegen/low:packet_hazard_plan_json",
-        "//loom/src/loom/codegen/low:packet_progress",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "wait_packets",
-    srcs = ["wait_packets.c"],
-    hdrs = ["wait_packets.h"],
-    deps = [
-        ":target_refs",
-        ":wait_plan",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target/arch/amdgpu:target_info",
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "storage_lease",
-    srcs = ["storage_lease.c"],
-    hdrs = ["storage_lease.h"],
-    deps = [
-        ":target_info_defs",
-        "//loom/src/loom/codegen/low:storage_lease",
-        "//runtime/src/iree/base",
-    ],
-)
-
 loom_cc_test(
     name = "storage_lease_test",
     srcs = ["storage_lease_test.cc"],
     deps = [
-        ":storage_lease",
         ":target_refs",
-        ":wait_plan",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:storage_lease",
         "//loom/src/loom/target/arch/amdgpu/descriptors:cdna3",
+        "//loom/src/loom/target/arch/amdgpu/planning:storage_lease",
+        "//loom/src/loom/target/arch/amdgpu/planning:wait_plan",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_target_table_cc_library(
-    name = "occupancy_tables",
-    generator = _AMDGPU_OCCUPANCY_TABLE_GENERATOR,
-    deps = [
-        ":target_info",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "occupancy",
-    srcs = ["occupancy.c"],
-    hdrs = ["occupancy.h"],
-    deps = [
-        ":occupancy_tables",
-        ":target_id",
-        "//loom/src/loom/codegen/low:allocation",
-        "//loom/src/loom/codegen/low:diagnostics",
-        "//loom/src/loom/codegen/low/schedule",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target:launch",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

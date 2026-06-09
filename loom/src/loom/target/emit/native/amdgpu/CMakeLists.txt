@@ -29,7 +29,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::encoding
-    loom::target::arch::amdgpu::packet_plan
+    loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::register_class
     loom::target::arch::amdgpu::target_info
     loom::target::arch::amdgpu::target_refs
@@ -55,9 +55,9 @@ loom_cc_library(
     loom::codegen::low::target_binding
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::address_state
-    loom::target::arch::amdgpu::packet_plan
-    loom::target::arch::amdgpu::storage_lease
+    loom::target::arch::amdgpu::planning::address_state
+    loom::target::arch::amdgpu::planning::packet_plan
+    loom::target::arch::amdgpu::planning::storage_lease
     loom::tools::loom-check::execute
   TESTONLY
   PUBLIC
@@ -248,7 +248,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::encoding
-    loom::target::arch::amdgpu::packet_plan
+    loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::register_class
     loom::target::arch::amdgpu::target_info
     loom::target::arch::amdgpu::target_refs
@@ -343,7 +343,7 @@ loom_cc_library(
     loom::codegen::low::allocation
     loom::codegen::low::schedule
     loom::target::arch::amdgpu::hal::kernel_abi
-    loom::target::arch::amdgpu::packet_plan
+    loom::target::arch::amdgpu::planning::packet_plan
   PUBLIC
 )
 endif()
@@ -426,14 +426,14 @@ loom_cc_library(
     loom::ops::func_symbol_facts
     loom::ops::low
     loom::ops::target
-    loom::target::arch::amdgpu::address_state
     loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::hal::kernel_abi
-    loom::target::arch::amdgpu::occupancy
     loom::target::arch::amdgpu::ops
-    loom::target::arch::amdgpu::packet_plan
+    loom::target::arch::amdgpu::planning::address_state
+    loom::target::arch::amdgpu::planning::occupancy
+    loom::target::arch::amdgpu::planning::packet_plan
+    loom::target::arch::amdgpu::planning::storage_lease
     loom::target::arch::amdgpu::provider
-    loom::target::arch::amdgpu::storage_lease
     loom::target::arch::amdgpu::target_info
     loom::target::compile_report
     loom::target::compile_report_low
@@ -602,9 +602,9 @@ loom_cc_test(
     loom::target::arch::amdgpu::hal::binding_materialization
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::ops
-    loom::target::arch::amdgpu::packet_plan
+    loom::target::arch::amdgpu::planning::packet_plan
+    loom::target::arch::amdgpu::planning::storage_lease
     loom::target::arch::amdgpu::records::target_records
-    loom::target::arch::amdgpu::storage_lease
     loom::target::arch::amdgpu::target_info
     loom::target::low_descriptor_registry
   LABELS

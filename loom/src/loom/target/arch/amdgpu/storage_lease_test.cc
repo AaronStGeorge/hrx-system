@@ -4,14 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/storage_lease.h"
+#include "loom/target/arch/amdgpu/planning/storage_lease.h"
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/target/arch/amdgpu/descriptors/cdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/planning/wait_plan.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
-#include "loom/target/arch/amdgpu/wait_plan.h"
 
 namespace loom {
 namespace {

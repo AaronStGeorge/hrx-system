@@ -13,13 +13,13 @@
 // insertion plan for combined s_waitcnt targets and split load/store/ALU wait
 // targets.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_WAIT_PACKETS_H_
-#define LOOM_TARGET_ARCH_AMDGPU_WAIT_PACKETS_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_PACKETS_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_PACKETS_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/string_builder.h"
-#include "loom/target/arch/amdgpu/wait_plan.h"
+#include "loom/target/arch/amdgpu/planning/wait_plan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -114,4 +114,4 @@ iree_status_t loom_amdgpu_wait_packet_plan_format_json(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_WAIT_PACKETS_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_PACKETS_H_

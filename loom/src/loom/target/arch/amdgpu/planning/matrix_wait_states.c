@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/matrix_wait_states.h"
+#include "loom/target/arch/amdgpu/planning/matrix_wait_states.h"
 
 #define LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW(profile_, use_, pass_, cycles_) \
   {                                                                        \

@@ -19,8 +19,8 @@ loom_cc_library(
     "occupancy.c"
   DEPS
     iree::base
-    loom::target::arch::amdgpu::occupancy
-    loom::target::arch::amdgpu::storage_lease
+    loom::target::arch::amdgpu::planning::occupancy
+    loom::target::arch::amdgpu::planning::storage_lease
     loom::tools::loom-check::execute
   TESTONLY
   PUBLIC

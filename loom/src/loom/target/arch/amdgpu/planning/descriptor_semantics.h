@@ -10,8 +10,8 @@
 // Python descriptor tables. This layer centralizes backend predicates that need
 // to stay consistent across wait-state and wait-counter planning.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_SEMANTICS_H_
-#define LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_SEMANTICS_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_DESCRIPTOR_SEMANTICS_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_DESCRIPTOR_SEMANTICS_H_
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
@@ -87,4 +87,4 @@ bool loom_amdgpu_descriptor_is_sdwa(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_SEMANTICS_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_DESCRIPTOR_SEMANTICS_H_

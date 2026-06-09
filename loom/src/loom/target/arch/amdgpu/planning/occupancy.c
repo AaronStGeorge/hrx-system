@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/amdgpu/occupancy.h"
+#include "loom/target/arch/amdgpu/planning/occupancy.h"
 
 #include <inttypes.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
-#include "loom/target/arch/amdgpu/occupancy_tables.h"
+#include "loom/target/arch/amdgpu/planning/occupancy_tables.h"
 #include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/launch.h"
 #include "loom/target/types.h"

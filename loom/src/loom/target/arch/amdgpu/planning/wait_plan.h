@@ -13,8 +13,8 @@
 // packet that needs the wait. The plan is a table only; IR materialization is
 // a later target-owned pass.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_WAIT_PLAN_H_
-#define LOOM_TARGET_ARCH_AMDGPU_WAIT_PLAN_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_PLAN_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_PLAN_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -180,4 +180,4 @@ iree_status_t loom_amdgpu_wait_plan_format_json(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_WAIT_PLAN_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_PLAN_H_

@@ -11,8 +11,8 @@
 // into these compact ids and then looks up the required instruction-slot
 // distance here.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_MATRIX_WAIT_STATES_H_
-#define LOOM_TARGET_ARCH_AMDGPU_MATRIX_WAIT_STATES_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_MATRIX_WAIT_STATES_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_MATRIX_WAIT_STATES_H_
 
 #include "iree/base/api.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
@@ -91,4 +91,4 @@ bool loom_amdgpu_matrix_wait_result_cycle_count(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_MATRIX_WAIT_STATES_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_MATRIX_WAIT_STATES_H_

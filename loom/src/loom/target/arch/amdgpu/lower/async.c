@@ -15,8 +15,8 @@
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
+#include "loom/target/arch/amdgpu/planning/wait_packets.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
-#include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/util/fact_table.h"
 
 static_assert(LOOM_AMDGPU_WAIT_PACKET_SELECTION_IMMEDIATE_CAPACITY <=

@@ -6,8 +6,8 @@
 
 // AMDGPU target storage leases for post-issue physical register hazards.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_STORAGE_LEASE_H_
-#define LOOM_TARGET_ARCH_AMDGPU_STORAGE_LEASE_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_STORAGE_LEASE_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_STORAGE_LEASE_H_
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/storage_lease.h"
@@ -24,4 +24,4 @@ void loom_amdgpu_storage_lease_provider(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_STORAGE_LEASE_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_STORAGE_LEASE_H_

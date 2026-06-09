@@ -103,21 +103,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_test(
   NAME
-    matrix_wait_states_test
-  SRCS
-    "matrix_wait_states_test.cc"
-  DEPS
-    ::matrix_wait_states
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
     encoding_test
   SRCS
     "encoding_test.cc"
@@ -139,7 +124,6 @@ loom_cc_test(
   SRCS
     "registers_test.cc"
   DEPS
-    ::occupancy_tables
     ::target_info
     iree::testing::gtest
     iree::testing::gtest_main
@@ -149,6 +133,7 @@ loom_cc_test(
     loom::target::arch::amdgpu::descriptors::rdna3
     loom::target::arch::amdgpu::descriptors::rdna4
     loom::target::arch::amdgpu::descriptors::rdna4_gfx125x
+    loom::target::arch::amdgpu::planning::occupancy_tables
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )
@@ -252,31 +237,6 @@ loom_cc_library(
     "register_class.h"
   DEPS
     loom::codegen::low::descriptors
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    address_state
-  HDRS
-    "address_state.h"
-  SRCS
-    "address_state.c"
-  DEPS
-    ::encoding
-    ::target_refs
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::builder
-    loom::codegen::low::descriptors
-    loom::codegen::low::frame
-    loom::codegen::low::schedule
-    loom::ir
-    loom::ops::low
-    loom::ops::op_defs
   PUBLIC
 )
 endif()
@@ -554,8 +514,6 @@ loom_cc_library(
     ::target_id
     ::target_info
     ::target_refs
-    ::wait_packets
-    ::wait_plan
     iree::base
     loom::analysis::contract_vector
     loom::analysis::view_regions
@@ -598,27 +556,12 @@ loom_cc_library(
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::matrix::contract
     loom::target::arch::amdgpu::matrix::projection
+    loom::target::arch::amdgpu::planning::wait_packets
+    loom::target::arch::amdgpu::planning::wait_plan
     loom::target::low_legality
     loom::target::registers
     loom::util::fact_table
     loom::util::math
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    descriptor_semantics
-  HDRS
-    "descriptor_semantics.h"
-  SRCS
-    "descriptor_semantics.c"
-  DEPS
-    ::encoding
-    ::target_refs
-    iree::base
-    loom::codegen::low::descriptors
   PUBLIC
 )
 endif()
@@ -636,102 +579,6 @@ loom_cc_library(
   DEPS
     iree::base
     loom::target::math_policy
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    matrix_wait_states
-  HDRS
-    "matrix_wait_states.h"
-  SRCS
-    "matrix_wait_states.c"
-  DEPS
-    ::target_info_defs
-    iree::base
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    wait_states
-  HDRS
-    "wait_states.h"
-  SRCS
-    "wait_states.c"
-  DEPS
-    ::descriptor_semantics
-    ::encoding
-    ::matrix_wait_states
-    ::target_id
-    ::target_info
-    ::target_refs
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::move_sequence
-    loom::codegen::low::packet
-    loom::codegen::low::packet_hazard_plan
-    loom::codegen::low::packet_hazard_plan_json
-    loom::codegen::low::packet_progress
-    loom::codegen::low::schedule
-    loom::ir
-    loom::ops::low
-    loom::target::arch::amdgpu::matrix::contract
-    loom::util::json
-    loom::util::stream
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    vopd_plan
-  HDRS
-    "vopd_plan.h"
-  SRCS
-    "vopd_plan.c"
-  DEPS
-    ::target_info
-    ::target_refs
-    ::wait_packets
-    ::wait_states
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::move_sequence
-    loom::codegen::low::packet
-    loom::codegen::low::packet_hazard_plan
-    loom::codegen::low::schedule
-    loom::ir
-    loom::ops::low
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    packet_plan
-  HDRS
-    "packet_plan.h"
-  SRCS
-    "packet_plan.c"
-  DEPS
-    ::vopd_plan
-    ::wait_packets
-    ::wait_plan
-    ::wait_states
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::packet
-    loom::codegen::low::schedule
   PUBLIC
 )
 endif()
@@ -4275,128 +4122,23 @@ iree_native_test(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    wait_plan
-  HDRS
-    "wait_plan.h"
-  SRCS
-    "wait_plan.c"
-  DEPS
-    ::descriptor_semantics
-    ::target_id
-    ::target_refs
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::descriptors
-    loom::codegen::low::packet
-    loom::codegen::low::packet_hazard_plan
-    loom::codegen::low::packet_hazard_plan_json
-    loom::codegen::low::packet_progress
-    loom::codegen::low::schedule
-    loom::ir
-    loom::ops::low
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    wait_packets
-  HDRS
-    "wait_packets.h"
-  SRCS
-    "wait_packets.c"
-  DEPS
-    ::target_refs
-    ::wait_plan
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::descriptors
-    loom::codegen::low::function
-    loom::ir
-    loom::ops::low
-    loom::target::arch::amdgpu::target_info
-    loom::util::json
-    loom::util::stream
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    storage_lease
-  HDRS
-    "storage_lease.h"
-  SRCS
-    "storage_lease.c"
-  DEPS
-    ::target_info_defs
-    iree::base
-    loom::codegen::low::storage_lease
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     storage_lease_test
   SRCS
     "storage_lease_test.cc"
   DEPS
-    ::storage_lease
     ::target_refs
-    ::wait_plan
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
     loom::codegen::low::storage_lease
     loom::target::arch::amdgpu::descriptors::cdna3
+    loom::target::arch::amdgpu::planning::storage_lease
+    loom::target::arch::amdgpu::planning::wait_plan
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
-  NAME
-    occupancy_tables
-  GENERATOR
-    loom::py::loom::gen::amdgpu_occupancy_tables
-  DEPS
-    ::target_info
-    iree::base
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    occupancy
-  HDRS
-    "occupancy.h"
-  SRCS
-    "occupancy.c"
-  DEPS
-    ::occupancy_tables
-    ::target_id
-    iree::base
-    iree::base::internal::arena
-    loom::codegen::low::allocation
-    loom::codegen::low::diagnostics
-    loom::codegen::low::schedule
-    loom::error::error_defs
-    loom::ir
-    loom::target::launch
-    loom::target::types
-    loom::util::json
-    loom::util::stream
-  PUBLIC
 )
 endif()
 
