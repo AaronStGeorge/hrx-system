@@ -119,20 +119,30 @@ iree_py_test(
 
 iree_py_library(
   NAME
-    c_tables
+    c_table_model
   SRCS
-    "bootstrap.py"
-    "c_tables.py"
+    "c_table_model.py"
   DEPS
     loom::py::loom::core
     loom::py::loom::dialect::package
-    loom::py::loom::gen::support::files
-    loom::py::loom::gen::support::generated_file
     loom::py::loom::target::arch::amdgpu::dialect
     loom::py::loom::target::arch::ireevm::dialect
     loom::py::loom::target::arch::spirv::dialect
     loom::py::loom::target::arch::wasm::dialect
     loom::py::loom::target::arch::x86::dialect
+)
+
+iree_py_library(
+  NAME
+    c_tables
+  SRCS
+    "bootstrap.py"
+    "c_tables.py"
+  DEPS
+    loom::py::loom::gen::c_table_model
+    loom::py::loom::core
+    loom::py::loom::gen::support::files
+    loom::py::loom::gen::support::generated_file
 )
 
 iree_py_library(
@@ -144,15 +154,10 @@ iree_py_library(
     "bootstrap.py"
     "c_tables.py"
   DEPS
+    loom::py::loom::gen::c_table_model
     loom::py::loom::core
-    loom::py::loom::dialect::package
     loom::py::loom::gen::support::files
     loom::py::loom::gen::support::generated_file
-    loom::py::loom::target::arch::amdgpu::dialect
-    loom::py::loom::target::arch::ireevm::dialect
-    loom::py::loom::target::arch::spirv::dialect
-    loom::py::loom::target::arch::wasm::dialect
-    loom::py::loom::target::arch::x86::dialect
 )
 
 iree_py_test(
@@ -163,6 +168,7 @@ iree_py_test(
   ARGS
     "loom.gen.c_tables_test"
   DEPS
+    loom::py::loom::gen::c_table_model
     loom::py::loom::gen::c_tables
     loom::py::loom::error::error
   PACKAGE_DIRS

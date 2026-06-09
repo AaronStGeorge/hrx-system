@@ -120,16 +120,27 @@ iree_py_test(
     ],
 )
 
-C_TABLES_DEPS = [
+C_TABLE_MODEL_DEPS = [
     "//loom/py/loom:core",
     "//loom/py/loom/dialect:package",
-    "//loom/py/loom/gen/support:files",
-    "//loom/py/loom/gen/support:generated_file",
     "//loom/py/loom/target/arch/amdgpu:dialect",
     "//loom/py/loom/target/arch/ireevm:dialect",
     "//loom/py/loom/target/arch/spirv:dialect",
     "//loom/py/loom/target/arch/wasm:dialect",
     "//loom/py/loom/target/arch/x86:dialect",
+]
+
+iree_py_library(
+    name = "c_table_model",
+    srcs = ["c_table_model.py"],
+    deps = C_TABLE_MODEL_DEPS,
+)
+
+C_TABLES_DEPS = [
+    ":c_table_model",
+    "//loom/py/loom:core",
+    "//loom/py/loom/gen/support:files",
+    "//loom/py/loom/gen/support:generated_file",
 ]
 
 iree_py_library(
@@ -160,6 +171,7 @@ iree_py_test(
     args = ["loom.gen.c_tables_test"],
     main = "pytest_style_runner.py",
     deps = [
+        ":c_table_model",
         ":c_tables",
         "//loom/py/loom/error",
     ],

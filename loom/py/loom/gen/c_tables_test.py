@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import argparse
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -73,7 +72,7 @@ from loom.dsl import (
     TypeSemantic,
     UnpackedPayloadBitCountMatchesStorage,
 )
-from loom.gen import c_tables
+from loom.gen import c_table_model
 from loom.gen.c_tables import (
     TYPE_CONSTRAINT_MAP,
     generate_builders_c,
@@ -98,29 +97,26 @@ def _raises_value_error(pattern: str) -> Iterator[None]:
 
 def test_load_dialect_generation_calls_only_requested_loader() -> None:
     calls: list[str] = []
-    expected = c_tables.DialectGeneration(dialect=object(), ops=[], table_shards=None)
-    other = c_tables.DialectGeneration(dialect=object(), ops=[], table_shards=None)
+    expected = c_table_model.DialectGeneration(dialect=object(), ops=[], table_shards=None)
+    other = c_table_model.DialectGeneration(dialect=object(), ops=[], table_shards=None)
 
-    def load_other() -> c_tables.DialectGeneration:
+    def load_other() -> c_table_model.DialectGeneration:
         calls.append("other")
         return other
 
-    def load_wanted() -> c_tables.DialectGeneration:
+    def load_wanted() -> c_table_model.DialectGeneration:
         calls.append("wanted")
         return expected
 
-    original_loaders = c_tables._DIALECT_GENERATION_LOADERS
+    original_loaders = c_table_model._DIALECT_GENERATION_LOADERS
     try:
-        c_tables._DIALECT_GENERATION_LOADERS = (
+        c_table_model._DIALECT_GENERATION_LOADERS = (
             ("other", load_other),
             ("wanted", load_wanted),
         )
-        actual = c_tables._load_dialect_generation(
-            argparse.ArgumentParser(),
-            "wanted",
-        )
+        actual = c_table_model.load_dialect_generation("wanted")
     finally:
-        c_tables._DIALECT_GENERATION_LOADERS = original_loaders
+        c_table_model._DIALECT_GENERATION_LOADERS = original_loaders
 
     assert actual is expected
     assert calls == ["wanted"]
