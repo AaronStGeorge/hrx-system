@@ -37,6 +37,11 @@ build --guard_against_concurrent_changes
 startup --windows_enable_symlinks
 build --enable_runfiles
 
+# Python runfiles must use explicit checked-in package initializers. Bazel's
+# legacy implicit init generation can synthesize empty __init__.py files in
+# runfiles trees, which is brittle around symlinked source runfiles.
+build --incompatible_default_to_explicit_init_py
+
 # -----------------------------------------------------------------------------
 # Test presets.
 # -----------------------------------------------------------------------------
