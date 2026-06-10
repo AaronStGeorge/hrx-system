@@ -24,6 +24,8 @@ enum class TraceMacroKind {
   kReturnIfError,
   kReturnAndEndIfError,
   kReturnAndEnd,
+  kAdopt,
+  kTransfer,
 };
 
 struct TraceMacroExpansion {

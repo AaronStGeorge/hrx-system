@@ -16,6 +16,8 @@ iree_status_t iree_clang_tidy_trace_status_source(void);
 #define IREE_TRACE_ZONE_BEGIN_NAMED_DYNAMIC(zone_id, name, name_length) \
   int zone_id = 0
 #define IREE_TRACE_ZONE_END(zone_id) (void)(zone_id)
+#define IREE_TRACE_ZONE_ADOPT(zone_id) (void)(zone_id)
+#define IREE_TRACE_ZONE_TRANSFER(zone_id) (zone_id) = 0
 
 #define IREE_RETURN_IF_ERROR(expr)                           \
   do {                                                       \
@@ -118,6 +120,58 @@ iree_status_t iree_clang_tidy_trace_zone_branch_local_zone(int flag) {
     IREE_TRACE_ZONE_END(z1);
   }
   IREE_TRACE_ZONE_END(z0);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_branch_replaces_handle(int flag) {
+  IREE_TRACE_ZONE_BEGIN_NAMED(zi, "tick");
+  if (flag) {
+    IREE_TRACE_ZONE_END(zi);
+    IREE_TRACE_ZONE_BEGIN_NAMED(zi_next, "tick");
+    zi = zi_next;
+  }
+  IREE_TRACE_ZONE_END(zi);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_adopted_branch(
+    int flag, iree_zone_id_t zone_id) {
+  if (flag) {
+    IREE_TRACE_ZONE_BEGIN(z0);
+    zone_id = z0;
+  } else {
+    IREE_TRACE_ZONE_ADOPT(zone_id);
+  }
+  IREE_TRACE_ZONE_END(zone_id);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_transfer(int flag) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  iree_zone_id_t zone_id = z0;
+  if (flag) {
+    IREE_TRACE_ZONE_TRANSFER(zone_id);
+    return IREE_STATUS_OK;
+  }
+  IREE_TRACE_ZONE_END(zone_id);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_branch_missing_end(int flag) {
+  IREE_TRACE_ZONE_BEGIN(branch_missing_end_outer_zone);
+  if (flag) {
+    IREE_TRACE_ZONE_BEGIN(branch_missing_end_inner_zone);
+  }
+  IREE_TRACE_ZONE_END(branch_missing_end_outer_zone);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_branch_conditional_end(int flag) {
+  IREE_TRACE_ZONE_BEGIN(branch_conditional_end_zone);
+  if (flag) {
+    IREE_TRACE_ZONE_END(branch_conditional_end_zone);
+  }
+  IREE_TRACE_ZONE_END(branch_conditional_end_zone);
   return IREE_STATUS_OK;
 }
 
