@@ -159,6 +159,13 @@ bool IsStatusObserver(StringRef Name) {
          Name == "iree_status_enumerate_payloads";
 }
 
+bool IsStatusReportingObserver(StringRef Name) {
+  return Name == "iree_status_format" || Name == "iree_status_format_to" ||
+         Name == "iree_status_to_string" || Name == "iree_status_fprint" ||
+         Name == "iree_status_format_message" ||
+         Name == "iree_status_format_message_to";
+}
+
 bool IsKnownStatusNoOwnerProducer(StringRef Name) {
   return Name == "iree_ok_status" || Name == "iree_status_from_code" ||
          Name == "iree_status_ignore" ||
@@ -267,8 +274,10 @@ struct VariableState {
   bool MayOwn = false;
   bool MayBeConsumed = false;
   bool Unknown = false;
+  bool Reported = false;
   SourceLocation OwnershipLocation;
   SourceLocation ConsumeLocation;
+  SourceLocation ReportLocation;
 
   static VariableState NoOwner() { return VariableState(); }
 
@@ -299,11 +308,14 @@ VariableState MergeVariableState(const VariableState& Lhs,
   VariableState Result;
   Result.MayOwn = Lhs.MayOwn || Rhs.MayOwn;
   Result.MayBeConsumed = Lhs.MayBeConsumed || Rhs.MayBeConsumed;
+  Result.Reported = Lhs.Reported || Rhs.Reported;
   Result.OwnershipLocation = Lhs.OwnershipLocation.isValid()
                                  ? Lhs.OwnershipLocation
                                  : Rhs.OwnershipLocation;
   Result.ConsumeLocation =
       Lhs.ConsumeLocation.isValid() ? Lhs.ConsumeLocation : Rhs.ConsumeLocation;
+  Result.ReportLocation =
+      Lhs.ReportLocation.isValid() ? Lhs.ReportLocation : Rhs.ReportLocation;
   return Result;
 }
 
@@ -1013,6 +1025,23 @@ class StatusLifetimeAnalyzer {
     }
   }
 
+  void diagnoseReportedIgnore(const VarDecl* Var, SourceLocation Location,
+                              const VariableState& State) {
+    if (State.ReportLocation.isValid()) {
+      Check_.diag(Location,
+                  "iree_status_t %0 was reported here before being passed to "
+                  "iree_status_ignore; use iree_status_free for statuses that "
+                  "have already been handled")
+          << Var << State.ReportLocation;
+    } else {
+      Check_.diag(Location,
+                  "iree_status_t %0 was passed to iree_status_ignore after "
+                  "being reported; use iree_status_free for statuses that have "
+                  "already been handled")
+          << Var;
+    }
+  }
+
   void diagnoseLeak(const VarDecl* Var, SourceLocation Location,
                     const VariableState& State) {
     if (!State.MayOwn || State.Unknown) {
@@ -1062,6 +1091,18 @@ class StatusLifetimeAnalyzer {
     }
   }
 
+  void reportVariable(const VarDecl* Var, SourceLocation Location,
+                      AnalysisState& State) {
+    VariableState* VarState = findState(Var, State);
+    if (!VarState || VarState->Unknown) {
+      return;
+    }
+    VarState->Reported = true;
+    if (!VarState->ReportLocation.isValid()) {
+      VarState->ReportLocation = Location;
+    }
+  }
+
   void consumeVariable(const VarDecl* Var, SourceLocation Location,
                        AnalysisState& State) {
     VariableState* VarState = findState(Var, State);
@@ -1076,6 +1117,15 @@ class StatusLifetimeAnalyzer {
       VarState->MayBeConsumed = true;
       VarState->ConsumeLocation = Location;
     }
+  }
+
+  void ignoreVariable(const VarDecl* Var, SourceLocation Location,
+                      AnalysisState& State) {
+    VariableState* VarState = findState(Var, State);
+    if (VarState && !VarState->Unknown && VarState->Reported) {
+      diagnoseReportedIgnore(Var, Location, *VarState);
+    }
+    consumeVariable(Var, Location, State);
   }
 
   void storeVariable(const VarDecl* Var, SourceLocation Location,
@@ -1631,7 +1681,18 @@ class StatusLifetimeAnalyzer {
     }
 
     if (IsKnownStatusConsumer(Name) && Call->getNumArgs() >= 1) {
-      analyzeTransferredExpression(Call->getArg(0), State);
+      if (Name == "iree_status_ignore") {
+        const Expr* Arg = Call->getArg(0);
+        if (const VarDecl* Var = ForwardedStatusLocal(Arg)) {
+          SourceLocation Location = Arg->getExprLoc();
+          useVariable(Var, Location, State);
+          ignoreVariable(Var, Location, State);
+        } else {
+          analyzeTransferredExpression(Arg, State);
+        }
+      } else {
+        analyzeTransferredExpression(Call->getArg(0), State);
+      }
       for (unsigned I = 1; I < Call->getNumArgs(); ++I) {
         analyzeExpression(Call->getArg(I), State);
       }
@@ -1683,6 +1744,12 @@ class StatusLifetimeAnalyzer {
     bool HasUnknownStatusArgument = false;
     for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
       StatusValue ArgValue = analyzeExpression(Call->getArg(I), State);
+      if (IsStatusReportingObserver(Name)) {
+        if (const VarDecl* Var =
+                ReferencedStatusLocalThroughCasts(Call->getArg(I))) {
+          reportVariable(Var, Call->getArg(I)->getExprLoc(), State);
+        }
+      }
       QualType ParamType;
       if (const FunctionDecl* Callee = Call->getDirectCallee();
           Callee && I < Callee->getNumParams()) {

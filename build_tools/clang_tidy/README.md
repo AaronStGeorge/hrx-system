@@ -135,6 +135,15 @@ the status, store it into an owning destination, consume it with
 it through helpers such as `iree_status_join`, `iree_status_annotate`, and
 `iree_status_freeze` while continuing to own the returned status.
 
+`iree_status_ignore` is reserved for failures that were deliberately not
+handled. Once a status has been reported through formatting or printing helpers,
+the local owner should release it with `iree_status_free` instead:
+
+```c
+iree_status_fprint(stderr, status);
+iree_status_free(status);
+```
+
 The lifetime model focuses on local ownership states that can be proven from
 the AST with high confidence. Straight-line code, block scope, local transfers,
 returns, `if` branches, status helper calls, C++ status wrappers, and known

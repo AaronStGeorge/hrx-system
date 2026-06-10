@@ -8,6 +8,7 @@
 
 typedef struct iree_status_handle_t* iree_status_t;
 typedef struct iree_hal_amdgpu_reclaim_entry_t iree_hal_amdgpu_reclaim_entry_t;
+typedef intptr_t iree_host_size_t;
 typedef int iree_status_code_t;
 
 iree_status_t iree_ok_status(void);
@@ -19,6 +20,9 @@ iree_status_t iree_status_join(iree_status_t base_status,
 iree_status_t iree_status_annotate(iree_status_t base_status,
                                    const char* message);
 iree_status_code_t iree_status_consume_code(iree_status_t status);
+int iree_status_format(iree_status_t status, iree_host_size_t buffer_capacity,
+                       char* buffer, iree_host_size_t* out_buffer_length);
+void iree_status_fprint(void* file, iree_status_t status);
 int iree_atomic_compare_exchange_strong(int* ptr, int* expected,
                                         intptr_t desired, int success_order,
                                         int failure_order);
@@ -272,6 +276,27 @@ void iree_clang_tidy_status_lifetime_stored(iree_status_t* out_status) {
 iree_status_code_t iree_clang_tidy_status_lifetime_consumed_code(void) {
   iree_status_t consumed_code_status = iree_clang_tidy_status_assigned_source();
   return iree_status_consume_code(consumed_code_status);
+}
+
+void iree_clang_tidy_status_lifetime_reported_ignore(void* file) {
+  iree_status_t reported_ignore_status =
+      iree_clang_tidy_status_assigned_source();
+  iree_status_fprint(file, reported_ignore_status);
+  iree_status_ignore(reported_ignore_status);
+}
+
+void iree_clang_tidy_status_lifetime_formatted_ignore(char* buffer) {
+  iree_host_size_t buffer_length = 0;
+  iree_status_t formatted_ignore_status =
+      iree_clang_tidy_status_assigned_source();
+  iree_status_format(formatted_ignore_status, 64, buffer, &buffer_length);
+  iree_status_ignore(formatted_ignore_status);
+}
+
+void iree_clang_tidy_status_lifetime_reported_free(void* file) {
+  iree_status_t reported_free_status = iree_clang_tidy_status_assigned_source();
+  iree_status_fprint(file, reported_free_status);
+  iree_status_free(reported_free_status);
 }
 
 int iree_clang_tidy_status_borrowed_parameter(

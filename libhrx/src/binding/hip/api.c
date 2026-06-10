@@ -3288,7 +3288,7 @@ static hipError_t iree_hip_ensure_pool(iree_hal_streaming_context_t* context) {
               actual_pool_size);
       iree_status_fprint(stderr, status);
     }
-    iree_status_ignore(status);
+    iree_status_free(status);
     // Free the tracking table too: a half-initialized slot must stay all-NULL
     // so reset/lookup logic can treat p->buffer as the single liveness flag.
     iree_allocator_free(context->host_allocator, p->allocs);

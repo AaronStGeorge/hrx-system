@@ -101,6 +101,8 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "used_after_transfer_status",
                 "lost_on_return_status",
                 "code_predicate_status",
+                "reported_ignore_status",
+                "formatted_ignore_status",
                 "[iree-status-lifetime]",
             ],
         )
@@ -128,6 +130,8 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "annotated_status",
                 "stored_status",
                 "consumed_code_status",
+                "reported_free_status",
+                "observer_only_status",
             ],
         )
 
