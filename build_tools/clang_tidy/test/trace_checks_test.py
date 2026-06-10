@@ -24,6 +24,8 @@ class TraceChecksTest(clang_tidy_test.ClangTidyAssertions):
         self.assertContainsAll(
             output,
             [
+                "raw_return_zone",
+                "hip_return_zone",
                 "plain_return_if_error_zone",
                 "hrx_plain_return_zone",
                 "[iree-trace-zone-balance]",

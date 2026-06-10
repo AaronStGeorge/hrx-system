@@ -179,9 +179,10 @@ do not transfer ownership and are accepted.
 
 ### `iree-trace-zone-balance`
 
-`iree-trace-zone-balance` treats trace zones as scoped C resources around
-status-return helper macros. A status-returning helper used inside an active
-zone must use the trace-zone-aware form so the failure path ends the zone:
+`iree-trace-zone-balance` treats trace zones as scoped C resources. A terminal
+path inside an active zone must end the zone before leaving the function. A
+status-returning helper used inside an active zone must use the
+trace-zone-aware form so the failure path ends the zone:
 
 ```c
 IREE_TRACE_ZONE_BEGIN(z0);
@@ -200,8 +201,22 @@ IREE_TRACE_ZONE_END(z0);
 return iree_ok_status();
 ```
 
+Plain source returns and known return macros such as `HIP_RETURN_ERROR` are
+also diagnosed when they leave an active zone:
+
+```c
+IREE_TRACE_ZONE_BEGIN(z0);
+return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "bad input");
+```
+
+The reliable shapes are to use `IREE_RETURN_AND_END_ZONE` for immediate return
+expressions, `IREE_RETURN_AND_END_ZONE_IF_ERROR` for conditional status helper
+returns, or an explicit `IREE_TRACE_ZONE_END` immediately before returning a
+status that is already carried in a local variable.
+
 The check uses the preprocessor's macro expansion stream so disabled tracing,
 HRX wrapper macros, and multi-line helper invocations are modeled by the macro
-the developer wrote rather than by the helper's implementation detail. General
-proof of arbitrary `return` statements and block-local zone balance is handled
-conservatively to keep this check high signal.
+the developer wrote rather than by the helper's implementation detail. Return
+statements generated inside macro bodies are not diagnosed independently; known
+return macros are checked at the macro expansion site. Ambiguous block-local
+zone balance is handled conservatively to keep this check high signal.

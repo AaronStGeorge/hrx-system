@@ -363,6 +363,9 @@ class TraceZoneAnalyzer {
         endZone(Macro, State);
         return true;
       case TraceMacroKind::kReturn:
+        if (!State.Zones.empty()) {
+          diagnoseActiveReturn(Statement->getBeginLoc(), State, Macro.Name);
+        }
         State.Terminal = true;
         return true;
       case TraceMacroKind::kReturnIfError:
@@ -397,6 +400,9 @@ class TraceZoneAnalyzer {
       return;
     }
     if (isa<ReturnStmt>(Statement)) {
+      if (!Statement->getBeginLoc().isMacroID() && !State.Zones.empty()) {
+        diagnoseActiveReturn(Statement->getBeginLoc(), State, "return");
+      }
       State.Terminal = true;
       return;
     }

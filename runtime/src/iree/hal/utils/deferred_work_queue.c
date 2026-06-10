@@ -1538,6 +1538,7 @@ static void iree_hal_deferred_work_queue_worker_process_ready_list(
         &actions->working_area.ready_worklist, status);
     iree_slim_mutex_unlock(&actions->action_mutex);
     iree_status_ignore(status);
+    IREE_TRACE_ZONE_END(z0);
     return;
   }
   iree_slim_mutex_unlock(&actions->action_mutex);

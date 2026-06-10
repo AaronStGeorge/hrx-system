@@ -100,6 +100,16 @@ int iree_clang_tidy_trace_zone_branch_macro_return_balanced(int fail) {
   return 0;
 }
 
+iree_status_t iree_clang_tidy_trace_zone_plain_return(void) {
+  IREE_TRACE_ZONE_BEGIN(raw_return_zone);
+  return iree_clang_tidy_trace_status_source();
+}
+
+int iree_clang_tidy_trace_zone_macro_return(void) {
+  IREE_TRACE_ZONE_BEGIN(hip_return_zone);
+  HIP_RETURN_ERROR(1);
+}
+
 iree_status_t iree_clang_tidy_trace_zone_branch_local_zone(int flag) {
   IREE_TRACE_ZONE_BEGIN(z0);
   if (flag) {
