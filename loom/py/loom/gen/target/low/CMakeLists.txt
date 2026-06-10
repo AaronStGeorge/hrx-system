@@ -14,9 +14,11 @@ iree_py_library(
     low_descriptors
   SRCS
     "__init__.py"
+    "c_emit.py"
     "c_spelling.py"
     "compiled.py"
     "low_descriptors.py"
+    "validation.py"
   DEPS
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::support::support
