@@ -1,0 +1,213 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+from __future__ import annotations
+
+from loom.migration.manifest import (
+    CURRENT_BYTECODE_VERSION,
+    CURRENT_MANIFEST,
+    CURRENT_TEXT_BASELINE,
+    DIAGNOSTIC_ERROR,
+    DIAGNOSTIC_WARNING,
+    REQUIRED_ACTIVE_RULE_TEST_KINDS,
+    LoomRelease,
+    MigrationManifest,
+    MigrationRuleMetadata,
+    TextBaseline,
+    lint_current_manifest,
+)
+
+
+def _manifest_with_rule(rule: MigrationRuleMetadata) -> MigrationManifest:
+    return MigrationManifest(
+        text_baselines=(
+            TextBaseline("pre-release"),
+            TextBaseline("loom-text-2026-06-09"),
+            TextBaseline("loom-text-2026-07-01"),
+        ),
+        current_text_baseline="loom-text-2026-06-09",
+        current_bytecode_version=14,
+        rules=(rule,),
+    )
+
+
+def test_current_manifest_has_no_releases_before_first_release() -> None:
+    assert CURRENT_MANIFEST.current_text_baseline == CURRENT_TEXT_BASELINE
+    assert CURRENT_MANIFEST.current_bytecode_version == CURRENT_BYTECODE_VERSION
+    assert CURRENT_MANIFEST.releases == ()
+    assert lint_current_manifest().diagnostics == ()
+
+
+def test_release_table_accepts_known_baselines_and_current_bytecode() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(
+            TextBaseline("pre-release"),
+            TextBaseline("loom-text-2026-06-09"),
+        ),
+        current_text_baseline="loom-text-2026-06-09",
+        current_bytecode_version=14,
+        releases=(
+            LoomRelease(
+                version="2026.06.0",
+                date="2026-06-30",
+                text_baseline="loom-text-2026-06-09",
+                bytecode_version=14,
+            ),
+        ),
+    )
+
+    assert manifest.lint().diagnostics == ()
+
+
+def test_unknown_current_baseline_is_an_error() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(TextBaseline("pre-release"),),
+        current_text_baseline="loom-text-missing",
+        current_bytecode_version=14,
+    )
+
+    report = manifest.lint()
+
+    assert [diagnostic.severity for diagnostic in report.diagnostics] == [
+        DIAGNOSTIC_ERROR
+    ]
+    assert report.diagnostics[0].baseline == "loom-text-missing"
+
+
+def test_duplicate_baseline_is_an_error() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(TextBaseline("same"), TextBaseline("same")),
+        current_text_baseline="same",
+        current_bytecode_version=14,
+    )
+
+    report = manifest.lint()
+
+    assert [(d.severity, d.baseline) for d in report.diagnostics] == [
+        (DIAGNOSTIC_ERROR, "same")
+    ]
+
+
+def test_release_with_unknown_baseline_is_an_error() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(TextBaseline("pre-release"),),
+        current_text_baseline="pre-release",
+        current_bytecode_version=14,
+        releases=(
+            LoomRelease(
+                version="2026.06.0",
+                date="2026-06-30",
+                text_baseline="loom-text-missing",
+                bytecode_version=14,
+            ),
+        ),
+    )
+
+    report = manifest.lint()
+
+    assert [(d.severity, d.release, d.baseline) for d in report.diagnostics] == [
+        (DIAGNOSTIC_ERROR, "2026.06.0", "loom-text-missing")
+    ]
+
+
+def test_rule_window_order_is_validated() -> None:
+    manifest = _manifest_with_rule(
+        MigrationRuleMetadata(
+            rule_id="demo-rule",
+            introduced="loom-text-2026-07-01",
+            replaced_by="loom-text-2026-06-09",
+            expires_after="pre-release",
+            test_kinds=REQUIRED_ACTIVE_RULE_TEST_KINDS,
+        )
+    )
+
+    report = manifest.lint()
+
+    assert [(d.severity, d.rule_id) for d in report.diagnostics] == [
+        (DIAGNOSTIC_ERROR, "demo-rule"),
+        (DIAGNOSTIC_ERROR, "demo-rule"),
+        (DIAGNOSTIC_WARNING, "demo-rule"),
+    ]
+
+
+def test_active_rule_requires_all_test_kinds() -> None:
+    manifest = _manifest_with_rule(
+        MigrationRuleMetadata(
+            rule_id="demo-rule",
+            replaced_by="loom-text-2026-06-09",
+            expires_after="loom-text-2026-07-01",
+        )
+    )
+
+    report = manifest.lint()
+
+    assert len(report.diagnostics) == 1
+    assert report.diagnostics[0].severity == DIAGNOSTIC_ERROR
+    assert report.diagnostics[0].rule_id == "demo-rule"
+    assert "legacy_rewrite" in report.diagnostics[0].message
+
+
+def test_active_rule_with_required_tests_is_clean() -> None:
+    manifest = _manifest_with_rule(
+        MigrationRuleMetadata(
+            rule_id="demo-rule",
+            replaced_by="loom-text-2026-06-09",
+            expires_after="loom-text-2026-07-01",
+            test_kinds=REQUIRED_ACTIVE_RULE_TEST_KINDS,
+        )
+    )
+
+    assert manifest.lint().diagnostics == ()
+
+
+def test_expired_rule_reports_compatibility_window_warning() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(
+            TextBaseline("pre-release"),
+            TextBaseline("loom-text-2026-06-09"),
+            TextBaseline("loom-text-2026-07-01"),
+        ),
+        current_text_baseline="loom-text-2026-07-01",
+        current_bytecode_version=14,
+        rules=(
+            MigrationRuleMetadata(
+                rule_id="demo-rule",
+                replaced_by="loom-text-2026-06-09",
+                expires_after="loom-text-2026-06-09",
+            ),
+        ),
+    )
+
+    report = manifest.lint()
+
+    assert [(d.severity, d.rule_id, d.baseline) for d in report.diagnostics] == [
+        (DIAGNOSTIC_WARNING, "demo-rule", "loom-text-2026-06-09")
+    ]
+
+
+def test_expired_rule_can_be_promoted_to_error() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(
+            TextBaseline("pre-release"),
+            TextBaseline("loom-text-2026-06-09"),
+            TextBaseline("loom-text-2026-07-01"),
+        ),
+        current_text_baseline="loom-text-2026-07-01",
+        current_bytecode_version=14,
+        rules=(
+            MigrationRuleMetadata(
+                rule_id="demo-rule",
+                replaced_by="loom-text-2026-06-09",
+                expires_after="loom-text-2026-06-09",
+            ),
+        ),
+    )
+
+    report = manifest.lint(expired_rules_are_errors=True)
+
+    assert [(d.severity, d.rule_id, d.baseline) for d in report.diagnostics] == [
+        (DIAGNOSTIC_ERROR, "demo-rule", "loom-text-2026-06-09")
+    ]
