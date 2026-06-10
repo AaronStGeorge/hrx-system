@@ -405,9 +405,7 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
     status = iree_ok_status();
   }
 
-  if (statistics_sink != NULL) {
-    iree_hal_profile_statistics_sink_release(statistics_sink);
-  }
+  iree_hal_profile_statistics_sink_release(statistics_sink);
   iree_hal_profile_sink_release(tee_sink);
   iree_hal_profile_sink_release(file_sink);
   return status;

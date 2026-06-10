@@ -62,6 +62,7 @@ void hrx_fence_retain(hrx_fence_t fence) {
 }
 
 void hrx_fence_release(hrx_fence_t fence) {
+  if (!fence) return;
   iree_hal_fence_release(fence->hal_fence);
   if (iree_atomic_ref_count_dec(&fence->ref_count) == 1) {
     free(fence);

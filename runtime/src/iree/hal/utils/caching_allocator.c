@@ -279,7 +279,7 @@ static iree_status_t iree_hal_caching_allocator_pool_acquire(
   if (iree_status_is_ok(status)) {
     *out_buffer = buffer;
   } else {
-    if (buffer) iree_hal_buffer_release(buffer);
+    iree_hal_buffer_release(buffer);
     iree_slim_mutex_lock(&pool->mutex);
     pool->total_allocated_size -= allocation_size;
     iree_slim_mutex_unlock(&pool->mutex);

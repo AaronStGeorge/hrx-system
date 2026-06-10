@@ -15,6 +15,7 @@ void hrx_allocator_retain(hrx_allocator_t allocator) {
 }
 
 void hrx_allocator_release(hrx_allocator_t allocator) {
+  if (!allocator) return;
   iree_hal_allocator_release(allocator->hal_allocator);
   hrx_device_release(allocator->device);
 }

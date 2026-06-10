@@ -76,6 +76,7 @@ void hrx_buffer_view_retain(hrx_buffer_view_t buffer_view) {
 }
 
 void hrx_buffer_view_release(hrx_buffer_view_t buffer_view) {
+  if (!buffer_view) return;
   iree_hal_buffer_view_release(buffer_view->hal_buffer_view);
   if (iree_atomic_ref_count_dec(&buffer_view->ref_count) == 1) {
     free(buffer_view);

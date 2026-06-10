@@ -24,6 +24,7 @@ class IreeTidyModule final : public ClangTidyModule {
     CheckFactories.registerCheck<StatusTransferOrderCheck>(
         "iree-status-transfer-order");
     CheckFactories.registerCheck<DirectGotoCheck>("iree-direct-goto");
+    CheckFactories.registerCheck<GuardedReleaseCheck>("iree-guarded-release");
     CheckFactories.registerCheck<TraceZoneCheck>("iree-trace-zone-balance");
   }
 };

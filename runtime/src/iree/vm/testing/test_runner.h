@@ -96,10 +96,8 @@ class VMTestRunner : public BaseType,
   }
 
   static void TearDownTestSuite() {
-    if (instance_) {
-      iree_vm_instance_release(instance_);
-      instance_ = nullptr;
-    }
+    iree_vm_instance_release(instance_);
+    instance_ = nullptr;
   }
 
   void SetUp() override {
@@ -126,14 +124,10 @@ class VMTestRunner : public BaseType,
   }
 
   void TearDown() override {
-    if (context_) {
-      iree_vm_context_release(context_);
-      context_ = nullptr;
-    }
-    if (test_module_) {
-      iree_vm_module_release(test_module_);
-      test_module_ = nullptr;
-    }
+    iree_vm_context_release(context_);
+    context_ = nullptr;
+    iree_vm_module_release(test_module_);
+    test_module_ = nullptr;
     for (auto* module : prerequisite_modules_) {
       iree_vm_module_release(module);
     }

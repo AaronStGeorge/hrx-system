@@ -99,6 +99,9 @@ static void iree_hal_cuda_event_pool_release_event(
     iree_hal_cuda_event_t** events);
 
 void iree_hal_cuda_event_release(iree_hal_cuda_event_t* event) {
+  if (!event) {
+    return;
+  }
   if (iree_atomic_ref_count_dec(&event->ref_count) == 1) {
     iree_hal_cuda_event_pool_t* pool = event->pool;
     // Release back to the pool if the reference count becomes 0.
@@ -204,6 +207,9 @@ void iree_hal_cuda_event_pool_retain(iree_hal_cuda_event_pool_t* event_pool) {
 }
 
 void iree_hal_cuda_event_pool_release(iree_hal_cuda_event_pool_t* event_pool) {
+  if (!event_pool) {
+    return;
+  }
   if (iree_atomic_ref_count_dec(&event_pool->ref_count) == 1) {
     iree_hal_cuda_event_pool_free(event_pool);
   }

@@ -93,9 +93,7 @@ void hrx_stream_release(hrx_stream_t stream) {
       hrx_status_ignore(
           hrx_semaphore_wait(stream->semaphore, stream->timepoint, UINT64_MAX));
     }
-    if (stream->pending_cb) {
-      iree_hal_command_buffer_release(stream->pending_cb);
-    }
+    iree_hal_command_buffer_release(stream->pending_cb);
     free(stream);
   }
   hrx_semaphore_release(semaphore);

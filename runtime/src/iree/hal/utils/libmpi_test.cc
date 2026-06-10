@@ -55,7 +55,7 @@ class LibmpiTest : public ::testing::Test {
         MPI_RESULT_TO_STATUS(&symbols, MPI_Finalize(), "MPI_Finalize"));
 
     memset(&symbols, 0, sizeof(symbols));
-    if (library) iree_dynamic_library_release(library);
+    iree_dynamic_library_release(library);
   }
 
  protected:

@@ -152,9 +152,7 @@ static void iree_hal_streaming_context_destroy(
   // Clean up peer contexts array.
   if (context->peer_contexts) {
     for (iree_host_size_t i = 0; i < context->peer_count; ++i) {
-      if (context->peer_contexts[i]) {
-        iree_hal_streaming_context_release(context->peer_contexts[i]);
-      }
+      iree_hal_streaming_context_release(context->peer_contexts[i]);
     }
     iree_allocator_free(context->host_allocator, context->peer_contexts);
   }
@@ -196,9 +194,7 @@ static void iree_hal_streaming_context_destroy(
   }
 
   // Now release the context's reference to default stream.
-  if (default_stream) {
-    iree_hal_streaming_stream_release(default_stream);
-  }
+  iree_hal_streaming_stream_release(default_stream);
 
   // Free stream tracking resources.
   if (context->streams) {
@@ -255,9 +251,7 @@ void iree_hal_streaming_context_set_current(
     iree_hal_streaming_context_retain(context);
   }
   iree_hal_streaming_current_context = context;
-  if (old_context) {
-    iree_hal_streaming_context_release(old_context);
-  }
+  iree_hal_streaming_context_release(old_context);
 
   IREE_TRACE_ZONE_END(z0);
 }

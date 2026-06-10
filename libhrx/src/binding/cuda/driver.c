@@ -1019,14 +1019,10 @@ CUDAAPI CUresult cuDevicePrimaryCtxReset(CUdevice dev) {
     device->primary_context = NULL;
 
     // Also clear memory pools.
-    if (device->current_mem_pool) {
-      hrx_mem_pool_release(device->current_mem_pool);
-      device->current_mem_pool = NULL;
-    }
-    if (device->default_mem_pool) {
-      hrx_mem_pool_release(device->default_mem_pool);
-      device->default_mem_pool = NULL;
-    }
+    hrx_mem_pool_release(device->current_mem_pool);
+    device->current_mem_pool = NULL;
+    hrx_mem_pool_release(device->default_mem_pool);
+    device->default_mem_pool = NULL;
 
     iree_slim_mutex_unlock(&device->primary_context_mutex);
 
