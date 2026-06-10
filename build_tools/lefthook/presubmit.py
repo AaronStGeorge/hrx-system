@@ -66,6 +66,25 @@ SEMGREP_PATH_PREFIXES = (
     "libhrx/",
 )
 SEMGREP_DEFAULT_MAX_JOBS = 14
+CLANG_TIDY_ASPECT = "//build_tools/clang_tidy:clang_tidy.bzl%collect_clang_tidy_aspect"
+CLANG_TIDY_EXTENSIONS = {
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cxx",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".hxx",
+}
+CLANG_TIDY_INFRA_PREFIX = "build_tools/clang_tidy/"
+CLANG_TIDY_OUTPUT_GROUP = "iree_clang_tidy_reports"
+CLANG_TIDY_PATH_PREFIXES = SEMGREP_PATH_PREFIXES
+CLANG_TIDY_REPO_ENV = "--repo_env=IREE_CLANG_TIDY_LLVM=auto"
+CLANG_TIDY_SETUP_HINT = (
+    "install LLVM clang-tidy/clang++/llvm-config or set "
+    "IREE_CLANG_TIDY_LLVM_CONFIG/IREE_CLANG_TIDY_LLVM_ROOT"
+)
 PYTHON_EXTENSIONS = {".py"}
 WATCHWORD_PATTERNS = (
     re.compile("DO " + "NOT SUBMIT"),
@@ -140,7 +159,7 @@ ROOT_DEVTOOLS_TRIGGERS = (
 class StaticAnalysisProvider:
     name: str
     profiles: frozenset[str]
-    runner: Callable[[list[str], str, bool], bool]
+    runner: Callable[[list[str], str, str, bool], bool]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -556,6 +575,100 @@ def is_semgrep_candidate_file(path: str) -> bool:
     return path.startswith(SEMGREP_PATH_PREFIXES) and (
         Path(path).suffix in SEMGREP_EXTENSIONS
     )
+
+
+def is_clang_tidy_candidate_file(path: str) -> bool:
+    return path.startswith(CLANG_TIDY_PATH_PREFIXES) and (
+        Path(path).suffix in CLANG_TIDY_EXTENSIONS
+    )
+
+
+def is_clang_tidy_infra_file(path: str) -> bool:
+    return path.startswith(CLANG_TIDY_INFRA_PREFIX)
+
+
+def is_executable_path(path: str) -> bool:
+    return Path(path).is_file() and os.access(path, os.X_OK)
+
+
+def executable_from_env(env_names: tuple[str, ...]) -> str | None:
+    for env_name in env_names:
+        value = os.environ.get(env_name)
+        if value and is_executable_path(value):
+            return value
+    return None
+
+
+def executable_from_roots(
+    root_env_names: tuple[str, ...], tool_names: tuple[str, ...]
+) -> str | None:
+    for root_env_name in root_env_names:
+        root = os.environ.get(root_env_name)
+        if not root:
+            continue
+        for tool_name in tool_names:
+            candidate = Path(root) / "bin" / tool_name
+            if is_executable_path(str(candidate)):
+                return str(candidate)
+    return None
+
+
+def executable_from_path(tool_names: tuple[str, ...]) -> str | None:
+    for tool_name in tool_names:
+        path = shutil.which(tool_name)
+        if path:
+            return path
+    return None
+
+
+def find_llvm_tool(
+    *,
+    env_names: tuple[str, ...] = (),
+    root_env_names: tuple[str, ...] = (),
+    tool_names: tuple[str, ...],
+) -> str | None:
+    return (
+        executable_from_env(env_names)
+        or executable_from_roots(root_env_names, tool_names)
+        or executable_from_path(tool_names)
+    )
+
+
+def clang_tidy_llvm_available() -> bool:
+    root_env_names = ("IREE_CLANG_TIDY_LLVM_ROOT", "IREE_LLVM_ROOT", "LLVM_ROOT")
+    return bool(
+        find_llvm_tool(
+            env_names=("IREE_CLANG_TIDY_LLVM_CONFIG", "LLVM_CONFIG"),
+            root_env_names=root_env_names,
+            tool_names=("llvm-config", "llvm-config-22"),
+        )
+        and find_llvm_tool(
+            env_names=("IREE_CLANG_TIDY_BINARY", "CLANG_TIDY"),
+            root_env_names=root_env_names,
+            tool_names=("clang-tidy", "clang-tidy-22"),
+        )
+        and find_llvm_tool(
+            env_names=(
+                "IREE_CLANG_TIDY_CLANGXX_BINARY",
+                "IREE_CLANGXX_BINARY",
+                "CLANGXX",
+            ),
+            root_env_names=root_env_names,
+            tool_names=("clang++", "clang++-22"),
+        )
+    )
+
+
+def bazel_package_target_for_path(path: str) -> str | None:
+    current = (REPO_ROOT / path).parent
+    while current != current.parent:
+        if (current / "BUILD.bazel").is_file():
+            relative = current.relative_to(REPO_ROOT).as_posix()
+            return f"//{relative}:all" if relative else "//:all"
+        if current == REPO_ROOT:
+            break
+        current = current.parent
+    return None
 
 
 def semgrep_jobs() -> int:
@@ -988,16 +1101,109 @@ def run_semgrep(paths: list[str], profile: str, verbose: bool) -> bool:
     return ok
 
 
+def clang_tidy_bazel_command(targets: list[str]) -> list[str]:
+    return [
+        "bazel",
+        "build",
+        CLANG_TIDY_REPO_ENV,
+        f"--aspects={CLANG_TIDY_ASPECT}",
+        f"--output_groups={CLANG_TIDY_OUTPUT_GROUP}",
+        "--",
+        *targets,
+    ]
+
+
+def run_clang_tidy(paths: list[str], profile: str, lane: str, verbose: bool) -> bool:
+    if lane != "bazel":
+        return skip_step("clang-tidy", "provider currently runs only in the Bazel lane")
+
+    candidate_files = existing_files(
+        [path for path in paths if is_clang_tidy_candidate_file(path)]
+    )
+    infra_files = existing_files(
+        [path for path in paths if is_clang_tidy_infra_file(path)]
+    )
+    if not candidate_files and not infra_files:
+        return skip_step("clang-tidy", "no C/C++ runtime inputs")
+
+    if not clang_tidy_llvm_available():
+        if profile == "ci":
+            print(f"[fail] clang-tidy: {CLANG_TIDY_SETUP_HINT}.")
+            return False
+        return skip_step("clang-tidy", CLANG_TIDY_SETUP_HINT)
+
+    ok = True
+    if infra_files:
+        ok = (
+            run_command(
+                [
+                    "bazel",
+                    "test",
+                    "--config=presubmit",
+                    CLANG_TIDY_REPO_ENV,
+                    "//build_tools/clang_tidy:plugin_smoke_test",
+                ],
+                "clang-tidy plugin smoke test",
+                verbose,
+            )
+            and ok
+        )
+        ok = (
+            run_command(
+                [
+                    "bazel",
+                    "build",
+                    CLANG_TIDY_REPO_ENV,
+                    "//build_tools/clang_tidy:action_smoke",
+                ],
+                "clang-tidy action smoke",
+                verbose,
+            )
+            and ok
+        )
+
+    package_targets = unique_paths(
+        [
+            target
+            for target in (
+                bazel_package_target_for_path(path) for path in candidate_files
+            )
+            if target is not None
+        ]
+    )
+    if package_targets:
+        ok = (
+            run_command(
+                clang_tidy_bazel_command(package_targets),
+                "clang-tidy Bazel actions",
+                verbose,
+            )
+            and ok
+        )
+    elif candidate_files:
+        ok = skip_step("clang-tidy", "no owning Bazel packages for inputs") and ok
+    return ok
+
+
 STATIC_ANALYSIS_PROVIDERS = (
     StaticAnalysisProvider(
         name="Semgrep",
         profiles=frozenset(("paranoid", "ci")),
-        runner=run_semgrep,
+        runner=lambda paths, profile, lane, verbose: run_semgrep(
+            paths, profile, verbose
+        ),
+    ),
+    StaticAnalysisProvider(
+        name="clang-tidy",
+        profiles=frozenset(("paranoid", "ci")),
+        runner=run_clang_tidy,
     ),
 )
 
 
-def run_static_analysis(paths: list[str], profile: str, verbose: bool) -> bool:
+def run_static_analysis(
+    paths: list[str], profile: str, lane: str, verbose: bool
+) -> bool:
     if not paths:
         return True
     ok = True
@@ -1009,7 +1215,7 @@ def run_static_analysis(paths: list[str], profile: str, verbose: bool) -> bool:
     if not selected_providers:
         return skip_step("Static analysis", f"no providers for {profile} profile")
     for provider in selected_providers:
-        ok = provider.runner(paths, profile, verbose) and ok
+        ok = provider.runner(paths, profile, lane, verbose) and ok
     return ok
 
 
@@ -1150,7 +1356,9 @@ def run_presubmit(
     if args.static_analysis:
         print_section("Static Analysis")
         ok = (
-            run_static_analysis(paths, profile=args.profile, verbose=args.verbose)
+            run_static_analysis(
+                paths, profile=args.profile, lane=args.lane, verbose=args.verbose
+            )
             and ok
         )
     print_suggested_actions(args, ok)

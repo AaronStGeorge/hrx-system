@@ -55,9 +55,89 @@ class PresubmitTest(unittest.TestCase):
         ):
             self.assertEqual(presubmit.semgrep_jobs(), 14)
 
+    def test_clang_tidy_candidates_require_configured_prefix_and_extension(self):
+        with (
+            mock.patch.object(presubmit, "CLANG_TIDY_PATH_PREFIXES", ("project/src/",)),
+            mock.patch.object(presubmit, "CLANG_TIDY_EXTENSIONS", {".c", ".h"}),
+        ):
+            self.assertTrue(
+                presubmit.is_clang_tidy_candidate_file("project/src/file.c")
+            )
+            self.assertTrue(
+                presubmit.is_clang_tidy_candidate_file("project/src/file.h")
+            )
+            self.assertFalse(
+                presubmit.is_clang_tidy_candidate_file("project/src/file.py")
+            )
+            self.assertFalse(presubmit.is_clang_tidy_candidate_file("other/src/file.c"))
+
+    def test_clang_tidy_bazel_command_uses_aspect_output_group(self):
+        command = presubmit.clang_tidy_bazel_command(["//runtime/src/iree/base:all"])
+
+        self.assertEqual(command[0:2], ["bazel", "build"])
+        self.assertIn(presubmit.CLANG_TIDY_REPO_ENV, command)
+        self.assertIn(f"--aspects={presubmit.CLANG_TIDY_ASPECT}", command)
+        self.assertIn(f"--output_groups={presubmit.CLANG_TIDY_OUTPUT_GROUP}", command)
+        self.assertEqual(command[-1], "//runtime/src/iree/base:all")
+
+    def test_bazel_package_target_for_path_finds_nearest_package(self):
+        self.assertEqual(
+            presubmit.bazel_package_target_for_path(
+                "build_tools/bazel/test/cc_benchmark_smoke_test_fixture.c"
+            ),
+            "//build_tools/bazel/test:all",
+        )
+
+    def test_clang_tidy_skips_locally_when_llvm_is_missing(self):
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            mock.patch.object(
+                presubmit, "CLANG_TIDY_PATH_PREFIXES", ("runtime/src/iree/",)
+            ),
+            mock.patch.object(
+                presubmit, "clang_tidy_llvm_available", return_value=False
+            ),
+        ):
+            ok = presubmit.run_clang_tidy(
+                ["runtime/src/iree/base/status.c"],
+                profile="paranoid",
+                lane="bazel",
+                verbose=False,
+            )
+
+        self.assertTrue(ok)
+        self.assertIn("[skip] clang-tidy", output.getvalue())
+
+    def test_clang_tidy_runs_bazel_package_for_candidate_file(self):
+        with (
+            mock.patch.object(
+                presubmit, "CLANG_TIDY_PATH_PREFIXES", ("build_tools/bazel/test/",)
+            ),
+            mock.patch.object(
+                presubmit, "clang_tidy_llvm_available", return_value=True
+            ),
+            mock.patch.object(
+                presubmit, "run_command", return_value=True
+            ) as run_command,
+        ):
+            ok = presubmit.run_clang_tidy(
+                ["build_tools/bazel/test/cc_benchmark_smoke_test_fixture.c"],
+                profile="paranoid",
+                lane="bazel",
+                verbose=False,
+            )
+
+        self.assertTrue(ok)
+        command = run_command.call_args.args[0]
+        self.assertIn("//build_tools/bazel/test:all", command)
+
     def test_default_profile_has_no_static_analysis_provider(self):
         ok = presubmit.run_static_analysis(
-            ["runtime/src/iree/base/status.c"], profile="default", verbose=False
+            ["runtime/src/iree/base/status.c"],
+            profile="default",
+            lane="bazel",
+            verbose=False,
         )
 
         self.assertTrue(ok)
