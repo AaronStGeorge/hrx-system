@@ -45,7 +45,8 @@ iree_status_t LoomCheckHarness::Initialize(
   loom_context_initialize(iree_allocator_system(), &context_);
   context_initialized_ = true;
 
-  iree_status_t status = loom_check_context_initialize(environment, &context_);
+  iree_status_t status =
+      loom_check_context_register_and_finalize(environment, &context_);
   if (iree_status_is_ok(status)) {
     environment_ = environment;
   } else {

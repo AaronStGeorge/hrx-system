@@ -47,8 +47,9 @@ class ReaderCorpusTest : public ::testing::Test {
                                      &block_pool_);
     // This is a full text-corpus integration test: every checked-in dialect can
     // appear in corpus entries and must round-trip through bytecode.
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_testing_context_register_all_dialects(&context_));
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_target_core_test_low_descriptor_registry_initialize(&low_registry_);
   }
 

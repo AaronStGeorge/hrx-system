@@ -45,16 +45,3 @@ iree_status_t loom_op_registry_register_all_dialects(loom_context_t* context) {
   }
   return loom_context_register_builtin_encoding_vtables(context);
 }
-
-iree_status_t loom_op_registry_initialize_context(iree_allocator_t allocator,
-                                                  loom_context_t* out_context) {
-  loom_context_initialize(allocator, out_context);
-  iree_status_t status = loom_op_registry_register_all_dialects(out_context);
-  if (iree_status_is_ok(status)) {
-    status = loom_context_finalize(out_context);
-  }
-  if (!iree_status_is_ok(status)) {
-    loom_context_deinitialize(out_context);
-  }
-  return status;
-}

@@ -212,8 +212,8 @@ class ExecuteTest : public ::testing::Test {
     provider_environment_ = kExecuteTestProviderEnvironment;
     provider_environment_.target_environment = &target_environment_;
     loom_context_initialize(iree_allocator_system(), &context_);
-    IREE_ASSERT_OK(
-        loom_check_context_initialize(&execute_environment_, &context_));
+    IREE_ASSERT_OK(loom_check_context_register_and_finalize(
+        &execute_environment_, &context_));
   }
 
   void TearDown() override {

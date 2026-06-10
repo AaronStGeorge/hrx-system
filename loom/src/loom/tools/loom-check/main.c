@@ -293,7 +293,8 @@ int loom_check_main(int argc, char** argv,
         argc - 1);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_check_context_initialize(base_environment, &context);
+    status =
+        loom_check_context_register_and_finalize(base_environment, &context);
   }
 
   iree_host_size_t pass_count = 0;
