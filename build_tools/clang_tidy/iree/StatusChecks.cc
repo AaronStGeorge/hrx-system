@@ -16,6 +16,7 @@
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace clang::tidy::iree {
 namespace {
@@ -705,6 +706,264 @@ class BorrowedStatusParameterAnalyzer {
   BorrowedStatusParameterCheck& Check_;
   llvm::DenseMap<const VarDecl*, StatusParameterUseState> State_;
   bool FunctionReturnsStatus_ = false;
+};
+
+struct StatusFullExpressionUse {
+  const VarDecl* Var = nullptr;
+  bool Transfers = false;
+  SourceLocation Location;
+};
+
+class StatusTransferOrderAnalyzer {
+ public:
+  explicit StatusTransferOrderAnalyzer(StatusTransferOrderCheck& Check)
+      : Check_(Check) {}
+
+  void analyzeFunction(const FunctionDecl* Function) {
+    if (!Function->hasBody()) {
+      return;
+    }
+    analyzeStatement(Function->getBody());
+  }
+
+ private:
+  void checkFullExpression(const Expr* Expr) {
+    SmallVector<StatusFullExpressionUse, 8> Uses;
+    collectExpressionUses(Expr, /*transferred=*/false, Uses);
+
+    llvm::DenseMap<const VarDecl*, unsigned> Counts;
+    llvm::DenseMap<const VarDecl*, SourceLocation> TransferLocations;
+    for (const StatusFullExpressionUse& Use : Uses) {
+      if (!Use.Var) {
+        continue;
+      }
+      const VarDecl* Var = Use.Var->getCanonicalDecl();
+      Counts[Var] += 1;
+      if (Use.Transfers && !TransferLocations[Var].isValid()) {
+        TransferLocations[Var] = Use.Location;
+      }
+    }
+
+    for (const auto& [Var, Count] : Counts) {
+      SourceLocation TransferLocation = TransferLocations[Var];
+      if (Count < 2 || !TransferLocation.isValid()) {
+        continue;
+      }
+      Check_.diag(TransferLocation,
+                  "iree_status_t %0 is used more than once in one full "
+                  "expression while ownership is transferred; sequence the "
+                  "operations through temporaries or clone before fanout")
+          << Var;
+    }
+  }
+
+  void recordUse(const VarDecl* Var, bool transferred, SourceLocation Location,
+                 SmallVectorImpl<StatusFullExpressionUse>& Uses) {
+    if (!Var) {
+      return;
+    }
+    Uses.push_back(StatusFullExpressionUse{
+        Var->getCanonicalDecl(),
+        transferred,
+        Location,
+    });
+  }
+
+  bool isStatusDestination(const Expr* Expr) const {
+    Expr = IgnoreExprNoise(Expr);
+    return Expr && IsStatusType(Expr->getType());
+  }
+
+  void checkSequencedExpression(const Expr* Expr) { checkFullExpression(Expr); }
+
+  void collectExpressionUses(const Expr* Expr, bool transferred,
+                             SmallVectorImpl<StatusFullExpressionUse>& Uses) {
+    Expr = IgnoreExprNoise(Expr);
+    if (!Expr) {
+      return;
+    }
+
+    if (const VarDecl* Var = ForwardedStatusLocal(Expr)) {
+      recordUse(Var, transferred, Expr->getExprLoc(), Uses);
+      return;
+    }
+    if (const VarDecl* Var = ReferencedStatusLocal(Expr)) {
+      recordUse(Var, transferred, Expr->getExprLoc(), Uses);
+      return;
+    }
+    if (const auto* Cast = dyn_cast<CastExpr>(Expr)) {
+      collectExpressionUses(Cast->getSubExpr(), transferred, Uses);
+      return;
+    }
+    if (const auto* Call = dyn_cast<CallExpr>(Expr)) {
+      collectCallUses(Call, transferred, Uses);
+      return;
+    }
+    if (const auto* Construct = dyn_cast<CXXConstructExpr>(Expr)) {
+      const CXXConstructorDecl* Constructor = Construct->getConstructor();
+      const bool IsStatusWrapper =
+          Constructor && Constructor->getParent() &&
+          (Constructor->getParent()->getName() == "Status" ||
+           Constructor->getParent()->getName() == "StatusOr");
+      for (unsigned I = 0; I < Construct->getNumArgs(); ++I) {
+        collectExpressionUses(Construct->getArg(I),
+                              /*transferred=*/IsStatusWrapper, Uses);
+      }
+      return;
+    }
+    if (const auto* Binary = dyn_cast<BinaryOperator>(Expr)) {
+      if (Binary->getOpcode() == BO_Comma || Binary->getOpcode() == BO_LAnd ||
+          Binary->getOpcode() == BO_LOr) {
+        checkSequencedExpression(Binary->getLHS());
+        checkSequencedExpression(Binary->getRHS());
+        return;
+      }
+      if (Binary->isAssignmentOp()) {
+        collectExpressionUses(
+            Binary->getRHS(),
+            /*transferred=*/isStatusDestination(Binary->getLHS()), Uses);
+        return;
+      }
+      collectExpressionUses(Binary->getLHS(), /*transferred=*/false, Uses);
+      collectExpressionUses(Binary->getRHS(), /*transferred=*/false, Uses);
+      return;
+    }
+    if (const auto* Unary = dyn_cast<UnaryOperator>(Expr)) {
+      collectExpressionUses(Unary->getSubExpr(), transferred, Uses);
+      return;
+    }
+    if (const auto* Conditional = dyn_cast<AbstractConditionalOperator>(Expr)) {
+      checkSequencedExpression(Conditional->getCond());
+      checkSequencedExpression(Conditional->getTrueExpr());
+      checkSequencedExpression(Conditional->getFalseExpr());
+      return;
+    }
+
+    for (const Stmt* Child : Expr->children()) {
+      if (const auto* ChildExpr = dyn_cast_or_null<clang::Expr>(Child)) {
+        collectExpressionUses(ChildExpr, transferred, Uses);
+      }
+    }
+  }
+
+  void collectCallUses(const CallExpr* Call, bool transferred,
+                       SmallVectorImpl<StatusFullExpressionUse>& Uses) {
+    StringRef Name = CalleeName(Call);
+    if (IsKnownStatusConsumer(Name) && Call->getNumArgs() >= 1) {
+      collectExpressionUses(Call->getArg(0), /*transferred=*/true, Uses);
+      for (unsigned I = 1; I < Call->getNumArgs(); ++I) {
+        collectExpressionUses(Call->getArg(I), /*transferred=*/false, Uses);
+      }
+      return;
+    }
+    if (IsKnownStatusTransferProducer(Name)) {
+      for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+        bool ConsumesArg = Name == "iree_status_join" ? I <= 1 : I == 0;
+        collectExpressionUses(Call->getArg(I), /*transferred=*/ConsumesArg,
+                              Uses);
+      }
+      return;
+    }
+    if (IsKnownStatusClone(Name)) {
+      for (const Expr* Arg : Call->arguments()) {
+        collectExpressionUses(Arg, /*transferred=*/false, Uses);
+      }
+      return;
+    }
+    if (std::optional<unsigned> SinkArg = KnownStatusSinkArgument(Name)) {
+      for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+        collectExpressionUses(Call->getArg(I), /*transferred=*/I == *SinkArg,
+                              Uses);
+      }
+      return;
+    }
+    if (IsStatusObserver(Name)) {
+      for (const Expr* Arg : Call->arguments()) {
+        collectExpressionUses(Arg, /*transferred=*/false, Uses);
+      }
+      return;
+    }
+
+    for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+      const Expr* Arg = Call->getArg(I);
+      QualType ParamType;
+      if (const FunctionDecl* Callee = Call->getDirectCallee();
+          Callee && I < Callee->getNumParams()) {
+        ParamType = Callee->getParamDecl(I)->getType();
+      }
+      const bool ArgIsStatus = IsStatusType(Arg->getType()) ||
+                               (!ParamType.isNull() && IsStatusType(ParamType));
+      collectExpressionUses(Arg, /*transferred=*/transferred || ArgIsStatus,
+                            Uses);
+    }
+  }
+
+  void analyzeStatement(const Stmt* Statement) {
+    if (!Statement) {
+      return;
+    }
+    if (const auto* Compound = dyn_cast<CompoundStmt>(Statement)) {
+      for (const Stmt* Child : Compound->body()) {
+        analyzeStatement(Child);
+      }
+      return;
+    }
+    if (const auto* DeclarationStatement = dyn_cast<DeclStmt>(Statement)) {
+      for (const Decl* D : DeclarationStatement->decls()) {
+        const auto* Var = dyn_cast<VarDecl>(D);
+        if (Var && Var->hasInit()) {
+          checkFullExpression(Var->getInit());
+        }
+      }
+      return;
+    }
+    if (const auto* Return = dyn_cast<ReturnStmt>(Statement)) {
+      checkFullExpression(Return->getRetValue());
+      return;
+    }
+    if (const auto* If = dyn_cast<IfStmt>(Statement)) {
+      analyzeStatement(If->getInit());
+      if (const DeclStmt* ConditionVariable =
+              If->getConditionVariableDeclStmt()) {
+        analyzeStatement(ConditionVariable);
+      }
+      checkFullExpression(If->getCond());
+      analyzeStatement(If->getThen());
+      analyzeStatement(If->getElse());
+      return;
+    }
+    if (const auto* For = dyn_cast<ForStmt>(Statement)) {
+      analyzeStatement(For->getInit());
+      checkFullExpression(For->getCond());
+      checkFullExpression(For->getInc());
+      analyzeStatement(For->getBody());
+      return;
+    }
+    if (const auto* While = dyn_cast<WhileStmt>(Statement)) {
+      checkFullExpression(While->getCond());
+      analyzeStatement(While->getBody());
+      return;
+    }
+    if (const auto* Do = dyn_cast<DoStmt>(Statement)) {
+      analyzeStatement(Do->getBody());
+      checkFullExpression(Do->getCond());
+      return;
+    }
+    if (const auto* Switch = dyn_cast<SwitchStmt>(Statement)) {
+      checkFullExpression(Switch->getCond());
+      analyzeStatement(Switch->getBody());
+      return;
+    }
+    if (const auto* ExprStatement = dyn_cast<Expr>(Statement)) {
+      checkFullExpression(ExprStatement);
+      return;
+    }
+    for (const Stmt* Child : Statement->children()) {
+      analyzeStatement(Child);
+    }
+  }
+
+  StatusTransferOrderCheck& Check_;
 };
 
 class StatusLifetimeAnalyzer {
@@ -1535,6 +1794,26 @@ void StatusLifetimeCheck::check(
     return;
   }
   StatusLifetimeAnalyzer Analyzer(*this, *Result.Context);
+  Analyzer.analyzeFunction(Function);
+}
+
+StatusTransferOrderCheck::StatusTransferOrderCheck(StringRef Name,
+                                                   ClangTidyContext* Context)
+    : ClangTidyCheck(Name, Context) {}
+
+void StatusTransferOrderCheck::registerMatchers(
+    ast_matchers::MatchFinder* Finder) {
+  using namespace ast_matchers;
+  Finder->addMatcher(functionDecl(isDefinition()).bind("function"), this);
+}
+
+void StatusTransferOrderCheck::check(
+    const ast_matchers::MatchFinder::MatchResult& Result) {
+  const auto* Function = Result.Nodes.getNodeAs<FunctionDecl>("function");
+  if (!Function || !Function->hasBody()) {
+    return;
+  }
+  StatusTransferOrderAnalyzer Analyzer(*this);
   Analyzer.analyzeFunction(Function);
 }
 

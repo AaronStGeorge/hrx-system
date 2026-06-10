@@ -20,6 +20,8 @@ class IreeTidyModule final : public ClangTidyModule {
         "iree-status-borrowed-parameter");
     CheckFactories.registerCheck<DiscardedStatusCheck>("iree-status-discarded");
     CheckFactories.registerCheck<StatusLifetimeCheck>("iree-status-lifetime");
+    CheckFactories.registerCheck<StatusTransferOrderCheck>(
+        "iree-status-transfer-order");
     CheckFactories.registerCheck<TraceZoneCheck>("iree-trace-zone-balance");
   }
 };

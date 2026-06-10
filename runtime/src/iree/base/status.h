@@ -228,6 +228,13 @@ typedef enum iree_status_code_e {
 //   status = iree_status_join(status, do_cleanup());
 //   return status;
 //
+// A single full expression should mention an owned status at most once when any
+// mention transfers ownership. C does not sequence function argument
+// evaluation, so expressions like iree_status_join(status, callback(status))
+// have no portable ownership order. Sequence the operations through temporary
+// locals, and clone first when two independent consumers need equivalent status
+// payloads.
+//
 // iree_status_annotate, iree_status_annotate_f, and iree_status_freeze consume
 // their input status and return the replacement status. The returned value is
 // the new owned value:
@@ -273,8 +280,9 @@ typedef enum iree_status_code_e {
 // The repo-owned clang-tidy checks enforce the mechanically provable part of
 // this contract: status-returning call results are not silently discarded,
 // local status owners are not overwritten or left unconsumed, consumed status
-// variables are not reused, and by-value status parameters are not merely
-// observed as borrowed values.
+// variables are not reused, a single full expression does not combine a
+// transfer with another use of the same local status, and by-value status
+// parameters are not merely observed as borrowed values.
 //
 // Opaque status structure containing an iree_status_code_t and optional status
 // object with more detailed information and payloads.

@@ -140,6 +140,41 @@ status-owning callback boundaries are checked directly. Loop-carried status
 variables and functions with `goto` cleanup paths are treated conservatively so
 diagnostics remain high signal.
 
+### `iree-status-transfer-order`
+
+`iree-status-transfer-order` diagnoses full expressions where the same local
+`iree_status_t` appears more than once and at least one occurrence transfers
+ownership:
+
+```c
+return iree_status_join(status, status);
+return iree_status_join(status, notify_failure(status));
+```
+
+C does not sequence function argument evaluation. In the second example, either
+argument can be evaluated first, so one path can consume or replace the status
+while the other path still tries to use the old owned value. The reliable shape
+is explicit sequencing through owned temporaries:
+
+```c
+iree_status_t notify_status = notify_failure(status);
+return iree_status_join(status, notify_status);
+```
+
+When two independent consumers intentionally need the same failure payload, clone
+first and give each owner one status value:
+
+```c
+iree_status_t cloned_status = iree_status_clone(status);
+iree_status_t notify_status = notify_failure(cloned_status);
+return iree_status_join(status, notify_status);
+```
+
+The check is local and syntactic by design. It models known status consumers,
+status transfer helpers, C++ status wrapper constructors, and status observer
+functions. Pure observer expressions such as multiple `iree_status_is_*` checks
+do not transfer ownership and are accepted.
+
 ### `iree-trace-zone-balance`
 
 `iree-trace-zone-balance` treats trace zones as scoped C resources around

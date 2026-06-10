@@ -34,6 +34,7 @@ iree_status_t iree_clang_tidy_status_ignored_source(void);
 iree_status_t iree_clang_tidy_status_named_call_source(void);
 iree_status_t iree_clang_tidy_status_returned_source(void);
 iree_status_t iree_clang_tidy_status_void_cast_source(void);
+iree_status_t iree_clang_tidy_status_transfer_order_sink(iree_status_t status);
 
 #define IREE_LIKELY(x) (__builtin_expect(!!(x), 1))
 #define IREE_STATUS_OK 0
@@ -326,4 +327,43 @@ void iree_clang_tidy_status_borrowed_parameter_reclaim_callback(
   (void)entry;
   *(iree_status_code_t*)user_data =
       iree_status_code(reclaim_callback_parameter_status);
+}
+
+iree_status_t iree_clang_tidy_status_transfer_order_join_same(void) {
+  iree_status_t transfer_order_join_same_status =
+      iree_clang_tidy_status_assigned_source();
+  return iree_status_join(transfer_order_join_same_status,
+                          transfer_order_join_same_status);
+}
+
+iree_status_t iree_clang_tidy_status_transfer_order_join_callback(void) {
+  iree_status_t transfer_order_nested_status =
+      iree_clang_tidy_status_assigned_source();
+  return iree_status_join(
+      transfer_order_nested_status,
+      iree_clang_tidy_status_transfer_order_sink(transfer_order_nested_status));
+}
+
+iree_status_t iree_clang_tidy_status_transfer_order_explicit_sequence(void) {
+  iree_status_t explicit_sequence_status =
+      iree_clang_tidy_status_assigned_source();
+  iree_status_t cleanup_status = iree_clang_tidy_status_cleanup_source();
+  return iree_status_join(explicit_sequence_status, cleanup_status);
+}
+
+iree_status_t iree_clang_tidy_status_transfer_order_clone_before_fanout(void) {
+  iree_status_t clone_before_fanout_status =
+      iree_clang_tidy_status_assigned_source();
+  iree_status_t cloned_status = iree_status_clone(clone_before_fanout_status);
+  iree_status_t callback_status =
+      iree_clang_tidy_status_transfer_order_sink(cloned_status);
+  return iree_status_join(clone_before_fanout_status, callback_status);
+}
+
+int iree_clang_tidy_status_transfer_order_observer_only(void) {
+  iree_status_t observer_only_status = iree_clang_tidy_status_assigned_source();
+  int result = iree_status_is_ok(observer_only_status) ||
+               iree_status_is_unavailable(observer_only_status);
+  iree_status_ignore(observer_only_status);
+  return result;
 }

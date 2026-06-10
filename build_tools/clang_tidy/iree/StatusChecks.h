@@ -35,6 +35,14 @@ class BorrowedStatusParameterCheck final : public ClangTidyCheck {
   void check(const ast_matchers::MatchFinder::MatchResult& Result) override;
 };
 
+class StatusTransferOrderCheck final : public ClangTidyCheck {
+ public:
+  StatusTransferOrderCheck(StringRef Name, ClangTidyContext* Context);
+
+  void registerMatchers(ast_matchers::MatchFinder* Finder) override;
+  void check(const ast_matchers::MatchFinder::MatchResult& Result) override;
+};
+
 }  // namespace clang::tidy::iree
 
 #endif  // IREE_BUILD_TOOLS_CLANG_TIDY_IREE_STATUS_CHECKS_H_

@@ -153,6 +153,32 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
+    def test_status_transfer_order_is_diagnosed(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-status-transfer-order",
+            source=clang_tidy_test.source_path(__file__, "status_checks.c"),
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "transfer_order_join_same_status",
+                "transfer_order_nested_status",
+                "[iree-status-transfer-order]",
+            ],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "explicit_sequence_status",
+                "clone_before_fanout_status",
+                "cloned_status",
+                "callback_status",
+                "observer_only_status",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
