@@ -31,6 +31,7 @@ iree_py_library(
   SRCS
     "__init__.py"
     "c_enums.py"
+    "c_format.py"
     "c_interfaces.py"
     "c_names.py"
     "c_queries.py"
@@ -54,6 +55,7 @@ iree_py_library(
   SRCS
     "__init__.py"
     "c_enums.py"
+    "c_format.py"
     "c_interfaces.py"
     "c_names.py"
     "c_queries.py"
