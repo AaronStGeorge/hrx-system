@@ -238,6 +238,12 @@ bool IsNoReturnCall(const CallExpr* Call) {
          Name == "__builtin_trap" || Name == "iree_abort";
 }
 
+bool IsIreeOkStatusCall(const Expr* Expr) {
+  Expr = IgnoreExprNoise(Expr);
+  const auto* Call = dyn_cast_or_null<CallExpr>(Expr);
+  return Call && CalleeName(Call) == "iree_ok_status";
+}
+
 struct StatusValue {
   bool IsStatus = false;
   bool MayOwn = false;
@@ -275,9 +281,11 @@ struct VariableState {
   bool MayBeConsumed = false;
   bool Unknown = false;
   bool Reported = false;
+  bool OkInitializerLive = false;
   SourceLocation OwnershipLocation;
   SourceLocation ConsumeLocation;
   SourceLocation ReportLocation;
+  SourceLocation OkInitLocation;
 
   static VariableState NoOwner() { return VariableState(); }
 
@@ -293,11 +301,19 @@ struct VariableState {
     State.Unknown = true;
     return State;
   }
+
+  static VariableState OkInitialized(SourceLocation Location) {
+    VariableState State;
+    State.OkInitializerLive = true;
+    State.OkInitLocation = Location;
+    return State;
+  }
 };
 
 struct AnalysisState {
   llvm::DenseMap<const VarDecl*, VariableState> Variables;
   bool Terminal = false;
+  bool SuppressOkOverwriteDiagnostics = false;
 };
 
 VariableState MergeVariableState(const VariableState& Lhs,
@@ -309,6 +325,7 @@ VariableState MergeVariableState(const VariableState& Lhs,
   Result.MayOwn = Lhs.MayOwn || Rhs.MayOwn;
   Result.MayBeConsumed = Lhs.MayBeConsumed || Rhs.MayBeConsumed;
   Result.Reported = Lhs.Reported || Rhs.Reported;
+  Result.OkInitializerLive = Lhs.OkInitializerLive && Rhs.OkInitializerLive;
   Result.OwnershipLocation = Lhs.OwnershipLocation.isValid()
                                  ? Lhs.OwnershipLocation
                                  : Rhs.OwnershipLocation;
@@ -316,6 +333,8 @@ VariableState MergeVariableState(const VariableState& Lhs,
       Lhs.ConsumeLocation.isValid() ? Lhs.ConsumeLocation : Rhs.ConsumeLocation;
   Result.ReportLocation =
       Lhs.ReportLocation.isValid() ? Lhs.ReportLocation : Rhs.ReportLocation;
+  Result.OkInitLocation =
+      Lhs.OkInitLocation.isValid() ? Lhs.OkInitLocation : Rhs.OkInitLocation;
   return Result;
 }
 
@@ -327,6 +346,8 @@ AnalysisState MergeStates(const AnalysisState& Lhs, const AnalysisState& Rhs) {
     return Lhs;
   }
   AnalysisState Result = Lhs;
+  Result.SuppressOkOverwriteDiagnostics =
+      Lhs.SuppressOkOverwriteDiagnostics && Rhs.SuppressOkOverwriteDiagnostics;
   for (const auto& [Var, RhsState] : Rhs.Variables) {
     auto It = Result.Variables.find(Var);
     if (It == Result.Variables.end()) {
@@ -1042,6 +1063,23 @@ class StatusLifetimeAnalyzer {
     }
   }
 
+  void diagnoseImmediateOkOverwrite(const VarDecl* Var, SourceLocation Location,
+                                    const VariableState& State) {
+    if (State.OkInitLocation.isValid()) {
+      Check_.diag(Location,
+                  "iree_status_t %0 initialized to iree_ok_status here is "
+                  "overwritten before the initializer is used; initialize from "
+                  "the producer directly or use a return-if-error helper")
+          << Var << State.OkInitLocation;
+    } else {
+      Check_.diag(Location,
+                  "iree_status_t %0 initialized to iree_ok_status is "
+                  "overwritten before the initializer is used; initialize from "
+                  "the producer directly or use a return-if-error helper")
+          << Var;
+    }
+  }
+
   void diagnoseLeak(const VarDecl* Var, SourceLocation Location,
                     const VariableState& State) {
     if (!State.MayOwn || State.Unknown) {
@@ -1086,6 +1124,7 @@ class StatusLifetimeAnalyzer {
     if (!VarState || VarState->Unknown) {
       return;
     }
+    VarState->OkInitializerLive = false;
     if (VarState->MayBeConsumed) {
       diagnoseUseAfterConsume(Var, Location, *VarState);
     }
@@ -1109,6 +1148,7 @@ class StatusLifetimeAnalyzer {
     if (!VarState || VarState->Unknown) {
       return;
     }
+    VarState->OkInitializerLive = false;
     if (VarState->MayBeConsumed) {
       diagnoseDoubleConsume(Var, Location, *VarState);
     }
@@ -1227,6 +1267,7 @@ class StatusLifetimeAnalyzer {
     }
     if (isa<DoStmt>(Statement) || isa<SwitchStmt>(Statement)) {
       AnalysisState InnerState = State;
+      InnerState.SuppressOkOverwriteDiagnostics = true;
       for (const Stmt* Child : Statement->children()) {
         analyzeStatement(Child, InnerState);
       }
@@ -1304,6 +1345,11 @@ class StatusLifetimeAnalyzer {
       const VarDecl* CanonicalVar = Var->getCanonicalDecl();
       if (!Var->hasInit()) {
         State.Variables[CanonicalVar] = VariableState::UnknownState();
+        continue;
+      }
+      if (IsIreeOkStatusCall(Var->getInit())) {
+        State.Variables[CanonicalVar] =
+            VariableState::OkInitialized(Var->getLocation());
         continue;
       }
       StatusValue InitValue =
@@ -1450,11 +1496,18 @@ class StatusLifetimeAnalyzer {
       }
     }
 
+    const bool SuppressOkOverwriteDiagnostics =
+        State.SuppressOkOverwriteDiagnostics;
+    ThenState.SuppressOkOverwriteDiagnostics = true;
     analyzeStatement(If->getThen(), ThenState);
+    ThenState.SuppressOkOverwriteDiagnostics = SuppressOkOverwriteDiagnostics;
     if (const Stmt* Else = If->getElse()) {
+      ElseState.SuppressOkOverwriteDiagnostics = true;
       analyzeStatement(Else, ElseState);
+      ElseState.SuppressOkOverwriteDiagnostics = SuppressOkOverwriteDiagnostics;
     }
     State = MergeStates(ThenState, ElseState);
+    State.SuppressOkOverwriteDiagnostics = SuppressOkOverwriteDiagnostics;
   }
 
   void markConditionTrueFacts(const Expr* Condition, AnalysisState& State) {
@@ -1470,6 +1523,7 @@ class StatusLifetimeAnalyzer {
     analyzeExpression(For->getCond(), InnerState);
 
     AnalysisState BodyState = InnerState;
+    BodyState.SuppressOkOverwriteDiagnostics = true;
     markConditionTrueFacts(For->getCond(), BodyState);
     analyzeStatement(For->getBody(), BodyState);
     analyzeExpression(For->getInc(), BodyState);
@@ -1482,6 +1536,7 @@ class StatusLifetimeAnalyzer {
     analyzeExpression(While->getCond(), InnerState);
 
     AnalysisState BodyState = InnerState;
+    BodyState.SuppressOkOverwriteDiagnostics = true;
     markConditionTrueFacts(While->getCond(), BodyState);
     analyzeStatement(While->getBody(), BodyState);
 
@@ -1639,6 +1694,13 @@ class StatusLifetimeAnalyzer {
       bool RhsConsumedLhs =
           LhsAfterRhs && (!LhsBefore.MayOwn || !LhsAfterRhs->MayOwn ||
                           LhsAfterRhs->MayBeConsumed || LhsAfterRhs->Unknown);
+      if (!State.SuppressOkOverwriteDiagnostics &&
+          LhsBefore.OkInitializerLive && LhsAfterRhs &&
+          LhsAfterRhs->OkInitializerLive && RhsValue.IsStatus &&
+          !IsIreeOkStatusCall(Binary->getRHS())) {
+        diagnoseImmediateOkOverwrite(LhsVar, Binary->getOperatorLoc(),
+                                     LhsBefore);
+      }
       if (LhsBefore.MayOwn && !LhsBefore.Unknown && !RhsConsumedLhs) {
         diagnoseLeak(LhsVar, Binary->getOperatorLoc(), LhsBefore);
       }

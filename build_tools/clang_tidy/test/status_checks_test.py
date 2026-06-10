@@ -103,6 +103,7 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "code_predicate_status",
                 "reported_ignore_status",
                 "formatted_ignore_status",
+                "immediate_ok_overwrite_status",
                 "[iree-status-lifetime]",
             ],
         )
@@ -121,6 +122,8 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "joined_secondary_status",
                 "loop_break_status",
                 "ok_and_status",
+                "conditional_ok_status",
+                "joined_ok_status",
                 "consumed_predicate_status",
                 "atomic_escape_status",
                 "atomic_builtin_status",

@@ -127,6 +127,9 @@ status = do_cleanup();  // Overwrites an owned status.
 iree_status_t status = do_work();
 iree_status_ignore(status);
 return status;  // Uses a consumed status value.
+
+iree_status_t status = iree_ok_status();
+status = do_work();  // OK initializer was never used.
 ```
 
 The accepted terminal actions mirror `runtime/src/iree/base/status.h`: return
@@ -143,6 +146,12 @@ the local owner should release it with `iree_status_free` instead:
 iree_status_fprint(stderr, status);
 iree_status_free(status);
 ```
+
+An `iree_ok_status()` initializer should represent the real initial state of a
+terminal status accumulator. If the next same-scope assignment replaces it
+before a branch, loop, observer, cleanup join, or ownership transfer can use
+that initial OK value, initialize the variable from the producer directly or use
+the appropriate return-if-error helper.
 
 The lifetime model focuses on local ownership states that can be proven from
 the AST with high confidence. Straight-line code, block scope, local transfers,

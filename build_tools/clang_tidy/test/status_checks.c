@@ -209,6 +209,28 @@ iree_status_t iree_clang_tidy_status_lifetime_ok_and_overwrite(int replace) {
   return ok_and_status;
 }
 
+iree_status_t iree_clang_tidy_status_lifetime_immediate_ok_overwrite(void) {
+  iree_status_t immediate_ok_overwrite_status = iree_ok_status();
+  immediate_ok_overwrite_status = iree_clang_tidy_status_assigned_source();
+  return immediate_ok_overwrite_status;
+}
+
+iree_status_t iree_clang_tidy_status_lifetime_conditional_ok_assignment(
+    int replace) {
+  iree_status_t conditional_ok_status = iree_ok_status();
+  if (replace) {
+    conditional_ok_status = iree_clang_tidy_status_assigned_source();
+  }
+  return conditional_ok_status;
+}
+
+iree_status_t iree_clang_tidy_status_lifetime_joined_ok_status(void) {
+  iree_status_t joined_ok_status = iree_ok_status();
+  joined_ok_status = iree_status_join(joined_ok_status,
+                                      iree_clang_tidy_status_cleanup_source());
+  return joined_ok_status;
+}
+
 iree_status_t iree_clang_tidy_status_lifetime_code_predicate_consumed(void) {
   iree_status_t consumed_predicate_status =
       iree_clang_tidy_status_assigned_source();
