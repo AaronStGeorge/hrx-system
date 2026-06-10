@@ -16,9 +16,9 @@ kernel.def target(@target) @workgroup_reduce_then_all_lane_bias_load(%input: buf
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
-  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
-  %bias_global = buffer.assume.memory_space %bias {memory_space = global} : buffer
-  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %bias_global = buffer.assume.memory_space<global> %bias : buffer
+  %output_global = buffer.assume.memory_space<global> %output : buffer
   %input_noalias, %bias_noalias, %output_noalias = buffer.assume.noalias %input_global, %bias_global, %output_global : buffer, buffer, buffer
   %input_view = buffer.view %input_noalias[%base] : buffer -> view<128xf32, #dense>
   %bias_view = buffer.view %bias_noalias[%base] : buffer -> view<1xbf16, #dense>

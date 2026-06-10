@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from itertools import pairwise
@@ -20,6 +20,10 @@ from loom.format.bytecode.writer import FORMAT_VERSION, MAGIC
 from loom.format.text.parser import Parser
 from loom.format.text.tokenizer import ParseError
 from loom.importers.check.cases import CheckCase, rewrite_inline_case_inputs
+from loom.migration.rules import (
+    DEFAULT_MIGRATION_RULES,
+    MigrationRule,
+)
 from loom.migration.source import (
     MigrationSourceDiagnostic,
     SourceDocument,
@@ -75,22 +79,6 @@ class MigrationFileDiagnostic:
         if self.source_range is not None:
             result["source_range"] = _source_range_to_json(self.source_range)
         return result
-
-
-@dataclass(frozen=True, slots=True)
-class MigrationRuleApplication:
-    """Edits and diagnostics produced by one source migration rule."""
-
-    edits: tuple[SourceEdit, ...] = ()
-    diagnostics: tuple[MigrationSourceDiagnostic, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class MigrationRule:
-    """One source migration rule registered with the driver."""
-
-    rule_id: str
-    rewrite: Callable[[SourceDocument], MigrationRuleApplication]
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,9 +152,6 @@ class MigrationRunResult:
                 diagnostic.to_json_object() for diagnostic in self.diagnostics
             ],
         }
-
-
-DEFAULT_MIGRATION_RULES: tuple[MigrationRule, ...] = ()
 
 
 def discover_migration_files(root: Path) -> tuple[Path, ...]:
@@ -278,12 +263,13 @@ def migrate_source_text(
                 _edit_application_diagnostic(document, sorted_edits, str(exc))
             )
 
-    if validate and not _has_errors(diagnostics):
+    changed = migrated_text != text
+    if validate and changed and not _has_errors(diagnostics):
         diagnostics.extend(validate_current_source(migrated_text, filename=filename))
 
     return SourceMigrationResult(
         text=migrated_text,
-        changed=migrated_text != text,
+        changed=changed,
         diagnostics=tuple(diagnostics),
     )
 
@@ -306,11 +292,7 @@ def migrate_loom_test_text(
             input_text,
             filename=filename,
             rules=rules,
-            validate=validate
-            and _loom_test_case_requires_current_parse_validation(
-                check_case,
-                input_text,
-            ),
+            validate=False,
         )
         case_results[check_case.index] = result
         return result.text
@@ -576,53 +558,6 @@ def _remap_loom_test_diagnostic(
         input_byte_start + source_range.end,
     )
     return replace(diagnostic, file=filename, source_range=remapped_range)
-
-
-def _loom_test_case_requires_current_parse_validation(
-    check_case: CheckCase,
-    input_text: str,
-) -> bool:
-    return (
-        not _loom_test_case_has_requires_directive(check_case)
-        and not _loom_test_input_has_diagnostic_annotations(input_text)
-        and _loom_test_input_looks_like_module(input_text)
-    )
-
-
-def _loom_test_case_has_requires_directive(check_case: CheckCase) -> bool:
-    return any(
-        line.strip().startswith("// REQUIRES:")
-        for line in check_case.source.splitlines()
-    )
-
-
-def _loom_test_input_has_diagnostic_annotations(input_text: str) -> bool:
-    for line in input_text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("//"):
-            continue
-        payload = stripped[2:].strip()
-        if payload in ("ERROR", "WARNING", "REMARK") or payload.startswith(
-            (
-                "ERROR:",
-                "ERROR@",
-                "WARNING:",
-                "WARNING@",
-                "REMARK:",
-                "REMARK@",
-            )
-        ):
-            return True
-    return False
-
-
-def _loom_test_input_looks_like_module(input_text: str) -> bool:
-    for line in input_text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("//"):
-            continue
-        return not stripped.startswith(("%", "^"))
-    return False
 
 
 def _edits_with_rule_id(

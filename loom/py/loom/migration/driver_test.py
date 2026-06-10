@@ -11,14 +11,13 @@ from pathlib import Path
 from loom.diagnostics import DiagnosticSeverity
 from loom.format.bytecode.writer import FORMAT_VERSION, MAGIC
 from loom.migration.driver import (
-    MigrationRule,
-    MigrationRuleApplication,
     check_bytecode_version,
     discover_migration_files,
     migrate_loom_test_text,
     migrate_source_text,
 )
-from loom.migration.source import SourceEdit
+from loom.migration.rules import MigrationRule, MigrationRuleApplication
+from loom.migration.source import MigrationSourceDiagnostic, SourceEdit
 
 
 def _edit_rule(
@@ -137,7 +136,7 @@ def test_loom_test_migrates_input_ir_without_touching_expected_output() -> None:
     )
 
 
-def test_loom_test_parse_diagnostic_maps_to_case_input_line() -> None:
+def test_loom_test_rule_diagnostic_maps_to_case_input_line() -> None:
     text = (
         "// RUN: roundtrip\n"
         "// descriptive harness comment\n"
@@ -151,17 +150,36 @@ def test_loom_test_parse_diagnostic_maps_to_case_input_line() -> None:
         "}\n"
     )
 
-    result = migrate_loom_test_text(text, filename=Path("broken.loom-test"))
+    def diagnose_bad_op(document):
+        byte_start = document.text.index("not-an-op")
+        return MigrationRuleApplication(
+            diagnostics=(
+                MigrationSourceDiagnostic(
+                    severity=DiagnosticSeverity.ERROR,
+                    message="bad op",
+                    source_range=document.byte_source_range(
+                        byte_start,
+                        byte_start + len("not-an-op"),
+                    ),
+                    rule_id="test.bad_op",
+                ),
+            )
+        )
+
+    result = migrate_loom_test_text(
+        text,
+        filename=Path("broken.loom-test"),
+        rules=(MigrationRule("test.bad_op", diagnose_bad_op),),
+    )
 
     assert not result.ok
     assert len(result.diagnostics) == 1
     diagnostic = result.diagnostics[0]
-    assert diagnostic.rule_id == "loom.migrate.current_parse"
+    assert diagnostic.rule_id == "test.bad_op"
     assert diagnostic.source_range is not None
     assert diagnostic.source_range.filename == Path("broken.loom-test")
     assert diagnostic.source_range.start_line == 5
     assert diagnostic.source_range.start_column == 3
-    assert "broken.loom-test:1:1" not in diagnostic.message
 
 
 def test_loom_test_fragment_input_is_left_to_loom_check() -> None:
@@ -220,18 +238,32 @@ def test_loom_test_diagnostic_mapping_accounts_for_earlier_rewrites() -> None:
         "}\n"
     )
 
-    def rewrite_first_case(document):
+    def rewrite_or_diagnose(document):
         if "@first" not in document.text:
-            return MigrationRuleApplication()
+            byte_start = document.text.index("not-an-op")
+            return MigrationRuleApplication(
+                diagnostics=(
+                    MigrationSourceDiagnostic(
+                        severity=DiagnosticSeverity.ERROR,
+                        message="bad op",
+                        source_range=document.byte_source_range(
+                            byte_start,
+                            byte_start + len("not-an-op"),
+                        ),
+                        rule_id="test.bad_op",
+                    ),
+                )
+            )
         return MigrationRuleApplication(edits=(SourceEdit(0, 0, "// migrated\n"),))
 
     result = migrate_loom_test_text(
         text,
         filename=Path("shifted.loom-test"),
-        rules=(MigrationRule("insert-comment", rewrite_first_case),),
+        rules=(MigrationRule("rewrite-or-diagnose", rewrite_or_diagnose),),
     )
 
     assert not result.ok
+    assert result.diagnostics[0].rule_id == "test.bad_op"
     assert result.diagnostics[0].source_range is not None
     assert result.diagnostics[0].source_range.start_line == 7
 

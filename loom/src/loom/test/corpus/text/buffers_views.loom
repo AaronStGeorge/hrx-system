@@ -1,6 +1,6 @@
 func.def @views(%buffer: buffer, %offset: offset, %row_stride: index, %row: index, %col: index, %value: f32) -> (f32) {
   %layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>
-  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %buffer : buffer
   %view = buffer.view %global[%offset] : buffer -> view<8x16xf32, %layout>
   %sub = view.subview %view[%row, 0] : view<8x16xf32, %layout> -> view<1x16xf32, %layout>
   view.prefetch %sub[0, %col] {intent = read, locality = l2} : view<1x16xf32, %layout>

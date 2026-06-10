@@ -7,15 +7,12 @@
 """Migration metadata and validation for Loom source and bytecode formats."""
 
 from loom.migration.driver import (
-    DEFAULT_MIGRATION_RULES,
     LOOM_BYTECODE_SUFFIX,
     LOOM_SOURCE_SUFFIX,
     LOOM_TEST_SUFFIX,
     FileMigrationResult,
     MigrationFileDiagnostic,
     MigrationFileKind,
-    MigrationRule,
-    MigrationRuleApplication,
     MigrationRunResult,
     SourceMigrationResult,
     check_bytecode_version,
@@ -50,6 +47,13 @@ from loom.migration.manifest import (
     lint_legacy_formats,
     migration_rule_metadata_from_ops,
 )
+from loom.migration.rules import (
+    BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE,
+    BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID,
+    DEFAULT_MIGRATION_RULES,
+    MigrationRule,
+    MigrationRuleApplication,
+)
 from loom.migration.source import (
     MigrationSourceDiagnostic,
     SourceDocument,
@@ -64,6 +68,8 @@ __all__ = [
     "DIAGNOSTIC_ERROR",
     "DIAGNOSTIC_WARNING",
     "DEFAULT_MIGRATION_RULES",
+    "BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE",
+    "BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID",
     "LOOM_BYTECODE_SUFFIX",
     "LOOM_SOURCE_SUFFIX",
     "LOOM_TEST_SUFFIX",

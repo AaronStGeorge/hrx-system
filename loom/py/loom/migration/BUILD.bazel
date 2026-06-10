@@ -18,6 +18,7 @@ iree_py_library(
         "cli.py",
         "driver.py",
         "manifest.py",
+        "rules.py",
         "source.py",
     ],
     deps = [
@@ -26,11 +27,8 @@ iree_py_library(
         "//loom/py/loom/format/bytecode",
         "//loom/py/loom/format/text",
         "//loom/py/loom/importers/check",
-        "//loom/py/loom/target/arch/amdgpu:dialect",
-        "//loom/py/loom/target/arch/ireevm:dialect",
-        "//loom/py/loom/target/arch/spirv:dialect",
-        "//loom/py/loom/target/arch/wasm:dialect",
-        "//loom/py/loom/target/arch/x86:dialect",
+        "//loom/py/loom/target/arch:all_targets",
+        "//loom/py/loom/target/test:descriptors",
     ],
 )
 
@@ -47,6 +45,7 @@ iree_py_test(
         "cli_test.py",
         "driver_test.py",
         "manifest_test.py",
+        "rules_test.py",
         "source_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
@@ -54,6 +53,7 @@ iree_py_test(
         "loom.migration.cli_test",
         "loom.migration.driver_test",
         "loom.migration.manifest_test",
+        "loom.migration.rules_test",
         "loom.migration.source_test",
     ],
     main = "pytest_style_runner.py",

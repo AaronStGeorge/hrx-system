@@ -45,6 +45,47 @@ def test_output_writes_single_source(
     )
 
 
+def test_in_place_writes_loom_test_input_only(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source_path = tmp_path / "input.loom-test"
+    source_path.write_text(
+        "\n".join(
+            (
+                "// RUN: roundtrip",
+                "",
+                "func.def @f(%input: buffer) {",
+                "  %global = buffer.assume.memory_space %input {memory_space = global} : buffer",
+                "  func.return",
+                "}",
+                "",
+                "// ----",
+                "func.def @f(%input: buffer) {",
+                "  %global = buffer.assume.memory_space %input {memory_space = global} : buffer",
+                "  func.return",
+                "}",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert main([str(source_path), "--in-place"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+    migrated_text = source_path.read_text(encoding="utf-8")
+    assert (
+        "  %global = buffer.assume.memory_space<global> %input : buffer\n"
+        in migrated_text
+    )
+    assert (
+        "  %global = buffer.assume.memory_space %input {memory_space = global} : buffer\n"
+        in migrated_text
+    )
+
+
 def test_check_root_reports_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

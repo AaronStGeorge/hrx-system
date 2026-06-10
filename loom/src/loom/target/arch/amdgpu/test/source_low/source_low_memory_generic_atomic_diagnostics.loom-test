@@ -21,7 +21,7 @@ kernel.def target(@target) @generic_dynamic_atomic_rejected(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %generic = buffer.assume.memory_space %input {memory_space = generic} : buffer
+  %generic = buffer.assume.memory_space<generic> %input : buffer
   %view = buffer.view %generic[%zero] : buffer -> view<64xi32, #dense>
   %one = scalar.constant 1 : i32
   // ERROR@+1: AMDGPU/020 {op_name="view.atomic.reduce", operation_kind="atomic_reduce", memory_space="generic", dynamic_term_index="0", byte_stride="4"}

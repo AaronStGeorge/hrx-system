@@ -92,7 +92,7 @@ func.def @workgroup_alloca_reference() -> (i64, i64, i64, i64, i64) {
 // through later view construction.
 func.def @assume_memory_space_feeds_view(%buffer: buffer, %offset: offset) -> (i64, i64) {
   %layout = encoding.layout.dense : encoding<layout>
-  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %buffer : buffer
   %view = buffer.view %global[%offset] : buffer -> view<4xf32, %layout>
   %buffer_space = test.fact_buffer_memory_space %global : buffer -> i64
   %view_space = test.fact_view_memory_space %view : view<4xf32, %layout> -> i64

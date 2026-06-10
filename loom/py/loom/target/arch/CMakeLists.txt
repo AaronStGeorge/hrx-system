@@ -27,4 +27,20 @@ iree_py_library(
     loom::py::loom::target::package_init
 )
 
+iree_py_library(
+  NAME
+    all_targets
+  DEPS
+    loom::py::loom::target::arch::amdgpu::descriptors
+    loom::py::loom::target::arch::amdgpu::dialect
+    loom::py::loom::target::arch::ireevm::descriptors
+    loom::py::loom::target::arch::ireevm::dialect
+    loom::py::loom::target::arch::spirv::descriptors
+    loom::py::loom::target::arch::spirv::dialect
+    loom::py::loom::target::arch::wasm::descriptors
+    loom::py::loom::target::arch::wasm::dialect
+    loom::py::loom::target::arch::x86::descriptors
+    loom::py::loom::target::arch::x86::dialect
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

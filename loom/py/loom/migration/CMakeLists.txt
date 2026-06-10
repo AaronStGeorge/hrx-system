@@ -17,6 +17,7 @@ iree_py_library(
     "cli.py"
     "driver.py"
     "manifest.py"
+    "rules.py"
     "source.py"
   DEPS
     loom::py::loom::core
@@ -24,11 +25,8 @@ iree_py_library(
     loom::py::loom::format::bytecode::bytecode
     loom::py::loom::format::text::text
     loom::py::loom::importers::check::check
-    loom::py::loom::target::arch::amdgpu::dialect
-    loom::py::loom::target::arch::ireevm::dialect
-    loom::py::loom::target::arch::spirv::dialect
-    loom::py::loom::target::arch::wasm::dialect
-    loom::py::loom::target::arch::x86::dialect
+    loom::py::loom::target::arch::all_targets
+    loom::py::loom::target::test::descriptors
 )
 
 iree_py_library(
@@ -51,6 +49,7 @@ iree_py_test(
     "loom.migration.cli_test"
     "loom.migration.driver_test"
     "loom.migration.manifest_test"
+    "loom.migration.rules_test"
     "loom.migration.source_test"
   DEPS
     loom::py::loom::migration::migration

@@ -191,7 +191,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
 amdgpu.target<gfx1100> @target
 func.def target(@target) @f32_uniform_vector_bitops(%input: buffer) -> (vector<4xf32>) {
   %base = index.constant 0 : offset
-  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %input_global = buffer.assume.memory_space<global> %input : buffer
   %input_noalias = buffer.assume.noalias %input_global : buffer
   %input_view = buffer.view %input_noalias[%base] : buffer -> view<4xf32, #dense>
   %loaded = vector.load %input_view[0] : view<4xf32, #dense> -> vector<4xf32>
@@ -235,8 +235,8 @@ low.func.def target(@target) abi(hal_kernel) @f32_uniform_vector_bitops() -> (re
 amdgpu.target<gfx1100> @target
 func.def target(@target) @f32_uniform_vector_binary(%lhs_buffer: buffer, %rhs_buffer: buffer) -> (vector<4xf32>) {
   %base = index.constant 0 : offset
-  %lhs_global = buffer.assume.memory_space %lhs_buffer {memory_space = global} : buffer
-  %rhs_global = buffer.assume.memory_space %rhs_buffer {memory_space = global} : buffer
+  %lhs_global = buffer.assume.memory_space<global> %lhs_buffer : buffer
+  %rhs_global = buffer.assume.memory_space<global> %rhs_buffer : buffer
   %lhs_noalias, %rhs_noalias = buffer.assume.noalias %lhs_global, %rhs_global : buffer, buffer
   %lhs_view = buffer.view %lhs_noalias[%base] : buffer -> view<4xf32, #dense>
   %rhs_view = buffer.view %rhs_noalias[%base] : buffer -> view<4xf32, #dense>
@@ -313,8 +313,8 @@ low.func.def target(@target) abi(hal_kernel) @f32_uniform_vector_binary() -> (re
 amdgpu.target<gfx1100> @target
 func.def target(@target) @f32_uniform_scalar_binary(%lhs_buffer: buffer, %rhs_buffer: buffer) -> (f32) {
   %base = index.constant 0 : offset
-  %lhs_global = buffer.assume.memory_space %lhs_buffer {memory_space = global} : buffer
-  %rhs_global = buffer.assume.memory_space %rhs_buffer {memory_space = global} : buffer
+  %lhs_global = buffer.assume.memory_space<global> %lhs_buffer : buffer
+  %rhs_global = buffer.assume.memory_space<global> %rhs_buffer : buffer
   %lhs_noalias, %rhs_noalias = buffer.assume.noalias %lhs_global, %rhs_global : buffer, buffer
   %lhs_view = buffer.view %lhs_noalias[%base] : buffer -> view<1xf32, #dense>
   %rhs_view = buffer.view %rhs_noalias[%base] : buffer -> view<1xf32, #dense>
@@ -341,9 +341,9 @@ low.func.def target(@target) abi(hal_kernel) @f32_uniform_scalar_binary() -> (re
 amdgpu.target<gfx1100> @target
 func.def target(@target) @f32_uniform_scalar_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (f32) {
   %base = index.constant 0 : offset
-  %a_global = buffer.assume.memory_space %a_buffer {memory_space = global} : buffer
-  %b_global = buffer.assume.memory_space %b_buffer {memory_space = global} : buffer
-  %c_global = buffer.assume.memory_space %c_buffer {memory_space = global} : buffer
+  %a_global = buffer.assume.memory_space<global> %a_buffer : buffer
+  %b_global = buffer.assume.memory_space<global> %b_buffer : buffer
+  %c_global = buffer.assume.memory_space<global> %c_buffer : buffer
   %a_noalias, %b_noalias, %c_noalias = buffer.assume.noalias %a_global, %b_global, %c_global : buffer, buffer, buffer
   %a_view = buffer.view %a_noalias[%base] : buffer -> view<1xf32, #dense>
   %b_view = buffer.view %b_noalias[%base] : buffer -> view<1xf32, #dense>
@@ -374,9 +374,9 @@ low.func.def target(@target) abi(hal_kernel) @f32_uniform_scalar_fma() -> (reg<a
 amdgpu.target<gfx1100> @target
 func.def target(@target) @f32_uniform_vector_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (vector<4xf32>) {
   %base = index.constant 0 : offset
-  %a_global = buffer.assume.memory_space %a_buffer {memory_space = global} : buffer
-  %b_global = buffer.assume.memory_space %b_buffer {memory_space = global} : buffer
-  %c_global = buffer.assume.memory_space %c_buffer {memory_space = global} : buffer
+  %a_global = buffer.assume.memory_space<global> %a_buffer : buffer
+  %b_global = buffer.assume.memory_space<global> %b_buffer : buffer
+  %c_global = buffer.assume.memory_space<global> %c_buffer : buffer
   %a_noalias, %b_noalias, %c_noalias = buffer.assume.noalias %a_global, %b_global, %c_global : buffer, buffer, buffer
   %a_view = buffer.view %a_noalias[%base] : buffer -> view<4xf32, #dense>
   %b_view = buffer.view %b_noalias[%base] : buffer -> view<4xf32, #dense>

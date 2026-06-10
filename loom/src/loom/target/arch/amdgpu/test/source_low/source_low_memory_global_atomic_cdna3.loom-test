@@ -7,7 +7,7 @@ kernel.def target(@target) @global_atomic_add_f32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xf32, #dense>
   %one = scalar.constant 1.0 : f32
   view.atomic.reduce<addf> %one, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense>
@@ -43,8 +43,8 @@ kernel.def target(@target) @intermediate_block_atomic_output_f32(%partial: buffe
   %lane0 = kernel.workitem.id<x> : index
   %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
   %zero = index.constant 0 : offset
-  %partial_global = buffer.assume.memory_space %partial {memory_space = global} : buffer
-  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %partial_global = buffer.assume.memory_space<global> %partial : buffer
+  %output_global = buffer.assume.memory_space<global> %output : buffer
   %partial_noalias, %output_noalias = buffer.assume.noalias %partial_global, %output_global : buffer, buffer
   %partial_view = buffer.view %partial_noalias[%zero] : buffer -> view<2x4x64xf32, #dense>
   %output_view = buffer.view %output_noalias[%zero] : buffer -> view<4x64xf32, #dense>

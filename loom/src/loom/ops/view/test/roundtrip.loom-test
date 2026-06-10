@@ -26,7 +26,7 @@ func.def @workgroup_scratch_view(%bytes: offset) {
 // establish a concrete memory space.
 func.def @global_arg_view(%buffer: buffer, %offset: offset) {
   %layout = encoding.layout.dense : encoding<layout>
-  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %buffer : buffer
   %view = buffer.view %global[%offset] : buffer -> view<16xf32, %layout>
   test.use %view : view<16xf32, %layout>
   func.return

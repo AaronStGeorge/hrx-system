@@ -34,10 +34,10 @@ kernel.def target(@target) @mlp_down_projection_residual_bf16(%rows: index, %inp
   %input_base = index.assume %input_base0 [mul(%input_base0, 32)] : index
 
   %zero_vector = vector.constant 0.0 : vector<2xf32>
-  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
-  %down_weight_global = buffer.assume.memory_space %down_weight {memory_space = global} : buffer
-  %residual_global = buffer.assume.memory_space %residual {memory_space = global} : buffer
-  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %down_weight_global = buffer.assume.memory_space<global> %down_weight : buffer
+  %residual_global = buffer.assume.memory_space<global> %residual : buffer
+  %output_global = buffer.assume.memory_space<global> %output : buffer
   %input_noalias, %down_weight_noalias, %residual_noalias, %output_noalias = buffer.assume.noalias %input_global, %down_weight_global, %residual_global, %output_global : buffer, buffer, buffer, buffer
   %input_view = buffer.view %input_noalias[%base] : buffer -> view<18944xf32, #dense>
   %down_weight_view = buffer.view %down_weight_noalias[%base] : buffer -> view<[%row_count]x18944xbf16, #dense>

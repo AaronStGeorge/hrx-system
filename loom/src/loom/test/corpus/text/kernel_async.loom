@@ -6,7 +6,7 @@ func.def @kernel_async(%source_buffer: buffer, %byte_offset: offset) {
   %d0 = vector.splat %i32_zero : vector<4xi32>
   %d1 = vector.splat %i32_zero : vector<8xi32>
   %desc = kernel.tensor.lds.descriptor dgroups(%d0, %d1) : vector<4xi32>, vector<8xi32> -> kernel.tensor.lds.descriptor
-  %global = buffer.assume.memory_space %source_buffer {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %source_buffer : buffer
   %source = buffer.view %global[%byte_offset] : buffer -> view<64x64xf32, %layout>
   %scratch = buffer.alloca %bytes {base_alignment = 256, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<64x64xf32, %layout>

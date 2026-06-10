@@ -42,7 +42,7 @@ func.def @buffer_alloca_rejects_global_memory_space(%size: offset) {
 
 func.def @buffer_assume_rejects_unknown_memory_space(%buffer: buffer) {
   // ERROR@+1: STRUCTURE/014 "memory_space" "0" "concrete memory space"
-  %scratch = buffer.assume.memory_space %buffer {memory_space = unknown} : buffer
+  %scratch = buffer.assume.memory_space<unknown> %buffer : buffer
   func.return
 }
 
@@ -51,7 +51,7 @@ func.def @buffer_assume_rejects_unknown_memory_space(%buffer: buffer) {
 func.def @buffer_assume_rejects_contradictory_memory_space(%size: offset) {
   %scratch = buffer.alloca %size {base_alignment = 64, memory_space = workgroup} : buffer
   // ERROR@+1: STRUCTURE/014 "memory_space" "3" "existing memory-space fact 2"
-  %private = buffer.assume.memory_space %scratch {memory_space = private} : buffer
+  %private = buffer.assume.memory_space<private> %scratch : buffer
   func.return
 }
 

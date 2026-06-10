@@ -7,7 +7,7 @@ kernel.def @async_gather_dword(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source_base = buffer.view %global[%zero] : buffer -> view<64x4xi8, #dense>
   %source = view.subview %source_base[%tid, 0] : view<64x4xi8, #dense> -> view<1x4xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -27,7 +27,7 @@ kernel.def @async_gather_b128(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source_base = buffer.view %global[%zero] : buffer -> view<64x16xi8, #dense>
   %source = view.subview %source_base[%tid, 0] : view<64x16xi8, #dense> -> view<1x16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -47,7 +47,7 @@ kernel.def @async_gather_two_stage(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source_base = buffer.view %global[%zero] : buffer -> view<64x1x16xi8, #dense>
   %source = view.subview %source_base[%tid, 0, 0] : view<64x1x16xi8, #dense> -> view<1x1x16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -72,7 +72,7 @@ kernel.def @async_gather_multi_packet_newer_group(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 3072 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source_base = buffer.view %global[%zero] : buffer -> view<64x1x16xi8, #dense>
   %source = view.subview %source_base[%tid, 0, 0] : view<64x1x16xi8, #dense> -> view<1x1x16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -100,7 +100,7 @@ kernel.def @async_gather_second_lds_slot(%input: buffer) {
   %zero = index.constant 0 : offset
   %pad_bytes = index.constant 256 : offset
   %scratch_bytes = index.constant 1024 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source_base = buffer.view %global[%zero] : buffer -> view<64x16xi8, #dense>
   %source = view.subview %source_base[%tid, 0] : view<64x16xi8, #dense> -> view<1x16xi8, #dense>
   %pad = buffer.alloca %pad_bytes {base_alignment = 16, memory_space = workgroup} : buffer

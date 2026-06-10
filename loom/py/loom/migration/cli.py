@@ -109,11 +109,10 @@ def _resolve_paths(args: argparse.Namespace) -> tuple[Path, ...]:
         raise _UsageError("expected input file or --root")
     if not input_path.exists():
         raise _UsageError(f"input file does not exist: {input_path}")
-    if (
-        args.output is not None
-        and classify_file(input_path) != MigrationFileKind.LOOM_SOURCE
+    if args.output is not None and not _is_text_migration_kind(
+        classify_file(input_path)
     ):
-        raise _UsageError("--output can only be used with a .loom source input")
+        raise _UsageError("--output can only be used with a Loom text input")
     return (input_path,)
 
 
@@ -139,7 +138,7 @@ def _with_check_diagnostics(run_result: MigrationRunResult) -> MigrationRunResul
 def _write_in_place(run_result: MigrationRunResult) -> None:
     for file_result in run_result.files:
         if (
-            file_result.kind == MigrationFileKind.LOOM_SOURCE
+            _is_text_migration_kind(file_result.kind)
             and file_result.changed
             and file_result.text is not None
         ):
@@ -150,8 +149,8 @@ def _write_output(run_result: MigrationRunResult, output_path: Path) -> None:
     if len(run_result.files) != 1:
         raise _UsageError("--output can only be used with one input file")
     file_result = run_result.files[0]
-    if file_result.kind != MigrationFileKind.LOOM_SOURCE:
-        raise _UsageError("--output can only be used with a .loom source input")
+    if not _is_text_migration_kind(file_result.kind):
+        raise _UsageError("--output can only be used with a Loom text input")
     if file_result.text is not None:
         output_path.write_text(file_result.text, encoding="utf-8")
 
@@ -180,7 +179,11 @@ def _should_print_source(
         return False
     if len(run_result.files) != 1 or not run_result.ok:
         return False
-    return run_result.files[0].kind == MigrationFileKind.LOOM_SOURCE
+    return _is_text_migration_kind(run_result.files[0].kind)
+
+
+def _is_text_migration_kind(kind: MigrationFileKind) -> bool:
+    return kind in (MigrationFileKind.LOOM_SOURCE, MigrationFileKind.LOOM_TEST)
 
 
 class _UsageError(ValueError):
