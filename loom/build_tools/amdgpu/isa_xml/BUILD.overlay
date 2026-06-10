@@ -10,9 +10,14 @@ package(
 )
 
 exports_files([
+    "amdgpu_isa_cdna1.xml",
+    "amdgpu_isa_cdna2.xml",
     "amdgpu_isa_cdna3.xml",
     "amdgpu_isa_cdna4.xml",
+    "amdgpu_isa_rdna1.xml",
+    "amdgpu_isa_rdna2.xml",
     "amdgpu_isa_rdna3.xml",
+    "amdgpu_isa_rdna3_5.xml",
     "amdgpu_isa_rdna4.xml",
 ])
 
