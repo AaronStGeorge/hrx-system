@@ -364,7 +364,8 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
           device->identifier, device->params.stream_tracing,
           &device->block_pool, host_allocator,
           &device->devices[i].tracing_context);
-      status = IREE_HIP_CALL_TO_STATUS(symbols, hipCtxPopCurrent(NULL));
+      status = iree_status_join(
+          status, IREE_HIP_CALL_TO_STATUS(symbols, hipCtxPopCurrent(NULL)));
       if (!iree_status_is_ok(status)) {
         break;
       }
@@ -2340,30 +2341,33 @@ static iree_status_t iree_hal_hip_device_make_queue_read_callback_data(
       (void*)((uint8_t*)callback_data + sizeof(*callback_data)),
       &callback_data->base);
 
-  if (iree_status_is_ok(status)) {
-    uint64_t* chunk_base =
-        (void*)((uint8_t*)callback_data + sizeof(*callback_data) +
-                additional_data_for_base);
-    iree_hal_command_buffer_t** command_buffer_base =
-        (iree_hal_command_buffer_t**)((uint8_t*)chunk_base +
-                                      sizeof(*callback_data->read_chunk_sizes) *
-                                          chunk_count);
-    callback_data->source_file = source_file;
-    callback_data->source_offset = source_offset;
-    callback_data->target_buffer = target_buffer;
-    iree_hal_resource_retain(target_buffer);
-    iree_hal_file_retain(source_file);
-    callback_data->target_offset = target_offset;
-    callback_data->length = length;
-    callback_data->flags = flags;
-    callback_data->read_chunks_completed = 0;
-    callback_data->num_read_chunks = chunk_count;
-    callback_data->read_chunk_sizes = chunk_base;
-    callback_data->command_buffers = command_buffer_base;
+  if (!iree_status_is_ok(status)) {
+    iree_allocator_free(host_allocator, callback_data);
+    IREE_TRACE_ZONE_END(z0);
+    return status;
   }
+  uint64_t* chunk_base =
+      (void*)((uint8_t*)callback_data + sizeof(*callback_data) +
+              additional_data_for_base);
+  iree_hal_command_buffer_t** command_buffer_base =
+      (iree_hal_command_buffer_t**)((uint8_t*)chunk_base +
+                                    sizeof(*callback_data->read_chunk_sizes) *
+                                        chunk_count);
+  callback_data->source_file = source_file;
+  callback_data->source_offset = source_offset;
+  callback_data->target_buffer = target_buffer;
+  iree_hal_resource_retain(target_buffer);
+  iree_hal_file_retain(source_file);
+  callback_data->target_offset = target_offset;
+  callback_data->length = length;
+  callback_data->flags = flags;
+  callback_data->read_chunks_completed = 0;
+  callback_data->num_read_chunks = chunk_count;
+  callback_data->read_chunk_sizes = chunk_base;
+  callback_data->command_buffers = command_buffer_base;
   *out_data = callback_data;
   IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
+  return status;
 }
 
 static iree_status_t iree_hal_hip_device_queue_read(

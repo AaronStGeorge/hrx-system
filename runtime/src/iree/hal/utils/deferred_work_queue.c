@@ -263,8 +263,9 @@ static void iree_hal_deferred_work_queue_ready_action_list_initialize(
 
 // Ready action entry struct.
 typedef struct iree_hal_deferred_work_queue_completion_list_node_t {
-  // The callback and user data for that callback. To be called
-  // when the associated event has completed.
+  // The callback and user data for that callback. To be called when the
+  // associated event has completed. The status passed to the callback is
+  // borrowed and must not be consumed by the callback.
   iree_status_t (*callback)(iree_status_t, void* user_data);
   void* user_data;
   // The event to wait for on the completion thread.
@@ -554,6 +555,7 @@ iree_status_t iree_hal_deferred_work_queue_create(
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_allocator_malloc(host_allocator, sizeof(*actions),
                                 (void**)&actions));
+  memset(actions, 0, sizeof(*actions));
   actions->host_allocator = host_allocator;
   actions->block_pool = block_pool;
   actions->device_interface = device_interface;
@@ -596,7 +598,7 @@ iree_status_t iree_hal_deferred_work_queue_create(
   }
 
   IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
+  return status;
 }
 
 static iree_hal_deferred_work_queue_t* iree_hal_deferred_work_queue_cast(
@@ -681,8 +683,6 @@ static void iree_hal_deferred_work_queue_action_destroy(
   iree_hal_resource_set_free(action->resource_set);
 
   iree_hal_deferred_work_queue_action_clear_events(action);
-
-  iree_hal_resource_release(actions);
 
   iree_allocator_free(host_allocator, action);
 
@@ -1392,9 +1392,6 @@ iree_status_t iree_hal_deferred_work_queue_issue(
               "exceeded maximum queue action wait event limit");
           action->device_interface->vtable->release_wait_event(
               action->device_interface, wait_event);
-          if (iree_status_is_ok(actions->status)) {
-            actions->status = status;
-          }
           iree_hal_deferred_work_queue_action_fail_locked(action, status);
           break;
         }
@@ -1607,8 +1604,8 @@ static void iree_hal_deferred_work_queue_worker_process_completion(
     }
 
     if (entry->callback) {
-      status =
-          iree_status_join(status, entry->callback(status, entry->user_data));
+      iree_status_t callback_status = entry->callback(status, entry->user_data);
+      status = iree_status_join(status, callback_status);
     }
 
     if (IREE_UNLIKELY(entry->created_event)) {

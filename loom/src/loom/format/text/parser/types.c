@@ -165,7 +165,7 @@ iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
 
     uint32_t errors_before = parser->error_count;
     iree_status_t status = loom_parse_encoding_params(parser, params_scratch);
-    if (parser->error_count > errors_before) {
+    if (iree_status_is_ok(status) && parser->error_count > errors_before) {
       loom_parser_release_encoding_params(parser, params_scratch);
       return iree_ok_status();
     }

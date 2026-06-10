@@ -267,7 +267,7 @@ IREE_API_EXPORT iree_status_t iree_io_file_contents_read(
   // Attempt to read the file into memory, chunking into ~2GB segments.
   // Several implementations of read have limits at ~2GB even on 64-bit systems.
   iree_host_size_t bytes_read = 0;
-  while (bytes_read < file_size) {
+  while (iree_status_is_ok(status) && bytes_read < file_size) {
     const iree_host_size_t chunk_size =
         iree_min(file_size - bytes_read, INT_MAX);
     if (fread(contents->buffer.data + bytes_read, 1, chunk_size, file) !=

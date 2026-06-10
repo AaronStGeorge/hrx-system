@@ -1667,7 +1667,7 @@ static iree_status_t iree_hal_replay_device_queue_dispatch(
         device->recorder, signal_semaphore_list, device->host_allocator,
         &signal_payloads, &signal_payloads_size);
   }
-  if (bindings.count) {
+  if (iree_status_is_ok(status) && bindings.count) {
     iree_host_size_t binding_storage_size = 0;
     iree_host_size_t temporary_buffers_size = 0;
     if (IREE_UNLIKELY(!iree_host_size_checked_mul(bindings.count,
@@ -1788,7 +1788,7 @@ static iree_status_t iree_hal_replay_device_queue_execute(
         device->recorder, signal_semaphore_list, device->host_allocator,
         &signal_payloads, &signal_payloads_size);
   }
-  if (binding_table.count) {
+  if (iree_status_is_ok(status) && binding_table.count) {
     iree_host_size_t binding_storage_size = 0;
     iree_host_size_t temporary_buffers_size = 0;
     if (IREE_UNLIKELY(!iree_host_size_checked_mul(binding_table.count,

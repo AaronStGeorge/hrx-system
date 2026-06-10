@@ -389,8 +389,10 @@ TEST(StatusToString, SinglePass) {
   iree_allocator_t allocator = iree_allocator_system();
   char* buffer = NULL;
   iree_host_size_t buffer_length = 0;
-  ASSERT_TRUE(
-      iree_status_to_string(status, &allocator, &buffer, &buffer_length));
+  const bool converted =
+      iree_status_to_string(status, &allocator, &buffer, &buffer_length);
+  iree_status_free(status);
+  ASSERT_TRUE(converted);
   std::string result(buffer, buffer_length);
   EXPECT_THAT(result, HasSubstr("INTERNAL"));
   EXPECT_THAT(result, HasSubstr("error 42"));
@@ -398,7 +400,6 @@ TEST(StatusToString, SinglePass) {
   // Verify NUL termination.
   EXPECT_EQ(buffer[buffer_length], '\0');
   iree_allocator_free(allocator, buffer);
-  iree_status_free(status);
 }
 
 #endif  // has IREE_STATUS_FEATURE_ANNOTATIONS

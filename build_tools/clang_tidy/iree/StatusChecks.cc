@@ -6,21 +6,35 @@
 
 #include "iree/StatusChecks.h"
 
+#include <optional>
+
+#include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/Stmt.h"
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 namespace clang::tidy::iree {
 namespace {
 
 bool IsNamedTypedef(QualType Type, StringRef Name) {
-  Type = Type.getLocalUnqualifiedType();
   if (Type.isNull()) {
     return false;
   }
+  Type = Type.getNonReferenceType();
+  if (Type.isNull() || Type->isDependentType()) {
+    return false;
+  }
+  Type = Type.getLocalUnqualifiedType();
   const auto* Typedef = Type->getAs<TypedefType>();
   return Typedef && Typedef->getDecl()->getName() == Name;
+}
+
+bool IsStatusType(QualType Type) {
+  return IsNamedTypedef(Type, "iree_status_t");
 }
 
 QualType ReturnTypeFromCalleeExpr(const Expr* Callee) {
@@ -67,6 +81,1062 @@ bool IsAllowedExplicitStatusConsumer(const CallExpr* Call) {
   return CalleeName(Call) == "iree_status_ignore";
 }
 
+bool IsMacroStatusTemporary(const VarDecl* Var) {
+  if (!Var) {
+    return false;
+  }
+  return Var->getName().starts_with("__status_") &&
+         Var->getLocation().isMacroID();
+}
+
+const Expr* IgnoreExprNoise(const Expr* Expr) {
+  while (Expr) {
+    Expr = Expr->IgnoreParenImpCasts();
+    if (const auto* Cleanups = dyn_cast<ExprWithCleanups>(Expr)) {
+      Expr = Cleanups->getSubExpr();
+      continue;
+    }
+    if (const auto* Materialized = dyn_cast<MaterializeTemporaryExpr>(Expr)) {
+      Expr = Materialized->getSubExpr();
+      continue;
+    }
+    break;
+  }
+  return Expr;
+}
+
+const VarDecl* ReferencedStatusLocal(const Expr* Expr) {
+  Expr = IgnoreExprNoise(Expr);
+  const auto* Ref = dyn_cast_or_null<DeclRefExpr>(Expr);
+  if (!Ref) {
+    return nullptr;
+  }
+  const auto* Var = dyn_cast<VarDecl>(Ref->getDecl());
+  if (!Var || !Var->hasLocalStorage() || IsMacroStatusTemporary(Var) ||
+      !IsStatusType(Var->getType())) {
+    return nullptr;
+  }
+  return Var->getCanonicalDecl();
+}
+
+const VarDecl* ReferencedStatusLocalThroughCasts(const Expr* Expr) {
+  Expr = IgnoreExprNoise(Expr);
+  while (const auto* Cast = dyn_cast_or_null<CastExpr>(Expr)) {
+    Expr = IgnoreExprNoise(Cast->getSubExpr());
+  }
+  return ReferencedStatusLocal(Expr);
+}
+
+const VarDecl* ForwardedStatusLocal(const Expr* Expr) {
+  if (const VarDecl* Var = ReferencedStatusLocal(Expr)) {
+    return Var;
+  }
+  Expr = IgnoreExprNoise(Expr);
+  if (const auto* Call = dyn_cast_or_null<CallExpr>(Expr);
+      Call && CalleeName(Call) == "move" && Call->getNumArgs() == 1) {
+    return ForwardedStatusLocal(Call->getArg(0));
+  }
+  return nullptr;
+}
+
+const VarDecl* ForwardedStatusLocalThroughCasts(const Expr* Expr) {
+  Expr = IgnoreExprNoise(Expr);
+  while (const auto* Cast = dyn_cast_or_null<CastExpr>(Expr)) {
+    Expr = IgnoreExprNoise(Cast->getSubExpr());
+  }
+  return ForwardedStatusLocal(Expr);
+}
+
+bool IsStatusObserver(StringRef Name) {
+  return Name == "iree_status_code" || Name == "iree_status_is_ok" ||
+         Name.starts_with("iree_status_is_") || Name == "iree_status_format" ||
+         Name == "iree_status_format_to" || Name == "iree_status_to_string" ||
+         Name == "iree_status_fprint" ||
+         Name == "iree_status_source_location" ||
+         Name == "iree_status_message" ||
+         Name == "iree_status_enumerate_payloads";
+}
+
+bool IsKnownStatusNoOwnerProducer(StringRef Name) {
+  return Name == "iree_ok_status" || Name == "iree_status_from_code" ||
+         Name == "iree_status_ignore" ||
+         Name == "iree_async_socket_query_failure";
+}
+
+bool IsKnownStatusConsumer(StringRef Name) {
+  return Name == "iree_status_free" || Name == "iree_status_ignore" ||
+         Name == "iree_status_consume_code" || Name == "iree_status_abort" ||
+         Name == "ConsumeForTest" || Name == "StatusToStringAndFree";
+}
+
+std::optional<unsigned> KnownStatusSinkArgument(StringRef Name) {
+  if (Name == "iree_async_proactor_io_uring_push_software_completion") {
+    return 2;
+  }
+  return std::nullopt;
+}
+
+bool IsKnownStatusTransferProducer(StringRef Name) {
+  return Name == "iree_status_annotate" || Name == "iree_status_annotate_f" ||
+         Name == "iree_status_freeze" || Name == "iree_status_join";
+}
+
+bool IsKnownStatusClone(StringRef Name) { return Name == "iree_status_clone"; }
+
+bool IsNoReturnStatusConsumer(StringRef Name) {
+  return Name == "iree_status_abort";
+}
+
+std::optional<std::pair<const VarDecl*, bool>> CompareExchangeStatusCondition(
+    const Expr* Condition) {
+  Condition = IgnoreExprNoise(Condition);
+  if (!Condition) {
+    return std::nullopt;
+  }
+  if (const auto* Unary = dyn_cast<UnaryOperator>(Condition);
+      Unary && Unary->getOpcode() == UO_LNot) {
+    if (auto Inner = CompareExchangeStatusCondition(Unary->getSubExpr())) {
+      return std::make_pair(Inner->first, !Inner->second);
+    }
+  }
+  if (const auto* Atomic = dyn_cast<AtomicExpr>(Condition);
+      Atomic && Atomic->isCmpXChg()) {
+    if (const VarDecl* Var =
+            ForwardedStatusLocalThroughCasts(Atomic->getVal2())) {
+      return std::make_pair(Var, true);
+    }
+  }
+  if (const auto* Call = dyn_cast<CallExpr>(Condition);
+      Call && Call->getNumArgs() >= 3 &&
+      CalleeName(Call).contains("compare_exchange")) {
+    if (const VarDecl* Var =
+            ForwardedStatusLocalThroughCasts(Call->getArg(2))) {
+      return std::make_pair(Var, true);
+    }
+  }
+  return std::nullopt;
+}
+
+bool IsNoReturnCall(const CallExpr* Call) {
+  if (const FunctionDecl* Callee = Call->getDirectCallee()) {
+    if (Callee->isNoReturn()) {
+      return true;
+    }
+  }
+  StringRef Name = CalleeName(Call);
+  return Name == "abort" || Name == "_Exit" || Name == "exit" ||
+         Name == "quick_exit" || Name == "__builtin_abort" ||
+         Name == "__builtin_trap" || Name == "iree_abort";
+}
+
+struct StatusValue {
+  bool IsStatus = false;
+  bool MayOwn = false;
+  bool Unknown = false;
+  SourceLocation Location;
+
+  static StatusValue NonStatus() { return StatusValue(); }
+
+  static StatusValue NoOwner(SourceLocation Location = SourceLocation()) {
+    StatusValue Value;
+    Value.IsStatus = true;
+    Value.Location = Location;
+    return Value;
+  }
+
+  static StatusValue Owned(SourceLocation Location) {
+    StatusValue Value;
+    Value.IsStatus = true;
+    Value.MayOwn = true;
+    Value.Location = Location;
+    return Value;
+  }
+
+  static StatusValue UnknownStatus(SourceLocation Location = SourceLocation()) {
+    StatusValue Value;
+    Value.IsStatus = true;
+    Value.Unknown = true;
+    Value.Location = Location;
+    return Value;
+  }
+};
+
+struct VariableState {
+  bool MayOwn = false;
+  bool MayBeConsumed = false;
+  bool Unknown = false;
+  SourceLocation OwnershipLocation;
+  SourceLocation ConsumeLocation;
+
+  static VariableState NoOwner() { return VariableState(); }
+
+  static VariableState Owned(SourceLocation Location) {
+    VariableState State;
+    State.MayOwn = true;
+    State.OwnershipLocation = Location;
+    return State;
+  }
+
+  static VariableState UnknownState() {
+    VariableState State;
+    State.Unknown = true;
+    return State;
+  }
+};
+
+struct AnalysisState {
+  llvm::DenseMap<const VarDecl*, VariableState> Variables;
+  bool Terminal = false;
+};
+
+VariableState MergeVariableState(const VariableState& Lhs,
+                                 const VariableState& Rhs) {
+  if (Lhs.Unknown || Rhs.Unknown) {
+    return VariableState::UnknownState();
+  }
+  VariableState Result;
+  Result.MayOwn = Lhs.MayOwn || Rhs.MayOwn;
+  Result.MayBeConsumed = Lhs.MayBeConsumed || Rhs.MayBeConsumed;
+  Result.OwnershipLocation = Lhs.OwnershipLocation.isValid()
+                                 ? Lhs.OwnershipLocation
+                                 : Rhs.OwnershipLocation;
+  Result.ConsumeLocation =
+      Lhs.ConsumeLocation.isValid() ? Lhs.ConsumeLocation : Rhs.ConsumeLocation;
+  return Result;
+}
+
+AnalysisState MergeStates(const AnalysisState& Lhs, const AnalysisState& Rhs) {
+  if (Lhs.Terminal) {
+    return Rhs;
+  }
+  if (Rhs.Terminal) {
+    return Lhs;
+  }
+  AnalysisState Result = Lhs;
+  for (const auto& [Var, RhsState] : Rhs.Variables) {
+    auto It = Result.Variables.find(Var);
+    if (It == Result.Variables.end()) {
+      Result.Variables[Var] = RhsState;
+    } else {
+      It->second = MergeVariableState(It->second, RhsState);
+    }
+  }
+  return Result;
+}
+
+class StatusRefCollector {
+ public:
+  void collect(const Stmt* Statement) {
+    if (!Statement) {
+      return;
+    }
+    if (const auto* ExprStatement = dyn_cast<Expr>(Statement)) {
+      if (const VarDecl* Var = ReferencedStatusLocal(ExprStatement)) {
+        Variables_.insert(Var);
+      }
+    }
+    for (const Stmt* Child : Statement->children()) {
+      collect(Child);
+    }
+  }
+
+  const llvm::SmallPtrSetImpl<const VarDecl*>& variables() const {
+    return Variables_;
+  }
+
+ private:
+  llvm::SmallPtrSet<const VarDecl*, 8> Variables_;
+};
+
+class GotoFinder {
+ public:
+  bool containsGoto(const Stmt* Statement) {
+    if (!Statement) {
+      return false;
+    }
+    if (isa<GotoStmt>(Statement) || isa<IndirectGotoStmt>(Statement)) {
+      return true;
+    }
+    for (const Stmt* Child : Statement->children()) {
+      if (containsGoto(Child)) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
+class StatusLifetimeAnalyzer {
+ public:
+  StatusLifetimeAnalyzer(StatusLifetimeCheck& Check, ASTContext& Context)
+      : Check_(Check), Context_(Context) {}
+
+  void analyzeFunction(const FunctionDecl* Function) {
+    const Stmt* Body = Function->getBody();
+    if (!Body) {
+      return;
+    }
+    GotoFinder Finder;
+    if (Finder.containsGoto(Body)) {
+      return;
+    }
+    AnalysisState State;
+    analyzeStatement(Body, State, /*is_function_body=*/true);
+  }
+
+ private:
+  void diagnoseUseAfterConsume(const VarDecl* Var, SourceLocation Location,
+                               const VariableState& State) {
+    if (State.ConsumeLocation.isValid()) {
+      Check_.diag(Location,
+                  "iree_status_t %0 is used after its ownership was consumed "
+                  "or transferred here")
+          << Var << State.ConsumeLocation;
+    } else {
+      Check_.diag(Location,
+                  "iree_status_t %0 is used after its ownership was consumed "
+                  "or transferred")
+          << Var;
+    }
+  }
+
+  void diagnoseDoubleConsume(const VarDecl* Var, SourceLocation Location,
+                             const VariableState& State) {
+    if (State.ConsumeLocation.isValid()) {
+      Check_.diag(Location,
+                  "iree_status_t %0 is consumed more than once; previous "
+                  "consume or transfer was here")
+          << Var << State.ConsumeLocation;
+    } else {
+      Check_.diag(Location, "iree_status_t %0 is consumed more than once")
+          << Var;
+    }
+  }
+
+  void diagnoseLeak(const VarDecl* Var, SourceLocation Location,
+                    const VariableState& State) {
+    if (!State.MayOwn || State.Unknown) {
+      return;
+    }
+    SourceLocation DiagnosticLocation =
+        Location.isValid() ? Location : State.OwnershipLocation;
+    if (State.OwnershipLocation.isValid() &&
+        State.OwnershipLocation != DiagnosticLocation) {
+      Check_.diag(DiagnosticLocation,
+                  "iree_status_t %0 may leave scope without being returned, "
+                  "stored, or consumed; ownership was acquired here")
+          << Var << State.OwnershipLocation;
+    } else {
+      Check_.diag(DiagnosticLocation,
+                  "iree_status_t %0 may leave scope without being returned, "
+                  "stored, or consumed")
+          << Var;
+    }
+  }
+
+  VariableState* findState(const VarDecl* Var, AnalysisState& State) {
+    if (!Var) {
+      return nullptr;
+    }
+    auto It = State.Variables.find(Var->getCanonicalDecl());
+    return It == State.Variables.end() ? nullptr : &It->second;
+  }
+
+  const VariableState* findState(const VarDecl* Var,
+                                 const AnalysisState& State) {
+    if (!Var) {
+      return nullptr;
+    }
+    auto It = State.Variables.find(Var->getCanonicalDecl());
+    return It == State.Variables.end() ? nullptr : &It->second;
+  }
+
+  void useVariable(const VarDecl* Var, SourceLocation Location,
+                   AnalysisState& State) {
+    VariableState* VarState = findState(Var, State);
+    if (!VarState || VarState->Unknown) {
+      return;
+    }
+    if (VarState->MayBeConsumed) {
+      diagnoseUseAfterConsume(Var, Location, *VarState);
+    }
+  }
+
+  void consumeVariable(const VarDecl* Var, SourceLocation Location,
+                       AnalysisState& State) {
+    VariableState* VarState = findState(Var, State);
+    if (!VarState || VarState->Unknown) {
+      return;
+    }
+    if (VarState->MayBeConsumed) {
+      diagnoseDoubleConsume(Var, Location, *VarState);
+    }
+    if (VarState->MayOwn) {
+      VarState->MayOwn = false;
+      VarState->MayBeConsumed = true;
+      VarState->ConsumeLocation = Location;
+    }
+  }
+
+  void storeVariable(const VarDecl* Var, SourceLocation Location,
+                     AnalysisState& State) {
+    consumeVariable(Var, Location, State);
+  }
+
+  StatusValue statusValueForVariable(const VarDecl* Var,
+                                     SourceLocation Location,
+                                     const AnalysisState& State) {
+    if (const VariableState* VarState = findState(Var, State)) {
+      if (VarState->Unknown) {
+        return StatusValue::UnknownStatus(Location);
+      }
+      return VarState->MayOwn ? StatusValue::Owned(Location)
+                              : StatusValue::NoOwner(Location);
+    }
+    return StatusValue::UnknownStatus(Location);
+  }
+
+  void setVariableFromStatusValue(const VarDecl* Var, const StatusValue& Value,
+                                  SourceLocation Location,
+                                  AnalysisState& State) {
+    if (!Var) {
+      return;
+    }
+    if (!Value.IsStatus) {
+      State.Variables[Var] = VariableState::UnknownState();
+      return;
+    }
+    if (Value.Unknown) {
+      State.Variables[Var] = VariableState::UnknownState();
+      return;
+    }
+    if (Value.MayOwn) {
+      State.Variables[Var] = VariableState::Owned(
+          Value.Location.isValid() ? Value.Location : Location);
+      return;
+    }
+    State.Variables[Var] = VariableState::NoOwner();
+  }
+
+  void diagnoseOutstandingStatus(AnalysisState& State,
+                                 SourceLocation Location) {
+    for (const auto& [Var, VarState] : State.Variables) {
+      diagnoseLeak(Var, Location, VarState);
+    }
+  }
+
+  void eraseVariables(ArrayRef<const VarDecl*> Vars, AnalysisState& State) {
+    for (const VarDecl* Var : Vars) {
+      State.Variables.erase(Var);
+    }
+  }
+
+  void markLoopTouchedVariablesUnknown(const Stmt* Statement,
+                                       AnalysisState& State) {
+    StatusRefCollector Collector;
+    Collector.collect(Statement);
+    for (const VarDecl* Var : Collector.variables()) {
+      if (findState(Var, State)) {
+        State.Variables[Var] = VariableState::UnknownState();
+      }
+    }
+  }
+
+  void analyzeStatement(const Stmt* Statement, AnalysisState& State,
+                        bool is_function_body = false) {
+    if (!Statement || State.Terminal) {
+      return;
+    }
+    if (const auto* Compound = dyn_cast<CompoundStmt>(Statement)) {
+      analyzeCompound(Compound, State, is_function_body);
+      return;
+    }
+    if (const auto* Decl = dyn_cast<DeclStmt>(Statement)) {
+      analyzeDeclStatement(Decl, State);
+      return;
+    }
+    if (const auto* Return = dyn_cast<ReturnStmt>(Statement)) {
+      analyzeReturn(Return, State);
+      return;
+    }
+    if (const auto* If = dyn_cast<IfStmt>(Statement)) {
+      analyzeIf(If, State);
+      return;
+    }
+    if (isa<BreakStmt>(Statement) || isa<ContinueStmt>(Statement)) {
+      State.Terminal = true;
+      return;
+    }
+    if (const auto* For = dyn_cast<ForStmt>(Statement)) {
+      analyzeFor(For, State);
+      return;
+    }
+    if (const auto* While = dyn_cast<WhileStmt>(Statement)) {
+      analyzeWhile(While, State);
+      return;
+    }
+    if (isa<DoStmt>(Statement) || isa<SwitchStmt>(Statement)) {
+      AnalysisState InnerState = State;
+      for (const Stmt* Child : Statement->children()) {
+        analyzeStatement(Child, InnerState);
+      }
+      markLoopTouchedVariablesUnknown(Statement, State);
+      return;
+    }
+    if (const auto* ExprStatement = dyn_cast<Expr>(Statement)) {
+      StatusValue Value = analyzeExpression(ExprStatement, State);
+      (void)Value;
+      return;
+    }
+    for (const Stmt* Child : Statement->children()) {
+      analyzeStatement(Child, State);
+    }
+  }
+
+  void analyzeCompound(const CompoundStmt* Compound, AnalysisState& State,
+                       bool is_function_body) {
+    SmallVector<const VarDecl*, 8> BlockVariables;
+    for (const Stmt* Child : Compound->body()) {
+      if (State.Terminal) {
+        break;
+      }
+      if (const auto* DeclarationStatement = dyn_cast<DeclStmt>(Child)) {
+        for (const Decl* D : DeclarationStatement->decls()) {
+          if (const auto* Var = dyn_cast<VarDecl>(D);
+              Var && Var->hasLocalStorage() && !IsMacroStatusTemporary(Var) &&
+              IsStatusType(Var->getType())) {
+            BlockVariables.push_back(Var->getCanonicalDecl());
+          }
+        }
+      }
+      analyzeStatement(Child, State);
+    }
+    if (!State.Terminal) {
+      if (is_function_body) {
+        diagnoseOutstandingStatus(State, Compound->getEndLoc());
+      } else {
+        for (const VarDecl* Var : BlockVariables) {
+          if (const VariableState* VarState = findState(Var, State)) {
+            diagnoseLeak(Var, Compound->getEndLoc(), *VarState);
+          }
+        }
+      }
+    }
+    if (!is_function_body) {
+      eraseVariables(BlockVariables, State);
+    }
+  }
+
+  void analyzeDeclStatement(const DeclStmt* DeclStatement,
+                            AnalysisState& State) {
+    for (const Decl* D : DeclStatement->decls()) {
+      const auto* Var = dyn_cast<VarDecl>(D);
+      if (!Var || !Var->hasLocalStorage()) {
+        continue;
+      }
+      if (!IsStatusType(Var->getType())) {
+        if (Var->hasInit()) {
+          analyzeExpression(Var->getInit(), State);
+        }
+        continue;
+      }
+      if (IsMacroStatusTemporary(Var)) {
+        if (Var->hasInit()) {
+          if (const VarDecl* InitVar = ForwardedStatusLocal(Var->getInit())) {
+            useVariable(InitVar, Var->getInit()->getExprLoc(), State);
+            markKnownOk(InitVar, State);
+          } else {
+            analyzeExpression(Var->getInit(), State);
+          }
+        }
+        continue;
+      }
+      const VarDecl* CanonicalVar = Var->getCanonicalDecl();
+      if (!Var->hasInit()) {
+        State.Variables[CanonicalVar] = VariableState::UnknownState();
+        continue;
+      }
+      StatusValue InitValue =
+          analyzeTransferredExpression(Var->getInit(), State);
+      setVariableFromStatusValue(CanonicalVar, InitValue, Var->getLocation(),
+                                 State);
+    }
+  }
+
+  void analyzeReturn(const ReturnStmt* Return, AnalysisState& State) {
+    if (const Expr* Value = Return->getRetValue()) {
+      StatusValue ReturnValue = analyzeTransferredExpression(Value, State);
+      (void)ReturnValue;
+    }
+    diagnoseOutstandingStatus(State, Return->getBeginLoc());
+    State.Terminal = true;
+  }
+
+  std::optional<std::pair<const VarDecl*, bool>> statusOkCondition(
+      const Expr* Condition) {
+    Condition = IgnoreExprNoise(Condition);
+    if (!Condition) {
+      return std::nullopt;
+    }
+    if (const auto* Unary = dyn_cast<UnaryOperator>(Condition);
+        Unary && Unary->getOpcode() == UO_LNot) {
+      if (auto Inner = statusOkCondition(Unary->getSubExpr())) {
+        return std::make_pair(Inner->first, !Inner->second);
+      }
+      if (const VarDecl* Var = ReferencedStatusLocal(Unary->getSubExpr())) {
+        return std::make_pair(Var, true);
+      }
+    }
+    if (const auto* Call = dyn_cast<CallExpr>(Condition);
+        Call && CalleeName(Call) == "iree_status_is_ok" &&
+        Call->getNumArgs() == 1) {
+      if (const VarDecl* Var = ReferencedStatusLocal(Call->getArg(0))) {
+        return std::make_pair(Var, true);
+      }
+    }
+    if (const auto* Call = dyn_cast<CallExpr>(Condition);
+        Call && CalleeName(Call) == "__builtin_expect" &&
+        Call->getNumArgs() >= 1) {
+      return statusOkCondition(Call->getArg(0));
+    }
+    if (const auto* Binary = dyn_cast<BinaryOperator>(Condition)) {
+      if (Binary->getOpcode() == BO_LAnd) {
+        if (auto LhsCondition = statusOkCondition(Binary->getLHS());
+            LhsCondition && LhsCondition->second) {
+          return LhsCondition;
+        }
+        if (auto RhsCondition = statusOkCondition(Binary->getRHS());
+            RhsCondition && RhsCondition->second) {
+          return RhsCondition;
+        }
+      }
+      if (Binary->getOpcode() == BO_LOr) {
+        if (auto LhsCondition = statusOkCondition(Binary->getLHS());
+            LhsCondition && !LhsCondition->second) {
+          return LhsCondition;
+        }
+        if (auto RhsCondition = statusOkCondition(Binary->getRHS());
+            RhsCondition && !RhsCondition->second) {
+          return RhsCondition;
+        }
+      }
+      if (Binary->getOpcode() == BO_EQ || Binary->getOpcode() == BO_NE) {
+        if (const VarDecl* Var =
+                ReferencedStatusLocalThroughCasts(Binary->getLHS())) {
+          if (isZeroConstant(Binary->getRHS())) {
+            return std::make_pair(Var, Binary->getOpcode() == BO_EQ);
+          }
+        }
+        if (const VarDecl* Var =
+                ReferencedStatusLocalThroughCasts(Binary->getRHS())) {
+          if (isZeroConstant(Binary->getLHS())) {
+            return std::make_pair(Var, Binary->getOpcode() == BO_EQ);
+          }
+        }
+      }
+    }
+    if (const VarDecl* Var = ReferencedStatusLocal(Condition)) {
+      return std::make_pair(Var, false);
+    }
+    return std::nullopt;
+  }
+
+  bool isZeroConstant(const Expr* Expr) {
+    Expr = IgnoreExprNoise(Expr);
+    if (!Expr) {
+      return false;
+    }
+    if (const auto* Literal = dyn_cast<IntegerLiteral>(Expr)) {
+      return Literal->getValue().isZero();
+    }
+    if (const auto* Ref = dyn_cast<DeclRefExpr>(Expr)) {
+      if (const auto* Constant = dyn_cast<EnumConstantDecl>(Ref->getDecl())) {
+        return Constant->getInitVal().isZero();
+      }
+    }
+    Expr::EvalResult Result;
+    if (!Expr->EvaluateAsInt(Result, Context_)) {
+      return false;
+    }
+    return Result.Val.getInt().isZero();
+  }
+
+  void markKnownOk(const VarDecl* Var, AnalysisState& State) {
+    VariableState* VarState = findState(Var, State);
+    if (!VarState || VarState->Unknown) {
+      return;
+    }
+    VarState->MayOwn = false;
+  }
+
+  void analyzeIf(const IfStmt* If, AnalysisState& State) {
+    if (const Stmt* Init = If->getInit()) {
+      analyzeStatement(Init, State);
+    }
+    if (const DeclStmt* ConditionVariable =
+            If->getConditionVariableDeclStmt()) {
+      analyzeDeclStatement(ConditionVariable, State);
+    }
+    analyzeExpression(If->getCond(), State);
+
+    AnalysisState ThenState = State;
+    AnalysisState ElseState = State;
+    if (auto Condition = statusOkCondition(If->getCond())) {
+      const VarDecl* Var = Condition->first;
+      bool TrueMeansOk = Condition->second;
+      if (TrueMeansOk) {
+        markKnownOk(Var, ThenState);
+      } else {
+        markKnownOk(Var, ElseState);
+      }
+    }
+    if (auto Condition = CompareExchangeStatusCondition(If->getCond())) {
+      const VarDecl* Var = Condition->first;
+      bool TrueTransfers = Condition->second;
+      if (TrueTransfers) {
+        consumeVariable(Var, If->getCond()->getExprLoc(), ThenState);
+      } else {
+        consumeVariable(Var, If->getCond()->getExprLoc(), ElseState);
+      }
+    }
+
+    analyzeStatement(If->getThen(), ThenState);
+    if (const Stmt* Else = If->getElse()) {
+      analyzeStatement(Else, ElseState);
+    }
+    State = MergeStates(ThenState, ElseState);
+  }
+
+  void markConditionTrueFacts(const Expr* Condition, AnalysisState& State) {
+    if (auto ConditionFact = statusOkCondition(Condition);
+        ConditionFact && ConditionFact->second) {
+      markKnownOk(ConditionFact->first, State);
+    }
+  }
+
+  void analyzeFor(const ForStmt* For, AnalysisState& State) {
+    AnalysisState InnerState = State;
+    analyzeStatement(For->getInit(), InnerState);
+    analyzeExpression(For->getCond(), InnerState);
+
+    AnalysisState BodyState = InnerState;
+    markConditionTrueFacts(For->getCond(), BodyState);
+    analyzeStatement(For->getBody(), BodyState);
+    analyzeExpression(For->getInc(), BodyState);
+
+    markLoopTouchedVariablesUnknown(For, State);
+  }
+
+  void analyzeWhile(const WhileStmt* While, AnalysisState& State) {
+    AnalysisState InnerState = State;
+    analyzeExpression(While->getCond(), InnerState);
+
+    AnalysisState BodyState = InnerState;
+    markConditionTrueFacts(While->getCond(), BodyState);
+    analyzeStatement(While->getBody(), BodyState);
+
+    markLoopTouchedVariablesUnknown(While, State);
+  }
+
+  StatusValue analyzeExpression(const Expr* Expr, AnalysisState& State) {
+    if (!Expr) {
+      return StatusValue::NonStatus();
+    }
+    Expr = IgnoreExprNoise(Expr);
+    if (!Expr) {
+      return StatusValue::NonStatus();
+    }
+
+    if (const VarDecl* Var = ReferencedStatusLocal(Expr)) {
+      useVariable(Var, Expr->getExprLoc(), State);
+      if (const VariableState* VarState = findState(Var, State)) {
+        if (VarState->Unknown) {
+          return StatusValue::UnknownStatus(Expr->getExprLoc());
+        }
+        return VarState->MayOwn ? StatusValue::Owned(Expr->getExprLoc())
+                                : StatusValue::NoOwner(Expr->getExprLoc());
+      }
+      return StatusValue::UnknownStatus(Expr->getExprLoc());
+    }
+
+    if (const auto* Cast = dyn_cast<CastExpr>(Expr);
+        Cast && Cast->getType()->isVoidType()) {
+      analyzeExpression(Cast->getSubExpr(), State);
+      return StatusValue::NonStatus();
+    }
+
+    if (const auto* Call = dyn_cast<CallExpr>(Expr)) {
+      return analyzeCall(Call, State);
+    }
+
+    if (const auto* Construct = dyn_cast<CXXConstructExpr>(Expr)) {
+      return analyzeCXXConstruct(Construct, State);
+    }
+
+    if (const auto* Binary = dyn_cast<BinaryOperator>(Expr)) {
+      if (Binary->isAssignmentOp()) {
+        return analyzeAssignment(Binary, State);
+      }
+      analyzeExpression(Binary->getLHS(), State);
+      analyzeExpression(Binary->getRHS(), State);
+      return IsStatusType(Binary->getType())
+                 ? StatusValue::UnknownStatus(Binary->getExprLoc())
+                 : StatusValue::NonStatus();
+    }
+
+    if (const auto* Unary = dyn_cast<UnaryOperator>(Expr)) {
+      analyzeExpression(Unary->getSubExpr(), State);
+      return IsStatusType(Unary->getType())
+                 ? StatusValue::UnknownStatus(Unary->getExprLoc())
+                 : StatusValue::NonStatus();
+    }
+
+    if (const auto* Conditional = dyn_cast<AbstractConditionalOperator>(Expr)) {
+      analyzeExpression(Conditional->getCond(), State);
+      AnalysisState TrueState = State;
+      AnalysisState FalseState = State;
+      StatusValue TrueValue =
+          analyzeExpression(Conditional->getTrueExpr(), TrueState);
+      StatusValue FalseValue =
+          analyzeExpression(Conditional->getFalseExpr(), FalseState);
+      State = MergeStates(TrueState, FalseState);
+      if (!TrueValue.IsStatus && !FalseValue.IsStatus) {
+        return StatusValue::NonStatus();
+      }
+      if (TrueValue.Unknown || FalseValue.Unknown) {
+        return StatusValue::UnknownStatus(Expr->getExprLoc());
+      }
+      return (TrueValue.MayOwn || FalseValue.MayOwn)
+                 ? StatusValue::Owned(Expr->getExprLoc())
+                 : StatusValue::NoOwner(Expr->getExprLoc());
+    }
+
+    for (const Stmt* Child : Expr->children()) {
+      if (const auto* ChildExpr =
+              Child ? dyn_cast<clang::Expr>(Child) : nullptr) {
+        analyzeExpression(ChildExpr, State);
+      } else {
+        analyzeStatement(Child, State);
+      }
+    }
+    return IsStatusType(Expr->getType())
+               ? StatusValue::UnknownStatus(Expr->getExprLoc())
+               : StatusValue::NonStatus();
+  }
+
+  StatusValue analyzeTransferredExpression(const Expr* Expr,
+                                           AnalysisState& State) {
+    if (!Expr) {
+      return StatusValue::NonStatus();
+    }
+    Expr = IgnoreExprNoise(Expr);
+    if (!Expr) {
+      return StatusValue::NonStatus();
+    }
+
+    if (const VarDecl* Var = ForwardedStatusLocal(Expr)) {
+      SourceLocation Location = Expr->getExprLoc();
+      useVariable(Var, Location, State);
+      StatusValue Value = statusValueForVariable(Var, Location, State);
+      consumeVariable(Var, Location, State);
+      return Value;
+    }
+
+    if (const auto* Conditional = dyn_cast<AbstractConditionalOperator>(Expr)) {
+      analyzeExpression(Conditional->getCond(), State);
+
+      AnalysisState TrueState = State;
+      AnalysisState FalseState = State;
+      if (auto Condition = statusOkCondition(Conditional->getCond())) {
+        const VarDecl* Var = Condition->first;
+        bool TrueMeansOk = Condition->second;
+        if (TrueMeansOk) {
+          markKnownOk(Var, TrueState);
+        } else {
+          markKnownOk(Var, FalseState);
+        }
+      }
+
+      StatusValue TrueValue =
+          analyzeTransferredExpression(Conditional->getTrueExpr(), TrueState);
+      StatusValue FalseValue =
+          analyzeTransferredExpression(Conditional->getFalseExpr(), FalseState);
+      State = MergeStates(TrueState, FalseState);
+      if (!TrueValue.IsStatus && !FalseValue.IsStatus) {
+        return StatusValue::NonStatus();
+      }
+      if (TrueValue.Unknown || FalseValue.Unknown) {
+        return StatusValue::UnknownStatus(Expr->getExprLoc());
+      }
+      return (TrueValue.MayOwn || FalseValue.MayOwn)
+                 ? StatusValue::Owned(Expr->getExprLoc())
+                 : StatusValue::NoOwner(Expr->getExprLoc());
+    }
+
+    return analyzeExpression(Expr, State);
+  }
+
+  StatusValue analyzeAssignment(const BinaryOperator* Binary,
+                                AnalysisState& State) {
+    const VarDecl* LhsVar = ReferencedStatusLocal(Binary->getLHS());
+    VariableState LhsBefore = LhsVar && findState(LhsVar, State)
+                                  ? *findState(LhsVar, State)
+                                  : VariableState::NoOwner();
+    StatusValue RhsValue =
+        analyzeTransferredExpression(Binary->getRHS(), State);
+    if (LhsVar) {
+      const VariableState* LhsAfterRhs = findState(LhsVar, State);
+      bool RhsConsumedLhs =
+          LhsAfterRhs && (!LhsBefore.MayOwn || !LhsAfterRhs->MayOwn ||
+                          LhsAfterRhs->MayBeConsumed || LhsAfterRhs->Unknown);
+      if (LhsBefore.MayOwn && !LhsBefore.Unknown && !RhsConsumedLhs) {
+        diagnoseLeak(LhsVar, Binary->getOperatorLoc(), LhsBefore);
+      }
+      setVariableFromStatusValue(LhsVar, RhsValue, Binary->getOperatorLoc(),
+                                 State);
+    }
+    return IsStatusType(Binary->getType())
+               ? StatusValue::UnknownStatus(Binary->getExprLoc())
+               : StatusValue::NonStatus();
+  }
+
+  StatusValue analyzeCall(const CallExpr* Call, AnalysisState& State) {
+    StringRef Name = CalleeName(Call);
+
+    if (Name == "iree_atomic_compare_exchange_strong" &&
+        Call->getNumArgs() >= 3) {
+      for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+        if (I == 2) {
+          if (const VarDecl* Var =
+                  ForwardedStatusLocalThroughCasts(Call->getArg(I))) {
+            useVariable(Var, Call->getArg(I)->getExprLoc(), State);
+            State.Variables[Var] = VariableState::UnknownState();
+            continue;
+          }
+        }
+        analyzeExpression(Call->getArg(I), State);
+      }
+      return StatusValue::NonStatus();
+    }
+
+    if (std::optional<unsigned> SinkArg = KnownStatusSinkArgument(Name)) {
+      for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+        if (I == *SinkArg) {
+          analyzeTransferredExpression(Call->getArg(I), State);
+        } else {
+          analyzeExpression(Call->getArg(I), State);
+        }
+      }
+      return StatusValue::NonStatus();
+    }
+
+    if (IsKnownStatusConsumer(Name) && Call->getNumArgs() >= 1) {
+      analyzeTransferredExpression(Call->getArg(0), State);
+      for (unsigned I = 1; I < Call->getNumArgs(); ++I) {
+        analyzeExpression(Call->getArg(I), State);
+      }
+      if (IsNoReturnStatusConsumer(Name)) {
+        diagnoseOutstandingStatus(State, Call->getExprLoc());
+        State.Terminal = true;
+      }
+      if (IsNamedTypedef(ReturnTypeFromCall(Call), "iree_status_t")) {
+        return StatusValue::NoOwner(Call->getExprLoc());
+      }
+      return StatusValue::NonStatus();
+    }
+
+    if (IsKnownStatusTransferProducer(Name)) {
+      bool ResultMayOwn = false;
+      bool ResultUnknown = false;
+      for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+        bool ConsumesArg = false;
+        if (Name == "iree_status_join") {
+          ConsumesArg = I == 0 || I == 1;
+        } else {
+          ConsumesArg = I == 0;
+        }
+        StatusValue ArgValue =
+            ConsumesArg ? analyzeTransferredExpression(Call->getArg(I), State)
+                        : analyzeExpression(Call->getArg(I), State);
+        if (ConsumesArg) {
+          ResultMayOwn = ResultMayOwn || ArgValue.MayOwn;
+          ResultUnknown = ResultUnknown || ArgValue.Unknown;
+        }
+      }
+      if (ResultUnknown) {
+        return StatusValue::UnknownStatus(Call->getExprLoc());
+      }
+      if (Name == "iree_status_annotate" || Name == "iree_status_annotate_f") {
+        ResultMayOwn = true;
+      }
+      return ResultMayOwn ? StatusValue::Owned(Call->getExprLoc())
+                          : StatusValue::NoOwner(Call->getExprLoc());
+    }
+
+    if (IsKnownStatusClone(Name)) {
+      for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+        analyzeExpression(Call->getArg(I), State);
+      }
+      return StatusValue::Owned(Call->getExprLoc());
+    }
+
+    bool HasUnknownStatusArgument = false;
+    for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
+      StatusValue ArgValue = analyzeExpression(Call->getArg(I), State);
+      QualType ParamType;
+      if (const FunctionDecl* Callee = Call->getDirectCallee();
+          Callee && I < Callee->getNumParams()) {
+        ParamType = Callee->getParamDecl(I)->getType();
+      }
+      if (ParamType.isNull() ? ArgValue.IsStatus : IsStatusType(ParamType)) {
+        if (!IsStatusObserver(Name)) {
+          HasUnknownStatusArgument = true;
+          if (const VarDecl* Var = ForwardedStatusLocal(Call->getArg(I))) {
+            State.Variables[Var] = VariableState::UnknownState();
+          }
+        }
+      }
+    }
+
+    if (IsNoReturnCall(Call)) {
+      diagnoseOutstandingStatus(State, Call->getExprLoc());
+      State.Terminal = true;
+      return StatusValue::NonStatus();
+    }
+
+    if (!IsNamedTypedef(ReturnTypeFromCall(Call), "iree_status_t")) {
+      return StatusValue::NonStatus();
+    }
+    if (IsKnownStatusNoOwnerProducer(Name)) {
+      return StatusValue::NoOwner(Call->getExprLoc());
+    }
+    if (HasUnknownStatusArgument) {
+      return StatusValue::UnknownStatus(Call->getExprLoc());
+    }
+    return StatusValue::Owned(Call->getExprLoc());
+  }
+
+  StatusValue analyzeCXXConstruct(const CXXConstructExpr* Construct,
+                                  AnalysisState& State) {
+    const CXXConstructorDecl* Constructor = Construct->getConstructor();
+    const bool IsStatusConstructor =
+        Constructor && Constructor->getParent() &&
+        (Constructor->getParent()->getName() == "Status" ||
+         Constructor->getParent()->getName() == "StatusOr");
+    for (unsigned I = 0; I < Construct->getNumArgs(); ++I) {
+      StatusValue ArgValue =
+          IsStatusConstructor
+              ? analyzeTransferredExpression(Construct->getArg(I), State)
+              : analyzeExpression(Construct->getArg(I), State);
+      (void)ArgValue;
+    }
+    return StatusValue::NonStatus();
+  }
+
+  StatusLifetimeCheck& Check_;
+  ASTContext& Context_;
+};
+
 }  // namespace
 
 DiscardedStatusCheck::DiscardedStatusCheck(StringRef Name,
@@ -106,6 +1176,25 @@ void DiscardedStatusCheck::check(
   diag(Call->getExprLoc(),
        "iree_status_t result must be returned, stored for later consumption, "
        "or explicitly consumed");
+}
+
+StatusLifetimeCheck::StatusLifetimeCheck(StringRef Name,
+                                         ClangTidyContext* Context)
+    : ClangTidyCheck(Name, Context) {}
+
+void StatusLifetimeCheck::registerMatchers(ast_matchers::MatchFinder* Finder) {
+  using namespace ast_matchers;
+  Finder->addMatcher(functionDecl(isDefinition()).bind("function"), this);
+}
+
+void StatusLifetimeCheck::check(
+    const ast_matchers::MatchFinder::MatchResult& Result) {
+  const auto* Function = Result.Nodes.getNodeAs<FunctionDecl>("function");
+  if (!Function || !Function->hasBody()) {
+    return;
+  }
+  StatusLifetimeAnalyzer Analyzer(*this, *Result.Context);
+  Analyzer.analyzeFunction(Function);
 }
 
 }  // namespace clang::tidy::iree

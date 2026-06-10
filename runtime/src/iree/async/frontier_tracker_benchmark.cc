@@ -398,6 +398,7 @@ static void BM_Wait_ImmediatelySatisfied(benchmark::State& state) {
         fixture.tracker(), frontier_storage.frontier(), MinimalCallback,
         nullptr, &waiter);
     benchmark::DoNotOptimize(status);
+    IREE_CHECK_OK(status);
   }
   state.SetItemsProcessed(state.iterations());
 }
@@ -419,6 +420,7 @@ static void BM_Wait_Pending(benchmark::State& state) {
         fixture.tracker(), frontier_storage.frontier(), MinimalCallback,
         nullptr, &waiter);
     benchmark::DoNotOptimize(status);
+    IREE_CHECK_OK(status);
 
     state.PauseTiming();
     iree_async_frontier_tracker_cancel_wait(fixture.tracker(), &waiter);
@@ -451,6 +453,7 @@ static void BM_Wait_MultiEntrySatisfied(benchmark::State& state) {
         fixture.tracker(), frontier_storage.frontier(), MinimalCallback,
         nullptr, &waiter);
     benchmark::DoNotOptimize(status);
+    IREE_CHECK_OK(status);
   }
   state.SetItemsProcessed(state.iterations());
 }

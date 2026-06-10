@@ -71,12 +71,12 @@ static iree_status_t iree_benchmark_loom_write_optional_i64_query_json(
     iree_hal_device_t* device, iree_string_view_t category,
     iree_string_view_t key, const char* field_name,
     loom_output_stream_t* stream) {
-  int64_t value = 0;
-  iree_status_t status =
-      iree_hal_device_query_i64(device, category, key, &value);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(stream, field_name));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
+  int64_t value = 0;
+  iree_status_t status =
+      iree_hal_device_query_i64(device, category, key, &value);
   if (iree_status_is_ok(status)) {
     return loom_output_stream_write_format(stream, "%" PRIi64, value);
   }
@@ -430,11 +430,11 @@ iree_status_t iree_benchmark_loom_write_hal_context_identity_fields_json(
         IREE_SV("concurrency"), "hal_dispatch_concurrency", stream));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
 
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"capabilities\":"));
     iree_hal_device_capabilities_t capabilities = {0};
     iree_status_t capabilities_status = iree_hal_device_query_capabilities(
         context->execution.runtime.device, &capabilities);
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"capabilities\":"));
     if (iree_status_is_ok(capabilities_status)) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
           stream,

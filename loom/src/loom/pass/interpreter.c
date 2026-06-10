@@ -355,14 +355,13 @@ static iree_status_t loom_pass_interpreter_invoke(
     invoke->descriptor->destroy(&pass);
   }
 
-  iree_status_t pass_status = status;
   iree_status_t report_status = iree_ok_status();
   loom_pass_interpreter_accumulate_diagnostics(state, &diagnostic_counter);
 
   if (state->options->report) {
     iree_duration_t duration_nanoseconds = iree_time_now() - start_time;
-    iree_status_code_t status_code = iree_status_code(pass_status);
-    if (iree_status_is_ok(pass_status) && diagnostic_counter.error_count != 0) {
+    iree_status_code_t status_code = iree_status_code(status);
+    if (iree_status_is_ok(status) && diagnostic_counter.error_count != 0) {
       status_code = IREE_STATUS_FAILED_PRECONDITION;
     }
     report_status = loom_pass_report_append_invocation(
@@ -382,17 +381,17 @@ static iree_status_t loom_pass_interpreter_invoke(
   }
 
   iree_arena_deinitialize(&instance_arena);
-  if (!iree_status_is_ok(pass_status)) {
+  if (!iree_status_is_ok(status)) {
     if (diagnostic_counter.emission_count == 0) {
-      pass_status = iree_status_join(
-          pass_status, loom_pass_interpreter_emit_failure_diagnostic(
-                           state, frame, instruction));
+      status = iree_status_join(
+          status, loom_pass_interpreter_emit_failure_diagnostic(state, frame,
+                                                                instruction));
     }
-    pass_status = iree_status_join(pass_status, report_status);
+    status = iree_status_join(status, report_status);
     iree_string_view_t symbol_name =
         loom_pass_interpreter_symbol_name(state, frame);
     return iree_status_annotate_f(
-        pass_status, "while executing pass '%.*s' at %s anchor on @%.*s",
+        status, "while executing pass '%.*s' at %s anchor on @%.*s",
         (int)invoke->descriptor->key.size, invoke->descriptor->key.data,
         loom_pass_interpreter_anchor_name(frame->kind), (int)symbol_name.size,
         symbol_name.data);

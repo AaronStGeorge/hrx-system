@@ -40,6 +40,75 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
+    def test_status_lifetime_is_diagnosed(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-status-lifetime",
+            source=clang_tidy_test.source_path(__file__, "status_checks.c"),
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "leaked_status",
+                "overwritten_status",
+                "double_consumed_status",
+                "used_after_consume_status",
+                "used_after_transfer_status",
+                "lost_on_return_status",
+                "code_predicate_status",
+                "[iree-status-lifetime]",
+            ],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "returned_status",
+                "return_if_error_status",
+                "macro_return_status",
+                "macro_fallthrough_status",
+                "transfer_source_status",
+                "transfer_target_status",
+                "conditional_source_status",
+                "conditional_target_status",
+                "joined_primary_status",
+                "joined_secondary_status",
+                "loop_break_status",
+                "ok_and_status",
+                "consumed_predicate_status",
+                "atomic_escape_status",
+                "atomic_builtin_status",
+                "sink_argument_status",
+                "borrowed_status",
+                "joined_status",
+                "annotated_status",
+                "stored_status",
+                "consumed_code_status",
+            ],
+        )
+
+    def test_status_lifetime_accepts_cpp_test_consumers(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-status-lifetime",
+            source=clang_tidy_test.source_path(__file__, "status_checks.cc"),
+            compiler_args=["-std=c++17"],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "consume_for_test_status",
+                "consume_for_test_move_status",
+                "string_to_free_status",
+                "gtest_condition_status",
+                "cpp_status_wrapper_status",
+                "cpp_status_wrapper_move_status",
+                "cpp_status_or_status",
+                "[iree-status-lifetime]",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

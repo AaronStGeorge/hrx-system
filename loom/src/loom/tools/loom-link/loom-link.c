@@ -1328,10 +1328,11 @@ int main(int argc, char** argv) {
     }
   }
 
-  const bool had_error = !iree_status_is_ok(status);
-  if (had_error) {
+  int exit_code = 0;
+  if (!iree_status_is_ok(status)) {
     iree_status_fprint(stderr, status);
     iree_status_free(status);
+    exit_code = 1;
   }
 
   iree_allocator_free(allocator, source_entries);
@@ -1344,5 +1345,5 @@ int main(int argc, char** argv) {
     loom_context_deinitialize(&context);
   }
   iree_arena_block_pool_deinitialize(&block_pool);
-  return had_error ? 1 : 0;
+  return exit_code;
 }

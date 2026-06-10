@@ -16,6 +16,7 @@ class IreeTidyModule final : public ClangTidyModule {
   void addCheckFactories(ClangTidyCheckFactories& CheckFactories) override {
     CheckFactories.registerCheck<SmokeCheck>("iree-smoke");
     CheckFactories.registerCheck<DiscardedStatusCheck>("iree-status-discarded");
+    CheckFactories.registerCheck<StatusLifetimeCheck>("iree-status-lifetime");
   }
 };
 

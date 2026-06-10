@@ -19,6 +19,14 @@ class DiscardedStatusCheck final : public ClangTidyCheck {
   void check(const ast_matchers::MatchFinder::MatchResult& Result) override;
 };
 
+class StatusLifetimeCheck final : public ClangTidyCheck {
+ public:
+  StatusLifetimeCheck(StringRef Name, ClangTidyContext* Context);
+
+  void registerMatchers(ast_matchers::MatchFinder* Finder) override;
+  void check(const ast_matchers::MatchFinder::MatchResult& Result) override;
+};
+
 }  // namespace clang::tidy::iree
 
 #endif  // IREE_BUILD_TOOLS_CLANG_TIDY_IREE_STATUS_CHECKS_H_

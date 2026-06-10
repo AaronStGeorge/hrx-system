@@ -31,6 +31,7 @@ static void BM_StatusCreation(benchmark::State& state) {
   for (auto _ : state) {
     iree_status_t status = iree_make_status(IREE_STATUS_OK);
     benchmark::DoNotOptimize(status);
+    IREE_CHECK_OK(status);
   }
 }
 BENCHMARK(BM_StatusCreation);

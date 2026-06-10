@@ -363,8 +363,18 @@ static iree_status_t loom_ireevm_register_assignment_metadata(
       assignment->descriptor_reg_class_id, &layout);
   if (!iree_status_is_ok(status)) {
     iree_string_view_t register_class = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
-        allocation, assignment, &register_class));
+    iree_status_t name_status =
+        loom_low_allocation_assignment_register_class_name(
+            allocation, assignment, &register_class);
+    if (!iree_status_is_ok(name_status)) {
+      return iree_status_join(
+          iree_status_annotate_f(status,
+                                 "while emitting VM bytecode value %u "
+                                 "allocated to invalid register class %u",
+                                 (unsigned)assignment->value_id,
+                                 (unsigned)assignment->descriptor_reg_class_id),
+          name_status);
+    }
     return iree_status_annotate_f(status,
                                   "while emitting VM bytecode value %u "
                                   "allocated to register class '%.*s'",

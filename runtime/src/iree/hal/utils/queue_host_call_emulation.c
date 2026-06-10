@@ -106,7 +106,7 @@ static int iree_hal_emulated_host_call_main(void* entry_arg) {
   // progress after this point regardless of how long the host call takes.
   const bool is_nonblocking =
       iree_any_bit_set(state->flags, IREE_HAL_HOST_CALL_FLAG_NON_BLOCKING);
-  if (is_nonblocking) {
+  if (iree_status_is_ok(status) && is_nonblocking) {
     // NOTE: the signals can fail in which case we never perform the call.
     // That's ok as failure to signal is considered a device-loss/death
     // situation as there's no telling what has gone wrong.

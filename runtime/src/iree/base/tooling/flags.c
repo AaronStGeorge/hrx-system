@@ -481,6 +481,7 @@ void iree_flags_parse_checked(iree_flags_parse_mode_t mode, int* argc,
   fprintf(stderr, "\x1b[31mFLAGS ERROR: (╯°□°)╯︵👻\x1b[0m\n");
   iree_status_fprint(stderr, status);
   fflush(stderr);
+  iree_status_free(status);
 
   exit(EXIT_FAILURE);
 }

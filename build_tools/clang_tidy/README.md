@@ -58,6 +58,8 @@ ctest --test-dir .tmp/iree-clang-tidy-plugin --output-on-failure
 
 ## Checks
 
+### `iree-status-discarded`
+
 `iree-status-discarded` diagnoses calls returning `iree_status_t` when the call
 is used as a bare expression statement, including `(void)` casts:
 
@@ -69,3 +71,33 @@ some_status_returning_function();
 The status result must be returned, stored for later consumption, or explicitly
 consumed. The check intentionally does not reason about whether a callee is
 infallible; if the function returns `iree_status_t`, the caller owns that result.
+
+### `iree-status-lifetime`
+
+`iree-status-lifetime` treats local `iree_status_t` variables as owned linear
+values. The check diagnoses mechanically provable local lifetime errors:
+
+```c
+iree_status_t status = do_work();
+(void)status;  // Status leaves scope unconsumed.
+
+iree_status_t status = do_work();
+status = do_cleanup();  // Overwrites an owned status.
+
+iree_status_t status = do_work();
+iree_status_ignore(status);
+return status;  // Uses a consumed status value.
+```
+
+The accepted terminal actions mirror `runtime/src/iree/base/status.h`: return
+the status, store it into an owning destination, consume it with
+`iree_status_free`/`iree_status_ignore`/`iree_status_consume_code`, or transfer
+it through helpers such as `iree_status_join`, `iree_status_annotate`, and
+`iree_status_freeze` while continuing to own the returned status.
+
+The lifetime model focuses on local ownership states that can be proven from
+the AST with high confidence. Straight-line code, block scope, local transfers,
+returns, `if` branches, status helper calls, C++ status wrappers, and known
+status-owning callback boundaries are checked directly. Loop-carried status
+variables and functions with `goto` cleanup paths are treated conservatively so
+diagnostics remain high signal.

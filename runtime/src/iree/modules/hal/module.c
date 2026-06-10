@@ -1786,7 +1786,6 @@ IREE_VM_ABI_EXPORT(iree_hal_module_fence_query,  //
 
   iree_status_t query_status = iree_hal_fence_query(fence);
   rets->i0 = iree_status_consume_code(query_status);
-  iree_status_ignore(query_status);
 
   return iree_ok_status();
 }

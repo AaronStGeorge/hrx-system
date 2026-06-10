@@ -377,14 +377,11 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
     status =
         iree_hal_device_profiling_begin(runtime->device, &profiling_options);
   }
-  const bool profiling_began = iree_status_is_ok(status);
-  if (profiling_began) {
-    status = loom_run_hal_dispatch_batch_execute(runtime, batch);
-  }
   if (iree_status_is_ok(status)) {
-    status = iree_hal_device_profiling_flush(runtime->device);
-  }
-  if (profiling_began) {
+    status = loom_run_hal_dispatch_batch_execute(runtime, batch);
+    if (iree_status_is_ok(status)) {
+      status = iree_hal_device_profiling_flush(runtime->device);
+    }
     status = iree_status_join(status,
                               iree_hal_device_profiling_end(runtime->device));
   }

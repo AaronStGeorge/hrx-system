@@ -137,9 +137,7 @@ IREE_API_EXPORT iree_status_t iree_hal_vulkan_query_extensibility_set(
   if (set == (target_set)) {                                             \
     iree_status_t add_status = iree_hal_vulkan_add_extensibility_string( \
         (value), string_capacity, out_string_count, out_string_values);  \
-    if (!iree_status_is_ok(add_status) && iree_status_is_ok(status)) {   \
-      status = add_status;                                               \
-    }                                                                    \
+    status = iree_status_join(status, add_status);                       \
   }
 
   switch (set) {

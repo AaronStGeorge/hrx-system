@@ -118,10 +118,11 @@ int main(int argc, char** argv) {
                                       &output, allocator);
   }
 
-  bool had_error = !iree_status_is_ok(status);
-  if (had_error) {
+  int exit_code = 0;
+  if (!iree_status_is_ok(status)) {
     iree_status_fprint(stderr, status);
     iree_status_free(status);
+    exit_code = 1;
   }
 
   loom_format_output_deinitialize(&output, allocator);
@@ -130,5 +131,5 @@ int main(int argc, char** argv) {
     loom_context_deinitialize(&context);
   }
   iree_arena_block_pool_deinitialize(&block_pool);
-  return had_error ? 1 : 0;
+  return exit_code;
 }

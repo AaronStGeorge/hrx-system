@@ -106,7 +106,7 @@ iree_status_t iree_hal_streaming_context_create(
   // Initialize symbol map with global registry as the backing store.
   iree_hal_streaming_global_symbol_registry_t* registry =
       iree_hal_streaming_global_symbol_registry();
-  if (!registry) {
+  if (iree_status_is_ok(status) && !registry) {
     status = iree_make_status(IREE_STATUS_INTERNAL,
                               "global symbol registry failed to initialize");
   }

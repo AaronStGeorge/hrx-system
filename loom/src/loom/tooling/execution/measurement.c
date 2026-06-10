@@ -150,6 +150,6 @@ iree_status_t loom_run_measurement_run_step(
   IREE_RETURN_IF_ERROR(
       loom_run_measurement_scope_begin(options, boundary, result, &scope));
   iree_status_t status = callback.fn(callback.user_data);
-  return iree_status_join(status,
-                          loom_run_measurement_scope_end(&scope, status));
+  iree_status_t scope_status = loom_run_measurement_scope_end(&scope, status);
+  return iree_status_join(status, scope_status);
 }

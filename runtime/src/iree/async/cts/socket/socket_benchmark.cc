@@ -308,11 +308,9 @@ static LoopbackContext* CreateLoopbackContext(
     iree_host_size_t count = 0;
     status = iree_async_proactor_poll(ctx->proactor, iree_make_timeout_ms(100),
                                       &count);
-    if (!iree_status_is_ok(status) &&
-        !iree_status_is_deadline_exceeded(status)) {
+    if (!iree_status_is_ok(status)) {
       iree_status_ignore(status);
     }
-    iree_status_ignore(status);
     completions += (int)count;
   }
 
