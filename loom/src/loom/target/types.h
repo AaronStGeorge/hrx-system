@@ -21,6 +21,7 @@
 extern "C" {
 #endif
 
+typedef uint8_t loom_target_codegen_format_t;
 typedef enum loom_target_codegen_format_e {
   LOOM_TARGET_CODEGEN_FORMAT_UNKNOWN = 0,
   LOOM_TARGET_CODEGEN_FORMAT_LLVMIR = 1,
@@ -28,8 +29,9 @@ typedef enum loom_target_codegen_format_e {
   LOOM_TARGET_CODEGEN_FORMAT_VM = 3,
   LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE = 4,
   LOOM_TARGET_CODEGEN_FORMAT_WASM = 5,
-} loom_target_codegen_format_t;
+} loom_target_codegen_format_e;
 
+typedef uint8_t loom_target_artifact_format_t;
 typedef enum loom_target_artifact_format_e {
   LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN = 0,
   LOOM_TARGET_ARTIFACT_FORMAT_ELF = 1,
@@ -38,8 +40,9 @@ typedef enum loom_target_artifact_format_e {
   LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY = 4,
   LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE = 5,
   LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY = 6,
-} loom_target_artifact_format_t;
+} loom_target_artifact_format_e;
 
+typedef uint8_t loom_target_artifact_abi_kind_t;
 typedef enum loom_target_artifact_abi_kind_e {
   LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN = 0,
   LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE = 1,
@@ -47,8 +50,9 @@ typedef enum loom_target_artifact_abi_kind_e {
   LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE = 3,
   LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE = 4,
   LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE = 5,
-} loom_target_artifact_abi_kind_t;
+} loom_target_artifact_abi_kind_e;
 
+typedef uint8_t loom_target_abi_kind_t;
 typedef enum loom_target_abi_kind_e {
   LOOM_TARGET_ABI_UNKNOWN = 0,
   LOOM_TARGET_ABI_OBJECT_FUNCTION = 1,
@@ -56,12 +60,13 @@ typedef enum loom_target_abi_kind_e {
   LOOM_TARGET_ABI_VM_MODULE_FUNCTION = 3,
   LOOM_TARGET_ABI_SHADER_ENTRY_POINT = 4,
   LOOM_TARGET_ABI_WASM_FUNCTION = 5,
-} loom_target_abi_kind_t;
+} loom_target_abi_kind_e;
 
+typedef uint8_t loom_target_linkage_t;
 typedef enum loom_target_linkage_e {
   LOOM_TARGET_LINKAGE_DEFAULT = 0,
   LOOM_TARGET_LINKAGE_DSO_LOCAL = 1,
-} loom_target_linkage_t;
+} loom_target_linkage_e;
 
 // Returns the assembly spelling for |format| used in diagnostics.
 static inline iree_string_view_t loom_target_codegen_format_name(

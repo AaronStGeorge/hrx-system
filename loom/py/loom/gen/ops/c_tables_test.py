@@ -1004,6 +1004,27 @@ def test_inline_attr_dict_uses_declared_attrs() -> None:
     assert "loom_op_attrs(*out_op)[1] = loom_attr_enum(scope);" in builders_c
 
 
+def test_open_enum_attr_uses_byte_typedef_with_enum_constants() -> None:
+    mode = EnumDef("Mode", [EnumCase("known", 1)])
+    op = Op(
+        "test.open_enum",
+        group=Dialect("test"),
+        attrs=[AttrDef("mode", "enum", enum_def=mode, open_enum=True)],
+        format=[Attr("mode")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+
+    assert "typedef uint8_t loom_test_open_enum_mode_t;" in ops_h
+    assert "typedef enum loom_test_open_enum_mode_e {" in ops_h
+    assert "  LOOM_TEST_OPEN_ENUM_MODE_KNOWN = 1," in ops_h
+    assert "  LOOM_TEST_OPEN_ENUM_MODE_COUNT_ = 2," in ops_h
+    assert "} loom_test_open_enum_mode_e;" in ops_h
+    assert "#define LOOM_TEST_OPEN_ENUM_MODE_KNOWN" not in ops_h
+    assert "LOOM_TEST_OPEN_ENUM_MODE_BYTE_MAX_" not in ops_h
+    assert ("LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_open_enum_mode, 0, loom_test_open_enum_mode_t)") in ops_h
+
+
 def test_external_enum_alias_uses_shared_c_type_without_typedef() -> None:
     mode = EnumDef(
         "Mode",

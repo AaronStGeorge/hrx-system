@@ -84,15 +84,24 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
     # multiple ops (e.g., CallingConv used by func.def, func.decl,
     # func.template, func.ukernel), emit it once with a dialect-level
     # name (loom_func_cc_t) instead of duplicating per-op.
+    open_enum_ids = {id(attr_def.enum_def) for op in ops for attr_def in op.attrs if (attr_def.attr_type == "enum" and attr_def.open_enum and attr_def.enum_def is not None)}
+
     # Emit shared enums first.
-    for c_prefix, const_prefix, enum_def in shared_enums.values():
+    for enum_id, (c_prefix, const_prefix, enum_def) in shared_enums.items():
         if enum_def.doc:
             lines.append(f"// {enum_def.doc}")
-        lines.append(f"typedef enum {c_prefix}_e {{")
-        lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in enum_def.cases)
         max_value = max(c.value for c in enum_def.cases)
-        lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
-        lines.append(f"}} {c_prefix}_t;")
+        if enum_id in open_enum_ids:
+            lines.append(f"typedef uint8_t {c_prefix}_t;")
+            lines.append(f"typedef enum {c_prefix}_e {{")
+            lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in enum_def.cases)
+            lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
+            lines.append(f"}} {c_prefix}_e;")
+        else:
+            lines.append(f"typedef enum {c_prefix}_e {{")
+            lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in enum_def.cases)
+            lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
+            lines.append(f"}} {c_prefix}_t;")
         lines.append("")
 
     # Emit per-op enums (only for EnumDefs not already emitted as shared).
@@ -114,11 +123,18 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             const_prefix = c_prefix.upper()
             if attr_def.enum_def.doc:
                 lines.append(f"// {attr_def.enum_def.doc}")
-            lines.append(f"typedef enum {enum_tag} {{")
-            lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in attr_def.enum_def.cases)
             max_value = max(c.value for c in attr_def.enum_def.cases)
-            lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
-            lines.append(f"}} {c_prefix}_t;")
+            if attr_def.open_enum:
+                lines.append(f"typedef uint8_t {c_prefix}_t;")
+                lines.append(f"typedef enum {enum_tag} {{")
+                lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in attr_def.enum_def.cases)
+                lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
+                lines.append(f"}} {enum_tag};")
+            else:
+                lines.append(f"typedef enum {enum_tag} {{")
+                lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in attr_def.enum_def.cases)
+                lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
+                lines.append(f"}} {c_prefix}_t;")
             lines.append("")
 
     # Per-op sections.

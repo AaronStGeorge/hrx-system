@@ -154,11 +154,12 @@ typedef enum loom_test_cmp_predicate_e {
 } loom_test_cmp_predicate_t;
 
 // Synthetic record kind. Open for bytecode future-ordinal tests.
+typedef uint8_t loom_test_record_kind_t;
 typedef enum loom_test_record_kind_e {
   LOOM_TEST_RECORD_KIND_TARGET = 1,
   LOOM_TEST_RECORD_KIND_ARTIFACT = 2,
   LOOM_TEST_RECORD_KIND_COUNT_ = 3,
-} loom_test_record_kind_t;
+} loom_test_record_kind_e;
 
 // Synthetic target kind for target-like interface tests.
 typedef enum loom_test_target_kind_e {
