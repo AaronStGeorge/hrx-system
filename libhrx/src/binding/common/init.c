@@ -192,6 +192,7 @@ static iree_status_t iree_hal_streaming_query_device_info(
 // Initializes a single device from a pyre device handle.
 static iree_status_t iree_hal_streaming_initialize_device(
     iree_hal_streaming_device_registry_t* registry, hrx_device_t hrx_dev,
+    iree_hal_streaming_device_ordinal_t ordinal,
     iree_hal_streaming_device_t* out_device) {
   IREE_ASSERT_ARGUMENT(registry);
   IREE_ASSERT_ARGUMENT(hrx_dev);
@@ -199,6 +200,10 @@ static iree_status_t iree_hal_streaming_initialize_device(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   memset(out_device, 0, sizeof(*out_device));
+  // The entry was just zeroed, so the ordinal MUST be (re)assigned here.
+  // Per-device pools, peer lookups, and context->device_ordinal all key off
+  // it; if it stays 0 every device aliases device 0.
+  out_device->ordinal = ordinal;
 
   // Store pyre device and extract HAL device for direct HAL usage.
   out_device->hrx_device = hrx_dev;
@@ -522,10 +527,9 @@ iree_status_t iree_hal_streaming_init_global(
 
       iree_hal_streaming_device_t* device =
           &device_registry->devices[device_registry->device_count];
-      device->ordinal = device_registry->device_count;
 
-      dev_status = iree_hal_streaming_initialize_device(device_registry,
-                                                        hrx_dev, device);
+      dev_status = iree_hal_streaming_initialize_device(
+          device_registry, hrx_dev, device_registry->device_count, device);
       if (!iree_status_is_ok(dev_status)) {
         iree_status_ignore(dev_status);
         continue;
