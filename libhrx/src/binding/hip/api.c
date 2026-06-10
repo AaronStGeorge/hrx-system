@@ -8290,10 +8290,11 @@ HIPAPI hipError_t hipModuleLaunchKernel(
 // libraries (hipBLASLt, hipSPARSELt, MIOpen, rocSOLVER, rocSPARSE) import this
 // as a *versioned* symbol (hipDrvLaunchKernelEx@hip_6.5). When the HRX binding
 // is the sole libamdhip64, those libraries cannot resolve their relocation and
-// `import torch` aborts during rocm_sdk's preload step. Exporting an unversioned
-// hipDrvLaunchKernelEx satisfies the versioned reference via the glibc
-// unversioned-default compatibility rule (the same way the binding's unversioned
-// hipMalloc/hipFree already satisfy the libraries' hip_4.2 references).
+// `import torch` aborts during rocm_sdk's preload step. Exporting an
+// unversioned hipDrvLaunchKernelEx satisfies the versioned reference via the
+// glibc unversioned-default compatibility rule (the same way the binding's
+// unversioned hipMalloc/hipFree already satisfy the libraries' hip_4.2
+// references).
 //
 // Not yet implemented. We export it so the libraries resolve and torch loads,
 // but per the single-backend policy we never route to another HIP library: if a
@@ -8342,7 +8343,8 @@ HIPAPI hipError_t hipDrvLaunchKernelEx(const void* config, hipFunction_t f,
 // each for that future work.
 // ---------------------------------------------------------------------------
 
-// hipError_t hipGetFuncBySymbol(hipFunction_t* functionPtr, const void* symbolPtr);
+// hipError_t hipGetFuncBySymbol(hipFunction_t* functionPtr,
+//     const void* symbolPtr);
 // Needed by: librccl (hip_6.2).
 HIPAPI hipError_t hipGetFuncBySymbol(void) {
   HIP_DEBUG_LOG("[HIP_API] hipGetFuncBySymbol() — not implemented in HRX\n");
@@ -8357,11 +8359,13 @@ HIPAPI hipError_t hipStreamBatchMemOp(void) {
   HIP_RETURN_ERROR(hipErrorNotSupported);
 }
 
-// hipError_t hipMemGetHandleForAddressRange(void* handle, void* dptr, size_t size,
-//     hipMemRangeHandleType handleType, unsigned long long flags);
+// hipError_t hipMemGetHandleForAddressRange(void* handle, void* dptr,
+//     size_t size, hipMemRangeHandleType handleType,
+//     unsigned long long flags);
 // Needed by: librccl (hip_6.5).
 HIPAPI hipError_t hipMemGetHandleForAddressRange(void) {
-  HIP_DEBUG_LOG("[HIP_API] hipMemGetHandleForAddressRange() — not implemented in HRX\n");
+  HIP_DEBUG_LOG(
+      "[HIP_API] hipMemGetHandleForAddressRange() — not implemented in HRX\n");
   HIP_RETURN_ERROR(hipErrorNotSupported);
 }
 
@@ -8376,22 +8380,27 @@ HIPAPI hipError_t hipMemcpyBatchAsync(void) {
 //     const hipExternalMemoryHandleDesc* memHandleDesc);
 // Needed by: librocdecode, librocjpeg (hip_4.3).
 HIPAPI hipError_t hipImportExternalMemory(void) {
-  HIP_DEBUG_LOG("[HIP_API] hipImportExternalMemory() — not implemented in HRX\n");
+  HIP_DEBUG_LOG(
+      "[HIP_API] hipImportExternalMemory() — not implemented in HRX\n");
   HIP_RETURN_ERROR(hipErrorNotSupported);
 }
 
 // hipError_t hipDestroyExternalMemory(hipExternalMemory_t extMem);
 // Needed by: librocdecode, librocjpeg (hip_4.3).
 HIPAPI hipError_t hipDestroyExternalMemory(void) {
-  HIP_DEBUG_LOG("[HIP_API] hipDestroyExternalMemory() — not implemented in HRX\n");
+  HIP_DEBUG_LOG(
+      "[HIP_API] hipDestroyExternalMemory() — not implemented in HRX\n");
   HIP_RETURN_ERROR(hipErrorNotSupported);
 }
 
-// hipError_t hipExternalMemoryGetMappedBuffer(void** devPtr, hipExternalMemory_t extMem,
+// hipError_t hipExternalMemoryGetMappedBuffer(void** devPtr,
+//     hipExternalMemory_t extMem,
 //     const hipExternalMemoryBufferDesc* bufferDesc);
 // Needed by: librocdecode, librocjpeg (hip_4.3).
 HIPAPI hipError_t hipExternalMemoryGetMappedBuffer(void) {
-  HIP_DEBUG_LOG("[HIP_API] hipExternalMemoryGetMappedBuffer() — not implemented in HRX\n");
+  HIP_DEBUG_LOG(
+      "[HIP_API] hipExternalMemoryGetMappedBuffer() — not implemented in "
+      "HRX\n");
   HIP_RETURN_ERROR(hipErrorNotSupported);
 }
 
