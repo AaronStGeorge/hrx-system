@@ -36,6 +36,7 @@ iree_py_library(
         "compiler.py",
         "low_descriptors.py",
         "validation.py",
+        "views.py",
     ],
     deps = LOW_DESCRIPTOR_DEPS,
 )

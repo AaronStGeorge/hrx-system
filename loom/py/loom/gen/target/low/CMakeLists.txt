@@ -20,6 +20,7 @@ iree_py_library(
     "compiler.py"
     "low_descriptors.py"
     "validation.py"
+    "views.py"
   DEPS
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::support::support

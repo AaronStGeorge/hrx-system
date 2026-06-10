@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from loom.gen.target.low import c_emit, compiler
+from loom.gen.target.low import c_emit, compiler, views
 from loom.gen.target.low.compiled import DescriptorAllowlist, GeneratedDescriptorSet
 from loom.target.low_descriptors import DescriptorSet
 
@@ -52,8 +52,8 @@ def generate_descriptor_set_shared_source(
         allowlist=None,
         allow_ambiguous_asm_mnemonics=True,
     )
-    views = tuple(c_emit.descriptor_set_view_for_spec(compiled, view_spec) for view_spec in view_specs)
-    return c_emit.emit_source_for_views(compiled, views=views)
+    descriptor_set_views = tuple(views.descriptor_set_view_for_spec(compiled, view_spec) for view_spec in view_specs)
+    return c_emit.emit_source_for_views(compiled, views=descriptor_set_views)
 
 
 def generate_descriptor_set_shared_header(
@@ -67,7 +67,7 @@ def generate_descriptor_set_shared_header(
         allowlist=None,
         allow_ambiguous_asm_mnemonics=True,
     )
-    c_emit.descriptor_set_view_for_spec(compiled, view_spec)
+    views.descriptor_set_view_for_spec(compiled, view_spec)
     return c_emit.emit_header_for_spec(compiled, view_spec)
 
 
