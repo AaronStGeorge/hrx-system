@@ -45,7 +45,7 @@ loom_generated_cc_library(
         "builders.c",
         "tables.c",
     ],
-    generator = "//loom/py/loom/gen/ops:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_amdgpu_generator",
     visibility = (
         _AMDGPU_HAL_VISIBILITY +
         _AMDGPU_NATIVE_VISIBILITY +

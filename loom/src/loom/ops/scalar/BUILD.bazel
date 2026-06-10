@@ -48,7 +48,7 @@ loom_generated_cc_library(
         "tables/conversion.c",
         "tables/math.c",
     ],
-    generator = "//loom/py/loom/gen/ops:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_scalar_generator",
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

@@ -224,6 +224,7 @@ iree_py_test(
   DEPS
     loom::py::loom::gen::target::contracts::lower_rules
     loom::py::loom::dialect::scalar::scalar
+    loom::py::loom::dialect::vector::vector
     loom::py::loom::target::contracts::contracts
     loom::py::loom::target::test::descriptors
   PACKAGE_DIRS

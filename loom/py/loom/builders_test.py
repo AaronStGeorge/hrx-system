@@ -14,9 +14,11 @@ import pytest
 # Keep the core builder tests on the synthetic test dialect. Real production
 # dialect imports belong in dialect-specific importer/builder coverage, not here.
 import loom
+import loom.dialect as dialect
 from loom.builder import ValueRef, tied
 from loom.builders import LoomBuilder, module_builder
 from loom.builtin_types import ALL_BUILTIN_TYPES
+from loom.dialect import vector
 from loom.dialect.globals import ALL_GLOBAL_OPS
 from loom.dialect.pass_ import ALL_PASS_OPS
 from loom.dialect.scf import ALL_SCF_OPS
@@ -48,6 +50,11 @@ def test_root_package_exports_module_builder() -> None:
     assert loom.module_builder is module_builder
     assert len(loom.default_ops()) > 0
     assert len(loom.default_types()) > 0
+
+
+def test_dialect_package_exports_dialects() -> None:
+    assert dialect.vector is vector
+    assert "vector" in dialect.__all__
 
 
 def test_default_dynamic_builder_registers_all_dialects() -> None:

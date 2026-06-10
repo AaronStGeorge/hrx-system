@@ -41,7 +41,7 @@ loom_generated_cc_library(
         "builders.c",
         "tables.c",
     ],
-    generator = "//loom/py/loom/gen/ops:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_encoding_generator",
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

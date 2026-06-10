@@ -17,12 +17,6 @@ iree_py_library(
     "model.py"
   DEPS
     loom::py::loom::core
-    loom::py::loom::dialect::package
-    loom::py::loom::target::arch::amdgpu::dialect
-    loom::py::loom::target::arch::ireevm::dialect
-    loom::py::loom::target::arch::spirv::dialect
-    loom::py::loom::target::arch::wasm::dialect
-    loom::py::loom::target::arch::x86::dialect
 )
 
 iree_py_library(
@@ -47,6 +41,7 @@ iree_py_library(
   DEPS
     loom::py::loom::gen::ops::model
     loom::py::loom::core
+    loom::py::loom::error::error
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::assembly::tokens
     loom::py::loom::gen::support::support
@@ -76,9 +71,765 @@ iree_py_library(
   DEPS
     loom::py::loom::gen::ops::model
     loom::py::loom::core
+    loom::py::loom::error::error
     loom::py::loom::gen::bootstrap
     loom::py::loom::gen::assembly::tokens
     loom::py::loom::gen::support::support
+    loom::py::loom::dialect::package
+    loom::py::loom::target::arch::amdgpu::dialect
+    loom::py::loom::target::arch::ireevm::dialect
+    loom::py::loom::target::arch::spirv::dialect
+    loom::py::loom::target::arch::wasm::dialect
+    loom::py::loom::target::arch::x86::dialect
+)
+
+iree_py_library(
+  NAME
+    c_tables_amdgpu_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::arch::amdgpu::dialect
+)
+
+iree_py_library(
+  NAME
+    c_tables_buffer_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::buffer::buffer
+)
+
+iree_py_library(
+  NAME
+    c_tables_cfg_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::cfg::cfg
+)
+
+iree_py_library(
+  NAME
+    c_tables_check_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::check::check
+)
+
+iree_py_library(
+  NAME
+    c_tables_config_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::config::config
+)
+
+iree_py_library(
+  NAME
+    c_tables_encoding_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::encoding::encoding
+)
+
+iree_py_library(
+  NAME
+    c_tables_func_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::func::func
+    loom::py::loom::dialect::target::target
+)
+
+iree_py_library(
+  NAME
+    c_tables_global_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::globals::globals
+)
+
+iree_py_library(
+  NAME
+    c_tables_index_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::index::index
+)
+
+iree_py_library(
+  NAME
+    c_tables_ireevm_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::arch::ireevm::dialect
+)
+
+iree_py_library(
+  NAME
+    c_tables_kernel_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::kernel::kernel
+    loom::py::loom::dialect::target::target
+)
+
+iree_py_library(
+  NAME
+    c_tables_llvmir_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::llvmir::llvmir
+    loom::py::loom::dialect::target::target
+)
+
+iree_py_library(
+  NAME
+    c_tables_low_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::low::low
+    loom::py::loom::dialect::target::target
+)
+
+iree_py_library(
+  NAME
+    c_tables_pass_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::pass_::pass_
+)
+
+iree_py_library(
+  NAME
+    c_tables_pool_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::pool::pool
+)
+
+iree_py_library(
+  NAME
+    c_tables_scalar_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::scalar::scalar
+)
+
+iree_py_library(
+  NAME
+    c_tables_scf_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::scf::scf
+)
+
+iree_py_library(
+  NAME
+    c_tables_spirv_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::arch::spirv::dialect
+)
+
+iree_py_library(
+  NAME
+    c_tables_target_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::target::target
+)
+
+iree_py_library(
+  NAME
+    c_tables_test_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::target::target
+    loom::py::loom::dialect::test::test
+)
+
+iree_py_library(
+  NAME
+    c_tables_vector_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::vector::vector
+)
+
+iree_py_library(
+  NAME
+    c_tables_view_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::dialect::view::view
+)
+
+iree_py_library(
+  NAME
+    c_tables_wasm_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::arch::wasm::dialect
+)
+
+iree_py_library(
+  NAME
+    c_tables_x86_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "__init__.py"
+    "c_builders.py"
+    "c_dialect.py"
+    "c_enum_attrs.py"
+    "c_enums.py"
+    "c_format.py"
+    "c_interfaces.py"
+    "c_names.py"
+    "c_queries.py"
+    "c_registry.py"
+    "c_symbols.py"
+    "c_tables.py"
+    "c_traits.py"
+    "keywords.py"
+    "type_registry.py"
+  DEPS
+    loom::py::loom::gen::ops::model
+    loom::py::loom::core
+    loom::py::loom::error::error
+    loom::py::loom::gen::bootstrap
+    loom::py::loom::gen::assembly::tokens
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::arch::x86::dialect
 )
 
 iree_py_test(

@@ -53,7 +53,7 @@ loom_generated_cc_library(
         "builders.c",
         "tables.c",
     ],
-    generator = "//loom/py/loom/gen/ops:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_func_generator",
     visibility = _FUNC_VISIBILITY,
     deps = [
         "//loom/src/loom/error:error_defs",

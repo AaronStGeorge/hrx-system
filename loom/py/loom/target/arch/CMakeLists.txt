@@ -18,4 +18,13 @@ iree_py_library(
     loom::py::loom::target::package
 )
 
+iree_py_library(
+  NAME
+    package_init
+  SRCS
+    "__init__.py"
+  DEPS
+    loom::py::loom::target::package_init
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

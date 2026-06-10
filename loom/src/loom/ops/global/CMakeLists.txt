@@ -13,7 +13,7 @@ loom_generated_cc_library(
   NAME
     global
   GENERATOR
-    loom::py::loom::gen::ops::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_global_generator
   SRCS
     "facts.c"
     "verify.c"

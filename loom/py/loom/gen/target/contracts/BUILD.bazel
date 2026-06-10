@@ -261,6 +261,7 @@ iree_py_test(
     deps = [
         ":lower_rules",
         "//loom/py/loom/dialect/scalar",
+        "//loom/py/loom/dialect/vector",
         "//loom/py/loom/target/contracts",
         "//loom/py/loom/target/test:descriptors",
     ],

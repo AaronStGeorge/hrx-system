@@ -14,7 +14,7 @@ loom_generated_cc_library(
   NAME
     ops
   GENERATOR
-    loom::py::loom::gen::ops::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_ireevm_generator
   SRCS
     "registry.c"
     "verify.c"

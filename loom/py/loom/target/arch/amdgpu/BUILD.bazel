@@ -19,7 +19,7 @@ iree_py_library(
     ],
     deps = [
         "//loom/py/loom/target:low_descriptors",
-        "//loom/py/loom/target/arch:package",
+        "//loom/py/loom/target/arch:package_init",
     ],
 )
 

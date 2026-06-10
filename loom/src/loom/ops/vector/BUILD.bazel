@@ -67,7 +67,7 @@ loom_generated_cc_library(
         "tables/reduction.c",
         "tables/table.c",
     ],
-    generator = "//loom/py/loom/gen/ops:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_vector_generator",
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

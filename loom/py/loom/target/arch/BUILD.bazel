@@ -16,3 +16,9 @@ iree_py_library(
     srcs = ["__init__.py"],
     deps = ["//loom/py/loom/target:package"],
 )
+
+iree_py_library(
+    name = "package_init",
+    srcs = ["__init__.py"],
+    deps = ["//loom/py/loom/target:package_init"],
+)
