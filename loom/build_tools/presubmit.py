@@ -10,7 +10,9 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +39,31 @@ RESOURCE_TEST_TAG_FILTERS = (
 CTEST_RESOURCE_LABEL_EXCLUDE_REGEX = "runtime-resource="
 
 
+@dataclass(frozen=True)
+class PythonPackageSurface:
+    path: str
+    required_exports: tuple[str, ...]
+
+
+PYTHON_PACKAGE_SURFACES = (
+    PythonPackageSurface(
+        "loom/py/loom/__init__.py",
+        (
+            "LoomBuilder",
+            "module_builder",
+        ),
+    ),
+    PythonPackageSurface(
+        "loom/py/loom/dialect/__init__.py",
+        (
+            "scf",
+            "target",
+            "vector",
+        ),
+    ),
+)
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Loom project presubmit.")
     mutation = parser.add_mutually_exclusive_group()
@@ -60,6 +87,71 @@ def run_command(command: list[str], description: str) -> bool:
     return project_presubmit.run_command(
         PROJECT_NAME, command, description, cwd=REPO_ROOT
     )
+
+
+def python_all_exports(path: Path) -> tuple[str, ...] | None:
+    try:
+        module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except SyntaxError as exc:
+        print(f"{path.relative_to(REPO_ROOT)}:{exc.lineno}: invalid Python syntax")
+        return None
+    for statement in module.body:
+        if not isinstance(statement, ast.Assign):
+            continue
+        if not any(
+            isinstance(target, ast.Name) and target.id == "__all__"
+            for target in statement.targets
+        ):
+            continue
+        try:
+            exports = ast.literal_eval(statement.value)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(exports, (list, tuple)):
+            return None
+        if not all(isinstance(export, str) for export in exports):
+            return None
+        return tuple(exports)
+    return None
+
+
+def verify_python_package_surfaces() -> bool:
+    ok = True
+    for surface in PYTHON_PACKAGE_SURFACES:
+        path = REPO_ROOT / surface.path
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"{surface.path}: could not read package surface: {exc}")
+            ok = False
+            continue
+        if not text.strip():
+            print(f"{surface.path}: protected package surface is empty")
+            ok = False
+            continue
+        exports = python_all_exports(path)
+        if exports is None:
+            print(f"{surface.path}: protected package surface must define __all__")
+            ok = False
+            continue
+        missing_exports = [
+            export for export in surface.required_exports if export not in exports
+        ]
+        if missing_exports:
+            print(
+                f"{surface.path}: protected package surface is missing "
+                f"required __all__ export(s): {', '.join(missing_exports)}"
+            )
+            ok = False
+    return ok
+
+
+def run_python_package_surface_check() -> bool:
+    print("loom presubmit: Python package surfaces")
+    ok = verify_python_package_surfaces()
+    if ok:
+        print("loom presubmit: Python package surfaces ok")
+    return ok
 
 
 def is_global_trigger(path: str) -> bool:
@@ -136,12 +228,16 @@ def main() -> int:
     if not should_run_tests(args.files_from):
         print("loom presubmit: no Loom-affecting files")
         return 0
+    ok = run_python_package_surface_check()
+    if not ok:
+        return 1
     if args.lane == "bazel":
         ok = run_bazel_tests()
     elif args.lane == "cmake":
         ok = run_cmake_tests()
     else:
         raise ValueError(f"unknown lane: {args.lane}")
+    ok = run_python_package_surface_check() and ok
     return 0 if ok else 1
 
 
