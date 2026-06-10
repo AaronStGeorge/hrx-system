@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import json
 import os
 import re
 import shlex
@@ -28,6 +29,7 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.parse import unquote, urlparse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -78,11 +80,13 @@ CLANG_TIDY_EXTENSIONS = {
     ".hxx",
 }
 CLANG_TIDY_INFRA_PREFIX = "build_tools/clang_tidy/"
+CLANG_TIDY_FIXES_OUTPUT_GROUP = "iree_clang_tidy_fixes"
 CLANG_TIDY_OUTPUT_GROUP = "iree_clang_tidy_reports"
 CLANG_TIDY_PATH_PREFIXES = SEMGREP_PATH_PREFIXES
 CLANG_TIDY_REPO_ENV = "--repo_env=IREE_CLANG_TIDY_LLVM=auto"
 CLANG_TIDY_CHECKS = "-*,iree-*"
 CLANG_TIDY_CMAKE_BUILD_DIR = REPO_ROOT / ".tmp" / "iree-clang-tidy-plugin"
+CLANG_TIDY_FIXES_ROOT = "iree-clang-tidy-fixes"
 CLANG_TIDY_SETUP_HINT = (
     "install LLVM clang-tidy/clang++/llvm-config or set "
     "IREE_CLANG_TIDY_LLVM_CONFIG/IREE_CLANG_TIDY_LLVM_ROOT"
@@ -688,6 +692,25 @@ def clang_tidy_llvm_tools() -> tuple[str, str, str] | None:
     return llvm_config, clang_tidy, clangxx
 
 
+def clang_tidy_apply_replacements_tool() -> str | None:
+    return find_llvm_tool(
+        env_names=(
+            "IREE_CLANG_APPLY_REPLACEMENTS_BINARY",
+            "CLANG_APPLY_REPLACEMENTS",
+        ),
+        root_env_names=("IREE_CLANG_TIDY_LLVM_ROOT", "IREE_LLVM_ROOT", "LLVM_ROOT"),
+        tool_names=("clang-apply-replacements", "clang-apply-replacements-22"),
+    )
+
+
+def clang_tidy_run_tool() -> str | None:
+    return find_llvm_tool(
+        env_names=("IREE_RUN_CLANG_TIDY_BINARY", "RUN_CLANG_TIDY"),
+        root_env_names=("IREE_CLANG_TIDY_LLVM_ROOT", "IREE_LLVM_ROOT", "LLVM_ROOT"),
+        tool_names=("run-clang-tidy", "run-clang-tidy-22"),
+    )
+
+
 def clang_tidy_required(profile: str) -> bool:
     return profile == "ci" and env_flag("IREE_CLANG_TIDY_REQUIRED")
 
@@ -1134,21 +1157,98 @@ def run_semgrep(paths: list[str], profile: str, verbose: bool) -> bool:
     return ok
 
 
-def clang_tidy_bazel_command(targets: list[str], keep_going: bool = False) -> list[str]:
+def clang_tidy_bazel_command(
+    targets: list[str],
+    keep_going: bool = False,
+    *,
+    build_events_path: Path | None = None,
+    emit_fixes: bool = False,
+) -> list[str]:
     command = [
         "bazel",
         "build",
     ]
     if keep_going:
         command.append("--keep_going")
+    output_groups = [CLANG_TIDY_OUTPUT_GROUP]
+    if emit_fixes:
+        output_groups.append(CLANG_TIDY_FIXES_OUTPUT_GROUP)
     command += [
         CLANG_TIDY_REPO_ENV,
         f"--aspects={CLANG_TIDY_ASPECT}",
-        f"--output_groups={CLANG_TIDY_OUTPUT_GROUP}",
+        f"--output_groups={','.join(output_groups)}",
+    ]
+    if emit_fixes:
+        command.append("--aspects_parameters=emit_fixes=true")
+    if build_events_path is not None:
+        command += [
+            f"--build_event_json_file={build_events_path}",
+            "--ui_event_filters=-info",
+        ]
+    command += [
         "--",
         *targets,
     ]
     return command
+
+
+def bazel_file_uri_to_path(uri: str) -> Path:
+    parsed = urlparse(uri)
+    if parsed.scheme != "file":
+        raise ValueError(f"expected file URI for Bazel output, got {uri}")
+    if parsed.netloc:
+        raise ValueError(f"file URI has unsupported host component: {uri}")
+    return Path(unquote(parsed.path))
+
+
+def bazel_output_paths_from_bep(
+    build_events_path: Path,
+    *,
+    output_group: str,
+    suffix: str,
+) -> list[Path]:
+    named_sets: dict[str, dict[str, object]] = {}
+    root_set_ids: list[str] = []
+    with build_events_path.open(encoding="utf-8") as build_events_file:
+        for line in build_events_file:
+            event = json.loads(line)
+            named_set_id = event.get("id", {}).get("namedSet", {}).get("id")
+            if named_set_id is not None:
+                named_sets[named_set_id] = event.get("namedSetOfFiles", {})
+            for group in event.get("completed", {}).get("outputGroup", []):
+                if group.get("name") == output_group:
+                    root_set_ids.extend(
+                        file_set["id"] for file_set in group.get("fileSets", [])
+                    )
+
+    seen_set_ids: set[str] = set()
+    seen_paths: set[Path] = set()
+    output_paths: list[Path] = []
+
+    def visit_set(set_id: str) -> None:
+        if set_id in seen_set_ids:
+            return
+        seen_set_ids.add(set_id)
+        named_set = named_sets.get(set_id)
+        if named_set is None:
+            raise ValueError(f"{build_events_path}: missing named set {set_id}")
+        for file_set in named_set.get("fileSets", []):
+            visit_set(file_set["id"])
+        for file_entry in named_set.get("files", []):
+            name = file_entry.get("name", "")
+            if not name.endswith(suffix):
+                continue
+            output_path = bazel_file_uri_to_path(file_entry["uri"])
+            if output_path in seen_paths:
+                continue
+            seen_paths.add(output_path)
+            output_paths.append(output_path)
+
+    for root_set_id in root_set_ids:
+        visit_set(root_set_id)
+
+    output_paths.sort()
+    return output_paths
 
 
 def normalize_repo_path(path: Path) -> Path:
@@ -1240,18 +1340,106 @@ def cmake_clang_tidy_command(
     plugin: Path,
     compile_commands_dir: Path,
     files: list[str],
+    fix: bool = False,
 ) -> list[str]:
-    return [
+    command = [
         clang_tidy,
         f"--load={plugin}",
         f"--checks={CLANG_TIDY_CHECKS}",
-        "--warnings-as-errors=*",
         f"-p={compile_commands_dir}",
+    ]
+    if fix:
+        command += [
+            "--fix-errors",
+            "--format-style=file",
+        ]
+    else:
+        command.append("--warnings-as-errors=*")
+    command += [
+        *files,
+    ]
+    return command
+
+
+def cmake_run_clang_tidy_fix_command(
+    *,
+    run_clang_tidy: str,
+    clang_tidy: str,
+    clang_apply_replacements: str,
+    plugin: Path,
+    compile_commands_dir: Path,
+    files: list[str],
+) -> list[str]:
+    return [
+        run_clang_tidy,
+        "-clang-tidy-binary",
+        clang_tidy,
+        "-clang-apply-replacements-binary",
+        clang_apply_replacements,
+        "-p",
+        str(compile_commands_dir),
+        f"-checks={CLANG_TIDY_CHECKS}",
+        f"-load={plugin}",
+        "-j",
+        str(semgrep_jobs()),
+        "-fix",
+        "-format",
+        "-style=file",
         *files,
     ]
 
 
-def run_clang_tidy_cmake(paths: list[str], profile: str, verbose: bool) -> bool:
+def prepare_clang_tidy_replacements_dir(
+    scratch_dir: Path, fix_paths: list[Path]
+) -> Path:
+    replacements_dir = scratch_dir / "replacements"
+    replacements_dir.mkdir(parents=True, exist_ok=True)
+    for fix_path in fix_paths:
+        shutil.copy2(fix_path, replacements_dir / fix_path.name)
+    return replacements_dir
+
+
+def clang_tidy_sanitize_artifact_path(path: str) -> str:
+    result = path
+    for old, new in (
+        ("/", "_"),
+        ("\\", "_"),
+        (":", "_"),
+        ("+", "_"),
+        ("-", "_"),
+        (".", "_"),
+    ):
+        result = result.replace(old, new)
+    return result
+
+
+def clang_tidy_fix_paths_for_files(
+    fix_paths: list[Path], candidate_files: list[str]
+) -> list[Path]:
+    selected_suffixes = tuple(
+        f".{clang_tidy_sanitize_artifact_path(path)}.clang_tidy_fixes.yaml"
+        for path in candidate_files
+    )
+    return [
+        fix_path for fix_path in fix_paths if fix_path.name.endswith(selected_suffixes)
+    ]
+
+
+def clang_apply_replacements_command(
+    clang_apply_replacements: str, replacements_dir: Path
+) -> list[str]:
+    return [
+        clang_apply_replacements,
+        "--format",
+        "--style=file",
+        "--remove-change-desc-files",
+        str(replacements_dir),
+    ]
+
+
+def run_clang_tidy_cmake(
+    paths: list[str], profile: str, verbose: bool, fix: bool = False
+) -> bool:
     candidate_files = cmake_clang_tidy_candidate_files(paths)
     infra_files = existing_files(
         [path for path in paths if is_clang_tidy_infra_file(path)]
@@ -1266,6 +1454,17 @@ def run_clang_tidy_cmake(paths: list[str], profile: str, verbose: bool) -> bool:
             return False
         return skip_step("clang-tidy", CLANG_TIDY_SETUP_HINT)
     llvm_config, clang_tidy, _ = tools
+    clang_apply_replacements = None
+    run_clang_tidy = None
+    if fix:
+        clang_apply_replacements = clang_tidy_apply_replacements_tool()
+        run_clang_tidy = clang_tidy_run_tool()
+        if not clang_apply_replacements or not run_clang_tidy:
+            print(
+                f"[fail] clang-tidy: {CLANG_TIDY_SETUP_HINT} with "
+                "clang-apply-replacements and run-clang-tidy for --fix."
+            )
+            return False
     if not require_tool("cmake", "clang-tidy CMake plugin"):
         return False
 
@@ -1333,25 +1532,149 @@ def run_clang_tidy_cmake(paths: list[str], profile: str, verbose: bool) -> bool:
         print("hint: run python dev.py cmake configure")
         return False
 
-    ok = (
-        run_command(
-            cmake_clang_tidy_command(
-                clang_tidy=clang_tidy,
-                plugin=plugin,
-                compile_commands_dir=compile_commands_dir,
-                files=candidate_files,
-            ),
-            "clang-tidy CMake compile database",
-            verbose,
+    if fix:
+        ok = (
+            run_command(
+                cmake_run_clang_tidy_fix_command(
+                    run_clang_tidy=run_clang_tidy,
+                    clang_tidy=clang_tidy,
+                    clang_apply_replacements=clang_apply_replacements,
+                    plugin=plugin,
+                    compile_commands_dir=compile_commands_dir,
+                    files=candidate_files,
+                ),
+                "clang-tidy CMake fix",
+                verbose,
+            )
+            and ok
         )
-        and ok
-    )
+        if ok:
+            ok = (
+                run_command(
+                    cmake_clang_tidy_command(
+                        clang_tidy=clang_tidy,
+                        plugin=plugin,
+                        compile_commands_dir=compile_commands_dir,
+                        files=candidate_files,
+                    ),
+                    "clang-tidy CMake compile database after fixes",
+                    verbose,
+                )
+                and ok
+            )
+    else:
+        ok = (
+            run_command(
+                cmake_clang_tidy_command(
+                    clang_tidy=clang_tidy,
+                    plugin=plugin,
+                    compile_commands_dir=compile_commands_dir,
+                    files=candidate_files,
+                ),
+                "clang-tidy CMake compile database",
+                verbose,
+            )
+            and ok
+        )
     return ok
 
 
-def run_clang_tidy(paths: list[str], profile: str, lane: str, verbose: bool) -> bool:
+def run_clang_tidy_bazel_fix(
+    *,
+    candidate_files: list[str],
+    package_targets: list[str],
+    profile: str,
+    verbose: bool,
+) -> bool:
+    clang_apply_replacements = clang_tidy_apply_replacements_tool()
+    if not clang_apply_replacements:
+        print(
+            f"[fail] clang-tidy: {CLANG_TIDY_SETUP_HINT} with "
+            "clang-apply-replacements for --fix."
+        )
+        return False
+
+    scratch_dir = devtools_tmp_root() / CLANG_TIDY_FIXES_ROOT / f"run-{os.getpid()}"
+    if scratch_dir.exists():
+        shutil.rmtree(scratch_dir)
+    scratch_dir.mkdir(parents=True)
+    build_events_path = scratch_dir / "build_events.json"
+    try:
+        ok = run_command(
+            clang_tidy_bazel_command(
+                package_targets,
+                keep_going=True,
+                build_events_path=build_events_path,
+                emit_fixes=True,
+            ),
+            "clang-tidy Bazel fix export",
+            verbose,
+        )
+        if not ok:
+            return False
+
+        fix_paths = bazel_output_paths_from_bep(
+            build_events_path,
+            output_group=CLANG_TIDY_FIXES_OUTPUT_GROUP,
+            suffix=".clang_tidy_fixes.yaml",
+        )
+        if not fix_paths:
+            print("[fail] clang-tidy: Bazel produced no replacement artifacts.")
+            return False
+        fix_paths = clang_tidy_fix_paths_for_files(fix_paths, candidate_files)
+        if not fix_paths:
+            ok = (
+                skip_step(
+                    "clang-tidy apply fixes",
+                    "no replacement artifacts for selected translation units",
+                )
+                and ok
+            )
+            return (
+                run_command(
+                    clang_tidy_bazel_command(
+                        package_targets,
+                        keep_going=profile == "ci",
+                    ),
+                    "clang-tidy Bazel actions after fixes",
+                    verbose,
+                )
+                and ok
+            )
+
+        replacements_dir = prepare_clang_tidy_replacements_dir(scratch_dir, fix_paths)
+        ok = run_command(
+            clang_apply_replacements_command(
+                clang_apply_replacements,
+                replacements_dir,
+            ),
+            "clang-tidy apply fixes",
+            verbose,
+        )
+        if not ok:
+            return False
+
+        return run_command(
+            clang_tidy_bazel_command(
+                package_targets,
+                keep_going=profile == "ci",
+            ),
+            "clang-tidy Bazel actions after fixes",
+            verbose,
+        )
+    finally:
+        shutil.rmtree(scratch_dir, ignore_errors=True)
+
+
+def run_clang_tidy(
+    paths: list[str],
+    profile: str,
+    lane: str,
+    verbose: bool,
+    fix: bool = False,
+) -> bool:
     if lane == "cmake":
-        return run_clang_tidy_cmake(paths, profile, verbose)
+        return run_clang_tidy_cmake(paths, profile, verbose, fix=fix)
     if lane != "bazel":
         return skip_step("clang-tidy", "unknown build-system lane")
 
@@ -1411,17 +1734,28 @@ def run_clang_tidy(paths: list[str], profile: str, lane: str, verbose: bool) -> 
         ]
     )
     if package_targets:
-        ok = (
-            run_command(
-                clang_tidy_bazel_command(
-                    package_targets,
-                    keep_going=profile == "ci",
-                ),
-                "clang-tidy Bazel actions",
-                verbose,
+        if fix:
+            ok = (
+                run_clang_tidy_bazel_fix(
+                    candidate_files=candidate_files,
+                    package_targets=package_targets,
+                    profile=profile,
+                    verbose=verbose,
+                )
+                and ok
             )
-            and ok
-        )
+        else:
+            ok = (
+                run_command(
+                    clang_tidy_bazel_command(
+                        package_targets,
+                        keep_going=profile == "ci",
+                    ),
+                    "clang-tidy Bazel actions",
+                    verbose,
+                )
+                and ok
+            )
     elif candidate_files:
         ok = skip_step("clang-tidy", "no owning Bazel packages for inputs") and ok
     return ok
@@ -1609,7 +1943,11 @@ def run_presubmit(
         print_section("clang-tidy")
         ok = (
             run_clang_tidy(
-                paths, profile=args.profile, lane=args.lane, verbose=args.verbose
+                paths,
+                profile=args.profile,
+                lane=args.lane,
+                verbose=args.verbose,
+                fix=args.fix,
             )
             and ok
         )

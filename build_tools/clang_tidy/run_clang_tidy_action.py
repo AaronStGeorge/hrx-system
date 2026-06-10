@@ -24,9 +24,24 @@ def parse_arguments(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--checks", required=True)
-    parser.add_argument("--warnings-as-errors", required=True)
+    parser.add_argument("--warnings-as-errors")
+    parser.add_argument("--export-fixes", type=Path)
+    parser.add_argument("--line-filter")
+    parser.add_argument(
+        "--allow-diagnostics",
+        action="store_true",
+        help="Return success when clang-tidy produced diagnostic fix artifacts.",
+    )
     args = parser.parse_args(argv[:delimiter])
     return args, argv[delimiter + 1 :]
+
+
+def write_empty_fixes(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\nMainSourceFile: ''\nDiagnostics: []\n...\n",
+        encoding="utf-8",
+    )
 
 
 def main(argv: list[str]) -> int:
@@ -39,11 +54,15 @@ def main(argv: list[str]) -> int:
         str(args.clang_tidy),
         f"--load={args.plugin}",
         f"--checks={args.checks}",
-        f"--warnings-as-errors={args.warnings_as_errors}",
         str(args.source),
-        "--",
-        *compile_args,
     ]
+    if args.warnings_as_errors:
+        command.append(f"--warnings-as-errors={args.warnings_as_errors}")
+    if args.export_fixes:
+        command.append(f"--export-fixes={args.export_fixes}")
+    if args.line_filter:
+        command.append(f"--line-filter={args.line_filter}")
+    command += ["--", *compile_args]
     completed = subprocess.run(
         command,
         stdout=subprocess.PIPE,
@@ -52,7 +71,15 @@ def main(argv: list[str]) -> int:
     )
     output = completed.stdout
     args.output.write_text(output, encoding="utf-8")
+    if (
+        args.export_fixes
+        and completed.returncode == 0
+        and not args.export_fixes.exists()
+    ):
+        write_empty_fixes(args.export_fixes)
     if completed.returncode != 0:
+        if args.allow_diagnostics and args.export_fixes and args.export_fixes.exists():
+            return 0
         print("clang-tidy command failed:", file=sys.stderr)
         print(shlex.join(command), file=sys.stderr)
         if output:

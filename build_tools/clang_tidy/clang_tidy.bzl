@@ -18,8 +18,9 @@ load(
 )
 
 IreeClangTidyInfo = provider(
-    doc = "clang-tidy report files collected from configured C/C++ targets.",
+    doc = "clang-tidy artifacts collected from configured C/C++ targets.",
     fields = {
+        "fixes": "depset of per-translation-unit clang-tidy replacement YAML files.",
         "reports": "depset of per-translation-unit clang-tidy report files.",
     },
 )
@@ -81,6 +82,18 @@ def _clang_tidy_report_path(target_label, source):
         _sanitize_path(source.path),
     )
 
+def _clang_tidy_fixes_report_path(target_label, source):
+    return "%s.%s.clang_tidy_fixes.txt" % (
+        iree_cc_sanitize_label(target_label),
+        _sanitize_path(source.path),
+    )
+
+def _clang_tidy_fixes_path(target_label, source):
+    return "%s.%s.clang_tidy_fixes.yaml" % (
+        iree_cc_sanitize_label(target_label),
+        _sanitize_path(source.path),
+    )
+
 def _run_clang_tidy_action(ctx, target, cc_toolchain, feature_configuration, source):
     compile_command = iree_cc_compile_command(
         ctx,
@@ -89,14 +102,26 @@ def _run_clang_tidy_action(ctx, target, cc_toolchain, feature_configuration, sou
         feature_configuration,
         source,
     )
-    report = ctx.actions.declare_file(_clang_tidy_report_path(target.label, source))
+    emit_fixes = ctx.attr.emit_fixes == "true"
+    report_path = (
+        _clang_tidy_fixes_report_path(target.label, source) if emit_fixes else _clang_tidy_report_path(target.label, source)
+    )
+    report = ctx.actions.declare_file(report_path)
+    fixes = None
+    outputs = [report]
     args = ctx.actions.args()
     args.add("--clang-tidy", ctx.executable._clang_tidy)
     args.add("--plugin", ctx.executable._plugin)
     args.add("--source", source)
     args.add("--output", report)
     args.add("--checks=%s" % ctx.attr._checks)
-    args.add("--warnings-as-errors=%s" % ctx.attr._warnings_as_errors)
+    if emit_fixes:
+        fixes = ctx.actions.declare_file(_clang_tidy_fixes_path(target.label, source))
+        outputs.append(fixes)
+        args.add("--export-fixes", fixes)
+        args.add("--allow-diagnostics")
+    else:
+        args.add("--warnings-as-errors=%s" % ctx.attr._warnings_as_errors)
     args.add("--")
     args.add_all(compile_command.compile_args)
 
@@ -109,7 +134,7 @@ def _run_clang_tidy_action(ctx, target, cc_toolchain, feature_configuration, sou
         executable = ctx.executable._runner,
         arguments = [args],
         inputs = inputs,
-        outputs = [report],
+        outputs = outputs,
         tools = [
             ctx.executable._clang_tidy,
             ctx.executable._plugin,
@@ -117,9 +142,10 @@ def _run_clang_tidy_action(ctx, target, cc_toolchain, feature_configuration, sou
         mnemonic = "IreeClangTidy",
         progress_message = "Running clang-tidy on %s" % source.short_path,
     )
-    return report
+    return report, fixes
 
 def _collect_clang_tidy_aspect_impl(target, ctx):
+    transitive_fixes = []
     transitive_reports = []
     for attr_name in [
         "actual",
@@ -137,25 +163,34 @@ def _collect_clang_tidy_aspect_impl(target, ctx):
             deps = []
         for dep in deps:
             if IreeClangTidyInfo in dep:
+                transitive_fixes.append(dep[IreeClangTidyInfo].fixes)
                 transitive_reports.append(dep[IreeClangTidyInfo].reports)
 
+    local_fixes = []
     local_reports = []
     if CcInfo in target:
         cc_toolchain = find_cc_toolchain(ctx)
         feature_configuration = iree_cc_feature_configuration(ctx, cc_toolchain)
         for source in iree_cc_source_files(ctx):
-            local_reports.append(_run_clang_tidy_action(
+            report, fixes = _run_clang_tidy_action(
                 ctx,
                 target,
                 cc_toolchain,
                 feature_configuration,
                 source,
-            ))
+            )
+            local_reports.append(report)
+            if fixes:
+                local_fixes.append(fixes)
 
+    fixes = depset(local_fixes, transitive = transitive_fixes)
     reports = depset(local_reports, transitive = transitive_reports)
     return [
-        IreeClangTidyInfo(reports = reports),
-        OutputGroupInfo(iree_clang_tidy_reports = reports),
+        IreeClangTidyInfo(fixes = fixes, reports = reports),
+        OutputGroupInfo(
+            iree_clang_tidy_fixes = fixes,
+            iree_clang_tidy_reports = reports,
+        ),
     ]
 
 collect_clang_tidy_aspect = aspect(
@@ -166,6 +201,11 @@ collect_clang_tidy_aspect = aspect(
         "implementation_deps",
     ],
     attrs = dict(CC_TOOLCHAIN_ATTRS, **{
+        "emit_fixes": attr.string(
+            default = "false",
+            values = ["false", "true"],
+            doc = "When true, emit clang-tidy replacement YAML files instead of failing on diagnostics.",
+        ),
         "_checks": attr.string(
             default = "-*,iree-*",
             doc = "clang-tidy checks enabled for IREE analysis.",
@@ -196,15 +236,21 @@ collect_clang_tidy_aspect = aspect(
 )
 
 def _iree_clang_tidy_impl(ctx):
+    transitive_fixes = []
     transitive_reports = []
     for target in ctx.attr.targets:
         if IreeClangTidyInfo in target:
+            transitive_fixes.append(target[IreeClangTidyInfo].fixes)
             transitive_reports.append(target[IreeClangTidyInfo].reports)
+    fixes = depset(transitive = transitive_fixes)
     reports = depset(transitive = transitive_reports)
     return [
         DefaultInfo(files = reports),
-        IreeClangTidyInfo(reports = reports),
-        OutputGroupInfo(iree_clang_tidy_reports = reports),
+        IreeClangTidyInfo(fixes = fixes, reports = reports),
+        OutputGroupInfo(
+            iree_clang_tidy_fixes = fixes,
+            iree_clang_tidy_reports = reports,
+        ),
     ]
 
 _iree_clang_tidy_rule = rule(

@@ -90,6 +90,38 @@ class PresubmitTest(unittest.TestCase):
 
         self.assertEqual(command[0:3], ["bazel", "build", "--keep_going"])
 
+    def test_clang_tidy_bazel_command_can_export_fixes(self):
+        command = presubmit.clang_tidy_bazel_command(
+            ["//runtime/src/iree/base:all"],
+            build_events_path=Path(".tmp/fixes/build_events.json"),
+            emit_fixes=True,
+        )
+
+        self.assertIn("--aspects_parameters=emit_fixes=true", command)
+        self.assertIn(
+            "--output_groups=iree_clang_tidy_reports,iree_clang_tidy_fixes",
+            command,
+        )
+        self.assertIn("--build_event_json_file=.tmp/fixes/build_events.json", command)
+
+    def test_clang_tidy_fix_paths_filter_to_selected_translation_units(self):
+        fix_paths = [
+            Path(
+                "label.runtime_src_iree_base_status_c.clang_tidy_fixes.yaml",
+            ),
+            Path(
+                "label.runtime_src_iree_base_allocator_c.clang_tidy_fixes.yaml",
+            ),
+        ]
+
+        self.assertEqual(
+            presubmit.clang_tidy_fix_paths_for_files(
+                fix_paths,
+                ["runtime/src/iree/base/status.c"],
+            ),
+            [fix_paths[0]],
+        )
+
     def test_cmake_clang_tidy_candidates_are_translation_units(self):
         with mock.patch.object(
             presubmit, "CLANG_TIDY_PATH_PREFIXES", ("runtime/src/iree/",)
@@ -117,6 +149,25 @@ class PresubmitTest(unittest.TestCase):
         self.assertIn("--load=.tmp/plugin/libIREEClangTidyPlugin.so", command)
         self.assertIn(f"--checks={presubmit.CLANG_TIDY_CHECKS}", command)
         self.assertIn("-p=build/cmake-debug", command)
+        self.assertEqual(command[-1], "runtime/src/iree/base/status.c")
+
+    def test_cmake_clang_tidy_fix_command_uses_parallel_driver(self):
+        command = presubmit.cmake_run_clang_tidy_fix_command(
+            run_clang_tidy="run-clang-tidy",
+            clang_tidy="clang-tidy",
+            clang_apply_replacements="clang-apply-replacements",
+            plugin=Path(".tmp/plugin/libIREEClangTidyPlugin.so"),
+            compile_commands_dir=Path("build/cmake-debug"),
+            files=["runtime/src/iree/base/status.c"],
+        )
+
+        self.assertEqual(command[0], "run-clang-tidy")
+        self.assertIn("-clang-tidy-binary", command)
+        self.assertIn("clang-tidy", command)
+        self.assertIn("-clang-apply-replacements-binary", command)
+        self.assertIn("clang-apply-replacements", command)
+        self.assertIn("-fix", command)
+        self.assertIn("-format", command)
         self.assertEqual(command[-1], "runtime/src/iree/base/status.c")
 
     def test_cmake_build_dir_uses_recorded_devtools_state(self):

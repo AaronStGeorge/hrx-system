@@ -250,6 +250,7 @@ the requested output path when -o/--output is supplied.""",
   python dev.py bazel clang-tidy
   python dev.py bazel clang-tidy --base origin/main
   python dev.py bazel clang-tidy --all --profile ci
+  python dev.py bazel clang-tidy --fix runtime/src/iree/vm/native_module.c
   python dev.py bazel clang-tidy runtime/src/iree/vm/native_module.c
   python dev.py bazel clang-tidy //runtime/src/iree/vm:all
 
@@ -257,7 +258,8 @@ With no input option, this checks local staged, unstaged, and untracked files.
 Repo-relative paths and git scopes use the presubmit clang-tidy provider, which
 maps files to owning Bazel packages. Bazel target patterns run the clang-tidy
 aspect directly. The ci profile adds Bazel --keep_going so one run reports the
-full failure set.""",
+full failure set. --fix is restricted to bounded path and git scopes; it exports
+fixes through Bazel, applies them outside Bazel, then re-runs the check.""",
         )
     if command == "clang-tidy" and lane == "cmake":
         return CommandHelp(
@@ -266,12 +268,14 @@ full failure set.""",
   python dev.py cmake clang-tidy
   python dev.py cmake clang-tidy --base origin/main
   python dev.py cmake clang-tidy --all --profile ci
+  python dev.py cmake clang-tidy --fix runtime/src/iree/vm/native_module.c
   python dev.py cmake clang-tidy runtime/src/iree/vm/native_module.c
   python dev.py --cmake-build-dir build/cmake-asan cmake clang-tidy runtime/src/iree/base/status.c
 
 With no input option, this checks local staged, unstaged, and untracked files.
 Repo-relative paths and git scopes use the configured CMake compile database.
-Run `python dev.py cmake configure` first. Select a build tree with
+--fix applies fixes through run-clang-tidy, then re-runs the check. Run
+`python dev.py cmake configure` first. Select a build tree with
 --cmake-build-dir or IREE_CMAKE_BUILD_DIR.""",
         )
     if command == "presubmit":
@@ -690,13 +694,16 @@ exercise one package or subtree directly.
 python dev.py bazel clang-tidy
 python dev.py bazel clang-tidy --base origin/main
 python dev.py bazel clang-tidy --all --profile ci
+python dev.py bazel clang-tidy --fix runtime/src/iree/vm/native_module.c
 python dev.py bazel clang-tidy runtime/src/iree/vm/native_module.c
 python dev.py bazel clang-tidy //runtime/src/iree/vm:all
 ```
 
 Git scopes and repo-relative paths route through the presubmit provider so the
 tool can map files to owning Bazel packages. Explicit Bazel targets run the
-clang-tidy aspect directly. The ci profile uses Bazel `--keep_going`."""
+clang-tidy aspect directly. The ci profile uses Bazel `--keep_going`.
+`--fix` is restricted to bounded path and git scopes; it exports replacements
+through Bazel, applies them outside Bazel, then re-runs the normal check."""
 
     if command == "run":
         return """## iree-bazel-run
@@ -786,12 +793,14 @@ Run CMake-backed clang-tidy checks from the repository root.
 python dev.py cmake configure
 python dev.py cmake clang-tidy
 python dev.py cmake clang-tidy --base origin/main
+python dev.py cmake clang-tidy --fix runtime/src/iree/base/status.c
 python dev.py cmake clang-tidy runtime/src/iree/base/status.c
 python dev.py --cmake-build-dir build/cmake-asan cmake clang-tidy runtime/src/iree/base/status.c
 ```
 
 The command builds the IREE clang-tidy plugin with CMake and runs `clang-tidy`
 against source files using the configured CMake `compile_commands.json`.
+`--fix` applies fixes through `run-clang-tidy`, then re-runs the normal check.
 Select the CMake build tree with `--cmake-build-dir` or
 `IREE_CMAKE_BUILD_DIR`."""
 

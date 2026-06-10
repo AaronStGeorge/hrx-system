@@ -461,6 +461,34 @@ class CliTest(unittest.TestCase):
         self.assertIn("--clang-tidy", description)
         self.assertIn("runtime/src/iree/vm/native_module.c", description)
 
+    def test_bazel_clang_tidy_fix_uses_presubmit_provider(self):
+        args = cli.parse_arguments(
+            [
+                "bazel",
+                "clang-tidy",
+                "--fix",
+                "runtime/src/iree/vm/native_module.c",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("build_tools/lefthook/presubmit.py", description)
+        self.assertIn("--fix", description)
+        self.assertIn("--clang-tidy", description)
+        self.assertIn("runtime/src/iree/vm/native_module.c", description)
+
+    def test_bazel_clang_tidy_fix_rejects_target_patterns(self):
+        with self.assertRaises(SystemExit):
+            cli.parse_arguments(
+                ["bazel", "clang-tidy", "--fix", "//runtime/src/iree/vm:all"]
+            )
+
+    def test_bazel_clang_tidy_fix_rejects_all_files(self):
+        with self.assertRaises(SystemExit):
+            cli.parse_arguments(["bazel", "clang-tidy", "--fix", "--all"])
+
     def test_cmake_compile_commands_prints_configured_database_path(self):
         args = cli.parse_arguments(
             [
@@ -532,6 +560,24 @@ class CliTest(unittest.TestCase):
         self.assertIn("--lane cmake", description)
         self.assertIn("--clang-tidy", description)
         self.assertIn("runtime/src/iree/vm/native_module.c", description)
+
+    def test_cmake_clang_tidy_fix_uses_presubmit_provider(self):
+        args = cli.parse_arguments(
+            [
+                "cmake",
+                "clang-tidy",
+                "--fix",
+                "runtime/src/iree/vm/native_module.c",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("build_tools/lefthook/presubmit.py", description)
+        self.assertIn("--lane cmake", description)
+        self.assertIn("--fix", description)
+        self.assertIn("--clang-tidy", description)
 
     def test_cmake_clang_tidy_rejects_bazel_targets(self):
         with self.assertRaises(SystemExit):

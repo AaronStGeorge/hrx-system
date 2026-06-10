@@ -463,6 +463,16 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
             is_bazel_target_pattern(input_arg) for input_arg in clang_tidy_inputs
         ):
             parser.error("clang-tidy inputs must be all Bazel targets or all paths")
+        if has_target_pattern and getattr(args, "fix", False):
+            parser.error(
+                "clang-tidy --fix accepts paths or git scopes, not Bazel targets"
+            )
+    if (
+        getattr(args, "backend_command", None) == "clang-tidy"
+        and getattr(args, "fix", False)
+        and getattr(args, "all_files", False)
+    ):
+        parser.error("clang-tidy --fix requires a bounded path or git scope")
     if args.agent_md:
         lane = getattr(args, "lane", None)
         print_agent_md((lane,) if lane else LANES, None)
@@ -650,6 +660,12 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
             default=presubmit.precommit_default_profile(lane),
             command="clang-tidy",
         )
+        add_argument(
+            command_parser,
+            "--fix",
+            action="store_true",
+            help="Apply clang-tidy fix-its for the selected path scope, then re-check.",
+        )
         input_group = command_parser.add_mutually_exclusive_group()
         add_argument(
             input_group,
@@ -693,7 +709,11 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
             nargs="*",
             help="Bazel target patterns or repo-relative paths. Defaults to --changed.",
         )
-        command_parser.set_defaults(handler=handle_bazel_clang_tidy, lane=lane)
+        command_parser.set_defaults(
+            handler=handle_bazel_clang_tidy,
+            lane=lane,
+            backend_command="clang-tidy",
+        )
 
     if lane == "cmake":
         command_help = help_text.lane_command_help(lane, "compile-commands")
@@ -725,6 +745,12 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
             command_parser,
             default=presubmit.precommit_default_profile(lane),
             command="clang-tidy",
+        )
+        add_argument(
+            command_parser,
+            "--fix",
+            action="store_true",
+            help="Apply clang-tidy fix-its for the selected path scope, then re-check.",
         )
         input_group = command_parser.add_mutually_exclusive_group()
         add_argument(
@@ -769,7 +795,11 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
             nargs="*",
             help="Repo-relative paths. Defaults to --changed.",
         )
-        command_parser.set_defaults(handler=handle_cmake_clang_tidy, lane=lane)
+        command_parser.set_defaults(
+            handler=handle_cmake_clang_tidy,
+            lane=lane,
+            backend_command="clang-tidy",
+        )
 
     precommit_parser = add_subparser(
         lane_subparsers,
@@ -1069,6 +1099,7 @@ def handle_bazel_clang_tidy(args: argparse.Namespace) -> CommandPlan:
         all_files=args.all_files,
         base=args.base,
         commit=args.commit,
+        fix=args.fix,
         since=args.since,
         staged=args.staged,
         paths=inputs,
@@ -1095,6 +1126,7 @@ def handle_cmake_clang_tidy(args: argparse.Namespace) -> CommandPlan:
         base=args.base,
         cmake_build_dir=configured_cmake_build_dir(args),
         commit=args.commit,
+        fix=args.fix,
         since=args.since,
         staged=args.staged,
         paths=list(args.clang_tidy_inputs),
