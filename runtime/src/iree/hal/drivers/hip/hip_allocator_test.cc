@@ -257,7 +257,7 @@ TEST_F(HipAllocatorTest, DeviceLocalMappingPromotesToHostVisible) {
   EXPECT_TRUE(iree_status_is_ok(status))
       << "Promoted buffer should be mappable";
   if (iree_status_is_ok(status)) {
-    iree_hal_buffer_unmap_range(&mapping);
+    IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
   }
 
   iree_hal_buffer_release(buffer);

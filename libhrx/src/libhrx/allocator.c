@@ -181,8 +181,9 @@ hrx_status_t hrx_allocator_virtual_memory_reserve(
   iree_status_t alloc_status = iree_allocator_malloc(
       iree_allocator_system(), sizeof(hrx_buffer_s), (void**)&buf);
   if (!iree_status_is_ok(alloc_status)) {
-    iree_hal_allocator_virtual_memory_release(allocator->hal_allocator,
-                                              hal_buffer);
+    alloc_status = iree_status_join(alloc_status,
+                                    iree_hal_allocator_virtual_memory_release(
+                                        allocator->hal_allocator, hal_buffer));
     HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(alloc_status));
   }
 

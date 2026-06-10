@@ -48,9 +48,9 @@ static iree_status_t CollectDiagnostic(void* user_data,
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&builder, &stream);
   loom_type_formatter_t type_formatter = {loom_type_format_minimal, NULL};
-  loom_diagnostic_render_message(diagnostic->error, diagnostic->params,
-                                 diagnostic->param_count, type_formatter,
-                                 &stream);
+  IREE_RETURN_IF_ERROR(loom_diagnostic_render_message(
+      diagnostic->error, diagnostic->params, diagnostic->param_count,
+      type_formatter, &stream));
   std::string message(iree_string_builder_buffer(&builder),
                       iree_string_builder_size(&builder));
   iree_string_builder_deinitialize(&builder);

@@ -206,7 +206,7 @@ static void RunDefaultPoolServesHostLocalMappedAlloca(
       buffer, IREE_HAL_MAPPING_MODE_SCOPED, IREE_HAL_MEMORY_ACCESS_WRITE,
       /*byte_offset=*/0, /*byte_length=*/8, &mapping));
   memset(mapping.contents.data, 0, 8);
-  iree_hal_buffer_unmap_range(&mapping);
+  IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
 
   Ref<iree_hal_semaphore_t> dealloca_signal;
   IREE_ASSERT_OK(

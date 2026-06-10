@@ -257,12 +257,8 @@ CUDAAPI CUresult cuSetDevice(int device) {
   }
 
   // Set the primary context as current.
-  status = iree_hal_streaming_context_set_current(primary_context);
-  CUresult result = iree_status_to_cu_result(status);
-  if (!iree_status_is_ok(status)) {
-    iree_status_ignore(status);
-  }
-  return result;
+  iree_hal_streaming_context_set_current(primary_context);
+  return CUDA_SUCCESS;
 }
 
 //===----------------------------------------------------------------------===//
@@ -333,7 +329,7 @@ CUDAAPI CUresult cuCtxCreate(CUcontext* pctx, unsigned int flags,
   if (iree_status_is_ok(status)) {
     *pctx = (CUcontext)context;
     // Make it current.
-    status = iree_hal_streaming_context_set_current(context);
+    iree_hal_streaming_context_set_current(context);
   }
 
   CUresult result = iree_status_to_cu_result(status);
@@ -387,11 +383,9 @@ CUDAAPI CUresult cuCtxPopCurrent(CUcontext* pctx) {
 
 CUDAAPI CUresult cuCtxSetCurrent(CUcontext ctx) {
   IREE_TRACE_ZONE_BEGIN(z0);
-  iree_status_t status = iree_hal_streaming_context_set_current(
-      (iree_hal_streaming_context_t*)ctx);
-  CUresult result = iree_status_to_cu_result(status);
+  iree_hal_streaming_context_set_current((iree_hal_streaming_context_t*)ctx);
   IREE_TRACE_ZONE_END(z0);
-  return result;
+  return CUDA_SUCCESS;
 }
 
 CUDAAPI CUresult cuCtxGetCurrent(CUcontext* pctx) {

@@ -438,9 +438,7 @@ class CliTest(unittest.TestCase):
         self.assertIn("//runtime/src/iree/vm:all", description)
 
     def test_bazel_clang_tidy_git_scope_uses_presubmit_provider(self):
-        args = cli.parse_arguments(
-            ["bazel", "clang-tidy", "--base", "origin/main"]
-        )
+        args = cli.parse_arguments(["bazel", "clang-tidy", "--base", "origin/main"])
 
         plan = args.handler(args)
         description = plan.describe()

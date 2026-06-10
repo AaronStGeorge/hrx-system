@@ -1142,9 +1142,11 @@ static void iree_hal_hip_async_buffer_release(
   void* ptr = iree_hal_hip_buffer_device_pointer(buffer);
   if (ptr) {
     if (device->params.async_caching) {
-      iree_hal_hip_allocator_free_async(device->device_allocator, buffer);
+      iree_status_ignore(
+          iree_hal_hip_allocator_free_async(device->device_allocator, buffer));
     } else {
-      iree_hal_hip_allocator_free_sync(device->device_allocator, buffer);
+      iree_status_ignore(
+          iree_hal_hip_allocator_free_sync(device->device_allocator, buffer));
     }
   }
 }

@@ -1173,9 +1173,9 @@ def cmake_build_dir_from_env() -> Path:
     if configured_build_dir:
         return normalize_repo_path(Path(configured_build_dir).expanduser())
     try:
-        recorded_build_dir = cmake_build_dir_state_file().read_text(
-            encoding="utf-8"
-        ).strip()
+        recorded_build_dir = (
+            cmake_build_dir_state_file().read_text(encoding="utf-8").strip()
+        )
     except FileNotFoundError:
         recorded_build_dir = ""
     if recorded_build_dir:
@@ -1251,9 +1251,7 @@ def cmake_clang_tidy_command(
     ]
 
 
-def run_clang_tidy_cmake(
-    paths: list[str], profile: str, verbose: bool
-) -> bool:
+def run_clang_tidy_cmake(paths: list[str], profile: str, verbose: bool) -> bool:
     candidate_files = cmake_clang_tidy_candidate_files(paths)
     infra_files = existing_files(
         [path for path in paths if is_clang_tidy_infra_file(path)]

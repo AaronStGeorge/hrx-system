@@ -2061,7 +2061,7 @@ static iree_status_t iree_hal_task_queue_drain_fill(
 
   // Unmap the buffer after inline execution completes. Safe on zero-initialized
   // mappings (no-op if map_range was never called or failed).
-  iree_hal_buffer_unmap_range(&mapping);
+  status = iree_status_join(status, iree_hal_buffer_unmap_range(&mapping));
   return status;
 }
 
@@ -2140,8 +2140,10 @@ static iree_status_t iree_hal_task_queue_drain_copy(
                                                  worker_context);
   }
 
-  iree_hal_buffer_unmap_range(&source_mapping);
-  iree_hal_buffer_unmap_range(&target_mapping);
+  status =
+      iree_status_join(status, iree_hal_buffer_unmap_range(&source_mapping));
+  status =
+      iree_status_join(status, iree_hal_buffer_unmap_range(&target_mapping));
   return status;
 }
 
@@ -2160,7 +2162,7 @@ static iree_status_t iree_hal_task_queue_drain_update(
     memcpy(mapping.contents.data, (const uint8_t*)operation->update.source_data,
            (size_t)operation->update.length);
   }
-  iree_hal_buffer_unmap_range(&mapping);
+  status = iree_status_join(status, iree_hal_buffer_unmap_range(&mapping));
 
   if (iree_status_is_ok(status)) {
     iree_hal_task_queue_op_complete(operation);
@@ -2854,7 +2856,8 @@ static iree_status_t iree_hal_task_queue_drain_read(
   iree_status_t submit_status = iree_async_proactor_submit_one(
       queue->proactor, &io_context->read_op.base);
   if (!iree_status_is_ok(submit_status)) {
-    iree_hal_buffer_unmap_range(&io_context->mapping);
+    submit_status = iree_status_join(
+        submit_status, iree_hal_buffer_unmap_range(&io_context->mapping));
   }
   return submit_status;
 }
@@ -2908,7 +2911,8 @@ static iree_status_t iree_hal_task_queue_drain_write(
     status = iree_hal_buffer_mapping_invalidate_range(
         &io_context->mapping, 0, io_context->mapping.contents.data_length);
     if (!iree_status_is_ok(status)) {
-      iree_hal_buffer_unmap_range(&io_context->mapping);
+      status = iree_status_join(
+          status, iree_hal_buffer_unmap_range(&io_context->mapping));
       return status;
     }
   }
@@ -2930,7 +2934,8 @@ static iree_status_t iree_hal_task_queue_drain_write(
   iree_status_t submit_status = iree_async_proactor_submit_one(
       queue->proactor, &io_context->write_op.base);
   if (!iree_status_is_ok(submit_status)) {
-    iree_hal_buffer_unmap_range(&io_context->mapping);
+    submit_status = iree_status_join(
+        submit_status, iree_hal_buffer_unmap_range(&io_context->mapping));
   }
   return submit_status;
 }

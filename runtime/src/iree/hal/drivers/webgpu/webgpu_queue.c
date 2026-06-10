@@ -728,7 +728,8 @@ static void iree_hal_webgpu_queue_op_wait_completion(
           iree_hal_webgpu_import_queue_write_buffer(
               queue->queue_handle, gpu_handle, gpu_offset,
               (uint32_t)(uintptr_t)mapping.contents.data, state->read.length);
-          iree_hal_buffer_unmap_range(&mapping);
+          work_status = iree_status_join(work_status,
+                                         iree_hal_buffer_unmap_range(&mapping));
         }
       } else {
         // FD: use zero-copy bridge import.
@@ -1310,7 +1311,7 @@ static iree_status_t iree_hal_webgpu_queue_read_inline(
       iree_hal_webgpu_import_queue_write_buffer(
           queue->queue_handle, gpu_handle, gpu_offset,
           (uint32_t)(uintptr_t)mapping.contents.data, length);
-      iree_hal_buffer_unmap_range(&mapping);
+      status = iree_status_join(status, iree_hal_buffer_unmap_range(&mapping));
     }
   } else {
     // FD: use zero-copy bridge import. The import_file dispatch guarantees
@@ -1585,7 +1586,7 @@ static void iree_hal_webgpu_queue_write_phase3(
       iree_hal_webgpu_import_buffer_get_mapped_range(
           state->staging_handle, /*offset=*/0, state->length,
           (uint32_t)(uintptr_t)mapping.contents.data);
-      iree_hal_buffer_unmap_range(&mapping);
+      status = iree_status_join(status, iree_hal_buffer_unmap_range(&mapping));
     }
   } else {
     // FD: write from mapped staging buffer directly to the file object.

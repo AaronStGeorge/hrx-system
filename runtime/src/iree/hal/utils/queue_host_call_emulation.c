@@ -44,10 +44,12 @@ static iree_status_t iree_hal_emulated_host_call_issue(
 
   if (is_nonblocking || iree_status_is_deferred(call_status)) {
     // User callback will signal in the future (or they are fire-and-forget).
+    iree_status_ignore(call_status);
   } else if (iree_status_is_ok(call_status)) {
     // Signal callback completed synchronously.
-    iree_hal_semaphore_list_signal(signal_semaphore_list,
-                                   /*frontier=*/NULL);
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_hal_semaphore_list_signal(signal_semaphore_list,
+                                           /*frontier=*/NULL));
   } else {
     // If the user function failed we propagate the error to the semaphore list
     // (blocking) or ignore it (non-blocking, where we lost our chance).

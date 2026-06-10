@@ -20,7 +20,7 @@ static void BM_SystemAllocator(benchmark::State& state) {
   iree_allocator_t allocator = iree_allocator_system();
   for (auto _ : state) {
     void* ptr = NULL;
-    iree_allocator_malloc(allocator, 1024, &ptr);
+    IREE_CHECK_OK(iree_allocator_malloc(allocator, 1024, &ptr));
     benchmark::DoNotOptimize(ptr);
     iree_allocator_free(allocator, ptr);
   }

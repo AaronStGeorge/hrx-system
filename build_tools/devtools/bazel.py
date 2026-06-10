@@ -35,9 +35,7 @@ DEFAULT_COMPILE_COMMANDS_TARGETS = ("//runtime/...", "//libhrx/...", "//loom/...
 COMPILE_COMMANDS_ASPECT = (
     "//build_tools/bazel:compile_commands.bzl%collect_compile_commands_aspect"
 )
-CLANG_TIDY_ASPECT = (
-    "//build_tools/clang_tidy:clang_tidy.bzl%collect_clang_tidy_aspect"
-)
+CLANG_TIDY_ASPECT = "//build_tools/clang_tidy:clang_tidy.bzl%collect_clang_tidy_aspect"
 CLANG_TIDY_OUTPUT_GROUP = "iree_clang_tidy_reports"
 CLANG_TIDY_REPO_ENV = "--repo_env=IREE_CLANG_TIDY_LLVM=auto"
 HEADER_ROOTS: tuple[tuple[str, Path], ...] = (
