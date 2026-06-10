@@ -8,7 +8,7 @@ kernel.def target(@target) @global_atomic_add_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %one = scalar.constant 1 : i32
   view.atomic.reduce<addi> %one, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
@@ -35,7 +35,7 @@ kernel.def target(@target) @global_atomic_add_f32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xf32, #dense>
   %one = scalar.constant 1.0 : f32
   view.atomic.reduce<addf> %one, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense>
@@ -62,7 +62,7 @@ kernel.def target(@target) @global_atomic_minnum_maxnum_f32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xf32, #dense>
   %limit = scalar.constant 1.0 : f32
   view.atomic.reduce<minnumf> %limit, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense>
@@ -93,7 +93,7 @@ kernel.def target(@target) @global_atomic_dynamic_minnum_f32(%input: buffer, %va
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xf32, #dense>
   %old_min = view.atomic.rmw<minnumf> %value, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense> -> f32
   %old_max = view.atomic.rmw<maxnumf> %value, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense> -> f32
@@ -119,7 +119,7 @@ kernel.def target(@target) @global_atomic_bitwise_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %mask = scalar.constant 255 : i32
   view.atomic.reduce<andi> %mask, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
@@ -154,7 +154,7 @@ kernel.def target(@target) @global_atomic_sub_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %delta = scalar.constant 1 : i32
   view.atomic.reduce<subi> %delta, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
@@ -181,7 +181,7 @@ kernel.def target(@target) @global_atomic_exchange_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %value = scalar.constant 7 : i32
   %old = view.atomic.rmw<xchgi> %value, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
@@ -206,7 +206,7 @@ kernel.def target(@target) @global_atomic_cmpxchg_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %expected = scalar.constant 7 : i32
   %replacement = scalar.constant 9 : i32
@@ -234,7 +234,7 @@ kernel.def target(@target) @global_atomic_minmax_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %limit = scalar.constant 1 : i32
   view.atomic.reduce<minsi> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>

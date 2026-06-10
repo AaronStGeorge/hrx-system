@@ -39,7 +39,7 @@ func.def @bf16_dot2f(%lhs: vector<8xbf16>, %rhs: vector<8xbf16>, %acc: vector<4x
 
 func.def @f32_uniform_smem_vector_operands(%lhs: vector<4xf32>, %weights: buffer) -> (f32) {
   %base = index.constant 0 : offset
-  %weights_global = buffer.assume.memory_space %weights {memory_space = global} : buffer
+  %weights_global = buffer.assume.memory_space<global> %weights : buffer
   %weights_noalias = buffer.assume.noalias %weights_global : buffer
   %weights_view = buffer.view %weights_noalias[%base] : buffer -> view<2x4xf32, #dense>
   %rhs = vector.load %weights_view[0, 0] : view<2x4xf32, #dense> -> vector<4xf32>

@@ -14,7 +14,7 @@ amdgpu.target<gfx1100> @target
 func.def target(@target) @async_copy_transfer_rejected(%input: buffer) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 64 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
@@ -38,7 +38,7 @@ kernel.def target(@target) @async_gather_destination_read_before_wait(%input: bu
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source_base = buffer.view %global[%zero] : buffer -> view<64x4xi8, #dense>
   %source = view.subview %source_base[%tid, 0] : view<64x4xi8, #dense> -> view<1x4xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -72,7 +72,7 @@ kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected(%input: buf
   %y = index.add %y0, %base_y : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %layout = encoding.layout.strided [1, 1, 1] : encoding<layout>
   %source_base = buffer.view %global[%zero] : buffer -> view<4294967296x4096x4xi8, %layout>
   %source = view.subview %source_base[%x, %y, 0] : view<4294967296x4096x4xi8, %layout> -> view<1x1x4xi8, %layout>

@@ -10,15 +10,21 @@ from loom.assembly import (
     ARROW,
     COLON,
     COMMA,
+    EQUALS,
     GLUE,
+    LBRACE,
     LBRACKET,
+    RBRACE,
     RBRACKET,
+    Attr,
     AttrDict,
     Ref,
     Refs,
     ResultType,
+    TemplateParam,
     TypeOf,
     TypesOf,
+    kw,
 )
 from loom.dialect.memory import MemorySpace
 from loom.dsl import (
@@ -32,6 +38,7 @@ from loom.dsl import (
     VIEW,
     AttrDef,
     Dialect,
+    LegacyFormat,
     Op,
     Operand,
     OpPhase,
@@ -162,13 +169,29 @@ buffer_assume_memory_space = Op(
     verify="loom_buffer_assume_memory_space_verify",
     facts="loom_buffer_assume_memory_space_facts",
     format=[
+        TemplateParam("memory_space"),
         Ref("buffer"),
-        AttrDict(),
         COLON,
         TypeOf("result"),
     ],
+    legacy_formats=[
+        LegacyFormat(
+            "buffer.assume.memory_space.attr_dict",
+            format=[
+                Ref("buffer"),
+                LBRACE,
+                kw("memory_space"),
+                EQUALS,
+                Attr("memory_space"),
+                RBRACE,
+                COLON,
+                TypeOf("result"),
+            ],
+            replaced_by="loom-source-format-2026-06-09",
+        )
+    ],
     examples=[
-        "%global = buffer.assume.memory_space %buffer {memory_space = global} : buffer",
+        "%global = buffer.assume.memory_space<global> %buffer : buffer",
     ],
 )
 

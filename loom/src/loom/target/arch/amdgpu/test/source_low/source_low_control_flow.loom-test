@@ -1091,9 +1091,9 @@ kernel.def target(@target) @branch_local_buffer_vector_load(%positive: buffer, %
   %lane = index.assume %workitem [range(%workitem, 0, 63)] : index
   %channel_start0 = index.mul %lane, %vector_width : index
   %channel_start = index.assume %channel_start0 [range(%channel_start0, 0, 252)] : index
-  %positive_global = buffer.assume.memory_space %positive {memory_space = global} : buffer
-  %negative_global = buffer.assume.memory_space %negative {memory_space = global} : buffer
-  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %positive_global = buffer.assume.memory_space<global> %positive : buffer
+  %negative_global = buffer.assume.memory_space<global> %negative : buffer
+  %output_global = buffer.assume.memory_space<global> %output : buffer
   %positive_noalias, %negative_noalias, %output_noalias = buffer.assume.noalias %positive_global, %negative_global, %output_global : buffer, buffer, buffer
   %positive_view = buffer.view %positive_noalias[%base_offset] : buffer -> view<256xf32, #dense>
   %negative_view = buffer.view %negative_noalias[%base_offset] : buffer -> view<256xf32, #dense>

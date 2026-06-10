@@ -179,6 +179,8 @@ useful when evaluating Loom as a companion to IREE runtime executable caches.
 | --- | --- |
 | [binding/c/include/loomc](binding/c/include/loomc) | Public C ABI contracts, ownership, threading, diagnostics, targets, linking, compile, and emit |
 | [binding/c/example](binding/c/example) | Minimal embedders for source info, compile, link, SPIR-V offline, raw Vulkan, and IREE HAL |
+| [loom/py/loom/dialect](/loom/py/loom/dialect) | Python op/dialect authoring DSL, assembly formats, and source-format migration breadcrumbs |
+| [loom/py/loom/migration](/loom/py/loom/migration) | Source migration driver, rule generation, baselines, compatibility windows, and `loom-migrate` |
 | [src/loom/test/corpus/authoring](src/loom/test/corpus/authoring) | Canonical hand-authored Loom examples for model/kernel-shaped source |
 | [src/loom/tools/iree-benchmark-loom](src/loom/tools/iree-benchmark-loom) | Runner for `check.case`, `check.benchmark`, correctness samples, timing, and reports |
 | [src/loom/tools/loom-check](src/loom/tools/loom-check) | Text/test corpus checking and `--update` workflow |

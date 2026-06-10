@@ -59,8 +59,8 @@ kernel.def target(@target) @scalar_sitofp_i8_load_store(%input: buffer, %output:
 } launch {
   %base = index.constant 0 : offset
   %index = index.constant 0 : index
-  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
-  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %output_global = buffer.assume.memory_space<global> %output : buffer
   %input_noalias, %output_noalias = buffer.assume.noalias %input_global, %output_global : buffer, buffer
   %input_view = buffer.view %input_noalias[%base] : buffer -> view<1xi8, #dense>
   %output_view = buffer.view %output_noalias[%base] : buffer -> view<1xf32, #dense>

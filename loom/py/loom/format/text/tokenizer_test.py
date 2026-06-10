@@ -571,16 +571,39 @@ class TestInterface:
         location = tokenizer.current_location()
         assert location.line == 1
         assert location.column == 1
+        assert location.offset == 0
         tokenizer.next()  # %x
         tokenizer.peek()  # triggers scan past newline
         location = tokenizer.current_location()
-        # After consuming %x and whitespace, should be at line 2.
+        assert location.line == 2
+        assert location.column == 3
+        assert location.offset == 5
+
+    def test_token_end_location(self) -> None:
+        tokenizer = Tokenizer("%x\nop.name")
+
+        value_token = tokenizer.next()
+        assert value_token.location.line == 1
+        assert value_token.location.column == 1
+        assert value_token.location.offset == 0
+        assert value_token.end_location.line == 1
+        assert value_token.end_location.column == 3
+        assert value_token.end_location.offset == 2
+
+        op_token = tokenizer.next()
+        assert op_token.location.line == 2
+        assert op_token.location.column == 1
+        assert op_token.location.offset == 3
+        assert op_token.end_location.line == 2
+        assert op_token.end_location.column == 8
+        assert op_token.end_location.offset == 10
 
     def test_eof(self) -> None:
         tokenizer = Tokenizer("")
         assert tokenizer.at(TokenKind.EOF)
         token = tokenizer.next()
         assert token.kind == TokenKind.EOF
+        assert token.location == token.end_location
 
 
 # ============================================================================

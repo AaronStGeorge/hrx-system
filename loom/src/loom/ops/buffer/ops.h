@@ -78,15 +78,15 @@ iree_status_t loom_buffer_assume_alignment_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE: Refine an existing buffer root with a concrete target-independent memory-space fact while preserving the same storage identity, extent, alignment, and nullability facts.
-// %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+// %global = buffer.assume.memory_space<global> %buffer : buffer
 LOOM_DEFINE_ISA(loom_buffer_assume_memory_space_isa, LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE)
 LOOM_DEFINE_OPERAND(loom_buffer_assume_memory_space_buffer, 0)
 LOOM_DEFINE_RESULT(loom_buffer_assume_memory_space_result, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_assume_memory_space_memory_space, 0, loom_value_fact_memory_space_t)
 iree_status_t loom_buffer_assume_memory_space_build(
     loom_builder_t* builder,
-    loom_value_id_t buffer,
     loom_value_fact_memory_space_t memory_space,
+    loom_value_id_t buffer,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

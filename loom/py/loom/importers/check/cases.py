@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -33,6 +33,18 @@ DEFAULT_CHECK_SYNTAX = InlineCheckSyntax(
 
 
 @dataclass(frozen=True, slots=True)
+class SourceSpan:
+    """Half-open character-offset span within an inline check source file."""
+
+    start: int
+    end: int
+
+    def text_from(self, source: str) -> str:
+        """Returns the source text covered by this span."""
+        return source[self.start : self.end]
+
+
+@dataclass(frozen=True, slots=True)
 class CheckCase:
     """One parsed inline importer check case."""
 
@@ -46,6 +58,22 @@ class CheckCase:
     line_start: int = field(default=1, compare=False)
     line_end: int = field(default=1, compare=False)
     raw_source: str = field(default="", compare=False)
+    source_span: SourceSpan | None = field(default=None, compare=False)
+    input_span: SourceSpan | None = field(default=None, compare=False)
+    expected_span: SourceSpan | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class InlineCaseInputRewriteResult:
+    """Source text after rewriting only inline check case input spans."""
+
+    source: str
+    cases: tuple[CheckCase, ...]
+    changed_cases: tuple[CheckCase, ...]
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.changed_cases)
 
 
 def parse_inline_cases(
@@ -72,6 +100,10 @@ def parse_inline_cases(
             raw_case.source,
             syntax=syntax,
         )
+        case_source_span, expected_span, input_span = _split_raw_case_spans_for_case(
+            raw_case,
+            syntax=syntax,
+        )
         input_text = strip_case_directives(case_source, syntax=syntax)
         cases.append(
             CheckCase(
@@ -85,9 +117,56 @@ def parse_inline_cases(
                 line_start=raw_case.line_start,
                 line_end=raw_case.line_end,
                 raw_source=raw_case.source,
+                source_span=case_source_span,
+                input_span=input_span,
+                expected_span=expected_span if has_expected else None,
             )
         )
     return tuple(cases)
+
+
+def rewrite_inline_case_inputs(
+    path: Path,
+    source: str,
+    rewrite: Callable[[CheckCase, str], str],
+    *,
+    syntax: InlineCheckSyntax = DEFAULT_CHECK_SYNTAX,
+    default_run: str | None = None,
+    allow_preamble: bool = False,
+) -> InlineCaseInputRewriteResult:
+    """Rewrites input IR sections while leaving expected sections untouched."""
+
+    cases = parse_inline_cases(
+        path,
+        source,
+        syntax=syntax,
+        default_run=default_run,
+        allow_preamble=allow_preamble,
+    )
+    replacements: list[tuple[SourceSpan, str]] = []
+    changed_cases: list[CheckCase] = []
+    for check_case in cases:
+        if check_case.input_span is None:
+            continue
+        input_text = check_case.input_span.text_from(source)
+        replacement_text = rewrite(check_case, input_text)
+        if replacement_text == input_text:
+            continue
+        replacements.append((check_case.input_span, replacement_text))
+        changed_cases.append(check_case)
+
+    rewritten_source = source
+    for span, replacement_text in reversed(replacements):
+        rewritten_source = (
+            rewritten_source[: span.start]
+            + replacement_text
+            + rewritten_source[span.end :]
+        )
+    return InlineCaseInputRewriteResult(
+        source=rewritten_source,
+        cases=cases,
+        changed_cases=tuple(changed_cases),
+    )
 
 
 def split_raw_cases(
@@ -105,6 +184,7 @@ class _RawCheckCase:
     source: str
     line_start: int
     line_end: int
+    source_span: SourceSpan
     is_preamble: bool = False
 
 
@@ -135,46 +215,57 @@ def _split_raw_case_spans(
     lines: list[str] = []
     line_start = 1
     line_number = 1
+    character_start = 0
+    character_offset = 0
     before_first_separator = True
     for line in source.splitlines(keepends=True):
+        line_character_start = character_offset
+        character_offset += len(line)
         if line.startswith(syntax.case_separator_prefix):
-            trim_separator_spacer(lines)
+            trimmed_character_count = trim_separator_spacer(lines)
             case_source = "".join(lines)
             if case_source.strip():
+                character_end = line_character_start - trimmed_character_count
                 cases.append(
                     _RawCheckCase(
                         source=case_source,
                         line_start=line_start,
                         line_end=max(line_start, line_number - 1),
+                        source_span=SourceSpan(character_start, character_end),
                         is_preamble=before_first_separator,
                     )
                 )
             lines = []
             line_start = line_number + 1
+            character_start = character_offset
             line_number += 1
             before_first_separator = False
             continue
         lines.append(line)
         line_number += 1
-    trim_separator_spacer(lines)
+    trimmed_character_count = trim_separator_spacer(lines)
     case_source = "".join(lines)
     if case_source.strip():
+        character_end = len(source) - trimmed_character_count
         cases.append(
             _RawCheckCase(
                 source=case_source,
                 line_start=line_start,
                 line_end=max(line_start, line_number - 1),
+                source_span=SourceSpan(character_start, character_end),
                 is_preamble=before_first_separator,
             )
         )
     return tuple(cases)
 
 
-def trim_separator_spacer(lines: list[str]) -> None:
+def trim_separator_spacer(lines: list[str]) -> int:
     """Drops formatting-only blank lines before a case separator."""
 
+    trimmed_character_count = 0
     while lines and not lines[-1].strip():
-        lines.pop()
+        trimmed_character_count += len(lines.pop())
+    return trimmed_character_count
 
 
 def split_expected(
@@ -214,6 +305,91 @@ def strip_case_directives(
             continue
         lines.append(line)
     return "".join(lines)
+
+
+def _split_raw_case_spans_for_case(
+    raw_case: _RawCheckCase,
+    *,
+    syntax: InlineCheckSyntax,
+) -> tuple[SourceSpan, SourceSpan | None, SourceSpan]:
+    input_end_relative = len(raw_case.source)
+    expected_span = None
+    scanner_offset = 0
+    for line in raw_case.source.splitlines(keepends=True):
+        line_end_offset = scanner_offset + len(line)
+        if line.strip() == syntax.expected_separator:
+            input_end_relative = scanner_offset
+            expected_span = SourceSpan(
+                raw_case.source_span.start + line_end_offset,
+                raw_case.source_span.end,
+            )
+            break
+        scanner_offset = line_end_offset
+
+    input_start_relative = _input_start_relative(
+        raw_case.source[:input_end_relative],
+        syntax=syntax,
+    )
+    return (
+        SourceSpan(
+            raw_case.source_span.start,
+            raw_case.source_span.start + input_end_relative,
+        ),
+        expected_span,
+        SourceSpan(
+            raw_case.source_span.start + input_start_relative,
+            raw_case.source_span.start + input_end_relative,
+        ),
+    )
+
+
+def _input_start_relative(source: str, *, syntax: InlineCheckSyntax) -> int:
+    scanner_offset = 0
+    body_start_offset = 0
+    for line in source.splitlines(keepends=True):
+        line_end_offset = scanner_offset + len(line)
+        stripped = line.strip()
+        if _is_header_line(stripped, syntax=syntax):
+            body_start_offset = line_end_offset
+            scanner_offset = line_end_offset
+            continue
+        break
+    return body_start_offset
+
+
+def _is_header_line(stripped_line: str, *, syntax: InlineCheckSyntax) -> bool:
+    if not stripped_line:
+        return True
+    if stripped_line == syntax.expected_separator:
+        return False
+    if _is_diagnostic_annotation_line(stripped_line, syntax=syntax):
+        return False
+    return syntax.comment_prefix is not None and stripped_line.startswith(
+        syntax.comment_prefix
+    )
+
+
+def _is_diagnostic_annotation_line(
+    stripped_line: str,
+    *,
+    syntax: InlineCheckSyntax,
+) -> bool:
+    if syntax.comment_prefix is None:
+        return False
+    if not stripped_line.startswith(syntax.comment_prefix):
+        return False
+    payload = stripped_line[len(syntax.comment_prefix) :].strip()
+    annotation_prefixes = (
+        "ERROR:",
+        "ERROR@",
+        "WARNING:",
+        "WARNING@",
+        "REMARK:",
+        "REMARK@",
+    )
+    return payload in ("ERROR", "WARNING", "REMARK") or payload.startswith(
+        annotation_prefixes
+    )
 
 
 def case_matches_filter(

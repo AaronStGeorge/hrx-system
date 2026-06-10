@@ -104,6 +104,9 @@ from loom.dsl import (
     HasRegister,
     ImplicitTerminator,
     LastAxisGroupedBy,
+    LegacyFieldDefault,
+    LegacyFieldMapping,
+    LegacyFormat,
     LiteralMatchesElementType,
     MemoryAccessInterface,
     NoAncestor,
@@ -1451,6 +1454,14 @@ class TestOp:
             traits=[PURE],
             constraints=[SameType("x", "y")],
             format=[Ref("x"), BlockRef("dest"), COLON, TypeOf("y")],
+            legacy_formats=[
+                LegacyFormat(
+                    "test.op.old",
+                    format=[Ref("x"), COLON, TypeOf("y")],
+                    replaced_by="loom-source-format-2026-06-09",
+                    expires_after="loom-source-format-2026-07-01",
+                )
+            ],
             examples=["example"],
         )
         assert isinstance(op.operands, tuple)
@@ -1459,7 +1470,171 @@ class TestOp:
         assert isinstance(op.traits, tuple)
         assert isinstance(op.constraints, tuple)
         assert isinstance(op.format, tuple)
+        assert isinstance(op.legacy_formats, tuple)
         assert isinstance(op.examples, tuple)
+
+    def test_legacy_format_metadata(self) -> None:
+        op = Op(
+            "test.op",
+            operands=[Operand("input", ANY)],
+            results=[Result("result", ANY)],
+            attrs=[AttrDef("mode", "string"), AttrDef("policy", "string")],
+            format=[Ref("input"), COLON, TypeOf("result")],
+            legacy_formats=[
+                LegacyFormat(
+                    "test.op.mode-attr",
+                    format=[
+                        Ref("legacy_input"),
+                        Attr("legacy_mode"),
+                        COLON,
+                        TypeOf("result"),
+                    ],
+                    field_mappings=[
+                        LegacyFieldMapping("legacy_input", "input"),
+                        LegacyFieldMapping("legacy_mode", "mode"),
+                    ],
+                    field_defaults=[LegacyFieldDefault("policy", "default")],
+                    replaced_by="loom-source-format-2026-06-09",
+                    expires_after="loom-source-format-2026-07-01",
+                    rewrite_hook="migrate_test_op_mode_attr",
+                )
+            ],
+        )
+
+        legacy_format = op.legacy_formats[0]
+        assert legacy_format.rule_id == "test.op.mode-attr"
+        assert legacy_format.format[0] == Ref("legacy_input")
+        assert legacy_format.field_mappings == (
+            LegacyFieldMapping("legacy_input", "input"),
+            LegacyFieldMapping("legacy_mode", "mode"),
+        )
+        assert legacy_format.field_defaults == (
+            LegacyFieldDefault("policy", "default"),
+        )
+        assert legacy_format.expires_after == "loom-source-format-2026-07-01"
+        assert legacy_format.rewrite_hook == "migrate_test_op_mode_attr"
+
+    def test_legacy_format_expiration_is_optional(self) -> None:
+        op = Op(
+            "test.op",
+            operands=[Operand("input", ANY)],
+            legacy_formats=[
+                LegacyFormat(
+                    "test.op.old",
+                    format=[Ref("input")],
+                    replaced_by="loom-source-format-2026-06-09",
+                )
+            ],
+        )
+
+        legacy_format = op.legacy_formats[0]
+        assert legacy_format.replaced_by == "loom-source-format-2026-06-09"
+        assert legacy_format.expires_after == ""
+
+    def test_duplicate_legacy_format_rule_id_is_rejected(self) -> None:
+        with _raises(ValueError, match="duplicate legacy format rule_id"):
+            Op(
+                "test.op",
+                operands=[Operand("input", ANY)],
+                legacy_formats=[
+                    LegacyFormat(
+                        "test.op.old",
+                        format=[Ref("input")],
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
+                    ),
+                    LegacyFormat(
+                        "test.op.old",
+                        format=[Ref("input")],
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
+                    ),
+                ],
+            )
+
+    def test_legacy_format_field_validation_catches_typo(self) -> None:
+        with _raises(ValueError, match="undeclared current fields"):
+            Op(
+                "test.op",
+                operands=[Operand("input", ANY)],
+                legacy_formats=[
+                    LegacyFormat(
+                        "test.op.bad",
+                        format=[Ref("missing")],
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
+                    )
+                ],
+            )
+
+    def test_legacy_format_unused_field_mapping_is_rejected(self) -> None:
+        with _raises(ValueError, match="not referenced"):
+            Op(
+                "test.op",
+                operands=[Operand("input", ANY)],
+                legacy_formats=[
+                    LegacyFormat(
+                        "test.op.bad",
+                        format=[Ref("input")],
+                        field_mappings=[
+                            LegacyFieldMapping("old_input", "input"),
+                        ],
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
+                    )
+                ],
+            )
+
+    def test_legacy_format_duplicate_current_mapping_is_rejected(self) -> None:
+        with _raises(ValueError, match="more than one legacy field"):
+            Op(
+                "test.op",
+                operands=[Operand("input", ANY)],
+                legacy_formats=[
+                    LegacyFormat(
+                        "test.op.bad",
+                        format=[Ref("old_input"), Ref("older_input")],
+                        field_mappings=[
+                            LegacyFieldMapping("old_input", "input"),
+                            LegacyFieldMapping("older_input", "input"),
+                        ],
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
+                    )
+                ],
+            )
+
+    def test_legacy_format_default_field_must_exist(self) -> None:
+        with _raises(ValueError, match="defaults undeclared field"):
+            Op(
+                "test.op",
+                operands=[Operand("input", ANY)],
+                legacy_formats=[
+                    LegacyFormat(
+                        "test.op.bad",
+                        format=[Ref("input")],
+                        field_defaults=[LegacyFieldDefault("missing", "value")],
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
+                    )
+                ],
+            )
+
+    def test_legacy_format_default_cannot_replace_parsed_field(self) -> None:
+        with _raises(ValueError, match="already parsed"):
+            Op(
+                "test.op",
+                operands=[Operand("input", ANY)],
+                legacy_formats=[
+                    LegacyFormat(
+                        "test.op.bad",
+                        format=[Ref("input")],
+                        field_defaults=[LegacyFieldDefault("input", "value")],
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
+                    )
+                ],
+            )
 
     def test_lookup_operand(self) -> None:
         op = Op(

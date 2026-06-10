@@ -245,7 +245,7 @@ amdgpu.target<gfx1100> @target
 
 func.def target(@target) @dynamic_view_base_b128_alignment_rejected(%input: buffer, %offset: offset) -> (vector<4xi32>) {
   %base = index.assume %offset [range(%offset, 0, 4096)] : offset
-  %input_descriptor = buffer.assume.memory_space %input {memory_space = descriptor} : buffer
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
   %input_view = buffer.view %input_descriptor[%base] : buffer -> view<4xi32, #dense>
   // ERROR@+1: AMDGPU/023 {constraint_key="memory_access.b128_dynamic_alignment"}
   %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
@@ -320,7 +320,7 @@ kernel.def target(@target) @global_atomic_system_scope_rejected(%input: buffer) 
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %one = scalar.constant 1 : i32
   // ERROR@+1: AMDGPU/023 {constraint_key="atomic.scope"}

@@ -6,7 +6,7 @@ kernel.def @global_atomic_release_reduce_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %one = scalar.constant 1 : i32
   view.atomic.reduce<addi> %one, %view[%tid] {ordering = release, scope = device} : i32, view<64xi32, #dense>
@@ -21,7 +21,7 @@ kernel.def @global_atomic_acquire_rmw_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %one = scalar.constant 1 : i32
   %old = view.atomic.rmw<addi> %one, %view[%tid] {ordering = acquire, scope = device} : i32, view<64xi32, #dense> -> i32
@@ -36,7 +36,7 @@ kernel.def @global_atomic_acq_rel_rmw_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %one = scalar.constant 1 : i32
   %old = view.atomic.rmw<addi> %one, %view[%tid] {ordering = acq_rel, scope = device} : i32, view<64xi32, #dense> -> i32
@@ -51,7 +51,7 @@ kernel.def @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %expected = scalar.constant 7 : i32
   %replacement = scalar.constant 9 : i32
@@ -67,7 +67,7 @@ kernel.def @global_atomic_seq_cst_reduce_i32(%input: buffer) {
 } launch {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
   %one = scalar.constant 1 : i32
   view.atomic.reduce<addi> %one, %view[%tid] {ordering = seq_cst, scope = device} : i32, view<64xi32, #dense>

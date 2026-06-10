@@ -83,7 +83,7 @@ func.def @allows_static_disjoint_pending_async_destinations(%input: buffer) {
   %zero = index.constant 0 : offset
   %sixteen = index.constant 16 : offset
   %bytes = index.constant 64 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source0 = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
   %source1 = buffer.view %global[%sixteen] : buffer -> view<16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -103,7 +103,7 @@ func.def @allows_static_disjoint_pending_async_destinations(%input: buffer) {
 func.def @rejects_overlapping_pending_async_destinations(%input: buffer) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 64 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest0 = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
@@ -123,7 +123,7 @@ func.def @rejects_overlapping_pending_async_destinations(%input: buffer) {
 func.def @rejects_unknown_same_root_pending_async_overlap(%input: buffer, %dest_offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 64 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest0 = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
@@ -143,7 +143,7 @@ func.def @rejects_unknown_same_root_pending_async_overlap(%input: buffer, %dest_
 func.def @rejects_destination_overwrite_before_wait(%input: buffer) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 64 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
@@ -161,7 +161,7 @@ func.def @rejects_destination_overwrite_before_wait(%input: buffer) {
 func.def @rejects_destination_read_before_wait(%input: buffer) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 64 : offset
-  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %global = buffer.assume.memory_space<global> %input : buffer
   %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>

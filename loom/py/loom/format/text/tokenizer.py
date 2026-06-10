@@ -101,6 +101,7 @@ class Token:
     kind: TokenKind
     text: str
     location: SourceLocation
+    end_location: SourceLocation
 
     def __repr__(self) -> str:
         return (
@@ -361,7 +362,7 @@ class Tokenizer:
         self, kind: TokenKind, text: str, location: SourceLocation
     ) -> Token:
         """Create a token."""
-        return Token(kind, text, location)
+        return Token(kind, text, location, self.current_location())
 
     def _skip_whitespace_and_comments(self) -> None:
         """Skip whitespace and collect comments."""

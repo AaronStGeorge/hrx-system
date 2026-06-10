@@ -11,6 +11,7 @@ from loom.importers.check.cases import (
     InlineCheckSyntax,
     case_matches_filter,
     parse_inline_cases,
+    rewrite_inline_case_inputs,
     split_expected,
     split_raw_cases,
 )
@@ -108,6 +109,63 @@ def test_parse_inline_cases_keeps_first_case_without_preamble_mode() -> None:
     assert len(cases) == 2
     assert cases[0].input == "case_0()\n"
     assert cases[1].input == "case_1()\n"
+
+
+def test_parse_inline_cases_tracks_input_and_expected_spans() -> None:
+    source = (
+        "// RUN: roundtrip\n"
+        "// descriptive harness comment\n"
+        "\n"
+        "func.def @f() {\n"
+        "  func.return\n"
+        "}\n"
+        "// ----\n"
+        "expected output\n"
+    )
+
+    cases = parse_inline_cases(Path("case.loom-test"), source)
+
+    assert len(cases) == 1
+    assert cases[0].input_span is not None
+    assert cases[0].input_span.text_from(source) == (
+        "func.def @f() {\n  func.return\n}\n"
+    )
+    assert cases[0].expected_span is not None
+    assert cases[0].expected_span.text_from(source) == "expected output\n"
+
+
+def test_rewrite_inline_case_inputs_preserves_expected_sections() -> None:
+    source = (
+        "// RUN: roundtrip\n"
+        "\n"
+        "func.def @f() {\n"
+        "  func.return\n"
+        "}\n"
+        "// ----\n"
+        "func.def @f() {\n"
+        "  func.return\n"
+        "}\n"
+    )
+
+    result = rewrite_inline_case_inputs(
+        Path("case.loom-test"),
+        source,
+        lambda _case, input_text: input_text.replace("@f", "@g"),
+    )
+
+    assert result.changed
+    assert len(result.changed_cases) == 1
+    assert result.source == (
+        "// RUN: roundtrip\n"
+        "\n"
+        "func.def @g() {\n"
+        "  func.return\n"
+        "}\n"
+        "// ----\n"
+        "func.def @f() {\n"
+        "  func.return\n"
+        "}\n"
+    )
 
 
 def test_case_matches_filter_checks_path_case_run_and_labels() -> None:
