@@ -104,8 +104,8 @@ typedef struct iree_hal_executable_function_info_t {
   iree_string_view_t name;
   // Flags defining the function behavior.
   iree_hal_executable_function_flags_t flags;
-  // Total number of 32-bit constants expected.
-  uint16_t constant_count;
+  // Total byte length of constants expected.
+  uint32_t constant_byte_length;
   // Total number of bindings expected.
   uint16_t binding_count;
   // Total number of logical parameters.

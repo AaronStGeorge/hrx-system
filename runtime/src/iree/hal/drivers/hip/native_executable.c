@@ -638,7 +638,8 @@ static iree_status_t iree_hal_hip_native_executable_export_info(
   memset(out_info, 0, sizeof(*out_info));
   out_info->name = kernel_params->name;
   out_info->flags = IREE_HAL_EXECUTABLE_FUNCTION_FLAG_NONE;
-  out_info->constant_count = (uint16_t)kernel_params->constant_count;
+  out_info->constant_byte_length =
+      kernel_params->constant_count * sizeof(uint32_t);
   out_info->binding_count = (uint16_t)kernel_params->binding_count;
   memcpy(out_info->workgroup_size, kernel_params->block_dims,
          sizeof(out_info->workgroup_size));

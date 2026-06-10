@@ -16,7 +16,7 @@ static const iree_string_view_t iree_hal_mock_executable_format =
     IREE_SVL("mock-executable");
 
 typedef struct iree_hal_mock_executable_function_record_t {
-  // Number of 32-bit constants reflected for the function.
+  // Number of 32-bit constant words reflected for the function.
   uint8_t constant_count;
   // Number of buffer bindings reflected for the function.
   uint8_t binding_count;
@@ -143,7 +143,8 @@ static iree_status_t iree_hal_mock_executable_create(
         executable_name_storage + name_offset, record->name_length);
     name_offset += record->name_length;
     executable->functions[i].flags = record->flags;
-    executable->functions[i].constant_count = record->constant_count;
+    executable->functions[i].constant_byte_length =
+        record->constant_count * sizeof(uint32_t);
     executable->functions[i].binding_count = record->binding_count;
     executable->functions[i].parameter_count = 0;
     executable->functions[i].workgroup_size[0] = record->workgroup_size[0];

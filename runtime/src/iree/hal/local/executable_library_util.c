@@ -170,7 +170,7 @@ iree_status_t iree_hal_executable_library_export_info(
           IREE_HAL_EXECUTABLE_FUNCTION_FLAG_WORKGROUP_SIZE_DYNAMIC;
     }
 
-    out_info->constant_count = attrs->constant_count;
+    out_info->constant_byte_length = attrs->constant_count * sizeof(uint32_t);
     out_info->binding_count = attrs->binding_count;
     out_info->parameter_count = attrs->parameter_count;
 

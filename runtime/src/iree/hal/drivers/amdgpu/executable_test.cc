@@ -262,7 +262,7 @@ TEST(ExecutableTest, RawHsacoHalAbiMetadataExportsUseNormalDispatch) {
   EXPECT_EQ(export_infos[0].flags, IREE_HAL_EXECUTABLE_FUNCTION_FLAG_NONE);
   EXPECT_EQ(export_infos[0].parameter_count, 2u);
   EXPECT_EQ(export_infos[0].binding_count, 1u);
-  EXPECT_EQ(export_infos[0].constant_count, 1u);
+  EXPECT_EQ(export_infos[0].constant_byte_length, sizeof(uint32_t));
   EXPECT_EQ(export_parameter_offsets[0], 0u);
   EXPECT_EQ(export_parameter_offsets[1], 2u);
   EXPECT_EQ(export_parameters[0].type,
@@ -297,7 +297,7 @@ TEST(ExecutableTest, RawHsacoNativeMetadataExportsRemainCustomDirectOnly) {
 
   EXPECT_TRUE(custom_direct_only_exports[0]);
   EXPECT_EQ(export_infos[0].parameter_count, 1u);
-  EXPECT_EQ(export_infos[0].constant_count, 3u);
+  EXPECT_EQ(export_infos[0].constant_byte_length, 3u * sizeof(uint32_t));
   EXPECT_EQ(export_parameters[0].offset, 8u);
 }
 

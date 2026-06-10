@@ -75,7 +75,7 @@ TEST_P(ExecutableTest, ExportInfo) {
       executable_, iree_hal_executable_function_from_index(0), &info));
   EXPECT_EQ(std::string_view(info.name.data, info.name.size), "export0");
   EXPECT_EQ(info.flags, IREE_HAL_EXECUTABLE_FUNCTION_FLAG_NONE);
-  EXPECT_EQ(info.constant_count, 2);
+  EXPECT_EQ(info.constant_byte_length, 2 * sizeof(uint32_t));
   EXPECT_EQ(info.binding_count, 2);
 }
 

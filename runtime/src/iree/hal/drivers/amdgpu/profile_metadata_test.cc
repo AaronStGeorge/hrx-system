@@ -28,7 +28,7 @@ class ProfileMetadataTest : public ::testing::Test {
   iree_hal_executable_function_info_t MakeFunctionInfo() {
     iree_hal_executable_function_info_t function_info = {};
     function_info.name = IREE_SV("test_dispatch");
-    function_info.constant_count = 3;
+    function_info.constant_byte_length = 3 * sizeof(uint32_t);
     function_info.binding_count = 2;
     function_info.workgroup_size[0] = 8;
     function_info.workgroup_size[1] = 4;
@@ -108,14 +108,14 @@ TEST_F(ProfileMetadataTest, RegisterExecutableComputesStablePipelineHash) {
             IREE_HAL_PROFILE_EXECUTABLE_FUNCTION_FLAG_FUNCTION_HASH);
   EXPECT_EQ(function_record->executable_id, executable_id);
   EXPECT_EQ(function_record->function_ordinal, 0u);
-  EXPECT_EQ(function_record->constant_count, 3u);
+  EXPECT_EQ(function_record->constant_byte_length, 3u * sizeof(uint32_t));
   EXPECT_EQ(function_record->binding_count, 2u);
   EXPECT_EQ(function_record->parameter_count, 3u);
   EXPECT_EQ(function_record->workgroup_size[0], 8u);
   EXPECT_EQ(function_record->workgroup_size[1], 4u);
   EXPECT_EQ(function_record->workgroup_size[2], 1u);
-  EXPECT_EQ(function_record->function_hash[0], 0x12dbd8b44277f553ull);
-  EXPECT_EQ(function_record->function_hash[1], 0x873c5d1c5596dce4ull);
+  EXPECT_EQ(function_record->function_hash[0], 0xc4ea0b9095cf1b5full);
+  EXPECT_EQ(function_record->function_hash[1], 0x462b3d4e1824ded4ull);
 }
 
 TEST_F(ProfileMetadataTest, RegisterExecutableArtifactsAttachToIdentity) {

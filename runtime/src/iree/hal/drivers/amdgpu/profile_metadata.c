@@ -242,8 +242,8 @@ static void iree_hal_amdgpu_profile_metadata_hash_pipeline(
   iree_hal_amdgpu_profile_hash128_append_u64(states, code_object_hash[0]);
   iree_hal_amdgpu_profile_hash128_append_u64(states, code_object_hash[1]);
   iree_hal_amdgpu_profile_hash128_append_u32(states, function_ordinal);
-  iree_hal_amdgpu_profile_hash128_append_u16(states,
-                                             host_kernel_args->constant_count);
+  iree_hal_amdgpu_profile_hash128_append_u32(
+      states, host_kernel_args->constant_count * sizeof(uint32_t));
   iree_hal_amdgpu_profile_hash128_append_u16(states,
                                              host_kernel_args->binding_count);
   iree_hal_amdgpu_profile_hash128_append_u32(
@@ -334,7 +334,8 @@ static iree_status_t iree_hal_amdgpu_profile_metadata_append_function_records(
     record.record_length = (uint32_t)record_length;
     record.executable_id = executable_id;
     record.function_ordinal = (uint32_t)i;
-    record.constant_count = host_kernel_args[i].constant_count;
+    record.constant_byte_length =
+        host_kernel_args[i].constant_count * sizeof(uint32_t);
     record.binding_count = host_kernel_args[i].binding_count;
     record.parameter_count = (uint32_t)(function_parameter_offsets[i + 1] -
                                         function_parameter_offsets[i]);

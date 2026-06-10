@@ -587,7 +587,8 @@ static iree_status_t iree_hal_vmvx_executable_export_info(
           IREE_HAL_EXECUTABLE_DISPATCH_FLAG_V0_WORKGROUP_SIZE_DYNAMIC)) {
     out_info->flags |= IREE_HAL_EXECUTABLE_FUNCTION_FLAG_WORKGROUP_SIZE_DYNAMIC;
   }
-  out_info->constant_count = dispatch_attrs->constant_count;
+  out_info->constant_byte_length =
+      dispatch_attrs->constant_count * sizeof(uint32_t);
   out_info->binding_count = dispatch_attrs->binding_count;
   out_info->parameter_count = dispatch_attrs->parameter_count;
   out_info->workgroup_size[0] = dispatch_attrs->workgroup_size_x;

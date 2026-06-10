@@ -1852,8 +1852,9 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_export_infos(
     info->flags = IREE_HAL_EXECUTABLE_FUNCTION_FLAG_NONE;
     // Preserve the flatbuffer ABI counts even when the HSACO metadata has lost
     // optimized-unused arguments.
-    info->constant_count =
-        (uint16_t)iree_hal_amdgpu_ExportDef_constant_count_get(export_def);
+    info->constant_byte_length =
+        iree_hal_amdgpu_ExportDef_constant_count_get(export_def) *
+        sizeof(uint32_t);
     iree_hal_amdgpu_BindingBits_vec_t binding_flags =
         iree_hal_amdgpu_ExportDef_binding_flags_get(export_def);
     info->binding_count =
@@ -1918,7 +1919,8 @@ iree_status_t iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
         kernel->has_required_workgroup_size || !projection.custom_direct_only
             ? IREE_HAL_EXECUTABLE_FUNCTION_FLAG_NONE
             : IREE_HAL_EXECUTABLE_FUNCTION_FLAG_WORKGROUP_SIZE_DYNAMIC;
-    info->constant_count = projection.requirements.constant_count;
+    info->constant_byte_length =
+        projection.requirements.constant_count * sizeof(uint32_t);
     info->binding_count = projection.requirements.binding_count;
     info->parameter_count = projection.requirements.parameter_count;
     iree_hal_amdgpu_executable_raw_hsaco_workgroup_size(kernel,

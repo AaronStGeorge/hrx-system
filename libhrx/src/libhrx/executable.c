@@ -273,7 +273,7 @@ hrx_status_t hrx_executable_export_info(
   memset(out_info, 0, sizeof(*out_info));
   out_info->name = executable->export_names[export_ordinal];
   out_info->flags = (uint32_t)hal_info.flags;
-  out_info->constant_count = hal_info.constant_count;
+  out_info->constant_byte_length = hal_info.constant_byte_length;
   out_info->binding_count = hal_info.binding_count;
   out_info->parameter_count = hal_info.parameter_count;
   out_info->workgroup_size[0] = hal_info.workgroup_size[0];
