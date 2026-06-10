@@ -234,6 +234,8 @@ TEST(AmdgpuTargetInfoTest, MatchesAmdhsaGfx9PlusProcessorElfFlags) {
       {IREE_SV("gfx909"), 0x131u},
       {IREE_SV("gfx90a"), 0x53Fu},
       {IREE_SV("gfx90c"), 0x132u},
+      {IREE_SV("gfx940"), 0x540u},
+      {IREE_SV("gfx941"), 0x54Bu},
       {IREE_SV("gfx942"), 0x54Cu},
       {IREE_SV("gfx950"), 0x54Fu},
       {IREE_SV("gfx1010"), 0x133u},

@@ -18,6 +18,8 @@ LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS = [
 ]
 
 LOOM_AMDGPU_SUPPORTED_PROCESSORS = [
+    "gfx940",
+    "gfx941",
     "gfx942",
     "gfx950",
     "gfx1100",
@@ -53,7 +55,11 @@ LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY = {
 
 # buildifier: disable=unsorted-dict-items
 LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS = {
-    "descriptor_set_cdna3_core": ["gfx942"],
+    "descriptor_set_cdna3_core": [
+        "gfx940",
+        "gfx941",
+        "gfx942",
+    ],
     "descriptor_set_cdna4_core": ["gfx950"],
     "descriptor_set_rdna3_core": [
         "gfx1100",

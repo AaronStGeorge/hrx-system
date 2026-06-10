@@ -15,6 +15,8 @@ set(_LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS
 )
 
 set(_LOOM_AMDGPU_SUPPORTED_PROCESSORS
+  "gfx940"
+  "gfx941"
   "gfx942"
   "gfx950"
   "gfx1100"
@@ -41,6 +43,8 @@ set(_LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES
 
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_KEY_descriptor_set_cdna3_core "amdgpu.cdna3.core")
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS_descriptor_set_cdna3_core
+  "gfx940"
+  "gfx941"
   "gfx942"
 )
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGET_descriptor_set_cdna3_core "cdna3")
