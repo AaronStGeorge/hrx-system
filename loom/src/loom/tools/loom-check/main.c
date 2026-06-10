@@ -14,7 +14,6 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
-#include "loom/ops/op_registry.h"
 #include "loom/tools/loom-check/file.h"
 #include "loom/tools/loom-check/json_output.h"
 #include "loom/tools/loom-check/output.h"
@@ -149,12 +148,6 @@ static void loom_check_print_agent_markdown(FILE* stream) {
       "only when the JSON structure is the unit under test. Prefer concise\n"
       "text emit targets, such as `low-allocation`, when the test only needs\n"
       "to prove compiler facts.\n");
-}
-
-iree_status_t loom_check_register_production_context(void* user_data,
-                                                     loom_context_t* context) {
-  (void)user_data;
-  return loom_op_registry_register_all_dialects(context);
 }
 
 //===----------------------------------------------------------------------===//

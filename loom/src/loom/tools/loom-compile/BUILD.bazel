@@ -68,9 +68,9 @@ loom_cc_binary(
     copts = _AMDGPU_COMPILE_COPTS + _IREE_VM_COMPILE_COPTS + _SPIRV_VULKAN_COMPILE_COPTS,
     deps = [
         "//loom/src/loom/error:diagnostic",
-        "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/tooling/compile:pipeline",
         "//loom/src/loom/tooling/config",
+        "//loom/src/loom/tooling/context",
         "//loom/src/loom/tooling/execution:compile_options",
         "//loom/src/loom/tooling/execution:compile_report_capture",
         "//loom/src/loom/tooling/execution:execution_provider",

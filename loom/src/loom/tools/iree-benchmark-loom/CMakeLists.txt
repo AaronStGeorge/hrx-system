@@ -81,9 +81,9 @@ loom_cc_library(
     loom::error::renderer
     loom::ir
     loom::ir::facts
-    loom::ops::op_registry
     loom::ops::special_values
     loom::tooling::compile::pipeline
+    loom::tooling::context
     loom::tooling::execution::benchmark
     loom::tooling::execution::compile_options
     loom::tooling::execution::compile_report_capture

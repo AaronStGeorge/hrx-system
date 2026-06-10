@@ -4,11 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// loom-check binary with all build-enabled target providers linked in.
+// loom-check binary with synthetic test support and all build-enabled check
+// providers linked in.
 
 #include <stddef.h>
 
 #include "loom/tools/loom-check/provider.h"
+#include "loom/tools/loom-check/test_provider.h"
 
 #ifndef LOOM_CHECK_HAVE_EMIT_AMDGPU
 #define LOOM_CHECK_HAVE_EMIT_AMDGPU 0
@@ -35,12 +37,6 @@
 #define LOOM_CHECK_HAVE_TARGET_X86 0
 #endif  // LOOM_CHECK_HAVE_TARGET_X86
 
-#define LOOM_CHECK_HAVE_ANY_PROVIDER                                \
-  (LOOM_CHECK_HAVE_EMIT_AMDGPU || LOOM_CHECK_HAVE_TARGET_IREE_VM || \
-   LOOM_CHECK_HAVE_EMIT_LLVMIR || LOOM_CHECK_HAVE_TARGET_SPIRV ||   \
-   LOOM_CHECK_HAVE_EMIT_SPIRV || LOOM_CHECK_HAVE_TARGET_WASM ||     \
-   LOOM_CHECK_HAVE_EMIT_WASM || LOOM_CHECK_HAVE_TARGET_X86)
-
 #if LOOM_CHECK_HAVE_EMIT_AMDGPU
 #include "loom/target/arch/amdgpu/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
@@ -66,8 +62,8 @@
 #include "loom/target/arch/x86/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_TARGET_X86
 
-#if LOOM_CHECK_HAVE_ANY_PROVIDER
 static const loom_check_provider_t* const kLoomCheckProviders[] = {
+    &loom_check_test_provider,
 #if LOOM_CHECK_HAVE_EMIT_AMDGPU
     &loom_amdgpu_check_provider,
 #endif  // LOOM_CHECK_HAVE_EMIT_AMDGPU
@@ -93,16 +89,10 @@ static const loom_check_provider_t* const kLoomCheckProviders[] = {
     &loom_x86_check_provider,
 #endif  // LOOM_CHECK_HAVE_TARGET_X86
 };
-#endif  // LOOM_CHECK_HAVE_ANY_PROVIDER
 
 static const loom_check_provider_set_t kLoomCheckProviderSet = {
-#if LOOM_CHECK_HAVE_ANY_PROVIDER
     .providers = kLoomCheckProviders,
     .provider_count = IREE_ARRAYSIZE(kLoomCheckProviders),
-#else
-    .providers = NULL,
-    .provider_count = 0,
-#endif  // LOOM_CHECK_HAVE_ANY_PROVIDER
 };
 
 int main(int argc, char** argv) {

@@ -244,7 +244,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_allocation.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -290,7 +290,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_descriptor_immediates.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -336,7 +336,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_hal_materialization.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -382,7 +382,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_hal_structural.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -428,7 +428,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_occupancy.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -474,7 +474,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_operand_forms.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -520,7 +520,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_packet_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -566,7 +566,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_partial_register.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -612,7 +612,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_addtid.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -658,7 +658,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_async.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -704,7 +704,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_async_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -750,7 +750,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_async_gfx950.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -796,7 +796,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitcast.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -842,7 +842,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitfield.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -888,7 +888,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitpack.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -934,7 +934,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitpack_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -980,7 +980,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitunpack.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1026,7 +1026,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitunpack_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1072,7 +1072,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitunpack_gfx950.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1118,7 +1118,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_cache_policy.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1164,7 +1164,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_cache_policy_gfx950.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1210,7 +1210,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_control_flow.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1256,7 +1256,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_control_flow_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1302,7 +1302,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_conversion.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1348,7 +1348,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_conversion_gfx950.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1394,7 +1394,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1440,7 +1440,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_dot.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1486,7 +1486,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_dot_cdna3.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1532,7 +1532,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_index.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1578,7 +1578,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_index_amdgpu.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1624,7 +1624,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_launch_config.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1670,7 +1670,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_legalize_math.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1716,7 +1716,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_mask.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1762,7 +1762,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1808,7 +1808,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1854,7 +1854,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic_gfx12.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1900,7 +1900,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic_gfx950.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1946,7 +1946,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -1992,7 +1992,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2038,7 +2038,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic_cdna3.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2084,7 +2084,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic_gfx12.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2130,7 +2130,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic_ordering.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2176,7 +2176,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic_ordering_gfx12.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2222,7 +2222,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_workgroup_atomic.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2268,7 +2268,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_workgroup_b128.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2314,7 +2314,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_workgroup_packed16.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2360,7 +2360,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_minmax.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2406,7 +2406,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_minmax_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2452,7 +2452,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_mma.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2498,7 +2498,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_mma_cdna3.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2544,7 +2544,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_mma_gfx950.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2590,7 +2590,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_numeric_f32.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2636,7 +2636,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_numeric_i32.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2682,7 +2682,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2728,7 +2728,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot_gfx12.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2774,7 +2774,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot_gfx950.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2820,7 +2820,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_pipeline.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2866,7 +2866,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_prefetch_gfx12.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2912,7 +2912,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_reduce.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -2958,7 +2958,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_reduce_uniform.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3004,7 +3004,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_i32.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3050,7 +3050,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_slice.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3096,7 +3096,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_slice_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3142,7 +3142,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_structural.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3188,7 +3188,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_subgroup_collective.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3234,7 +3234,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_subgroup_collective_cdna3.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3280,7 +3280,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_subgroup_collective_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3326,7 +3326,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_subgroup_index.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3372,7 +3372,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_sync.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3418,7 +3418,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_sync_kernel.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3464,7 +3464,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_table.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3510,7 +3510,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_table_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3556,7 +3556,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_legalize_final.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3602,7 +3602,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_record_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"
@@ -3648,7 +3648,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_records.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_empty.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/async_gather.loom-test"

@@ -43,6 +43,22 @@ loom_cc_library(
   DEPS
     iree::base
     loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    provider
+  HDRS
+    "provider.h"
+  SRCS
+    "provider.c"
+  DEPS
+    ::lower
+    iree::base
+    loom::pass::test::registry
+    loom::target::low_descriptor_registry_core_test
+    loom::target::provider
   TESTONLY
   PUBLIC
 )

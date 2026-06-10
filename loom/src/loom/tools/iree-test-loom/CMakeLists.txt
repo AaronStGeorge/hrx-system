@@ -20,8 +20,8 @@ loom_cc_library(
     iree::base
     iree::base::tooling::flags
     iree::io::file_handle
-    loom::ops::op_registry
     loom::target::provider
+    loom::tooling::context
     loom::tooling::execution::hal::artifact
     loom::tooling::execution::hal::testbench_actual
     loom::tooling::execution::session

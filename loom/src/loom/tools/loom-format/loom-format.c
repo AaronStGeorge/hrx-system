@@ -12,7 +12,8 @@
 #include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
 #include "loom/error/diagnostic.h"
-#include "loom/ops/op_registry.h"
+#include "loom/target/configured/provider.h"
+#include "loom/tooling/context/context.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tools/loom-format/convert.h"
 #include "loom/util/stream.h"
@@ -83,7 +84,9 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     loom_context_initialize(allocator, &context);
     context_initialized = true;
-    status = loom_op_registry_register_all_dialects(&context);
+    status =
+        loom_tooling_context_register_tool_dialects_with_target_environment(
+            loom_configured_target_environment(), &context);
   }
   if (iree_status_is_ok(status)) {
     status = loom_context_finalize(&context);

@@ -25,5 +25,4 @@ loom_check_test_suite(
         "target_legalize_report.loom-test",
         "target_legalize_structure.loom-test",
     ],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

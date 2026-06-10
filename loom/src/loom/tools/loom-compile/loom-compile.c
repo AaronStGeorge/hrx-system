@@ -13,9 +13,9 @@
 #include "iree/base/tooling/flags.h"
 #include "iree/io/file_contents.h"
 #include "loom/error/diagnostic.h"
-#include "loom/ops/op_registry.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/config/config.h"
+#include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/execution_provider.h"
 #include "loom/tooling/execution/hal/artifact.h"
@@ -158,10 +158,8 @@ static iree_status_t loom_compile_register_context(void* user_data,
                                                    loom_context_t* context) {
   loom_run_execution_environment_t* environment =
       (loom_run_execution_environment_t*)user_data;
-  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
-  const loom_run_register_context_callback_t register_context =
-      loom_run_execution_environment_register_context_callback(environment);
-  return register_context.fn(register_context.user_data, context);
+  return loom_tooling_context_register_tool_dialects_with_target_environment(
+      loom_run_execution_environment_target_environment(environment), context);
 }
 
 static iree_status_t loom_compile_initialize_session(

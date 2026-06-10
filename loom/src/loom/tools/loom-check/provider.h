@@ -49,7 +49,7 @@ typedef struct loom_check_provider_set_t {
   iree_host_size_t provider_count;
 } loom_check_provider_set_t;
 
-// Runs loom-check using production dialects plus |provider_set|'s target
+// Runs loom-check using tool dialects plus |provider_set|'s target/check
 // contributions.
 int loom_check_provider_main(int argc, char** argv,
                              const loom_check_provider_set_t* provider_set);

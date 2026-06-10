@@ -25,7 +25,6 @@ loom_cc_binary(
     loom::error::json_sink
     loom::format::text::printer
     loom::ir
-    loom::ops::op_registry
     loom::pass::builtin_registry
     loom::pass::pipeline
     loom::pass::registry
@@ -36,6 +35,7 @@ loom_cc_binary(
     loom::target::predicate
     loom::target::provider
     loom::tooling::config
+    loom::tooling::context
     loom::tooling::execution::session
     loom::tooling::io::file
     loom::util::json

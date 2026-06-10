@@ -19,5 +19,4 @@ loom_check_test_suite(
         "hazard_plan.loom-test",
         "packet.loom-test",
     ],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

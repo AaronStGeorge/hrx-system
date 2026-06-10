@@ -20,7 +20,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_LLVMIR_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+_LLVMIR_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check:__pkg__"]
 
 _LLVMIR_TARGET_VISIBILITY = [
     "//loom/src/loom/target/emit/llvmir/amdgpu:__pkg__",

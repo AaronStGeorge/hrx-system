@@ -19,11 +19,6 @@
 
 namespace loom::testing {
 
-// Registers the production Loom dialect surface for loom-check tests that do
-// not need the synthetic test dialect.
-iree_status_t LoomCheckRegisterProductionContext(void* user_data,
-                                                 loom_context_t* context);
-
 class LoomCheckHarness {
  public:
   LoomCheckHarness() = default;

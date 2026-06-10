@@ -12,7 +12,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_LOOM_CHECK_FULL_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+_LOOM_CHECK_FULL_VISIBILITY = ["//loom/src/loom/tools/loom-check:__pkg__"]
 
 loom_cc_library(
     name = "check_provider",

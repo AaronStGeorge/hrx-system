@@ -92,7 +92,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
   LABELS
@@ -107,7 +107,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
   LABELS
@@ -122,7 +122,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_allocation.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
   LABELS
@@ -137,7 +137,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_control.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
   LABELS

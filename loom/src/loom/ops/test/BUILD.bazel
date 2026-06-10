@@ -22,7 +22,6 @@ package(
 
 loom_generated_cc_library(
     name = "test",
-    testonly = True,
     srcs = [
         "canonicalize.c",
         "facts.c",

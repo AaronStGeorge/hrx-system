@@ -4,14 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Test/tooling context helpers.
+// Test context helpers.
 //
-// These helpers register the complete in-tree Loom dialect surface without
-// depending on loom-check's execution engine. Use them only for full corpus,
-// production front-door fuzzing, registry composition, and tool integration
-// tests. Unit tests and generated synthetic fuzzers should register the minimal
-// dialect set they exercise so accidental production-dialect dependencies stay
-// visible in BUILD files.
+// These helpers register the same base dialect surface used by user-facing
+// Loom tools without depending on any particular tool executable. Unit tests
+// and generated synthetic fuzzers should still register the minimal dialect set
+// they exercise so accidental dependencies stay visible in BUILD files.
 
 #ifndef LOOM_TESTING_CONTEXT_H_
 #define LOOM_TESTING_CONTEXT_H_
@@ -23,7 +21,8 @@
 extern "C" {
 #endif
 
-// Registers all checked-in dialect vtables and built-in encoding families.
+// Registers production dialects, the synthetic test dialect, and built-in
+// encoding families.
 //
 // The context must have been initialized and must not have been finalized yet.
 iree_status_t loom_testing_context_register_all_dialects(

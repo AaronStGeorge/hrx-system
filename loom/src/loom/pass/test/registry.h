@@ -84,7 +84,10 @@ loom_test_pass_trace_capability_t loom_test_pass_trace_capability_make(
 // Looks up the synthetic pass trace from |pass->environment|.
 loom_test_pass_trace_t* loom_test_pass_trace_from_pass(const loom_pass_t* pass);
 
-// Returns a registry containing only synthetic test pass descriptors.
+// Registry containing only synthetic test pass descriptors.
+extern const loom_pass_registry_t loom_test_pass_registry_storage;
+
+// Returns |loom_test_pass_registry_storage|.
 const loom_pass_registry_t* loom_test_pass_registry(void);
 
 #ifdef __cplusplus

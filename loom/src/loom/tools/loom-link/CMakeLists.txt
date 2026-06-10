@@ -29,8 +29,9 @@ loom_cc_binary(
     loom::link::linker
     loom::link::module_index
     loom::link::planner
-    loom::ops::op_registry
+    loom::target::configured::provider
     loom::tooling::config
+    loom::tooling::context
     loom::tooling::io::file
     loom::tools::loom-format::convert
     loom::util::stream

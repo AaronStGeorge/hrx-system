@@ -18,7 +18,6 @@
 #include "loom/error/json_sink.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
-#include "loom/ops/op_registry.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
@@ -28,6 +27,7 @@
 #include "loom/target/predicate.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/config/config.h"
+#include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 #include "loom/util/json.h"
@@ -134,8 +134,8 @@ static iree_status_t loom_opt_register_context(void* user_data,
                                                loom_context_t* context) {
   const loom_target_environment_t* target_environment =
       (const loom_target_environment_t*)user_data;
-  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
-  return loom_target_environment_register_context(target_environment, context);
+  return loom_tooling_context_register_tool_dialects_with_target_environment(
+      target_environment, context);
 }
 
 static iree_status_t loom_opt_initialize_low_descriptor_registry(

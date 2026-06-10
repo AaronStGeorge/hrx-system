@@ -44,9 +44,9 @@ loom_cc_binary(
     iree::base::tooling::flags
     iree::io::file_handle
     loom::error::diagnostic
-    loom::ops::op_registry
     loom::tooling::compile::pipeline
     loom::tooling::config
+    loom::tooling::context
     loom::tooling::execution::compile_options
     loom::tooling::execution::compile_report_capture
     loom::tooling::execution::execution_provider

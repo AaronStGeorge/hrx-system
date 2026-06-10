@@ -19,8 +19,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::ir
-    loom::ops::op_registry
-    loom::ops::test
+    loom::tooling::context
   TESTONLY
   PUBLIC
 )

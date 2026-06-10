@@ -15,7 +15,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/arithmeticf_structural.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -26,7 +26,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -37,7 +37,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici_structural.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -48,7 +48,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -59,7 +59,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei_structural.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -70,7 +70,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/comparison_structural.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -81,7 +81,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/comparisoni.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -92,7 +92,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/conversion_structural.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -103,7 +103,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/conversioni.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -114,7 +114,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/mathf_structural.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -125,7 +125,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/poison.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )

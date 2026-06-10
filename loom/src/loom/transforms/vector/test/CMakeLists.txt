@@ -15,7 +15,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/gather_to_scalar.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -26,7 +26,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/memory_footprint.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -37,7 +37,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/reduce_axes_to_scalar.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -48,7 +48,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/to_scalar.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )

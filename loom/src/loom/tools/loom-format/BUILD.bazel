@@ -37,7 +37,8 @@ loom_cc_binary(
     deps = [
         ":convert",
         "//loom/src/loom/error:diagnostic",
-        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target/configured:provider",
+        "//loom/src/loom/tooling/context",
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",

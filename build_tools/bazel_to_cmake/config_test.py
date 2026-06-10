@@ -120,14 +120,12 @@ class ConfigTest(unittest.TestCase):
             ["loom::ir"],
         )
         self.assertEqual(
-            converter.convert_target("@iree//loom/src/loom/tools/loom-check/full"),
-            ["loom::tools::loom-check::full"],
+            converter.convert_target("@iree//loom/src/loom/tools/loom-check"),
+            ["loom::tools::loom-check"],
         )
         self.assertEqual(
-            converter.convert_target(
-                "//loom/src/loom/tools/loom-check/full:loom-check"
-            ),
-            ["loom::tools::loom-check::full::loom-check"],
+            converter.convert_target("//loom/src/loom/tools/loom-check:loom-check"),
+            ["loom::tools::loom-check::loom-check"],
         )
         self.assertEqual(
             converter.convert_target("//loom/src:defines"),

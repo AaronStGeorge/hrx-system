@@ -845,7 +845,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         src,
         data=None,
         tags=None,
-        runner="//loom/src/loom/tools/loom-check/full:loom-check",
+        runner="//loom/src/loom/tools/loom-check:loom-check",
         target_compatible_with=None,
         **kwargs,
     ):
@@ -883,7 +883,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         srcs,
         data=None,
         tags=None,
-        runner="//loom/src/loom/tools/loom-check/full:loom-check",
+        runner="//loom/src/loom/tools/loom-check:loom-check",
         test_name_prefix_to_strip="",
         target_compatible_with=None,
         **kwargs,

@@ -39,5 +39,4 @@ loom_check_test_suite(
         "test_resource_lifetime.loom-test",
         "value_facts.loom-test",
     ],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

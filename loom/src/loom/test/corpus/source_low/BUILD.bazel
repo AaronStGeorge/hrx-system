@@ -91,5 +91,4 @@ loom_check_test_suite(
         "vector_v16.loom-test",
         "vector_v4.loom-test",
     ],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )
