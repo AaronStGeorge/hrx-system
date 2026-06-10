@@ -3814,14 +3814,37 @@ iree_status_t iree_hal_task_queue_submit_dispatch(
   iree_status_t status = iree_hal_task_queue_profile_set_dispatch(
       operation, executable, export_ordinal, config, flags);
   if (iree_status_is_ok(status) && constants.data_length > 0) {
+    if (IREE_UNLIKELY(!constants.data)) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "local task queue dispatch constants must be non-null when length is "
+          "non-zero");
+    }
+    if (iree_status_is_ok(status) &&
+        IREE_UNLIKELY((constants.data_length % sizeof(uint32_t)) != 0)) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "local task queue dispatch constants must be 4-byte aligned");
+    }
+    const iree_host_size_t constant_count =
+        constants.data_length / sizeof(uint32_t);
+    if (iree_status_is_ok(status) &&
+        IREE_UNLIKELY(constant_count > UINT16_MAX)) {
+      status =
+          iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                           "local task queue dispatch constant count %" PRIhsz
+                           " exceeds maximum %u",
+                           constant_count, UINT16_MAX);
+    }
     uint32_t* constants_copy = NULL;
-    status = iree_arena_allocate(&operation->arena, constants.data_length,
-                                 (void**)&constants_copy);
+    if (iree_status_is_ok(status)) {
+      status = iree_arena_allocate(&operation->arena, constants.data_length,
+                                   (void**)&constants_copy);
+    }
     if (iree_status_is_ok(status)) {
       memcpy(constants_copy, constants.data, constants.data_length);
       operation->dispatch.constants = constants_copy;
-      operation->dispatch.constant_count =
-          (uint16_t)(constants.data_length / sizeof(uint32_t));
+      operation->dispatch.constant_count = (uint16_t)constant_count;
     }
   }
   if (iree_status_is_ok(status) && binding_count > 0) {

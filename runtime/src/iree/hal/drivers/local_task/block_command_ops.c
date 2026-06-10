@@ -235,13 +235,13 @@ iree_status_t iree_hal_cmd_build_dispatch(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "constants must be 4-byte aligned");
   }
-  if (IREE_UNLIKELY(constants.data_length !=
-                    dispatch_attrs.constant_count * sizeof(uint32_t))) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "constant count mismatch, expected %u but was provided %" PRIhsz,
-        (uint32_t)dispatch_attrs.constant_count,
-        constants.data_length / sizeof(uint32_t));
+  const iree_host_size_t expected_constant_length =
+      (iree_host_size_t)dispatch_attrs.constant_count * sizeof(uint32_t);
+  if (IREE_UNLIKELY(constants.data_length != expected_constant_length)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "constant byte length mismatch, expected %" PRIhsz
+                            " but was provided %" PRIhsz,
+                            expected_constant_length, constants.data_length);
   }
 
   // Validate bindings.

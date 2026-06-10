@@ -2141,9 +2141,9 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
                     expected_constant_length)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "dispatch constant count mismatch; expected %u but got %" PRIhsz,
-        (uint32_t)out_plan->descriptor->kernel_args.constant_count,
-        inputs->constants.data_length / sizeof(uint32_t));
+        "dispatch constant byte length mismatch; expected %" PRIhsz
+        " but got %" PRIhsz,
+        expected_constant_length, inputs->constants.data_length);
   }
   if (IREE_UNLIKELY(inputs->bindings.count !=
                     out_plan->descriptor->kernel_args.binding_count)) {
