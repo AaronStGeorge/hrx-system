@@ -11,7 +11,6 @@ load(
     "loom_cc_test",
     "loom_generated_cc_library",
     "loom_low_descriptor_data_archive",
-    "loom_target_table_cc_library",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
@@ -103,14 +102,19 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
-loom_target_table_cc_library(
+loom_generated_cc_library(
     name = "target_info",
+    srcs = ["target_info.c"],
     args = [
         "--isa-xml=cdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna3.xml)",
         "--isa-xml=cdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
         "--isa-xml=rdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
         "--isa-xml=rdna4:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
     ],
+    generated_hdr_flags = ["--header"],
+    generated_hdrs = ["target_info.h"],
+    generated_src_flags = ["--tables-header"],
+    generated_srcs = ["target_info_tables.h"],
     generator = _AMDGPU_TARGET_INFO_GENERATOR,
     inputs = [
         "@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml",
@@ -118,6 +122,7 @@ loom_target_table_cc_library(
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
     ],
+    source = "target_info_tables.c",
     visibility = (
         _AMDGPU_ENCODING_VISIBILITY +
         _AMDGPU_HAL_VISIBILITY +

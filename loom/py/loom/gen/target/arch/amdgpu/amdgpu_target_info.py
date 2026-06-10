@@ -330,6 +330,40 @@ def _emit_header(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _emit_tables_header() -> str:
+    guard = "LOOM_TARGET_ARCH_AMDGPU_TARGET_INFO_TABLES_H_"
+    lines = [
+        "// Copyright 2026 The IREE Authors",
+        "//",
+        "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
+        "// See https://llvm.org/LICENSE.txt for license information.",
+        "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
+        "",
+        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.amdgpu_target_info"),
+        "",
+        f"#ifndef {guard}",
+        f"#define {guard}",
+        "",
+        '#include "loom/target/arch/amdgpu/target_info_defs.h"',
+        "",
+        "extern const iree_string_view_t",
+        "    loom_amdgpu_target_info_amdhsa_target_id_prefix;",
+        "",
+        "extern const loom_amdgpu_descriptor_set_info_t",
+        "    loom_amdgpu_target_info_descriptor_set_infos[];",
+        "extern const iree_host_size_t",
+        "    loom_amdgpu_target_info_descriptor_set_info_count;",
+        "",
+        "extern const loom_amdgpu_processor_info_t",
+        "    loom_amdgpu_target_info_processor_infos[];",
+        "extern const iree_host_size_t",
+        "    loom_amdgpu_target_info_processor_info_count;",
+        "",
+        f"#endif  // {guard}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[str]:
     key_width = max(len(_c_string_arg(row.info.key)) for row in rows)
     ordinal_width = len("UINT16_C(65535)")
@@ -351,7 +385,7 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
         "    .vector_memory_cache_policy_encoding = vector_memory_cache_policy_encoding_, \\",
         "  }",
         "",
-        "static const loom_amdgpu_descriptor_set_info_t kAmdgpuDescriptorSetInfos[] = {",
+        "const loom_amdgpu_descriptor_set_info_t loom_amdgpu_target_info_descriptor_set_infos[] = {",
         "  // ordinal         descriptor_set_key     s_nop s_endpgm s_branch s_cbranch_scc0 s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
     ]
     lines.extend(
@@ -409,7 +443,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "    .kernel_descriptor_has_packed_workitem_id = has_packed_tid_, \\",
         "  }",
         "",
-        "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
+        "const loom_amdgpu_processor_info_t loom_amdgpu_target_info_processor_infos[] = {",
         "  // processor descriptor_set_key    ordinal         mach  feat wave kernel_profile                              matrix_profile                             sched vgpr32 vgpr64 flat_scratch gfx10_sgpr accum_offset dx10_ieee packed_tid",
     ]
     lines.extend(
@@ -438,7 +472,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     return lines
 
 
-def _emit_source(
+def _emit_tables_source(
     processors: Sequence[AmdgpuProcessorInfo],
     descriptor_set_rows: Sequence[_AmdgpuDescriptorSetRow],
 ) -> str:
@@ -451,12 +485,11 @@ def _emit_source(
         "",
         *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.amdgpu_target_info"),
         "",
-        '#include "loom/target/arch/amdgpu/target_info.h"',
+        '#include "loom/target/arch/amdgpu/target_info_tables.h"',
         "",
-        "#include <inttypes.h>",
         "#include <stdint.h>",
         "",
-        f'static const iree_string_view_t kAmdgpuAmdhsaTargetIdPrefix = IREE_SVL("{_c_string_literal(AMDGPU_AMDHSA_TARGET_TRIPLE)}--");',
+        f'const iree_string_view_t loom_amdgpu_target_info_amdhsa_target_id_prefix = IREE_SVL("{_c_string_literal(AMDGPU_AMDHSA_TARGET_TRIPLE)}--");',
         "",
         "// clang-format off",
     ]
@@ -466,194 +499,13 @@ def _emit_source(
     lines.append("")
     lines.extend(
         [
-            "iree_host_size_t loom_amdgpu_target_info_processor_count(void) {",
-            "  return IREE_ARRAYSIZE(kAmdgpuProcessorInfos);",
-            "}",
+            "const iree_host_size_t",
+            "    loom_amdgpu_target_info_descriptor_set_info_count =",
+            "        IREE_ARRAYSIZE(loom_amdgpu_target_info_descriptor_set_infos);",
             "",
-            "const loom_amdgpu_processor_info_t* loom_amdgpu_target_info_processor_at(",
-            "    iree_host_size_t index) {",
-            "  if (index >= IREE_ARRAYSIZE(kAmdgpuProcessorInfos)) {",
-            "    return NULL;",
-            "  }",
-            "  return &kAmdgpuProcessorInfos[index];",
-            "}",
-            "",
-            "const loom_amdgpu_processor_info_t*",
-            "loom_amdgpu_target_info_find_processor(",
-            "    iree_string_view_t processor_name) {",
-            "  if (iree_string_view_is_empty(processor_name)) {",
-            "    return NULL;",
-            "  }",
-            "  iree_host_size_t low = 0;",
-            "  iree_host_size_t high = IREE_ARRAYSIZE(kAmdgpuProcessorInfos);",
-            "  while (low < high) {",
-            "    const iree_host_size_t mid = low + (high - low) / 2;",
-            "    const loom_amdgpu_processor_info_t* processor =",
-            "        &kAmdgpuProcessorInfos[mid];",
-            "    const int comparison = iree_string_view_compare(",
-            "        processor->processor, processor_name);",
-            "    if (comparison == 0) {",
-            "      return processor;",
-            "    }",
-            "    if (comparison < 0) {",
-            "      low = mid + 1;",
-            "    } else {",
-            "      high = mid;",
-            "    }",
-            "  }",
-            "  return NULL;",
-            "}",
-            "",
-            "iree_host_size_t loom_amdgpu_target_info_descriptor_set_count(void) {",
-            "  return IREE_ARRAYSIZE(kAmdgpuDescriptorSetInfos);",
-            "}",
-            "",
-            "const loom_amdgpu_descriptor_set_info_t*",
-            "loom_amdgpu_target_info_descriptor_set_at(",
-            "    uint16_t descriptor_set_ordinal) {",
-            "  if (descriptor_set_ordinal >= IREE_ARRAYSIZE(kAmdgpuDescriptorSetInfos)) {",
-            "    return NULL;",
-            "  }",
-            "  return &kAmdgpuDescriptorSetInfos[descriptor_set_ordinal];",
-            "}",
-            "",
-            "iree_status_t loom_amdgpu_target_info_lookup_processor(",
-            "    iree_string_view_t processor_name,",
-            "    const loom_amdgpu_processor_info_t** out_processor) {",
-            "  IREE_ASSERT_ARGUMENT(out_processor);",
-            "  *out_processor = NULL;",
-            "  if (iree_string_view_is_empty(processor_name)) {",
-            "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
-            '                            "AMDGPU processor is required");',
-            "  }",
-            "  const loom_amdgpu_processor_info_t* processor =",
-            "      loom_amdgpu_target_info_find_processor(processor_name);",
-            "  if (processor != NULL) {",
-            "    *out_processor = processor;",
-            "    return iree_ok_status();",
-            "  }",
-            "  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,",
-            "                          \"AMDGPU processor '%.*s' is not supported\",",
-            "                          (int)processor_name.size,",
-            "                          processor_name.data);",
-            "}",
-            "",
-            "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set(",
-            "    iree_string_view_t descriptor_set_key,",
-            "    const loom_amdgpu_descriptor_set_info_t** out_descriptor_set) {",
-            "  IREE_ASSERT_ARGUMENT(out_descriptor_set);",
-            "  *out_descriptor_set = NULL;",
-            "  if (iree_string_view_is_empty(descriptor_set_key)) {",
-            "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
-            '                            "AMDGPU descriptor set key is required");',
-            "  }",
-            "  iree_host_size_t low = 0;",
-            "  iree_host_size_t high = IREE_ARRAYSIZE(kAmdgpuDescriptorSetInfos);",
-            "  while (low < high) {",
-            "    const iree_host_size_t mid = low + (high - low) / 2;",
-            "    const loom_amdgpu_descriptor_set_info_t* descriptor_set =",
-            "        &kAmdgpuDescriptorSetInfos[mid];",
-            "    const int comparison = iree_string_view_compare(",
-            "        descriptor_set->descriptor_set_key, descriptor_set_key);",
-            "    if (comparison == 0) {",
-            "      *out_descriptor_set = descriptor_set;",
-            "      return iree_ok_status();",
-            "    }",
-            "    if (comparison < 0) {",
-            "      low = mid + 1;",
-            "    } else {",
-            "      high = mid;",
-            "    }",
-            "  }",
-            "  return iree_make_status(",
-            "      IREE_STATUS_UNIMPLEMENTED,",
-            "      \"AMDGPU descriptor set '%.*s' is not supported by native emission\",",
-            "      (int)descriptor_set_key.size, descriptor_set_key.data);",
-            "}",
-            "",
-            "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(",
-            "    uint16_t descriptor_set_ordinal,",
-            "    const loom_amdgpu_descriptor_set_info_t** out_descriptor_set) {",
-            "  IREE_ASSERT_ARGUMENT(out_descriptor_set);",
-            "  *out_descriptor_set = NULL;",
-            "  if (descriptor_set_ordinal == LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE) {",
-            "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
-            '                            "AMDGPU descriptor set ordinal is required");',
-            "  }",
-            "  const loom_amdgpu_descriptor_set_info_t* descriptor_set =",
-            "      loom_amdgpu_target_info_descriptor_set_at(",
-            "          descriptor_set_ordinal);",
-            "  if (descriptor_set != NULL) {",
-            "    *out_descriptor_set = descriptor_set;",
-            "    return iree_ok_status();",
-            "  }",
-            "  return iree_make_status(",
-            "      IREE_STATUS_UNIMPLEMENTED,",
-            '      "AMDGPU descriptor set ordinal %" PRIu16',
-            '      " is not supported by native emission",',
-            "      descriptor_set_ordinal);",
-            "}",
-        ]
-    )
-    lines.extend(
-        [
-            "",
-            "static iree_status_t loom_amdgpu_target_info_validate_target_id_chars(",
-            "    iree_string_view_t target_id) {",
-            "  for (iree_host_size_t i = 0; i < target_id.size; ++i) {",
-            "    const unsigned char c = (unsigned char)target_id.data[i];",
-            "    if (c <= ' ' || c == '\"' || c == '\\\\') {",
-            "      return iree_make_status(",
-            "          IREE_STATUS_INVALID_ARGUMENT,",
-            '          "AMDGPU AMDHSA target id contains an unsupported character");',
-            "    }",
-            "  }",
-            "  return iree_ok_status();",
-            "}",
-            "",
-            "iree_status_t loom_amdgpu_target_info_parse_amdhsa_target_id(",
-            "    iree_string_view_t target_id,",
-            "    loom_amdgpu_amdhsa_target_id_t* out_target_id) {",
-            "  IREE_ASSERT_ARGUMENT(out_target_id);",
-            "  *out_target_id = (loom_amdgpu_amdhsa_target_id_t){0};",
-            "  if (iree_string_view_is_empty(target_id)) {",
-            "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
-            '                            "AMDGPU AMDHSA target id is required");',
-            "  }",
-            "  IREE_RETURN_IF_ERROR(",
-            "      loom_amdgpu_target_info_validate_target_id_chars(target_id));",
-            "  iree_string_view_t processor_and_features = target_id;",
-            "  if (!iree_string_view_consume_prefix(",
-            "          &processor_and_features, kAmdgpuAmdhsaTargetIdPrefix)) {",
-            "    return iree_make_status(",
-            "        IREE_STATUS_INVALID_ARGUMENT,",
-            "        \"AMDGPU AMDHSA target id '%.*s' does not start with '%.*s'\",",
-            "        (int)target_id.size, target_id.data,",
-            "        (int)kAmdgpuAmdhsaTargetIdPrefix.size,",
-            "        kAmdgpuAmdhsaTargetIdPrefix.data);",
-            "  }",
-            "  iree_string_view_t processor_name = iree_string_view_empty();",
-            "  iree_string_view_t feature_suffix = iree_string_view_empty();",
-            "  const intptr_t split = iree_string_view_split(",
-            "      processor_and_features, ':', &processor_name, &feature_suffix);",
-            "  if (split == -1) {",
-            "    processor_name = processor_and_features;",
-            "  } else if (iree_string_view_is_empty(feature_suffix)) {",
-            "    return iree_make_status(",
-            "        IREE_STATUS_INVALID_ARGUMENT,",
-            "        \"AMDGPU AMDHSA target id '%.*s' has an empty feature suffix\",",
-            "        (int)target_id.size, target_id.data);",
-            "  }",
-            "  const loom_amdgpu_processor_info_t* processor = NULL;",
-            "  IREE_RETURN_IF_ERROR(",
-            "      loom_amdgpu_target_info_lookup_processor(processor_name,",
-            "                                             &processor));",
-            "  *out_target_id = (loom_amdgpu_amdhsa_target_id_t){",
-            "      .processor = processor,",
-            "      .feature_suffix = feature_suffix,",
-            "  };",
-            "  return iree_ok_status();",
-            "}",
+            "const iree_host_size_t",
+            "    loom_amdgpu_target_info_processor_info_count =",
+            "        IREE_ARRAYSIZE(loom_amdgpu_target_info_processor_infos);",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -662,6 +514,7 @@ def _emit_source(
 def write_target_info_to_paths(
     header_path: Path,
     source_path: Path,
+    tables_header_path: Path,
     isa_xml_arguments: Sequence[str],
 ) -> None:
     descriptor_sets = sorted_descriptor_set_infos()
@@ -672,11 +525,14 @@ def write_target_info_to_paths(
     _validate_descriptor_set_rows(descriptor_set_rows)
     _validate_processors(processors, descriptor_sets)
     header = _emit_header(descriptor_sets)
-    source = _emit_source(processors, descriptor_set_rows)
+    tables_header = _emit_tables_header()
+    source = _emit_tables_source(processors, descriptor_set_rows)
     header_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.parent.mkdir(parents=True, exist_ok=True)
+    tables_header_path.parent.mkdir(parents=True, exist_ok=True)
     header_path.write_text(header, encoding="utf-8")
     source_path.write_text(source, encoding="utf-8")
+    tables_header_path.write_text(tables_header, encoding="utf-8")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -694,6 +550,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Generated target-info source path.",
     )
     parser.add_argument(
+        "--tables-header",
+        required=True,
+        type=Path,
+        help="Generated target-info private table header path.",
+    )
+    parser.add_argument(
         "--isa-xml",
         action="append",
         default=[],
@@ -704,6 +566,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_target_info_to_paths(
         header_path=args.header,
         source_path=args.source,
+        tables_header_path=args.tables_header,
         isa_xml_arguments=args.isa_xml,
     )
     return 0

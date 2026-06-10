@@ -7,10 +7,11 @@
 // AMDGPU processor and descriptor-set facts.
 //
 // The declarations here are the stable C contract for target-owned AMDGPU
-// facts. Generated target-info tables provide the row data and lookup
-// implementation; this header owns the public types so C API design does not
-// live inside the table generator. Target-info generators may include this
-// header, but must not emit public struct or enum definitions for these facts.
+// facts. Generated target-info tables provide row data; checked-in C owns the
+// lookup and parsing algorithms. This header owns the public types so C API
+// design does not live inside the table generator. Target-info generators may
+// include this header, but must not emit public struct or enum definitions for
+// these facts.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_TARGET_INFO_DEFS_H_
 #define LOOM_TARGET_ARCH_AMDGPU_TARGET_INFO_DEFS_H_
