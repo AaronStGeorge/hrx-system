@@ -28,6 +28,17 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    op_defs_test
+  SRCS
+    "op_defs_test.cc"
+  DEPS
+    ::op_defs
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     func_symbol_facts

@@ -198,8 +198,9 @@ def test_generate_dialect_tables_emit_dense_op_semantics() -> None:
     assert "static const loom_op_semantics_t loom_test_semantics_array[] = {" in tables_c
     assert ".phase = LOOM_OP_PHASE_EXECUTABLE," in tables_c
     assert ".contract_families = LOOM_CONTRACT_VECTOR_COORDINATE," in tables_c
-    assert "loom_op_dialect_id(kind) != LOOM_DIALECT_TEST" in tables_c
-    assert "return loom_test_semantics_array[op_index];" in tables_c
+    assert "loom_dialect_semantics_lookup(" in tables_c
+    assert "kind, LOOM_DIALECT_TEST, loom_test_semantics_array," in tables_c
+    assert "loom_op_dialect_id(kind)" not in tables_c
 
 
 def test_generate_tables_omits_zero_default_vtable_fields() -> None:
@@ -317,14 +318,15 @@ def test_generate_sharded_tables_exports_vtables_and_keeps_dense_aggregator() ->
     assert "loom_op_semantics_t loom_test_op_semantics(" in table_files["tables.c"]
 
 
-def test_generate_tables_aggregator_rejects_wrong_dialect_kind() -> None:
+def test_generate_tables_aggregator_delegates_semantics_lookup() -> None:
     dialect = Dialect("test", dialect_id=0x01)
     op = Op("test.first", group=dialect)
 
     tables_c = generate_tables_aggregator_c("test", 0x01, [op])
 
-    assert "loom_op_dialect_id(kind) != LOOM_DIALECT_TEST" in tables_c
-    assert "return loom_test_semantics_array[op_index];" in tables_c
+    assert "loom_dialect_semantics_lookup(" in tables_c
+    assert "kind, LOOM_DIALECT_TEST, loom_test_semantics_array," in tables_c
+    assert "loom_op_dialect_id(kind)" not in tables_c
 
 
 def test_generate_tables_rejects_constraint_field_index_above_6_bit_max() -> None:

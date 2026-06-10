@@ -259,6 +259,37 @@ loom_bstring_t loom_keyword_bstring(loom_keyword_id_t keyword_id) {
 // Vtable helpers
 //===----------------------------------------------------------------------===//
 
+const loom_op_vtable_t* const* loom_dialect_vtable_array(
+    const loom_op_vtable_t* const* vtables, iree_host_size_t vtable_count,
+    iree_host_size_t* out_count) {
+  if (out_count != NULL) {
+    *out_count = vtable_count;
+  }
+  return vtables;
+}
+
+const loom_op_semantics_t* loom_dialect_semantics_array(
+    const loom_op_semantics_t* semantics, iree_host_size_t semantic_count,
+    iree_host_size_t* out_count) {
+  if (out_count != NULL) {
+    *out_count = semantic_count;
+  }
+  return semantics;
+}
+
+loom_op_semantics_t loom_dialect_semantics_lookup(
+    loom_op_kind_t kind, loom_dialect_id_t dialect_id,
+    const loom_op_semantics_t* semantics, iree_host_size_t semantic_count) {
+  if (loom_op_dialect_id(kind) != dialect_id) {
+    return loom_op_semantics_empty();
+  }
+  uint8_t op_index = loom_op_dialect_index(kind);
+  if (op_index >= semantic_count) {
+    return loom_op_semantics_empty();
+  }
+  return semantics[op_index];
+}
+
 const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
     const loom_op_vtable_t* vtable, uint8_t region_index) {
   if (!vtable || !vtable->region_descriptors || vtable->region_count == 0) {

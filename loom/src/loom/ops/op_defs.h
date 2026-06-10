@@ -945,6 +945,26 @@ typedef struct loom_op_placement_descriptor_t {
   uint8_t forbidden_ancestor_count;
 } loom_op_placement_descriptor_t;
 
+// Returns a dialect vtable array and writes |vtable_count| to |out_count| when
+// requested. Generated dialect accessors use this so the count-output contract
+// is owned by the op-definition runtime instead of duplicated in generated C.
+const loom_op_vtable_t* const* loom_dialect_vtable_array(
+    const loom_op_vtable_t* const* vtables, iree_host_size_t vtable_count,
+    iree_host_size_t* out_count);
+
+// Returns a dense dialect semantic metadata array and writes |semantic_count|
+// to |out_count| when requested.
+const loom_op_semantics_t* loom_dialect_semantics_array(
+    const loom_op_semantics_t* semantics, iree_host_size_t semantic_count,
+    iree_host_size_t* out_count);
+
+// Returns semantic metadata for |kind| within |dialect_id| from a dense
+// dialect-local semantic table, or empty metadata when the kind belongs to a
+// different dialect or has no row in |semantics|.
+loom_op_semantics_t loom_dialect_semantics_lookup(
+    loom_op_kind_t kind, loom_dialect_id_t dialect_id,
+    const loom_op_semantics_t* semantics, iree_host_size_t semantic_count);
+
 // Returns the descriptor for an actual region slot. For ops with a trailing
 // variadic region field, fixed slots use their exact descriptor and every
 // variadic slot reuses the final descriptor entry.

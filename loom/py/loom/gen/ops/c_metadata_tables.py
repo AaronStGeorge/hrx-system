@@ -77,6 +77,34 @@ def _op_semantics_row(op: Op) -> list[str]:
     return row
 
 
+def _emit_dialect_table_accessors(lines: list[str], dialect_name: str) -> None:
+    """Emits dialect-specific wrappers around shared table helper algorithms."""
+
+    vtable_array_name = f"loom_{dialect_name}_vtable_array"
+    semantics_array_name = f"loom_{dialect_name}_semantics_array"
+    lines.append(f"const loom_op_vtable_t* const* loom_{dialect_name}_dialect_vtables(")
+    lines.append("    iree_host_size_t* out_count) {")
+    lines.append("  return loom_dialect_vtable_array(")
+    lines.append(f"      {vtable_array_name}, IREE_ARRAYSIZE({vtable_array_name}),")
+    lines.append("      out_count);")
+    lines.append("}")
+    lines.append("")
+    lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
+    lines.append("    iree_host_size_t* out_count) {")
+    lines.append("  return loom_dialect_semantics_array(")
+    lines.append(f"      {semantics_array_name}, IREE_ARRAYSIZE({semantics_array_name}),")
+    lines.append("      out_count);")
+    lines.append("}")
+    lines.append("")
+    lines.append(f"loom_op_semantics_t loom_{dialect_name}_op_semantics(")
+    lines.append("    loom_op_kind_t kind) {")
+    lines.append("  return loom_dialect_semantics_lookup(")
+    lines.append(f"      kind, {_c_dialect_enum(dialect_name)}, {semantics_array_name},")
+    lines.append(f"      IREE_ARRAYSIZE({semantics_array_name}));")
+    lines.append("}")
+    lines.append("")
+
+
 # Maps Python symbol interface names to C interface flag constants.
 SYMBOL_INTERFACE_MAP: dict[str, str] = {
     "func_like": "LOOM_SYMBOL_INTERFACE_FUNC_LIKE",
@@ -580,37 +608,13 @@ def generate_tables_c(
         f"loom_{dialect_name}_vtable_array",
         [f"&{_c_prefix(op)}_vtable" for op in ops],
     )
-    lines.append(f"const loom_op_vtable_t* const* loom_{dialect_name}_dialect_vtables(")
-    lines.append("    iree_host_size_t* out_count) {")
-    lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_vtable_array);")
-    lines.append(f"  return loom_{dialect_name}_vtable_array;")
-    lines.append("}")
-    lines.append("")
-
     c_arrays.append_struct_array(
         lines,
         "loom_op_semantics_t",
         f"loom_{dialect_name}_semantics_array",
         [_op_semantics_row(op) for op in ops],
     )
-    lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
-    lines.append("    iree_host_size_t* out_count) {")
-    lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array);")
-    lines.append(f"  return loom_{dialect_name}_semantics_array;")
-    lines.append("}")
-    lines.append("")
-    lines.append(f"loom_op_semantics_t loom_{dialect_name}_op_semantics(")
-    lines.append("    loom_op_kind_t kind) {")
-    lines.append(f"  if (loom_op_dialect_id(kind) != {_c_dialect_enum(dialect_name)}) {{")
-    lines.append("    return loom_op_semantics_empty();")
-    lines.append("  }")
-    lines.append("  uint8_t op_index = loom_op_dialect_index(kind);")
-    lines.append(f"  if (op_index >= IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array)) {{")
-    lines.append("    return loom_op_semantics_empty();")
-    lines.append("  }")
-    lines.append(f"  return loom_{dialect_name}_semantics_array[op_index];")
-    lines.append("}")
-    lines.append("")
+    _emit_dialect_table_accessors(lines, dialect_name)
 
     return "\n".join(lines)
 
@@ -669,37 +673,13 @@ def generate_tables_aggregator_c(
         f"loom_{dialect_name}_vtable_array",
         [f"&{_c_prefix(op)}_vtable" for op in ops],
     )
-    lines.append(f"const loom_op_vtable_t* const* loom_{dialect_name}_dialect_vtables(")
-    lines.append("    iree_host_size_t* out_count) {")
-    lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_vtable_array);")
-    lines.append(f"  return loom_{dialect_name}_vtable_array;")
-    lines.append("}")
-    lines.append("")
-
     c_arrays.append_struct_array(
         lines,
         "loom_op_semantics_t",
         f"loom_{dialect_name}_semantics_array",
         [_op_semantics_row(op) for op in ops],
     )
-    lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
-    lines.append("    iree_host_size_t* out_count) {")
-    lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array);")
-    lines.append(f"  return loom_{dialect_name}_semantics_array;")
-    lines.append("}")
-    lines.append("")
-    lines.append(f"loom_op_semantics_t loom_{dialect_name}_op_semantics(")
-    lines.append("    loom_op_kind_t kind) {")
-    lines.append(f"  if (loom_op_dialect_id(kind) != {_c_dialect_enum(dialect_name)}) {{")
-    lines.append("    return loom_op_semantics_empty();")
-    lines.append("  }")
-    lines.append("  uint8_t op_index = loom_op_dialect_index(kind);")
-    lines.append(f"  if (op_index >= IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array)) {{")
-    lines.append("    return loom_op_semantics_empty();")
-    lines.append("  }")
-    lines.append(f"  return loom_{dialect_name}_semantics_array[op_index];")
-    lines.append("}")
-    lines.append("")
+    _emit_dialect_table_accessors(lines, dialect_name)
 
     return "\n".join(lines)
 
