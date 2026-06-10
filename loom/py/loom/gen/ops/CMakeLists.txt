@@ -38,6 +38,7 @@ iree_py_library(
     "c_queries.py"
     "c_symbols.py"
     "c_tables.py"
+    "c_traits.py"
     "keywords.py"
     "type_registry.py"
   DEPS
@@ -63,6 +64,7 @@ iree_py_library(
     "c_queries.py"
     "c_symbols.py"
     "c_tables.py"
+    "c_traits.py"
     "keywords.py"
     "type_registry.py"
   DEPS

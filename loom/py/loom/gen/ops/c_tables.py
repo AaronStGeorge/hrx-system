@@ -83,7 +83,7 @@ from loom.dsl import (
 )
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
-from loom.gen.ops import c_format, c_interfaces, c_queries, c_symbols
+from loom.gen.ops import c_format, c_interfaces, c_queries, c_symbols, c_traits
 from loom.gen.ops.c_enum_attrs import SharedEnumMap
 from loom.gen.ops.c_enum_attrs import (
     collect_shared_enums as _collect_shared_enums,
@@ -105,7 +105,6 @@ from loom.gen.ops.c_enums import (
     OPERAND_OWNERSHIP_EFFECT_MAP,
     OWNERSHIP_CARRIER_MAP,
     RESULT_OWNERSHIP_EFFECT_MAP,
-    TRAIT_MAP,
     TYPE_CONSTRAINT_MAP,
 )
 from loom.gen.ops.c_enums import (
@@ -212,122 +211,6 @@ def _constraint_arg_ref(
     if field_index > LOOM_FIELD_REF_MAX_INDEX:
         raise ValueError(f"Op '{op.name}' constraint {constraint_name}: field '{arg_name}' index {field_index} exceeds LOOM_FIELD_REF 6-bit max {LOOM_FIELD_REF_MAX_INDEX}")
     return f"LOOM_FIELD_REF({category}, {field_index})"
-
-
-# ============================================================================
-# Trait translation
-# ============================================================================
-
-
-def _implicit_terminator_kind(op: Op, ops_by_name: dict[str, Op]) -> str:
-    """Returns the C op kind for this op's implicit terminator trait."""
-    terminator_traits = [trait for trait in op.traits if trait.name == "ImplicitTerminator"]
-    if not terminator_traits:
-        return "LOOM_OP_KIND_UNKNOWN"
-    if len(terminator_traits) > 1:
-        raise ValueError(f"Op '{op.name}': duplicate ImplicitTerminator traits are not supported")
-    trait = terminator_traits[0]
-    if len(trait.args) != 1:
-        raise ValueError(f"Op '{op.name}': ImplicitTerminator requires one op name argument")
-    terminator_name = trait.args[0]
-    terminator_op = ops_by_name.get(terminator_name)
-    if terminator_op is None:
-        raise ValueError(f"Op '{op.name}': ImplicitTerminator '{terminator_name}' must name an op in the '{op.namespace}' dialect")
-    if not any(trait.name == "Terminator" for trait in terminator_op.traits):
-        raise ValueError(f"Op '{op.name}': ImplicitTerminator '{terminator_name}' is not marked with the Terminator trait")
-    terminator_layout = compute_layout(terminator_op)
-    if terminator_layout.fixed_operand_count != 0 or terminator_layout.fixed_result_count != 0 or terminator_op.attrs or terminator_op.regions:
-        raise ValueError(f"Op '{op.name}': ImplicitTerminator '{terminator_name}' must be instantiable with zero operands, results, attrs, and regions")
-    return _c_enum_name(terminator_op)
-
-
-def _region_terminator_kind(op: Op, region: RegionDef, ops_by_name: dict[str, Op]) -> str:
-    """Returns the C op kind required for explicit terminators in a region."""
-    if region.terminator is None:
-        return "LOOM_OP_KIND_UNKNOWN"
-    terminator_op = ops_by_name.get(region.terminator)
-    if terminator_op is None:
-        raise ValueError(f"Op '{op.name}' region '{region.name}': terminator '{region.terminator}' must name a registered op")
-    if not any(trait.name == "Terminator" for trait in terminator_op.traits):
-        raise ValueError(f"Op '{op.name}' region '{region.name}': terminator '{region.terminator}' is not marked with the Terminator trait")
-    return _c_enum_name(terminator_op)
-
-
-def _trait_op_kinds(
-    op: Op,
-    ops_by_name: dict[str, Op],
-    trait_name: str,
-) -> list[str]:
-    """Returns op-kind enum names referenced by parameterized placement traits."""
-    kinds: list[str] = []
-    for trait in op.traits:
-        if trait.name != trait_name:
-            continue
-        if len(trait.args) != 1:
-            raise ValueError(f"Op '{op.name}': {trait_name} requires one op name argument")
-        ancestor_name = trait.args[0]
-        ancestor_op = ops_by_name.get(ancestor_name)
-        if ancestor_op is None:
-            raise ValueError(f"Op '{op.name}': {trait_name} '{ancestor_name}' must name an op in the '{op.namespace}' dialect")
-        kinds.append(_c_enum_name(ancestor_op))
-    return kinds
-
-
-def _trait_flags(op: Op) -> str:
-    """Returns the C trait bitfield expression for an op.
-
-    Includes explicitly declared traits and derived summary bits:
-    READS_MEMORY and WRITES_MEMORY are derived from per-operand effects.
-    PURE is derived when no effects, no allocating results, and no
-    NON_DETERMINISTIC or UNKNOWN_EFFECTS traits are present.
-    """
-    bits = []
-    for trait in op.traits:
-        c_name = TRAIT_MAP.get(trait.name)
-        if c_name:
-            bits.append(c_name)
-
-    # Derive summary bits from per-operand effects.
-    has_read = False
-    has_write = False
-    for effect in op.effects:
-        if effect.kind in (EffectKind.READ, EffectKind.READWRITE):
-            has_read = True
-        if effect.kind in (EffectKind.WRITE, EffectKind.READWRITE):
-            has_write = True
-    if has_read:
-        bits.append("LOOM_TRAIT_READS_MEMORY")
-    if has_write:
-        bits.append("LOOM_TRAIT_WRITES_MEMORY")
-
-    # Derive UNIQUE_IDENTITY when any result allocates fresh storage.
-    has_allocating_result = any(r.allocates for r in op.results)
-    has_explicit_unique_identity = any(t.name == "UniqueIdentity" for t in op.traits)
-    if has_allocating_result and not has_explicit_unique_identity:
-        bits.append("LOOM_TRAIT_UNIQUE_IDENTITY")
-
-    # Derive PURE when the op has no effects and no conflicting traits.
-    explicit_pure = any(t.name == "Pure" for t in op.traits)
-    has_non_deterministic = any(t.name == "NonDeterministic" for t in op.traits)
-    has_unknown_effects = any(t.name == "UnknownEffects" for t in op.traits)
-    has_hint = any(t.name == "Hint" for t in op.traits)
-    if (
-        not explicit_pure
-        and not op.effects
-        and not op.ownership_effects
-        and not has_non_deterministic
-        and not has_unknown_effects
-        and not has_hint
-        and not has_allocating_result
-        and not has_explicit_unique_identity
-        and not has_read
-        and not has_write
-    ):
-        bits.append("LOOM_TRAIT_PURE")
-
-    if not bits:
-        return "0"
-    return " | ".join(bits)
 
 
 # ============================================================================
@@ -2213,7 +2096,7 @@ def generate_tables_c(
 
         # Region descriptors.
         if op.regions:
-            implicit_terminator = _implicit_terminator_kind(op, ops_by_name)
+            implicit_terminator = c_traits.implicit_terminator_kind(op, ops_by_name)
             lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
             func_args_fields = c_queries.func_args_field_names(op)
             for region_def in op.regions:
@@ -2230,7 +2113,7 @@ def generate_tables_c(
                         raise ValueError(f"Op '{op.name}' region '{region_def.name}' has unsupported buffer_arg_memory_space '{buffer_arg_memory_space}'")
                     region_flags.append("LOOM_REGION_GLOBAL_BUFFER_ARGS")
                 flags = " | ".join(region_flags) if region_flags else "0"
-                terminator = _region_terminator_kind(op, region_def, ops_by_name)
+                terminator = c_traits.region_terminator_kind(op, region_def, ops_by_name)
                 lines.append(f"    {{{terminator}, {implicit_terminator}, {flags}}},")
             lines.append("};")
 
@@ -2296,9 +2179,9 @@ def generate_tables_c(
             lines.append("};")
 
         # Structural placement descriptor.
-        required_parent_kinds = _trait_op_kinds(op, ops_by_name, "HasParent")
-        required_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "HasAncestor")
-        forbidden_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "NoAncestor")
+        required_parent_kinds = c_traits.trait_op_kinds(op, ops_by_name, "HasParent")
+        required_ancestor_kinds = c_traits.trait_op_kinds(op, ops_by_name, "HasAncestor")
+        forbidden_ancestor_kinds = c_traits.trait_op_kinds(op, ops_by_name, "NoAncestor")
         if required_parent_kinds or required_ancestor_kinds or forbidden_ancestor_kinds:
             required_parent_ptr = "NULL"
             required_ptr = "NULL"
@@ -2331,7 +2214,7 @@ def generate_tables_c(
             lines.append("};")
 
         # Vtable.
-        traits = _trait_flags(op)
+        traits = c_traits.trait_flags(op)
         vtable_flag_bits: list[str] = []
         if layout.segmented_operands:
             vtable_flag_bits.append("LOOM_OP_VTABLE_SEGMENTED_OPERANDS")
