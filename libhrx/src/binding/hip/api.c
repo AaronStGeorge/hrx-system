@@ -682,9 +682,7 @@ HIPAPI hipError_t hipSetDevice(int device) {
       hipErrorOutOfMemory);
 
   // Switch to the primary context for the device.
-  HIP_RETURN_STATUS_AND_END_ZONE_IF_ERROR(
-      z0, iree_hal_streaming_context_set_current(primary_context),
-      hipErrorInvalidDevice);
+  iree_hal_streaming_context_set_current(primary_context);
 
   IREE_TRACE_ZONE_END(z0);
   return hipSuccess;
@@ -2439,7 +2437,7 @@ HIPAPI hipError_t hipCtxCreate(hipCtx_t* pctx, unsigned int flags,
   if (iree_status_is_ok(status)) {
     *pctx = (hipCtx_t)context;
     // Make it current.
-    status = iree_hal_streaming_context_set_current(context);
+    iree_hal_streaming_context_set_current(context);
   }
 
   hipError_t result = iree_status_to_hip_result(status);
@@ -2657,11 +2655,9 @@ HIPAPI hipError_t hipCtxGetCurrent(hipCtx_t* pctx) {
 // See also: hipCtxGetCurrent, hipCtxPushCurrent, hipCtxPopCurrent.
 HIPAPI hipError_t hipCtxSetCurrent(hipCtx_t ctx) {
   IREE_TRACE_ZONE_BEGIN(z0);
-  iree_status_t status = iree_hal_streaming_context_set_current(
-      (iree_hal_streaming_context_t*)ctx);
-  hipError_t result = iree_status_to_hip_result(status);
+  iree_hal_streaming_context_set_current((iree_hal_streaming_context_t*)ctx);
   IREE_TRACE_ZONE_END(z0);
-  return result;
+  return hipSuccess;
 }
 
 // Gets the device associated with the current context.

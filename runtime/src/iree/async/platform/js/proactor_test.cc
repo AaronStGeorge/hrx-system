@@ -603,8 +603,13 @@ TEST_F(JsProactorTest, SequenceCancellation) {
   // Poll to drain pending completions.
   for (int i = 0; i < 4; ++i) {
     iree_host_size_t poll_completed = 0;
-    iree_async_proactor_poll(proactor_, iree_make_timeout_ms(0),
-                             &poll_completed);
+    iree_status_t poll_status = iree_async_proactor_poll(
+        proactor_, iree_make_timeout_ms(0), &poll_completed);
+    if (iree_status_code(poll_status) == IREE_STATUS_DEADLINE_EXCEEDED) {
+      iree_status_ignore(poll_status);
+    } else {
+      IREE_ASSERT_OK(poll_status);
+    }
   }
 
   EXPECT_EQ(seq_status, IREE_STATUS_CANCELLED);

@@ -1353,12 +1353,13 @@ TEST_F(CheckParseTest, ManyCasesExercisesArenaBulkAllocation) {
   // many small allocations (one cases array + 66 annotation arrays).
   iree_string_builder_t builder;
   iree_string_builder_initialize(allocator_, &builder);
-  iree_string_builder_append_cstring(&builder, "func.def @case_0() {}\n");
+  IREE_ASSERT_OK(
+      iree_string_builder_append_cstring(&builder, "func.def @case_0() {}\n"));
   for (int i = 1; i <= 65; ++i) {
-    iree_string_builder_append_cstring(&builder, "// ====\n");
+    IREE_ASSERT_OK(iree_string_builder_append_cstring(&builder, "// ====\n"));
     char body[64];
     iree_snprintf(body, sizeof(body), "func.def @case_%d() {}\n", i);
-    iree_string_builder_append_cstring(&builder, body);
+    IREE_ASSERT_OK(iree_string_builder_append_cstring(&builder, body));
   }
   iree_string_view_t source = iree_string_builder_view(&builder);
   IREE_ASSERT_OK(loom_check_parse(source, &arena_, &file_));

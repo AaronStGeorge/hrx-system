@@ -432,9 +432,7 @@ static iree_status_t iree_hal_vmvx_executable_issue_call(
                             dispatch_state->binding_lengths[i]),
         iree_allocator_null(), binding_buffer);
     iree_vm_ref_t ref = {0};
-    status =
-        iree_vm_ref_wrap_assign(binding_buffer, iree_vm_buffer_type(), &ref);
-    if (!iree_status_is_ok(status)) break;
+    iree_vm_ref_wrap_assign(binding_buffer, iree_vm_buffer_type(), &ref);
     status = iree_vm_list_push_ref_retain(binding_list, &ref);
     if (!iree_status_is_ok(status)) break;
   }

@@ -188,6 +188,67 @@ def precommit_plan(
     return plan
 
 
+def clang_tidy_plan(
+    lane: str,
+    tool_env: ToolEnvironment,
+    profile: str,
+    all_files: bool = False,
+    base: str | None = None,
+    cmake_build_dir: Path | None = None,
+    commit: bool = False,
+    fix: bool = False,
+    since: str | None = None,
+    staged: bool = False,
+    paths: list[str] | None = None,
+    verbose: bool = False,
+) -> CommandPlan:
+    if lane not in ("bazel", "cmake"):
+        raise ValueError(f"unknown lane: {lane}")
+
+    env = tool_env.path_env()
+    if cmake_build_dir is not None:
+        env[CMAKE_BUILD_DIR_ENV] = str(cmake_build_dir)
+    input_args: list[str] = []
+    if paths:
+        input_args += paths
+    elif all_files:
+        input_args.append("--all")
+    elif base is not None:
+        input_args += ["--base", base]
+    elif commit:
+        input_args.append("--commit")
+    elif since is not None:
+        input_args += ["--since", since]
+    elif staged:
+        input_args.append("--staged")
+    else:
+        input_args.append("--changed")
+
+    command = [
+        tool_env.python,
+        str(REPO_ROOT / "build_tools/lefthook/presubmit.py"),
+        "--lane",
+        lane,
+        "--fix" if fix else "--check",
+        *input_args,
+        "--profile",
+        profile,
+        "--clang-tidy",
+    ]
+    if verbose:
+        command.append("--verbose")
+    return CommandPlan(
+        [
+            CommandStep(
+                command,
+                cwd=REPO_ROOT,
+                env=env,
+                label=f"run {build_system_name(lane)} clang-tidy",
+            )
+        ]
+    )
+
+
 def fix_plan(tool_env: ToolEnvironment, verbose: bool = False) -> CommandPlan:
     env = tool_env.path_env()
     command = [

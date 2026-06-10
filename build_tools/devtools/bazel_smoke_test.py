@@ -44,7 +44,8 @@ def run_dry_run_scenario(checkout: Path) -> None:
     )
     smoke_test_lib.assert_absent(checkout / ".bazelrc.configured")
     smoke_test_lib.assert_absent(checkout / ".venv")
-    smoke_test_lib.assert_absent(checkout / ".iree-bazel-try")
+    smoke_test_lib.assert_absent(checkout / ".tmp/iree-bazel-compile-commands")
+    smoke_test_lib.assert_absent(checkout / ".tmp/iree-bazel-try")
     smoke_test_lib.assert_absent(checkout / "lefthook-local.yml")
 
 

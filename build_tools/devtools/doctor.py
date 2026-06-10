@@ -31,6 +31,7 @@ OPTIONAL_COMMON_TOOLS = (
         SEMGREP_WARNING_FILTER,
     ),
     ("clang-tidy", ("--version",), None, None, None),
+    ("clang-apply-replacements", ("--version",), None, None, None),
 )
 LANE_TOOLS = {
     "bazel": (

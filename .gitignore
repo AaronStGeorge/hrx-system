@@ -13,11 +13,9 @@
 /.beads/
 /.bv/
 
-# Bazel output symlinks and local experiment output.
+# Bazel output symlinks and local developer scratch/state.
 /bazel-*
-/.iree/
-/.iree-bazel-try/
-/.iree-cmake-try/
+/.tmp/
 
 # CMake and other local build trees.
 /build/

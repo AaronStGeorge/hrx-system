@@ -103,6 +103,15 @@ def run_dry_run_scenario(checkout: Path) -> None:
         [
             "--dry-run",
             "bazel",
+            "compile-commands",
+            "//runtime/src/iree/base/...",
+        ],
+    )
+    smoke_test_lib.run_dev_command(
+        checkout,
+        [
+            "--dry-run",
+            "bazel",
             "fuzz",
             "//runtime/src/iree/tokenizer:special_tokens_fuzz",
             "--",
@@ -141,6 +150,16 @@ def run_dry_run_scenario(checkout: Path) -> None:
             "--cmake-build-dir",
             "build/smoke-cmake",
             "hrx",
+        ],
+    )
+    smoke_test_lib.run_dev_command(
+        checkout,
+        [
+            "--dry-run",
+            "--cmake-build-dir",
+            "build/smoke-cmake",
+            "cmake",
+            "compile-commands",
         ],
     )
     smoke_test_lib.run_dev_command(
@@ -207,8 +226,8 @@ def run_dry_run_scenario(checkout: Path) -> None:
     smoke_test_lib.assert_absent(checkout / ".bazelrc.configured")
     smoke_test_lib.assert_absent(checkout / ".venv")
     smoke_test_lib.assert_absent(checkout / ".iree")
-    smoke_test_lib.assert_absent(checkout / ".iree-bazel-try")
-    smoke_test_lib.assert_absent(checkout / ".iree-cmake-try")
+    smoke_test_lib.assert_absent(checkout / ".tmp/iree-bazel-try")
+    smoke_test_lib.assert_absent(checkout / ".tmp/iree-cmake-try")
     smoke_test_lib.assert_absent(checkout / "lefthook-local.yml")
     smoke_test_lib.assert_absent(tool_root)
 

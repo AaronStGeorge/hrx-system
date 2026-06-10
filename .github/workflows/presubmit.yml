@@ -25,6 +25,13 @@ jobs:
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
     env:
+      HRX_ARTIFACT_SET: core-with-llvm-dev
+      HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/presubmit/downloads
+      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/presubmit
+      HRX_PYTHON: ${{ github.workspace }}/build/presubmit/python/bin/python3
+      HRX_RELEASE_TYPE: nightly
+      HRX_ROCM_ROOT: ${{ github.workspace }}/build/presubmit/rocm-root
+      IREE_CLANG_TIDY_REQUIRED: "1"
       PIP_CACHE_DIR: ${{ github.workspace }}/build/presubmit/caches/pip
     steps:
       - name: Checkout repository
@@ -33,6 +40,9 @@ jobs:
       - name: Adjust git config
         run: git config --global --add safe.directory "$PWD"
 
+      - name: Fetch ROCm LLVM toolchain
+        run: bash .github/scripts/fetch_rocm_toolchain.sh
+
       - name: Install developer tools
         run: |
           python3 --version
@@ -40,7 +50,12 @@ jobs:
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Check tool versions
-        run: python3 dev.py bazel doctor
+        run: |
+          python3 dev.py bazel doctor
+          clang-tidy --version
+          llvm-config --version
+          clang++ --version
+          test -d "${HRX_ROCM_ROOT}/lib/llvm/include"
 
       - name: Run presubmit
         run: python3 dev.py bazel presubmit --profile ci --no-project-tests

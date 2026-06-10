@@ -219,8 +219,10 @@ static LoopbackContext* CreateLoopbackContext(
 
   // Bind to loopback and listen.
   iree_async_address_t bind_addr;
-  iree_async_address_from_ipv4(IREE_SV("127.0.0.1"), 0, &bind_addr);
-  status = iree_async_socket_bind(ctx->listener, &bind_addr);
+  status = iree_async_address_from_ipv4(IREE_SV("127.0.0.1"), 0, &bind_addr);
+  if (iree_status_is_ok(status)) {
+    status = iree_async_socket_bind(ctx->listener, &bind_addr);
+  }
   if (iree_status_is_ok(status)) {
     status = iree_async_socket_listen(ctx->listener, 16);
   }
@@ -474,8 +476,10 @@ static void BM_AcceptRate(::benchmark::State& state,
   }
 
   iree_async_address_t bind_addr;
-  iree_async_address_from_ipv4(IREE_SV("127.0.0.1"), 0, &bind_addr);
-  status = iree_async_socket_bind(listener, &bind_addr);
+  status = iree_async_address_from_ipv4(IREE_SV("127.0.0.1"), 0, &bind_addr);
+  if (iree_status_is_ok(status)) {
+    status = iree_async_socket_bind(listener, &bind_addr);
+  }
   if (iree_status_is_ok(status)) {
     status = iree_async_socket_listen(listener, 128);
   }

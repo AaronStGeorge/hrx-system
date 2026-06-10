@@ -513,7 +513,7 @@ TEST_P(BufferMappingTest, MapRangeRead) {
       mapping.contents.data + mapping.contents.data_length);
   EXPECT_THAT(mapping_data, ContainerEq(reference_buffer));
 
-  iree_hal_buffer_unmap_range(&mapping);
+  IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
   iree_hal_buffer_release(buffer);
 }
 
@@ -543,7 +543,7 @@ TEST_P(BufferMappingTest, MapRangeWrite) {
   std::vector<uint8_t> reference_buffer(buffer_size, fill_value);
   EXPECT_THAT(actual_data, ContainerEq(reference_buffer));
 
-  iree_hal_buffer_unmap_range(&mapping);
+  IREE_ASSERT_OK(iree_hal_buffer_unmap_range(&mapping));
   iree_hal_buffer_release(buffer);
 }
 

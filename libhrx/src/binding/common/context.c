@@ -244,7 +244,7 @@ iree_hal_streaming_context_t* iree_hal_streaming_context_current(void) {
   return context;
 }
 
-iree_status_t iree_hal_streaming_context_set_current(
+void iree_hal_streaming_context_set_current(
     iree_hal_streaming_context_t* context) {
   IREE_TRACE_ZONE_BEGIN(z0);
 
@@ -260,7 +260,6 @@ iree_status_t iree_hal_streaming_context_set_current(
   }
 
   IREE_TRACE_ZONE_END(z0);
-  return iree_ok_status();
 }
 
 iree_status_t iree_hal_streaming_context_push(

@@ -48,6 +48,9 @@ tool output are useful.
 bazel-to-cmake, generated AMDGPU target metadata, watchwords, merge-conflict
 markers, and basic text hygiene.
 
+clang-format runs C/C++ files in parallel batches. Set `IREE_CLANG_FORMAT_JOBS`
+to override the default worker cap when diagnosing local machine behavior.
+
 `paranoid` adds affected project tests for the selected build lane and the
 static-analysis lane. Semgrep hard rules are the first configured provider.
 Rules that inventory existing drift stay at `WARNING` or `INFO` severity until
@@ -167,8 +170,11 @@ Outside CI, optional static-analysis providers skip when their tool is
 unavailable and print the missing executable. CI requires the providers selected
 by the CI profile. `dev.py doctor` reports optional tool availability; Semgrep
 includes the managed setup command in its warning when it is missing or the
-wrong version. Clang-tidy remains a system/LLVM tool warning until the
-clang-tidy plugin workflow is wired in.
+wrong version. Clang-tidy uses the Bazel LLVM repository model under
+`build_tools/clang_tidy`; local paranoid precommit skips when the LLVM tools are
+not available. The GitHub presubmit workflow fetches the ROCm LLVM toolchain and
+sets `IREE_CLANG_TIDY_REQUIRED=1` so missing LLVM tools fail loudly instead of
+silently skipping.
 
 ## Static Analysis
 
@@ -196,6 +202,18 @@ parallelism is controlled by `IREE_SEMGREP_JOBS`; when unset, the dispatcher
 uses roughly 85% of detected logical CPUs capped at 14 jobs. That cap avoids
 Semgrep's current high-core-count OCaml-domain failure mode while keeping the
 local/CI default comfortably fast for this repository size.
+
+Clang-tidy runs only in the Bazel lane. It maps changed C/C++ files under
+`runtime/src/iree/`, `loom/src/loom/`, and `libhrx/` to their nearest Bazel
+package and invokes the checked-in clang-tidy aspect:
+
+```bash
+python dev.py bazel precommit --profile paranoid runtime/src/iree/base/status.c
+```
+
+Changes under `build_tools/clang_tidy/` run the plugin smoke test and action
+smoke target instead. See `build_tools/clang_tidy/README.md` for the direct
+Bazel commands and LLVM discovery environment variables.
 
 ## Project Dispatch
 

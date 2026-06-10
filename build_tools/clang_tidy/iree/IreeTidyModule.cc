@@ -1,0 +1,29 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "clang-tidy/ClangTidyModule.h"
+#include "iree/SmokeCheck.h"
+#include "iree/StatusChecks.h"
+
+namespace clang::tidy::iree {
+namespace {
+
+class IreeTidyModule final : public ClangTidyModule {
+ public:
+  void addCheckFactories(ClangTidyCheckFactories& CheckFactories) override {
+    CheckFactories.registerCheck<SmokeCheck>("iree-smoke");
+    CheckFactories.registerCheck<DiscardedStatusCheck>("iree-status-discarded");
+  }
+};
+
+}  // namespace
+}  // namespace clang::tidy::iree
+
+static clang::tidy::ClangTidyModuleRegistry::Add<
+    clang::tidy::iree::IreeTidyModule>
+    X("iree-module", "Adds IREE-specific checks.");
+
+volatile int IreeClangTidyModuleAnchorSource = 0;
