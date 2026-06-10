@@ -15,6 +15,22 @@ cmake --build .tmp/iree-clang-tidy-plugin
 ctest --test-dir .tmp/iree-clang-tidy-plugin --output-on-failure
 ```
 
+Bazel exposes the matching LLVM install through the optional
+`@iree_clang_tidy_llvm` repository. The repository is a stub unless explicitly
+enabled, so normal Bazel commands do not require LLVM tools or development
+headers:
+
+```bash
+bazel build --repo_env=IREE_CLANG_TIDY_LLVM=auto \
+  @iree_clang_tidy_llvm//:llvm_identity \
+  @iree_clang_tidy_llvm//:clang-tidy
+```
+
+Discovery checks `IREE_CLANG_TIDY_LLVM_CONFIG`, `LLVM_CONFIG`,
+`IREE_CLANG_TIDY_LLVM_ROOT`, `IREE_LLVM_ROOT`, `LLVM_ROOT`, and then `PATH`.
+Use `IREE_CLANG_TIDY_BINARY` or `IREE_CLANG_TIDY_CLANGXX_BINARY` only when the
+tools are not next to the discovered `llvm-config`.
+
 The first checked-in check is `iree-smoke`. It only diagnoses the deliberately
 named test function `iree_clang_tidy_smoke_bad`, and exists to prove that the
 plugin builds, loads, registers checks, and emits diagnostics before real IREE
