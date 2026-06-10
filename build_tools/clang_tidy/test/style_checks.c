@@ -102,7 +102,8 @@ void iree_clang_tidy_style_refcount_void_release(
   if (!resource) {
     return;
   }
-  (void)iree_atomic_ref_count_dec(&resource->ref_count);
+  if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
+  }
 }
 
 void iree_clang_tidy_style_refcount_unguarded_release(
@@ -116,6 +117,11 @@ void iree_clang_tidy_style_refcount_asserting_release(
   IREE_ASSERT_ARGUMENT(resource);
   if (resource && iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
   }
+}
+
+void iree_clang_tidy_style_refcount_ignored_dec(
+    iree_clang_tidy_style_refcounted_t* resource) {
+  (void)iree_atomic_ref_count_dec(&resource->ref_count);
 }
 
 void iree_clang_tidy_style_refcount_early_null_release(

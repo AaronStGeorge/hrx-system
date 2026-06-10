@@ -340,6 +340,32 @@ bool BodyContainsRefCountMutation(StringRef BodyText) {
          SourceContainsIdentifier(BodyText, "iree_atomic_ref_count_dec");
 }
 
+bool HasIgnoredRefCountDecrement(StringRef NormalizedBody) {
+  static constexpr StringRef RefCountDec = "iree_atomic_ref_count_dec";
+  size_t SearchPosition = 0;
+  while (true) {
+    size_t DecPosition = NormalizedBody.find(RefCountDec, SearchPosition);
+    if (DecPosition == StringRef::npos) {
+      return false;
+    }
+    bool IsStatementStart = DecPosition == 0 ||
+                            NormalizedBody[DecPosition - 1] == '{' ||
+                            NormalizedBody[DecPosition - 1] == ';';
+    static constexpr StringRef VoidCast = "(void)";
+    if (!IsStatementStart && DecPosition >= VoidCast.size()) {
+      size_t CastPosition = DecPosition - VoidCast.size();
+      IsStatementStart =
+          NormalizedBody.substr(CastPosition, VoidCast.size()) == VoidCast &&
+          (CastPosition == 0 || NormalizedBody[CastPosition - 1] == '{' ||
+           NormalizedBody[CastPosition - 1] == ';');
+    }
+    if (IsStatementStart) {
+      return true;
+    }
+    SearchPosition = DecPosition + RefCountDec.size();
+  }
+}
+
 bool RefCountDecrementReferencesParameter(StringRef NormalizedBody,
                                           StringRef ParameterName) {
   static constexpr StringRef RefCountDec = "iree_atomic_ref_count_dec";
@@ -666,16 +692,21 @@ void RefCountLifecycleCheck::check(
   if (IsExternalMacroBody(Function->getLocation(), SourceManager)) {
     return;
   }
-  StringRef FunctionName = Function->getName();
-  if (!IsRefCountLifecycleFunctionName(FunctionName)) {
-    return;
-  }
   std::optional<std::string> BodyText = FunctionBodySourceText(
       Function, SourceManager, Result.Context->getLangOpts());
   if (!BodyText || !BodyContainsRefCountMutation(*BodyText)) {
     return;
   }
   std::string NormalizedBody = NormalizedCodeSource(*BodyText);
+  if (HasIgnoredRefCountDecrement(NormalizedBody)) {
+    diag(SourceManager.getExpansionLoc(Function->getLocation()),
+         "iree_atomic_ref_count_dec return value must be checked");
+    return;
+  }
+  StringRef FunctionName = Function->getName();
+  if (!IsRefCountLifecycleFunctionName(FunctionName)) {
+    return;
+  }
   if (Function->getReturnType()->isVoidType() &&
       FunctionName.ends_with("_release") &&
       !IsRefCountReleaseNullSafe(Function, NormalizedBody)) {

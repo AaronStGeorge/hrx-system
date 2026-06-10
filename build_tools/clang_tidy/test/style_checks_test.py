@@ -60,6 +60,7 @@ class StyleChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "refcounted release function "
                 "iree_clang_tidy_style_refcount_asserting_release "
                 "must be null-safe",
+                "iree_atomic_ref_count_dec return value must be checked",
                 "iree_atomic_ref_count_t field pending_submissions must model "
                 "object lifetime",
                 "[iree-refcount-lifecycle]",
