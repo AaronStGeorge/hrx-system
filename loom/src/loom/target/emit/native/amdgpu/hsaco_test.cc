@@ -16,6 +16,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/descriptor.h"
+#include "loom/target/emit/native/amdgpu/native_kernel_abi.h"
 #include "loom/target/emit/native/elf.h"
 
 namespace loom {
@@ -420,6 +421,141 @@ TEST(AmdgpuHsacoTest, WritesSupportedProcessorCodeObjectFlags) {
         << StringViewToString(processor->processor);
   }
   EXPECT_GE(supported_count, 9u);
+}
+
+TEST(AmdgpuHsacoTest, WritesNativeKernargLayoutsWithoutHalCompaction) {
+  const uint8_t s_endpgm[] = {0x00, 0x00, 0x81, 0xbf};
+  loom_amdgpu_hsaco_kernel_t kernels[] = {
+      {
+          .metadata = MinimalKernel(IREE_SV("fill_x1"), IREE_SV("fill_x1.kd")),
+          .text = iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
+      },
+      {
+          .metadata = MinimalKernel(IREE_SV("patch_dispatch"),
+                                    IREE_SV("patch_dispatch.kd")),
+          .text = iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
+      },
+  };
+
+  const loom_amdgpu_native_kernel_abi_argument_t fill_arguments[] = {
+      {
+          .name = IREE_SV("target_ptr"),
+          .offset = 0,
+          .size = 8,
+          .alignment = 8,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_GLOBAL_BUFFER,
+          .address_space = IREE_SV("global"),
+          .actual_access = IREE_SV("write_only"),
+      },
+      {
+          .name = IREE_SV("element_length"),
+          .offset = 8,
+          .size = 8,
+          .alignment = 8,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+      },
+      {
+          .name = IREE_SV("pattern"),
+          .offset = 16,
+          .size = 8,
+          .alignment = 8,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+      },
+  };
+  const loom_amdgpu_native_kernel_abi_argument_t patch_arguments[] = {
+      {
+          .name = IREE_SV("dispatch_state"),
+          .offset = 0,
+          .size = 8,
+          .alignment = 8,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_GLOBAL_BUFFER,
+          .address_space = IREE_SV("global"),
+          .actual_access = IREE_SV("read_write"),
+      },
+      {
+          .name = IREE_SV("opcode"),
+          .offset = 16,
+          .size = 2,
+          .alignment = 2,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+      },
+      {
+          .name = IREE_SV("flags"),
+          .offset = 18,
+          .size = 2,
+          .alignment = 2,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+      },
+      {
+          .name = IREE_SV("dispatch_id"),
+          .offset = 24,
+          .size = 8,
+          .alignment = 8,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+      },
+  };
+
+  TestArena arena;
+  const loom_amdgpu_native_kernel_abi_t fill_abi = {
+      .kernarg_segment_size = 24,
+      .kernarg_segment_alignment = 8,
+      .descriptor_flags =
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X,
+      .arguments = fill_arguments,
+      .argument_count = IREE_ARRAYSIZE(fill_arguments),
+  };
+  IREE_ASSERT_OK(loom_amdgpu_native_kernel_abi_apply_to_hsaco_kernel(
+      &fill_abi, &kernels[0], arena.arena()));
+  const loom_amdgpu_native_kernel_abi_t patch_abi = {
+      .kernarg_segment_size = 32,
+      .kernarg_segment_alignment = 8,
+      .descriptor_flags =
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X |
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X,
+      .arguments = patch_arguments,
+      .argument_count = IREE_ARRAYSIZE(patch_arguments),
+  };
+  IREE_ASSERT_OK(loom_amdgpu_native_kernel_abi_apply_to_hsaco_kernel(
+      &patch_abi, &kernels[1], arena.arena()));
+
+  EXPECT_EQ(kernels[0].metadata.kernarg_segment_size, 24u);
+  EXPECT_EQ(kernels[0].metadata.argument_count, 3u);
+  EXPECT_EQ(kernels[0].metadata.arguments[1].offset, 8u);
+  EXPECT_EQ(kernels[0].metadata.arguments[1].size, 8u);
+  EXPECT_EQ(kernels[0].descriptor_options.flags,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X);
+  EXPECT_EQ(kernels[1].metadata.kernarg_segment_size, 32u);
+  EXPECT_EQ(kernels[1].metadata.argument_count, 4u);
+  EXPECT_EQ(kernels[1].metadata.arguments[1].offset, 16u);
+  EXPECT_EQ(kernels[1].metadata.arguments[1].size, 2u);
+
+  const loom_amdgpu_hsaco_file_t file = {
+      .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
+      .processor = IREE_SV("gfx1100"),
+      .kernels = kernels,
+      .kernel_count = IREE_ARRAYSIZE(kernels),
+  };
+
+  StreamPtr stream = CreateStream();
+  IREE_ASSERT_OK(
+      loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
+  const std::string bytes = StreamBytes(stream.get());
+  const std::vector<Section> sections = ReadSections(bytes);
+  const Section& rodata = FindSection(sections, ".rodata");
+  const Section& note = FindSection(sections, ".note");
+
+  ASSERT_EQ(rodata.size, 2u * LOOM_AMDGPU_KERNEL_DESCRIPTOR_LENGTH);
+  EXPECT_EQ(LoadLeU32(bytes, (size_t)rodata.offset + 8u), 24u);
+  EXPECT_EQ(LoadLeU32(bytes, (size_t)rodata.offset +
+                                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_LENGTH + 8u),
+            32u);
+
+  const std::string note_contents =
+      bytes.substr((size_t)note.offset, (size_t)note.size);
+  EXPECT_NE(note_contents.find("target_ptr"), std::string::npos);
+  EXPECT_NE(note_contents.find("global_buffer"), std::string::npos);
+  EXPECT_NE(note_contents.find("dispatch_id"), std::string::npos);
+  EXPECT_NE(note_contents.find("by_value"), std::string::npos);
 }
 
 TEST(AmdgpuHsacoTest, WritesGfx942CodeObjectTargetFlags) {

@@ -383,6 +383,23 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
+    native_kernel_abi
+  HDRS
+    "native_kernel_abi.h"
+  SRCS
+    "native_kernel_abi.c"
+  DEPS
+    ::hsaco
+    ::metadata
+    iree::base
+    iree::base::internal::arena
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_library(
+  NAME
     hal_kernel_metadata
   HDRS
     "hal_kernel_metadata.h"
@@ -517,6 +534,7 @@ loom_cc_test(
     ::descriptor
     ::hsaco
     ::metadata
+    ::native_kernel_abi
     iree::base
     iree::base::internal::arena
     iree::io::stream

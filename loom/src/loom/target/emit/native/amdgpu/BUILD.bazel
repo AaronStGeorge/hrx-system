@@ -294,6 +294,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "native_kernel_abi",
+    srcs = ["native_kernel_abi.c"],
+    hdrs = ["native_kernel_abi.h"],
+    deps = [
+        ":hsaco",
+        ":metadata",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "hal_kernel_metadata",
     hdrs = ["hal_kernel_metadata.h"],
     visibility = _AMDGPU_HAL_VISIBILITY,
@@ -402,6 +414,7 @@ loom_cc_test(
         ":descriptor",
         ":hsaco",
         ":metadata",
+        ":native_kernel_abi",
         "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/emit/native:elf",
         "//runtime/src/iree/base",
