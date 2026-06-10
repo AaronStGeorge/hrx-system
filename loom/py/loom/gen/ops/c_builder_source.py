@@ -27,13 +27,11 @@ def _emit_builder_count_check(
     *,
     count: str,
     max_value: str,
-    message: str,
+    label: str,
 ) -> None:
     """Emits a C range check before narrowing a host-size builder count."""
-    lines.append(f"  if ({count} > {max_value}) {{")
-    lines.append("    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,")
-    lines.append(f'                            "{message}");')
-    lines.append("  }")
+    lines.append("  IREE_RETURN_IF_ERROR(loom_builder_check_count_range(")
+    lines.append(f'      {count}, {max_value}, IREE_SV("{label}")));')
 
 
 def _emit_builder_i64_array_storage(
@@ -47,16 +45,9 @@ def _emit_builder_i64_array_storage(
 ) -> None:
     """Emits C code that copies an i64-array attr payload into the builder."""
     lines.append(f"  int64_t* {storage} = NULL;")
-    lines.append(f"  if ({count} > 0) {{")
-    lines.append(f"    if (!{source}) {{")
-    lines.append("      return iree_make_status(")
-    lines.append("          IREE_STATUS_INVALID_ARGUMENT,")
-    lines.append(f'          "{op_name} {field_name} storage is NULL for non-zero count");')
-    lines.append("    }")
-    lines.append("    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(")
-    lines.append(f"        builder->arena, {count}, sizeof(*{storage}), (void**)&{storage}));")
-    lines.append(f"    memcpy({storage}, {source}, {count} * sizeof(*{storage}));")
-    lines.append("  }")
+    lines.append("  IREE_RETURN_IF_ERROR(loom_builder_copy_i64_array_attr_storage(")
+    lines.append(f'      builder, {source}, {count}, IREE_SV("{op_name} {field_name}"),')
+    lines.append(f"      &{storage}));")
 
 
 def _emit_builder_predicate_list_storage(
@@ -70,16 +61,10 @@ def _emit_builder_predicate_list_storage(
 ) -> None:
     """Emits C code that copies a predicate-list attr payload into the builder."""
     lines.append(f"  loom_predicate_t* {storage} = NULL;")
-    lines.append(f"  if ({count} > 0) {{")
-    lines.append(f"    if (!{source}) {{")
-    lines.append("      return iree_make_status(")
-    lines.append("          IREE_STATUS_INVALID_ARGUMENT,")
-    lines.append(f'          "{op_name} {field_name} storage is NULL for non-zero count");')
-    lines.append("    }")
-    lines.append("    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(")
-    lines.append(f"        builder->arena, {count}, sizeof(*{storage}), (void**)&{storage}));")
-    lines.append(f"    memcpy({storage}, {source}, {count} * sizeof(*{storage}));")
-    lines.append("  }")
+    lines.append("  IREE_RETURN_IF_ERROR(")
+    lines.append("      loom_builder_copy_predicate_list_attr_storage(")
+    lines.append(f'          builder, {source}, {count}, IREE_SV("{op_name} {field_name}"),')
+    lines.append(f"          &{storage}));")
 
 
 def _generate_builder_implementation(
@@ -137,7 +122,7 @@ def _generate_builder_implementation(
                     lines,
                     count=f"{count_name}_count",
                     max_value="UINT16_MAX",
-                    message=f"{op.name} operand segment '{count_name}' exceeds uint16_t range",
+                    label=f"{op.name} {count_name} operand segment",
                 )
     elif variadic_operand_param:
         max_variadic_operand_count = "UINT16_MAX"
@@ -147,14 +132,14 @@ def _generate_builder_implementation(
             lines,
             count=f"{variadic_operand_param}_count",
             max_value=max_variadic_operand_count,
-            message=f"{op.name} operand count exceeds uint16_t range",
+            label=f"{op.name} operand",
         )
     if has_variadic_result:
         _emit_builder_count_check(
             lines,
             count="result_count",
             max_value="UINT16_MAX",
-            message=f"{op.name} result count exceeds uint16_t range",
+            label=f"{op.name} result",
         )
     for param in params:
         if param["kind"] == "auto_region_table":
@@ -162,14 +147,14 @@ def _generate_builder_implementation(
                 lines,
                 count=f"{param['keys_field']}_count",
                 max_value=f"UINT8_MAX - {layout.fixed_region_count}",
-                message=f"{op.name} region count exceeds uint8_t range",
+                label=f"{op.name} region",
             )
     if any(param["kind"] == "tied_results" for param in params):
         _emit_builder_count_check(
             lines,
             count="tied_result_count",
             max_value="UINT16_MAX",
-            message=f"{op.name} tied result count exceeds uint16_t range",
+            label=f"{op.name} tied result",
         )
     for param in params:
         if param["kind"] == "index_list":
@@ -177,21 +162,21 @@ def _generate_builder_implementation(
                 lines,
                 count=f"{param['static_field']}_count",
                 max_value="UINT16_MAX",
-                message=f"{op.name} static index count exceeds uint16_t range",
+                label=f"{op.name} static index",
             )
         elif param["kind"] == "predicate_list":
             _emit_builder_count_check(
                 lines,
                 count=f"{param['name']}_count",
                 max_value="UINT16_MAX",
-                message=f"{op.name} predicate count exceeds uint16_t range",
+                label=f"{op.name} predicate",
             )
         elif param["kind"] == "attr" and param["attr_type"] == "i64_array":
             _emit_builder_count_check(
                 lines,
                 count=f"{param['name']}_count",
                 max_value="UINT16_MAX",
-                message=f"{op.name} i64 array attribute count exceeds uint16_t range",
+                label=f"{op.name} i64 array attribute",
             )
 
     optional_operand_params = [param for param in params if param["kind"] == "operand" and param.get("optional")]
@@ -218,11 +203,8 @@ def _generate_builder_implementation(
             else:
                 lines.append(f"  operand_segment_counts[{desc.index}] = 1;")
                 lines.append("  operand_count_32 += 1;")
-        lines.append("  if (operand_count_32 > UINT16_MAX) {")
-        lines.append("    return iree_make_status(")
-        lines.append("        IREE_STATUS_INVALID_ARGUMENT,")
-        lines.append(f'        "{op.name} operand count exceeds uint16_t range");')
-        lines.append("  }")
+        lines.append("  IREE_RETURN_IF_ERROR(loom_builder_check_count_range(")
+        lines.append(f'      operand_count_32, UINT16_MAX, IREE_SV("{op.name} operand")));')
         lines.append("  uint16_t operand_count = (uint16_t)operand_count_32;")
         operand_count_expr = "operand_count"
     elif optional_operand_params:
@@ -432,14 +414,12 @@ def _generate_builder_implementation(
         has_block_args = bool(implicit_args)
         lines.append(f"  // Auto-create {name} region with entry block.")
         lines.append("  {")
-        lines.append("    loom_region_t* _region = NULL;")
-        lines.append("    IREE_RETURN_IF_ERROR(")
-        lines.append("        loom_module_allocate_region(builder->module, 1, &_region));")
         if has_block_args:
-            lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
+            lines.append("    loom_block_t* _block = NULL;")
+        lines.append("    IREE_RETURN_IF_ERROR(loom_builder_create_region(")
+        lines.append(f"        builder, *out_op, {slot_expr}, {'&_block' if has_block_args else 'NULL'}));")
         for _arg_name, arg_type_kw in implicit_args:
             emit_define_implicit_block_arg("    ", arg_type_kw)
-        lines.append(f"    loom_op_regions(*out_op)[{slot_expr}] = _region;")
         lines.append("  }")
 
     # Auto-create regions with typed entry block args.
@@ -457,11 +437,10 @@ def _generate_builder_implementation(
         has_block_args = bool(param.get("implicit_args")) or bool(param.get("binding")) or bool(param.get("arg_source")) or bool(param.get("func_args"))
         lines.append(f"{region_indent}// Auto-create {name} region with entry block.")
         lines.append(f"{region_indent}{{")
-        lines.append(f"{inner_indent}loom_region_t* _region = NULL;")
-        lines.append(f"{inner_indent}IREE_RETURN_IF_ERROR(")
-        lines.append(f"{inner_indent}    loom_module_allocate_region(builder->module, 1, &_region));")
         if has_block_args:
-            lines.append(f"{inner_indent}loom_block_t* _block = loom_region_entry_block(_region);")
+            lines.append(f"{inner_indent}loom_block_t* _block = NULL;")
+        lines.append(f"{inner_indent}IREE_RETURN_IF_ERROR(loom_builder_create_region(")
+        lines.append(f"{inner_indent}    builder, *out_op, {idx}, {'&_block' if has_block_args else 'NULL'}));")
 
         # Implicit args (e.g., loop IV).
         for _arg_name, arg_type_kw in param.get("implicit_args", ()):
@@ -513,7 +492,6 @@ def _generate_builder_implementation(
             lines.append(f"{inner_indent}      builder, _block, arg_types[_i], &_arg_id));")
             lines.append(f"{inner_indent}}}")
 
-        lines.append(f"{inner_indent}loom_op_regions(*out_op)[{idx}] = _region;")
         lines.append(f"{region_indent}}}")
         if optional_region:
             lines.append("  }")
@@ -527,14 +505,14 @@ def _generate_builder_implementation(
             param["default_implicit_args"],
         )
         lines.append(f"  for (iree_host_size_t _case = 0; _case < {param['keys_field']}_count; ++_case) {{")
-        lines.append("    loom_region_t* _region = NULL;")
-        lines.append("    IREE_RETURN_IF_ERROR(")
-        lines.append("        loom_module_allocate_region(builder->module, 1, &_region));")
         if param["case_implicit_args"]:
-            lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
+            lines.append("    loom_block_t* _block = NULL;")
+        lines.append("    IREE_RETURN_IF_ERROR(loom_builder_create_region(")
+        lines.append(f"        builder, *out_op, {param['case_region_index']} + _case,")
+        lines.append(f"        {'&_block' if param['case_implicit_args'] else 'NULL'}));")
+        if param["case_implicit_args"]:
             for _arg_name, arg_type_kw in param["case_implicit_args"]:
                 emit_define_implicit_block_arg("    ", arg_type_kw)
-        lines.append(f"    loom_op_regions(*out_op)[{param['case_region_index']} + _case] = _region;")
         lines.append("  }")
 
     # Fill in attributes.
@@ -650,37 +628,23 @@ def _generate_builder_implementation(
     # Define result values in the module's value table.
     for param in params:
         if param["kind"] == "result_type":
-            lines.append("  {")
-            lines.append("    loom_value_id_t _result_id = LOOM_VALUE_ID_INVALID;")
-            lines.append("    IREE_RETURN_IF_ERROR(")
-            lines.append("        loom_builder_define_value(builder, result_type, &_result_id));")
-            lines.append("    loom_op_results(*out_op)[0] = _result_id;")
-            lines.append("  }")
+            lines.append("  IREE_RETURN_IF_ERROR(loom_builder_define_result(")
+            lines.append("      builder, result_type, &loom_op_results(*out_op)[0]));")
         elif param["kind"] == "result_types":
             if has_variadic_result:
-                lines.append("  for (iree_host_size_t _r = 0; _r < result_count; ++_r) {")
-                lines.append("    loom_value_id_t _result_id = LOOM_VALUE_ID_INVALID;")
-                lines.append("    IREE_RETURN_IF_ERROR(")
-                lines.append("        loom_builder_define_value(builder, result_types[_r], &_result_id));")
-                lines.append("    loom_op_results(*out_op)[_r] = _result_id;")
-                lines.append("  }")
+                lines.append("  IREE_RETURN_IF_ERROR(loom_builder_define_results(")
+                lines.append("      builder, result_types, result_count, loom_op_results(*out_op)));")
             else:
-                lines.append("  {")
-                lines.append("    loom_value_id_t _result_id = LOOM_VALUE_ID_INVALID;")
-                lines.append("    IREE_RETURN_IF_ERROR(")
-                lines.append("        loom_builder_define_value(builder, result_type, &_result_id));")
-                lines.append("    loom_op_results(*out_op)[0] = _result_id;")
-                lines.append("  }")
+                lines.append("  IREE_RETURN_IF_ERROR(loom_builder_define_result(")
+                lines.append("      builder, result_type, &loom_op_results(*out_op)[0]));")
 
     # Populate tied result metadata.
     if static_ties:
         for tie_index, (result_idx, operand_idx) in enumerate(static_ties):
             lines.append(f"  loom_op_tied_results(*out_op)[{tie_index}] = (loom_tied_result_t){{.result_index = {result_idx}, .operand_index = {operand_idx}, .has_type_change = true}};")
     elif has_tied_param:
-        lines.append("  if (tied_result_count > 0) {")
-        lines.append("    memcpy(loom_op_tied_results(*out_op), tied_results,")
-        lines.append("           tied_result_count * sizeof(loom_tied_result_t));")
-        lines.append("  }")
+        lines.append("  IREE_RETURN_IF_ERROR(loom_builder_copy_tied_results(")
+        lines.append("      tied_results, tied_result_count, *out_op));")
 
     lines.append("  return loom_builder_finalize_op(builder, *out_op);")
     lines.append("}")

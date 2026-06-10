@@ -1481,10 +1481,149 @@ iree_status_t loom_builder_define_block_arg(loom_builder_t* builder,
   return loom_block_add_arg(builder->module, block, *out_value_id);
 }
 
+iree_status_t loom_builder_create_region(loom_builder_t* builder, loom_op_t* op,
+                                         uint8_t region_index,
+                                         loom_block_t** out_entry_block) {
+  if (!builder || !builder->module) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "builder has no module");
+  }
+  if (!op) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "region owner op is NULL");
+  }
+  if (region_index >= op->region_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "region index %u is out of range for op with %u region(s)",
+        (unsigned)region_index, (unsigned)op->region_count);
+  }
+  loom_region_t* region = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_module_allocate_region(builder->module, 1, &region));
+  loom_op_regions(op)[region_index] = region;
+  if (out_entry_block) {
+    *out_entry_block = loom_region_entry_block(region);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_builder_define_result(loom_builder_t* builder,
+                                         loom_type_t result_type,
+                                         loom_value_id_t* out_result) {
+  return loom_builder_define_value(builder, result_type, out_result);
+}
+
+iree_status_t loom_builder_define_results(loom_builder_t* builder,
+                                          const loom_type_t* result_types,
+                                          iree_host_size_t result_count,
+                                          loom_value_id_t* result_storage) {
+  if (result_count == 0) return iree_ok_status();
+  if (!result_types) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "result type storage is NULL for non-zero result count");
+  }
+  if (!result_storage) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "result id storage is NULL for non-zero result count");
+  }
+  for (iree_host_size_t i = 0; i < result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_builder_define_result(builder, result_types[i],
+                                                    &result_storage[i]));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_builder_copy_tied_results(
+    const loom_tied_result_t* tied_results, iree_host_size_t tied_result_count,
+    loom_op_t* op) {
+  if (tied_result_count == 0) return iree_ok_status();
+  if (!op) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "tied result owner op is NULL");
+  }
+  if (!tied_results) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "tied result storage is NULL for non-zero tied result count");
+  }
+  if (tied_result_count > op->tied_result_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "tied result count %" PRIhsz
+                            " exceeds op tied result storage count %u",
+                            tied_result_count, (unsigned)op->tied_result_count);
+  }
+  memcpy(loom_op_tied_results(op), tied_results,
+         tied_result_count * sizeof(loom_tied_result_t));
+  return iree_ok_status();
+}
+
 iree_status_t loom_builder_intern_string(loom_builder_t* builder,
                                          iree_string_view_t string,
                                          loom_string_id_t* out_string_id) {
   return loom_module_intern_string(builder->module, string, out_string_id);
+}
+
+iree_status_t loom_builder_check_count_range(iree_host_size_t count,
+                                             iree_host_size_t max_count,
+                                             iree_string_view_t label) {
+  if (count <= max_count) return iree_ok_status();
+  return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                          "%.*s count %" PRIhsz " exceeds max %" PRIhsz,
+                          (int)label.size, label.data, count, max_count);
+}
+
+iree_status_t loom_builder_copy_i64_array_attr_storage(loom_builder_t* builder,
+                                                       const int64_t* values,
+                                                       iree_host_size_t count,
+                                                       iree_string_view_t label,
+                                                       int64_t** out_storage) {
+  if (!out_storage) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "i64-array storage output is NULL");
+  }
+  *out_storage = NULL;
+  if (count == 0) return iree_ok_status();
+  if (!builder || !builder->arena) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "builder has no arena");
+  }
+  if (!values) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "%.*s storage is NULL for non-zero count",
+                            (int)label.size, label.data);
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      builder->arena, count, sizeof(**out_storage), (void**)out_storage));
+  memcpy(*out_storage, values, count * sizeof(**out_storage));
+  return iree_ok_status();
+}
+
+iree_status_t loom_builder_copy_predicate_list_attr_storage(
+    loom_builder_t* builder, const loom_predicate_t* predicates,
+    iree_host_size_t count, iree_string_view_t label,
+    loom_predicate_t** out_storage) {
+  if (!out_storage) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "predicate-list storage output is NULL");
+  }
+  *out_storage = NULL;
+  if (count == 0) return iree_ok_status();
+  if (!builder || !builder->arena) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "builder has no arena");
+  }
+  if (!predicates) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "%.*s storage is NULL for non-zero count",
+                            (int)label.size, label.data);
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      builder->arena, count, sizeof(**out_storage), (void**)out_storage));
+  memcpy(*out_storage, predicates, count * sizeof(**out_storage));
+  return iree_ok_status();
 }
 
 static iree_status_t loom_builder_compare_string_ids(

@@ -680,9 +680,8 @@ def test_generate_builders_copy_i64_array_attrs_into_builder_arena() -> None:
     builders_c = generate_builders_c("test", [op])
 
     assert "int64_t* _case_keys_storage = NULL;" in builders_c
-    assert "if (!case_keys)" in builders_c
-    assert ("builder->arena, case_keys_count, sizeof(*_case_keys_storage), (void**)&_case_keys_storage") in builders_c
-    assert ("memcpy(_case_keys_storage, case_keys, case_keys_count * sizeof(*_case_keys_storage));") in builders_c
+    assert "loom_builder_copy_i64_array_attr_storage(" in builders_c
+    assert 'IREE_SV("test.attr_table case_keys")' in builders_c
     assert "loom_attr_i64_array(_case_keys_storage, (uint16_t)case_keys_count)" in builders_c
     assert "(int64_t*)case_keys" not in builders_c
 
@@ -700,9 +699,8 @@ def test_generate_builders_copy_predicate_list_attrs_into_builder_arena() -> Non
     builders_c = generate_builders_c("test", [op])
 
     assert "loom_predicate_t* _predicates_storage = NULL;" in builders_c
-    assert "if (!predicates)" in builders_c
-    assert ("builder->arena, predicates_count, sizeof(*_predicates_storage), (void**)&_predicates_storage") in builders_c
-    assert ("memcpy(_predicates_storage, predicates, predicates_count * sizeof(*_predicates_storage));") in builders_c
+    assert "loom_builder_copy_predicate_list_attr_storage(" in builders_c
+    assert 'IREE_SV("test.assume predicates")' in builders_c
     assert ("loom_attr_predicate_list(_predicates_storage, (uint16_t)predicates_count)") in builders_c
     assert "(loom_predicate_t*)predicates" not in builders_c
 

@@ -1879,6 +1879,29 @@ iree_status_t loom_builder_set_operand_dict(
     loom_builder_t* builder, loom_named_value_slice_t named_values,
     loom_value_id_t* operand_storage, loom_attribute_t* out_names_attr);
 
+// Checks that a generated builder count fits the target storage width.
+iree_status_t loom_builder_check_count_range(iree_host_size_t count,
+                                             iree_host_size_t max_count,
+                                             iree_string_view_t label);
+
+// Copies an i64-array attribute payload into the builder arena.
+iree_status_t loom_builder_copy_i64_array_attr_storage(loom_builder_t* builder,
+                                                       const int64_t* values,
+                                                       iree_host_size_t count,
+                                                       iree_string_view_t label,
+                                                       int64_t** out_storage);
+
+// Copies a predicate-list attribute payload into the builder arena.
+iree_status_t loom_builder_copy_predicate_list_attr_storage(
+    loom_builder_t* builder, const loom_predicate_t* predicates,
+    iree_host_size_t count, iree_string_view_t label,
+    loom_predicate_t** out_storage);
+
+// Creates a one-block region and installs it into |op| at |region_index|.
+iree_status_t loom_builder_create_region(loom_builder_t* builder, loom_op_t* op,
+                                         uint8_t region_index,
+                                         loom_block_t** out_entry_block);
+
 // Creates a fresh value with the given type and adds it as a block
 // argument. Convenience wrapper for the define_value + block_add_arg
 // sequence that generated builders use when auto-creating regions.
@@ -1886,6 +1909,22 @@ iree_status_t loom_builder_define_block_arg(loom_builder_t* builder,
                                             loom_block_t* block,
                                             loom_type_t type,
                                             loom_value_id_t* out_value_id);
+
+// Defines one op result value and writes the result id to |out_result|.
+iree_status_t loom_builder_define_result(loom_builder_t* builder,
+                                         loom_type_t result_type,
+                                         loom_value_id_t* out_result);
+
+// Defines |result_count| op result values into |result_storage|.
+iree_status_t loom_builder_define_results(loom_builder_t* builder,
+                                          const loom_type_t* result_types,
+                                          iree_host_size_t result_count,
+                                          loom_value_id_t* result_storage);
+
+// Copies tied-result metadata into |op|.
+iree_status_t loom_builder_copy_tied_results(
+    const loom_tied_result_t* tied_results, iree_host_size_t tied_result_count,
+    loom_op_t* op);
 
 // Allocates an op with the given field counts and inserts it at the
 // builder's current insertion point. This is the low-level primitive
