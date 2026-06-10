@@ -84,6 +84,19 @@ from loom.dsl import (
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
 from loom.gen.ops import c_format, c_interfaces, c_queries, c_symbols
+from loom.gen.ops.c_enum_attrs import SharedEnumMap
+from loom.gen.ops.c_enum_attrs import (
+    collect_shared_enums as _collect_shared_enums,
+)
+from loom.gen.ops.c_enum_attrs import (
+    enum_c_type as _enum_c_type,
+)
+from loom.gen.ops.c_enum_attrs import (
+    enum_case_c_ident as _enum_case_c_ident,
+)
+from loom.gen.ops.c_enum_attrs import (
+    enum_names_array_name as _enum_names_array_name,
+)
 from loom.gen.ops.c_enums import (
     ATTR_KIND_MAP,
     CONSTRAINT_MAP,
@@ -199,117 +212,6 @@ def _constraint_arg_ref(
     if field_index > LOOM_FIELD_REF_MAX_INDEX:
         raise ValueError(f"Op '{op.name}' constraint {constraint_name}: field '{arg_name}' index {field_index} exceeds LOOM_FIELD_REF 6-bit max {LOOM_FIELD_REF_MAX_INDEX}")
     return f"LOOM_FIELD_REF({category}, {field_index})"
-
-
-# ============================================================================
-# Enum attributes
-# ============================================================================
-
-
-def _collect_shared_enums(
-    dialect_name: str,
-    ops: Sequence[Op],
-) -> dict[int, tuple[str, str, EnumDef]]:
-    """Identifies EnumDef objects shared across multiple ops in a dialect.
-
-    Returns a mapping from id(enum_def) to (c_prefix, const_prefix, enum_def)
-    for each EnumDef used by more than one op. The naming uses the dialect
-    prefix + attr name (e.g., loom_func_cc for the func dialect's cc attr).
-
-    EnumDefs used by only one op are not included — they keep per-op naming.
-    """
-    from collections import defaultdict
-
-    # Map id(enum_def) -> list of (op, attr_def) pairs.
-    usage: dict[int, list[tuple[Op, AttrDef]]] = defaultdict(list)
-    for op in ops:
-        for attr_def in op.attrs:
-            if attr_def.attr_type == "enum" and attr_def.enum_def is not None:
-                if attr_def.enum_def.c_type is not None:
-                    continue
-                usage[id(attr_def.enum_def)].append((op, attr_def))
-
-    shared: dict[int, tuple[str, str, EnumDef]] = {}
-    for enum_id, pairs in usage.items():
-        if len(pairs) <= 1:
-            continue
-        # All pairs reference the same EnumDef and should have the same
-        # attr name (since they share the object). Verify this.
-        attr_names = {attr_def.name for _, attr_def in pairs}
-        if len(attr_names) != 1:
-            # Same EnumDef used under different attr names — can't share
-            # the C name. Fall back to per-op naming for all.
-            continue
-        attr_name = next(iter(attr_names))
-        c_prefix = f"loom_{dialect_name}_{attr_name}"
-        const_prefix = c_prefix.upper()
-        enum_def = pairs[0][1].enum_def
-        assert enum_def is not None  # Filtered at collection time.
-        shared[enum_id] = (c_prefix, const_prefix, enum_def)
-
-    return shared
-
-
-def _enum_c_prefix_from_type(c_type: str) -> str:
-    """Returns the C prefix for an enum typedef name."""
-    if c_type.endswith("_t"):
-        return c_type[:-2]
-    return c_type
-
-
-def _enum_c_prefix(
-    op: Op,
-    attr_def: AttrDef,
-    shared_enums: dict[int, tuple[str, str, EnumDef]],
-) -> tuple[str, str]:
-    """Returns (c_prefix, const_prefix) for an enum attr.
-
-    Uses the shared dialect-level name if the EnumDef is shared across
-    multiple ops, otherwise falls back to the per-op prefix.
-    """
-    if attr_def.enum_def is not None and attr_def.enum_def.c_type is not None:
-        assert attr_def.enum_def.c_const_prefix is not None
-        return (
-            _enum_c_prefix_from_type(attr_def.enum_def.c_type),
-            attr_def.enum_def.c_const_prefix,
-        )
-    if attr_def.enum_def is not None and id(attr_def.enum_def) in shared_enums:
-        c_prefix, const_prefix, _ = shared_enums[id(attr_def.enum_def)]
-        return c_prefix, const_prefix
-    c_prefix = _c_prefix(op) + "_" + attr_def.name
-    return c_prefix, c_prefix.upper()
-
-
-def _enum_c_type(
-    op: Op,
-    attr_def: AttrDef,
-    shared_enums: dict[int, tuple[str, str, EnumDef]],
-) -> str:
-    """Returns the C type exposed for an enum attribute."""
-    if attr_def.enum_def is not None and attr_def.enum_def.c_type is not None:
-        return attr_def.enum_def.c_type
-    c_prefix, _ = _enum_c_prefix(op, attr_def, shared_enums)
-    return f"{c_prefix}_t"
-
-
-def _enum_names_array_name(
-    op: Op,
-    attr_def: AttrDef,
-    shared_enums: dict[int, tuple[str, str, EnumDef]],
-) -> str:
-    """Returns the enum keyword table symbol for an enum attribute."""
-    if attr_def.enum_def is not None and attr_def.enum_def.c_type is not None:
-        c_prefix, _ = _enum_c_prefix(op, attr_def, shared_enums)
-        return f"{c_prefix}_names"
-    shared = shared_enums.get(id(attr_def.enum_def)) if attr_def.enum_def is not None else None
-    if shared:
-        return f"{shared[0]}_names"
-    return f"{_c_prefix(op)}_{attr_def.name}_names"
-
-
-def _enum_case_c_ident(keyword: str) -> str:
-    """Converts an enum assembly keyword to a C enum/macro suffix."""
-    return keyword.replace(".", "_").upper()
 
 
 # ============================================================================
@@ -566,7 +468,7 @@ def _static_tied_results(op: Op) -> list[tuple[int, int]]:
 def _c_attr_param_type(
     op: Op,
     attr_def: AttrDef,
-    shared_enums: dict[int, tuple[str, str, EnumDef]],
+    shared_enums: SharedEnumMap,
 ) -> str:
     """Returns the C builder parameter type for an attribute."""
     if attr_def.attr_type == "enum" and attr_def.enum_def is not None and not attr_def.optional:
@@ -574,7 +476,7 @@ def _c_attr_param_type(
     return _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t")
 
 
-def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]]) -> list[dict[str, Any]]:
+def _extract_c_params(op: Op, shared_enums: SharedEnumMap) -> list[dict[str, Any]]:
     """Extracts builder parameters for a C function from format specs.
 
     Mirrors the Python _extract_params but produces C-oriented descriptors.
@@ -1098,7 +1000,7 @@ def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pr
     return c_params
 
 
-def _generate_builder_declaration(op: Op, prefix: str, shared_enums: dict[int, tuple[str, str, EnumDef]]) -> list[str]:
+def _generate_builder_declaration(op: Op, prefix: str, shared_enums: SharedEnumMap) -> list[str]:
     """Generates the C builder function declaration for a complex op."""
     params = _extract_c_params(op, shared_enums)
     layout = compute_layout(op)
@@ -1178,7 +1080,7 @@ def _generate_builder_implementation(
     op: Op,
     prefix: str,
     enum_name: str,
-    shared_enums: dict[int, tuple[str, str, EnumDef]],
+    shared_enums: SharedEnumMap,
 ) -> list[str]:
     """Generates the C builder function implementation for a complex op."""
     params = _extract_c_params(op, shared_enums)

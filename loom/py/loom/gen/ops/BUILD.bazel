@@ -53,6 +53,7 @@ iree_py_library(
     name = "c_tables",
     srcs = [
         "__init__.py",
+        "c_enum_attrs.py",
         "c_enums.py",
         "c_format.py",
         "c_interfaces.py",
@@ -70,6 +71,7 @@ iree_py_binary(
     name = "c_tables_generator",
     srcs = [
         "__init__.py",
+        "c_enum_attrs.py",
         "c_enums.py",
         "c_format.py",
         "c_interfaces.py",

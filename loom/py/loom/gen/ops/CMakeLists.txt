@@ -30,6 +30,7 @@ iree_py_library(
     c_tables
   SRCS
     "__init__.py"
+    "c_enum_attrs.py"
     "c_enums.py"
     "c_format.py"
     "c_interfaces.py"
@@ -54,6 +55,7 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_enum_attrs.py"
     "c_enums.py"
     "c_format.py"
     "c_interfaces.py"
