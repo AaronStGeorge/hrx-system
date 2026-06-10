@@ -23,14 +23,24 @@ filegroup(
     srcs = [],
 )
 
-cc_library(
-    name = "llvm_headers",
-    hdrs = [],
+filegroup(
+    name = "clang-tidy",
+    srcs = [],
 )
 
 filegroup(
-    name = "unused",
+    name = "clang++",
     srcs = [],
+)
+
+filegroup(
+    name = "llvm-config",
+    srcs = [],
+)
+
+cc_library(
+    name = "llvm_headers",
+    hdrs = [],
 )
 """
 
@@ -46,6 +56,7 @@ CLANG_TIDY_LLVM_LIB_DIR = ""
 CLANG_TIDY_LLVM_CMAKE_DIR = ""
 CLANG_TIDY_LLVM_BINDIR = ""
 CLANG_TIDY_LLVM_COPTS = []
+CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH = ["@platforms//:incompatible"]
 CLANG_TIDY_TOOL = ""
 CLANG_TIDY_CLANGXX_TOOL = ""
 CLANG_TIDY_LLVM_CONFIG_TOOL = ""
@@ -261,6 +272,7 @@ CLANG_TIDY_LLVM_LIB_DIR = {lib_dir}
 CLANG_TIDY_LLVM_CMAKE_DIR = {cmake_dir}
 CLANG_TIDY_LLVM_BINDIR = {bindir}
 CLANG_TIDY_LLVM_COPTS = {copts}
+CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH = []
 CLANG_TIDY_TOOL = "@iree_clang_tidy_llvm//:clang-tidy"
 CLANG_TIDY_CLANGXX_TOOL = "@iree_clang_tidy_llvm//:clang++"
 CLANG_TIDY_LLVM_CONFIG_TOOL = "@iree_clang_tidy_llvm//:llvm-config"

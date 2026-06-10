@@ -31,6 +31,18 @@ Discovery checks `IREE_CLANG_TIDY_LLVM_CONFIG`, `LLVM_CONFIG`,
 Use `IREE_CLANG_TIDY_BINARY` or `IREE_CLANG_TIDY_CLANGXX_BINARY` only when the
 tools are not next to the discovered `llvm-config`.
 
+With LLVM enabled, Bazel can build and test the plugin as a host tool:
+
+```bash
+bazel build --repo_env=IREE_CLANG_TIDY_LLVM=auto \
+  //build_tools/clang_tidy:IREEClangTidyPlugin.so
+bazel test --repo_env=IREE_CLANG_TIDY_LLVM=auto \
+  //build_tools/clang_tidy:plugin_smoke_test
+```
+
+Those targets are tagged `manual` so normal wildcard builds stay independent of
+the local LLVM installation.
+
 The first checked-in check is `iree-smoke`. It only diagnoses the deliberately
 named test function `iree_clang_tidy_smoke_bad`, and exists to prove that the
 plugin builds, loads, registers checks, and emits diagnostics before real IREE

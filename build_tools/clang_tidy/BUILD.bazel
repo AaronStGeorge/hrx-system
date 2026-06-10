@@ -4,6 +4,10 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@iree_clang_tidy_llvm//:config.bzl", "CLANG_TIDY_LLVM_COPTS", "CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_python//python:defs.bzl", "py_test")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
@@ -30,4 +34,39 @@ filegroup(
 filegroup(
     name = "testdata",
     srcs = glob(["test/*"]),
+)
+
+cc_binary(
+    name = "IREEClangTidyPlugin.so",
+    srcs = [
+        "iree/IreeTidyModule.cc",
+        "iree/SmokeCheck.cc",
+        "iree/SmokeCheck.h",
+    ],
+    copts = CLANG_TIDY_LLVM_COPTS,
+    includes = ["."],
+    linkshared = True,
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+    deps = [
+        "@iree_clang_tidy_llvm//:llvm_headers",
+    ],
+)
+
+py_test(
+    name = "plugin_smoke_test",
+    srcs = ["test/run_clang_tidy_plugin_test.py"],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :IREEClangTidyPlugin.so)",
+        "--source=$(location test/smoke.c)",
+    ],
+    data = [
+        "test/smoke.c",
+        ":IREEClangTidyPlugin.so",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    main = "test/run_clang_tidy_plugin_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
 )
