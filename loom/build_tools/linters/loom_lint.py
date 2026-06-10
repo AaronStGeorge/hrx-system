@@ -105,6 +105,16 @@ def main() -> int:
         ["ruff", "check", "--fix", "--cache-dir", ".ruff_cache", "loom/py/loom/"],
         cwd=REPO_ROOT,
     )
+    ok &= _run(
+        "package init files after fixups",
+        [
+            sys.executable,
+            "loom/py/loom/gen/run.py",
+            "package_inits",
+            "--check",
+        ],
+        cwd=REPO_ROOT,
+    )
 
     print("loom-lint: mypy")
     ok &= _run(
