@@ -43,6 +43,22 @@ def test_token_source_range_maps_character_offsets_to_utf8_bytes() -> None:
     assert source_range.end_column == 10
 
 
+def test_byte_source_range_maps_utf8_offsets_to_line_columns() -> None:
+    document = SourceDocument("µ first\n  second\n", Path("model.loom"))
+    byte_start = len("µ first\n  ".encode())
+    byte_end = byte_start + len(b"second")
+
+    source_range = document.byte_source_range(byte_start, byte_end)
+
+    assert source_range.filename == Path("model.loom")
+    assert source_range.start == byte_start
+    assert source_range.end == byte_end
+    assert source_range.start_line == 2
+    assert source_range.start_column == 3
+    assert source_range.end_line == 2
+    assert source_range.end_column == 9
+
+
 def test_token_ranges_cover_operation_syntax_categories() -> None:
     text = "%r = scalar.addi %lhs, %rhs {rounding = fast} : i32"
     document = SourceDocument(text, Path("model.loom"))

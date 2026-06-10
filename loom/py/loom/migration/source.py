@@ -61,6 +61,19 @@ class SourceDocument:
             and self._character_byte_offsets[index] == byte_offset
         )
 
+    def source_location_at_byte_offset(self, byte_offset: int) -> SourceLocation:
+        """Maps a UTF-8 byte offset to a tokenizer source location."""
+        if not self.is_byte_boundary(byte_offset):
+            raise ValueError("byte offset must align to a UTF-8 boundary")
+        character_offset = bisect_left(self._character_byte_offsets, byte_offset)
+        prefix = self.text[:character_offset]
+        line = prefix.count("\n") + 1
+        line_start = prefix.rfind("\n")
+        column = (
+            character_offset + 1 if line_start < 0 else character_offset - line_start
+        )
+        return SourceLocation(line=line, column=column, offset=character_offset)
+
     def source_range(
         self,
         start_location: SourceLocation,
@@ -84,6 +97,15 @@ class SourceDocument:
     def token_source_range(self, token: Token) -> SourceRange:
         """Returns the byte-backed source range for a tokenizer token."""
         return self.source_range(token.location, token.end_location)
+
+    def byte_source_range(self, byte_start: int, byte_end: int) -> SourceRange:
+        """Builds a source range from half-open UTF-8 byte offsets."""
+        if byte_start > byte_end:
+            raise ValueError("source range start must not be after end")
+        return self.source_range(
+            self.source_location_at_byte_offset(byte_start),
+            self.source_location_at_byte_offset(byte_end),
+        )
 
     def apply_edits(self, edits: tuple[SourceEdit, ...]) -> str:
         """Applies ordered, non-overlapping UTF-8 byte replacements."""

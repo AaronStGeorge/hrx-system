@@ -14,12 +14,31 @@ iree_py_library(
     migration
   SRCS
     "__init__.py"
+    "cli.py"
+    "driver.py"
     "manifest.py"
     "source.py"
   DEPS
     loom::py::loom::core
+    loom::py::loom::dialect::package
     loom::py::loom::format::bytecode::bytecode
     loom::py::loom::format::text::text
+    loom::py::loom::target::arch::amdgpu::dialect
+    loom::py::loom::target::arch::ireevm::dialect
+    loom::py::loom::target::arch::spirv::dialect
+    loom::py::loom::target::arch::wasm::dialect
+    loom::py::loom::target::arch::x86::dialect
+)
+
+iree_py_library(
+  NAME
+    loom-migrate
+  MAIN
+    "cli.py"
+  SRCS
+    "cli.py"
+  DEPS
+    loom::py::loom::migration::migration
 )
 
 iree_py_test(
@@ -28,6 +47,8 @@ iree_py_test(
   SRCS
     "../tools/pytest_style_runner.py"
   ARGS
+    "loom.migration.cli_test"
+    "loom.migration.driver_test"
     "loom.migration.manifest_test"
     "loom.migration.source_test"
   DEPS
