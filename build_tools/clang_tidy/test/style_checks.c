@@ -51,6 +51,10 @@ typedef struct iree_clang_tidy_style_refcounted_t {
   iree_atomic_ref_count_t ref_count;
 } iree_clang_tidy_style_refcounted_t;
 
+typedef struct iree_clang_tidy_style_refcount_misused_counter_t {
+  iree_atomic_ref_count_t pending_submissions;
+} iree_clang_tidy_style_refcount_misused_counter_t;
+
 void iree_clang_tidy_style_resource_release(
     iree_clang_tidy_style_resource_t* resource);
 void iree_clang_tidy_style_resource_deinitialize(

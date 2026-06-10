@@ -308,6 +308,33 @@ std::optional<std::string> FunctionBodySourceText(
                     LangOptions);
 }
 
+std::optional<std::string> FieldSourceText(const FieldDecl* Field,
+                                           const SourceManager& SourceManager,
+                                           const LangOptions& LangOptions) {
+  SourceRange FieldRange = Field->getSourceRange();
+  if (FieldRange.getBegin().isInvalid() || FieldRange.getEnd().isInvalid()) {
+    return std::nullopt;
+  }
+  return SourceText(CharSourceRange::getTokenRange(FieldRange), SourceManager,
+                    LangOptions);
+}
+
+bool IsRefCountFieldDeclarationText(StringRef FieldText) {
+  return SourceContainsIdentifier(FieldText, "iree_atomic_ref_count_t");
+}
+
+bool IsAllowedRefCountFieldName(const FieldDecl* Field,
+                                const SourceManager& SourceManager) {
+  if (Field->getName() == "ref_count") {
+    return true;
+  }
+
+  SourceLocation Location = SourceManager.getExpansionLoc(Field->getLocation());
+  StringRef Filename = SourceManager.getFilename(Location);
+  return Field->getName() == "counter" &&
+         Filename.ends_with("runtime/src/iree/vm/ref.h");
+}
+
 bool BodyContainsRefCountMutation(StringRef BodyText) {
   return SourceContainsIdentifier(BodyText, "iree_atomic_ref_count_inc") ||
          SourceContainsIdentifier(BodyText, "iree_atomic_ref_count_dec");
@@ -592,10 +619,31 @@ void RefCountLifecycleCheck::registerMatchers(
       functionDecl(isDefinition(), unless(isExpansionInSystemHeader()))
           .bind("function"),
       this);
+  Finder->addMatcher(
+      fieldDecl(unless(isExpansionInSystemHeader())).bind("refcount-field"),
+      this);
 }
 
 void RefCountLifecycleCheck::check(
     const ast_matchers::MatchFinder::MatchResult& Result) {
+  if (const auto* Field = Result.Nodes.getNodeAs<FieldDecl>("refcount-field")) {
+    const SourceManager& SourceManager = *Result.SourceManager;
+    if (IsExternalMacroBody(Field->getLocation(), SourceManager)) {
+      return;
+    }
+    std::optional<std::string> FieldText =
+        FieldSourceText(Field, SourceManager, Result.Context->getLangOpts());
+    if (!FieldText || !IsRefCountFieldDeclarationText(*FieldText) ||
+        IsAllowedRefCountFieldName(Field, SourceManager)) {
+      return;
+    }
+    diag(SourceManager.getExpansionLoc(Field->getLocation()),
+         "iree_atomic_ref_count_t field %0 must model object lifetime; use an "
+         "explicit atomic integer type for counters")
+        << Field->getName();
+    return;
+  }
+
   const auto* Function = Result.Nodes.getNodeAs<FunctionDecl>("function");
   if (!Function) {
     return;
