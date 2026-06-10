@@ -19,6 +19,7 @@ from loom.diagnostics import DiagnosticSeverity, SourceRange
 from loom.format.bytecode.writer import FORMAT_VERSION, MAGIC
 from loom.format.text.parser import Parser
 from loom.format.text.tokenizer import ParseError
+from loom.importers.check.cases import CheckCase, rewrite_inline_case_inputs
 from loom.migration.source import (
     MigrationSourceDiagnostic,
     SourceDocument,
@@ -26,6 +27,7 @@ from loom.migration.source import (
 )
 
 LOOM_SOURCE_SUFFIX = ".loom"
+LOOM_TEST_SUFFIX = ".loom-test"
 LOOM_BYTECODE_SUFFIX = ".loombc"
 
 
@@ -33,6 +35,7 @@ class MigrationFileKind(StrEnum):
     """File kind understood by the migration driver."""
 
     LOOM_SOURCE = "loom"
+    LOOM_TEST = "loom-test"
     LOOM_BYTECODE = "loombc"
     UNSUPPORTED = "unsupported"
 
@@ -183,6 +186,8 @@ def classify_file(path: Path) -> MigrationFileKind:
     """Returns the migration kind for ``path`` based on its suffix."""
     if path.suffix == LOOM_SOURCE_SUFFIX:
         return MigrationFileKind.LOOM_SOURCE
+    if path.suffix == LOOM_TEST_SUFFIX:
+        return MigrationFileKind.LOOM_TEST
     if path.suffix == LOOM_BYTECODE_SUFFIX:
         return MigrationFileKind.LOOM_BYTECODE
     return MigrationFileKind.UNSUPPORTED
@@ -207,6 +212,16 @@ def migrate_file(
     if kind == MigrationFileKind.LOOM_SOURCE:
         text = path.read_text(encoding="utf-8")
         result = migrate_source_text(text, filename=path, rules=rules)
+        return FileMigrationResult(
+            path=path,
+            kind=kind,
+            text=result.text,
+            changed=result.changed,
+            diagnostics=result.diagnostics,
+        )
+    if kind == MigrationFileKind.LOOM_TEST:
+        text = path.read_text(encoding="utf-8")
+        result = migrate_loom_test_text(text, filename=path, rules=rules)
         return FileMigrationResult(
             path=path,
             kind=kind,
@@ -273,6 +288,68 @@ def migrate_source_text(
     )
 
 
+def migrate_loom_test_text(
+    text: str,
+    *,
+    filename: Path | None = None,
+    rules: Sequence[MigrationRule] = DEFAULT_MIGRATION_RULES,
+    validate: bool = True,
+) -> SourceMigrationResult:
+    """Applies Loom source migration rules to .loom-test input IR sections."""
+    case_results: dict[int, SourceMigrationResult] = {}
+
+    def migrate_input(
+        check_case: CheckCase,
+        input_text: str,
+    ) -> str:
+        result = migrate_source_text(
+            input_text,
+            filename=filename,
+            rules=rules,
+            validate=validate
+            and _loom_test_case_requires_current_parse_validation(
+                check_case,
+                input_text,
+            ),
+        )
+        case_results[check_case.index] = result
+        return result.text
+
+    try:
+        rewrite_result = rewrite_inline_case_inputs(
+            filename or Path("<input.loom-test>"),
+            text,
+            migrate_input,
+        )
+    except ValueError as exc:
+        return SourceMigrationResult(
+            text=text,
+            changed=False,
+            diagnostics=(
+                MigrationFileDiagnostic(
+                    severity=DiagnosticSeverity.ERROR,
+                    message=str(exc),
+                    file=filename,
+                    rule_id="loom.migrate.loom_test_parse",
+                    source_range=SourceRange(filename=filename),
+                    fixup_hint="Check that the .loom-test file has at least one case.",
+                ),
+            ),
+        )
+
+    diagnostics = _remap_loom_test_case_diagnostics(
+        rewrite_result.source,
+        rewrite_result.cases,
+        case_results,
+        filename,
+    )
+    return SourceMigrationResult(
+        text=rewrite_result.source,
+        changed=rewrite_result.source != text,
+        diagnostics=diagnostics,
+    )
+
+
 def validate_current_source(
     text: str,
     *,
@@ -289,7 +366,7 @@ def validate_current_source(
         return (
             MigrationFileDiagnostic(
                 severity=DiagnosticSeverity.ERROR,
-                message=str(exc),
+                message=_parse_error_summary(exc),
                 file=filename,
                 rule_id="loom.migrate.current_parse",
                 source_range=document.source_range(exc.location, exc.location),
@@ -446,6 +523,106 @@ def _source_diagnostic_to_migration(
         source_range=diagnostic.source_range,
         fixup_hint=diagnostic.fixup_hint,
     )
+
+
+def _parse_error_summary(exc: ParseError) -> str:
+    message = str(exc)
+    _prefix, separator, summary = message.partition(": error: ")
+    return summary if separator else message
+
+
+def _remap_loom_test_case_diagnostics(
+    rewritten_text: str,
+    cases: Sequence[CheckCase],
+    case_results: dict[int, SourceMigrationResult],
+    filename: Path | None,
+) -> tuple[MigrationFileDiagnostic, ...]:
+    document = SourceDocument(rewritten_text, filename)
+    diagnostics: list[MigrationFileDiagnostic] = []
+    character_delta = 0
+    for check_case in cases:
+        if check_case.input_span is None:
+            continue
+        result = case_results.get(check_case.index)
+        if result is None:
+            continue
+        input_start = check_case.input_span.start + character_delta
+        original_length = check_case.input_span.end - check_case.input_span.start
+        character_delta += len(result.text) - original_length
+        diagnostics.extend(
+            _remap_loom_test_diagnostic(
+                document,
+                input_start,
+                diagnostic,
+                filename,
+            )
+            for diagnostic in result.diagnostics
+        )
+    return tuple(diagnostics)
+
+
+def _remap_loom_test_diagnostic(
+    document: SourceDocument,
+    input_start: int,
+    diagnostic: MigrationFileDiagnostic,
+    filename: Path | None,
+) -> MigrationFileDiagnostic:
+    source_range = diagnostic.source_range
+    if source_range is None:
+        return replace(diagnostic, file=filename)
+    input_byte_start = len(document.text[:input_start].encode("utf-8"))
+    remapped_range = document.byte_source_range(
+        input_byte_start + source_range.start,
+        input_byte_start + source_range.end,
+    )
+    return replace(diagnostic, file=filename, source_range=remapped_range)
+
+
+def _loom_test_case_requires_current_parse_validation(
+    check_case: CheckCase,
+    input_text: str,
+) -> bool:
+    return (
+        not _loom_test_case_has_requires_directive(check_case)
+        and not _loom_test_input_has_diagnostic_annotations(input_text)
+        and _loom_test_input_looks_like_module(input_text)
+    )
+
+
+def _loom_test_case_has_requires_directive(check_case: CheckCase) -> bool:
+    return any(
+        line.strip().startswith("// REQUIRES:")
+        for line in check_case.source.splitlines()
+    )
+
+
+def _loom_test_input_has_diagnostic_annotations(input_text: str) -> bool:
+    for line in input_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("//"):
+            continue
+        payload = stripped[2:].strip()
+        if payload in ("ERROR", "WARNING", "REMARK") or payload.startswith(
+            (
+                "ERROR:",
+                "ERROR@",
+                "WARNING:",
+                "WARNING@",
+                "REMARK:",
+                "REMARK@",
+            )
+        ):
+            return True
+    return False
+
+
+def _loom_test_input_looks_like_module(input_text: str) -> bool:
+    for line in input_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        return not stripped.startswith(("%", "^"))
+    return False
 
 
 def _edits_with_rule_id(

@@ -23,6 +23,7 @@ iree_py_library(
     loom::py::loom::dialect::package
     loom::py::loom::format::bytecode::bytecode
     loom::py::loom::format::text::text
+    loom::py::loom::importers::check::check
     loom::py::loom::target::arch::amdgpu::dialect
     loom::py::loom::target::arch::ireevm::dialect
     loom::py::loom::target::arch::spirv::dialect

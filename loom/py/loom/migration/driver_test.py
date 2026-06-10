@@ -15,6 +15,7 @@ from loom.migration.driver import (
     MigrationRuleApplication,
     check_bytecode_version,
     discover_migration_files,
+    migrate_loom_test_text,
     migrate_source_text,
 )
 from loom.migration.source import SourceEdit
@@ -93,6 +94,148 @@ def test_source_migration_validates_rewritten_text_with_current_parser() -> None
     assert result.diagnostics[0].source_range.filename == Path("broken.loom")
 
 
+def test_loom_test_migrates_input_ir_without_touching_expected_output() -> None:
+    text = (
+        "// RUN: roundtrip\n"
+        "\n"
+        "func.def @f() {\n"
+        "  func.return\n"
+        "}\n"
+        "// ----\n"
+        "func.def @f() {\n"
+        "  func.return\n"
+        "}\n"
+    )
+
+    result = migrate_loom_test_text(
+        text,
+        filename=Path("case.loom-test"),
+        rules=(
+            _edit_rule(
+                "rename-function",
+                lambda document: SourceEdit(
+                    byte_start=document.text.index("@f") + 1,
+                    byte_end=document.text.index("@f") + 2,
+                    replacement_text="g",
+                ),
+            ),
+        ),
+    )
+
+    assert result.ok
+    assert result.changed
+    assert result.text == (
+        "// RUN: roundtrip\n"
+        "\n"
+        "func.def @g() {\n"
+        "  func.return\n"
+        "}\n"
+        "// ----\n"
+        "func.def @f() {\n"
+        "  func.return\n"
+        "}\n"
+    )
+
+
+def test_loom_test_parse_diagnostic_maps_to_case_input_line() -> None:
+    text = (
+        "// RUN: roundtrip\n"
+        "// descriptive harness comment\n"
+        "\n"
+        "func.def @bad() {\n"
+        "  not-an-op\n"
+        "}\n"
+        "// ----\n"
+        "func.def @bad() {\n"
+        "  not-an-op\n"
+        "}\n"
+    )
+
+    result = migrate_loom_test_text(text, filename=Path("broken.loom-test"))
+
+    assert not result.ok
+    assert len(result.diagnostics) == 1
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.rule_id == "loom.migrate.current_parse"
+    assert diagnostic.source_range is not None
+    assert diagnostic.source_range.filename == Path("broken.loom-test")
+    assert diagnostic.source_range.start_line == 5
+    assert diagnostic.source_range.start_column == 3
+    assert "broken.loom-test:1:1" not in diagnostic.message
+
+
+def test_loom_test_fragment_input_is_left_to_loom_check() -> None:
+    text = (
+        "// RUN: roundtrip\n"
+        "\n"
+        "%a = test.constant 1 : i32\n"
+        "%b = test.constant 2 : i32\n"
+        "%c = test.addi %a, %b : i32\n"
+    )
+
+    result = migrate_loom_test_text(text, filename=Path("fragment.loom-test"))
+
+    assert result.ok
+    assert not result.changed
+
+
+def test_loom_test_requires_input_is_left_to_loom_check() -> None:
+    text = (
+        "// RUN: roundtrip\n"
+        "// REQUIRES: loom-check-test-unavailable\n"
+        "\n"
+        "this.is.invalid.ir\n"
+    )
+
+    result = migrate_loom_test_text(text, filename=Path("requires.loom-test"))
+
+    assert result.ok
+    assert not result.changed
+
+
+def test_loom_test_annotated_negative_input_is_not_locally_rejected() -> None:
+    text = (
+        "// RUN: verify\n"
+        "\n"
+        "func.def @unknown_op() {\n"
+        "  // ERROR@+1: PARSE/006\n"
+        "  bogus.nonexistent\n"
+        "}\n"
+    )
+
+    result = migrate_loom_test_text(text, filename=Path("negative.loom-test"))
+
+    assert result.ok
+    assert not result.changed
+
+
+def test_loom_test_diagnostic_mapping_accounts_for_earlier_rewrites() -> None:
+    text = (
+        "func.def @first() {\n"
+        "  func.return\n"
+        "}\n"
+        "// ====\n"
+        "func.def @bad() {\n"
+        "  not-an-op\n"
+        "}\n"
+    )
+
+    def rewrite_first_case(document):
+        if "@first" not in document.text:
+            return MigrationRuleApplication()
+        return MigrationRuleApplication(edits=(SourceEdit(0, 0, "// migrated\n"),))
+
+    result = migrate_loom_test_text(
+        text,
+        filename=Path("shifted.loom-test"),
+        rules=(MigrationRule("insert-comment", rewrite_first_case),),
+    )
+
+    assert not result.ok
+    assert result.diagnostics[0].source_range is not None
+    assert result.diagnostics[0].source_range.start_line == 7
+
+
 def test_current_bytecode_version_is_accepted() -> None:
     assert check_bytecode_version(MAGIC + bytes([FORMAT_VERSION])) == ()
 
@@ -111,6 +254,7 @@ def test_old_bytecode_version_reports_actual_and_current_versions() -> None:
 def test_discover_migration_files_sorts_supported_kinds(tmp_path: Path) -> None:
     (tmp_path / "z.loom").write_text("", encoding="utf-8")
     (tmp_path / "a.loombc").write_bytes(MAGIC + bytes([FORMAT_VERSION]))
+    (tmp_path / "b.loom-test").write_text("", encoding="utf-8")
     (tmp_path / "ignored.txt").write_text("", encoding="utf-8")
     nested = tmp_path / "nested"
     nested.mkdir()
@@ -118,6 +262,7 @@ def test_discover_migration_files_sorts_supported_kinds(tmp_path: Path) -> None:
 
     assert discover_migration_files(tmp_path) == (
         tmp_path / "a.loombc",
+        tmp_path / "b.loom-test",
         nested / "m.loom",
         tmp_path / "z.loom",
     )
