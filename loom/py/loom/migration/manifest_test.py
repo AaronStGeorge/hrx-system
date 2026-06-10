@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from loom.dsl import ANY, LegacyFormat, Op, Operand
 from loom.migration.manifest import (
     CURRENT_BYTECODE_VERSION,
     CURRENT_MANIFEST,
@@ -18,6 +19,8 @@ from loom.migration.manifest import (
     MigrationRuleMetadata,
     TextBaseline,
     lint_current_manifest,
+    lint_legacy_formats,
+    migration_rule_metadata_from_ops,
 )
 
 
@@ -210,4 +213,120 @@ def test_expired_rule_can_be_promoted_to_error() -> None:
 
     assert [(d.severity, d.rule_id, d.baseline) for d in report.diagnostics] == [
         (DIAGNOSTIC_ERROR, "demo-rule", "loom-text-2026-06-09")
+    ]
+
+
+def test_legacy_format_metadata_can_be_extracted_from_ops() -> None:
+    op = Op(
+        "test.op",
+        operands=[Operand("input", ANY)],
+        legacy_formats=[
+            LegacyFormat(
+                "test.op.old",
+                format=[],
+                introduced="pre-release",
+                replaced_by="loom-text-2026-06-09",
+                expires_after="loom-text-2026-07-01",
+            )
+        ],
+    )
+
+    assert migration_rule_metadata_from_ops([op]) == (
+        MigrationRuleMetadata(
+            rule_id="test.op.old",
+            introduced="pre-release",
+            replaced_by="loom-text-2026-06-09",
+            expires_after="loom-text-2026-07-01",
+        ),
+    )
+
+
+def test_legacy_format_lint_accepts_known_baseline_window() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(
+            TextBaseline("pre-release"),
+            TextBaseline("loom-text-2026-06-09"),
+            TextBaseline("loom-text-2026-07-01"),
+        ),
+        current_text_baseline="loom-text-2026-06-09",
+        current_bytecode_version=14,
+    )
+    op = Op(
+        "test.op",
+        operands=[Operand("input", ANY)],
+        legacy_formats=[
+            LegacyFormat(
+                "test.op.old",
+                format=[],
+                replaced_by="loom-text-2026-06-09",
+                expires_after="loom-text-2026-07-01",
+            )
+        ],
+    )
+
+    assert lint_legacy_formats(manifest, [op]).diagnostics == ()
+
+
+def test_legacy_format_lint_reports_unknown_baseline() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(TextBaseline("pre-release"),),
+        current_text_baseline="pre-release",
+        current_bytecode_version=14,
+    )
+    op = Op(
+        "test.op",
+        legacy_formats=[
+            LegacyFormat(
+                "test.op.old",
+                format=[],
+                replaced_by="loom-text-missing",
+                expires_after="loom-text-missing",
+            )
+        ],
+    )
+
+    report = lint_legacy_formats(manifest, [op])
+
+    assert [(d.severity, d.rule_id, d.baseline) for d in report.diagnostics] == [
+        (DIAGNOSTIC_ERROR, "test.op.old", "loom-text-missing"),
+        (DIAGNOSTIC_ERROR, "test.op.old", "loom-text-missing"),
+    ]
+
+
+def test_legacy_format_lint_reports_duplicate_rule_ids_across_ops() -> None:
+    manifest = MigrationManifest(
+        text_baselines=(
+            TextBaseline("pre-release"),
+            TextBaseline("loom-text-2026-06-09"),
+        ),
+        current_text_baseline="loom-text-2026-06-09",
+        current_bytecode_version=14,
+    )
+    first_op = Op(
+        "test.first",
+        legacy_formats=[
+            LegacyFormat(
+                "test.duplicate",
+                format=[],
+                replaced_by="loom-text-2026-06-09",
+                expires_after="loom-text-2026-06-09",
+            )
+        ],
+    )
+    second_op = Op(
+        "test.second",
+        legacy_formats=[
+            LegacyFormat(
+                "test.duplicate",
+                format=[],
+                replaced_by="loom-text-2026-06-09",
+                expires_after="loom-text-2026-06-09",
+            )
+        ],
+    )
+
+    report = lint_legacy_formats(manifest, [first_op, second_op])
+
+    assert [(d.severity, d.rule_id) for d in report.diagnostics] == [
+        (DIAGNOSTIC_ERROR, "test.duplicate")
     ]

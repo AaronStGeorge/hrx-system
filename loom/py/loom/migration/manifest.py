@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from loom.format.bytecode.writer import FORMAT_VERSION
 
@@ -119,41 +121,97 @@ class MigrationManifest:
         object.__setattr__(self, "rules", tuple(self.rules))
 
     def lint(self, *, expired_rules_are_errors: bool = False) -> MigrationLintReport:
-        diagnostics: list[MigrationDiagnostic] = []
-        baseline_positions = _collect_baselines(self.text_baselines, diagnostics)
-
-        if self.current_text_baseline not in baseline_positions:
-            diagnostics.append(
-                MigrationDiagnostic(
-                    severity=DIAGNOSTIC_ERROR,
-                    message=(
-                        "current text baseline is not listed in the migration "
-                        "baseline table"
-                    ),
-                    baseline=self.current_text_baseline,
-                )
-            )
-        if self.current_bytecode_version < 0:
-            diagnostics.append(
-                MigrationDiagnostic(
-                    severity=DIAGNOSTIC_ERROR,
-                    message="current bytecode version must be non-negative",
-                )
-            )
-
-        _lint_releases(self, baseline_positions, diagnostics)
-        _lint_rules(
+        return _lint_manifest(
             self,
-            baseline_positions,
-            diagnostics,
             expired_rules_are_errors=expired_rules_are_errors,
+            require_active_rule_tests=True,
         )
-        return MigrationLintReport(tuple(diagnostics))
+
+
+def lint_legacy_formats(
+    manifest: MigrationManifest,
+    ops: Iterable[Any],
+    *,
+    expired_rules_are_errors: bool = False,
+) -> MigrationLintReport:
+    """Validates op-authored legacy formats against manifest baselines."""
+    rule_metadata = migration_rule_metadata_from_ops(ops)
+    combined_manifest = MigrationManifest(
+        text_baselines=manifest.text_baselines,
+        current_text_baseline=manifest.current_text_baseline,
+        current_bytecode_version=manifest.current_bytecode_version,
+        releases=manifest.releases,
+        rules=manifest.rules + rule_metadata,
+    )
+    return _lint_manifest(
+        combined_manifest,
+        expired_rules_are_errors=expired_rules_are_errors,
+        require_active_rule_tests=False,
+    )
+
+
+def migration_rule_metadata_from_ops(
+    ops: Iterable[Any],
+) -> tuple[MigrationRuleMetadata, ...]:
+    """Extracts migration rule metadata from op legacy-format declarations."""
+    rules: list[MigrationRuleMetadata] = []
+    for op in ops:
+        rules.extend(
+            (
+                MigrationRuleMetadata(
+                    rule_id=legacy_format.rule_id,
+                    introduced=legacy_format.introduced,
+                    replaced_by=legacy_format.replaced_by,
+                    expires_after=legacy_format.expires_after,
+                )
+            )
+            for legacy_format in getattr(op, "legacy_formats", ())
+        )
+    return tuple(rules)
 
 
 def lint_current_manifest() -> MigrationLintReport:
     """Validates the checked-in migration manifest."""
     return CURRENT_MANIFEST.lint()
+
+
+def _lint_manifest(
+    manifest: MigrationManifest,
+    *,
+    expired_rules_are_errors: bool,
+    require_active_rule_tests: bool,
+) -> MigrationLintReport:
+    diagnostics: list[MigrationDiagnostic] = []
+    baseline_positions = _collect_baselines(manifest.text_baselines, diagnostics)
+
+    if manifest.current_text_baseline not in baseline_positions:
+        diagnostics.append(
+            MigrationDiagnostic(
+                severity=DIAGNOSTIC_ERROR,
+                message=(
+                    "current text baseline is not listed in the migration "
+                    "baseline table"
+                ),
+                baseline=manifest.current_text_baseline,
+            )
+        )
+    if manifest.current_bytecode_version < 0:
+        diagnostics.append(
+            MigrationDiagnostic(
+                severity=DIAGNOSTIC_ERROR,
+                message="current bytecode version must be non-negative",
+            )
+        )
+
+    _lint_releases(manifest, baseline_positions, diagnostics)
+    _lint_rules(
+        manifest,
+        baseline_positions,
+        diagnostics,
+        expired_rules_are_errors=expired_rules_are_errors,
+        require_active_rule_tests=require_active_rule_tests,
+    )
+    return MigrationLintReport(tuple(diagnostics))
 
 
 def _collect_baselines(
@@ -240,6 +298,7 @@ def _lint_rules(
     diagnostics: list[MigrationDiagnostic],
     *,
     expired_rules_are_errors: bool,
+    require_active_rule_tests: bool,
 ) -> None:
     seen_rule_ids: set[str] = set()
     current_position = baseline_positions.get(manifest.current_text_baseline)
@@ -326,7 +385,7 @@ def _lint_rules(
                     baseline=rule.expires_after,
                 )
             )
-        elif current_position is not None:
+        elif require_active_rule_tests and current_position is not None:
             missing_tests = REQUIRED_ACTIVE_RULE_TEST_KINDS.difference(rule.test_kinds)
             if missing_tests:
                 diagnostics.append(

@@ -215,6 +215,10 @@ __all__ = [
     "RegisterUnitsSumTo",
     # Op group.
     "Dialect",
+    # Legacy text-format migration declarations.
+    "LegacyFieldDefault",
+    "LegacyFieldMapping",
+    "LegacyFormat",
     # Interfaces.
     "CallLikeInterface",
     "CallLikeKind",
@@ -2846,6 +2850,24 @@ def _validate_no_nested_scope(
             _validate_no_nested_scope(op_name, elem.elements, depth)
 
 
+def _declared_format_fields(
+    operands: tuple[Operand, ...],
+    results: tuple[Result | TiedResult, ...],
+    attrs: tuple[AttrDef, ...],
+    successors: tuple[Successor, ...],
+    regions: tuple[RegionDef, ...],
+) -> set[str]:
+    """Returns all fields a format element may reference."""
+    return (
+        {o.name for o in operands}
+        | {r.name for r in results}
+        | {a.name for a in attrs}
+        | {s.name for s in successors}
+        | {r.name for r in regions}
+        | _IMPLICIT_FORMAT_FIELDS
+    )
+
+
 def _validate_format_fields(
     op_name: str,
     format_elements: tuple[FormatElement, ...],
@@ -2857,14 +2879,7 @@ def _validate_format_fields(
 ) -> None:
     """Validate that all fields in format elements are declared on the op."""
     _validate_no_nested_scope(op_name, format_elements)
-    declared = (
-        {o.name for o in operands}
-        | {r.name for r in results}
-        | {a.name for a in attrs}
-        | {s.name for s in successors}
-        | {r.name for r in regions}
-        | _IMPLICIT_FORMAT_FIELDS
-    )
+    declared = _declared_format_fields(operands, results, attrs, successors, regions)
     referenced = _collect_format_fields(format_elements)
     unknown = referenced - declared
     if unknown:
@@ -2872,6 +2887,115 @@ def _validate_format_fields(
             f"Op '{op_name}': format references undeclared fields: "
             f"{sorted(unknown)}. Declared: {sorted(declared)}"
         )
+
+
+def _validate_legacy_formats(
+    op_name: str,
+    legacy_formats: tuple[LegacyFormat, ...],
+    operands: tuple[Operand, ...],
+    results: tuple[Result | TiedResult, ...],
+    attrs: tuple[AttrDef, ...],
+    successors: tuple[Successor, ...],
+    regions: tuple[RegionDef, ...],
+) -> None:
+    """Validate legacy format declarations against the current op surface."""
+    declared = _declared_format_fields(operands, results, attrs, successors, regions)
+    seen_rule_ids: set[str] = set()
+    for legacy_format in legacy_formats:
+        _validate_no_nested_scope(op_name, legacy_format.format)
+        if not legacy_format.rule_id:
+            raise ValueError(f"Op '{op_name}': legacy format rule_id is empty.")
+        if legacy_format.rule_id in seen_rule_ids:
+            raise ValueError(
+                f"Op '{op_name}': duplicate legacy format rule_id "
+                f"'{legacy_format.rule_id}'."
+            )
+        seen_rule_ids.add(legacy_format.rule_id)
+        if not legacy_format.introduced:
+            raise ValueError(
+                f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                "introduced baseline is empty."
+            )
+        if not legacy_format.replaced_by:
+            raise ValueError(
+                f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                "replaced_by baseline is empty."
+            )
+        if not legacy_format.expires_after:
+            raise ValueError(
+                f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                "expires_after baseline is empty."
+            )
+
+        field_mapping: dict[str, str] = {}
+        mapped_current_fields: set[str] = set()
+        for mapping in legacy_format.field_mappings:
+            if not mapping.legacy:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    "has an empty legacy field mapping source."
+                )
+            if not mapping.current:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    "has an empty legacy field mapping target."
+                )
+            if mapping.legacy in field_mapping:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    f"maps legacy field '{mapping.legacy}' more than once."
+                )
+            if mapping.current in mapped_current_fields:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    f"maps more than one legacy field to current field "
+                    f"'{mapping.current}'."
+                )
+            field_mapping[mapping.legacy] = mapping.current
+            mapped_current_fields.add(mapping.current)
+
+        referenced = _collect_format_fields(legacy_format.format)
+        unused_mappings = set(field_mapping) - referenced
+        if unused_mappings:
+            raise ValueError(
+                f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                "maps fields that are not referenced by its format: "
+                f"{sorted(unused_mappings)}."
+            )
+        mapped_referenced = {field_mapping.get(field, field) for field in referenced}
+        unknown = mapped_referenced - declared
+        if unknown:
+            raise ValueError(
+                f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                "references undeclared current fields after mapping: "
+                f"{sorted(unknown)}. Declared: {sorted(declared)}"
+            )
+
+        default_fields: set[str] = set()
+        for field_default in legacy_format.field_defaults:
+            if not field_default.field:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    "has an empty field default target."
+                )
+            if field_default.field in default_fields:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    f"defaults field '{field_default.field}' more than once."
+                )
+            if field_default.field in mapped_referenced:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    f"defaults field '{field_default.field}' that is already "
+                    "parsed by its format."
+                )
+            default_fields.add(field_default.field)
+            if field_default.field not in declared:
+                raise ValueError(
+                    f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
+                    f"defaults undeclared field '{field_default.field}'. "
+                    f"Declared: {sorted(declared)}"
+                )
 
 
 def _validate_region_arg_sources(
@@ -3472,6 +3596,62 @@ class MemoryAccessInterface:
 
 
 @dataclass(frozen=True, slots=True)
+class LegacyFieldMapping:
+    """Maps one parsed legacy format field onto the current op field."""
+
+    legacy: str
+    current: str
+
+
+@dataclass(frozen=True, slots=True)
+class LegacyFieldDefault:
+    """Supplies a current field value omitted by a legacy format."""
+
+    field: str
+    value: Any
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class LegacyFormat:
+    """One legacy textual format accepted by migration tooling.
+
+    Legacy formats are declaration metadata only. The strict current parser and
+    printer continue to use Op.format; migration tooling may opt into these
+    rules to parse older source and construct the current op shape.
+    """
+
+    rule_id: str
+    format: tuple[FormatElement, ...]
+    replaced_by: str
+    expires_after: str
+    introduced: str = "pre-release"
+    field_mappings: tuple[LegacyFieldMapping, ...] = ()
+    field_defaults: tuple[LegacyFieldDefault, ...] = ()
+    rewrite_hook: str = ""
+
+    def __init__(
+        self,
+        rule_id: str,
+        *,
+        format: list[FormatElement] | tuple[FormatElement, ...],
+        replaced_by: str,
+        expires_after: str,
+        introduced: str = "pre-release",
+        field_mappings: list[LegacyFieldMapping] | tuple[LegacyFieldMapping, ...] = (),
+        field_defaults: list[LegacyFieldDefault] | tuple[LegacyFieldDefault, ...] = (),
+        rewrite_hook: str = "",
+    ) -> None:
+        object.__setattr__(self, "rule_id", rule_id)
+        object.__setattr__(self, "format", tuple(format))
+        object.__setattr__(self, "replaced_by", replaced_by)
+        object.__setattr__(self, "expires_after", expires_after)
+        object.__setattr__(self, "introduced", introduced)
+        object.__setattr__(self, "field_mappings", tuple(field_mappings))
+        object.__setattr__(self, "field_defaults", tuple(field_defaults))
+        object.__setattr__(self, "rewrite_hook", rewrite_hook)
+
+
+@dataclass(frozen=True, slots=True)
 class Op:
     """A complete operation declaration.
 
@@ -3496,6 +3676,7 @@ class Op:
     ownership_effects: Ownership actions on operand/result fields.
     symbol_def: Symbol definition descriptor for SYMBOL_DEFINE ops.
     format: Format element list describing textual assembly.
+    legacy_formats: Legacy textual formats accepted by migration tooling.
     examples: List of example IR strings for documentation.
 
     The format field is the critical connection point. It drives:
@@ -3534,6 +3715,7 @@ class Op:
         Any, ...
     ] = ()  # Interface implementations (FuncLikeInterface, etc.).
     format: tuple[FormatElement, ...] = ()
+    legacy_formats: tuple[LegacyFormat, ...] = ()
     examples: tuple[str, ...] = ()
 
     def __init__(
@@ -3565,6 +3747,7 @@ class Op:
         symbol_def: SymbolDefinition | None = None,
         interfaces: list[Any] | tuple[Any, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
+        legacy_formats: list[LegacyFormat] | tuple[LegacyFormat, ...] = (),
         examples: list[str] | tuple[str, ...] = (),
     ) -> None:
         # Accept lists for ergonomics, store as tuples for immutability.
@@ -3579,6 +3762,7 @@ class Op:
         frozen_effects = tuple(effects)
         frozen_ownership_effects = tuple(ownership_effects)
         frozen_format = tuple(format)
+        frozen_legacy_formats = tuple(legacy_formats)
         object.__setattr__(self, "operands", frozen_operands)
         object.__setattr__(self, "results", frozen_results)
         object.__setattr__(self, "attrs", frozen_attrs)
@@ -3611,6 +3795,7 @@ class Op:
         object.__setattr__(self, "symbol_def", symbol_def)
         object.__setattr__(self, "interfaces", tuple(interfaces))
         object.__setattr__(self, "format", frozen_format)
+        object.__setattr__(self, "legacy_formats", frozen_legacy_formats)
         object.__setattr__(self, "examples", tuple(examples))
         has_symbol_define = any(trait.name == "SymbolDefine" for trait in traits)
         if has_symbol_define and symbol_def is None:
@@ -3676,6 +3861,16 @@ class Op:
             _validate_format_fields(
                 name,
                 frozen_format,
+                frozen_operands,
+                frozen_results,
+                frozen_attrs,
+                frozen_successors,
+                frozen_regions,
+            )
+        if frozen_legacy_formats:
+            _validate_legacy_formats(
+                name,
+                frozen_legacy_formats,
                 frozen_operands,
                 frozen_results,
                 frozen_attrs,

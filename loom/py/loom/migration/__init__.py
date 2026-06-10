@@ -24,6 +24,8 @@ from loom.migration.manifest import (
     MigrationRuleMetadata,
     TextBaseline,
     lint_current_manifest,
+    lint_legacy_formats,
+    migration_rule_metadata_from_ops,
 )
 from loom.migration.source import (
     MigrationSourceDiagnostic,
@@ -53,5 +55,7 @@ __all__ = [
     "SourceEdit",
     "TextBaseline",
     "apply_source_edits",
+    "lint_legacy_formats",
     "lint_current_manifest",
+    "migration_rule_metadata_from_ops",
 ]
