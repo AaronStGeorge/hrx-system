@@ -171,6 +171,12 @@ class TargetConfig:
                 "shared AMDGPU code-object targets missing Loom processor rows: "
                 + ", ".join(missing_code_object_processors)
             )
+        missing_exact_processors = sorted(exact_targets - seen_processors)
+        if missing_exact_processors:
+            raise ValueError(
+                "shared AMDGPU exact targets missing Loom processor rows: "
+                + ", ".join(missing_exact_processors)
+            )
         return descriptor_backed_keys
 
     def _validate_target_records(
@@ -263,13 +269,6 @@ class TargetConfig:
             if key not in keys:
                 keys.append(key)
         return keys
-
-    def processors_for_descriptor_set(self, key: str) -> list[str]:
-        processors: list[str] = []
-        for processor_info in self._supported_processor_infos:
-            if processor_info.descriptor_set_key == key:
-                processors.append(processor_info.processor)
-        return processors
 
     def exact_processors_for_descriptor_set(self, key: str) -> list[str]:
         processors: list[str] = []
