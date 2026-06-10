@@ -1247,8 +1247,12 @@ int main(int argc, char** argv) {
                          "--print_plan cannot be combined with --list_symbols");
   }
   if (iree_status_is_ok(status)) {
-    status = loom_op_registry_initialize_context(allocator, &context);
-    context_initialized = iree_status_is_ok(status);
+    loom_context_initialize(allocator, &context);
+    context_initialized = true;
+    status = loom_op_registry_register_all_dialects(&context);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_context_finalize(&context);
   }
   if (iree_status_is_ok(status)) {
     status = loom_link_cli_append_config_files(&config_set, allocator);

@@ -14,7 +14,7 @@ loom_target_table_cc_library(
   NAME
     logical_core
   GENERATOR
-    loom::py::loom::gen::spirv_contract_fragment
+    loom::py::loom::gen::target::contracts::spirv_contract_fragment
   ARGS
     "--contract-fragment=spirv.logical.core"
   DEPS
@@ -27,7 +27,7 @@ loom_target_table_cc_library(
   NAME
     logical_core_lower_rules
   GENERATOR
-    loom::py::loom::gen::spirv_lower_rule_shard
+    loom::py::loom::gen::target::contracts::spirv_lower_rule_shard
   ARGS
     "--contract-fragment=spirv.logical.core"
   DEPS

@@ -15,7 +15,7 @@ import bootstrap  # type: ignore[import-not-found]
 
 REPO_ROOT = bootstrap.ensure_runtime_py_on_path(Path(__file__))
 
-from loom.gen.generated_file import GENERATED_FILE_MARKER  # noqa: E402
+from loom.gen.support.generated_file import GENERATED_FILE_MARKER  # noqa: E402
 
 PRESERVE_BELOW_TAG = "### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###"
 

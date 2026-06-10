@@ -32,7 +32,7 @@ _WASM_DESCRIPTOR_IDS_VISIBILITY = (
 loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=wasm_core_simd128"],
-    generator = "//loom/py/loom/gen:wasm_low_descriptor_shard",
+    generator = "//loom/py/loom/gen/target/low:wasm_low_descriptor_shard",
     ids_visibility = _WASM_DESCRIPTOR_IDS_VISIBILITY,
     visibility = _WASM_DESCRIPTOR_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],

@@ -31,7 +31,7 @@ loom_target_table_cc_library(
   NAME
     target_refs
   GENERATOR
-    loom::py::loom::gen::amdgpu_target_refs
+    loom::py::loom::gen::target::arch::amdgpu::refs::target_refs
   ARGS
     "--isa-xml=cdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
     "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"

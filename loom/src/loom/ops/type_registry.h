@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // GENERATED FILE: DO NOT EDIT.
-// Generator: loom.gen.c_tables.
+// Generator: loom.gen.ops.c_tables.
 // clang-format off
 #ifndef LOOM_OPS_TYPE_REGISTRY_H_
 #define LOOM_OPS_TYPE_REGISTRY_H_

@@ -29,12 +29,6 @@ extern "C" {
 iree_status_t loom_testing_context_register_all_dialects(
     loom_context_t* context);
 
-// Initializes |out_context|, registers all checked-in dialects/encodings, and
-// finalizes op-name lookup tables. On failure the partially initialized context
-// is deinitialized before returning.
-iree_status_t loom_testing_context_initialize_all(iree_allocator_t allocator,
-                                                  loom_context_t* out_context);
-
 #ifdef __cplusplus
 }
 #endif

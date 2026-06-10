@@ -382,7 +382,7 @@ loom_generated_cc_library(
   NAME
     packed_dot_contract
   GENERATOR
-    loom::py::loom::gen::x86_packed_dot_contract
+    loom::py::loom::gen::target::arch::x86::packed_dot_contract
   SOURCE
     "packed_dot_contract_data.c"
   SRCS

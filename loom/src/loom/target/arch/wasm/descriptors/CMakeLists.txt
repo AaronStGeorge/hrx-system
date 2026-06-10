@@ -14,7 +14,7 @@ loom_low_descriptor_cc_library(
   NAME
     descriptors
   GENERATOR
-    loom::py::loom::gen::wasm_low_descriptor_shard
+    loom::py::loom::gen::target::low::wasm_low_descriptor_shard
   ARGS
     "--descriptor-set=wasm_core_simd128"
   DEPS

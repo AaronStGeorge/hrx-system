@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from build_tools.devtools import project_presubmit
+from build_tools.devtools.source_lock import NonEmptyTrackedFileSnapshot
 
 PROJECT_NAME = "loom"
 PROJECT_ROOT = "loom/"
@@ -129,8 +130,7 @@ def run_cmake_tests() -> bool:
     )
 
 
-def main() -> int:
-    args = parse_arguments()
+def run_presubmit(args: argparse.Namespace) -> int:
     if not args.tests:
         return 0
     if not should_run_tests(args.files_from):
@@ -143,6 +143,17 @@ def main() -> int:
     else:
         raise ValueError(f"unknown lane: {args.lane}")
     return 0 if ok else 1
+
+
+def main() -> int:
+    args = parse_arguments()
+    snapshot = NonEmptyTrackedFileSnapshot.capture_tracked_package_initializers(
+        REPO_ROOT
+    )
+    result = run_presubmit(args)
+    if not snapshot.verify(REPO_ROOT):
+        result = 1
+    return result
 
 
 if __name__ == "__main__":

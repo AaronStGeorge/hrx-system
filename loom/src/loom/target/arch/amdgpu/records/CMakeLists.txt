@@ -14,7 +14,7 @@ loom_generated_textual_header(
   NAME
     target_records_tables_gen
   GENERATOR
-    loom::py::loom::gen::amdgpu_target_records
+    loom::py::loom::gen::target::arch::amdgpu::records::target_records
   OUTPUT
     "target_records_tables.inl"
   OUTPUT_FLAG

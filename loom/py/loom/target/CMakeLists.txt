@@ -20,11 +20,20 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    package_init
+  SRCS
+    "__init__.py"
+  DEPS
+    loom::py::loom::core
+)
+
+iree_py_library(
+  NAME
     low_descriptors
   SRCS
     "low_descriptors.py"
   DEPS
-    loom::py::loom::target::package
+    loom::py::loom::target::package_init
     loom::py::loom::core
 )
 

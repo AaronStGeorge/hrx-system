@@ -158,7 +158,7 @@ iree_status_t loom_check_diagnostic_capture_sink(
   return iree_ok_status();
 }
 
-iree_status_t loom_check_context_initialize(
+iree_status_t loom_check_context_register_and_finalize(
     const loom_check_environment_t* environment, loom_context_t* context) {
   IREE_RETURN_IF_ERROR(environment->register_context.fn(
       environment->register_context.user_data, context));

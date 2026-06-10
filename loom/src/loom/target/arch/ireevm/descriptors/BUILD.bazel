@@ -37,7 +37,7 @@ _IREEVM_LOW_REGISTRY_VISIBILITY = [
 loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=ireevm_core"],
-    generator = "//loom/py/loom/gen:ireevm_low_descriptor_shard",
+    generator = "//loom/py/loom/gen/target/low:ireevm_low_descriptor_shard",
     ids_visibility = _IREEVM_DESCRIPTOR_IDS_VISIBILITY,
     visibility = _IREEVM_DESCRIPTOR_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],

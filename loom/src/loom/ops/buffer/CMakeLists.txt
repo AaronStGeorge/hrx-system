@@ -13,7 +13,7 @@ loom_generated_cc_library(
   NAME
     buffer
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_buffer_generator
   SRCS
     "facts.c"
     "verify.c"

@@ -37,7 +37,7 @@ loom_low_descriptor_cc_library(
     name = "descriptors",
     testonly = True,
     args = ["--descriptor-set=test_low_core"],
-    generator = "//loom/py/loom/gen:test_low_descriptor_shard",
+    generator = "//loom/py/loom/gen/target/low:test_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -45,7 +45,7 @@ loom_low_descriptor_cc_library(
     name = "alt_descriptors",
     testonly = True,
     args = ["--descriptor-set=test_low_alt"],
-    generator = "//loom/py/loom/gen:test_low_descriptor_shard",
+    generator = "//loom/py/loom/gen/target/low:test_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 

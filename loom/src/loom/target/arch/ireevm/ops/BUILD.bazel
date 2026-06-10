@@ -40,7 +40,7 @@ loom_generated_cc_library(
         "builders.c",
         "tables.c",
     ],
-    generator = "//loom/py/loom/gen:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_ireevm_generator",
     visibility = _IREEVM_ROOT_VISIBILITY + _IREEVM_EXECUTION_VISIBILITY + _IREEVM_LOWER_VISIBILITY,
     deps = [
         "//loom/src/loom/error:emitter",

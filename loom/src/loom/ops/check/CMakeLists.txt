@@ -13,7 +13,7 @@ loom_generated_cc_library(
   NAME
     check
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_check_generator
   GENERATED_SRC_FLAGS
     "--builders"
     "--tables"

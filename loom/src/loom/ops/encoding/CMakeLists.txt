@@ -13,7 +13,7 @@ loom_generated_cc_library(
   NAME
     encoding
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_encoding_generator
   SRCS
     "facts.c"
     "families.c"

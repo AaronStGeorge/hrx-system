@@ -25,8 +25,9 @@ namespace {
 
 TEST(OpRegistry, RegistersProductionContextSurface) {
   loom_context_t context;
-  IREE_ASSERT_OK(
-      loom_op_registry_initialize_context(iree_allocator_system(), &context));
+  loom_context_initialize(iree_allocator_system(), &context);
+  IREE_ASSERT_OK(loom_op_registry_register_all_dialects(&context));
+  IREE_ASSERT_OK(loom_context_finalize(&context));
 
   loom_op_kind_t kind = 0;
   const loom_op_vtable_t* vtable = loom_context_lookup_op_by_name(

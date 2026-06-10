@@ -36,6 +36,16 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "op_defs_test",
+    srcs = ["op_defs_test.cc"],
+    deps = [
+        ":op_defs",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "func_symbol_facts",
     srcs = ["func_symbol_facts.c"],
@@ -130,11 +140,18 @@ loom_cc_library(
 
 loom_generated_cc_library(
     name = "op_registry",
+    srcs = ["op_registry.c"],
     hdrs = ["op_registry.h"],
     args = ["--registry"],
-    generated_src_flags = ["--op-registry-source"],
-    generated_srcs = ["op_registry.c"],
-    generator = "//loom/py/loom/gen:c_tables_generator",
+    generated_src_flags = [
+        "--op-registry-tables",
+        "--op-registry-tables-header",
+    ],
+    generated_srcs = [
+        "op_registry_tables.c",
+        "op_registry_tables.h",
+    ],
+    generator = "//loom/py/loom/gen/ops:c_tables_generator",
     deps = [
         ":op_defs",
         "//loom/src/loom/ir",
@@ -177,11 +194,18 @@ loom_cc_library(
 
 loom_generated_cc_library(
     name = "type_registry",
+    srcs = ["type_registry.c"],
     hdrs = ["type_registry.h"],
     args = ["--registry"],
-    generated_src_flags = ["--type-registry-source"],
-    generated_srcs = ["type_registry.c"],
-    generator = "//loom/py/loom/gen:c_tables_generator",
+    generated_src_flags = [
+        "--type-registry-tables",
+        "--type-registry-tables-header",
+    ],
+    generated_srcs = [
+        "type_registry_tables.c",
+        "type_registry_tables.h",
+    ],
+    generator = "//loom/py/loom/gen/ops:c_tables_generator",
     deps = [
         ":op_defs",
         ":storage_facts",

@@ -7,8 +7,11 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
+import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def load_presubmit_module():
@@ -17,6 +20,7 @@ def load_presubmit_module():
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load {presubmit_path}")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -46,6 +50,26 @@ class LoomPresubmitTest(unittest.TestCase):
             self.presubmit.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX,
             "runtime-resource=",
         )
+
+    def test_main_rechecks_package_initializers_after_bazel_tests(self):
+        args = types.SimpleNamespace(
+            files_from=None,
+            lane="bazel",
+            tests=True,
+        )
+        snapshot = mock.Mock()
+        snapshot.verify.return_value = False
+        with (
+            mock.patch.object(self.presubmit, "parse_arguments", return_value=args),
+            mock.patch.object(
+                self.presubmit.NonEmptyTrackedFileSnapshot,
+                "capture_tracked_package_initializers",
+                return_value=snapshot,
+            ),
+            mock.patch.object(self.presubmit, "run_bazel_tests", return_value=True),
+        ):
+            self.assertEqual(self.presubmit.main(), 1)
+            snapshot.verify.assert_called_once_with(self.presubmit.REPO_ROOT)
 
 
 if __name__ == "__main__":

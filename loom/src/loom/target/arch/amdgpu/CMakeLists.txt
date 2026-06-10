@@ -31,7 +31,7 @@ loom_generated_cc_library(
   NAME
     error_defs
   GENERATOR
-    loom::py::loom::gen::c_errors
+    loom::py::loom::gen::error::c_errors
   SOURCE
     "error_catalog.c"
   GENERATED_HDR_FLAGS
@@ -42,7 +42,6 @@ loom_generated_cc_library(
     "--catalog-symbol=loom_amdgpu_error_catalog"
     "--fallback-catalog-symbol=loom_error_catalog_core"
     "--fallback-public-header=loom/error/error_catalog.h"
-    "--no-runtime"
     "--public-header=loom/target/arch/amdgpu/error_catalog.h"
     "--shard=amdgpu"
   DEPS
@@ -63,11 +62,23 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
+loom_generated_cc_library(
   NAME
     target_info
   GENERATOR
-    loom::py::loom::gen::amdgpu_target_info
+    loom::py::loom::gen::target::arch::amdgpu::target_info
+  SOURCE
+    "target_info_tables.c"
+  SRCS
+    "target_info.c"
+  GENERATED_SRC_FLAGS
+    "--tables-header"
+  GENERATED_SRCS
+    "target_info_tables.h"
+  GENERATED_HDR_FLAGS
+    "--header"
+  GENERATED_HDRS
+    "target_info.h"
   ARGS
     "--isa-xml=cdna3:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna3.xml"
     "--isa-xml=cdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"

@@ -314,7 +314,9 @@ std::vector<uint8_t> WriteBytecodeModule(const char* source_text) {
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(32 * 1024, allocator, &block_pool);
   loom_context_t context = {};
-  IREE_CHECK_OK(loom_op_registry_initialize_context(allocator, &context));
+  loom_context_initialize(allocator, &context);
+  IREE_CHECK_OK(loom_op_registry_register_all_dialects(&context));
+  IREE_CHECK_OK(loom_context_finalize(&context));
 
   loom_text_parse_options_t parse_options = {
       /*.diagnostic_sink=*/{},

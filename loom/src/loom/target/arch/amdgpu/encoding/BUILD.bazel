@@ -19,7 +19,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
+_AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/encoding:encoding_tables"
 
 _AMDGPU_ENCODING_VISIBILITY = [
     "//loom/src/loom/target/arch/amdgpu/planning:__pkg__",

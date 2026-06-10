@@ -17,7 +17,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_occupancy_tables"
+_AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/planning:occupancy_tables"
 
 _AMDGPU_ROOT_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu:__pkg__"]
 

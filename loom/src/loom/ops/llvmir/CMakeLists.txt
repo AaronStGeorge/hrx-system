@@ -13,7 +13,7 @@ loom_generated_cc_library(
   NAME
     llvmir
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_llvmir_generator
   SRCS
     "target_records.c"
   GENERATED_SRC_FLAGS

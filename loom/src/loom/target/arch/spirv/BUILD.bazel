@@ -55,13 +55,12 @@ loom_generated_cc_library(
         "--catalog-symbol=loom_spirv_error_catalog",
         "--fallback-catalog-symbol=loom_error_catalog_core",
         "--fallback-public-header=loom/error/error_catalog.h",
-        "--no-runtime",
         "--public-header=loom/target/arch/spirv/error_catalog.h",
         "--shard=spirv",
     ],
     generated_hdr_flags = ["--header"],
     generated_hdrs = ["error_catalog.h"],
-    generator = "//loom/py/loom/gen:c_errors",
+    generator = "//loom/py/loom/gen/error:c_errors",
     source = "error_catalog.c",
     deps = ["//loom/src/loom/error:error_defs"],
 )
@@ -75,7 +74,7 @@ loom_cc_library(
 loom_generated_textual_header(
     name = "features_gen",
     args = ["--isa-header=$(location isa.h)"],
-    generator = "//loom/py/loom/gen:spirv_features",
+    generator = "//loom/py/loom/gen/target/arch/spirv:features",
     inputs = ["isa.h"],
     output = "features_tables.inl",
     output_flag = "--tables",
@@ -129,7 +128,7 @@ loom_cc_library(
 
 loom_generated_textual_header(
     name = "packet_rows_tables_gen",
-    generator = "//loom/py/loom/gen:spirv_packet_rows",
+    generator = "//loom/py/loom/gen/target/arch/spirv:packet_rows",
     output = "packet_rows_tables.inl",
     output_flag = "--tables",
 )
@@ -164,7 +163,7 @@ loom_cc_library(
 
 loom_generated_textual_header(
     name = "cooperative_properties_tables_gen",
-    generator = "//loom/py/loom/gen:spirv_cooperative_properties",
+    generator = "//loom/py/loom/gen/target/arch/spirv:cooperative_properties",
     output = "cooperative_properties_tables.inl",
     output_flag = "--tables",
 )

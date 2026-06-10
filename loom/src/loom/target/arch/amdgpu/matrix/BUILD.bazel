@@ -17,7 +17,7 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_AMDGPU_MATRIX_CONTRACT_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_matrix_contract_tables"
+_AMDGPU_MATRIX_CONTRACT_TABLE_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/matrix:contract_tables"
 
 loom_cc_library(
     name = "types",

@@ -366,10 +366,11 @@ iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
                                             iree_allocator_t allocator,
                                             loom_check_result_t* result);
 
-// Registers the dialects selected by |environment|, then finalizes the context.
+// Registers the dialects selected by |environment|, then finalizes |context|.
+//
 // The context must have been initialized with loom_context_initialize() before
 // calling this.
-iree_status_t loom_check_context_initialize(
+iree_status_t loom_check_context_register_and_finalize(
     const loom_check_environment_t* environment, loom_context_t* context);
 
 // Initializes the target-low descriptor registry selected by |environment|.

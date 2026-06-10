@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.gen.generated_file import GENERATED_FILE_MARKER
+from loom.gen.support.generated_file import GENERATED_FILE_MARKER
 from loom.tools.source_surface import (
     build_source_surface_report,
     format_text_report,

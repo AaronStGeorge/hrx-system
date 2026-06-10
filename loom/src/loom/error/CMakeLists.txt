@@ -53,15 +53,19 @@ loom_generated_cc_library(
   NAME
     error_defs
   GENERATOR
-    loom::py::loom::gen::c_errors
+    loom::py::loom::gen::error::c_errors
   SOURCE
     "error_catalog.c"
+  SRCS
+    "error_defs.c"
   HDRS
     "error_defs.h"
   GENERATED_HDR_FLAGS
     "--header"
+    "--runtime-tables"
   GENERATED_HDRS
     "error_catalog.h"
+    "error_defs_tables.inl"
   ARGS
     "--catalog-symbol=loom_error_catalog_core"
     "--public-header=loom/error/error_catalog.h"

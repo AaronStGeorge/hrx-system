@@ -44,7 +44,7 @@ loom_generated_cc_library(
         "builders.c",
         "tables.c",
     ],
-    generator = "//loom/py/loom/gen:c_tables_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_test_generator",
     deps = [
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:emitter",

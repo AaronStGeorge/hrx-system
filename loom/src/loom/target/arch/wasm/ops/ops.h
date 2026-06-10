@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // GENERATED FILE: DO NOT EDIT.
-// Generator: loom.gen.c_tables.
+// Generator: loom.gen.ops.c_tables.
 // Regenerate: python3 loom/py/loom/gen/run.py c_tables --in-place
 // clang-format off
 

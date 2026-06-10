@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 # GENERATED FILE: DO NOT EDIT.
-# Generator: loom.gen.package_inits.
+# Generator: loom.gen.python.package_inits.
 # Regenerate: python3 loom/py/loom/gen/run.py package_inits --in-place
 
 """x86 source-to-low contract fragments."""

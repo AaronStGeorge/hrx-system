@@ -1,5 +1,5 @@
 # GENERATED FILE: DO NOT EDIT.
-# Generator: loom.gen.builders_pyi.
+# Generator: loom.gen.python.builders_pyi.
 # Regenerate: python3 loom/py/loom/gen/run.py builders_pyi --in-place
 # ruff: noqa
 

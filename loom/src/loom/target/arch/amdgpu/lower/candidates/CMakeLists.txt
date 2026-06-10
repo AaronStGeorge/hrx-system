@@ -14,7 +14,7 @@ loom_target_table_cc_library(
   NAME
     atomic_candidates
   GENERATOR
-    loom::py::loom::gen::amdgpu_atomic_candidates
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::atomic_candidates
   DEPS
     iree::base
     loom::ops::atomic
@@ -29,7 +29,7 @@ loom_target_table_cc_library(
   NAME
     compare_candidates
   GENERATOR
-    loom::py::loom::gen::amdgpu_compare_candidates
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::compare_candidates
   DEPS
     iree::base
     loom::ir

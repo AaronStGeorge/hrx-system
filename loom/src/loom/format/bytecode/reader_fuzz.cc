@@ -47,8 +47,10 @@ static void fuzz_ensure_context(void) {
   // dialect so malformed op payloads can reach all production bytecode
   // decoders. Generated valid modules still come from the synthetic test
   // generator profile.
+  loom_context_initialize(iree_allocator_system(), &g_context);
   fuzz_ignore_status_or_trap(
-      loom_testing_context_initialize_all(iree_allocator_system(), &g_context));
+      loom_testing_context_register_all_dialects(&g_context));
+  fuzz_ignore_status_or_trap(loom_context_finalize(&g_context));
   g_context_initialized = true;
 }
 

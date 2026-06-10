@@ -14,7 +14,7 @@ loom_generated_cc_library(
   NAME
     error_defs
   GENERATOR
-    loom::py::loom::gen::c_errors
+    loom::py::loom::gen::error::c_errors
   SOURCE
     "error_catalog.c"
   GENERATED_HDR_FLAGS
@@ -25,7 +25,6 @@ loom_generated_cc_library(
     "--catalog-symbol=loom_spirv_error_catalog"
     "--fallback-catalog-symbol=loom_error_catalog_core"
     "--fallback-public-header=loom/error/error_catalog.h"
-    "--no-runtime"
     "--public-header=loom/target/arch/spirv/error_catalog.h"
     "--shard=spirv"
   DEPS
@@ -50,7 +49,7 @@ loom_generated_textual_header(
   NAME
     features_gen
   GENERATOR
-    loom::py::loom::gen::spirv_features
+    loom::py::loom::gen::target::arch::spirv::features
   OUTPUT
     "features_tables.inl"
   OUTPUT_FLAG
@@ -128,7 +127,7 @@ loom_generated_textual_header(
   NAME
     packet_rows_tables_gen
   GENERATOR
-    loom::py::loom::gen::spirv_packet_rows
+    loom::py::loom::gen::target::arch::spirv::packet_rows
   OUTPUT
     "packet_rows_tables.inl"
   OUTPUT_FLAG
@@ -178,7 +177,7 @@ loom_generated_textual_header(
   NAME
     cooperative_properties_tables_gen
   GENERATOR
-    loom::py::loom::gen::spirv_cooperative_properties
+    loom::py::loom::gen::target::arch::spirv::cooperative_properties
   OUTPUT
     "cooperative_properties_tables.inl"
   OUTPUT_FLAG

@@ -13,7 +13,7 @@ loom_generated_cc_library(
   NAME
     cfg
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
+    loom::py::loom::gen::ops::c_tables_cfg_generator
   SRCS
     "verify.c"
   GENERATED_SRC_FLAGS

@@ -14,7 +14,7 @@ loom_generated_cc_library(
   NAME
     error_defs
   GENERATOR
-    loom::py::loom::gen::c_errors
+    loom::py::loom::gen::error::c_errors
   SOURCE
     "error_catalog.c"
   GENERATED_HDR_FLAGS
@@ -25,7 +25,6 @@ loom_generated_cc_library(
     "--catalog-symbol=loom_wasm_error_catalog"
     "--fallback-catalog-symbol=loom_error_catalog_core"
     "--fallback-public-header=loom/error/error_catalog.h"
-    "--no-runtime"
     "--public-header=loom/target/emit/wasm/error_catalog.h"
     "--shard=wasm"
   DEPS

@@ -46,8 +46,10 @@ static void fuzz_ensure_context(void) {
   // registration lets arbitrary input reach every checked-in op format parser.
   // The generated valid-module strategy stays synthetic through the generator's
   // default test-dialect profile.
+  loom_context_initialize(iree_allocator_system(), &g_context);
   fuzz_ignore_status_or_trap(
-      loom_testing_context_initialize_all(iree_allocator_system(), &g_context));
+      loom_testing_context_register_all_dialects(&g_context));
+  fuzz_ignore_status_or_trap(loom_context_finalize(&g_context));
   g_context_initialized = true;
 }
 

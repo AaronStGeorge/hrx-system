@@ -28,6 +28,17 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    op_defs_test
+  SRCS
+    "op_defs_test.cc"
+  DEPS
+    ::op_defs
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     func_symbol_facts
@@ -152,11 +163,15 @@ loom_generated_cc_library(
   NAME
     op_registry
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
-  GENERATED_SRC_FLAGS
-    "--op-registry-source"
-  GENERATED_SRCS
+    loom::py::loom::gen::ops::c_tables_generator
+  SRCS
     "op_registry.c"
+  GENERATED_SRC_FLAGS
+    "--op-registry-tables"
+    "--op-registry-tables-header"
+  GENERATED_SRCS
+    "op_registry_tables.c"
+    "op_registry_tables.h"
   HDRS
     "op_registry.h"
   ARGS
@@ -207,11 +222,15 @@ loom_generated_cc_library(
   NAME
     type_registry
   GENERATOR
-    loom::py::loom::gen::c_tables_generator
-  GENERATED_SRC_FLAGS
-    "--type-registry-source"
-  GENERATED_SRCS
+    loom::py::loom::gen::ops::c_tables_generator
+  SRCS
     "type_registry.c"
+  GENERATED_SRC_FLAGS
+    "--type-registry-tables"
+    "--type-registry-tables-header"
+  GENERATED_SRCS
+    "type_registry_tables.c"
+    "type_registry_tables.h"
   HDRS
     "type_registry.h"
   ARGS

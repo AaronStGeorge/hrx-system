@@ -31,7 +31,7 @@ loom_low_descriptor_cc_library(
   NAME
     cdna3
   GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
+    loom::py::loom::gen::target::arch::amdgpu::descriptors::descriptors
   SOURCE
     "cdna3_descriptors.c"
   HEADER
@@ -53,7 +53,7 @@ loom_low_descriptor_cc_library(
   NAME
     rdna3
   GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
+    loom::py::loom::gen::target::arch::amdgpu::descriptors::descriptors
   SOURCE
     "rdna3_descriptors.c"
   HEADER
@@ -75,7 +75,7 @@ loom_low_descriptor_cc_library(
   NAME
     rdna4
   GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
+    loom::py::loom::gen::target::arch::amdgpu::descriptors::descriptors
   SOURCE
     "rdna4_descriptors.c"
   HEADER
@@ -97,7 +97,7 @@ loom_low_descriptor_cc_library(
   NAME
     rdna4_gfx125x
   GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
+    loom::py::loom::gen::target::arch::amdgpu::descriptors::descriptors
   SOURCE
     "rdna4_gfx125x_descriptors.c"
   HEADER
@@ -119,7 +119,7 @@ loom_low_descriptor_cc_library(
   NAME
     cdna4
   GENERATOR
-    loom::py::loom::gen::amdgpu_descriptors
+    loom::py::loom::gen::target::arch::amdgpu::descriptors::descriptors
   SOURCE
     "cdna4_descriptors.c"
   HEADER

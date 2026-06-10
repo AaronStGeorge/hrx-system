@@ -19,7 +19,7 @@ _AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
 
 loom_target_table_cc_library(
     name = "atomic_candidates",
-    generator = "//loom/py/loom/gen:amdgpu_atomic_candidates",
+    generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:atomic_candidates",
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
         "//loom/src/loom/ops:atomic",
@@ -32,7 +32,7 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
     name = "compare_candidates",
-    generator = "//loom/py/loom/gen:amdgpu_compare_candidates",
+    generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:compare_candidates",
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
         "//loom/src/loom/ir",

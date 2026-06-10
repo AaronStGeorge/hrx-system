@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // GENERATED FILE: DO NOT EDIT.
-// Generator: loom.gen.c_tables.
+// Generator: loom.gen.ops.c_tables.
 // clang-format off
 #ifndef LOOM_OPS_OP_REGISTRY_H_
 #define LOOM_OPS_OP_REGISTRY_H_
@@ -24,13 +24,6 @@ extern "C" {
 // developer tools and tests that need it must opt in explicitly.
 iree_status_t loom_op_registry_register_all_dialects(
     loom_context_t* context);
-
-// Initializes |out_context| with production dialects and encodings.
-//
-// On failure the partially initialized context is deinitialized before
-// returning.
-iree_status_t loom_op_registry_initialize_context(
-    iree_allocator_t allocator, loom_context_t* out_context);
 
 #ifdef __cplusplus
 }

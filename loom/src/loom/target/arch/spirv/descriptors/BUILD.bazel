@@ -32,7 +32,7 @@ _SPIRV_LOW_REGISTRY_VISIBILITY = [
 loom_low_descriptor_cc_library(
     name = "descriptors",
     args = ["--descriptor-set=spirv_logical_core"],
-    generator = "//loom/py/loom/gen:spirv_low_descriptor_shard",
+    generator = "//loom/py/loom/gen/target/low:spirv_low_descriptor_shard",
     visibility = _SPIRV_DESCRIPTOR_VISIBILITY,
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )

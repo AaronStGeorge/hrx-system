@@ -17,7 +17,7 @@ iree_py_library(
     "packed_dot_data.py"
     "target_info.py"
   DEPS
-    loom::py::loom::target::arch::package
+    loom::py::loom::target::arch::package_init
 )
 
 iree_py_library(

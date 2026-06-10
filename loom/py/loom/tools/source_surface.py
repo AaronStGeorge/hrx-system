@@ -25,7 +25,7 @@ _RUNTIME_PY_ROOT = Path(__file__).resolve().parents[2]
 if str(_RUNTIME_PY_ROOT) not in sys.path:
     sys.path.insert(0, str(_RUNTIME_PY_ROOT))
 
-from loom.gen.generated_file import GENERATED_FILE_MARKER  # noqa: E402
+from loom.gen.support.generated_file import GENERATED_FILE_MARKER  # noqa: E402
 
 SCHEMA_VERSION = 1
 SOURCE_ROOT = Path("loom/src/loom")

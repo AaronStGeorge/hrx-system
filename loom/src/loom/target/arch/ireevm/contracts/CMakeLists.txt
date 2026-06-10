@@ -14,7 +14,7 @@ loom_target_table_cc_library(
   NAME
     core
   GENERATOR
-    loom::py::loom::gen::ireevm_contract_fragment
+    loom::py::loom::gen::target::contracts::ireevm_contract_fragment
   ARGS
     "--contract-fragment=ireevm.core"
   DEPS
@@ -27,7 +27,7 @@ loom_target_table_cc_library(
   NAME
     core_lower_rules
   GENERATOR
-    loom::py::loom::gen::ireevm_lower_rule_shard
+    loom::py::loom::gen::target::contracts::ireevm_lower_rule_shard
   ARGS
     "--contract-fragment=ireevm.core"
   DEPS

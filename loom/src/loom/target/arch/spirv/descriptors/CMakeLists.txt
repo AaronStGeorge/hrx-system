@@ -14,7 +14,7 @@ loom_low_descriptor_cc_library(
   NAME
     descriptors
   GENERATOR
-    loom::py::loom::gen::spirv_low_descriptor_shard
+    loom::py::loom::gen::target::low::spirv_low_descriptor_shard
   ARGS
     "--descriptor-set=spirv_logical_core"
   DEPS
