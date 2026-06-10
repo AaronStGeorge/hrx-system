@@ -364,6 +364,7 @@ loom_cc_test(
     srcs = ["hal_kernel_library_test.cc"],
     deps = [
         ":hal_kernel_library",
+        "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",

@@ -11,6 +11,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -55,6 +56,40 @@ uint32_t LoadLeU32(const uint8_t* bytes, size_t offset) {
          ((uint32_t)bytes[offset + 3] << 24);
 }
 
+std::string DiagnosticSummary(const DiagnosticCapture& capture) {
+  std::string result;
+  for (const CapturedDiagnostic& diagnostic : capture.diagnostics) {
+    if (!result.empty()) {
+      result += "\n";
+    }
+    result += diagnostic.error ? diagnostic.error->error_id : "<unknown>";
+    result += ": ";
+    result += diagnostic.error ? diagnostic.error->summary : "";
+    for (const loom_diagnostic_param_t& param : diagnostic.params) {
+      result += " [";
+      switch (param.kind) {
+        case LOOM_PARAM_STRING:
+          result.append(param.string.data, param.string.size);
+          break;
+        case LOOM_PARAM_I64:
+          result += std::to_string(param.i64);
+          break;
+        case LOOM_PARAM_U32:
+          result += std::to_string(param.u32);
+          break;
+        case LOOM_PARAM_U64:
+          result += std::to_string(param.u64);
+          break;
+        default:
+          result += "?";
+          break;
+      }
+      result += "]";
+    }
+  }
+  return result;
+}
+
 class AmdgpuHalKernelLibraryTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -69,6 +104,25 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
+  void ParseSource(iree_string_view_t source, loom_module_t** out_module) {
+    DiagnosticCapture parse_capture;
+    loom_text_parse_options_t parse_options = {
+        .diagnostic_sink = parse_capture.sink(),
+        .max_errors = 20,
+    };
+    loom_low_descriptor_text_asm_environment_initialize(
+        &low_registry_.registry, &parse_options.low_asm_environment);
+    iree_status_t status =
+        loom_text_parse(source, IREE_SV("amdgpu_emit_test.loom"), &context_,
+                        &block_pool_, &parse_options, out_module);
+    if (!parse_capture.diagnostics.empty()) {
+      ADD_FAILURE() << DiagnosticSummary(parse_capture);
+    }
+    IREE_ASSERT_OK(status);
+    ASSERT_TRUE(parse_capture.diagnostics.empty());
+    ASSERT_NE(*out_module, nullptr);
+  }
+
   void ParseGfx11Kernel(loom_module_t** out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx1100> @gfx_target\n"
@@ -76,16 +130,28 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
         "@loom_kernel() {\n"
         "  low.return\n"
         "}\n";
-    DiagnosticCapture parse_capture;
-    loom_text_parse_options_t parse_options = {
-        .diagnostic_sink = parse_capture.sink(),
-        .max_errors = 20,
-    };
-    IREE_ASSERT_OK(loom_text_parse(iree_make_cstring_view(kSource),
-                                   IREE_SV("amdgpu_emit_test.loom"), &context_,
-                                   &block_pool_, &parse_options, out_module));
-    ASSERT_TRUE(parse_capture.diagnostics.empty());
-    ASSERT_NE(*out_module, nullptr);
+    ASSERT_NO_FATAL_FAILURE(
+        ParseSource(iree_make_cstring_view(kSource), out_module));
+  }
+
+  void ParseGfx11KernelWithArguments(loom_module_t** out_module) {
+    static const char kSource[] =
+        "amdgpu.target<gfx1100> @gfx_target\n"
+        "low.kernel.def target(@gfx_target) "
+        "abi_layout({constant_count = 1, direct_arg_count = 1, "
+        "direct_arg_names = {arg0 = \"extent\"}, resource_count = 1, "
+        "uses_kernarg_segment_ptr = true}) "
+        "workgroup_size(64, 1, 1) @loom_kernel() {\n"
+        "  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : "
+        "reg<amdgpu.sgpr x2>\n"
+        "  %extent = low.op<amdgpu.s_load_dword_offset_only>(%kernarg) "
+        "{offset = 8} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr>\n"
+        "  %view = low.op<amdgpu.s_load_dwordx2_offset_only>(%kernarg) "
+        "{offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>\n"
+        "  low.return\n"
+        "}\n";
+    ASSERT_NO_FATAL_FAILURE(
+        ParseSource(iree_make_cstring_view(kSource), out_module));
   }
 
   void ParseGfx11MultiKernel(loom_module_t** out_module) {
@@ -99,16 +165,8 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
         "@second_kernel() {\n"
         "  low.return\n"
         "}\n";
-    DiagnosticCapture parse_capture;
-    loom_text_parse_options_t parse_options = {
-        .diagnostic_sink = parse_capture.sink(),
-        .max_errors = 20,
-    };
-    IREE_ASSERT_OK(loom_text_parse(iree_make_cstring_view(kSource),
-                                   IREE_SV("amdgpu_emit_test.loom"), &context_,
-                                   &block_pool_, &parse_options, out_module));
-    ASSERT_TRUE(parse_capture.diagnostics.empty());
-    ASSERT_NE(*out_module, nullptr);
+    ASSERT_NO_FATAL_FAILURE(
+        ParseSource(iree_make_cstring_view(kSource), out_module));
   }
 
   void ParseGfx942Kernel(loom_module_t** out_module) {
@@ -118,16 +176,8 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
         "@loom_kernel() {\n"
         "  low.return\n"
         "}\n";
-    DiagnosticCapture parse_capture;
-    loom_text_parse_options_t parse_options = {
-        .diagnostic_sink = parse_capture.sink(),
-        .max_errors = 20,
-    };
-    IREE_ASSERT_OK(loom_text_parse(iree_make_cstring_view(kSource),
-                                   IREE_SV("amdgpu_emit_test.loom"), &context_,
-                                   &block_pool_, &parse_options, out_module));
-    ASSERT_TRUE(parse_capture.diagnostics.empty());
-    ASSERT_NE(*out_module, nullptr);
+    ASSERT_NO_FATAL_FAILURE(
+        ParseSource(iree_make_cstring_view(kSource), out_module));
   }
 
   void ParseKernelForProcessor(const loom_amdgpu_processor_info_t* processor,
@@ -154,19 +204,9 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
         "  low.return\n"
         "}\n";
 
-    DiagnosticCapture parse_capture;
-    loom_text_parse_options_t parse_options = {
-        .diagnostic_sink = parse_capture.sink(),
-        .max_errors = 20,
-    };
-    IREE_ASSERT_OK(
-        loom_text_parse(iree_make_string_view(source.data(), source.size()),
-                        IREE_SV("amdgpu_emit_test.loom"), &context_,
-                        &block_pool_, &parse_options, out_module))
+    ASSERT_NO_FATAL_FAILURE(ParseSource(
+        iree_make_string_view(source.data(), source.size()), out_module))
         << StringViewToString(processor->processor);
-    ASSERT_TRUE(parse_capture.diagnostics.empty())
-        << StringViewToString(processor->processor);
-    ASSERT_NE(*out_module, nullptr) << StringViewToString(processor->processor);
   }
 
   bool IsDescriptorSetLinked(iree_string_view_t descriptor_set_key) const {
@@ -328,6 +368,38 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsEveryLinkedSupportedProcessor) {
     loom_module_free(module);
   }
   EXPECT_GE(linked_supported_count, 1u);
+}
+
+TEST_F(AmdgpuHalKernelLibraryTest, EmitsArgumentMetadataFromLowKernelAbi) {
+  loom_module_t* module = nullptr;
+  ASSERT_NO_FATAL_FAILURE(ParseGfx11KernelWithArguments(&module));
+
+  DiagnosticCapture capture;
+  loom_amdgpu_hal_kernel_library_t library = {};
+  loom_amdgpu_hal_kernel_library_options_t options = {
+      .diagnostic_sink = capture.sink(),
+      .max_errors = 20,
+  };
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+      module, &options, iree_allocator_system(), &emitted, &library));
+
+  EXPECT_TRUE(emitted);
+  EXPECT_TRUE(capture.diagnostics.empty());
+  ASSERT_EQ(library.export_count, 1u);
+  EXPECT_EQ(library.exports[0].binding_count, 1u);
+  EXPECT_EQ(library.exports[0].constant_count, 1u);
+  ASSERT_NE(library.hsaco_data, nullptr);
+  std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
+                    library.hsaco_data_length);
+  EXPECT_NE(hsaco.find("binding0"), std::string::npos);
+  EXPECT_NE(hsaco.find("global_buffer"), std::string::npos);
+  EXPECT_NE(hsaco.find("extent"), std::string::npos);
+  EXPECT_NE(hsaco.find("by_value"), std::string::npos);
+
+  loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                              iree_allocator_system());
+  loom_module_free(module);
 }
 
 TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
