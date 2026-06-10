@@ -18,8 +18,17 @@ set(_LOOM_AMDGPU_SUPPORTED_PROCESSORS
   "gfx942"
   "gfx950"
   "gfx1100"
+  "gfx1101"
+  "gfx1102"
+  "gfx1103"
+  "gfx1150"
+  "gfx1151"
+  "gfx1152"
+  "gfx1153"
   "gfx1200"
+  "gfx1201"
   "gfx1250"
+  "gfx1251"
 )
 
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES
@@ -51,6 +60,13 @@ set(_LOOM_AMDGPU_DESCRIPTOR_SET_DEFINE_descriptor_set_cdna4_core "LOOM_AMDGPU_DE
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_KEY_descriptor_set_rdna3_core "amdgpu.rdna3.core")
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS_descriptor_set_rdna3_core
   "gfx1100"
+  "gfx1101"
+  "gfx1102"
+  "gfx1103"
+  "gfx1150"
+  "gfx1151"
+  "gfx1152"
+  "gfx1153"
 )
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGET_descriptor_set_rdna3_core "rdna3")
 set(_LOOM_AMDGPU_LOW_DESCRIPTOR_HEADER_descriptor_set_rdna3_core "loom/target/arch/amdgpu/descriptors/rdna3_descriptors.h")
@@ -60,6 +76,7 @@ set(_LOOM_AMDGPU_DESCRIPTOR_SET_DEFINE_descriptor_set_rdna3_core "LOOM_AMDGPU_DE
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_KEY_descriptor_set_rdna4_core "amdgpu.rdna4.core")
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS_descriptor_set_rdna4_core
   "gfx1200"
+  "gfx1201"
 )
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGET_descriptor_set_rdna4_core "rdna4")
 set(_LOOM_AMDGPU_LOW_DESCRIPTOR_HEADER_descriptor_set_rdna4_core "loom/target/arch/amdgpu/descriptors/rdna4_descriptors.h")
@@ -69,6 +86,7 @@ set(_LOOM_AMDGPU_DESCRIPTOR_SET_DEFINE_descriptor_set_rdna4_core "LOOM_AMDGPU_DE
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_KEY_descriptor_set_rdna4_gfx125x_core "amdgpu.rdna4.gfx125x.core")
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS_descriptor_set_rdna4_gfx125x_core
   "gfx1250"
+  "gfx1251"
 )
 set(_LOOM_AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGET_descriptor_set_rdna4_gfx125x_core "rdna4_gfx125x")
 set(_LOOM_AMDGPU_LOW_DESCRIPTOR_HEADER_descriptor_set_rdna4_gfx125x_core "loom/target/arch/amdgpu/descriptors/rdna4_gfx125x_descriptors.h")

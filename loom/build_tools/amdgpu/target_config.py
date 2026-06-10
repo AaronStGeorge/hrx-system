@@ -102,17 +102,22 @@ class TargetConfig:
         }
         self._target_records = target_info.sorted_target_record_infos()
         self._validate()
+        self._supported_processor_infos = self._compute_supported_processor_infos()
 
     def _validate(self) -> None:
         exact_targets = set(self._root_target_map.exact_targets())
         code_object_targets = set(self._root_target_map.code_object_targets())
-        self._validate_processor_infos(exact_targets, code_object_targets)
+        descriptor_backed_keys = self._validate_processor_infos(
+            exact_targets, code_object_targets
+        )
         self._validate_target_records(exact_targets)
+        self._validate_descriptor_set_defaults(descriptor_backed_keys)
 
     def _validate_processor_infos(
         self, exact_targets: set[str], code_object_targets: set[str]
-    ) -> None:
+    ) -> set[str]:
         seen_processors: set[str] = set()
+        descriptor_backed_keys: set[str] = set()
         for processor_info in self._target_info.AMDGPU_PROCESSOR_INFOS:
             if processor_info.processor in seen_processors:
                 raise ValueError(
@@ -139,6 +144,7 @@ class TargetConfig:
                     f"Loom AMDGPU processor {processor_info.processor} references "
                     f"unknown descriptor set {processor_info.descriptor_set_key}"
                 )
+            descriptor_backed_keys.add(processor_info.descriptor_set_key)
 
         missing_code_object_processors = sorted(code_object_targets - seen_processors)
         if missing_code_object_processors:
@@ -146,6 +152,7 @@ class TargetConfig:
                 "shared AMDGPU code-object targets missing Loom processor rows: "
                 + ", ".join(missing_code_object_processors)
             )
+        return descriptor_backed_keys
 
     def _validate_target_records(self, exact_targets: set[str]) -> None:
         seen_processors: set[str] = set()
@@ -174,9 +181,40 @@ class TargetConfig:
                     f"unknown descriptor set {processor_info.descriptor_set_key}"
                 )
 
+    def _validate_descriptor_set_defaults(
+        self, descriptor_backed_keys: set[str]
+    ) -> None:
+        target_record_descriptor_set_keys = {
+            self._processor_infos[record.processor].descriptor_set_key
+            for record in self._target_records
+        }
+        missing_defaults = sorted(
+            descriptor_backed_keys - target_record_descriptor_set_keys
+        )
+        if missing_defaults:
+            raise ValueError(
+                "descriptor-backed Loom AMDGPU processors need default target "
+                "records for descriptor sets: " + ", ".join(missing_defaults)
+            )
+
+    def _compute_supported_processor_infos(self) -> list:
+        processor_infos_by_descriptor_set = {
+            key: [] for key in self.descriptor_set_keys
+        }
+        for processor_info in self._target_info.sorted_processor_infos():
+            if not processor_info.descriptor_set_key:
+                continue
+            processor_infos_by_descriptor_set[processor_info.descriptor_set_key].append(
+                processor_info
+            )
+        supported_processor_infos = []
+        for key in self.descriptor_set_keys:
+            supported_processor_infos.extend(processor_infos_by_descriptor_set[key])
+        return supported_processor_infos
+
     @property
     def supported_processors(self) -> list[str]:
-        return [record.processor for record in self._target_records]
+        return [info.processor for info in self._supported_processor_infos]
 
     @property
     def descriptor_set_capabilities(self) -> list[str]:
@@ -193,10 +231,9 @@ class TargetConfig:
 
     def processors_for_descriptor_set(self, key: str) -> list[str]:
         processors: list[str] = []
-        for record in self._target_records:
-            processor_info = self._processor_infos[record.processor]
+        for processor_info in self._supported_processor_infos:
             if processor_info.descriptor_set_key == key:
-                processors.append(record.processor)
+                processors.append(processor_info.processor)
         return processors
 
     def descriptor_set_info(self, key: str):
