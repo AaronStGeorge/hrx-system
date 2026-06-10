@@ -155,6 +155,29 @@ class PresubmitTest(unittest.TestCase):
         command = run_command.call_args.args[0]
         self.assertIn("//build_tools/bazel/test:all", command)
 
+    def test_clang_tidy_infra_runs_plugin_tests(self):
+        with (
+            mock.patch.object(
+                presubmit, "clang_tidy_llvm_available", return_value=True
+            ),
+            mock.patch.object(
+                presubmit, "run_command", return_value=True
+            ) as run_command,
+        ):
+            ok = presubmit.run_clang_tidy(
+                ["build_tools/clang_tidy/iree/IreeTidyModule.cc"],
+                profile="paranoid",
+                lane="bazel",
+                verbose=False,
+            )
+
+        self.assertTrue(ok)
+        plugin_test_command = run_command.call_args_list[0].args[0]
+        self.assertIn("//build_tools/clang_tidy:plugin_smoke_test", plugin_test_command)
+        self.assertIn(
+            "//build_tools/clang_tidy:status_checks_test", plugin_test_command
+        )
+
     def test_default_profile_has_no_static_analysis_provider(self):
         ok = presubmit.run_static_analysis(
             ["runtime/src/iree/base/status.c"],

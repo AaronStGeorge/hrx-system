@@ -18,6 +18,7 @@ find_package(Clang REQUIRED CONFIG)
 add_library(IREEClangTidyPlugin MODULE
   iree/IreeTidyModule.cc
   iree/SmokeCheck.cc
+  iree/StatusChecks.cc
 )
 
 target_include_directories(IREEClangTidyPlugin
@@ -62,8 +63,16 @@ add_test(
   NAME iree-clang-tidy-plugin-smoke
   COMMAND
     Python3::Interpreter
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/run_clang_tidy_plugin_test.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/smoke_test.py"
     "--clang-tidy=${CLANG_TIDY_EXECUTABLE}"
     "--plugin=$<TARGET_FILE:IREEClangTidyPlugin>"
-    "--source=${CMAKE_CURRENT_SOURCE_DIR}/test/smoke.c"
+)
+
+add_test(
+  NAME iree-clang-tidy-status-checks
+  COMMAND
+    Python3::Interpreter
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/status_checks_test.py"
+    "--clang-tidy=${CLANG_TIDY_EXECUTABLE}"
+    "--plugin=$<TARGET_FILE:IREEClangTidyPlugin>"
 )

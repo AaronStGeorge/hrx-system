@@ -55,7 +55,11 @@ bazel build --repo_env=IREE_CLANG_TIDY_LLVM=auto \
 Build files can load `iree_clang_tidy` from `:clang_tidy.bzl` to define
 additional clang-tidy gates over configured C/C++ targets.
 
-The first checked-in check is `iree-smoke`. It only diagnoses the deliberately
-named test function `iree_clang_tidy_smoke_bad`, and exists to prove that the
-plugin builds, loads, registers checks, and emits diagnostics before real IREE
-contracts are added.
+The `iree-smoke` check only diagnoses the deliberately named test function
+`iree_clang_tidy_smoke_bad`, and exists to prove that the plugin builds, loads,
+registers checks, and emits diagnostics.
+
+The first real contract check is `iree-status-discarded`. It diagnoses a call
+returning `iree_status_t` when that call is used as a bare expression statement,
+including `(void)` casts. Returning, assigning, checking in another expression,
+or passing the status to the explicit consumer `iree_status_ignore` is accepted.

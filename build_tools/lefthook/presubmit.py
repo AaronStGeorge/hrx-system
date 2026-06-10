@@ -1146,8 +1146,9 @@ def run_clang_tidy(paths: list[str], profile: str, lane: str, verbose: bool) -> 
                     "--config=presubmit",
                     CLANG_TIDY_REPO_ENV,
                     "//build_tools/clang_tidy:plugin_smoke_test",
+                    "//build_tools/clang_tidy:status_checks_test",
                 ],
-                "clang-tidy plugin smoke test",
+                "clang-tidy plugin tests",
                 verbose,
             )
             and ok
