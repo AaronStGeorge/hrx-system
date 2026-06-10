@@ -140,10 +140,17 @@ loom_cc_library(
 
 loom_generated_cc_library(
     name = "op_registry",
+    srcs = ["op_registry.c"],
     hdrs = ["op_registry.h"],
     args = ["--registry"],
-    generated_src_flags = ["--op-registry-source"],
-    generated_srcs = ["op_registry.c"],
+    generated_src_flags = [
+        "--op-registry-tables",
+        "--op-registry-tables-header",
+    ],
+    generated_srcs = [
+        "op_registry_tables.c",
+        "op_registry_tables.h",
+    ],
     generator = "//loom/py/loom/gen/ops:c_tables_generator",
     deps = [
         ":op_defs",

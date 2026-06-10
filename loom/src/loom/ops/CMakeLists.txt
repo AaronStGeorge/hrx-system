@@ -164,10 +164,14 @@ loom_generated_cc_library(
     op_registry
   GENERATOR
     loom::py::loom::gen::ops::c_tables_generator
-  GENERATED_SRC_FLAGS
-    "--op-registry-source"
-  GENERATED_SRCS
+  SRCS
     "op_registry.c"
+  GENERATED_SRC_FLAGS
+    "--op-registry-tables"
+    "--op-registry-tables-header"
+  GENERATED_SRCS
+    "op_registry_tables.c"
+    "op_registry_tables.h"
   HDRS
     "op_registry.h"
   ARGS

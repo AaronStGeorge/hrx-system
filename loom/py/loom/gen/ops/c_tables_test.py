@@ -75,6 +75,7 @@ from loom.dsl import (
 from loom.gen.ops import model as c_table_model
 from loom.gen.ops.c_builders import generate_builders_c
 from loom.gen.ops.c_enums import TYPE_CONSTRAINT_MAP
+from loom.gen.ops.c_registry import generate_op_registry
 from loom.gen.ops.c_tables import (
     generate_ops_h,
     generate_sharded_tables_c,
@@ -196,6 +197,22 @@ def test_generate_type_registry_rejects_invalid_fact_domain_symbol() -> None:
 
     with _raises_value_error(r"TypeDef 'test\.handle': fact_domain must be a C symbol name"):
         generate_type_registry([type_def])
+
+
+def test_generate_op_registry_emits_registration_tables() -> None:
+    dialect = Dialect(
+        "test",
+        dialect_id=0x01,
+        default_phase=OpPhase.EXECUTABLE,
+    )
+
+    op_registry_h, op_registry_tables_h, op_registry_tables_c = generate_op_registry([(dialect, [])])
+
+    assert "loom_op_registry_register_all_dialects" in op_registry_h
+    assert "loom_op_registry_dialects[]" in op_registry_tables_h
+    assert "loom_test_dialect_vtables" in op_registry_tables_c
+    assert "loom_op_registry_register_dialect" not in op_registry_tables_c
+    assert "iree_make_status" not in op_registry_tables_c
 
 
 def test_generate_dialect_tables_emit_dense_op_semantics() -> None:

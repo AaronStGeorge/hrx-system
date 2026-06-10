@@ -88,11 +88,12 @@ def _production_dialects(model: GenerationModel) -> list[tuple[Any, list[Op]]]:
 
 
 def _generate_registry_contents(model: GenerationModel) -> dict[str, str]:
-    op_reg_h, op_reg_c = c_registry.generate_op_registry(_production_dialects(model))
+    op_reg_h, op_reg_tables_h, op_reg_tables_c = c_registry.generate_op_registry(_production_dialects(model))
     type_reg_h, type_reg_tables_h, type_reg_tables_c = generate_type_registry(model.types)
     return {
         "op_registry.h": op_reg_h,
-        "op_registry.c": op_reg_c,
+        "op_registry_tables.h": op_reg_tables_h,
+        "op_registry_tables.c": op_reg_tables_c,
         "type_registry.h": type_reg_h,
         "type_registry_tables.h": type_reg_tables_h,
         "type_registry_tables.c": type_reg_tables_c,
@@ -133,7 +134,8 @@ def _build_generated_output_paths(model: GenerationModel) -> list[Path]:
     registry_dir = output_root / "ops"
     paths.extend(
         [
-            registry_dir / "op_registry.c",
+            registry_dir / "op_registry_tables.c",
+            registry_dir / "op_registry_tables.h",
             registry_dir / "type_registry_tables.c",
             registry_dir / "type_registry_tables.h",
         ]
@@ -212,7 +214,8 @@ def _main_build_output_mode(parser: argparse.ArgumentParser, args: argparse.Name
 
     outputs = {}
     _set_output(parser, outputs, "op_registry.h", args.op_registry_header)
-    _set_output(parser, outputs, "op_registry.c", args.op_registry_source)
+    _set_output(parser, outputs, "op_registry_tables.h", args.op_registry_tables_header)
+    _set_output(parser, outputs, "op_registry_tables.c", args.op_registry_tables)
     _set_output(parser, outputs, "type_registry.h", args.type_registry_header)
     _set_output(parser, outputs, "type_registry_tables.h", args.type_registry_tables_header)
     _set_output(parser, outputs, "type_registry_tables.c", args.type_registry_tables)
@@ -256,7 +259,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Generated sharded-dialect tables/NAME.c path.",
     )
     parser.add_argument("--op-registry-header", type=Path, help="Generated op_registry.h path.")
-    parser.add_argument("--op-registry-source", type=Path, help="Generated op_registry.c path.")
+    parser.add_argument("--op-registry-tables", type=Path, help="Generated op_registry_tables.c path.")
+    parser.add_argument("--op-registry-tables-header", type=Path, help="Generated op_registry_tables.h path.")
     parser.add_argument("--type-registry-header", type=Path, help="Generated type_registry.h path.")
     parser.add_argument("--type-registry-tables", type=Path, help="Generated type_registry_tables.c path.")
     parser.add_argument("--type-registry-tables-header", type=Path, help="Generated type_registry_tables.h path.")
