@@ -246,6 +246,11 @@ def parse_arguments() -> argparse.Namespace:
         help="Run configured static-analysis providers.",
     )
     parser.add_argument(
+        "--clang-tidy",
+        action="store_true",
+        help="Run only the clang-tidy static-analysis provider.",
+    )
+    parser.add_argument(
         "--print-plan",
         action="store_true",
         help="Print the selected plan before running it.",
@@ -299,7 +304,12 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
         args.all = args.profile == "ci"
         args.changed = not args.all
 
-    if not args.hygiene and not args.tests and not args.static_analysis:
+    if (
+        not args.hygiene
+        and not args.tests
+        and not args.static_analysis
+        and not args.clang_tidy
+    ):
         args.hygiene = True
         if args.profile in ("paranoid", "ci"):
             args.tests = True
@@ -1105,16 +1115,21 @@ def run_semgrep(paths: list[str], profile: str, verbose: bool) -> bool:
     return ok
 
 
-def clang_tidy_bazel_command(targets: list[str]) -> list[str]:
-    return [
+def clang_tidy_bazel_command(targets: list[str], keep_going: bool = False) -> list[str]:
+    command = [
         "bazel",
         "build",
+    ]
+    if keep_going:
+        command.append("--keep_going")
+    command += [
         CLANG_TIDY_REPO_ENV,
         f"--aspects={CLANG_TIDY_ASPECT}",
         f"--output_groups={CLANG_TIDY_OUTPUT_GROUP}",
         "--",
         *targets,
     ]
+    return command
 
 
 def run_clang_tidy(paths: list[str], profile: str, lane: str, verbose: bool) -> bool:
@@ -1179,7 +1194,10 @@ def run_clang_tidy(paths: list[str], profile: str, lane: str, verbose: bool) -> 
     if package_targets:
         ok = (
             run_command(
-                clang_tidy_bazel_command(package_targets),
+                clang_tidy_bazel_command(
+                    package_targets,
+                    keep_going=profile == "ci",
+                ),
                 "clang-tidy Bazel actions",
                 verbose,
             )
@@ -1251,6 +1269,8 @@ def print_plan(
         scopes.append("tests")
     if args.static_analysis:
         scopes.append("static-analysis")
+    if args.clang_tidy:
+        scopes.append("clang-tidy")
     print("presubmit plan:")
     print(f"  lane: {args.lane}")
     print(f"  profile: {args.profile}")
@@ -1362,6 +1382,14 @@ def run_presubmit(
         print_section("Static Analysis")
         ok = (
             run_static_analysis(
+                paths, profile=args.profile, lane=args.lane, verbose=args.verbose
+            )
+            and ok
+        )
+    if args.clang_tidy:
+        print_section("clang-tidy")
+        ok = (
+            run_clang_tidy(
                 paths, profile=args.profile, lane=args.lane, verbose=args.verbose
             )
             and ok

@@ -397,6 +397,72 @@ class CliTest(unittest.TestCase):
         self.assertIn("//runtime/...", description)
         self.assertIn("-//runtime/src/iree/hal/drivers/cuda/...", description)
 
+    def test_bazel_clang_tidy_target_runs_aspect_directly(self):
+        args = cli.parse_arguments(
+            [
+                "bazel",
+                "clang-tidy",
+                "//runtime/src/iree/vm:all",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("# bazel clang-tidy", description)
+        self.assertIn("bazel build", description)
+        self.assertIn(
+            "--aspects=//build_tools/clang_tidy:clang_tidy.bzl%collect_clang_tidy_aspect",
+            description,
+        )
+        self.assertIn("--output_groups=iree_clang_tidy_reports", description)
+        self.assertIn("//runtime/src/iree/vm:all", description)
+        self.assertNotIn("build_tools/lefthook/presubmit.py", description)
+        self.assertNotIn("--keep_going", description)
+
+    def test_bazel_clang_tidy_ci_target_keeps_going(self):
+        args = cli.parse_arguments(
+            [
+                "bazel",
+                "clang-tidy",
+                "--profile",
+                "ci",
+                "//runtime/src/iree/vm:all",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--keep_going", description)
+        self.assertIn("//runtime/src/iree/vm:all", description)
+
+    def test_bazel_clang_tidy_git_scope_uses_presubmit_provider(self):
+        args = cli.parse_arguments(
+            ["bazel", "clang-tidy", "--base", "origin/main"]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("build_tools/lefthook/presubmit.py", description)
+        self.assertIn("--clang-tidy", description)
+        self.assertIn("--base origin/main", description)
+        self.assertIn("--profile paranoid", description)
+        self.assertNotIn("--static-analysis", description)
+
+    def test_bazel_clang_tidy_explicit_paths_use_presubmit_provider(self):
+        args = cli.parse_arguments(
+            ["bazel", "clang-tidy", "runtime/src/iree/vm/native_module.c"]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("build_tools/lefthook/presubmit.py", description)
+        self.assertIn("--clang-tidy", description)
+        self.assertIn("runtime/src/iree/vm/native_module.c", description)
+
     def test_cmake_compile_commands_prints_configured_database_path(self):
         args = cli.parse_arguments(
             [
@@ -870,6 +936,7 @@ class CliTest(unittest.TestCase):
         self.assertIn("python dev.py bazel precommit", output)
         self.assertIn("python dev.py bazel run", output)
         self.assertIn("python dev.py bazel compile-commands", output)
+        self.assertIn("python dev.py bazel clang-tidy", output)
         self.assertIn("python dev.py cmake precommit", output)
         self.assertIn("python dev.py cmake run", output)
         self.assertIn("python dev.py cmake compile-commands", output)
@@ -900,6 +967,14 @@ class CliTest(unittest.TestCase):
         self.assertIn("The default profile is ci", output)
         self.assertIn("full-tree", output)
         self.assertIn("precommit", output)
+
+    def test_bazel_clang_tidy_help_explains_modes(self):
+        output = self.parse_help(["bazel", "clang-tidy", "--help"])
+
+        self.assertIn("Bazel target patterns", output)
+        self.assertIn("aspect directly", output)
+        self.assertIn("--keep_going", output)
+        self.assertIn("--base", output)
 
 
 if __name__ == "__main__":

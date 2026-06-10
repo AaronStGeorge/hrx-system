@@ -435,6 +435,24 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         or getattr(args, "commit", False)
     ):
         parser.error("explicit precommit paths cannot be combined with input mode")
+    clang_tidy_inputs = getattr(args, "clang_tidy_inputs", None)
+    if clang_tidy_inputs and (
+        getattr(args, "all_files", False)
+        or getattr(args, "base", None) is not None
+        or getattr(args, "changed", False)
+        or getattr(args, "commit", False)
+        or getattr(args, "since", None) is not None
+        or getattr(args, "staged", False)
+    ):
+        parser.error("explicit clang-tidy inputs cannot be combined with input mode")
+    if clang_tidy_inputs:
+        has_target_pattern = any(
+            is_bazel_target_pattern(input_arg) for input_arg in clang_tidy_inputs
+        )
+        if has_target_pattern and not all(
+            is_bazel_target_pattern(input_arg) for input_arg in clang_tidy_inputs
+        ):
+            parser.error("clang-tidy inputs must be all Bazel targets or all paths")
     if args.agent_md:
         lane = getattr(args, "lane", None)
         print_agent_md((lane,) if lane else LANES, None)
@@ -607,6 +625,65 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
             lane=lane,
             backend_command="compile-commands",
         )
+
+        command_help = help_text.lane_command_help(lane, "clang-tidy")
+        command_parser = add_subparser(
+            lane_subparsers,
+            "clang-tidy",
+            command_help=command_help,
+            help="Run Bazel-backed clang-tidy checks.",
+        )
+        add_common_options(command_parser)
+        add_tool_environment_options(command_parser)
+        add_profile_option(
+            command_parser,
+            default=presubmit.precommit_default_profile(lane),
+            command="clang-tidy",
+        )
+        input_group = command_parser.add_mutually_exclusive_group()
+        add_argument(
+            input_group,
+            "--all",
+            dest="all_files",
+            action="store_true",
+            help="Check all tracked files through the clang-tidy provider.",
+        )
+        add_argument(
+            input_group,
+            "--base",
+            metavar="GIT_REF",
+            help="Check branch changes since GIT_REF plus local changes.",
+        )
+        add_argument(
+            input_group,
+            "--changed",
+            action="store_true",
+            help="Check local staged, unstaged, and untracked files.",
+        )
+        add_argument(
+            input_group,
+            "--commit",
+            action="store_true",
+            help="Check the Git hook commit scope.",
+        )
+        add_argument(
+            input_group,
+            "--since",
+            metavar="GIT_REF",
+            help="Check tracked files changed since GIT_REF.",
+        )
+        add_argument(
+            input_group,
+            "--staged",
+            action="store_true",
+            help="Check only files staged for commit.",
+        )
+        command_parser.add_argument(
+            "clang_tidy_inputs",
+            nargs="*",
+            help="Bazel target patterns or repo-relative paths. Defaults to --changed.",
+        )
+        command_parser.set_defaults(handler=handle_bazel_clang_tidy, lane=lane)
 
     if lane == "cmake":
         command_help = help_text.lane_command_help(lane, "compile-commands")
@@ -894,6 +971,39 @@ def handle_bazel_compile_commands(args: argparse.Namespace) -> CommandPlan:
                 env=tool_env.path_env(),
             )
         ]
+    )
+
+
+def handle_bazel_clang_tidy(args: argparse.Namespace) -> CommandPlan:
+    tool_env = existing_or_system_environment(args)
+    inputs = list(args.clang_tidy_inputs)
+    if inputs and all(is_bazel_target_pattern(input_arg) for input_arg in inputs):
+        command = bazel_dev.clang_tidy_build_argv(
+            tool_env.tool("bazel"),
+            inputs,
+            keep_going=args.profile == "ci",
+        )
+        return CommandPlan(
+            [
+                ExecCommandStep(
+                    command,
+                    cwd=REPO_ROOT,
+                    env=tool_env.path_env(),
+                    label="bazel clang-tidy",
+                )
+            ]
+        )
+    return presubmit.clang_tidy_plan(
+        args.lane,
+        tool_env,
+        args.profile,
+        all_files=args.all_files,
+        base=args.base,
+        commit=args.commit,
+        since=args.since,
+        staged=args.staged,
+        paths=inputs,
+        verbose=args.verbose,
     )
 
 

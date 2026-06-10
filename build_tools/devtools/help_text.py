@@ -28,6 +28,7 @@ ROOT_COMMAND_EPILOG = """Common build-system commands:
   python dev.py bazel try
   python dev.py bazel fuzz
   python dev.py bazel compile-commands
+  python dev.py bazel clang-tidy
 
   python dev.py cmake configure
   python dev.py cmake build
@@ -240,6 +241,22 @@ compile_commands.json at the repository root.""",
 CMake writes compile_commands.json during configure. This command resolves the
 configured build directory, prints that file path by default, and copies it to
 the requested output path when -o/--output is supplied.""",
+        )
+    if command == "clang-tidy" and lane == "bazel":
+        return CommandHelp(
+            description="Run Bazel-backed clang-tidy checks.",
+            epilog="""Examples:
+  python dev.py bazel clang-tidy
+  python dev.py bazel clang-tidy --base origin/main
+  python dev.py bazel clang-tidy --all --profile ci
+  python dev.py bazel clang-tidy runtime/src/iree/vm/native_module.c
+  python dev.py bazel clang-tidy //runtime/src/iree/vm:all
+
+With no input option, this checks local staged, unstaged, and untracked files.
+Repo-relative paths and git scopes use the presubmit clang-tidy provider, which
+maps files to owning Bazel packages. Bazel target patterns run the clang-tidy
+aspect directly. The ci profile adds Bazel --keep_going so one run reports the
+full failure set.""",
         )
     if command == "presubmit":
         return CommandHelp(
@@ -643,6 +660,25 @@ With no explicit targets, this covers `//runtime/...`, `//libhrx/...`, and
 the Bazel build event stream to find generated fragments, and merges them into
 the requested output path. Use `-k/--keep` to inspect the captured build event
 stream."""
+
+    if command == "clang-tidy":
+        return """## python dev.py bazel clang-tidy
+
+Run Bazel-backed clang-tidy checks from the repository root. Use git scopes or
+repo-relative paths while iterating, and explicit Bazel targets when you want to
+exercise one package or subtree directly.
+
+```bash
+python dev.py bazel clang-tidy
+python dev.py bazel clang-tidy --base origin/main
+python dev.py bazel clang-tidy --all --profile ci
+python dev.py bazel clang-tidy runtime/src/iree/vm/native_module.c
+python dev.py bazel clang-tidy //runtime/src/iree/vm:all
+```
+
+Git scopes and repo-relative paths route through the presubmit provider so the
+tool can map files to owning Bazel packages. Explicit Bazel targets run the
+clang-tidy aspect directly. The ci profile uses Bazel `--keep_going`."""
 
     if command == "run":
         return """## iree-bazel-run

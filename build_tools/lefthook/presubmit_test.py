@@ -75,10 +75,19 @@ class PresubmitTest(unittest.TestCase):
         command = presubmit.clang_tidy_bazel_command(["//runtime/src/iree/base:all"])
 
         self.assertEqual(command[0:2], ["bazel", "build"])
+        self.assertNotIn("--keep_going", command)
         self.assertIn(presubmit.CLANG_TIDY_REPO_ENV, command)
         self.assertIn(f"--aspects={presubmit.CLANG_TIDY_ASPECT}", command)
         self.assertIn(f"--output_groups={presubmit.CLANG_TIDY_OUTPUT_GROUP}", command)
         self.assertEqual(command[-1], "//runtime/src/iree/base:all")
+
+    def test_clang_tidy_bazel_command_can_keep_going(self):
+        command = presubmit.clang_tidy_bazel_command(
+            ["//runtime/src/iree/base:all"],
+            keep_going=True,
+        )
+
+        self.assertEqual(command[0:3], ["bazel", "build", "--keep_going"])
 
     def test_bazel_package_target_for_path_finds_nearest_package(self):
         self.assertEqual(
@@ -153,6 +162,31 @@ class PresubmitTest(unittest.TestCase):
 
         self.assertTrue(ok)
         command = run_command.call_args.args[0]
+        self.assertNotIn("--keep_going", command)
+        self.assertIn("//build_tools/bazel/test:all", command)
+
+    def test_clang_tidy_ci_runs_bazel_packages_keep_going(self):
+        with (
+            mock.patch.object(
+                presubmit, "CLANG_TIDY_PATH_PREFIXES", ("build_tools/bazel/test/",)
+            ),
+            mock.patch.object(
+                presubmit, "clang_tidy_llvm_available", return_value=True
+            ),
+            mock.patch.object(
+                presubmit, "run_command", return_value=True
+            ) as run_command,
+        ):
+            ok = presubmit.run_clang_tidy(
+                ["build_tools/bazel/test/cc_benchmark_smoke_test_fixture.c"],
+                profile="ci",
+                lane="bazel",
+                verbose=False,
+            )
+
+        self.assertTrue(ok)
+        command = run_command.call_args.args[0]
+        self.assertIn("--keep_going", command)
         self.assertIn("//build_tools/bazel/test:all", command)
 
     def test_clang_tidy_infra_runs_plugin_tests(self):

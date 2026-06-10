@@ -188,6 +188,62 @@ def precommit_plan(
     return plan
 
 
+def clang_tidy_plan(
+    lane: str,
+    tool_env: ToolEnvironment,
+    profile: str,
+    all_files: bool = False,
+    base: str | None = None,
+    commit: bool = False,
+    since: str | None = None,
+    staged: bool = False,
+    paths: list[str] | None = None,
+    verbose: bool = False,
+) -> CommandPlan:
+    if lane != "bazel":
+        raise ValueError("clang-tidy currently runs only in the Bazel lane")
+
+    input_args: list[str] = []
+    if paths:
+        input_args += paths
+    elif all_files:
+        input_args.append("--all")
+    elif base is not None:
+        input_args += ["--base", base]
+    elif commit:
+        input_args.append("--commit")
+    elif since is not None:
+        input_args += ["--since", since]
+    elif staged:
+        input_args.append("--staged")
+    else:
+        input_args.append("--changed")
+
+    command = [
+        tool_env.python,
+        str(REPO_ROOT / "build_tools/lefthook/presubmit.py"),
+        "--lane",
+        lane,
+        "--check",
+        *input_args,
+        "--profile",
+        profile,
+        "--clang-tidy",
+    ]
+    if verbose:
+        command.append("--verbose")
+    return CommandPlan(
+        [
+            CommandStep(
+                command,
+                cwd=REPO_ROOT,
+                env=tool_env.path_env(),
+                label="run Bazel clang-tidy",
+            )
+        ]
+    )
+
+
 def fix_plan(tool_env: ToolEnvironment, verbose: bool = False) -> CommandPlan:
     env = tool_env.path_env()
     command = [

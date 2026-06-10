@@ -35,6 +35,11 @@ DEFAULT_COMPILE_COMMANDS_TARGETS = ("//runtime/...", "//libhrx/...", "//loom/...
 COMPILE_COMMANDS_ASPECT = (
     "//build_tools/bazel:compile_commands.bzl%collect_compile_commands_aspect"
 )
+CLANG_TIDY_ASPECT = (
+    "//build_tools/clang_tidy:clang_tidy.bzl%collect_clang_tidy_aspect"
+)
+CLANG_TIDY_OUTPUT_GROUP = "iree_clang_tidy_reports"
+CLANG_TIDY_REPO_ENV = "--repo_env=IREE_CLANG_TIDY_LLVM=auto"
 HEADER_ROOTS: tuple[tuple[str, Path], ...] = (
     ("iree/", REPO_ROOT / "runtime/src"),
     ("loom/", REPO_ROOT / "loom/src"),
@@ -261,6 +266,25 @@ def forwarded_tool_args(arguments: list[str]) -> list[str]:
     if arguments and arguments[0] == "--":
         return arguments[1:]
     return arguments
+
+
+def clang_tidy_build_argv(
+    bazel: str,
+    targets: list[str],
+    *,
+    keep_going: bool = False,
+) -> list[str]:
+    argv = [bazel, "build"]
+    if keep_going:
+        argv.append("--keep_going")
+    argv += [
+        CLANG_TIDY_REPO_ENV,
+        f"--aspects={CLANG_TIDY_ASPECT}",
+        f"--output_groups={CLANG_TIDY_OUTPUT_GROUP}",
+        "--",
+        *targets,
+    ]
+    return argv
 
 
 def is_negative_bazel_target_pattern(arg: str) -> bool:
