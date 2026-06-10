@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 typedef int iree_status_t;
+typedef int iree_zone_id_t;
 
 #define IREE_STATUS_OK 0
 
@@ -123,6 +124,61 @@ iree_status_t iree_clang_tidy_trace_zone_branch_local_zone(int flag) {
 iree_status_t iree_clang_tidy_trace_zone_return_and_end_if_error(void) {
   IREE_TRACE_ZONE_BEGIN(z0);
   IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, iree_clang_tidy_trace_status_source());
+  IREE_TRACE_ZONE_END(z0);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_unmatched_end(void) {
+  IREE_TRACE_ZONE_BEGIN(unmatched_end_zone);
+  IREE_TRACE_ZONE_END(unmatched_end_zone);
+  IREE_TRACE_ZONE_END(unmatched_end_zone);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_mismatched_end(void) {
+  IREE_TRACE_ZONE_BEGIN(mismatch_outer_zone);
+  IREE_TRACE_ZONE_BEGIN(mismatch_inner_zone);
+  IREE_TRACE_ZONE_END(mismatch_outer_zone);
+  IREE_TRACE_ZONE_END(mismatch_inner_zone);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_mismatched_return_and_end(void) {
+  IREE_TRACE_ZONE_BEGIN(return_helper_wrong_zone);
+  IREE_TRACE_ZONE_BEGIN(return_helper_active_zone);
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(return_helper_wrong_zone,
+                                    iree_clang_tidy_trace_status_source());
+  IREE_TRACE_ZONE_END(return_helper_active_zone);
+  IREE_TRACE_ZONE_END(return_helper_wrong_zone);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_dynamic_end(iree_zone_id_t zone_id) {
+  IREE_TRACE_ZONE_END(zone_id);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_dynamic_return_helper(void) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  iree_zone_id_t zone_id = z0;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(zone_id,
+                                    iree_clang_tidy_trace_status_source());
+  IREE_TRACE_ZONE_END(z0);
+  return IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_trace_zone_switch_return_balanced(int selector) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  switch (selector) {
+    case 0:
+      IREE_TRACE_ZONE_END(z0);
+      return iree_clang_tidy_trace_status_source();
+    case 1:
+      IREE_TRACE_ZONE_END(z0);
+      return iree_clang_tidy_trace_status_source();
+    default:
+      break;
+  }
   IREE_TRACE_ZONE_END(z0);
   return IREE_STATUS_OK;
 }

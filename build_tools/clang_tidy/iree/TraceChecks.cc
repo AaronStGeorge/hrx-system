@@ -38,8 +38,16 @@ struct TraceZone {
 
 struct TraceState {
   llvm::SmallVector<TraceZone, 8> Zones;
+  llvm::SmallVector<std::string, 8> KnownZoneIds;
   bool Terminal = false;
   bool Unknown = false;
+  bool SuppressEndDiagnostics = false;
+};
+
+enum class EndZoneResult {
+  kValid,
+  kInvalid,
+  kDynamic,
 };
 
 std::string Trim(std::string Text) {
@@ -53,6 +61,7 @@ TraceMacroKind TraceMacroKindForName(StringRef Name) {
       Name == "IREE_TRACE_ZONE_BEGIN_NAMED" ||
       Name == "IREE_TRACE_ZONE_BEGIN_NAMED_DYNAMIC" ||
       Name == "IREE_TRACE_ZONE_BEGIN_EXTERNAL" ||
+      Name == "IREE_HAL_EXECUTABLE_LIBRARY_CALL_TRACE_ZONE_BEGIN" ||
       Name == "HRX_TRACE_ZONE_BEGIN") {
     return TraceMacroKind::kBegin;
   }
@@ -262,6 +271,23 @@ class TraceZoneAnalyzer {
     return State.Zones.empty() ? nullptr : &State.Zones.back();
   }
 
+  bool isKnownZoneId(const TraceState& State, StringRef ZoneId) const {
+    for (StringRef KnownZoneId : State.KnownZoneIds) {
+      if (KnownZoneId == ZoneId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void addKnownZoneId(TraceState& State, StringRef ZoneId) {
+    if (ZoneId.empty() || ZoneId == "<unknown>" ||
+        isKnownZoneId(State, ZoneId)) {
+      return;
+    }
+    State.KnownZoneIds.push_back(ZoneId.str());
+  }
+
   void diagnoseActiveReturn(SourceLocation Location, const TraceState& State,
                             StringRef ReturnKind) {
     const TraceZone* Zone = activeZone(State);
@@ -281,27 +307,94 @@ class TraceZoneAnalyzer {
     }
   }
 
+  void diagnoseUnmatchedEnd(SourceLocation Location, const TraceMacro& Macro) {
+    Check_.diag(Location, "%0 ends trace zone %1 but no trace zone is active")
+        << Macro.Name << Macro.ZoneId;
+  }
+
+  void diagnoseMismatchedEnd(SourceLocation Location, const TraceState& State,
+                             const TraceMacro& Macro) {
+    const TraceZone* Zone = activeZone(State);
+    if (!Zone || State.Unknown) {
+      return;
+    }
+    if (Zone->BeginLocation.isValid()) {
+      Check_.diag(Location,
+                  "%0 ends trace zone %1 but the active trace zone is %2")
+          << Macro.Name << Macro.ZoneId << Zone->Id << Zone->BeginLocation;
+    } else {
+      Check_.diag(Location,
+                  "%0 ends trace zone %1 but the active trace zone is %2")
+          << Macro.Name << Macro.ZoneId << Zone->Id;
+    }
+  }
+
   void beginZone(const TraceMacro& Macro, SourceLocation Location,
                  TraceState& State) {
     std::string ZoneId = Macro.ZoneId.empty() ? "<unknown>" : Macro.ZoneId;
+    addKnownZoneId(State, ZoneId);
     State.Zones.push_back(TraceZone{std::move(ZoneId), Location});
   }
 
-  void endZone(const TraceMacro& Macro, TraceState& State) {
-    if (State.Zones.empty() || State.Unknown) {
-      return;
+  EndZoneResult validateEndZone(const TraceMacro& Macro,
+                                SourceLocation Location,
+                                const TraceState& State) {
+    if (State.Unknown) {
+      return EndZoneResult::kDynamic;
+    }
+    if (State.Zones.empty()) {
+      if (Macro.ZoneId.empty() || !isKnownZoneId(State, Macro.ZoneId)) {
+        return EndZoneResult::kDynamic;
+      }
+      if (!State.SuppressEndDiagnostics) {
+        diagnoseUnmatchedEnd(Location, Macro);
+      }
+      return EndZoneResult::kInvalid;
     }
     if (Macro.ZoneId.empty()) {
-      State.Zones.pop_back();
-      return;
+      return EndZoneResult::kValid;
     }
     const TraceZone& Zone = State.Zones.back();
-    if (Zone.Id != "<unknown>" && Zone.Id != Macro.ZoneId) {
-      State.Unknown = true;
-      State.Zones.clear();
+    if (Zone.Id == "<unknown>" || Zone.Id == Macro.ZoneId) {
+      return EndZoneResult::kValid;
+    }
+    if (!isKnownZoneId(State, Macro.ZoneId)) {
+      return EndZoneResult::kDynamic;
+    }
+    if (!State.SuppressEndDiagnostics) {
+      diagnoseMismatchedEnd(Location, State, Macro);
+    }
+    return EndZoneResult::kInvalid;
+  }
+
+  void markUnknown(TraceState& State) {
+    State.Unknown = true;
+    State.Zones.clear();
+  }
+
+  void endZone(const TraceMacro& Macro, SourceLocation Location,
+               TraceState& State) {
+    if (State.Unknown) {
+      return;
+    }
+    EndZoneResult Result = validateEndZone(Macro, Location, State);
+    if (Result == EndZoneResult::kInvalid ||
+        Result == EndZoneResult::kDynamic) {
+      markUnknown(State);
       return;
     }
     State.Zones.pop_back();
+  }
+
+  void validateEndZoneWithoutPop(const TraceMacro& Macro,
+                                 SourceLocation Location, TraceState& State) {
+    if (State.Unknown) {
+      return;
+    }
+    EndZoneResult Result = validateEndZone(Macro, Location, State);
+    if (Result == EndZoneResult::kInvalid) {
+      markUnknown(State);
+    }
   }
 
   bool sameZones(const TraceState& Lhs, const TraceState& Rhs) const {
@@ -360,7 +453,7 @@ class TraceZoneAnalyzer {
         beginZone(Macro, Statement->getBeginLoc(), State);
         return true;
       case TraceMacroKind::kEnd:
-        endZone(Macro, State);
+        endZone(Macro, Statement->getBeginLoc(), State);
         return true;
       case TraceMacroKind::kReturn:
         if (!State.Zones.empty()) {
@@ -377,11 +470,10 @@ class TraceZoneAnalyzer {
       case TraceMacroKind::kReturnAndEndIfError:
         // The macro is a conditional failure path: it ends the zone only on
         // failure and falls through with the zone still active on success.
+        validateEndZoneWithoutPop(Macro, Statement->getBeginLoc(), State);
         return true;
       case TraceMacroKind::kReturnAndEnd:
-        if (!State.Zones.empty()) {
-          endZone(Macro, State);
-        }
+        endZone(Macro, Statement->getBeginLoc(), State);
         State.Terminal = true;
         return true;
     }
@@ -467,6 +559,7 @@ class TraceZoneAnalyzer {
 
   void analyzeLoopLike(const Stmt* Body, TraceState& State) {
     TraceState BodyState = State;
+    BodyState.SuppressEndDiagnostics = true;
     analyzeStatement(Body, BodyState);
     // A loop or switch body may execute zero times or leave through break, so
     // the outer state remains the entry state. Diagnostics inside the body

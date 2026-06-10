@@ -214,9 +214,17 @@ expressions, `IREE_RETURN_AND_END_ZONE_IF_ERROR` for conditional status helper
 returns, or an explicit `IREE_TRACE_ZONE_END` immediately before returning a
 status that is already carried in a local variable.
 
+End macros using statically named zones are checked against the active zone
+stack. Ending a zone after this function has already ended it, ending an outer
+zone while an inner zone is active, or passing the wrong static zone ID to a
+return-and-end helper is diagnosed. Dynamic zone ID carriers such as
+`iree_zone_id_t zone_id` are treated conservatively because they often model an
+explicit ownership transfer across helper boundaries.
+
 The check uses the preprocessor's macro expansion stream so disabled tracing,
 HRX wrapper macros, and multi-line helper invocations are modeled by the macro
 the developer wrote rather than by the helper's implementation detail. Return
 statements generated inside macro bodies are not diagnosed independently; known
-return macros are checked at the macro expansion site. Ambiguous block-local
-zone balance is handled conservatively to keep this check high signal.
+return macros are checked at the macro expansion site. Ambiguous block-local,
+loop, and switch zone balance is handled conservatively to keep this check high
+signal.
