@@ -153,6 +153,10 @@ iree_status_t iree_clang_tidy_trace_zone_mismatched_return_and_end(void) {
   return IREE_STATUS_OK;
 }
 
+void iree_clang_tidy_trace_zone_missing_end(void) {
+  IREE_TRACE_ZONE_BEGIN(missing_end_zone);
+}
+
 iree_status_t iree_clang_tidy_trace_zone_dynamic_end(iree_zone_id_t zone_id) {
   IREE_TRACE_ZONE_END(zone_id);
   return IREE_STATUS_OK;
@@ -181,6 +185,14 @@ iree_status_t iree_clang_tidy_trace_zone_switch_return_balanced(int selector) {
   }
   IREE_TRACE_ZONE_END(z0);
   return IREE_STATUS_OK;
+}
+
+int iree_clang_tidy_trace_zone_infinite_loop_return_balanced(void) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  while (1) {
+    IREE_TRACE_ZONE_END(z0);
+    return 1;
+  }
 }
 
 iree_status_t iree_clang_tidy_trace_zone_return_and_end(void) {

@@ -153,7 +153,14 @@ class TraceZoneAnalyzer {
       return;
     }
     TraceState State;
-    analyzeStatement(Body, State);
+    if (const auto* Compound = dyn_cast<CompoundStmt>(Body)) {
+      analyzeFunctionCompound(Compound, State);
+    } else {
+      analyzeStatement(Body, State);
+    }
+    if (!State.Terminal && !State.Zones.empty()) {
+      diagnoseActiveFunctionEnd(Body->getEndLoc(), State);
+    }
   }
 
  private:
@@ -304,6 +311,25 @@ class TraceZoneAnalyzer {
                   "%0 exits with active trace zone %1; end the zone or use a "
                   "trace-zone return helper")
           << ReturnKind << Zone->Id;
+    }
+  }
+
+  void diagnoseActiveFunctionEnd(SourceLocation Location,
+                                 const TraceState& State) {
+    const TraceZone* Zone = activeZone(State);
+    if (!Zone || State.Unknown) {
+      return;
+    }
+    if (Zone->BeginLocation.isValid()) {
+      Check_.diag(Location,
+                  "function exits with active trace zone %0; end the zone "
+                  "before the function exits")
+          << Zone->Id << Zone->BeginLocation;
+    } else {
+      Check_.diag(Location,
+                  "function exits with active trace zone %0; end the zone "
+                  "before the function exits")
+          << Zone->Id;
     }
   }
 
@@ -513,19 +539,23 @@ class TraceZoneAnalyzer {
       return;
     }
     if (const auto* For = dyn_cast<ForStmt>(Statement)) {
-      analyzeLoopLike(For->getBody(), State);
+      analyzeLoopLike(For->getBody(), State,
+                      isInfiniteLoopCondition(For->getCond()));
       return;
     }
     if (const auto* While = dyn_cast<WhileStmt>(Statement)) {
-      analyzeLoopLike(While->getBody(), State);
+      analyzeLoopLike(While->getBody(), State,
+                      isInfiniteLoopCondition(While->getCond()));
       return;
     }
     if (const auto* Do = dyn_cast<DoStmt>(Statement)) {
-      analyzeLoopLike(Do->getBody(), State);
+      analyzeLoopLike(Do->getBody(), State,
+                      isInfiniteLoopCondition(Do->getCond()));
       return;
     }
     if (const auto* Switch = dyn_cast<SwitchStmt>(Statement)) {
-      analyzeLoopLike(Switch->getBody(), State);
+      analyzeLoopLike(Switch->getBody(), State,
+                      /*LoopCannotFallThrough=*/false);
       return;
     }
     for (const Stmt* Child : Statement->children()) {
@@ -544,6 +574,16 @@ class TraceZoneAnalyzer {
     dropBlockLocalZones(EntryState, State);
   }
 
+  void analyzeFunctionCompound(const CompoundStmt* Compound,
+                               TraceState& State) {
+    for (const Stmt* Child : Compound->body()) {
+      if (State.Terminal) {
+        break;
+      }
+      analyzeStatement(Child, State);
+    }
+  }
+
   void analyzeIf(const IfStmt* If, TraceState& State) {
     TraceState EntryState = State;
     TraceState ThenState = State;
@@ -557,13 +597,44 @@ class TraceZoneAnalyzer {
     State = mergeStates(EntryState, ThenState, ElseState);
   }
 
-  void analyzeLoopLike(const Stmt* Body, TraceState& State) {
+  bool isInfiniteLoopCondition(const Expr* Condition) const {
+    if (!Condition) {
+      return true;
+    }
+    Expr::EvalResult Result;
+    if (!Condition->EvaluateAsInt(Result, Context_)) {
+      return false;
+    }
+    return Result.Val.getInt().getBoolValue();
+  }
+
+  bool containsEscapingLoopControl(const Stmt* Statement) const {
+    if (!Statement) {
+      return false;
+    }
+    if (isa<BreakStmt>(Statement) || isa<GotoStmt>(Statement) ||
+        isa<IndirectGotoStmt>(Statement)) {
+      return true;
+    }
+    for (const Stmt* Child : Statement->children()) {
+      if (containsEscapingLoopControl(Child)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void analyzeLoopLike(const Stmt* Body, TraceState& State,
+                       bool LoopCannotFallThrough) {
     TraceState BodyState = State;
     BodyState.SuppressEndDiagnostics = true;
     analyzeStatement(Body, BodyState);
     // A loop or switch body may execute zero times or leave through break, so
     // the outer state remains the entry state. Diagnostics inside the body
     // still report active-zone status returns.
+    if (LoopCannotFallThrough && !containsEscapingLoopControl(Body)) {
+      State.Terminal = true;
+    }
   }
 
   TraceZoneCheck& Check_;

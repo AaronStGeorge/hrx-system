@@ -209,6 +209,10 @@ IREE_TRACE_ZONE_BEGIN(z0);
 return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "bad input");
 ```
 
+Falling off the end of a function with an active zone is diagnosed for the same
+reason: a zone is a scoped C resource and the function must close it on every
+terminal path.
+
 The reliable shapes are to use `IREE_RETURN_AND_END_ZONE` for immediate return
 expressions, `IREE_RETURN_AND_END_ZONE_IF_ERROR` for conditional status helper
 returns, or an explicit `IREE_TRACE_ZONE_END` immediately before returning a

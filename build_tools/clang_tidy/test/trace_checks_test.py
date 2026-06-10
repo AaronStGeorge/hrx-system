@@ -33,6 +33,7 @@ class TraceChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "mismatch_inner_zone",
                 "return_helper_wrong_zone",
                 "return_helper_active_zone",
+                "missing_end_zone",
                 "[iree-trace-zone-balance]",
             ],
         )
@@ -49,6 +50,7 @@ class TraceChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "iree_clang_tidy_trace_zone_dynamic_end",
                 "iree_clang_tidy_trace_zone_dynamic_return_helper",
                 "iree_clang_tidy_trace_zone_switch_return_balanced",
+                "iree_clang_tidy_trace_zone_infinite_loop_return_balanced",
                 "iree_clang_tidy_trace_zone_return_and_end",
                 "iree_clang_tidy_trace_zone_hrx_return_and_end_if_error",
             ],
