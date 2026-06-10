@@ -43,6 +43,18 @@ bazel test --repo_env=IREE_CLANG_TIDY_LLVM=auto \
 Those targets are tagged `manual` so normal wildcard builds stay independent of
 the local LLVM installation.
 
+The Bazel action runner uses the same configured C/C++ compile arguments that
+feed `dev.py bazel compile-commands`, builds one cacheable action per source
+file, and writes a per-source report:
+
+```bash
+bazel build --repo_env=IREE_CLANG_TIDY_LLVM=auto \
+  //build_tools/clang_tidy:action_smoke
+```
+
+Build files can load `iree_clang_tidy` from `:clang_tidy.bzl` to define
+additional clang-tidy gates over configured C/C++ targets.
+
 The first checked-in check is `iree-smoke`. It only diagnoses the deliberately
 named test function `iree_clang_tidy_smoke_bad`, and exists to prove that the
 plugin builds, loads, registers checks, and emits diagnostics before real IREE

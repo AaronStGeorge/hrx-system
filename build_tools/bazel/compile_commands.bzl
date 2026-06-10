@@ -4,16 +4,17 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Repository-owned C/C++ compile command extraction.
+"""Repository-owned C/C++ compile command extraction."""
 
-This file owns build-system introspection shared by clang tooling, IDE support,
-and source-analysis tools. It is intentionally independent of clang-tidy.
-"""
-
-load("@rules_cc//cc:action_names.bzl", "CPP_COMPILE_ACTION_NAME", "C_COMPILE_ACTION_NAME")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "CC_TOOLCHAIN_ATTRS", "find_cc_toolchain", "use_cc_toolchain")
-load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+load(
+    "//build_tools/bazel:cc_introspection.bzl",
+    "iree_cc_compile_command",
+    "iree_cc_feature_configuration",
+    "iree_cc_sanitize_label",
+    "iree_cc_source_files",
+)
 
 IreeCompileCommandsInfo = provider(
     doc = "C/C++ compile command metadata collected from configured targets.",
@@ -23,132 +24,16 @@ IreeCompileCommandsInfo = provider(
     },
 )
 
-_C_SOURCE_EXTENSIONS = (".c",)
-_CXX_SOURCE_EXTENSIONS = (".cc", ".cpp", ".cxx", ".c++", ".C")
-
-def _sanitize_label(label):
-    result = str(label)
-    for old, new in [
-        ("@", "external_"),
-        ("//", ""),
-        (":", "__"),
-        ("/", "_"),
-        ("+", "_"),
-        ("-", "_"),
-        (".", "_"),
-    ]:
-        result = result.replace(old, new)
-    return result
-
-def _source_language(source):
-    if source.extension:
-        extension = "." + source.extension
-    else:
-        extension = ""
-    if extension in _C_SOURCE_EXTENSIONS:
-        return "c"
-    if extension in _CXX_SOURCE_EXTENSIONS:
-        return "c++"
-    return None
-
-def _is_main_workspace_source(source):
-    return source.is_source and source.owner.workspace_name == ""
-
-def _source_files(ctx):
-    if not hasattr(ctx.rule.attr, "srcs"):
-        return []
-    result = []
-    for src_target in ctx.rule.attr.srcs:
-        for src in src_target.files.to_list():
-            if _is_main_workspace_source(src) and _source_language(src) != None:
-                result.append(src)
-    return result
-
-def _string_list_attr(ctx, name):
-    if not hasattr(ctx.rule.attr, name):
-        return []
-    value = getattr(ctx.rule.attr, name)
-    if value == None:
-        return []
-    return value
-
-def _user_compile_flags(ctx, language):
-    flags = []
-    flags.extend(_string_list_attr(ctx, "copts"))
-    if language == "c":
-        flags.extend(_string_list_attr(ctx, "conlyopts"))
-    elif language == "c++":
-        flags.extend(_string_list_attr(ctx, "cxxopts"))
-    return flags
-
-def _compile_action_name(language):
-    if language == "c":
-        return C_COMPILE_ACTION_NAME
-    if language == "c++":
-        return CPP_COMPILE_ACTION_NAME
-    fail("unsupported source language: %s" % language)
-
-def _compile_variables_extension(feature_configuration, compilation_context):
-    variables = {}
-
-    # Bazel/rules_cc currently exposes module-map data through private
-    # compilation-context fields while public cc_common.create_compile_variables
-    # still needs these variables when the toolchain enables module maps.
-    module_maps_enabled = cc_common.is_enabled(
-        feature_configuration = feature_configuration,
-        feature_name = "module_maps",
-    )
-    layering_check_enabled = cc_common.is_enabled(
-        feature_configuration = feature_configuration,
-        feature_name = "layering_check",
-    )
-    if module_maps_enabled and hasattr(compilation_context, "_module_map"):
-        module_map = compilation_context._module_map
-        if module_map:
-            variables["module_name"] = module_map.name
-            variables["module_map_file"] = module_map.file.path
-
-    if layering_check_enabled and hasattr(compilation_context, "_direct_module_maps"):
-        variables["dependent_module_map_files"] = [
-            module_map.path
-            for module_map in compilation_context._direct_module_maps.to_list()
-        ]
-
-    return variables
-
 def _compile_command_entry(ctx, target, cc_toolchain, feature_configuration, source):
-    language = _source_language(source)
-    action_name = _compile_action_name(language)
-    compilation_context = target[CcInfo].compilation_context
-    variables = cc_common.create_compile_variables(
-        cc_toolchain = cc_toolchain,
-        feature_configuration = feature_configuration,
-        source_file = source.path,
-        user_compile_flags = _user_compile_flags(ctx, language),
-        include_directories = compilation_context.includes,
-        quote_include_directories = compilation_context.quote_includes,
-        system_include_directories = compilation_context.system_includes,
-        framework_include_directories = compilation_context.framework_includes,
-        preprocessor_defines = depset(transitive = [
-            compilation_context.defines,
-            compilation_context.local_defines,
-        ]),
-        variables_extension = _compile_variables_extension(
-            feature_configuration,
-            compilation_context,
-        ),
-    )
-    compiler = cc_common.get_tool_for_action(
-        feature_configuration = feature_configuration,
-        action_name = action_name,
-    )
-    command_line = cc_common.get_memory_inefficient_command_line(
-        feature_configuration = feature_configuration,
-        action_name = action_name,
-        variables = variables,
+    compile_command = iree_cc_compile_command(
+        ctx,
+        target,
+        cc_toolchain,
+        feature_configuration,
+        source,
     )
     return json.encode({
-        "arguments": [compiler] + command_line,
+        "arguments": compile_command.arguments,
         "directory": ".",
         "file": source.path,
     })
@@ -178,13 +63,8 @@ def _collect_compile_commands_aspect_impl(target, ctx):
     local_entries = []
     if CcInfo in target:
         cc_toolchain = find_cc_toolchain(ctx)
-        feature_configuration = cc_common.configure_features(
-            ctx = ctx,
-            cc_toolchain = cc_toolchain,
-            requested_features = ctx.features,
-            unsupported_features = ctx.disabled_features,
-        )
-        for source in _source_files(ctx):
+        feature_configuration = iree_cc_feature_configuration(ctx, cc_toolchain)
+        for source in iree_cc_source_files(ctx):
             local_entries.append(_compile_command_entry(
                 ctx,
                 target,
@@ -196,7 +76,7 @@ def _collect_compile_commands_aspect_impl(target, ctx):
     local_fragments = []
     if local_entries:
         fragment = ctx.actions.declare_file(
-            "%s.compile_commands.json" % _sanitize_label(target.label),
+            "%s.compile_commands.json" % iree_cc_sanitize_label(target.label),
         )
         ctx.actions.write(
             output = fragment,

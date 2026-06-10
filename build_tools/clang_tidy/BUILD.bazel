@@ -6,11 +6,14 @@
 
 load("@iree_clang_tidy_llvm//:config.bzl", "CLANG_TIDY_LLVM_COPTS", "CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
-load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load(":clang_tidy.bzl", "iree_clang_tidy")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "clang_tidy.bzl",
     "llvm_repo.bzl",
 ])
 
@@ -34,6 +37,12 @@ filegroup(
 filegroup(
     name = "testdata",
     srcs = glob(["test/*"]),
+)
+
+py_binary(
+    name = "run_clang_tidy_action",
+    srcs = ["run_clang_tidy_action.py"],
+    main = "run_clang_tidy_action.py",
 )
 
 cc_binary(
@@ -69,4 +78,18 @@ py_test(
     main = "test/run_clang_tidy_plugin_test.py",
     tags = ["manual"],
     target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+cc_library(
+    name = "action_smoke_subject",
+    testonly = True,
+    srcs = ["test/action_smoke.c"],
+    tags = ["manual"],
+)
+
+iree_clang_tidy(
+    name = "action_smoke",
+    testonly = True,
+    tags = ["manual"],
+    targets = [":action_smoke_subject"],
 )
