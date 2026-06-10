@@ -26,6 +26,7 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             output,
             [
                 "iree_clang_tidy_status_dropped_source",
+                "iree_clang_tidy_status_named_call_source",
                 "iree_clang_tidy_status_void_cast_source",
                 "[iree-status-discarded]",
             ],

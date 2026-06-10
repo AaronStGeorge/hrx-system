@@ -39,6 +39,7 @@ ROOT_COMMAND_EPILOG = """Common build-system commands:
   python dev.py cmake try
   python dev.py cmake fuzz
   python dev.py cmake compile-commands
+  python dev.py cmake clang-tidy
 
 Most developer scratch/state defaults under .tmp/. Set IREE_DEVTOOLS_TMP to
 redirect scratch that does not need to be a Bazel workspace package.
@@ -257,6 +258,21 @@ Repo-relative paths and git scopes use the presubmit clang-tidy provider, which
 maps files to owning Bazel packages. Bazel target patterns run the clang-tidy
 aspect directly. The ci profile adds Bazel --keep_going so one run reports the
 full failure set.""",
+        )
+    if command == "clang-tidy" and lane == "cmake":
+        return CommandHelp(
+            description="Run CMake-backed clang-tidy checks.",
+            epilog="""Examples:
+  python dev.py cmake clang-tidy
+  python dev.py cmake clang-tidy --base origin/main
+  python dev.py cmake clang-tidy --all --profile ci
+  python dev.py cmake clang-tidy runtime/src/iree/vm/native_module.c
+  python dev.py --cmake-build-dir build/cmake-asan cmake clang-tidy runtime/src/iree/base/status.c
+
+With no input option, this checks local staged, unstaged, and untracked files.
+Repo-relative paths and git scopes use the configured CMake compile database.
+Run `python dev.py cmake configure` first. Select a build tree with
+--cmake-build-dir or IREE_CMAKE_BUILD_DIR.""",
         )
     if command == "presubmit":
         return CommandHelp(
@@ -533,6 +549,7 @@ iree-cmake-test -R hrx
 iree-cmake-run iree::tools::iree-run-module -- --help
 iree-cmake-fuzz iree::tokenizer::special_tokens_fuzz -- -max_total_time=60
 python dev.py cmake compile-commands
+python dev.py cmake clang-tidy
 iree-cmake-dev precommit
 iree-cmake-dev presubmit
 ```
@@ -543,7 +560,8 @@ full-tree CI-shaped check. `iree-cmake-run` resolves an already-built
 executable and does not build implicitly. `iree-cmake-try` builds temporary
 C/C++ snippets against the configured tree. `iree-cmake-fuzz` builds and execs
 a configured libFuzzer target. `python dev.py cmake compile-commands` prints
-the configured compile database path for clang tooling."""
+the configured compile database path for clang tooling. `python dev.py cmake
+clang-tidy` runs IREE clang-tidy checks against that compile database."""
 
 
 def bazel_command_agent_markdown(command: str) -> str:
@@ -758,6 +776,24 @@ python dev.py cmake compile-commands -o .cache/compile_commands/cmake.json
 CMake writes the compile database during configure. This command resolves the
 recorded build directory, prints the compile database path by default, and
 copies it when `-o/--output` is supplied."""
+
+    if command == "clang-tidy":
+        return """## python dev.py cmake clang-tidy
+
+Run CMake-backed clang-tidy checks from the repository root.
+
+```bash
+python dev.py cmake configure
+python dev.py cmake clang-tidy
+python dev.py cmake clang-tidy --base origin/main
+python dev.py cmake clang-tidy runtime/src/iree/base/status.c
+python dev.py --cmake-build-dir build/cmake-asan cmake clang-tidy runtime/src/iree/base/status.c
+```
+
+The command builds the IREE clang-tidy plugin with CMake and runs `clang-tidy`
+against source files using the configured CMake `compile_commands.json`.
+Select the CMake build tree with `--cmake-build-dir` or
+`IREE_CMAKE_BUILD_DIR`."""
 
     if command == "configure":
         return """## iree-cmake-configure

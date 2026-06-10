@@ -499,6 +499,46 @@ class CliTest(unittest.TestCase):
         self.assertIn("out/cmake_compile_commands.json", description)
         self.assertIn("cp", description)
 
+    def test_cmake_clang_tidy_git_scope_uses_presubmit_provider(self):
+        args = cli.parse_arguments(
+            [
+                "--cmake-build-dir",
+                "build/cmake-debug",
+                "cmake",
+                "clang-tidy",
+                "--base",
+                "origin/main",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("IREE_CMAKE_BUILD_DIR=", description)
+        self.assertIn("build/cmake-debug", description)
+        self.assertIn("build_tools/lefthook/presubmit.py", description)
+        self.assertIn("--lane cmake", description)
+        self.assertIn("--clang-tidy", description)
+        self.assertIn("--base origin/main", description)
+        self.assertNotIn("--static-analysis", description)
+
+    def test_cmake_clang_tidy_explicit_paths_use_presubmit_provider(self):
+        args = cli.parse_arguments(
+            ["cmake", "clang-tidy", "runtime/src/iree/vm/native_module.c"]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("build_tools/lefthook/presubmit.py", description)
+        self.assertIn("--lane cmake", description)
+        self.assertIn("--clang-tidy", description)
+        self.assertIn("runtime/src/iree/vm/native_module.c", description)
+
+    def test_cmake_clang_tidy_rejects_bazel_targets(self):
+        with self.assertRaises(SystemExit):
+            cli.parse_arguments(["cmake", "clang-tidy", "//runtime/src/iree/vm:all"])
+
     def test_bazel_fuzz_normalizes_signal_exit_codes(self):
         self.assertEqual(bazel_dev.process_exit_code(-2), 130)
         self.assertEqual(bazel_dev.process_exit_code(7), 7)
@@ -940,6 +980,7 @@ class CliTest(unittest.TestCase):
         self.assertIn("python dev.py cmake precommit", output)
         self.assertIn("python dev.py cmake run", output)
         self.assertIn("python dev.py cmake compile-commands", output)
+        self.assertIn("python dev.py cmake clang-tidy", output)
 
     def test_bazel_build_help_explains_default_targets(self):
         output = self.parse_help(["bazel", "build", "--help"])
@@ -974,6 +1015,13 @@ class CliTest(unittest.TestCase):
         self.assertIn("Bazel target patterns", output)
         self.assertIn("aspect directly", output)
         self.assertIn("--keep_going", output)
+        self.assertIn("--base", output)
+
+    def test_cmake_clang_tidy_help_explains_modes(self):
+        output = self.parse_help(["cmake", "clang-tidy", "--help"])
+
+        self.assertIn("CMake compile database", output)
+        self.assertIn("--cmake-build-dir", output)
         self.assertIn("--base", output)
 
 

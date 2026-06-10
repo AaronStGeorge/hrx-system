@@ -194,15 +194,19 @@ def clang_tidy_plan(
     profile: str,
     all_files: bool = False,
     base: str | None = None,
+    cmake_build_dir: Path | None = None,
     commit: bool = False,
     since: str | None = None,
     staged: bool = False,
     paths: list[str] | None = None,
     verbose: bool = False,
 ) -> CommandPlan:
-    if lane != "bazel":
-        raise ValueError("clang-tidy currently runs only in the Bazel lane")
+    if lane not in ("bazel", "cmake"):
+        raise ValueError(f"unknown lane: {lane}")
 
+    env = tool_env.path_env()
+    if cmake_build_dir is not None:
+        env[CMAKE_BUILD_DIR_ENV] = str(cmake_build_dir)
     input_args: list[str] = []
     if paths:
         input_args += paths
@@ -237,8 +241,8 @@ def clang_tidy_plan(
             CommandStep(
                 command,
                 cwd=REPO_ROOT,
-                env=tool_env.path_env(),
-                label="run Bazel clang-tidy",
+                env=env,
+                label=f"run {build_system_name(lane)} clang-tidy",
             )
         ]
     )

@@ -98,14 +98,14 @@ void DiscardedStatusCheck::check(
 
   if (StringRef Name = CalleeName(Call); !Name.empty()) {
     diag(Call->getExprLoc(),
-         "iree_status_t result from %0 must be checked, returned, assigned, "
-         "or explicitly consumed")
+         "iree_status_t result from %0 must be returned, stored for later "
+         "consumption, or explicitly consumed")
         << Name;
     return;
   }
   diag(Call->getExprLoc(),
-       "iree_status_t result must be checked, returned, assigned, or "
-       "explicitly consumed");
+       "iree_status_t result must be returned, stored for later consumption, "
+       "or explicitly consumed");
 }
 
 }  // namespace clang::tidy::iree

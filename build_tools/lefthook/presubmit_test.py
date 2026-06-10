@@ -11,6 +11,7 @@ import importlib.util
 import io
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -88,6 +89,51 @@ class PresubmitTest(unittest.TestCase):
         )
 
         self.assertEqual(command[0:3], ["bazel", "build", "--keep_going"])
+
+    def test_cmake_clang_tidy_candidates_are_translation_units(self):
+        with mock.patch.object(
+            presubmit, "CLANG_TIDY_PATH_PREFIXES", ("runtime/src/iree/",)
+        ):
+            self.assertEqual(
+                presubmit.cmake_clang_tidy_candidate_files(
+                    [
+                        "runtime/src/iree/base/status.c",
+                        "runtime/src/iree/base/status.h",
+                        "runtime/src/iree/base/status.py",
+                    ]
+                ),
+                ["runtime/src/iree/base/status.c"],
+            )
+
+    def test_cmake_clang_tidy_command_uses_compile_database(self):
+        command = presubmit.cmake_clang_tidy_command(
+            clang_tidy="clang-tidy",
+            plugin=Path(".tmp/plugin/libIREEClangTidyPlugin.so"),
+            compile_commands_dir=Path("build/cmake-debug"),
+            files=["runtime/src/iree/base/status.c"],
+        )
+
+        self.assertEqual(command[0], "clang-tidy")
+        self.assertIn("--load=.tmp/plugin/libIREEClangTidyPlugin.so", command)
+        self.assertIn(f"--checks={presubmit.CLANG_TIDY_CHECKS}", command)
+        self.assertIn("-p=build/cmake-debug", command)
+        self.assertEqual(command[-1], "runtime/src/iree/base/status.c")
+
+    def test_cmake_build_dir_uses_recorded_devtools_state(self):
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            state_file = Path(temporary_dir) / "iree" / "cmake_build_dir"
+            state_file.parent.mkdir()
+            state_file.write_text("/tmp/iree-cmake-configured\n", encoding="utf-8")
+
+            with mock.patch.dict(
+                os.environ,
+                {presubmit.DEVTOOLS_TMP_ENV: temporary_dir},
+                clear=True,
+            ):
+                self.assertEqual(
+                    presubmit.cmake_build_dir_from_env(),
+                    Path("/tmp/iree-cmake-configured"),
+                )
 
     def test_bazel_package_target_for_path_finds_nearest_package(self):
         self.assertEqual(

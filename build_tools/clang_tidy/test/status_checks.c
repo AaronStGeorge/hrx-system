@@ -10,6 +10,7 @@ iree_status_t iree_status_ignore(iree_status_t status);
 iree_status_t iree_clang_tidy_status_assigned_source(void);
 iree_status_t iree_clang_tidy_status_dropped_source(void);
 iree_status_t iree_clang_tidy_status_ignored_source(void);
+iree_status_t iree_clang_tidy_status_named_call_source(void);
 iree_status_t iree_clang_tidy_status_returned_source(void);
 iree_status_t iree_clang_tidy_status_void_cast_source(void);
 
@@ -32,4 +33,8 @@ void iree_clang_tidy_status_dropped(void) {
 
 void iree_clang_tidy_status_void_cast(void) {
   (void)iree_clang_tidy_status_void_cast_source();
+}
+
+void iree_clang_tidy_status_named_call_dropped(void) {
+  iree_clang_tidy_status_named_call_source();
 }

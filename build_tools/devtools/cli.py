@@ -166,6 +166,10 @@ def selected_cmake_build_dir(args: argparse.Namespace) -> Path | None:
     return getattr(args, "cmake_build_dir", None)
 
 
+def configured_cmake_build_dir(args: argparse.Namespace) -> Path:
+    return cmake_dev.build_dir(selected_cmake_build_dir(args))
+
+
 def option_name(arg: str) -> str:
     return arg.split("=", 1)[0]
 
@@ -446,6 +450,12 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     ):
         parser.error("explicit clang-tidy inputs cannot be combined with input mode")
     if clang_tidy_inputs:
+        if getattr(args, "lane", None) == "cmake" and any(
+            is_bazel_target_pattern(input_arg) for input_arg in clang_tidy_inputs
+        ):
+            parser.error(
+                "cmake clang-tidy accepts repo-relative paths, not Bazel targets"
+            )
         has_target_pattern = any(
             is_bazel_target_pattern(input_arg) for input_arg in clang_tidy_inputs
         )
@@ -701,6 +711,65 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
             lane=lane,
             backend_command="compile-commands",
         )
+
+        command_help = help_text.lane_command_help(lane, "clang-tidy")
+        command_parser = add_subparser(
+            lane_subparsers,
+            "clang-tidy",
+            command_help=command_help,
+            help="Run CMake-backed clang-tidy checks.",
+        )
+        add_common_options(command_parser)
+        add_tool_environment_options(command_parser)
+        add_profile_option(
+            command_parser,
+            default=presubmit.precommit_default_profile(lane),
+            command="clang-tidy",
+        )
+        input_group = command_parser.add_mutually_exclusive_group()
+        add_argument(
+            input_group,
+            "--all",
+            dest="all_files",
+            action="store_true",
+            help="Check all tracked files through the clang-tidy provider.",
+        )
+        add_argument(
+            input_group,
+            "--base",
+            metavar="GIT_REF",
+            help="Check branch changes since GIT_REF plus local changes.",
+        )
+        add_argument(
+            input_group,
+            "--changed",
+            action="store_true",
+            help="Check local staged, unstaged, and untracked files.",
+        )
+        add_argument(
+            input_group,
+            "--commit",
+            action="store_true",
+            help="Check the Git hook commit scope.",
+        )
+        add_argument(
+            input_group,
+            "--since",
+            metavar="GIT_REF",
+            help="Check tracked files changed since GIT_REF.",
+        )
+        add_argument(
+            input_group,
+            "--staged",
+            action="store_true",
+            help="Check only files staged for commit.",
+        )
+        command_parser.add_argument(
+            "clang_tidy_inputs",
+            nargs="*",
+            help="Repo-relative paths. Defaults to --changed.",
+        )
+        command_parser.set_defaults(handler=handle_cmake_clang_tidy, lane=lane)
 
     precommit_parser = add_subparser(
         lane_subparsers,
@@ -1017,6 +1086,22 @@ def handle_cmake_compile_commands(args: argparse.Namespace) -> CommandPlan:
     )
 
 
+def handle_cmake_clang_tidy(args: argparse.Namespace) -> CommandPlan:
+    return presubmit.clang_tidy_plan(
+        args.lane,
+        existing_or_system_environment(args),
+        args.profile,
+        all_files=args.all_files,
+        base=args.base,
+        cmake_build_dir=configured_cmake_build_dir(args),
+        commit=args.commit,
+        since=args.since,
+        staged=args.staged,
+        paths=list(args.clang_tidy_inputs),
+        verbose=args.verbose,
+    )
+
+
 def handle_bazel_runnable_command(args: argparse.Namespace) -> CommandPlan:
     tool_env = existing_or_system_environment(args)
     backend_args = forwarded_args(args.args)
@@ -1092,9 +1177,9 @@ def handle_presubmit(args: argparse.Namespace) -> CommandPlan:
         args.lane,
         existing_or_system_environment(args),
         args.profile,
-        cmake_build_dir=(
-            selected_cmake_build_dir(args) if args.lane == "cmake" else None
-        ),
+        cmake_build_dir=configured_cmake_build_dir(args)
+        if args.lane == "cmake"
+        else None,
         verbose=args.verbose,
         project_tests=args.project_tests,
     )
@@ -1107,9 +1192,9 @@ def handle_precommit(args: argparse.Namespace) -> CommandPlan:
         args.profile,
         base=args.base,
         commit=args.commit,
-        cmake_build_dir=(
-            selected_cmake_build_dir(args) if args.lane == "cmake" else None
-        ),
+        cmake_build_dir=configured_cmake_build_dir(args)
+        if args.lane == "cmake"
+        else None,
         staged=args.staged,
         paths=args.paths,
         verbose=args.verbose,
