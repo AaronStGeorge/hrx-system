@@ -38,6 +38,8 @@ iree_py_library(
     lower_rules
   SRCS
     "__init__.py"
+    "lower_rule_rows.py"
+    "lower_rule_spelling.py"
     "lower_rules.py"
   DEPS
     loom::py::loom::core

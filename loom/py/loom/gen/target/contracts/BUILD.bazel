@@ -63,6 +63,8 @@ iree_py_library(
     name = "lower_rules",
     srcs = [
         "__init__.py",
+        "lower_rule_rows.py",
+        "lower_rule_spelling.py",
         "lower_rules.py",
     ],
     deps = LOWER_RULE_DEPS,
