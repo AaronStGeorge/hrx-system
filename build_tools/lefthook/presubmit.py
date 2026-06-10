@@ -2013,6 +2013,8 @@ def run_clang_tidy(
                     CLANG_TIDY_REPO_ENV,
                     "//build_tools/clang_tidy:plugin_smoke_test",
                     "//build_tools/clang_tidy:status_checks_test",
+                    "//build_tools/clang_tidy:style_checks_test",
+                    "//build_tools/clang_tidy:trace_checks_test",
                 ],
                 "clang-tidy plugin tests",
                 verbose,

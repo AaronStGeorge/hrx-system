@@ -44,7 +44,7 @@ class TraceChecksTest(clang_tidy_test.ClangTidyAssertions):
             [
                 "iree_clang_tidy_trace_zone_balanced",
                 "iree_clang_tidy_trace_zone_nested_balanced",
-                "iree_clang_tidy_trace_zone_cleanup_label",
+                "iree_clang_tidy_trace_zone_single_exit_cleanup",
                 "iree_clang_tidy_trace_zone_branch_return_balanced",
                 "iree_clang_tidy_trace_zone_branch_macro_return_balanced",
                 "iree_clang_tidy_trace_zone_branch_local_zone",

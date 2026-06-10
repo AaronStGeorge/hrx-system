@@ -19,6 +19,7 @@ add_library(IREEClangTidyPlugin MODULE
   iree/IreeTidyModule.cc
   iree/SmokeCheck.cc
   iree/StatusChecks.cc
+  iree/StyleChecks.cc
   iree/TraceChecks.cc
 )
 
@@ -83,6 +84,15 @@ add_test(
   COMMAND
     Python3::Interpreter
     "${CMAKE_CURRENT_SOURCE_DIR}/test/trace_checks_test.py"
+    "--clang-tidy=${CLANG_TIDY_EXECUTABLE}"
+    "--plugin=$<TARGET_FILE:IREEClangTidyPlugin>"
+)
+
+add_test(
+  NAME iree-clang-tidy-style-checks
+  COMMAND
+    Python3::Interpreter
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/style_checks_test.py"
     "--clang-tidy=${CLANG_TIDY_EXECUTABLE}"
     "--plugin=$<TARGET_FILE:IREEClangTidyPlugin>"
 )

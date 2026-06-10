@@ -82,6 +82,7 @@ void hrx_stream_retain(hrx_stream_t stream) {
 }
 
 void hrx_stream_release(hrx_stream_t stream) {
+  if (!stream) return;
   hrx_device_t device = stream->device;
   hrx_semaphore_t semaphore = stream->semaphore;
   if (iree_atomic_ref_count_dec(&stream->ref_count) == 1) {

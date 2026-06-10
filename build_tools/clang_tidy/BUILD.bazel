@@ -53,6 +53,8 @@ cc_binary(
         "iree/SmokeCheck.h",
         "iree/StatusChecks.cc",
         "iree/StatusChecks.h",
+        "iree/StyleChecks.cc",
+        "iree/StyleChecks.h",
         "iree/TraceChecks.cc",
         "iree/TraceChecks.h",
     ],
@@ -126,6 +128,27 @@ py_test(
     ],
     imports = ["test"],
     main = "test/trace_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "style_checks_test",
+    srcs = [
+        "test/clang_tidy_test.py",
+        "test/style_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :IREEClangTidyPlugin.so)",
+    ],
+    data = [
+        "test/style_checks.c",
+        ":IREEClangTidyPlugin.so",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["test"],
+    main = "test/style_checks_test.py",
     tags = ["manual"],
     target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
 )

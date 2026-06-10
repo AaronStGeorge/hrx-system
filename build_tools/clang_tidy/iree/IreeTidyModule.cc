@@ -7,6 +7,7 @@
 #include "clang-tidy/ClangTidyModule.h"
 #include "iree/SmokeCheck.h"
 #include "iree/StatusChecks.h"
+#include "iree/StyleChecks.h"
 #include "iree/TraceChecks.h"
 
 namespace clang::tidy::iree {
@@ -22,6 +23,7 @@ class IreeTidyModule final : public ClangTidyModule {
     CheckFactories.registerCheck<StatusLifetimeCheck>("iree-status-lifetime");
     CheckFactories.registerCheck<StatusTransferOrderCheck>(
         "iree-status-transfer-order");
+    CheckFactories.registerCheck<DirectGotoCheck>("iree-direct-goto");
     CheckFactories.registerCheck<TraceZoneCheck>("iree-trace-zone-balance");
   }
 };

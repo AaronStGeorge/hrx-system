@@ -71,14 +71,12 @@ iree_status_t iree_clang_tidy_trace_zone_nested_balanced(void) {
   return IREE_STATUS_OK;
 }
 
-iree_status_t iree_clang_tidy_trace_zone_cleanup_label(int fail) {
+iree_status_t iree_clang_tidy_trace_zone_single_exit_cleanup(int fail) {
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_status_t status = IREE_STATUS_OK;
   if (fail) {
     status = iree_clang_tidy_trace_status_source();
-    goto cleanup;
   }
-cleanup:
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

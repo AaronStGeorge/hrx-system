@@ -540,6 +540,8 @@ class PresubmitTest(unittest.TestCase):
         self.assertIn(
             "//build_tools/clang_tidy:status_checks_test", plugin_test_command
         )
+        self.assertIn("//build_tools/clang_tidy:style_checks_test", plugin_test_command)
+        self.assertIn("//build_tools/clang_tidy:trace_checks_test", plugin_test_command)
 
     def test_default_profile_has_no_static_analysis_provider(self):
         ok = presubmit.run_static_analysis(
