@@ -13,6 +13,7 @@ from collections.abc import Sequence
 
 from loom.dsl import AttrDef, EnumDef, Op
 from loom.gen.ops.c_names import c_prefix
+from loom.gen.support.c import CIdentifierCase, c_identifier
 
 SharedEnumMap = dict[int, tuple[str, str, EnumDef]]
 
@@ -109,4 +110,4 @@ def enum_names_array_name(
 
 def enum_case_c_ident(keyword: str) -> str:
     """Converts an enum assembly keyword to a C enum/macro suffix."""
-    return keyword.replace(".", "_").upper()
+    return c_identifier(keyword, case=CIdentifierCase.UPPER)

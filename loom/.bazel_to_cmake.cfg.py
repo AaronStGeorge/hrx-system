@@ -31,7 +31,7 @@ _LOOM_AMDGPU_TARGET_CONFIG = _load_generated_amdgpu_target_config()
 def _loom_amdgpu_config_cmake_options():
     config = _LOOM_AMDGPU_TARGET_CONFIG
     options = {}
-    for processor in config["LOOM_AMDGPU_SUPPORTED_PROCESSORS"]:
+    for processor in config["LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS"]:
         processor_upper = processor.upper()
         options[f"//loom/config/target/amdgpu:processor_{processor}"] = (
             f"LOOM_TARGET_AMDGPU_PROCESSOR_{processor_upper}"

@@ -20,8 +20,8 @@ load(
     ":target_config.bzl",
     "LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS",
     "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES",
-    "LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS",
-    "LOOM_AMDGPU_SUPPORTED_PROCESSORS",
+    "LOOM_AMDGPU_DESCRIPTOR_SET_EXACT_PROCESSORS",
+    "LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS",
     "LOOM_AMDGPU_TARGET_SOURCE_IREE_HAL",
     "LOOM_AMDGPU_TARGET_SOURCE_LOOM_DEFAULTS",
     "LOOM_AMDGPU_TARGET_SOURCE_SELECTORS",
@@ -33,7 +33,7 @@ def _append_unique(values, new_values):
             values.append(value)
 
 def _is_supported_exact_target(target):
-    return target in LOOM_AMDGPU_SUPPORTED_PROCESSORS
+    return target in LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS
 
 def _selector_expands_only_to_supported_processors(selector):
     expanded_targets = iree_amdgpu_expand_target_selectors(
@@ -190,17 +190,17 @@ def loom_amdgpu_target_config_settings(
     loom_processors = _exact_target_selector_config_settings(
         name = "selected_processor",
         flag = flag,
-        exact_targets = LOOM_AMDGPU_SUPPORTED_PROCESSORS,
+        exact_targets = LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS,
         valid_selectors = explicit_loom_selectors,
     )
     iree_hal_processors = _exact_target_selector_config_settings(
         name = "iree_hal_selected_processor",
         flag = iree_hal_flag,
-        exact_targets = LOOM_AMDGPU_SUPPORTED_PROCESSORS,
+        exact_targets = LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS,
         valid_selectors = iree_amdgpu_valid_selectors(),
     )
 
-    for processor in LOOM_AMDGPU_SUPPORTED_PROCESSORS:
+    for processor in LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS:
         iree_hal_processor = _processor_label(processor, prefix = "iree_hal")
         iree_hal_processor_from_source = _processor_label(
             processor,
@@ -238,7 +238,7 @@ def loom_amdgpu_target_config_settings(
             name = iree_hal_capability,
             match_any = [
                 iree_hal_processors[processor]
-                for processor in LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS[capability]
+                for processor in LOOM_AMDGPU_DESCRIPTOR_SET_EXACT_PROCESSORS[capability]
             ],
         )
         selects.config_setting_group(
@@ -255,7 +255,7 @@ def loom_amdgpu_target_config_settings(
                 ":" + iree_hal_from_source,
             ] + [
                 loom_processors[processor]
-                for processor in LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS[capability]
+                for processor in LOOM_AMDGPU_DESCRIPTOR_SET_EXACT_PROCESSORS[capability]
             ],
         )
         descriptor_sets[capability] = ":" + capability

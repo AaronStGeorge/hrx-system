@@ -15,6 +15,29 @@ from loom.ir import I32
 from loom.verify import verify_module
 
 
+def _printed_kernel_module_for_target_preset(target_preset: str) -> str:
+    shell = create_kernel_module(
+        KernelModuleSpec(
+            target_preset=target_preset,
+            export_symbol="kernel",
+            callee="kernel",
+            arguments=[],
+        )
+    )
+    with shell.builder.insertion_block(shell.body_block):
+        shell.builder.kernel.return_()
+
+    diagnostics = verify_module(
+        shell.module,
+        ops=kernel_module_ops(target_preset),
+    )
+    diagnostics.raise_if_errors()
+    return print_loom_module(
+        shell.module,
+        ops=kernel_module_ops(target_preset),
+    )
+
+
 def test_create_kernel_module_exposes_projected_region_arguments() -> None:
     shell = create_kernel_module(
         KernelModuleSpec(
@@ -116,3 +139,15 @@ kernel.def target(@hip_mcpu_gfx942) export(\"kernel\") @kernel() {
 }
 """
     )
+
+
+def test_create_kernel_module_uses_amdgpu_processor_override() -> None:
+    assert _printed_kernel_module_for_target_preset("hip -mcpu=gfx1101").startswith(
+        'amdgpu.target<gfx1100> @hip_mcpu_gfx1101 {processor = "gfx1101"}\n'
+    )
+
+
+def test_create_kernel_module_uses_generic_amdgpu_target_record() -> None:
+    assert _printed_kernel_module_for_target_preset(
+        "hip -mcpu=gfx11-generic"
+    ).startswith("amdgpu.target<gfx11-generic> @hip_mcpu_gfx11_generic\n")

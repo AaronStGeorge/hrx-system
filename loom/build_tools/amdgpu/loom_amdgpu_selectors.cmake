@@ -15,11 +15,13 @@ include("${CMAKE_CURRENT_LIST_DIR}/target_config.cmake")
 
 function(_loom_amdgpu_unknown_selector selector)
   string(JOIN " " _source_selectors ${_LOOM_AMDGPU_TARGET_SOURCE_SELECTORS})
-  string(JOIN " " _supported_processors ${_LOOM_AMDGPU_SUPPORTED_PROCESSORS})
+  string(JOIN " " _supported_processors ${_LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS})
+  string(JOIN " " _supported_code_objects ${_LOOM_AMDGPU_SUPPORTED_CODE_OBJECT_PROCESSORS})
   message(FATAL_ERROR
     "Unknown or unsupported Loom AMDGPU target selector '${selector}'. "
     "Source selectors: ${_source_selectors}. "
-    "Supported processors: ${_supported_processors}.")
+    "Supported exact processors: ${_supported_processors}. "
+    "Supported code-object processors: ${_supported_code_objects}.")
 endfunction()
 
 function(_loom_amdgpu_append_explicit_exact_selector out_targets selector)
@@ -29,7 +31,7 @@ function(_loom_amdgpu_append_explicit_exact_selector out_targets selector)
     "${selector}"
   )
   foreach(_exact_target ${_expanded_exact_targets})
-    if(NOT "${_exact_target}" IN_LIST _LOOM_AMDGPU_SUPPORTED_PROCESSORS)
+    if(NOT "${_exact_target}" IN_LIST _LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS)
       _loom_amdgpu_unknown_selector("${selector}")
     endif()
   endforeach()
@@ -46,7 +48,7 @@ function(_loom_amdgpu_append_supported_exact_selector out_targets selector)
   )
   set(_targets ${${out_targets}})
   foreach(_exact_target ${_expanded_exact_targets})
-    if("${_exact_target}" IN_LIST _LOOM_AMDGPU_SUPPORTED_PROCESSORS)
+    if("${_exact_target}" IN_LIST _LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS)
       list(APPEND _targets "${_exact_target}")
     endif()
   endforeach()
@@ -74,7 +76,7 @@ function(loom_amdgpu_expand_target_selectors out_targets)
   set(_expanded_targets)
   foreach(_selector ${ARGN})
     if("${_selector}" STREQUAL "${LOOM_AMDGPU_TARGET_SOURCE_LOOM_DEFAULTS}")
-      list(APPEND _expanded_targets ${_LOOM_AMDGPU_SUPPORTED_PROCESSORS})
+      list(APPEND _expanded_targets ${_LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS})
     elseif("${_selector}" STREQUAL "${LOOM_AMDGPU_TARGET_SOURCE_IREE_HAL}")
       _loom_amdgpu_expand_iree_hal_target_selectors(
         _iree_hal_exact_targets
@@ -101,7 +103,7 @@ endfunction()
 
 function(_loom_amdgpu_descriptor_set_selected out_var targets_var capability)
   set(_selected OFF)
-  foreach(_processor ${_LOOM_AMDGPU_DESCRIPTOR_SET_PROCESSORS_${capability}})
+  foreach(_processor ${_LOOM_AMDGPU_DESCRIPTOR_SET_EXACT_PROCESSORS_${capability}})
     if("${_processor}" IN_LIST ${targets_var})
       set(_selected ON)
     endif()
@@ -127,7 +129,7 @@ function(loom_amdgpu_configure_target_selectors)
     set(_loom_amdgpu_iree_hal_exact_targets)
   endif()
 
-  foreach(_processor ${_LOOM_AMDGPU_SUPPORTED_PROCESSORS})
+  foreach(_processor ${_LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS})
     string(TOUPPER "${_processor}" _processor_upper)
     _loom_amdgpu_exact_target_selected(
       _selected

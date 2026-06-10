@@ -208,13 +208,14 @@ def rdna3_processor_info(
     processor: str,
     elf_machine_flags: int,
     *,
+    elf_feature_flags: int = 0,
     scheduling_bits: int = 0,
 ) -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
         processor=processor,
         descriptor_set_key="amdgpu.rdna3.core",
         elf_machine_flags=elf_machine_flags,
-        elf_feature_flags=0,
+        elf_feature_flags=elf_feature_flags,
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
@@ -509,21 +510,26 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         default_wavefront_size=32,
     ),
-    processor_info(
+    rdna3_processor_info(
         "gfx11-generic",
         0x054,
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
-        default_wavefront_size=32,
-        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
         scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
     ),
     processor_info(
         "gfx12-generic",
         0x059,
+        descriptor_set_key="amdgpu.rdna4.core",
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
         scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+        kernel_descriptor_vgpr_encoding_granule_wave32=8,
+        kernel_descriptor_vgpr_encoding_granule_wave64=4,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_uses_gfx10_sgpr_encoding=True,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     processor_info(
         "gfx9-4-generic",
@@ -536,9 +542,16 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     processor_info(
         "gfx12-5-generic",
         0x05B,
+        descriptor_set_key="amdgpu.rdna4.gfx125x.core",
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        kernel_descriptor_vgpr_encoding_granule_wave32=16,
+        kernel_descriptor_vgpr_encoding_granule_wave64=8,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_uses_gfx10_sgpr_encoding=True,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
 )
 
@@ -579,6 +592,21 @@ AMDGPU_TARGET_RECORD_INFOS: tuple[AmdgpuTargetRecordInfo, ...] = (
         enum_value=6,
         doc="RDNA 3.5 gfx1170 target row.",
         default_for_descriptor_set=True,
+    ),
+    AmdgpuTargetRecordInfo(
+        processor="gfx11-generic",
+        enum_value=7,
+        doc="RDNA 3 generic code-object target row.",
+    ),
+    AmdgpuTargetRecordInfo(
+        processor="gfx12-generic",
+        enum_value=8,
+        doc="RDNA 4 generic code-object target row.",
+    ),
+    AmdgpuTargetRecordInfo(
+        processor="gfx12-5-generic",
+        enum_value=9,
+        doc="RDNA 4 gfx125x generic code-object target row.",
     ),
 )
 
@@ -682,6 +710,36 @@ def sorted_processor_infos() -> tuple[AmdgpuProcessorInfo, ...]:
 
 def sorted_target_record_infos() -> tuple[AmdgpuTargetRecordInfo, ...]:
     return tuple(sorted(AMDGPU_TARGET_RECORD_INFOS, key=lambda info: info.enum_value))
+
+
+def amdgpu_processor_info_by_name(processor: str) -> AmdgpuProcessorInfo | None:
+    for info in AMDGPU_PROCESSOR_INFOS:
+        if info.processor == processor:
+            return info
+    return None
+
+
+def amdgpu_target_record_info_for_processor(
+    processor: str,
+) -> AmdgpuTargetRecordInfo | None:
+    for info in AMDGPU_TARGET_RECORD_INFOS:
+        if info.processor == processor:
+            return info
+    return None
+
+
+def amdgpu_default_target_record_info_for_descriptor_set(
+    descriptor_set_key: str,
+) -> AmdgpuTargetRecordInfo | None:
+    for info in AMDGPU_TARGET_RECORD_INFOS:
+        processor_info = amdgpu_processor_info_by_name(info.processor)
+        if (
+            info.default_for_descriptor_set
+            and processor_info is not None
+            and processor_info.descriptor_set_key == descriptor_set_key
+        ):
+            return info
+    return None
 
 
 def sorted_occupancy_model_infos() -> tuple[AmdgpuOccupancyModelInfo, ...]:
