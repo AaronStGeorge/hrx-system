@@ -24,6 +24,9 @@ iree_py_library(
     c_tables
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -56,6 +59,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -94,6 +100,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -127,6 +136,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -160,6 +172,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -193,6 +208,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -226,6 +244,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -259,6 +280,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -292,6 +316,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -326,6 +353,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -359,6 +389,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -392,6 +425,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -425,6 +461,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -459,6 +498,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -493,6 +535,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -527,6 +572,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -560,6 +608,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -593,6 +644,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -626,6 +680,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -659,6 +716,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -692,6 +752,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -725,6 +788,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -759,6 +825,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -792,6 +861,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -825,6 +897,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
@@ -858,6 +933,9 @@ iree_py_library(
     "c_tables.py"
   SRCS
     "__init__.py"
+    "c_builder_declarations.py"
+    "c_builder_model.py"
+    "c_builder_source.py"
     "c_builders.py"
     "c_dialect.py"
     "c_enum_attrs.py"
