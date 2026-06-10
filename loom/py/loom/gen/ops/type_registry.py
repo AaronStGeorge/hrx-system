@@ -162,10 +162,47 @@ def _translate_type_format_elements(
     return elements
 
 
+def _type_builtin_name_rows(all_types: Sequence[Any]) -> dict[str, str]:
+    """Returns sparse loom_type_kind_t name rows for built-in registry types."""
+
+    rows: dict[str, str] = {}
+    for type_def in all_types:
+        if type_def.ir_kind == "dialect":
+            continue
+        kind = _IR_KIND_MAP[type_def.ir_kind]
+        previous = rows.get(kind)
+        if previous is not None:
+            raise ValueError(f"Type kind {type_def.ir_kind!r} has duplicate registry names {previous!r} and {type_def.name!r}")
+        rows[kind] = type_def.name
+    return rows
+
+
+def _emit_tables_header() -> str:
+    guard = "LOOM_OPS_TYPE_REGISTRY_TABLES_H_"
+    lines = [
+        GENERATED_HEADER,
+        f"#ifndef {guard}",
+        f"#define {guard}",
+        "",
+        '#include "loom/ops/type_registry.h"',
+        "",
+        "extern const iree_string_view_t",
+        "    loom_type_registry_builtin_names[LOOM_TYPE_COUNT_];",
+        "",
+        "extern const loom_type_registry_entry_t",
+        "    loom_type_registry_entries_storage[];",
+        "extern const iree_host_size_t loom_type_registry_entry_count;",
+        "",
+        f"#endif  // {guard}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def generate_type_registry(
     all_types: list[Any],
-) -> tuple[str, str]:
-    """Generate type_registry.h and type_registry.c."""
+) -> tuple[str, str, str]:
+    """Generate type_registry.h, type_registry_tables.h, and type_registry_tables.c."""
     header = [GENERATED_HEADER]
     header.append("#ifndef LOOM_OPS_TYPE_REGISTRY_H_")
     header.append("#define LOOM_OPS_TYPE_REGISTRY_H_")
@@ -270,10 +307,10 @@ def generate_type_registry(
     header.append("#endif  // LOOM_OPS_TYPE_REGISTRY_H_")
     header.append("")
 
+    tables_header = _emit_tables_header()
+
     source = [GENERATED_HEADER]
-    source.append('#include "loom/ops/type_registry.h"')
-    source.append("")
-    source.append('#include "loom/util/fact_table.h"')
+    source.append('#include "loom/ops/type_registry_tables.h"')
     source.append("")
 
     for type_def in all_types:
@@ -326,98 +363,22 @@ def generate_type_registry(
         source.append("")
 
     sorted_types = sorted(all_types, key=lambda type_def: type_def.name)
-    source.append("static const loom_type_registry_entry_t loom_type_registry[] = {")
+    source.append("const loom_type_registry_entry_t")
+    source.append("    loom_type_registry_entries_storage[] = {")
     for type_def in sorted_types:
         ident = _type_c_ident(type_def.name)
         source.append(f'    {{IREE_SVL("{type_def.name}"), &loom_type_{ident}_descriptor}},')
     source.append("};")
     source.append("")
     count = len(sorted_types)
-    source.append(f"#define LOOM_TYPE_REGISTRY_COUNT {count}")
+    source.append("const iree_host_size_t loom_type_registry_entry_count =")
+    source.append(f"    {count};")
     source.append("")
-    source.append("iree_host_size_t loom_type_registry_count(void) {")
-    source.append("  return LOOM_TYPE_REGISTRY_COUNT;")
-    source.append("}")
-    source.append("")
-    source.append("const loom_type_registry_entry_t* loom_type_registry_entries(void) {")
-    source.append("  return loom_type_registry;")
-    source.append("}")
-    source.append("")
-    source.append("static iree_string_view_t loom_type_registry_builtin_name(")
-    source.append("    loom_type_kind_t kind) {")
-    source.append("  switch (kind) {")
-    source.append("    case LOOM_TYPE_TILE:")
-    source.append('      return IREE_SV("tile");')
-    source.append("    case LOOM_TYPE_TENSOR:")
-    source.append('      return IREE_SV("tensor");')
-    source.append("    case LOOM_TYPE_VECTOR:")
-    source.append('      return IREE_SV("vector");')
-    source.append("    case LOOM_TYPE_VIEW:")
-    source.append('      return IREE_SV("view");')
-    source.append("    case LOOM_TYPE_BUFFER:")
-    source.append('      return IREE_SV("buffer");')
-    source.append("    case LOOM_TYPE_STORAGE:")
-    source.append('      return IREE_SV("low.storage");')
-    source.append("    case LOOM_TYPE_GROUP:")
-    source.append('      return IREE_SV("group");')
-    source.append("    case LOOM_TYPE_POOL:")
-    source.append('      return IREE_SV("pool");')
-    source.append("    default:")
-    source.append("      return iree_string_view_empty();")
-    source.append("  }")
-    source.append("}")
-    source.append("")
-    source.append("const loom_type_descriptor_t* loom_type_registry_lookup(")
-    source.append("    iree_string_view_t name) {")
-    source.append("  iree_host_size_t low = 0;")
-    source.append("  iree_host_size_t high = LOOM_TYPE_REGISTRY_COUNT;")
-    source.append("  while (low < high) {")
-    source.append("    iree_host_size_t mid = low + (high - low) / 2;")
-    source.append("    int cmp = iree_string_view_compare(loom_type_registry[mid].name, name);")
-    source.append("    if (cmp < 0) {")
-    source.append("      low = mid + 1;")
-    source.append("    } else if (cmp > 0) {")
-    source.append("      high = mid;")
-    source.append("    } else {")
-    source.append("      return loom_type_registry[mid].descriptor;")
-    source.append("    }")
-    source.append("  }")
-    source.append("  return NULL;")
-    source.append("}")
-    source.append("")
-    source.append("const loom_value_fact_domain_t* loom_type_registry_resolve_fact_domain(")
-    source.append("    void* user_data, const loom_fact_context_t* context,")
-    source.append("    const loom_module_t* module, loom_type_t type) {")
-    source.append("  (void)user_data;")
-    source.append("  (void)context;")
-    source.append("  iree_string_view_t name = iree_string_view_empty();")
-    source.append("  if (loom_type_is_dialect(type)) {")
-    source.append("    loom_string_id_t name_id = loom_type_dialect_name_id(type);")
-    source.append("    if (!module || name_id == LOOM_STRING_ID_INVALID ||")
-    source.append("        (iree_host_size_t)name_id >= module->strings.count) {")
-    source.append("      return NULL;")
-    source.append("    }")
-    source.append("    name = module->strings.entries[name_id];")
-    source.append("  } else {")
-    source.append("    name = loom_type_registry_builtin_name(loom_type_kind(type));")
-    source.append("  }")
-    source.append("  if (iree_string_view_is_empty(name)) {")
-    source.append("    return NULL;")
-    source.append("  }")
-    source.append("  const loom_type_descriptor_t* descriptor =")
-    source.append("      loom_type_registry_lookup(name);")
-    source.append("  return descriptor ? descriptor->fact_domain : NULL;")
-    source.append("}")
-    source.append("")
-    source.append("void loom_type_registry_configure_fact_context(")
-    source.append("    loom_fact_context_t* context) {")
-    source.append("  if (!context) {")
-    source.append("    return;")
-    source.append("  }")
-    source.append("  context->resolve_type_domain =")
-    source.append("      loom_value_fact_type_domain_resolver_callback_make(")
-    source.append("          loom_type_registry_resolve_fact_domain, NULL);")
-    source.append("}")
+    source.append("const iree_string_view_t")
+    source.append("    loom_type_registry_builtin_names[LOOM_TYPE_COUNT_] = {")
+    for kind, name in sorted(_type_builtin_name_rows(all_types).items()):
+        source.append(f'    [{kind}] = IREE_SVL("{name}"),')
+    source.append("};")
     source.append("")
 
-    return "\n".join(header), "\n".join(source)
+    return "\n".join(header), tables_header, "\n".join(source)

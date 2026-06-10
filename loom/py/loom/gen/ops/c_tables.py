@@ -89,12 +89,13 @@ def _production_dialects(model: GenerationModel) -> list[tuple[Any, list[Op]]]:
 
 def _generate_registry_contents(model: GenerationModel) -> dict[str, str]:
     op_reg_h, op_reg_c = c_registry.generate_op_registry(_production_dialects(model))
-    type_reg_h, type_reg_c = generate_type_registry(model.types)
+    type_reg_h, type_reg_tables_h, type_reg_tables_c = generate_type_registry(model.types)
     return {
         "op_registry.h": op_reg_h,
         "op_registry.c": op_reg_c,
         "type_registry.h": type_reg_h,
-        "type_registry.c": type_reg_c,
+        "type_registry_tables.h": type_reg_tables_h,
+        "type_registry_tables.c": type_reg_tables_c,
         "keyword_enum.inc": generate_keyword_enum_inc(),
         "keyword_table.inc": generate_keyword_table_inc(),
     }
@@ -122,7 +123,7 @@ def _checked_in_output_contents(model: GenerationModel) -> dict[Path, str]:
     return outputs
 
 
-def _build_generated_source_paths(model: GenerationModel) -> list[Path]:
+def _build_generated_output_paths(model: GenerationModel) -> list[Path]:
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom"
     paths: list[Path] = []
     for generation in model.dialects:
@@ -133,7 +134,8 @@ def _build_generated_source_paths(model: GenerationModel) -> list[Path]:
     paths.extend(
         [
             registry_dir / "op_registry.c",
-            registry_dir / "type_registry.c",
+            registry_dir / "type_registry_tables.c",
+            registry_dir / "type_registry_tables.h",
         ]
     )
     return sorted(paths)
@@ -149,7 +151,7 @@ def _check_checked_in_outputs(model: GenerationModel) -> int:
         if actual != expected:
             failures.append(f"{path.relative_to(_bootstrap.REPO_ROOT)}: stale generated file")
 
-    failures.extend(f"{path.relative_to(_bootstrap.REPO_ROOT)}: generated C source must be a build output" for path in _build_generated_source_paths(model) if path.exists())
+    failures.extend(f"{path.relative_to(_bootstrap.REPO_ROOT)}: generated file must be a build output" for path in _build_generated_output_paths(model) if path.exists())
 
     if failures:
         print("c table generation check failed:", file=sys.stderr)
@@ -212,7 +214,8 @@ def _main_build_output_mode(parser: argparse.ArgumentParser, args: argparse.Name
     _set_output(parser, outputs, "op_registry.h", args.op_registry_header)
     _set_output(parser, outputs, "op_registry.c", args.op_registry_source)
     _set_output(parser, outputs, "type_registry.h", args.type_registry_header)
-    _set_output(parser, outputs, "type_registry.c", args.type_registry_source)
+    _set_output(parser, outputs, "type_registry_tables.h", args.type_registry_tables_header)
+    _set_output(parser, outputs, "type_registry_tables.c", args.type_registry_tables)
     _set_output(parser, outputs, "keyword_enum.inc", args.keyword_enum)
     _set_output(parser, outputs, "keyword_table.inc", args.keyword_table)
     model = load_generation_model()
@@ -255,7 +258,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--op-registry-header", type=Path, help="Generated op_registry.h path.")
     parser.add_argument("--op-registry-source", type=Path, help="Generated op_registry.c path.")
     parser.add_argument("--type-registry-header", type=Path, help="Generated type_registry.h path.")
-    parser.add_argument("--type-registry-source", type=Path, help="Generated type_registry.c path.")
+    parser.add_argument("--type-registry-tables", type=Path, help="Generated type_registry_tables.c path.")
+    parser.add_argument("--type-registry-tables-header", type=Path, help="Generated type_registry_tables.h path.")
     parser.add_argument("--keyword-enum", type=Path, help="Generated keyword_enum.inc path.")
     parser.add_argument("--keyword-table", type=Path, help="Generated keyword_table.inc path.")
     args = parser.parse_args(argv)

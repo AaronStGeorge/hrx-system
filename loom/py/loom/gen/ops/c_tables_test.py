@@ -132,26 +132,27 @@ def test_generate_type_registry_emits_fact_domain_pointer() -> None:
         fact_domain="loom_test_handle_fact_domain",
     )
 
-    type_registry_h, type_registry_c = generate_type_registry([type_def])
+    type_registry_h, type_registry_tables_h, type_registry_tables_c = generate_type_registry([type_def])
 
     assert "loom_type_registry_configure_fact_context" in type_registry_h
+    assert "loom_type_registry_entries_storage" in type_registry_tables_h
     assert "void* user_data, const loom_fact_context_t* context," in type_registry_h
-    assert "extern const loom_value_fact_domain_t loom_test_handle_fact_domain;" in type_registry_c
-    assert ".fact_domain = &loom_test_handle_fact_domain," in type_registry_c
-    assert "loom_value_fact_type_domain_resolver_callback_make(\n          loom_type_registry_resolve_fact_domain, NULL)" in type_registry_c
+    assert "extern const loom_value_fact_domain_t loom_test_handle_fact_domain;" in type_registry_tables_c
+    assert ".fact_domain = &loom_test_handle_fact_domain," in type_registry_tables_c
+    assert "loom_value_fact_type_domain_resolver_callback_make" not in type_registry_tables_c
 
 
 def test_generate_type_registry_omits_zero_default_descriptor_fields() -> None:
     type_def = TypeDef(name="test.handle")
 
-    _, type_registry_c = generate_type_registry([type_def])
+    _, _, type_registry_tables_c = generate_type_registry([type_def])
 
-    assert ".param_count = 0," not in type_registry_c
-    assert ".fact_domain = NULL," not in type_registry_c
-    assert ".semantic = LOOM_TYPE_SEMANTIC_ORDINARY," not in type_registry_c
-    assert ".contract_families = 0," not in type_registry_c
-    assert ".format_elements = NULL," not in type_registry_c
-    assert ".format_element_count = 0," not in type_registry_c
+    assert ".param_count = 0," not in type_registry_tables_c
+    assert ".fact_domain = NULL," not in type_registry_tables_c
+    assert ".semantic = LOOM_TYPE_SEMANTIC_ORDINARY," not in type_registry_tables_c
+    assert ".contract_families = 0," not in type_registry_tables_c
+    assert ".format_elements = NULL," not in type_registry_tables_c
+    assert ".format_element_count = 0," not in type_registry_tables_c
 
 
 def test_generate_type_registry_emits_type_semantics() -> None:
@@ -161,11 +162,30 @@ def test_generate_type_registry_emits_type_semantics() -> None:
         contracts=[ContractFamily.KERNEL_ASYNC],
     )
 
-    type_registry_h, type_registry_c = generate_type_registry([type_def])
+    type_registry_h, _, type_registry_tables_c = generate_type_registry([type_def])
 
     assert "loom_type_semantics_t semantics;" in type_registry_h
-    assert ".semantic = LOOM_TYPE_SEMANTIC_CONTROL_TOKEN," in type_registry_c
-    assert ".contract_families = LOOM_CONTRACT_KERNEL_ASYNC," in type_registry_c
+    assert ".semantic = LOOM_TYPE_SEMANTIC_CONTROL_TOKEN," in type_registry_tables_c
+    assert ".contract_families = LOOM_CONTRACT_KERNEL_ASYNC," in type_registry_tables_c
+
+
+def test_generate_type_registry_emits_builtin_type_name_table() -> None:
+    type_def = TypeDef(name="test.tensor", ir_kind="tensor")
+
+    _, _, type_registry_tables_c = generate_type_registry([type_def])
+
+    assert "loom_type_registry_builtin_names[LOOM_TYPE_COUNT_]" in type_registry_tables_c
+    assert '[LOOM_TYPE_TENSOR] = IREE_SVL("test.tensor"),' in type_registry_tables_c
+
+
+def test_generate_type_registry_rejects_duplicate_builtin_type_names() -> None:
+    type_defs = [
+        TypeDef(name="test.tensor", ir_kind="tensor"),
+        TypeDef(name="test.other_tensor", ir_kind="tensor"),
+    ]
+
+    with _raises_value_error(r"Type kind 'tensor' has duplicate registry names"):
+        generate_type_registry(type_defs)
 
 
 def test_generate_type_registry_rejects_invalid_fact_domain_symbol() -> None:
