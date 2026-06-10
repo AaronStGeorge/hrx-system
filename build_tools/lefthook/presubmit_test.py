@@ -92,6 +92,7 @@ class PresubmitTest(unittest.TestCase):
         output = io.StringIO()
         with (
             contextlib.redirect_stdout(output),
+            mock.patch.dict(os.environ, {}, clear=True),
             mock.patch.object(
                 presubmit, "CLANG_TIDY_PATH_PREFIXES", ("runtime/src/iree/",)
             ),
@@ -108,6 +109,28 @@ class PresubmitTest(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertIn("[skip] clang-tidy", output.getvalue())
+
+    def test_clang_tidy_required_ci_fails_when_llvm_is_missing(self):
+        output = io.StringIO()
+        with (
+            contextlib.redirect_stdout(output),
+            mock.patch.dict(os.environ, {"IREE_CLANG_TIDY_REQUIRED": "1"}),
+            mock.patch.object(
+                presubmit, "CLANG_TIDY_PATH_PREFIXES", ("runtime/src/iree/",)
+            ),
+            mock.patch.object(
+                presubmit, "clang_tidy_llvm_available", return_value=False
+            ),
+        ):
+            ok = presubmit.run_clang_tidy(
+                ["runtime/src/iree/base/status.c"],
+                profile="ci",
+                lane="bazel",
+                verbose=False,
+            )
+
+        self.assertFalse(ok)
+        self.assertIn("[fail] clang-tidy", output.getvalue())
 
     def test_clang_tidy_runs_bazel_package_for_candidate_file(self):
         with (

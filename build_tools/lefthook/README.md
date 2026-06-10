@@ -169,7 +169,9 @@ by the CI profile. `dev.py doctor` reports optional tool availability; Semgrep
 includes the managed setup command in its warning when it is missing or the
 wrong version. Clang-tidy uses the Bazel LLVM repository model under
 `build_tools/clang_tidy`; local paranoid precommit skips when the LLVM tools are
-not available, while CI treats the selected provider as required.
+not available. The GitHub presubmit workflow fetches the ROCm LLVM toolchain and
+sets `IREE_CLANG_TIDY_REQUIRED=1` so missing LLVM tools fail loudly instead of
+silently skipping.
 
 ## Static Analysis
 

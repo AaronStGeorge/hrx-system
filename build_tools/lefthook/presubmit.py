@@ -659,6 +659,10 @@ def clang_tidy_llvm_available() -> bool:
     )
 
 
+def clang_tidy_required(profile: str) -> bool:
+    return profile == "ci" and env_flag("IREE_CLANG_TIDY_REQUIRED")
+
+
 def bazel_package_target_for_path(path: str) -> str | None:
     current = (REPO_ROOT / path).parent
     while current != current.parent:
@@ -1127,7 +1131,7 @@ def run_clang_tidy(paths: list[str], profile: str, lane: str, verbose: bool) -> 
         return skip_step("clang-tidy", "no C/C++ runtime inputs")
 
     if not clang_tidy_llvm_available():
-        if profile == "ci":
+        if clang_tidy_required(profile):
             print(f"[fail] clang-tidy: {CLANG_TIDY_SETUP_HINT}.")
             return False
         return skip_step("clang-tidy", CLANG_TIDY_SETUP_HINT)
