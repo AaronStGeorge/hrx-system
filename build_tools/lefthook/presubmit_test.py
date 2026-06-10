@@ -56,6 +56,68 @@ class PresubmitTest(unittest.TestCase):
         ):
             self.assertEqual(presubmit.semgrep_jobs(), 14)
 
+    def test_clang_format_default_jobs_are_capped_on_large_machines(self):
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(presubmit.os, "cpu_count", return_value=192),
+        ):
+            self.assertEqual(
+                presubmit.clang_format_jobs(),
+                presubmit.C_FORMAT_DEFAULT_MAX_JOBS,
+            )
+
+    def test_clang_format_jobs_can_be_configured(self):
+        with mock.patch.dict(os.environ, {"IREE_CLANG_FORMAT_JOBS": "3"}):
+            self.assertEqual(presubmit.clang_format_jobs(), 3)
+
+    def test_clang_format_batches_large_file_sets(self):
+        files = [f"runtime/src/iree/base/file_{index}.c" for index in range(130)]
+        with (
+            mock.patch.object(
+                presubmit, "existing_files", side_effect=lambda paths: paths
+            ),
+            mock.patch.object(presubmit, "require_tool", return_value=True),
+            mock.patch.object(presubmit, "clang_format_jobs", return_value=8),
+            mock.patch.object(
+                presubmit, "run_parallel_commands", return_value=True
+            ) as run_parallel_commands,
+        ):
+            self.assertTrue(presubmit.run_clang_format(files, fix=False, verbose=False))
+
+        commands = run_parallel_commands.call_args.args[0]
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(commands[0][:3], ["clang-format", "--dry-run", "--Werror"])
+        self.assertEqual(len(commands[0][3:]), presubmit.C_FORMAT_BATCH_SIZE)
+        self.assertEqual(run_parallel_commands.call_args.kwargs["jobs"], 3)
+
+    def test_stage_files_skips_git_add_when_worktree_is_clean(self):
+        clean_diff = presubmit.subprocess.CompletedProcess(
+            args=["git", "diff"], returncode=0
+        )
+        with (
+            mock.patch.object(presubmit.subprocess, "run", return_value=clean_diff),
+            mock.patch.object(
+                presubmit, "run_command", return_value=True
+            ) as run_command,
+        ):
+            self.assertTrue(presubmit.stage_files(["build_tools/file.py"], False))
+
+        run_command.assert_not_called()
+
+    def test_stage_files_adds_formatter_changes(self):
+        dirty_diff = presubmit.subprocess.CompletedProcess(
+            args=["git", "diff"], returncode=1
+        )
+        with (
+            mock.patch.object(presubmit.subprocess, "run", return_value=dirty_diff),
+            mock.patch.object(
+                presubmit, "run_command", return_value=True
+            ) as run_command,
+        ):
+            self.assertTrue(presubmit.stage_files(["build_tools/file.py"], False))
+
+        self.assertEqual(run_command.call_args.args[0][0:3], ["git", "add", "--"])
+
     def test_clang_tidy_candidates_require_configured_prefix_and_extension(self):
         with (
             mock.patch.object(presubmit, "CLANG_TIDY_PATH_PREFIXES", ("project/src/",)),

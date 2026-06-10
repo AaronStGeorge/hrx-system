@@ -48,6 +48,9 @@ tool output are useful.
 bazel-to-cmake, generated AMDGPU target metadata, watchwords, merge-conflict
 markers, and basic text hygiene.
 
+clang-format runs C/C++ files in parallel batches. Set `IREE_CLANG_FORMAT_JOBS`
+to override the default worker cap when diagnosing local machine behavior.
+
 `paranoid` adds affected project tests for the selected build lane and the
 static-analysis lane. Semgrep hard rules are the first configured provider.
 Rules that inventory existing drift stay at `WARNING` or `INFO` severity until

@@ -14,6 +14,7 @@ presubmit entry points. Project-specific test policy stays in each project.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import contextlib
 import io
 import json
@@ -60,6 +61,8 @@ C_FORMAT_EXTENSIONS = {
     ".m",
     ".mm",
 }
+C_FORMAT_BATCH_SIZE = 64
+C_FORMAT_DEFAULT_MAX_JOBS = 16
 SEMGREP_CONFIG = "build_tools/static_analysis/semgrep/iree.yml"
 SEMGREP_EXTENSIONS = C_FORMAT_EXTENSIONS
 SEMGREP_PATH_PREFIXES = (
@@ -438,6 +441,83 @@ def run_command(command: list[str], description: str, verbose: bool) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class CommandBatchResult:
+    command: list[str]
+    returncode: int
+    output: str
+
+
+def run_command_batch(command: list[str]) -> CommandBatchResult:
+    result = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return CommandBatchResult(
+        command=command,
+        returncode=result.returncode,
+        output=result.stdout,
+    )
+
+
+def run_parallel_commands(
+    commands: list[list[str]],
+    description: str,
+    verbose: bool,
+    *,
+    jobs: int,
+) -> bool:
+    if not commands:
+        return True
+    if len(commands) == 1:
+        return run_command(commands[0], description, verbose)
+
+    print(f"[run] {description}")
+    sys.stdout.flush()
+    start_time = time.monotonic()
+    if verbose:
+        print(f"  {len(commands)} batches, {jobs} jobs")
+        for command in commands:
+            print("  " + command_text(command))
+        sys.stdout.flush()
+
+    results: list[CommandBatchResult | None] = [None] * len(commands)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
+        future_to_index = {
+            executor.submit(run_command_batch, command): index
+            for index, command in enumerate(commands)
+        }
+        for future in concurrent.futures.as_completed(future_to_index):
+            results[future_to_index[future]] = future.result()
+
+    elapsed_seconds = time.monotonic() - start_time
+    completed_results = [result for result in results if result is not None]
+    failed_results = [result for result in completed_results if result.returncode != 0]
+    if not failed_results:
+        print(f"[ok] {description} ({format_duration(elapsed_seconds)})")
+        return True
+
+    failure_output_parts = []
+    for result in failed_results:
+        failure_output_parts.append("command:")
+        failure_output_parts.append("  " + command_text(result.command))
+        if result.output:
+            failure_output_parts.append("output:")
+            failure_output_parts.append(result.output.rstrip())
+    print_step_failure(
+        description,
+        elapsed_seconds,
+        output="\n".join(failure_output_parts),
+        exit_code=max(result.returncode for result in failed_results),
+    )
+    return False
+
+
 def run_inline_check(description: str, action, verbose: bool) -> bool:
     print(f"[run] {description}")
     sys.stdout.flush()
@@ -582,8 +662,26 @@ def existing_files(paths: list[str]) -> list[str]:
     return [path for path in paths if (REPO_ROOT / path).is_file()]
 
 
+def has_unstaged_changes(paths: list[str]) -> bool:
+    if not paths:
+        return False
+    result = subprocess.run(
+        ["git", "diff", "--quiet", "--", *paths],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode == 0:
+        return False
+    if result.returncode == 1:
+        return True
+    raise subprocess.CalledProcessError(result.returncode, result.args)
+
+
 def stage_files(paths: list[str], verbose: bool) -> bool:
     if not paths:
+        return True
+    if not has_unstaged_changes(paths):
         return True
     return run_command(["git", "add", "--", *paths], "Stage local fixups", verbose)
 
@@ -715,6 +813,16 @@ def clang_tidy_required(profile: str) -> bool:
     return profile == "ci" and env_flag("IREE_CLANG_TIDY_REQUIRED")
 
 
+def clang_format_jobs() -> int:
+    configured_jobs = os.environ.get("IREE_CLANG_FORMAT_JOBS")
+    if configured_jobs:
+        try:
+            return max(1, int(configured_jobs))
+        except ValueError:
+            return 1
+    return min(os.cpu_count() or 1, C_FORMAT_DEFAULT_MAX_JOBS)
+
+
 def bazel_package_target_for_path(path: str) -> str | None:
     current = (REPO_ROOT / path).parent
     while current != current.parent:
@@ -821,13 +929,21 @@ def run_clang_format(paths: list[str], fix: bool, verbose: bool) -> bool:
         return skip_step("clang-format", "no C/C++ files")
     if not require_tool("clang-format", "clang-format"):
         return False
-    command = ["clang-format"]
+    command_prefix = ["clang-format"]
     if fix:
-        command.append("-i")
+        command_prefix.append("-i")
     else:
-        command += ["--dry-run", "--Werror"]
-    command += files
-    ok = run_command(command, "clang-format", verbose)
+        command_prefix += ["--dry-run", "--Werror"]
+    commands = [
+        command_prefix + files[index : index + C_FORMAT_BATCH_SIZE]
+        for index in range(0, len(files), C_FORMAT_BATCH_SIZE)
+    ]
+    ok = run_parallel_commands(
+        commands,
+        "clang-format",
+        verbose,
+        jobs=min(clang_format_jobs(), len(commands)),
+    )
     if fix and ok:
         ok = stage_files(files, verbose)
     return ok
