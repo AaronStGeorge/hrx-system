@@ -100,6 +100,48 @@ class CiTest(unittest.TestCase):
         self.assertNotIn("IREE_ROCM_PATH", text)
         self.assertNotIn("/opt/rocm", text)
 
+    def test_amdgpu_loom_target_scope_omits_resource_tests(self):
+        args = ci.parse_arguments(
+            [
+                "iree-bazel-amdgpu",
+                "--target",
+                "//loom/...",
+            ]
+        )
+
+        steps = ci.steps_from_args(args)
+
+        self.assertFalse(
+            any("resources" in step.name for step in steps),
+        )
+        self.assertFalse(
+            any("//loom/..." in step.argv for step in steps),
+        )
+
+    def test_bazel_loom_amdgpu_command_runs_compile_coverage_without_driver(self):
+        args = ci.parse_arguments(["iree-bazel-loom-amdgpu"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertEqual(len(steps), 2)
+        self.assertEqual(command_lines[0], "python3 dev.py bazel configure")
+        test_step = steps[1]
+        self.assertEqual(test_step.name, "Test Loom AMDGPU compile coverage")
+        self.assertIn(
+            "--test_tag_filters=" + ",".join(ci_config.CPU_RESOURCE_TAG_EXCLUDES),
+            test_step.argv,
+        )
+        for target in ci_config.LOOM_AMDGPU_BAZEL_COMPILE_TEST_TARGETS:
+            self.assertIn(target, test_step.argv)
+        self.assertNotIn(
+            "//loom/src/loom/target/emit/native/amdgpu:hsaco_hsa_test",
+            test_step.argv,
+        )
+        self.assertFalse(
+            any("-DIREE_HAL_DRIVER_AMDGPU=ON" in line for line in command_lines)
+        )
+
     def test_sanitizer_command_runs_tests_and_msan_build(self):
         args = ci.parse_arguments(
             [
@@ -798,6 +840,41 @@ class CiTest(unittest.TestCase):
         for target in ci_config.AMDGPU_CMAKE_RESOURCE_TEST_BUILD_TARGETS:
             self.assertFalse(any(target in step.argv for step in build_steps))
         self.assertFalse(any("Test IREE CMake AMDGPU" in step.name for step in steps))
+
+    def test_cmake_loom_amdgpu_command_runs_compile_coverage_without_driver(self):
+        args = ci.parse_arguments(["iree-cmake-loom-amdgpu"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertEqual(len(steps), 3)
+        self.assertTrue(
+            any(
+                "--cmake-build-dir build/ci/iree-cmake-loom-amdgpu" in line
+                for line in command_lines
+            )
+        )
+        self.assertTrue(
+            any("-DIREE_HAL_DRIVER_AMDGPU=OFF" in line for line in command_lines)
+        )
+        self.assertFalse(
+            any("-DIREE_HAL_AMDGPU_TARGETS=" in line for line in command_lines)
+        )
+        build_step = next(
+            step
+            for step in steps
+            if step.name == "Build Loom CMake AMDGPU compile coverage"
+        )
+        for target in ci_config.LOOM_AMDGPU_CMAKE_COMPILE_TEST_BUILD_TARGETS:
+            self.assertIn(target, build_step.argv)
+        test_step = next(
+            step
+            for step in steps
+            if step.name == "Test Loom CMake AMDGPU compile coverage"
+        )
+        for regex in ci_config.LOOM_AMDGPU_CMAKE_COMPILE_CTEST_REGEXES:
+            self.assertTrue(any(regex in arg for arg in test_step.argv))
+        self.assertIn(ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX, test_step.argv)
 
     def test_cmake_vulkan_command_scopes_build_and_tests_to_vulkan(self):
         args = ci.parse_arguments(["iree-cmake-vulkan"])

@@ -45,6 +45,7 @@ BAZEL_COMMANDS = {
     "iree-bazel-amdgpu-tsan": ("amdgpu", "tsan"),
     "iree-bazel-amdgpu-ubsan": ("amdgpu", "ubsan"),
     "iree-bazel-amdgpu-sanitizers": ("amdgpu", "all"),
+    "iree-bazel-loom-amdgpu": ("loom-amdgpu", None),
     "iree-bazel-vulkan": ("vulkan", None),
     "iree-bazel-vulkan-asan": ("vulkan", "asan"),
     "iree-bazel-vulkan-msan": ("vulkan", "msan"),
@@ -65,6 +66,7 @@ CMAKE_COMMANDS = {
     "iree-cmake-amdgpu-tsan": ("amdgpu", "tsan"),
     "iree-cmake-amdgpu-ubsan": ("amdgpu", "ubsan"),
     "iree-cmake-amdgpu-sanitizers": ("amdgpu", "all"),
+    "iree-cmake-loom-amdgpu": ("loom-amdgpu", None),
     "iree-cmake-vulkan": ("vulkan", None),
     "iree-cmake-vulkan-asan": ("vulkan", "asan"),
     "iree-cmake-vulkan-msan": ("vulkan", "msan"),
@@ -344,7 +346,8 @@ def resource_slice_targets(
     target_prefix: str,
     default_target: str,
 ) -> tuple[str, ...]:
-    slice_targets = []
+    positive_targets = []
+    negative_targets = []
     seen_targets = set()
     for target in targets:
         is_negative = target.startswith("-")
@@ -357,9 +360,14 @@ def resource_slice_targets(
             continue
         if selected_target in seen_targets:
             continue
-        slice_targets.append(selected_target)
+        if is_negative:
+            negative_targets.append(selected_target)
+        else:
+            positive_targets.append(selected_target)
         seen_targets.add(selected_target)
-    return tuple(slice_targets)
+    if not positive_targets:
+        return ()
+    return tuple(positive_targets + negative_targets)
 
 
 def target_in_prefix(target: str, target_prefix: str) -> bool:
@@ -378,6 +386,17 @@ def amdgpu_steps(targets: tuple[str, ...]) -> list[CiStep]:
             ci_config.AMDGPU_BAZEL_DRIVER_TARGETS,
         ),
         *amdgpu_test_steps(targets, xfail_targets=ci_config.AMDGPU_XFAIL_TARGETS),
+    ]
+
+
+def loom_amdgpu_bazel_steps() -> list[CiStep]:
+    return [
+        bazel_configure_step(),
+        bazel_test_step(
+            "Test Loom AMDGPU compile coverage",
+            ci_config.LOOM_AMDGPU_BAZEL_COMPILE_TEST_TARGETS,
+            test_tag_filters=ci_config.CPU_RESOURCE_TAG_EXCLUDES,
+        ),
     ]
 
 
@@ -547,6 +566,25 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
     return steps
 
 
+def cmake_loom_amdgpu_steps(command_name: str) -> list[CiStep]:
+    return [
+        cmake_configure_step(command_name),
+        cmake_build_step(
+            command_name,
+            "Build Loom CMake AMDGPU compile coverage",
+            ci_config.LOOM_AMDGPU_CMAKE_COMPILE_TEST_BUILD_TARGETS,
+        ),
+        cmake_test_step(
+            command_name,
+            "Test Loom CMake AMDGPU compile coverage",
+            regex=combine_ctest_regex(
+                *ci_config.LOOM_AMDGPU_CMAKE_COMPILE_CTEST_REGEXES
+            ),
+            label_exclude_regex=ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX,
+        ),
+    ]
+
+
 def cmake_vulkan_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
     sanitizer_name = f" with {sanitizer.upper()}" if sanitizer is not None else ""
     tests_enabled = cmake_tests_enabled(sanitizer)
@@ -581,6 +619,10 @@ def cmake_target_steps(
         return cmake_cpu_steps(command_name, sanitizer)
     if target_group == "amdgpu":
         return cmake_amdgpu_steps(command_name, sanitizer)
+    if target_group == "loom-amdgpu":
+        if sanitizer is not None:
+            raise ValueError("Loom AMDGPU CMake CI does not support sanitizers")
+        return cmake_loom_amdgpu_steps(command_name)
     if target_group == "vulkan":
         return cmake_vulkan_steps(command_name, sanitizer)
     raise ValueError(f"unknown CMake CI target: {target_group}")
@@ -658,6 +700,12 @@ def steps_from_args(args: argparse.Namespace) -> list[CiStep]:
         return cmake_target_steps(args.command, target_group, sanitizer)
 
     bazel_target, sanitizer = BAZEL_COMMANDS[args.command]
+    if bazel_target == "loom-amdgpu":
+        if args.target:
+            raise ValueError("--target is not supported by Loom AMDGPU CI")
+        if sanitizer is not None:
+            raise ValueError("Loom AMDGPU Bazel CI does not support sanitizers")
+        return loom_amdgpu_bazel_steps()
     targets = command_targets(args.target)
     if bazel_target == "cpu":
         if sanitizer == "all":
