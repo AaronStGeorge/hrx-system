@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from functools import cache
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -21,8 +22,8 @@ from loom.format.text.parser import Parser
 from loom.format.text.tokenizer import ParseError
 from loom.importers.check.cases import CheckCase, rewrite_inline_case_inputs
 from loom.migration.rules import (
-    DEFAULT_MIGRATION_RULES,
     MigrationRule,
+    migration_rules_from_ops,
 )
 from loom.migration.source import (
     MigrationSourceDiagnostic,
@@ -181,18 +182,20 @@ def classify_file(path: Path) -> MigrationFileKind:
 def migrate_files(
     paths: Sequence[Path],
     *,
-    rules: Sequence[MigrationRule] = DEFAULT_MIGRATION_RULES,
+    rules: Sequence[MigrationRule] | None = None,
 ) -> MigrationRunResult:
     """Migrates or checks each path without writing results to disk."""
+    rules = _resolve_rules(rules)
     return MigrationRunResult(tuple(migrate_file(path, rules=rules) for path in paths))
 
 
 def migrate_file(
     path: Path,
     *,
-    rules: Sequence[MigrationRule] = DEFAULT_MIGRATION_RULES,
+    rules: Sequence[MigrationRule] | None = None,
 ) -> FileMigrationResult:
     """Migrates or checks one filesystem path without writing results to disk."""
+    rules = _resolve_rules(rules)
     kind = classify_file(path)
     if kind == MigrationFileKind.LOOM_SOURCE:
         text = path.read_text(encoding="utf-8")
@@ -235,10 +238,11 @@ def migrate_source_text(
     text: str,
     *,
     filename: Path | None = None,
-    rules: Sequence[MigrationRule] = DEFAULT_MIGRATION_RULES,
+    rules: Sequence[MigrationRule] | None = None,
     validate: bool = True,
 ) -> SourceMigrationResult:
     """Applies source-preserving migration rules to one Loom source string."""
+    rules = _resolve_rules(rules)
     document = SourceDocument(text, filename)
     diagnostics: list[MigrationFileDiagnostic] = []
     edits: list[SourceEdit] = []
@@ -278,10 +282,11 @@ def migrate_loom_test_text(
     text: str,
     *,
     filename: Path | None = None,
-    rules: Sequence[MigrationRule] = DEFAULT_MIGRATION_RULES,
+    rules: Sequence[MigrationRule] | None = None,
     validate: bool = True,
 ) -> SourceMigrationResult:
     """Applies Loom source migration rules to .loom-test input IR sections."""
+    rules = _resolve_rules(rules)
     case_results: dict[int, SourceMigrationResult] = {}
 
     def migrate_input(
@@ -476,6 +481,18 @@ def default_migration_types() -> tuple[Any, ...]:
         *ALL_KERNEL_TYPES,
         *ALL_IREEVM_TYPES,
     )
+
+
+@cache
+def default_migration_rules() -> tuple[MigrationRule, ...]:
+    """Returns migration rules generated from current op legacy formats."""
+    return migration_rules_from_ops(default_migration_ops())
+
+
+def _resolve_rules(
+    rules: Sequence[MigrationRule] | None,
+) -> tuple[MigrationRule, ...]:
+    return default_migration_rules() if rules is None else tuple(rules)
 
 
 def _source_range_to_json(source_range: SourceRange) -> dict[str, Any]:

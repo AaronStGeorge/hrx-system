@@ -8,8 +8,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loom.migration.driver import migrate_loom_test_text, migrate_source_text
-from loom.migration.rules import BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID
+import pytest
+
+from loom.assembly import COLON, AttrDict, Ref, TypeOf
+from loom.dsl import ANY, ATTR_TYPE_DICT, AttrDef, LegacyFormat, Op, Operand, Result
+from loom.migration.driver import (
+    default_migration_rules,
+    migrate_loom_test_text,
+    migrate_source_text,
+)
+from loom.migration.rules import (
+    BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID,
+    MigrationRuleApplication,
+    migration_rules_from_ops,
+)
+from loom.migration.source import SourceDocument
+
+
+def test_default_rules_are_generated_from_op_legacy_formats() -> None:
+    rule_ids = tuple(rule.rule_id for rule in default_migration_rules())
+
+    assert BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID in rule_ids
 
 
 def test_buffer_assume_memory_space_attr_dict_rewrites_source() -> None:
@@ -133,3 +152,69 @@ def test_buffer_assume_memory_space_rewrites_loom_test_input_only() -> None:
         "  func.return %global : buffer\n"
         "}\n"
     )
+
+
+def test_legacy_format_rewrite_hook_is_registered_by_name() -> None:
+    op = Op(
+        "test.semantic",
+        attrs=[AttrDef("attrs", ATTR_TYPE_DICT)],
+        legacy_formats=[
+            LegacyFormat(
+                "test.semantic.old",
+                format=[AttrDict("attrs")],
+                replaced_by="loom-source-format-2026-06-09",
+                rewrite_hook="semantic_rewrite",
+            )
+        ],
+    )
+    seen_documents: list[str] = []
+
+    def semantic_rewrite(document: SourceDocument) -> MigrationRuleApplication:
+        seen_documents.append(document.text)
+        return MigrationRuleApplication()
+
+    rules = migration_rules_from_ops(
+        (op,), rewrite_hooks={"semantic_rewrite": semantic_rewrite}
+    )
+    application = rules[0].rewrite(SourceDocument("test.semantic {kind = old}\n"))
+
+    assert application == MigrationRuleApplication()
+    assert seen_documents == ["test.semantic {kind = old}\n"]
+
+
+def test_legacy_format_rewrite_hook_must_be_registered() -> None:
+    op = Op(
+        "test.semantic",
+        attrs=[AttrDef("attrs", ATTR_TYPE_DICT)],
+        legacy_formats=[
+            LegacyFormat(
+                "test.semantic.old",
+                format=[AttrDict("attrs")],
+                replaced_by="loom-source-format-2026-06-09",
+                rewrite_hook="semantic_rewrite",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="unknown rewrite hook"):
+        migration_rules_from_ops((op,))
+
+
+def test_unsupported_structural_format_requires_rewrite_hook() -> None:
+    op = Op(
+        "test.unsupported",
+        operands=[Operand("input", ANY)],
+        results=[Result("result", ANY)],
+        attrs=[AttrDef("attrs", ATTR_TYPE_DICT)],
+        format=[Ref("input"), COLON, TypeOf("result")],
+        legacy_formats=[
+            LegacyFormat(
+                "test.unsupported.old",
+                format=[AttrDict("attrs")],
+                replaced_by="loom-source-format-2026-06-09",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="provide a rewrite hook"):
+        migration_rules_from_ops((op,))

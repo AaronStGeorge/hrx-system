@@ -2921,12 +2921,6 @@ def _validate_legacy_formats(
                 f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
                 "replaced_by baseline is empty."
             )
-        if not legacy_format.expires_after:
-            raise ValueError(
-                f"Op '{op_name}': legacy format '{legacy_format.rule_id}' "
-                "expires_after baseline is empty."
-            )
-
         field_mapping: dict[str, str] = {}
         mapped_current_fields: set[str] = set()
         for mapping in legacy_format.field_mappings:
@@ -3623,7 +3617,7 @@ class LegacyFormat:
     rule_id: str
     format: tuple[FormatElement, ...]
     replaced_by: str
-    expires_after: str
+    expires_after: str = ""
     introduced: str = "pre-release"
     field_mappings: tuple[LegacyFieldMapping, ...] = ()
     field_defaults: tuple[LegacyFieldDefault, ...] = ()
@@ -3635,7 +3629,7 @@ class LegacyFormat:
         *,
         format: list[FormatElement] | tuple[FormatElement, ...],
         replaced_by: str,
-        expires_after: str,
+        expires_after: str = "",
         introduced: str = "pre-release",
         field_mappings: list[LegacyFieldMapping] | tuple[LegacyFieldMapping, ...] = (),
         field_defaults: list[LegacyFieldDefault] | tuple[LegacyFieldDefault, ...] = (),

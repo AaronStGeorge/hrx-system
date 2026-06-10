@@ -31,7 +31,7 @@ REQUIRED_ACTIVE_RULE_TEST_KINDS = frozenset(
     )
 )
 
-CURRENT_TEXT_BASELINE = "loom-text-2026-06-09"
+CURRENT_TEXT_BASELINE = "loom-source-format-2026-06-09"
 CURRENT_BYTECODE_VERSION = FORMAT_VERSION
 
 
@@ -59,7 +59,7 @@ class MigrationRuleMetadata:
 
     rule_id: str
     replaced_by: str
-    expires_after: str
+    expires_after: str = ""
     introduced: str = "pre-release"
     test_kinds: frozenset[str] = frozenset()
 
@@ -330,13 +330,15 @@ def _lint_rules(
             baseline_positions,
             diagnostics,
         )
-        expires_position = _rule_baseline_position(
-            rule.rule_id,
-            "expires_after",
-            rule.expires_after,
-            baseline_positions,
-            diagnostics,
-        )
+        expires_position = None
+        if rule.expires_after:
+            expires_position = _rule_baseline_position(
+                rule.rule_id,
+                "expires_after",
+                rule.expires_after,
+                baseline_positions,
+                diagnostics,
+            )
 
         if (
             introduced_position is not None
@@ -423,7 +425,7 @@ def _rule_baseline_position(
 CURRENT_MANIFEST = MigrationManifest(
     text_baselines=(
         TextBaseline("pre-release", "Development before migration tracking."),
-        TextBaseline(CURRENT_TEXT_BASELINE, "Initial Loom migration baseline."),
+        TextBaseline(CURRENT_TEXT_BASELINE, "Initial Loom source-format baseline."),
     ),
     current_text_baseline=CURRENT_TEXT_BASELINE,
     current_bytecode_version=CURRENT_BYTECODE_VERSION,

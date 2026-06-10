@@ -187,9 +187,7 @@ buffer_assume_memory_space = Op(
                 COLON,
                 TypeOf("result"),
             ],
-            replaced_by="loom-text-2026-06-09",
-            expires_after="loom-text-2026-06-09",
-            rewrite_hook="buffer_assume_memory_space_attr_dict",
+            replaced_by="loom-source-format-2026-06-09",
         )
     ],
     examples=[

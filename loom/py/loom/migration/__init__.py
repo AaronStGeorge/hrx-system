@@ -18,6 +18,7 @@ from loom.migration.driver import (
     check_bytecode_version,
     classify_file,
     default_migration_ops,
+    default_migration_rules,
     default_migration_types,
     discover_migration_files,
     migrate_file,
@@ -48,11 +49,11 @@ from loom.migration.manifest import (
     migration_rule_metadata_from_ops,
 )
 from loom.migration.rules import (
-    BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE,
     BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID,
-    DEFAULT_MIGRATION_RULES,
+    MigrationRewrite,
     MigrationRule,
     MigrationRuleApplication,
+    migration_rules_from_ops,
 )
 from loom.migration.source import (
     MigrationSourceDiagnostic,
@@ -67,8 +68,6 @@ __all__ = [
     "CURRENT_TEXT_BASELINE",
     "DIAGNOSTIC_ERROR",
     "DIAGNOSTIC_WARNING",
-    "DEFAULT_MIGRATION_RULES",
-    "BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE",
     "BUFFER_ASSUME_MEMORY_SPACE_ATTR_DICT_RULE_ID",
     "LOOM_BYTECODE_SUFFIX",
     "LOOM_SOURCE_SUFFIX",
@@ -87,6 +86,7 @@ __all__ = [
     "MigrationManifest",
     "MigrationRule",
     "MigrationRuleApplication",
+    "MigrationRewrite",
     "MigrationRuleMetadata",
     "MigrationRunResult",
     "MigrationSourceDiagnostic",
@@ -98,6 +98,7 @@ __all__ = [
     "check_bytecode_version",
     "classify_file",
     "default_migration_ops",
+    "default_migration_rules",
     "default_migration_types",
     "discover_migration_files",
     "lint_legacy_formats",
@@ -107,5 +108,6 @@ __all__ = [
     "migrate_loom_test_text",
     "migrate_source_text",
     "migration_rule_metadata_from_ops",
+    "migration_rules_from_ops",
     "validate_current_source",
 ]

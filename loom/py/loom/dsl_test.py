@@ -1458,8 +1458,8 @@ class TestOp:
                 LegacyFormat(
                     "test.op.old",
                     format=[Ref("x"), COLON, TypeOf("y")],
-                    replaced_by="loom-text-2026-06-09",
-                    expires_after="loom-text-2026-07-01",
+                    replaced_by="loom-source-format-2026-06-09",
+                    expires_after="loom-source-format-2026-07-01",
                 )
             ],
             examples=["example"],
@@ -1494,8 +1494,8 @@ class TestOp:
                         LegacyFieldMapping("legacy_mode", "mode"),
                     ],
                     field_defaults=[LegacyFieldDefault("policy", "default")],
-                    replaced_by="loom-text-2026-06-09",
-                    expires_after="loom-text-2026-07-01",
+                    replaced_by="loom-source-format-2026-06-09",
+                    expires_after="loom-source-format-2026-07-01",
                     rewrite_hook="migrate_test_op_mode_attr",
                 )
             ],
@@ -1511,7 +1511,25 @@ class TestOp:
         assert legacy_format.field_defaults == (
             LegacyFieldDefault("policy", "default"),
         )
+        assert legacy_format.expires_after == "loom-source-format-2026-07-01"
         assert legacy_format.rewrite_hook == "migrate_test_op_mode_attr"
+
+    def test_legacy_format_expiration_is_optional(self) -> None:
+        op = Op(
+            "test.op",
+            operands=[Operand("input", ANY)],
+            legacy_formats=[
+                LegacyFormat(
+                    "test.op.old",
+                    format=[Ref("input")],
+                    replaced_by="loom-source-format-2026-06-09",
+                )
+            ],
+        )
+
+        legacy_format = op.legacy_formats[0]
+        assert legacy_format.replaced_by == "loom-source-format-2026-06-09"
+        assert legacy_format.expires_after == ""
 
     def test_duplicate_legacy_format_rule_id_is_rejected(self) -> None:
         with _raises(ValueError, match="duplicate legacy format rule_id"):
@@ -1522,14 +1540,14 @@ class TestOp:
                     LegacyFormat(
                         "test.op.old",
                         format=[Ref("input")],
-                        replaced_by="loom-text-2026-06-09",
-                        expires_after="loom-text-2026-07-01",
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
                     ),
                     LegacyFormat(
                         "test.op.old",
                         format=[Ref("input")],
-                        replaced_by="loom-text-2026-06-09",
-                        expires_after="loom-text-2026-07-01",
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
                     ),
                 ],
             )
@@ -1543,8 +1561,8 @@ class TestOp:
                     LegacyFormat(
                         "test.op.bad",
                         format=[Ref("missing")],
-                        replaced_by="loom-text-2026-06-09",
-                        expires_after="loom-text-2026-07-01",
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
                     )
                 ],
             )
@@ -1561,8 +1579,8 @@ class TestOp:
                         field_mappings=[
                             LegacyFieldMapping("old_input", "input"),
                         ],
-                        replaced_by="loom-text-2026-06-09",
-                        expires_after="loom-text-2026-07-01",
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
                     )
                 ],
             )
@@ -1580,8 +1598,8 @@ class TestOp:
                             LegacyFieldMapping("old_input", "input"),
                             LegacyFieldMapping("older_input", "input"),
                         ],
-                        replaced_by="loom-text-2026-06-09",
-                        expires_after="loom-text-2026-07-01",
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
                     )
                 ],
             )
@@ -1596,8 +1614,8 @@ class TestOp:
                         "test.op.bad",
                         format=[Ref("input")],
                         field_defaults=[LegacyFieldDefault("missing", "value")],
-                        replaced_by="loom-text-2026-06-09",
-                        expires_after="loom-text-2026-07-01",
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
                     )
                 ],
             )
@@ -1612,8 +1630,8 @@ class TestOp:
                         "test.op.bad",
                         format=[Ref("input")],
                         field_defaults=[LegacyFieldDefault("input", "value")],
-                        replaced_by="loom-text-2026-06-09",
-                        expires_after="loom-text-2026-07-01",
+                        replaced_by="loom-source-format-2026-06-09",
+                        expires_after="loom-source-format-2026-07-01",
                     )
                 ],
             )
