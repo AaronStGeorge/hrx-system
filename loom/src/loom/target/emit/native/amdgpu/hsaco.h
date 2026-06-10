@@ -27,6 +27,8 @@ extern "C" {
 typedef struct loom_amdgpu_hsaco_kernel_descriptor_options_t {
   // Descriptor-only ABI flags requested by low/kernel lowering.
   loom_amdgpu_kernel_descriptor_flags_t flags;
+  // Minimum user SGPR count implied by descriptor-only ABI flags.
+  uint32_t user_sgpr_count;
 } loom_amdgpu_hsaco_kernel_descriptor_options_t;
 
 // One kernel entry emitted into an AMDGPU HSA code object.

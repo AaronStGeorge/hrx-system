@@ -47,8 +47,18 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
       builder, "  .amdhsa_user_sgpr_count %" PRIu32 "\n",
       record->user_sgpr_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      builder, "  .amdhsa_user_sgpr_kernarg_segment_ptr %u\n",
-      record->abi_layout.uses_kernarg_segment_ptr ? 1u : 0u));
+      builder,
+      "  .amdhsa_user_sgpr_dispatch_ptr %u\n"
+      "  .amdhsa_user_sgpr_kernarg_segment_ptr %u\n",
+      iree_any_bit_set(record->descriptor_flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR)
+          ? 1u
+          : 0u,
+      iree_any_bit_set(
+          record->descriptor_flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR)
+          ? 1u
+          : 0u));
   if (record->processor->kernel_descriptor_uses_gfx10_sgpr_encoding) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder, "  .amdhsa_wavefront_size32 %u\n",

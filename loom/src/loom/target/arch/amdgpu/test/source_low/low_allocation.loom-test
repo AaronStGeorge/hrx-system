@@ -26,6 +26,23 @@ low.func.def target(@target) @gfx11_structural_vgpr_span_rebased_before_257(%wid
 
 // ====
 
+// RUN: emit low-allocation-json @dispatch_ptr_lifetime_releases_sgpr_pair fixed=%dispatch:physical_register:0:2
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @dispatch_ptr_lifetime_releases_sgpr_pair() -> (reg<amdgpu.sgpr>) {
+  %dispatch = low.live_in<amdgpu.dispatch_ptr> : reg<amdgpu.sgpr x2>
+  %grid = low.op<amdgpu.s_load_dword_offset_only>(%dispatch) {offset = 12} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr>
+  %late = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
+  %sum = low.op<amdgpu.s_add_u32>(%grid, %late) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %sum : reg<amdgpu.sgpr>
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"dispatch_ptr_lifetime_releases_sgpr_pair","target":"target","descriptor_set":"amdgpu.rdna3.core","allocation_mode":"virtual","assignment_count":4,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":1,"name":"dispatch","type":"reg<amdgpu.sgpr x2>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.sgpr"},"start_point":1,"end_point":3,"unit_count":2,"location":{"kind":"physical_register","base":0,"count":2}},{"index":1,"value":{"id":2,"name":"grid","type":"reg<amdgpu.sgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.sgpr"},"start_point":2,"end_point":4,"unit_count":1,"location":{"kind":"physical_register","base":2,"count":1}},{"index":2,"value":{"id":3,"name":"late","type":"reg<amdgpu.sgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.sgpr"},"start_point":3,"end_point":4,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}},{"index":3,"value":{"id":4,"name":"sum","type":"reg<amdgpu.sgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.sgpr"},"start_point":4,"end_point":5,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+
+// ====
+
 // RUN: pass low-materialize-allocation{budgets=amdgpu.vgpr=2,spill-storage-spaces=none}
 
 amdgpu.target<gfx1100> @target

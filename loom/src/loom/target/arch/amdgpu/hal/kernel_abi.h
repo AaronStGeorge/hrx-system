@@ -45,6 +45,13 @@ extern "C" {
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE_ID \
   UINT64_C(0x7C8A03858206FDDC)
 
+// Stable low.live_in source spelling for the AMDGPU dispatch packet pointer.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE "amdgpu.dispatch_ptr"
+
+// Stable low.live_in source ID for the AMDGPU dispatch packet pointer.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE_ID \
+  UINT64_C(0x36D73B4B3758D0B2)
+
 // Stable low.live_in source spelling for workgroup_id.x in the first system
 // SGPR after enabled user SGPRs.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE "amdgpu.workgroup_id.x"
@@ -233,6 +240,10 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
 bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
 
+// Returns true if |value_id| is defined by the dispatch packet pointer live-in.
+bool loom_amdgpu_hal_kernel_abi_is_dispatch_ptr_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
 // Returns true if |value_id| is defined by the workgroup_id.x live-in.
 bool loom_amdgpu_hal_kernel_abi_is_workgroup_id_x_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
@@ -273,10 +284,12 @@ bool loom_amdgpu_hal_kernel_abi_is_m0_live_in(const loom_module_t* module,
 // Finds AMDGPU ABI live-ins that require fixed physical locations during
 // allocation.
 //
-// The returned array is arena-owned. The current ABI fixes the kernarg segment
-// pointer live-in to s[0:1], workgroup_id.x/y/z live-ins to the SGPRs
-// immediately following enabled user SGPRs, unpacked workitem_id.x/y/z live-ins
-// to v0/v1/v2, and packed workitem-id live-ins to v0 when present.
+// The returned array is arena-owned. The current ABI fixes hidden user SGPRs in
+// AMDHSA order: dispatch pointer, then kernarg segment pointer. Each pointer
+// consumes two SGPRs starting at the next available user-SGPR location.
+// workgroup_id.x/y/z live-ins use the SGPRs immediately following enabled user
+// SGPRs. Unpacked workitem_id.x/y/z live-ins use v0/v1/v2, and packed
+// workitem-id live-ins use v0 when present.
 //
 // The function must already have passed
 // loom_amdgpu_hal_kernel_abi_verify_low. Status is reserved for allocation and

@@ -831,8 +831,6 @@ static iree_status_t loom_amdgpu_append_memory_immediate_suffixes(
 
 static iree_status_t loom_amdgpu_append_memory_packet(
     const loom_native_assembly_packet_context_t* context) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   if (descriptor->canonical_asm_form_ordinal ==
       LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
@@ -843,7 +841,15 @@ static iree_status_t loom_amdgpu_append_memory_packet(
     IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_canonical_asm_form(context, &form));
     iree_string_view_t mnemonic = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-        descriptor_set, form->mnemonic_string_offset, &mnemonic));
+        context->schedule->target.descriptor_set, form->mnemonic_string_offset,
+        &mnemonic));
+    // Fixed-SOFFSET SMEM forms use a unique low-asm mnemonic; native assembly
+    // still spells the ordinary ISA mnemonic.
+    if (iree_string_view_ends_with(mnemonic, IREE_SV("_offset_only"))) {
+      IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+          context->schedule->target.descriptor_set,
+          descriptor->mnemonic_string_offset, &mnemonic));
+    }
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_string(context->builder, mnemonic));
     bool in_list = false;
