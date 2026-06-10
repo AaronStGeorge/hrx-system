@@ -737,8 +737,8 @@ typedef enum hrx_event_flags_t {
 HRX_API hrx_status_t hrx_event_create(hrx_device_t device,
                                       hrx_event_flags_t flags,
                                       hrx_event_t* out_event);
-HRX_API hrx_status_t hrx_event_retain(hrx_event_t event);
-HRX_API hrx_status_t hrx_event_release(hrx_event_t event);
+HRX_API void hrx_event_retain(hrx_event_t event);
+HRX_API void hrx_event_release(hrx_event_t event);
 HRX_API hrx_status_t hrx_event_record(hrx_event_t event, hrx_stream_t stream);
 HRX_API hrx_status_t hrx_event_query(hrx_event_t event, bool* complete);
 HRX_API hrx_status_t hrx_event_synchronize(hrx_event_t event);

@@ -12,6 +12,7 @@
 #include <string>
 
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/Stmt.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
@@ -170,6 +171,92 @@ bool IsPointerLikeSingleArgumentRelease(const CallExpr* Call,
     return false;
   }
   return Callee->getParamDecl(0)->getType()->isAnyPointerType();
+}
+
+bool IsRefCountLifecycleFunctionName(StringRef FunctionName) {
+  return FunctionName.ends_with("_retain") ||
+         FunctionName.ends_with("_release");
+}
+
+bool IsIdentifierCharacter(char Character) {
+  return std::isalnum(static_cast<unsigned char>(Character)) ||
+         Character == '_';
+}
+
+bool SourceContainsIdentifier(StringRef Source, StringRef Identifier) {
+  enum class State {
+    kCode,
+    kLineComment,
+    kBlockComment,
+    kString,
+    kCharacter,
+  };
+  State ParserState = State::kCode;
+  for (size_t I = 0; I < Source.size(); ++I) {
+    char Character = Source[I];
+    char Next = I + 1 < Source.size() ? Source[I + 1] : '\0';
+    switch (ParserState) {
+      case State::kCode:
+        if (Character == '/' && Next == '/') {
+          ParserState = State::kLineComment;
+          ++I;
+        } else if (Character == '/' && Next == '*') {
+          ParserState = State::kBlockComment;
+          ++I;
+        } else if (Character == '"') {
+          ParserState = State::kString;
+        } else if (Character == '\'') {
+          ParserState = State::kCharacter;
+        } else if (Source.substr(I).starts_with(Identifier) &&
+                   (I == 0 || !IsIdentifierCharacter(Source[I - 1])) &&
+                   (I + Identifier.size() == Source.size() ||
+                    !IsIdentifierCharacter(Source[I + Identifier.size()]))) {
+          return true;
+        }
+        break;
+      case State::kLineComment:
+        if (Character == '\n' || Character == '\r') {
+          ParserState = State::kCode;
+        }
+        break;
+      case State::kBlockComment:
+        if (Character == '*' && Next == '/') {
+          ParserState = State::kCode;
+          ++I;
+        }
+        break;
+      case State::kString:
+      case State::kCharacter:
+        if (Character == '\\' && Next != '\0') {
+          ++I;
+        } else if ((ParserState == State::kString && Character == '"') ||
+                   (ParserState == State::kCharacter && Character == '\'')) {
+          ParserState = State::kCode;
+        }
+        break;
+    }
+  }
+  return false;
+}
+
+bool BodyContainsRefCountMutation(const FunctionDecl* Function,
+                                  const SourceManager& SourceManager,
+                                  const LangOptions& LangOptions) {
+  const Stmt* Body = Function->getBody();
+  if (!Body) {
+    return false;
+  }
+  SourceRange BodyRange = Body->getSourceRange();
+  if (BodyRange.getBegin().isInvalid() || BodyRange.getEnd().isInvalid()) {
+    return false;
+  }
+  std::optional<std::string> BodyText = SourceText(
+      CharSourceRange::getTokenRange(BodyRange), SourceManager, LangOptions);
+  if (!BodyText) {
+    return false;
+  }
+  return SourceContainsIdentifier(*BodyText, "iree_atomic_ref_count_inc") ||
+         SourceContainsIdentifier(*BodyText, "iree_atomic_ref_count_dec");
 }
 
 bool IsNullAssignmentToGuard(const Stmt* Statement, const Expr* GuardExpression,
@@ -353,6 +440,42 @@ void GuardedReleaseCheck::check(
     Diagnostic << FixItHint::CreateReplacement(*ReplacementRange,
                                                *ReplacementText);
   }
+}
+
+RefCountLifecycleCheck::RefCountLifecycleCheck(StringRef Name,
+                                               ClangTidyContext* Context)
+    : ClangTidyCheck(Name, Context) {}
+
+void RefCountLifecycleCheck::registerMatchers(
+    ast_matchers::MatchFinder* Finder) {
+  using namespace ast_matchers;
+  Finder->addMatcher(
+      functionDecl(isDefinition(), unless(isExpansionInSystemHeader()))
+          .bind("function"),
+      this);
+}
+
+void RefCountLifecycleCheck::check(
+    const ast_matchers::MatchFinder::MatchResult& Result) {
+  const auto* Function = Result.Nodes.getNodeAs<FunctionDecl>("function");
+  if (!Function || Function->getReturnType()->isVoidType()) {
+    return;
+  }
+  const SourceManager& SourceManager = *Result.SourceManager;
+  if (IsExternalMacroBody(Function->getLocation(), SourceManager)) {
+    return;
+  }
+  StringRef FunctionName = Function->getName();
+  if (!IsRefCountLifecycleFunctionName(FunctionName)) {
+    return;
+  }
+  if (!BodyContainsRefCountMutation(Function, SourceManager,
+                                    Result.Context->getLangOpts())) {
+    return;
+  }
+  diag(SourceManager.getExpansionLoc(Function->getLocation()),
+       "refcounted retain/release function %0 must return void")
+      << FunctionName;
 }
 
 }  // namespace clang::tidy::iree

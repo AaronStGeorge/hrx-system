@@ -39,6 +39,34 @@ class StyleChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
+    def test_refcount_lifecycle_requires_void(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-refcount-lifecycle",
+            source=clang_tidy_test.source_path(__file__, "style_checks.c"),
+            compiler_args=["-std=gnu11"],
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "refcounted retain/release function "
+                "iree_clang_tidy_style_refcount_status_retain must return void",
+                "refcounted retain/release function "
+                "iree_clang_tidy_style_refcount_status_release must return void",
+                "[iree-refcount-lifecycle]",
+            ],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "iree_clang_tidy_style_refcount_void_retain",
+                "iree_clang_tidy_style_refcount_void_release",
+                "iree_clang_tidy_style_refcount_lookup_retain",
+                "iree_clang_tidy_style_virtual_memory_release",
+            ],
+        )
+
     def test_guarded_release_is_diagnosed(self):
         output = clang_tidy_test.run_clang_tidy(
             clang_tidy=_ARGS.clang_tidy,
