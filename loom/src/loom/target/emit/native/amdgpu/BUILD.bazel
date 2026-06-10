@@ -399,6 +399,7 @@ loom_cc_test(
         ":descriptor",
         ":hsaco",
         ":metadata",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/emit/native:elf",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

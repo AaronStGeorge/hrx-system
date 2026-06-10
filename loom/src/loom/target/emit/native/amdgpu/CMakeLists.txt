@@ -519,6 +519,7 @@ loom_cc_test(
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::target::arch::amdgpu::target_info
     loom::target::emit::native::elf
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

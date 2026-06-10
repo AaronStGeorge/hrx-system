@@ -199,6 +199,11 @@ static inline bool loom_amdgpu_processor_supports_wavefront_size(
   }
 }
 
+// Returns whether |processor| has enough native target information to emit an
+// AMDHSA HSACO code object.
+iree_status_t loom_amdgpu_target_info_processor_supports_hsaco(
+    const loom_amdgpu_processor_info_t* processor, bool* out_supported);
+
 // Returns the number of known AMDGPU processor fact rows.
 iree_host_size_t loom_amdgpu_target_info_processor_count(void);
 

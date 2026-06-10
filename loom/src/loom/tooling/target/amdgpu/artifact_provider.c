@@ -32,26 +32,6 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_format_target_id(
                                              iree_string_view_empty(), builder);
 }
 
-static iree_status_t loom_amdgpu_hal_artifact_processor_is_supported(
-    const loom_amdgpu_processor_info_t* processor, bool* out_supported) {
-  *out_supported = false;
-  if (iree_string_view_is_empty(processor->processor) ||
-      iree_string_view_is_empty(processor->descriptor_set_key) ||
-      processor->descriptor_set_ordinal ==
-          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
-      processor->elf_machine_flags == 0 ||
-      processor->kernel_descriptor_profile ==
-          LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE) {
-    return iree_ok_status();
-  }
-
-  const loom_amdgpu_descriptor_set_info_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
-      processor->descriptor_set_ordinal, &descriptor_set));
-  *out_supported = descriptor_set->supports_descriptor_packet_encoding;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
     const loom_run_hal_artifact_provider_t* provider,
     const loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
@@ -75,8 +55,8 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
     const loom_amdgpu_processor_info_t* processor =
         loom_amdgpu_target_info_processor_at(i);
     bool emit_supported = false;
-    status = loom_amdgpu_hal_artifact_processor_is_supported(processor,
-                                                             &emit_supported);
+    status = loom_amdgpu_target_info_processor_supports_hsaco(processor,
+                                                              &emit_supported);
     if (!iree_status_is_ok(status) || !emit_supported) {
       continue;
     }
