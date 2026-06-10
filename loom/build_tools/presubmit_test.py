@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -31,30 +30,6 @@ class LoomPresubmitTest(unittest.TestCase):
     def setUpClass(cls):
         cls.presubmit = load_presubmit_module()
 
-    def verify_single_package_surface(
-        self, package_text: str, required_exports: tuple[str, ...]
-    ) -> bool:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            package_init = root / "pkg" / "__init__.py"
-            package_init.parent.mkdir()
-            package_init.write_text(package_text, encoding="utf-8")
-
-            with (
-                mock.patch.object(self.presubmit, "REPO_ROOT", root),
-                mock.patch.object(
-                    self.presubmit,
-                    "PYTHON_PACKAGE_SURFACES",
-                    (
-                        self.presubmit.PythonPackageSurface(
-                            "pkg/__init__.py",
-                            required_exports,
-                        ),
-                    ),
-                ),
-            ):
-                return self.presubmit.verify_python_package_surfaces()
-
     def test_bazel_tests_exclude_runtime_resource_requirements(self):
         command = self.presubmit.bazel_test_command()
 
@@ -76,48 +51,25 @@ class LoomPresubmitTest(unittest.TestCase):
             "runtime-resource=",
         )
 
-    def test_python_package_surface_check_accepts_required_exports(self):
-        self.assertTrue(
-            self.verify_single_package_surface(
-                '__all__ = ["module_builder"]\n',
-                ("module_builder",),
-            )
-        )
-
-    def test_python_package_surface_check_rejects_blank_package(self):
-        self.assertFalse(
-            self.verify_single_package_surface(
-                "",
-                ("module_builder",),
-            )
-        )
-
-    def test_python_package_surface_check_rejects_missing_required_export(self):
-        self.assertFalse(
-            self.verify_single_package_surface(
-                '__all__ = ["other"]\n',
-                ("module_builder",),
-            )
-        )
-
-    def test_main_rechecks_python_package_surfaces_after_bazel_tests(self):
+    def test_main_rechecks_package_initializers_after_bazel_tests(self):
         args = types.SimpleNamespace(
             files_from=None,
             lane="bazel",
             tests=True,
         )
+        snapshot = mock.Mock()
+        snapshot.verify.return_value = False
         with (
             mock.patch.object(self.presubmit, "parse_arguments", return_value=args),
-            mock.patch.object(self.presubmit, "should_run_tests", return_value=True),
             mock.patch.object(
-                self.presubmit,
-                "run_python_package_surface_check",
-                side_effect=(True, False),
-            ) as surface_check,
+                self.presubmit.NonEmptyTrackedFileSnapshot,
+                "capture_tracked_package_initializers",
+                return_value=snapshot,
+            ),
             mock.patch.object(self.presubmit, "run_bazel_tests", return_value=True),
         ):
             self.assertEqual(self.presubmit.main(), 1)
-            self.assertEqual(surface_check.call_count, 2)
+            snapshot.verify.assert_called_once_with(self.presubmit.REPO_ROOT)
 
 
 if __name__ == "__main__":

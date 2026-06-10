@@ -18,9 +18,16 @@ Exit code is 0 only if all steps pass and no files were modified.
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+sys.path.insert(0, REPO_ROOT)
+
+from build_tools.devtools.source_lock import (
+    NonEmptyTrackedFileSnapshot,
+    source_mutation_lock,
 )
 
 
@@ -39,7 +46,7 @@ def _run(description: str, cmd: list[str], **kwargs: object) -> bool:
     return False
 
 
-def main() -> int:
+def _run_lint() -> int:
     ok = True
 
     print("loom-lint: generators")
@@ -122,6 +129,18 @@ def main() -> int:
     )
 
     return 0 if ok else 1
+
+
+def main() -> int:
+    repo_root = Path(REPO_ROOT)
+    with source_mutation_lock(repo_root, "loom-lint"):
+        snapshot = NonEmptyTrackedFileSnapshot.capture_tracked_package_initializers(
+            repo_root
+        )
+        result = _run_lint()
+        if not snapshot.verify(repo_root):
+            result = 1
+        return result
 
 
 if __name__ == "__main__":

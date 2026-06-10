@@ -31,6 +31,7 @@ py_library(
         "project_presubmit.py",
         "setup.py",
         "smoke_test_lib.py",
+        "source_lock.py",
     ],
 )
 
@@ -156,6 +157,15 @@ py_test(
         "project_presubmit_test.py",
     ],
     main = "project_presubmit_test.py",
+)
+
+py_test(
+    name = "source_lock_test",
+    srcs = [
+        "source_lock.py",
+        "source_lock_test.py",
+    ],
+    main = "source_lock_test.py",
 )
 
 py_test(

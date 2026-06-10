@@ -30,6 +30,12 @@ from pathlib import Path
 from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from build_tools.devtools.source_lock import (
+    NonEmptyTrackedFileSnapshot,
+    source_mutation_lock,
+)
 
 BUILDIFIER_EXTENSIONS = {".bzl", ".BUILD"}
 BUILDIFIER_NAMES = {
@@ -1111,10 +1117,9 @@ def print_suggested_actions(args: argparse.Namespace, ok: bool) -> None:
     print("  " + command_text(dev_py_rerun_command(args, verbose=True)))
 
 
-def main() -> int:
-    args = parse_arguments()
-    paths = selected_files(args)
-    projects = projects_for_paths(paths)
+def run_presubmit(
+    args: argparse.Namespace, paths: list[str], projects: list[Project]
+) -> int:
     if args.print_plan:
         print_plan(args, paths, projects)
 
@@ -1150,6 +1155,28 @@ def main() -> int:
         )
     print_suggested_actions(args, ok)
     return 0 if ok else 1
+
+
+def run_presubmit_with_source_guard(
+    args: argparse.Namespace, paths: list[str], projects: list[Project]
+) -> int:
+    snapshot = NonEmptyTrackedFileSnapshot.capture_tracked_package_initializers(
+        REPO_ROOT
+    )
+    result = run_presubmit(args, paths, projects)
+    if not snapshot.verify(REPO_ROOT):
+        result = 1
+    return result
+
+
+def main() -> int:
+    args = parse_arguments()
+    paths = selected_files(args)
+    projects = projects_for_paths(paths)
+    if args.fix:
+        with source_mutation_lock(REPO_ROOT, "root-presubmit-fix"):
+            return run_presubmit_with_source_guard(args, paths, projects)
+    return run_presubmit_with_source_guard(args, paths, projects)
 
 
 if __name__ == "__main__":
