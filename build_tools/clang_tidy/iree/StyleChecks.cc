@@ -407,6 +407,17 @@ bool HasGuardedRefCountDecrement(StringRef NormalizedBody,
   }
 }
 
+bool HasArgumentAssert(StringRef NormalizedBody, StringRef ParameterName) {
+  std::string Parameter = ParameterName.str();
+  for (std::string Pattern : {"IREE_ASSERT_ARGUMENT(" + Parameter + ");",
+                              "IREE_ASSERT(" + Parameter + ");"}) {
+    if (NormalizedBody.contains(StringRef(Pattern))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool IsRefCountReleaseNullSafe(const FunctionDecl* Function,
                                StringRef NormalizedBody) {
   if (Function->getNumParams() != 1) {
@@ -420,6 +431,9 @@ bool IsRefCountReleaseNullSafe(const FunctionDecl* Function,
   if (ParameterName.empty() ||
       !RefCountDecrementReferencesParameter(NormalizedBody, ParameterName)) {
     return true;
+  }
+  if (HasArgumentAssert(NormalizedBody, ParameterName)) {
+    return false;
   }
   return HasEarlyNullReturn(NormalizedBody, ParameterName) ||
          HasGuardedRefCountDecrement(NormalizedBody, ParameterName);

@@ -12,6 +12,10 @@
 #define IREE_LIKELY(x) (x)
 #endif  // IREE_LIKELY
 
+#ifndef IREE_ASSERT_ARGUMENT
+#define IREE_ASSERT_ARGUMENT(x) ((void)(x))
+#endif  // IREE_ASSERT_ARGUMENT
+
 int iree_clang_tidy_style_direct_goto(int flag) {
   if (flag) goto cleanup;
   return 0;
@@ -104,6 +108,13 @@ void iree_clang_tidy_style_refcount_void_release(
 void iree_clang_tidy_style_refcount_unguarded_release(
     iree_clang_tidy_style_refcounted_t* resource) {
   if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
+  }
+}
+
+void iree_clang_tidy_style_refcount_asserting_release(
+    iree_clang_tidy_style_refcounted_t* resource) {
+  IREE_ASSERT_ARGUMENT(resource);
+  if (resource && iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
   }
 }
 
