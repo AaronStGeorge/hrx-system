@@ -8,6 +8,10 @@
 #define NULL ((void*)0)
 #endif  // NULL
 
+#ifndef IREE_LIKELY
+#define IREE_LIKELY(x) (x)
+#endif  // IREE_LIKELY
+
 int iree_clang_tidy_style_direct_goto(int flag) {
   if (flag) goto cleanup;
   return 0;
@@ -87,7 +91,45 @@ void iree_clang_tidy_style_refcount_void_retain(
 
 void iree_clang_tidy_style_refcount_void_release(
     iree_clang_tidy_style_refcounted_t* resource) {
+  if (!resource) {
+    return;
+  }
   (void)iree_atomic_ref_count_dec(&resource->ref_count);
+}
+
+void iree_clang_tidy_style_refcount_unguarded_release(
+    iree_clang_tidy_style_refcounted_t* resource) {
+  if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
+  }
+}
+
+void iree_clang_tidy_style_refcount_early_null_release(
+    iree_clang_tidy_style_refcounted_t* resource) {
+  if (!resource) {
+    return;
+  }
+  if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
+  }
+}
+
+void iree_clang_tidy_style_refcount_inline_null_release(
+    iree_clang_tidy_style_refcounted_t* resource) {
+  if (resource && iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
+  }
+}
+
+void iree_clang_tidy_style_refcount_likely_null_release(
+    iree_clang_tidy_style_refcounted_t* resource) {
+  if (IREE_LIKELY(resource) &&
+      iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
+  }
+}
+
+void iree_clang_tidy_style_refcount_local_counter_release(
+    iree_clang_tidy_style_refcounted_t* resource) {
+  iree_atomic_ref_count_t* ref_count = &resource->ref_count;
+  if (iree_atomic_ref_count_dec(ref_count) == 1) {
+  }
 }
 
 iree_status_t iree_clang_tidy_style_refcount_lookup_retain(

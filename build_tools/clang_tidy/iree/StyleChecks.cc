@@ -239,24 +239,163 @@ bool SourceContainsIdentifier(StringRef Source, StringRef Identifier) {
   return false;
 }
 
-bool BodyContainsRefCountMutation(const FunctionDecl* Function,
-                                  const SourceManager& SourceManager,
-                                  const LangOptions& LangOptions) {
+std::string NormalizedCodeSource(StringRef Source) {
+  enum class State {
+    kCode,
+    kLineComment,
+    kBlockComment,
+    kString,
+    kCharacter,
+  };
+  State ParserState = State::kCode;
+  std::string Result;
+  for (size_t I = 0; I < Source.size(); ++I) {
+    char Character = Source[I];
+    char Next = I + 1 < Source.size() ? Source[I + 1] : '\0';
+    switch (ParserState) {
+      case State::kCode:
+        if (Character == '/' && Next == '/') {
+          ParserState = State::kLineComment;
+          ++I;
+        } else if (Character == '/' && Next == '*') {
+          ParserState = State::kBlockComment;
+          ++I;
+        } else if (Character == '"') {
+          ParserState = State::kString;
+        } else if (Character == '\'') {
+          ParserState = State::kCharacter;
+        } else if (!std::isspace(static_cast<unsigned char>(Character))) {
+          Result.push_back(Character);
+        }
+        break;
+      case State::kLineComment:
+        if (Character == '\n' || Character == '\r') {
+          ParserState = State::kCode;
+        }
+        break;
+      case State::kBlockComment:
+        if (Character == '*' && Next == '/') {
+          ParserState = State::kCode;
+          ++I;
+        }
+        break;
+      case State::kString:
+      case State::kCharacter:
+        if (Character == '\\' && Next != '\0') {
+          ++I;
+        } else if ((ParserState == State::kString && Character == '"') ||
+                   (ParserState == State::kCharacter && Character == '\'')) {
+          ParserState = State::kCode;
+        }
+        break;
+    }
+  }
+  return Result;
+}
+
+std::optional<std::string> FunctionBodySourceText(
+    const FunctionDecl* Function, const SourceManager& SourceManager,
+    const LangOptions& LangOptions) {
   const Stmt* Body = Function->getBody();
   if (!Body) {
-    return false;
+    return std::nullopt;
   }
   SourceRange BodyRange = Body->getSourceRange();
   if (BodyRange.getBegin().isInvalid() || BodyRange.getEnd().isInvalid()) {
-    return false;
+    return std::nullopt;
   }
-  std::optional<std::string> BodyText = SourceText(
-      CharSourceRange::getTokenRange(BodyRange), SourceManager, LangOptions);
-  if (!BodyText) {
-    return false;
+  return SourceText(CharSourceRange::getTokenRange(BodyRange), SourceManager,
+                    LangOptions);
+}
+
+bool BodyContainsRefCountMutation(StringRef BodyText) {
+  return SourceContainsIdentifier(BodyText, "iree_atomic_ref_count_inc") ||
+         SourceContainsIdentifier(BodyText, "iree_atomic_ref_count_dec");
+}
+
+bool RefCountDecrementReferencesParameter(StringRef NormalizedBody,
+                                          StringRef ParameterName) {
+  static constexpr StringRef RefCountDec = "iree_atomic_ref_count_dec";
+  size_t SearchPosition = 0;
+  while (true) {
+    size_t DecPosition = NormalizedBody.find(RefCountDec, SearchPosition);
+    if (DecPosition == StringRef::npos) {
+      return false;
+    }
+    size_t StatementEnd = NormalizedBody.find(';', DecPosition);
+    if (StatementEnd == StringRef::npos) {
+      StatementEnd = NormalizedBody.size();
+    }
+    if (SourceContainsIdentifier(
+            NormalizedBody.substr(DecPosition, StatementEnd - DecPosition),
+            ParameterName)) {
+      return true;
+    }
+    SearchPosition = DecPosition + RefCountDec.size();
   }
-  return SourceContainsIdentifier(*BodyText, "iree_atomic_ref_count_inc") ||
-         SourceContainsIdentifier(*BodyText, "iree_atomic_ref_count_dec");
+}
+
+bool HasEarlyNullReturn(StringRef NormalizedBody, StringRef ParameterName) {
+  std::string Parameter = ParameterName.str();
+  for (std::string Pattern :
+       {"if(!" + Parameter + ")return;", "if(!" + Parameter + "){return;}",
+        "if(" + Parameter + "==NULL)return;",
+        "if(" + Parameter + "==NULL){return;}",
+        "if(NULL==" + Parameter + ")return;",
+        "if(NULL==" + Parameter + "){return;}",
+        "if(IREE_UNLIKELY(!" + Parameter + "))return;",
+        "if(IREE_UNLIKELY(!" + Parameter + ")){return;}"}) {
+    if (NormalizedBody.contains(StringRef(Pattern))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool HasGuardedRefCountDecrement(StringRef NormalizedBody,
+                                 StringRef ParameterName) {
+  static constexpr StringRef RefCountDec = "iree_atomic_ref_count_dec";
+  size_t SearchPosition = 0;
+  while (true) {
+    size_t DecPosition = NormalizedBody.find(RefCountDec, SearchPosition);
+    if (DecPosition == StringRef::npos) {
+      return false;
+    }
+    StringRef Prefix = NormalizedBody.substr(0, DecPosition);
+    size_t IfPosition = Prefix.rfind("if(");
+    size_t StatementPosition = NormalizedBody.rfind(';', DecPosition);
+    size_t BlockPosition = NormalizedBody.rfind('{', DecPosition);
+    size_t Boundary =
+        std::max(StatementPosition == StringRef::npos ? 0 : StatementPosition,
+                 BlockPosition == StringRef::npos ? 0 : BlockPosition);
+    if (IfPosition != StringRef::npos && IfPosition >= Boundary) {
+      StringRef ConditionPrefix =
+          NormalizedBody.substr(IfPosition + 3, DecPosition - IfPosition - 3);
+      if (ConditionPrefix.contains("&&") &&
+          SourceContainsIdentifier(ConditionPrefix, ParameterName)) {
+        return true;
+      }
+    }
+    SearchPosition = DecPosition + RefCountDec.size();
+  }
+}
+
+bool IsRefCountReleaseNullSafe(const FunctionDecl* Function,
+                               StringRef NormalizedBody) {
+  if (Function->getNumParams() != 1) {
+    return true;
+  }
+  const ParmVarDecl* Parameter = Function->getParamDecl(0);
+  if (!Parameter->getType()->isAnyPointerType()) {
+    return true;
+  }
+  StringRef ParameterName = Parameter->getName();
+  if (ParameterName.empty() ||
+      !RefCountDecrementReferencesParameter(NormalizedBody, ParameterName)) {
+    return true;
+  }
+  return HasEarlyNullReturn(NormalizedBody, ParameterName) ||
+         HasGuardedRefCountDecrement(NormalizedBody, ParameterName);
 }
 
 bool IsNullAssignmentToGuard(const Stmt* Statement, const Expr* GuardExpression,
@@ -458,7 +597,7 @@ void RefCountLifecycleCheck::registerMatchers(
 void RefCountLifecycleCheck::check(
     const ast_matchers::MatchFinder::MatchResult& Result) {
   const auto* Function = Result.Nodes.getNodeAs<FunctionDecl>("function");
-  if (!Function || Function->getReturnType()->isVoidType()) {
+  if (!Function) {
     return;
   }
   const SourceManager& SourceManager = *Result.SourceManager;
@@ -469,8 +608,21 @@ void RefCountLifecycleCheck::check(
   if (!IsRefCountLifecycleFunctionName(FunctionName)) {
     return;
   }
-  if (!BodyContainsRefCountMutation(Function, SourceManager,
-                                    Result.Context->getLangOpts())) {
+  std::optional<std::string> BodyText = FunctionBodySourceText(
+      Function, SourceManager, Result.Context->getLangOpts());
+  if (!BodyText || !BodyContainsRefCountMutation(*BodyText)) {
+    return;
+  }
+  std::string NormalizedBody = NormalizedCodeSource(*BodyText);
+  if (Function->getReturnType()->isVoidType() &&
+      FunctionName.ends_with("_release") &&
+      !IsRefCountReleaseNullSafe(Function, NormalizedBody)) {
+    diag(SourceManager.getExpansionLoc(Function->getLocation()),
+         "refcounted release function %0 must be null-safe")
+        << FunctionName;
+    return;
+  }
+  if (Function->getReturnType()->isVoidType()) {
     return;
   }
   diag(SourceManager.getExpansionLoc(Function->getLocation()),
