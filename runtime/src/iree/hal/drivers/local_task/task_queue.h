@@ -245,9 +245,8 @@ struct iree_hal_task_queue_op_t {
       iree_hal_executable_t* executable;
       iree_hal_executable_function_t export_ordinal;
       iree_hal_dispatch_config_t config;
-      // Constants arena-allocated (pointer into operation arena).
-      const uint32_t* constants;
-      uint16_t constant_count;
+      // Constants arena-allocated in the operation arena.
+      iree_const_byte_span_t constants;
       // Bindings arena-allocated (pointer into operation arena).
       const iree_hal_buffer_ref_t* bindings;
       iree_host_size_t binding_count;

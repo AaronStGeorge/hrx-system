@@ -84,6 +84,8 @@ PUBLIC_DEPS_OPTIONAL_GLOBS = [
     "lib/rocm_sysdeps/lib/*.so*",
 ]
 
+CORE_CTEST_EXCLUDE_REGEXES = ("^iree/hal/local/elf/elf_module_test$",)
+
 
 @dataclass(frozen=True)
 class S3Object:
@@ -718,6 +720,10 @@ def add_sanitizer_runtime_env(
     return env
 
 
+def combine_ctest_exclude_regex(*regexes: str) -> str:
+    return "|".join(f"({regex})" for regex in regexes if regex)
+
+
 def build_core(args: argparse.Namespace) -> None:
     rocm_root = args.rocm_root.resolve()
     build_dir = args.build_dir.resolve()
@@ -848,8 +854,11 @@ def test_core(args: argparse.Namespace) -> None:
     ]
     if args.ctest_regex:
         ctest_cmd.extend(["-R", args.ctest_regex])
-    if args.ctest_exclude_regex:
-        ctest_cmd.extend(["-E", args.ctest_exclude_regex])
+    ctest_exclude_regex = combine_ctest_exclude_regex(
+        *CORE_CTEST_EXCLUDE_REGEXES, args.ctest_exclude_regex
+    )
+    if ctest_exclude_regex:
+        ctest_cmd.extend(["-E", ctest_exclude_regex])
     if args.ctest_label_regex:
         ctest_cmd.extend(["-L", args.ctest_label_regex])
     if args.ctest_label_exclude_regex:

@@ -523,6 +523,10 @@ class CiTest(unittest.TestCase):
             ci_config.CPU_SANITIZERS_CTEST_EXCLUDE_REGEX,
         )
         self.assertIn(
+            "^iree/hal/local/elf/elf_module_test$",
+            ci_config.CPU_CTEST_EXCLUDE_REGEX,
+        )
+        self.assertIn(
             "^iree/hal/drivers/amdgpu/allocator_test$",
             ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
         )

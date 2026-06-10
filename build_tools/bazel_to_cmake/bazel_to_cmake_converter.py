@@ -170,9 +170,13 @@ class BuildFileFunctions(object):
     ):
         self._converter = converter
         self._targets = targets
-        self._build_dir = build_dir
-        self._repo_root = repo_root
+        self._repo_root = os.path.abspath(repo_root) if repo_root else ""
+        if self._repo_root and build_dir and not os.path.isabs(build_dir):
+            self._build_dir = os.path.join(self._repo_root, build_dir)
+        else:
+            self._build_dir = build_dir
         self._filegroup_srcs = {}
+        self._target_file_labels = set()
         self.selects = _SelectsModule()
         self._custom_initialize()
 
@@ -529,6 +533,18 @@ class BuildFileFunctions(object):
             return ""
         return os.path.relpath(self._build_dir, self._repo_root).replace("\\", "/")
 
+    def _canonical_location_label(self, label):
+        package, name = self._split_location_label(label)
+        if package:
+            return f"//{package}:{name}"
+        return f":{name}"
+
+    def _current_target_label(self, name):
+        package = self._current_package()
+        if package:
+            return f"//{package}:{name}"
+        return f":{name}"
+
     def _should_emit_python_target(self):
         return False
 
@@ -776,6 +792,31 @@ class BuildFileFunctions(object):
         ]
 
         return self._convert_string_list_block(block_name, srcs, sort=True)
+
+    def _convert_data_srcs_block(self, srcs, block_name="SRCS"):
+        if not srcs:
+            return ""
+
+        converted_srcs = []
+        for src in srcs:
+            if src.startswith(":") or src.startswith("//"):
+                paths = self._cmake_location_paths(src)
+                if self._canonical_location_label(
+                    src
+                ) in self._target_file_labels or not any(
+                    path.startswith("$<TARGET_FILE:") for path in paths
+                ):
+                    converted_srcs.extend(paths)
+                else:
+                    converted_srcs.append(self._normalize_label(src))
+            elif src.startswith("$") or os.path.splitext(src)[1]:
+                converted_srcs.append(self._normalize_label(src))
+            else:
+                converted_srcs.append(
+                    self._filegroup_dep_filename(self._normalize_label(src))
+                )
+
+        return self._convert_string_list_block(block_name, converted_srcs, sort=True)
 
     def _convert_target(self, target):
         """Returns a list of targets that correspond to the specified Bazel target.
@@ -1571,6 +1612,7 @@ class BuildFileFunctions(object):
         copts=None,
         defines=None,
         linkopts=None,
+        linkshared=None,
         testonly=None,
         includes=None,
         target_compatible_with=None,
@@ -1578,6 +1620,7 @@ class BuildFileFunctions(object):
     ):
         if self._should_skip_target(**kwargs):
             return
+        self._target_file_labels.add(self._current_target_label(name))
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         copts_block, platform_copts_block = self._convert_platform_select_strings(
             name, "COPTS", copts, sort=False
@@ -1603,6 +1646,23 @@ class BuildFileFunctions(object):
             self._converter.body += platform_deps_block
         if platform_linkopts_block:
             self._converter.body += platform_linkopts_block
+        if linkshared:
+            self._converter.body += (
+                f"iree_cc_library(\n"
+                f"{name_block}"
+                f"{copts_block}"
+                f"{srcs_block}"
+                f"{data_block}"
+                f"{deps_block}"
+                f"{defines_block}"
+                f"{linkopts_block}"
+                f"{testonly_block}"
+                f"{includes_block}"
+                f"  SHARED\n"
+                f")\n\n"
+            )
+            self._emit_platform_guard_end(target_compatible_with)
+            return
         self._converter.body += (
             f"iree_cc_binary(\n"
             f"{name_block}"
@@ -1693,7 +1753,7 @@ class BuildFileFunctions(object):
         if self._should_skip_target(**kwargs):
             return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        srcs_block = self._convert_srcs_block(srcs)
+        srcs_block = self._convert_data_srcs_block(srcs)
         c_file_output_block = self._convert_string_arg_block(
             "C_FILE_OUTPUT", c_file_output
         )

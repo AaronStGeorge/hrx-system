@@ -218,6 +218,109 @@ class ConfigTest(unittest.TestCase):
             'IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32"',
         )
 
+    def test_cc_binary_linkshared_emits_shared_library(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="runtime/src/iree/hal/local/elf/testdata",
+        )
+
+        functions.cc_binary(
+            name="elementwise_mul_library.so",
+            srcs=["elementwise_mul_library.c"],
+            deps=["//runtime/src/iree/hal/local:executable_library"],
+            testonly=True,
+            linkshared=True,
+        )
+
+        self.assertIn("iree_cc_library(", converter.body)
+        self.assertNotIn("iree_cc_binary(", converter.body)
+        self.assertIn("  SHARED\n", converter.body)
+        self.assertIn("  TESTONLY\n", converter.body)
+        self.assertIn("iree::hal::local::executable_library", converter.body)
+
+    def test_c_embed_data_srcs_can_reference_generated_targets(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="runtime/src/iree/hal/local/elf/testdata",
+            repo_root=str(repo_root),
+        )
+
+        functions.cc_binary(
+            name="elementwise_mul_library.so",
+            srcs=["elementwise_mul_library.c"],
+            deps=["//runtime/src/iree/hal/local:executable_library"],
+            testonly=True,
+            linkshared=True,
+        )
+        converter.body = ""
+
+        functions.iree_c_embed_data(
+            name="elementwise_mul",
+            srcs=[":elementwise_mul_library.so"],
+            c_file_output="elementwise_mul.c",
+            h_file_output="elementwise_mul.h",
+            testonly=True,
+            flatten=True,
+        )
+
+        self.assertIn(
+            "$<TARGET_FILE:iree_hal_local_elf_testdata_elementwise_mul_library.so>",
+            converter.body,
+        )
+        self.assertNotIn('"elementwise_mul_library.so"', converter.body)
+
+    def test_c_embed_data_srcs_preserve_generated_file_labels(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="runtime/src/iree/vm/test",
+            repo_root=str(repo_root),
+        )
+
+        functions.iree_c_embed_data(
+            name="all_bytecode_modules_c",
+            srcs=[":arithmetic_ops.vmfb"],
+            c_file_output="all_bytecode_modules.c",
+            h_file_output="all_bytecode_modules.h",
+            flatten=True,
+        )
+
+        self.assertIn('"arithmetic_ops.vmfb"', converter.body)
+        self.assertNotIn("$<TARGET_FILE:", converter.body)
+
+    def test_c_embed_data_srcs_preserve_source_file_labels(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="runtime/src/iree/hal/local/elf/testdata",
+            repo_root=str(repo_root),
+        )
+
+        functions.iree_c_embed_data(
+            name="elementwise_mul_source",
+            srcs=[":elementwise_mul_library.c"],
+            c_file_output="elementwise_mul_source.c",
+            h_file_output="elementwise_mul_source.h",
+            testonly=True,
+            flatten=True,
+        )
+
+        self.assertIn(
+            '"${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/local/elf/testdata/'
+            'elementwise_mul_library.c"',
+            converter.body,
+        )
+        self.assertNotIn("$<TARGET_FILE:", converter.body)
+
     def test_requirement_policy_loads_cross_project_requirement_defs(self):
         repo_root = Path(__file__).resolve().parents[2]
         policy = bazel_to_cmake_requirements.load_project_policy(

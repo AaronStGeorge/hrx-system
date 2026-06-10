@@ -309,7 +309,8 @@ static iree_status_t iree_hal_vmvx_executable_create(
       if (!iree_string_view_is_empty(constant_count_str)) {
         iree_string_view_atoi_uint32(constant_count_str, &constant_count);
       }
-      dispatch_attrs[i].constant_count = (uint8_t)constant_count;
+      dispatch_attrs[i].constant_byte_length =
+          constant_count * sizeof(uint32_t);
 
       iree_string_view_t binding_count_str =
           iree_vm_function_lookup_attr_by_name(
@@ -451,8 +452,8 @@ static iree_status_t iree_hal_vmvx_executable_issue_call(
   iree_vm_buffer_t constants_buffer;
   iree_vm_buffer_initialize(
       IREE_VM_BUFFER_ACCESS_ORIGIN_HOST,
-      iree_make_byte_span((void*)dispatch_state->constants,
-                          sizeof(uint32_t) * dispatch_state->constant_count),
+      iree_make_byte_span((void*)dispatch_state->constants.data,
+                          dispatch_state->constants.data_length),
       iree_allocator_null(), &constants_buffer);
 
   // Prepare call argument buffer. We've verified the signature on creation and
@@ -587,8 +588,7 @@ static iree_status_t iree_hal_vmvx_executable_export_info(
           IREE_HAL_EXECUTABLE_DISPATCH_FLAG_V0_WORKGROUP_SIZE_DYNAMIC)) {
     out_info->flags |= IREE_HAL_EXECUTABLE_FUNCTION_FLAG_WORKGROUP_SIZE_DYNAMIC;
   }
-  out_info->constant_byte_length =
-      dispatch_attrs->constant_count * sizeof(uint32_t);
+  out_info->constant_byte_length = dispatch_attrs->constant_byte_length;
   out_info->binding_count = dispatch_attrs->binding_count;
   out_info->parameter_count = dispatch_attrs->parameter_count;
   out_info->workgroup_size[0] = dispatch_attrs->workgroup_size_x;

@@ -3826,25 +3826,25 @@ iree_status_t iree_hal_task_queue_submit_dispatch(
           IREE_STATUS_INVALID_ARGUMENT,
           "local task queue dispatch constants must be 4-byte aligned");
     }
-    const iree_host_size_t constant_count =
-        constants.data_length / sizeof(uint32_t);
     if (iree_status_is_ok(status) &&
-        IREE_UNLIKELY(constant_count > UINT16_MAX)) {
-      status =
-          iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                           "local task queue dispatch constant count %" PRIhsz
-                           " exceeds maximum %u",
-                           constant_count, UINT16_MAX);
+        IREE_UNLIKELY(constants.data_length >
+                      IREE_HAL_EXECUTABLE_MAX_CONSTANT_BYTE_LENGTH)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "local task queue dispatch constant byte length %" PRIhsz
+          " exceeds maximum %" PRIhsz,
+          constants.data_length,
+          (iree_host_size_t)IREE_HAL_EXECUTABLE_MAX_CONSTANT_BYTE_LENGTH);
     }
-    uint32_t* constants_copy = NULL;
+    uint8_t* constants_copy = NULL;
     if (iree_status_is_ok(status)) {
       status = iree_arena_allocate(&operation->arena, constants.data_length,
                                    (void**)&constants_copy);
     }
     if (iree_status_is_ok(status)) {
       memcpy(constants_copy, constants.data, constants.data_length);
-      operation->dispatch.constants = constants_copy;
-      operation->dispatch.constant_count = (uint16_t)constant_count;
+      operation->dispatch.constants =
+          iree_make_const_byte_span(constants_copy, constants.data_length);
     }
   }
   if (iree_status_is_ok(status) && binding_count > 0) {
@@ -3979,15 +3979,11 @@ static iree_status_t iree_hal_task_queue_drain_dispatch(
   iree_hal_cmd_fixup_t* fixups = NULL;
   iree_hal_cmd_build_token_t token;
   if (iree_status_is_ok(status)) {
-    iree_const_byte_span_t dispatch_constants = {
-        .data = (const uint8_t*)operation->dispatch.constants,
-        .data_length = operation->dispatch.constant_count * sizeof(uint32_t),
-    };
     status = iree_hal_cmd_build_dispatch(
         &builder, operation->dispatch.executable,
         operation->dispatch.export_ordinal, operation->dispatch.config,
-        dispatch_constants, binding_count, operation->dispatch.flags, &fixups,
-        &token);
+        operation->dispatch.constants, binding_count, operation->dispatch.flags,
+        &fixups, &token);
   }
   if (iree_status_is_ok(status)) {
     for (iree_host_size_t i = 0; i < binding_count; ++i) {
