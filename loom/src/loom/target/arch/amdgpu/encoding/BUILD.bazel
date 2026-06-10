@@ -40,6 +40,8 @@ _DESCRIPTOR_SET_CDNA4 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdn
 
 _DESCRIPTOR_SET_RDNA3 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3.core"]
 
+_DESCRIPTOR_SET_RDNA3_5 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3_5.core"]
+
 _DESCRIPTOR_SET_RDNA4 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna4.core"]
 
 _DESCRIPTOR_SET_RDNA4_GFX125X = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna4.gfx125x.core"]
@@ -102,6 +104,24 @@ loom_target_table_cc_library(
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml"],
     target_compatible_with = loom_amdgpu_descriptor_set_compatible_with(_DESCRIPTOR_SET_RDNA3),
+    deps = [
+        ":encoding_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_target_table_cc_library(
+    name = "rdna3_5_encoding_tables",
+    args = [
+        "--target=rdna3_5",
+        "--descriptor-set-key=amdgpu.rdna3_5.core",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3_5.xml)",
+        "--public-header=loom/target/arch/amdgpu/encoding/rdna3_5_encoding_tables.h",
+    ],
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3_5.xml"],
+    target_compatible_with = loom_amdgpu_descriptor_set_compatible_with(_DESCRIPTOR_SET_RDNA3_5),
     deps = [
         ":encoding_defs",
         "//runtime/src/iree/base",

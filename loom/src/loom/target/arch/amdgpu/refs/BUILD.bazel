@@ -33,6 +33,8 @@ _DESCRIPTOR_SET_CDNA4 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdn
 
 _DESCRIPTOR_SET_RDNA3 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3.core"]
 
+_DESCRIPTOR_SET_RDNA3_5 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3_5.core"]
+
 _DESCRIPTOR_SET_RDNA4 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna4.core"]
 
 _DESCRIPTOR_SET_RDNA4_GFX125X = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna4.gfx125x.core"]
@@ -49,6 +51,10 @@ _AMDGPU_TARGET_REF_ARGS = {
     _DESCRIPTOR_SET_RDNA3: [
         "--descriptor-set=amdgpu.rdna3.core",
         "--isa-xml=rdna3:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
+    ],
+    _DESCRIPTOR_SET_RDNA3_5: [
+        "--descriptor-set=amdgpu.rdna3_5.core",
+        "--isa-xml=rdna3_5:$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3_5.xml)",
     ],
     _DESCRIPTOR_SET_RDNA4: [
         "--descriptor-set=amdgpu.rdna4.core",
@@ -83,6 +89,7 @@ loom_target_table_cc_library(
         "@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml",
+        "@amdgpu_isa_xml//:amdgpu_isa_rdna3_5.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
     ],
     visibility = _AMDGPU_TARGET_REFS_VISIBILITY,

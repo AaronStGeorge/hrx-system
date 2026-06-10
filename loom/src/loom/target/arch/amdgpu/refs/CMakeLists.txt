@@ -48,6 +48,10 @@ if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
   list(APPEND _target_refs_platform_args "--descriptor-set=amdgpu.rdna4.gfx125x.core")
   list(APPEND _target_refs_platform_args "--isa-xml=rdna4:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml")
 endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+  list(APPEND _target_refs_platform_args "--descriptor-set=amdgpu.rdna3_5.core")
+  list(APPEND _target_refs_platform_args "--isa-xml=rdna3_5:${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3_5.xml")
+endif()
 loom_target_table_cc_library(
   NAME
     target_refs
@@ -61,6 +65,7 @@ loom_target_table_cc_library(
     "loom_amdgpu_isa_xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3_5.xml"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
   DEPS
     loom::codegen::low::descriptors

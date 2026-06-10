@@ -94,6 +94,27 @@ loom_target_table_cc_library(
 )
 endif()
 
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE AND LOOM_TARGET_ARCH_AMDGPU)
+loom_target_table_cc_library(
+  NAME
+    rdna3_5_encoding_tables
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::encoding::encoding_tables
+  ARGS
+    "--target=rdna3_5"
+    "--descriptor-set-key=amdgpu.rdna3_5.core"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3_5.xml"
+    "--public-header=loom/target/arch/amdgpu/encoding/rdna3_5_encoding_tables.h"
+  INPUTS
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3_5.xml"
+    "loom_amdgpu_isa_xml"
+  DEPS
+    ::encoding_defs
+    iree::base
+  EXCLUDE_FROM_ALL
+)
+endif()
+
 if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE AND LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
@@ -187,6 +208,9 @@ endif()
 if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
   list(APPEND _encoding_platform_defines "LOOM_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE")
 endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+  list(APPEND _encoding_platform_defines "LOOM_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE")
+endif()
 set(_encoding_platform_deps "")
 if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
   list(APPEND _encoding_platform_deps ::cdna3_encoding_tables)
@@ -202,6 +226,9 @@ if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
 endif()
 if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
   list(APPEND _encoding_platform_deps ::rdna4_gfx125x_encoding_tables)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_5_CORE)
+  list(APPEND _encoding_platform_deps ::rdna3_5_encoding_tables)
 endif()
 loom_cc_library(
   NAME

@@ -40,6 +40,8 @@ _DESCRIPTOR_SET_CDNA4 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdn
 
 _DESCRIPTOR_SET_RDNA3 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3.core"]
 
+_DESCRIPTOR_SET_RDNA3_5 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3_5.core"]
+
 _DESCRIPTOR_SET_RDNA4 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna4.core"]
 
 _DESCRIPTOR_SET_RDNA4_GFX125X = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna4.gfx125x.core"]
@@ -89,6 +91,21 @@ loom_low_descriptor_cc_library(
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml"],
     source = "rdna3_descriptors.c",
     target_compatible_with = loom_amdgpu_descriptor_set_compatible_with(_DESCRIPTOR_SET_RDNA3),
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_low_descriptor_cc_library(
+    name = "rdna3_5",
+    args = [
+        "--target=rdna3_5",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3_5.xml)",
+    ],
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
+    header = "rdna3_5_descriptors.h",
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3_5.xml"],
+    source = "rdna3_5_descriptors.c",
+    target_compatible_with = loom_amdgpu_descriptor_set_compatible_with(_DESCRIPTOR_SET_RDNA3_5),
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 

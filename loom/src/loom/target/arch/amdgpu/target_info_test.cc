@@ -284,18 +284,30 @@ TEST(AmdgpuTargetInfoTest, MatchesAmdhsaGfx9PlusProcessorElfFlags) {
   }
 }
 
-TEST(AmdgpuTargetInfoTest, LooksUpGfx1170AsMatrixOnlyProcessor) {
+TEST(AmdgpuTargetInfoTest, LooksUpGfx1170Processor) {
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_ASSERT_OK(
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1170"), &processor));
   ASSERT_NE(processor, nullptr);
-  EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
+  EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
+                                     IREE_SV("amdgpu.rdna3_5.core")));
   EXPECT_EQ(processor->descriptor_set_ordinal,
-            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE);
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3_5);
   EXPECT_EQ(processor->elf_machine_flags, 0x05Du);
   EXPECT_EQ(processor->default_wavefront_size, 32u);
+  EXPECT_EQ(processor->kernel_descriptor_profile,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave32, 8u);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave64, 4u);
+  EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
+  EXPECT_TRUE(processor->kernel_descriptor_uses_gfx10_sgpr_encoding);
+  EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
+  EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
+  EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
   EXPECT_EQ(processor->matrix_feature_profile,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12);
+  ExpectSchedulingBits(processor,
+                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx94GenericSchedulingFacts) {
