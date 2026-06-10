@@ -345,7 +345,8 @@ static iree_status_t loom_check_execute_finish_status_failure(
       &result->detail, "%.*s returned status: ", (int)operation_name.size,
       operation_name.data);
   if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_status(&result->detail, failure_status);
+    status =
+        iree_string_builder_append_status(&result->detail, &failure_status);
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(&result->detail, "\n");

@@ -194,6 +194,17 @@ typedef enum iree_status_code_e {
 // leave ownership unchanged. A status that was only checked still needs to be
 // returned, stored, or consumed on every non-OK path.
 //
+// A function parameter typed as iree_status_t by value participates in that
+// ownership protocol. Callbacks and helpers that accept a by-value status must
+// return it, store it into an owning destination, consume it, clone it before
+// fanout, or transfer it to another owning status API. If a callee only needs
+// to test success/failure or record a scalar result, pass iree_status_code_t
+// instead. If a C callee needs to inspect the full formatted status without
+// consuming it, pass const iree_status_t* and document that the pointer is
+// borrowed. In C++ helpers, pass const iree_status_t& for the same borrowed
+// full-status case. These non-owning signatures make it visible that the caller
+// still owns the original status after the call returns.
+//
 // iree_status_free and iree_status_ignore both consume ownership, but they
 // communicate different intent. Use iree_status_free when the failure has been
 // handled, reported, propagated through another channel, or otherwise accounted
@@ -261,8 +272,9 @@ typedef enum iree_status_code_e {
 //
 // The repo-owned clang-tidy checks enforce the mechanically provable part of
 // this contract: status-returning call results are not silently discarded,
-// local status owners are not overwritten or left unconsumed, and consumed
-// status variables are not reused.
+// local status owners are not overwritten or left unconsumed, consumed status
+// variables are not reused, and by-value status parameters are not merely
+// observed as borrowed values.
 //
 // Opaque status structure containing an iree_status_code_t and optional status
 // object with more detailed information and payloads.

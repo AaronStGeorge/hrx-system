@@ -475,9 +475,9 @@ iree_hal_profile_sink_t* TestProfileSinkAsBase(TestProfileSink* sink) {
   return reinterpret_cast<iree_hal_profile_sink_t*>(sink);
 }
 
-bool IsProfilingUnsupported(iree_status_t status) {
-  return iree_status_is_unimplemented(status) ||
-         iree_status_is_invalid_argument(status);
+bool IsProfilingUnsupported(iree_status_code_t status_code) {
+  return status_code == IREE_STATUS_UNIMPLEMENTED ||
+         status_code == IREE_STATUS_INVALID_ARGUMENT;
 }
 
 static bool HasInvalidDeviceTickAlignment(const TestProfileSink& sink,

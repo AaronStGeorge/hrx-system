@@ -603,7 +603,7 @@ TEST_P(QueueTransferTest, FillAndCopyHostQueueEventProfiling) {
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS |
                           IREE_HAL_DEVICE_PROFILING_DATA_HOST_EXECUTION_EVENTS,
                       TestProfileSinkAsBase(&sink));
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "host queue profiling unsupported by backend";
   }

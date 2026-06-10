@@ -13,6 +13,7 @@ class Status {
  public:
   Status() = default;
   Status(iree_status_t&& status);
+  const char* ToString(iree_status_t status) { return status ? "error" : "ok"; }
 };
 
 template <typename T>

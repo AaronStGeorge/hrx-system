@@ -124,7 +124,7 @@ TEST(StatusJoin, FailedBaseKeepsPrimaryAndPreservesSecondary) {
 }
 
 // Helper: collects iree_status_format_to output into a std::string.
-static std::string FormatStatusTo(iree_status_t status) {
+static std::string FormatStatusTo(const iree_status_t& status) {
   std::string result;
   iree_status_format_to(
       status,
@@ -138,7 +138,7 @@ static std::string FormatStatusTo(iree_status_t status) {
 }
 
 // Helper: collects iree_status_format output into a std::string.
-static std::string FormatStatusBuffer(iree_status_t status) {
+static std::string FormatStatusBuffer(const iree_status_t& status) {
   iree_host_size_t buffer_length = 0;
   if (!iree_status_format(status, 0, NULL, &buffer_length)) return "<!>";
   std::vector<char> buffer(buffer_length + 1, '\0');
@@ -150,7 +150,7 @@ static std::string FormatStatusBuffer(iree_status_t status) {
   return std::string(buffer.data(), actual_length);
 }
 
-static void ExpectStatusFormatTruncated(iree_status_t status,
+static void ExpectStatusFormatTruncated(const iree_status_t& status,
                                         iree_host_size_t buffer_capacity) {
   iree_host_size_t required_length = 0;
   EXPECT_TRUE(iree_status_format(status, 0, NULL, &required_length));
@@ -168,7 +168,7 @@ static void ExpectStatusFormatTruncated(iree_status_t status,
 }
 
 static void ExpectStatusFormatTruncatedAtAllSmallerCapacities(
-    iree_status_t status) {
+    const iree_status_t& status) {
   iree_host_size_t required_length = 0;
   ASSERT_TRUE(iree_status_format(status, 0, NULL, &required_length));
   ASSERT_GT(required_length, 0u);
@@ -178,14 +178,14 @@ static void ExpectStatusFormatTruncatedAtAllSmallerCapacities(
   }
 }
 
-static void ExpectStatusFormatRequiresTerminator(iree_status_t status) {
+static void ExpectStatusFormatRequiresTerminator(const iree_status_t& status) {
   iree_host_size_t required_length = 0;
   ASSERT_TRUE(iree_status_format(status, 0, NULL, &required_length));
   ASSERT_GT(required_length, 0u);
   ExpectStatusFormatTruncated(status, required_length);
 }
 
-static void ExpectStatusFormatFitsExactly(iree_status_t status) {
+static void ExpectStatusFormatFitsExactly(const iree_status_t& status) {
   std::string expected = FormatStatusTo(status);
   ASSERT_FALSE(expected.empty());
 

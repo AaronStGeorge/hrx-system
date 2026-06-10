@@ -134,8 +134,8 @@ static iree_status_t loom_check_skip_unavailable_requirement(
     status = iree_string_builder_append_cstring(&result->detail, ": ");
   }
   if (iree_status_is_ok(status)) {
-    status =
-        iree_string_builder_append_status(&result->detail, availability_status);
+    status = iree_string_builder_append_status(&result->detail,
+                                               &availability_status);
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(&result->detail, "\n");

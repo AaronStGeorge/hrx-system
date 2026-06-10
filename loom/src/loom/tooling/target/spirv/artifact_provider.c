@@ -228,7 +228,7 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
         &low_registry, &arena, allocator, out_emitted, out_artifact);
   }
   if (report != NULL) {
-    loom_target_compile_report_record_status(report, status);
+    loom_target_compile_report_record_status(report, iree_status_code(status));
   }
 
   iree_arena_deinitialize(&arena);

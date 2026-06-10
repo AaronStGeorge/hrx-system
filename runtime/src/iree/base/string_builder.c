@@ -247,8 +247,8 @@ static bool iree_string_builder_append_status_output(iree_string_view_t chunk,
 }
 
 IREE_API_EXPORT iree_status_t iree_string_builder_append_status(
-    iree_string_builder_t* builder, iree_status_t status) {
-  if (!iree_status_format_to(status, iree_string_builder_append_status_output,
+    iree_string_builder_t* builder, const iree_status_t* status) {
+  if (!iree_status_format_to(*status, iree_string_builder_append_status_output,
                              builder)) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                             "failed to append formatted status to builder");

@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 typedef struct iree_status_handle_t* iree_status_t;
+typedef struct iree_hal_amdgpu_reclaim_entry_t iree_hal_amdgpu_reclaim_entry_t;
 typedef int iree_status_code_t;
 
 iree_status_t iree_ok_status(void);
@@ -270,4 +271,59 @@ void iree_clang_tidy_status_lifetime_stored(iree_status_t* out_status) {
 iree_status_code_t iree_clang_tidy_status_lifetime_consumed_code(void) {
   iree_status_t consumed_code_status = iree_clang_tidy_status_assigned_source();
   return iree_status_consume_code(consumed_code_status);
+}
+
+int iree_clang_tidy_status_borrowed_parameter(
+    iree_status_t borrowed_parameter_status) {
+  return iree_status_is_ok(borrowed_parameter_status);
+}
+
+int iree_clang_tidy_status_borrowed_parameter_code(
+    iree_status_code_t status_code) {
+  return status_code == IREE_STATUS_OK;
+}
+
+iree_status_t iree_clang_tidy_status_borrowed_parameter_returned(
+    iree_status_t returned_parameter_status) {
+  return returned_parameter_status;
+}
+
+void iree_clang_tidy_status_borrowed_parameter_consumed(
+    iree_status_t consumed_parameter_status) {
+  iree_status_free(consumed_parameter_status);
+}
+
+void iree_clang_tidy_status_borrowed_parameter_stored(
+    iree_status_t stored_parameter_status, iree_status_t* out_status) {
+  *out_status = stored_parameter_status;
+}
+
+iree_status_t iree_clang_tidy_status_borrowed_parameter_joined(
+    iree_status_t joined_parameter_status) {
+  return iree_status_join(joined_parameter_status,
+                          iree_clang_tidy_status_cleanup_source());
+}
+
+iree_status_t iree_clang_tidy_status_borrowed_parameter_annotated(
+    iree_status_t annotated_parameter_status) {
+  return iree_status_annotate(annotated_parameter_status, "message");
+}
+
+iree_status_t iree_clang_tidy_status_borrowed_parameter_cloned(
+    iree_status_t cloned_parameter_status) {
+  return iree_status_clone(cloned_parameter_status);
+}
+
+void iree_clang_tidy_status_borrowed_parameter_sink(
+    void* proactor, void* operation, iree_status_t sink_parameter_status) {
+  iree_async_proactor_io_uring_push_software_completion(proactor, operation,
+                                                        sink_parameter_status);
+}
+
+void iree_clang_tidy_status_borrowed_parameter_reclaim_callback(
+    iree_hal_amdgpu_reclaim_entry_t* entry, void* user_data,
+    iree_status_t reclaim_callback_parameter_status) {
+  (void)entry;
+  *(iree_status_code_t*)user_data =
+      iree_status_code(reclaim_callback_parameter_status);
 }

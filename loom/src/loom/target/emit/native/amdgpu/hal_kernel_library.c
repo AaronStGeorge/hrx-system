@@ -802,7 +802,7 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
     loom_amdgpu_hal_kernel_library_deinitialize(out_library, allocator);
   }
   if (report != NULL) {
-    loom_target_compile_report_record_status(report, status);
+    loom_target_compile_report_record_status(report, iree_status_code(status));
   }
   iree_arena_deinitialize(&table_arena);
   iree_arena_block_pool_deinitialize(&block_pool);

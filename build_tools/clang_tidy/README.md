@@ -73,6 +73,43 @@ The status result must be returned, stored for later consumption, or explicitly
 consumed. The check intentionally does not reason about whether a callee is
 infallible; if the function returns `iree_status_t`, the caller owns that result.
 
+### `iree-status-borrowed-parameter`
+
+`iree-status-borrowed-parameter` diagnoses functions that take an
+`iree_status_t` parameter by value but only observe it:
+
+```c
+static bool is_unavailable(iree_status_t status) {
+  return iree_status_is_unavailable(status);
+}
+```
+
+A by-value `iree_status_t` parameter means the callee participates in ownership.
+The callee must return it, store it into an owning destination, consume it,
+clone it before fanout, or transfer it to another owning status API. Observer
+helpers should expose the non-owning representation they actually need:
+
+```c
+static bool is_unavailable(iree_status_code_t status_code) {
+  return status_code == IREE_STATUS_UNAVAILABLE;
+}
+
+static iree_status_t append_status(iree_string_builder_t* builder,
+                                   const iree_status_t* status) {
+  return iree_status_format_to(*status, append_chunk, builder)
+             ? iree_ok_status()
+             : iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "failed to format status");
+}
+```
+
+The check intentionally keeps exceptions narrow. Status primitives that define
+the observer API, known status sinks, C++ `iree::Status` formatting internals,
+and documented borrowed callback boundaries are modeled explicitly. Ordinary
+debug/reporting helpers should use `iree_status_code_t`, `const iree_status_t*`,
+or `const iree_status_t&` instead of accepting a by-value status they do not
+own.
+
 ### `iree-status-lifetime`
 
 `iree-status-lifetime` treats local `iree_status_t` variables as owned linear

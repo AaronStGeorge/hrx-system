@@ -39,7 +39,7 @@ static void loom_run_hal_candidate_initialize(
 
 static void loom_run_hal_candidate_record_report_status(
     const loom_run_candidate_compile_options_t* options,
-    loom_run_hal_candidate_t* candidate, iree_status_t status) {
+    loom_run_hal_candidate_t* candidate, iree_status_code_t status_code) {
   loom_target_compile_report_t* report =
       options->report != NULL ? &candidate->compile_report : NULL;
   if (report == NULL) {
@@ -55,7 +55,7 @@ static void loom_run_hal_candidate_record_report_status(
     loom_target_compile_report_record_artifact_size(
         report, candidate->artifact.executable_data.data_length);
   }
-  loom_target_compile_report_record_status(report, status);
+  loom_target_compile_report_record_status(report, status_code);
 }
 
 static iree_status_t loom_run_hal_candidate_emit_selected_target(
@@ -109,7 +109,8 @@ iree_status_t loom_run_hal_candidate_compile(
     status = loom_run_hal_candidate_emit_selected_target(
         provider, run_module, options, allocator, out_candidate);
   }
-  loom_run_hal_candidate_record_report_status(options, out_candidate, status);
+  loom_run_hal_candidate_record_report_status(options, out_candidate,
+                                              iree_status_code(status));
   loom_run_hal_candidate_publish_compile_report(options, out_candidate);
   if (!iree_status_is_ok(status)) {
     loom_run_hal_candidate_deinitialize(out_candidate);
@@ -126,7 +127,8 @@ iree_status_t loom_run_hal_candidate_emit_module_target(
                                     out_candidate);
   iree_status_t status = loom_run_hal_candidate_emit_selected_target(
       provider, run_module, options, allocator, out_candidate);
-  loom_run_hal_candidate_record_report_status(options, out_candidate, status);
+  loom_run_hal_candidate_record_report_status(options, out_candidate,
+                                              iree_status_code(status));
   loom_run_hal_candidate_publish_compile_report(options, out_candidate);
   if (!iree_status_is_ok(status)) {
     loom_run_hal_candidate_deinitialize(out_candidate);

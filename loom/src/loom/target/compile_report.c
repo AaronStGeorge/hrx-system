@@ -71,8 +71,8 @@ void loom_target_compile_report_initialize_if_empty(
 }
 
 void loom_target_compile_report_record_status(
-    loom_target_compile_report_t* report, iree_status_t status) {
-  report->status_code = iree_status_code(status);
+    loom_target_compile_report_t* report, iree_status_code_t status_code) {
+  report->status_code = status_code;
 }
 
 void loom_target_compile_report_record_target_bundle(

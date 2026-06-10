@@ -597,7 +597,8 @@ iree_status_t loom_ireevm_emit_module_archive_from_ir(
     loom_ireevm_module_archive_deinitialize(out_archive, allocator);
   }
   if (state.report != NULL) {
-    loom_target_compile_report_record_status(state.report, status);
+    loom_target_compile_report_record_status(state.report,
+                                             iree_status_code(status));
   }
   if (state.initialized) {
     loom_ireevm_archive_emit_state_deinitialize(&state);

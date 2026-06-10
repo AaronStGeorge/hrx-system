@@ -1172,7 +1172,7 @@ TEST_P(BdaRawSpirvTest, CommandBufferProfilingBypassesCachedNativeReplay) {
   iree_status_t status =
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS,
                       TestProfileSinkAsBase(&sink));
-  if (IsProfilingUnsupported(status)) {
+  if (IsProfilingUnsupported(iree_status_code(status))) {
     iree_status_ignore(status);
     GTEST_SKIP() << "Vulkan dispatch profiling is unavailable";
   }

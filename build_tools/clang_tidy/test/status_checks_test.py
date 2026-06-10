@@ -15,6 +15,50 @@ _ARGS = clang_tidy_test.parse_arguments()
 
 
 class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
+    def test_borrowed_status_parameter_is_diagnosed(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-status-borrowed-parameter",
+            source=clang_tidy_test.source_path(__file__, "status_checks.c"),
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "borrowed_parameter_status",
+                "[iree-status-borrowed-parameter]",
+            ],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "returned_parameter_status",
+                "consumed_parameter_status",
+                "stored_parameter_status",
+                "joined_parameter_status",
+                "annotated_parameter_status",
+                "cloned_parameter_status",
+                "sink_parameter_status",
+                "reclaim_callback_parameter_status",
+            ],
+        )
+
+    def test_borrowed_status_parameter_accepts_cpp_status_observer(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-status-borrowed-parameter",
+            source=clang_tidy_test.source_path(__file__, "status_checks.cc"),
+            compiler_args=["-std=c++17"],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "ToString",
+                "[iree-status-borrowed-parameter]",
+            ],
+        )
+
     def test_discarded_status_result_is_diagnosed(self):
         output = clang_tidy_test.run_clang_tidy(
             clang_tidy=_ARGS.clang_tidy,
