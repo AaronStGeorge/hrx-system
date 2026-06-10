@@ -17,6 +17,7 @@ iree_py_library(
     "c_emit.py"
     "c_spelling.py"
     "compiled.py"
+    "compiler.py"
     "low_descriptors.py"
     "validation.py"
   DEPS
