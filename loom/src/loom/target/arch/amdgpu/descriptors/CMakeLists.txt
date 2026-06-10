@@ -232,19 +232,6 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    low_registry_for_testing
-  HDRS
-    "low_registry.h"
-  DEPS
-    ::low_registry
-  TESTONLY
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
 loom_low_descriptor_exclude_from_all(
   CC_LIBRARIES
     "low_registry"
