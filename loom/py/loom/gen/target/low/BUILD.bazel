@@ -31,6 +31,7 @@ iree_py_library(
     srcs = [
         "__init__.py",
         "c_spelling.py",
+        "compiled.py",
         "low_descriptors.py",
     ],
     deps = LOW_DESCRIPTOR_DEPS,
