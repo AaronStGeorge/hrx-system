@@ -25,7 +25,6 @@ loom_generated_cc_library(
     "--catalog-symbol=loom_spirv_error_catalog"
     "--fallback-catalog-symbol=loom_error_catalog_core"
     "--fallback-public-header=loom/error/error_catalog.h"
-    "--no-runtime"
     "--public-header=loom/target/arch/spirv/error_catalog.h"
     "--shard=spirv"
   DEPS

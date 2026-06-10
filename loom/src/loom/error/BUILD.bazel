@@ -48,6 +48,7 @@ loom_cc_test(
 
 loom_generated_cc_library(
     name = "error_defs",
+    srcs = ["error_defs.c"],
     hdrs = [
         "error_defs.h",
     ],
@@ -64,9 +65,11 @@ loom_generated_cc_library(
     ],
     generated_hdr_flags = [
         "--header",
+        "--runtime-tables",
     ],
     generated_hdrs = [
         "error_catalog.h",
+        "error_defs_tables.inl",
     ],
     generator = "//loom/py/loom/gen/error:c_errors",
     source = "error_catalog.c",
