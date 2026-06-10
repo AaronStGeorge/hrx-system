@@ -15,6 +15,7 @@ iree_py_library(
   SRCS
     "__init__.py"
     "c.py"
+    "c_arrays.py"
     "files.py"
     "generated_file.py"
     "string_pool.py"
@@ -29,6 +30,7 @@ iree_py_test(
   SRCS
     "../../tools/pytest_style_runner.py"
   ARGS
+    "loom.gen.support.c_arrays_test"
     "loom.gen.support.c_test"
     "loom.gen.support.files_test"
     "loom.gen.support.generated_file_test"

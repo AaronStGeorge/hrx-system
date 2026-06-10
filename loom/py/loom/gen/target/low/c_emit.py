@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from loom.gen.support import c_arrays
 from loom.gen.support.c import c_string_literal
 from loom.gen.support.generated_file import line_comment_header
 from loom.gen.target.low import c_spelling, validation
@@ -184,15 +185,7 @@ def _emit_array(
     name: str,
     row_lines: Sequence[list[str]],
 ) -> None:
-    if not row_lines:
-        return
-    lines.append(f"static const {c_type} k{table_prefix}{name}[] = {{")
-    for row in row_lines:
-        lines.append("    {")
-        lines.extend(f"        {line}" for line in row)
-        lines.append("    },")
-    lines.append("};")
-    lines.append("")
+    c_arrays.append_struct_array(lines, c_type, f"k{table_prefix}{name}", row_lines)
 
 
 def _metadata_string_label(storage_spec: DescriptorSet, view_spec: DescriptorSet, field_name: str) -> str:
@@ -786,10 +779,12 @@ def emit_source_for_views(
         ],
     )
     if compiled.feature_mask_words:
-        lines.append(f"static const uint64_t k{spec.c_table_prefix}FeatureMaskWords[] = {{")
-        lines.extend(f"    {c_spelling.hex_u64_literal(word)}," for word in compiled.feature_mask_words)
-        lines.append("};")
-        lines.append("")
+        c_arrays.append_value_array(
+            lines,
+            "uint64_t",
+            f"k{spec.c_table_prefix}FeatureMaskWords",
+            [c_spelling.hex_u64_literal(word) for word in compiled.feature_mask_words],
+        )
     _emit_array(
         lines,
         "loom_low_encoding_field_value_t",
@@ -827,10 +822,12 @@ def emit_source_for_views(
         ],
     )
     if compiled.operand_form_operand_indices:
-        lines.append(f"static const uint16_t k{spec.c_table_prefix}OperandFormOperandIndices[] = {{")
-        lines.extend(f"    {operand_index}," for operand_index in compiled.operand_form_operand_indices)
-        lines.append("};")
-        lines.append("")
+        c_arrays.append_value_array(
+            lines,
+            "uint16_t",
+            f"k{spec.c_table_prefix}OperandFormOperandIndices",
+            [str(operand_index) for operand_index in compiled.operand_form_operand_indices],
+        )
     _emit_array(
         lines,
         "loom_low_descriptor_t",
@@ -881,10 +878,12 @@ def emit_source_for_views(
             ],
         )
     if compiled.asm_operand_indices:
-        lines.append(f"static const uint16_t k{spec.c_table_prefix}AsmOperandIndices[] = {{")
-        lines.extend(f"    {operand_index}," for operand_index in compiled.asm_operand_indices)
-        lines.append("};")
-        lines.append("")
+        c_arrays.append_value_array(
+            lines,
+            "uint16_t",
+            f"k{spec.c_table_prefix}AsmOperandIndices",
+            [str(operand_index) for operand_index in compiled.asm_operand_indices],
+        )
     _emit_array(
         lines,
         "loom_low_asm_immediate_t",

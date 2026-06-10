@@ -99,6 +99,7 @@ from loom.gen.ops.model import (
     load_generation_model,
 )
 from loom.gen.ops.type_registry import generate_type_registry
+from loom.gen.support import c_arrays
 from loom.gen.support.c import c_identifier as _c_identifier
 from loom.gen.support.c import c_string_literal as _c_string_literal
 from loom.gen.support.files import write_text_file as _write_file
@@ -127,15 +128,13 @@ def _op_phase_c_name(op: Op) -> str:
     return phase.c_name
 
 
-def _emit_op_semantics(lines: list[str], op: Op) -> None:
-    """Appends a sparse initializer for one op semantic metadata row."""
-
+def _op_semantics_row(op: Op) -> list[str]:
+    """Returns a sparse initializer row for one op semantic metadata row."""
     contract_families = _contract_family_mask(op.contracts)
-    lines.append("    {")
-    lines.append(f"        .phase = {_op_phase_c_name(op)},")
+    row = [f".phase = {_op_phase_c_name(op)},"]
     if contract_families != "0":
-        lines.append(f"        .contract_families = {contract_families},")
-    lines.append("    },")
+        row.append(f".contract_families = {contract_families},")
+    return row
 
 
 # Maps Python symbol interface names to C interface flag constants.
@@ -497,14 +496,13 @@ def generate_tables_c(
         cases_by_value = sorted(enum_def.cases, key=lambda c: c.value)
         max_value = max(c.value for c in cases_by_value)
         value_to_name: dict[int, str] = {c.value: c.keyword for c in cases_by_value}
-        lines.append(f"static const loom_bstring_t {array_name}[] = {{")
-        for v in range(max_value + 1):
-            name = value_to_name.get(v)
-            if name is not None:
-                lines.append(f"    {_bstring_expr(name)},")
-            else:
-                lines.append("    NULL,")
-        lines.append("};")
+        c_arrays.append_value_array(
+            lines,
+            "loom_bstring_t",
+            array_name,
+            [_bstring_expr(name) if (name := value_to_name.get(v)) is not None else "NULL" for v in range(max_value + 1)],
+            trailing_blank=False,
+        )
 
     # Symbol definition descriptors may refer to fact domains outside this
     # generated translation unit.
@@ -619,9 +617,13 @@ def generate_tables_c(
             individual_cases = [c for c in flags_attr.enum_def.cases if c.value != 0 and (c.value & (c.value - 1)) == 0]
             individual_cases.sort(key=lambda c: c.value)
             array_name = f"{prefix}_instance_flags_names"
-            lines.append(f"static const loom_bstring_t {array_name}[] = {{")
-            lines.extend(f"    {_bstring_expr(case.keyword)}," for case in individual_cases)
-            lines.append("};")
+            c_arrays.append_value_array(
+                lines,
+                "loom_bstring_t",
+                array_name,
+                [_bstring_expr(case.keyword) for case in individual_cases],
+                trailing_blank=False,
+            )
 
         # Attribute symbol-reference descriptors.
         for attr_def in non_flags:
@@ -883,12 +885,12 @@ def generate_tables_c(
         return "\n".join(lines)
 
     # Registration function.
-    lines.append(f"static const loom_op_vtable_t* const loom_{dialect_name}_vtable_array[] = {{")
-    for op in ops:
-        prefix = _c_prefix(op)
-        lines.append(f"    &{prefix}_vtable,")
-    lines.append("};")
-    lines.append("")
+    c_arrays.append_value_array(
+        lines,
+        "loom_op_vtable_t* const",
+        f"loom_{dialect_name}_vtable_array",
+        [f"&{_c_prefix(op)}_vtable" for op in ops],
+    )
     lines.append(f"const loom_op_vtable_t* const* loom_{dialect_name}_dialect_vtables(")
     lines.append("    iree_host_size_t* out_count) {")
     lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_vtable_array);")
@@ -896,11 +898,12 @@ def generate_tables_c(
     lines.append("}")
     lines.append("")
 
-    lines.append(f"static const loom_op_semantics_t loom_{dialect_name}_semantics_array[] = {{")
-    for op in ops:
-        _emit_op_semantics(lines, op)
-    lines.append("};")
-    lines.append("")
+    c_arrays.append_struct_array(
+        lines,
+        "loom_op_semantics_t",
+        f"loom_{dialect_name}_semantics_array",
+        [_op_semantics_row(op) for op in ops],
+    )
     lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
     lines.append("    iree_host_size_t* out_count) {")
     lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array);")
@@ -971,10 +974,12 @@ def generate_tables_aggregator_c(
     lines.append(f'#include "{include_path}/tables.h"')
     lines.append("")
 
-    lines.append(f"static const loom_op_vtable_t* const loom_{dialect_name}_vtable_array[] = {{")
-    lines.extend(f"    &{_c_prefix(op)}_vtable," for op in ops)
-    lines.append("};")
-    lines.append("")
+    c_arrays.append_value_array(
+        lines,
+        "loom_op_vtable_t* const",
+        f"loom_{dialect_name}_vtable_array",
+        [f"&{_c_prefix(op)}_vtable" for op in ops],
+    )
     lines.append(f"const loom_op_vtable_t* const* loom_{dialect_name}_dialect_vtables(")
     lines.append("    iree_host_size_t* out_count) {")
     lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_vtable_array);")
@@ -982,11 +987,12 @@ def generate_tables_aggregator_c(
     lines.append("}")
     lines.append("")
 
-    lines.append(f"static const loom_op_semantics_t loom_{dialect_name}_semantics_array[] = {{")
-    for op in ops:
-        _emit_op_semantics(lines, op)
-    lines.append("};")
-    lines.append("")
+    c_arrays.append_struct_array(
+        lines,
+        "loom_op_semantics_t",
+        f"loom_{dialect_name}_semantics_array",
+        [_op_semantics_row(op) for op in ops],
+    )
     lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
     lines.append("    iree_host_size_t* out_count) {")
     lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array);")
