@@ -151,7 +151,8 @@ An `iree_ok_status()` initializer should represent the real initial state of a
 terminal status accumulator. If the next same-scope assignment replaces it
 before a branch, loop, observer, cleanup join, or ownership transfer can use
 that initial OK value, initialize the variable from the producer directly or use
-the appropriate return-if-error helper.
+the appropriate return-if-error helper. The simple adjacent declaration and
+assignment form is fixable with `clang-tidy --fix`.
 
 The lifetime model focuses on local ownership states that can be proven from
 the AST with high confidence. Straight-line code, block scope, local transfers,

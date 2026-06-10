@@ -160,6 +160,34 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
+    def test_status_lifetime_fixes_immediate_ok_overwrite(self):
+        output, fixed_source = clang_tidy_test.run_clang_tidy_fix(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-status-lifetime",
+            source=clang_tidy_test.source_path(__file__, "status_checks.c"),
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "fix_status",
+                "[iree-status-lifetime]",
+            ],
+        )
+        self.assertIn(
+            "iree_status_t fix_status = iree_clang_tidy_status_fix_source();",
+            fixed_source,
+        )
+        self.assertIn("  return fix_status;", fixed_source)
+        self.assertNotIn(
+            "  fix_status = iree_clang_tidy_status_fix_source();",
+            fixed_source,
+        )
+        self.assertIn(
+            "iree_status_t conditional_ok_status = iree_ok_status();",
+            fixed_source,
+        )
+
     def test_status_transfer_order_is_diagnosed(self):
         output = clang_tidy_test.run_clang_tidy(
             clang_tidy=_ARGS.clang_tidy,

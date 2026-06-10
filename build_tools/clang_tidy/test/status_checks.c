@@ -34,6 +34,7 @@ void iree_async_proactor_io_uring_push_software_completion(
 iree_status_t iree_clang_tidy_status_assigned_source(void);
 iree_status_t iree_clang_tidy_status_cleanup_source(void);
 iree_status_t iree_clang_tidy_status_dropped_source(void);
+iree_status_t iree_clang_tidy_status_fix_source(void);
 iree_status_t iree_clang_tidy_status_ignored_source(void);
 iree_status_t iree_clang_tidy_status_named_call_source(void);
 iree_status_t iree_clang_tidy_status_returned_source(void);
@@ -213,6 +214,12 @@ iree_status_t iree_clang_tidy_status_lifetime_immediate_ok_overwrite(void) {
   iree_status_t immediate_ok_overwrite_status = iree_ok_status();
   immediate_ok_overwrite_status = iree_clang_tidy_status_assigned_source();
   return immediate_ok_overwrite_status;
+}
+
+iree_status_t iree_clang_tidy_status_lifetime_fix_immediate_ok_overwrite(void) {
+  iree_status_t fix_status = iree_ok_status();
+  fix_status = iree_clang_tidy_status_fix_source();
+  return fix_status;
 }
 
 iree_status_t iree_clang_tidy_status_lifetime_conditional_ok_assignment(

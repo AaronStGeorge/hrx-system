@@ -14,6 +14,10 @@
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
+#include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/Lex/Lexer.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -286,6 +290,7 @@ struct VariableState {
   SourceLocation ConsumeLocation;
   SourceLocation ReportLocation;
   SourceLocation OkInitLocation;
+  SourceRange OkInitRange;
 
   static VariableState NoOwner() { return VariableState(); }
 
@@ -302,10 +307,12 @@ struct VariableState {
     return State;
   }
 
-  static VariableState OkInitialized(SourceLocation Location) {
+  static VariableState OkInitialized(SourceLocation Location,
+                                     SourceRange Range) {
     VariableState State;
     State.OkInitializerLive = true;
     State.OkInitLocation = Location;
+    State.OkInitRange = Range;
     return State;
   }
 };
@@ -314,6 +321,11 @@ struct AnalysisState {
   llvm::DenseMap<const VarDecl*, VariableState> Variables;
   bool Terminal = false;
   bool SuppressOkOverwriteDiagnostics = false;
+};
+
+struct ImmediateOkOverwriteFix {
+  const Expr* ReplacementExpr = nullptr;
+  const Stmt* RemovalStatement = nullptr;
 };
 
 VariableState MergeVariableState(const VariableState& Lhs,
@@ -335,6 +347,8 @@ VariableState MergeVariableState(const VariableState& Lhs,
       Lhs.ReportLocation.isValid() ? Lhs.ReportLocation : Rhs.ReportLocation;
   Result.OkInitLocation =
       Lhs.OkInitLocation.isValid() ? Lhs.OkInitLocation : Rhs.OkInitLocation;
+  Result.OkInitRange =
+      Lhs.OkInitRange.isValid() ? Lhs.OkInitRange : Rhs.OkInitRange;
   return Result;
 }
 
@@ -1063,20 +1077,155 @@ class StatusLifetimeAnalyzer {
     }
   }
 
-  void diagnoseImmediateOkOverwrite(const VarDecl* Var, SourceLocation Location,
+  bool isFileSourceRange(SourceRange Range) const {
+    return Range.isValid() && Range.getBegin().isFileID() &&
+           Range.getEnd().isFileID();
+  }
+
+  std::optional<std::string> sourceText(SourceRange Range) const {
+    if (!isFileSourceRange(Range)) {
+      return std::nullopt;
+    }
+    StringRef Text = Lexer::getSourceText(CharSourceRange::getTokenRange(Range),
+                                          Context_.getSourceManager(),
+                                          Context_.getLangOpts());
+    if (Text.empty()) {
+      return std::nullopt;
+    }
+    return Text.str();
+  }
+
+  std::optional<CharSourceRange> statementRemovalRange(
+      const Stmt* Statement) const {
+    if (!Statement || !isFileSourceRange(Statement->getSourceRange())) {
+      return std::nullopt;
+    }
+    std::optional<SourceLocation> Begin = statementRemovalBegin(Statement);
+    if (!Begin) {
+      return std::nullopt;
+    }
+    std::optional<unsigned> EndOffset = statementRemovalEndOffset(Statement);
+    if (!EndOffset) {
+      return std::nullopt;
+    }
+    auto BeginOffset =
+        Context_.getSourceManager().getDecomposedLoc(*Begin).second;
+    if (*EndOffset <= BeginOffset) {
+      return std::nullopt;
+    }
+    SourceLocation End = Begin->getLocWithOffset(*EndOffset - BeginOffset - 1);
+    return CharSourceRange::getCharRange(*Begin, End);
+  }
+
+  std::optional<SourceLocation> statementRemovalBegin(
+      const Stmt* Statement) const {
+    const SourceManager& SourceManager = Context_.getSourceManager();
+    SourceLocation Begin = Statement->getBeginLoc();
+    if (!Begin.isFileID()) {
+      return std::nullopt;
+    }
+    auto Decomposed = SourceManager.getDecomposedLoc(Begin);
+    bool Invalid = false;
+    StringRef Buffer = SourceManager.getBufferData(Decomposed.first, &Invalid);
+    if (Invalid || Decomposed.second > Buffer.size()) {
+      return std::nullopt;
+    }
+
+    unsigned LineStart = Decomposed.second;
+    while (LineStart > 0 && Buffer[LineStart - 1] != '\n' &&
+           Buffer[LineStart - 1] != '\r') {
+      --LineStart;
+    }
+    for (unsigned I = LineStart; I < Decomposed.second; ++I) {
+      if (Buffer[I] != ' ' && Buffer[I] != '\t') {
+        return std::nullopt;
+      }
+    }
+    return SourceManager.getLocForStartOfFile(Decomposed.first)
+        .getLocWithOffset(LineStart);
+  }
+
+  std::optional<unsigned> statementRemovalEndOffset(
+      const Stmt* Statement) const {
+    const SourceManager& SourceManager = Context_.getSourceManager();
+    SourceLocation Begin = Statement->getBeginLoc();
+    if (!Begin.isFileID()) {
+      return std::nullopt;
+    }
+    auto Decomposed = SourceManager.getDecomposedLoc(Begin);
+    bool Invalid = false;
+    StringRef Buffer = SourceManager.getBufferData(Decomposed.first, &Invalid);
+    if (Invalid || Decomposed.second > Buffer.size()) {
+      return std::nullopt;
+    }
+
+    for (unsigned I = Decomposed.second; I < Buffer.size(); ++I) {
+      if (Buffer[I] == '\r' || Buffer[I] == '\n') {
+        return std::nullopt;
+      }
+      if (Buffer[I] != ';') {
+        continue;
+      }
+      for (unsigned End = I + 1; End < Buffer.size(); ++End) {
+        if (Buffer[End] == ' ' || Buffer[End] == '\t') {
+          continue;
+        }
+        if (Buffer[End] == '\r') {
+          if (End + 1 < Buffer.size() && Buffer[End + 1] == '\n') {
+            return End + 2;
+          }
+          return End + 1;
+        }
+        if (Buffer[End] == '\n') {
+          return End + 1;
+        }
+        return std::nullopt;
+      }
+      return Buffer.size();
+    }
+    return std::nullopt;
+  }
+
+  void appendImmediateOkOverwriteFix(DiagnosticBuilder& Diagnostic,
+                                     const BinaryOperator* Assignment,
+                                     const VariableState& State) const {
+    auto It = ImmediateOkOverwriteFixes_.find(Assignment);
+    if (It == ImmediateOkOverwriteFixes_.end()) {
+      return;
+    }
+    std::optional<std::string> ReplacementText =
+        sourceText(It->second.ReplacementExpr->getSourceRange());
+    std::optional<CharSourceRange> RemovalRange =
+        statementRemovalRange(It->second.RemovalStatement);
+    if (!ReplacementText || !RemovalRange ||
+        !isFileSourceRange(State.OkInitRange)) {
+      return;
+    }
+    Diagnostic << FixItHint::CreateRemoval(*RemovalRange)
+               << FixItHint::CreateReplacement(
+                      CharSourceRange::getTokenRange(State.OkInitRange),
+                      *ReplacementText);
+  }
+
+  void diagnoseImmediateOkOverwrite(const VarDecl* Var,
+                                    const BinaryOperator* Assignment,
                                     const VariableState& State) {
     if (State.OkInitLocation.isValid()) {
-      Check_.diag(Location,
-                  "iree_status_t %0 initialized to iree_ok_status here is "
-                  "overwritten before the initializer is used; initialize from "
-                  "the producer directly or use a return-if-error helper")
-          << Var << State.OkInitLocation;
+      DiagnosticBuilder Diagnostic = Check_.diag(
+          Assignment->getOperatorLoc(),
+          "iree_status_t %0 initialized to iree_ok_status here is overwritten "
+          "before the initializer is used; initialize from the producer "
+          "directly or use a return-if-error helper");
+      Diagnostic << Var << State.OkInitLocation;
+      appendImmediateOkOverwriteFix(Diagnostic, Assignment, State);
     } else {
-      Check_.diag(Location,
-                  "iree_status_t %0 initialized to iree_ok_status is "
-                  "overwritten before the initializer is used; initialize from "
-                  "the producer directly or use a return-if-error helper")
-          << Var;
+      DiagnosticBuilder Diagnostic = Check_.diag(
+          Assignment->getOperatorLoc(),
+          "iree_status_t %0 initialized to iree_ok_status is overwritten "
+          "before the initializer is used; initialize from the producer "
+          "directly or use a return-if-error helper");
+      Diagnostic << Var;
+      appendImmediateOkOverwriteFix(Diagnostic, Assignment, State);
     }
   }
 
@@ -1284,12 +1433,46 @@ class StatusLifetimeAnalyzer {
     }
   }
 
+  void recordImmediateOkOverwriteFix(const Stmt* DeclarationStatement,
+                                     const Stmt* AssignmentStatement) {
+    const auto* Declaration = dyn_cast_or_null<DeclStmt>(DeclarationStatement);
+    if (!Declaration || !Declaration->isSingleDecl()) {
+      return;
+    }
+    const auto* Var = dyn_cast_or_null<VarDecl>(Declaration->getSingleDecl());
+    if (!Var || !Var->hasLocalStorage() || IsMacroStatusTemporary(Var) ||
+        !Var->hasInit() || !IsStatusType(Var->getType()) ||
+        !IsIreeOkStatusCall(Var->getInit())) {
+      return;
+    }
+
+    const auto* AssignmentExpr = dyn_cast_or_null<Expr>(AssignmentStatement);
+    const auto* Assignment =
+        dyn_cast_or_null<BinaryOperator>(IgnoreExprNoise(AssignmentExpr));
+    if (!Assignment || Assignment->getOpcode() != BO_Assign) {
+      return;
+    }
+    const VarDecl* LhsVar = ReferencedStatusLocal(Assignment->getLHS());
+    if (LhsVar != Var->getCanonicalDecl()) {
+      return;
+    }
+
+    ImmediateOkOverwriteFixes_[Assignment] = ImmediateOkOverwriteFix{
+        Assignment->getRHS(),
+        AssignmentStatement,
+    };
+  }
+
   void analyzeCompound(const CompoundStmt* Compound, AnalysisState& State,
                        bool is_function_body) {
     SmallVector<const VarDecl*, 8> BlockVariables;
+    const Stmt* PreviousChild = nullptr;
     for (const Stmt* Child : Compound->body()) {
       if (State.Terminal) {
         break;
+      }
+      if (PreviousChild) {
+        recordImmediateOkOverwriteFix(PreviousChild, Child);
       }
       if (const auto* DeclarationStatement = dyn_cast<DeclStmt>(Child)) {
         for (const Decl* D : DeclarationStatement->decls()) {
@@ -1301,6 +1484,7 @@ class StatusLifetimeAnalyzer {
         }
       }
       analyzeStatement(Child, State);
+      PreviousChild = Child;
     }
     if (!State.Terminal) {
       if (is_function_body) {
@@ -1348,8 +1532,8 @@ class StatusLifetimeAnalyzer {
         continue;
       }
       if (IsIreeOkStatusCall(Var->getInit())) {
-        State.Variables[CanonicalVar] =
-            VariableState::OkInitialized(Var->getLocation());
+        State.Variables[CanonicalVar] = VariableState::OkInitialized(
+            Var->getLocation(), Var->getInit()->getSourceRange());
         continue;
       }
       StatusValue InitValue =
@@ -1698,8 +1882,7 @@ class StatusLifetimeAnalyzer {
           LhsBefore.OkInitializerLive && LhsAfterRhs &&
           LhsAfterRhs->OkInitializerLive && RhsValue.IsStatus &&
           !IsIreeOkStatusCall(Binary->getRHS())) {
-        diagnoseImmediateOkOverwrite(LhsVar, Binary->getOperatorLoc(),
-                                     LhsBefore);
+        diagnoseImmediateOkOverwrite(LhsVar, Binary, LhsBefore);
       }
       if (LhsBefore.MayOwn && !LhsBefore.Unknown && !RhsConsumedLhs) {
         diagnoseLeak(LhsVar, Binary->getOperatorLoc(), LhsBefore);
@@ -1864,6 +2047,8 @@ class StatusLifetimeAnalyzer {
 
   StatusLifetimeCheck& Check_;
   ASTContext& Context_;
+  llvm::DenseMap<const BinaryOperator*, ImmediateOkOverwriteFix>
+      ImmediateOkOverwriteFixes_;
 };
 
 }  // namespace
