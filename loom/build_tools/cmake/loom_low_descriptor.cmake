@@ -113,10 +113,12 @@ function(loom_target_table_cc_library)
       message(FATAL_ERROR
         "loom_target_table_cc_library HEADER_ONLY target cannot generate outputs")
     endif()
-    add_custom_target("${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+    set(_GEN_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}_gen")
+    add_custom_target("${_GEN_TARGET}"
       DEPENDS
         "${_HEADER}"
     )
+    iree_register_generated_compile_input("${_GEN_TARGET}")
     loom_cc_library(
       NAME
         ${_RULE_NAME}
@@ -129,7 +131,7 @@ function(loom_target_table_cc_library)
     )
     add_dependencies(
       "${_PACKAGE_NAME}_${_RULE_NAME}"
-      "${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+      "${_GEN_TARGET}"
     )
     return()
   endif()
@@ -161,12 +163,14 @@ function(loom_target_table_cc_library)
     VERBATIM
   )
 
-  add_custom_target("${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+  set(_GEN_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}_gen")
+  add_custom_target("${_GEN_TARGET}"
     DEPENDS
       "${_SOURCE}"
       "${_HEADER}"
       ${_GENERATED_HDRS}
   )
+  iree_register_generated_compile_input("${_GEN_TARGET}")
 
   loom_cc_library(
     NAME
@@ -218,6 +222,7 @@ function(loom_low_descriptor_cc_library)
 
   set(_HEADER "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_HEADER}")
   iree_package_name(_PACKAGE_NAME)
+  set(_GEN_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}_gen")
   loom_cc_library(
     NAME
       "${_RULE_NAME}_ids"
@@ -230,7 +235,7 @@ function(loom_low_descriptor_cc_library)
   )
   add_dependencies(
     "${_PACKAGE_NAME}_${_RULE_NAME}_ids"
-    "${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+    "${_GEN_TARGET}"
   )
 endfunction()
 

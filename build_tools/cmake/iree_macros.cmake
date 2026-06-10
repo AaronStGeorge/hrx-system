@@ -97,6 +97,24 @@ endif()
 # General utilities
 #-------------------------------------------------------------------------------
 
+if(NOT TARGET iree_generated_compile_inputs)
+  add_custom_target(iree_generated_compile_inputs)
+endif()
+
+# Registers a target that materializes generated C/C++ compile inputs.
+#
+# Compile-database consumers such as clang-tidy read compile_commands.json
+# without asking CMake to build the source target first. Generated headers and
+# sources therefore need a stable aggregate target that prepares the filesystem
+# view before external analysis starts.
+function(iree_register_generated_compile_input TARGET_NAME)
+  if(NOT TARGET "${TARGET_NAME}")
+    message(FATAL_ERROR
+      "Generated compile input target ${TARGET_NAME} was not found")
+  endif()
+  add_dependencies(iree_generated_compile_inputs "${TARGET_NAME}")
+endfunction()
+
 # iree_to_bool
 #
 # Sets `variable` to `ON` if `value` is true and `OFF` otherwise.

@@ -43,10 +43,12 @@ python dev.py cmake clang-tidy runtime/src/iree/base/status.c
 python dev.py cmake clang-tidy --base origin/main
 ```
 
-The CMake command builds the plugin in `.tmp/iree-clang-tidy-plugin` and runs
-`clang-tidy` against source files using the configured CMake
-`compile_commands.json`. Select the CMake build tree with
-`--cmake-build-dir` or `IREE_CMAKE_BUILD_DIR`.
+The CMake command builds the plugin in `.tmp/iree-clang-tidy-plugin`,
+materializes generated C/C++ compile inputs in the configured CMake build tree,
+and runs `run-clang-tidy` against source files using that build tree's
+`compile_commands.json`. Select the CMake build tree with `--cmake-build-dir`
+or `IREE_CMAKE_BUILD_DIR`. The runner defaults to a capped parallel job count
+and can be tuned with `IREE_CLANG_TIDY_JOBS`.
 
 Plugin-only CMake validation is also available:
 
