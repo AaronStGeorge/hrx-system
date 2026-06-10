@@ -98,6 +98,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY_LITERAL = 68,
 } loom_amdgpu_encoding_format_t;
 
+#include "loom/target/arch/amdgpu/encoding/encoding_field_ids.h"
+
 typedef struct loom_amdgpu_encoding_bit_range_t {
   // Target bit offset populated by this range.
   uint8_t bit_offset;

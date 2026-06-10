@@ -35,6 +35,8 @@ loom_cc_library = _loom_cc_library
 loom_cc_test = _loom_cc_test
 
 def _loom_bazel_generator_args(args):
+    if type(args) != type([]):
+        return args
     return [
         arg.replace("$(rootpath ", "$(location ").replace("$(execpath ", "$(location ")
         for arg in args

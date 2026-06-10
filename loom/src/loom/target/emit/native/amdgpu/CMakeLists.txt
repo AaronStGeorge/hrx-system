@@ -218,7 +218,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_test(
   NAME
     spill_lowering_test
@@ -232,7 +232,7 @@ loom_cc_test(
     loom::codegen::low::builder
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::descriptors::shards_for_testing
+    loom::target::arch::amdgpu::descriptors::low_registry_for_testing
     loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

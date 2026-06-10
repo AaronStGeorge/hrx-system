@@ -26,7 +26,7 @@ endif()
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE AND LOOM_TARGET_ARCH_AMDGPU)
 loom_low_descriptor_cc_library(
   NAME
     cdna3
@@ -48,7 +48,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND LOOM_TARGET_ARCH_AMDGPU)
 loom_low_descriptor_cc_library(
   NAME
     rdna3
@@ -70,7 +70,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE AND LOOM_TARGET_ARCH_AMDGPU)
 loom_low_descriptor_cc_library(
   NAME
     rdna4
@@ -92,7 +92,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE AND LOOM_TARGET_ARCH_AMDGPU)
 loom_low_descriptor_cc_library(
   NAME
     rdna4_gfx125x
@@ -114,7 +114,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE AND LOOM_TARGET_ARCH_AMDGPU)
 loom_low_descriptor_cc_library(
   NAME
     cdna4
@@ -137,44 +137,68 @@ loom_low_descriptor_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
+loom_generated_textual_header(
   NAME
-    shards_for_testing
-  HDRS
-    "cdna3_descriptors.h"
-    "cdna4_descriptors.h"
-    "rdna3_descriptors.h"
-    "rdna4_descriptors.h"
-    "rdna4_gfx125x_descriptors.h"
-  DEPS
-    ::cdna3
-    ::cdna4
-    ::rdna3
-    ::rdna4
-    ::rdna4_gfx125x
-  TESTONLY
-  PUBLIC
+    low_registry_tables_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::config_tables
+  OUTPUT
+    "low_registry_tables.inl"
+  OUTPUT_FLAG
+    "--low-registry-tables"
 )
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
+set(_low_registry_platform_defines "")
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+  list(APPEND _low_registry_platform_defines "LOOM_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE")
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE)
+  list(APPEND _low_registry_platform_defines "LOOM_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE")
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+  list(APPEND _low_registry_platform_defines "LOOM_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE")
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+  list(APPEND _low_registry_platform_defines "LOOM_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE")
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
+  list(APPEND _low_registry_platform_defines "LOOM_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE")
+endif()
+set(_low_registry_platform_deps "")
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE)
+  list(APPEND _low_registry_platform_deps ::cdna3)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA4_CORE)
+  list(APPEND _low_registry_platform_deps ::cdna4)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE)
+  list(APPEND _low_registry_platform_deps ::rdna3)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_CORE)
+  list(APPEND _low_registry_platform_deps ::rdna4)
+endif()
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA4_GFX125X_CORE)
+  list(APPEND _low_registry_platform_deps ::rdna4_gfx125x)
+endif()
 loom_cc_library(
   NAME
     low_registry
   HDRS
     "low_registry.h"
+  TEXTUAL_HDRS
+    "low_registry_tables.inl"
   SRCS
     "low_registry.c"
   DEPS
-    ::cdna3
-    ::cdna4
-    ::rdna3
-    ::rdna4
-    ::rdna4_gfx125x
     iree::base
     loom::codegen::low::descriptors
     loom::target::low_descriptor_registry
     loom::target::types
+    ${_low_registry_platform_deps}
+  DEFINES
+    ${_low_registry_platform_defines}
   PUBLIC
 )
 endif()

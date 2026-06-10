@@ -8,42 +8,16 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/target/arch/amdgpu/encoding/rdna3_encoding_tables.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 namespace {
 
-const loom_amdgpu_encoding_table_t* Cdna3EncodingTable() {
-  const loom_amdgpu_encoding_table_t* table =
-      loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
-          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3);
-  EXPECT_NE(table, nullptr);
-  return table;
-}
-
-const loom_amdgpu_encoding_table_t* Cdna4EncodingTable() {
-  const loom_amdgpu_encoding_table_t* table =
-      loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
-          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4);
-  EXPECT_NE(table, nullptr);
-  return table;
-}
-
-const loom_amdgpu_encoding_table_t* Rdna3EncodingTable() {
-  const loom_amdgpu_encoding_table_t* table =
-      loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
-          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3);
-  EXPECT_NE(table, nullptr);
-  return table;
-}
-
-const loom_amdgpu_encoding_table_t* Gfx1250EncodingTable() {
-  const loom_amdgpu_encoding_table_t* table =
-      loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
-          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X);
-  EXPECT_NE(table, nullptr);
-  return table;
-}
+#define LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(variable, ordinal, key)    \
+  const loom_amdgpu_encoding_table_t* variable =                      \
+      loom_amdgpu_encoding_table_for_descriptor_set_ordinal(ordinal); \
+  if (variable == nullptr) {                                          \
+    GTEST_SKIP() << "AMDGPU encoding table not selected: " << key;    \
+  }
 
 iree_status_t PackVMovB32Dpp(const loom_amdgpu_encoding_table_t* table,
                              uint16_t format,
@@ -161,35 +135,41 @@ iree_status_t PackVMovB32Sdwa(const loom_amdgpu_encoding_table_t* table,
 }
 
 TEST(AmdgpuEncodingTest, VMovB32UsesInlineSourceForSmallU32) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
-  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_v_mov_b32_u32(
-      Rdna3EncodingTable(), /*vdst=*/1, /*imm32=*/2, &packet));
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_v_mov_b32_u32(table, /*vdst=*/1,
+                                                         /*imm32=*/2, &packet));
   EXPECT_EQ(packet.word_count, 1u);
   EXPECT_EQ(packet.bit_count, 32u);
 }
 
 TEST(AmdgpuEncodingTest, VMovB32UsesLiteralForLargeU32) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
   IREE_ASSERT_OK(loom_amdgpu_encoding_pack_v_mov_b32_u32(
-      Rdna3EncodingTable(), /*vdst=*/1, /*imm32=*/65536, &packet));
+      table, /*vdst=*/1, /*imm32=*/65536, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
 }
 
 TEST(AmdgpuEncodingTest, Vop2U32VgprUsesInlineSourceForSmallU32) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
   IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vop2_u32_vgpr(
-      Rdna3EncodingTable(), /*opcode=*/0, /*vdst=*/1, /*imm32=*/8,
-      /*vsrc1=*/2, &packet));
+      table, /*opcode=*/0, /*vdst=*/1, /*imm32=*/8, /*vsrc1=*/2, &packet));
   EXPECT_EQ(packet.word_count, 1u);
   EXPECT_EQ(packet.bit_count, 32u);
 }
 
 TEST(AmdgpuEncodingTest, Vop2U32VgprUsesLiteralForLargeU32) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
   IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vop2_u32_vgpr(
-      Rdna3EncodingTable(), /*opcode=*/0, /*vdst=*/1, /*imm32=*/65536,
-      /*vsrc1=*/2, &packet));
+      table, /*opcode=*/0, /*vdst=*/1, /*imm32=*/65536, /*vsrc1=*/2, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
 }
@@ -276,9 +256,11 @@ TEST(AmdgpuEncodingTest, LeavesUncontrolledFieldsWithoutVgprMsbSlot) {
 }
 
 TEST(AmdgpuEncodingTest, PacksRdna3VMovB32Dpp16LaneControl) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
-  IREE_ASSERT_OK(PackVMovB32Dpp(
-      Rdna3EncodingTable(), LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP16, &packet));
+  IREE_ASSERT_OK(
+      PackVMovB32Dpp(table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP16, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0x7e0202fa));
@@ -286,9 +268,11 @@ TEST(AmdgpuEncodingTest, PacksRdna3VMovB32Dpp16LaneControl) {
 }
 
 TEST(AmdgpuEncodingTest, PacksCdna4VMovB32DppLaneControl) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4, "amdgpu.cdna4.core");
   loom_amdgpu_encoding_packet_t packet = {};
-  IREE_ASSERT_OK(PackVMovB32Dpp(Cdna4EncodingTable(),
-                                LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP, &packet));
+  IREE_ASSERT_OK(
+      PackVMovB32Dpp(table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0x7e0202fa));
@@ -296,6 +280,9 @@ TEST(AmdgpuEncodingTest, PacksCdna4VMovB32DppLaneControl) {
 }
 
 TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalSwmmac) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X,
+      "amdgpu.rdna4.gfx125x.core");
   const loom_amdgpu_encoding_field_value_t field_values[] = {
       {
           .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
@@ -332,8 +319,8 @@ TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalSwmmac) {
   };
   loom_amdgpu_encoding_packet_t packet = {};
   IREE_ASSERT_OK(loom_amdgpu_encoding_pack(
-      Gfx1250EncodingTable(), LOOM_AMDGPU_ENCODING_FORMAT_VOP3P,
-      /*opcode=*/0x65, field_values, IREE_ARRAYSIZE(field_values), &packet));
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP3P, /*opcode=*/0x65, field_values,
+      IREE_ARRAYSIZE(field_values), &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0xcc650818));
@@ -341,6 +328,9 @@ TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalSwmmac) {
 }
 
 TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalScaledWmma) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X,
+      "amdgpu.rdna4.gfx125x.core");
   const loom_amdgpu_encoding_field_value_t field_values[] = {
       {
           .field_id = LOOM_AMDGPU_ENCODING_FIELD_X2ENCODING,
@@ -405,8 +395,8 @@ TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalScaledWmma) {
   };
   loom_amdgpu_encoding_packet_t packet = {};
   IREE_ASSERT_OK(loom_amdgpu_encoding_pack(
-      Gfx1250EncodingTable(), LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2,
-      /*opcode=*/0x33, field_values, IREE_ARRAYSIZE(field_values), &packet));
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2, /*opcode=*/0x33, field_values,
+      IREE_ARRAYSIZE(field_values), &packet));
   EXPECT_EQ(packet.word_count, 4u);
   EXPECT_EQ(packet.bit_count, 128u);
   EXPECT_EQ(packet.words[0], UINT32_C(0xcc350800));
@@ -416,9 +406,10 @@ TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalScaledWmma) {
 }
 
 TEST(AmdgpuEncodingTest, PacksCdna4VMovB32SdwaByteExtract) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4, "amdgpu.cdna4.core");
   loom_amdgpu_encoding_packet_t packet = {};
-  IREE_ASSERT_OK(PackVMovB32Sdwa(Cdna4EncodingTable(),
-                                 /*sign_extend=*/false, &packet));
+  IREE_ASSERT_OK(PackVMovB32Sdwa(table, /*sign_extend=*/false, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0x7e0202f9));
@@ -426,9 +417,10 @@ TEST(AmdgpuEncodingTest, PacksCdna4VMovB32SdwaByteExtract) {
 }
 
 TEST(AmdgpuEncodingTest, PacksCdna4VMovB32SdwaSignedByteExtract) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4, "amdgpu.cdna4.core");
   loom_amdgpu_encoding_packet_t packet = {};
-  IREE_ASSERT_OK(PackVMovB32Sdwa(Cdna4EncodingTable(),
-                                 /*sign_extend=*/true, &packet));
+  IREE_ASSERT_OK(PackVMovB32Sdwa(table, /*sign_extend=*/true, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0x7e0202f9));
@@ -504,16 +496,20 @@ TEST(AmdgpuEncodingTest, RejectsOutOfRangeVopdxyOp) {
 }
 
 TEST(AmdgpuEncodingTest, InlineF32SourceMapsBitPatternToSourceSelector) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   uint16_t source = 0;
   EXPECT_TRUE(loom_amdgpu_encoding_inline_f32_source(
-      Rdna3EncodingTable(), UINT32_C(0x3f800000), &source));
+      table, UINT32_C(0x3f800000), &source));
   EXPECT_EQ(source, 242u);
 }
 
 TEST(AmdgpuEncodingTest, InlineF32SourceRejectsUnsupportedBitPattern) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   uint16_t source = 1;
   EXPECT_FALSE(loom_amdgpu_encoding_inline_f32_source(
-      Rdna3EncodingTable(), UINT32_C(0x40400000), &source));
+      table, UINT32_C(0x40400000), &source));
   EXPECT_EQ(source, 0u);
 }
 

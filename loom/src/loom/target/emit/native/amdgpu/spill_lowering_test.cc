@@ -13,7 +13,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/descriptors/rdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 namespace loom {
@@ -57,11 +57,14 @@ enum class SpillRegisterClass {
 class AmdgpuSpillLoweringTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    descriptor_set_ = loom_amdgpu_rdna3_core_descriptor_set();
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     iree_arena_initialize(&block_pool_, &scratch_arena_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    loom_amdgpu_low_descriptor_registry_initialize(&low_registry_);
+    descriptor_set_ = loom_low_descriptor_registry_lookup(
+        &low_registry_.registry, IREE_SV("amdgpu.rdna3.core"));
+    ASSERT_NE(descriptor_set_, nullptr);
     RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
@@ -225,6 +228,7 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
   }
 
   const loom_low_descriptor_set_t* descriptor_set_ = nullptr;
+  loom_target_low_descriptor_registry_t low_registry_ = {};
   iree_arena_block_pool_t block_pool_;
   iree_arena_allocator_t scratch_arena_;
   loom_context_t context_;

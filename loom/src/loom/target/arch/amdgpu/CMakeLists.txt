@@ -122,8 +122,9 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
-    loom::target::arch::amdgpu::descriptors::shards_for_testing
+    loom::target::arch::amdgpu::descriptors::low_registry_for_testing
     loom::target::arch::amdgpu::planning::occupancy_tables
+    loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )

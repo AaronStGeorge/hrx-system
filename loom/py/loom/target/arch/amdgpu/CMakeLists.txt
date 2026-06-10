@@ -14,10 +14,18 @@ iree_py_library(
     target_info
   SRCS
     "__init__.py"
+    "names.py"
     "target_info.py"
   DEPS
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::package_init
+)
+
+iree_py_library(
+  NAME
+    encoding_info
+  SRCS
+    "encoding.py"
 )
 
 iree_py_library(
@@ -65,9 +73,9 @@ iree_py_library(
     "descriptors/memory.py"
     "descriptors/sets.py"
     "descriptors/workgroup.py"
-    "encoding.py"
     "target_info.py"
   DEPS
+    loom::py::loom::target::arch::amdgpu::encoding_info
     loom::py::loom::target::arch::amdgpu::isa_xml
     loom::py::loom::target::arch::amdgpu::target_info
     loom::py::loom::target::low_descriptors

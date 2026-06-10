@@ -31,6 +31,9 @@ from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     AmdgpuIsaFactSource,
     parse_amdgpu_isa_xml_path,
 )
+from loom.target.arch.amdgpu.names import (  # noqa: E402
+    amdgpu_descriptor_set_ordinal_constant_name,
+)
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_AMDHSA_TARGET_TRIPLE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE,
@@ -84,18 +87,6 @@ def _u16_expr(value: int) -> str:
 
 def _padded_arg(value: str, width: int) -> str:
     return f"{value},{' ' * (width - len(value) + 1)}"
-
-
-def _descriptor_set_ordinal_suffix(key: str) -> str:
-    prefix = "amdgpu."
-    suffix = ".core"
-    if not key.startswith(prefix) or not key.endswith(suffix):
-        raise ValueError(f"AMDGPU descriptor-set key '{key}' must be a core key")
-    return key.removeprefix(prefix).removesuffix(suffix).replace(".", "_").upper()
-
-
-def _descriptor_set_ordinal_constant_name(key: str) -> str:
-    return f"LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_{_descriptor_set_ordinal_suffix(key)}"
 
 
 def _kernel_descriptor_profile_expr(profile: str) -> str:
@@ -315,7 +306,7 @@ def _emit_header(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> str:
         "",
         "// Generated dense descriptor-set ordinals.",
     ]
-    lines.extend(f"#define {_descriptor_set_ordinal_constant_name(info.key)} {_u16_expr(amdgpu_descriptor_set_ordinal(info.key))}" for info in descriptor_sets)
+    lines.extend(f"#define {amdgpu_descriptor_set_ordinal_constant_name(info.key)} {_u16_expr(amdgpu_descriptor_set_ordinal(info.key))}" for info in descriptor_sets)
     lines.extend(
         [
             f"#define LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT {_u16_expr(len(descriptor_sets))}",

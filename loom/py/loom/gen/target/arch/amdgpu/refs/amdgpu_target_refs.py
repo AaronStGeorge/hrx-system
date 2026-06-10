@@ -50,11 +50,15 @@ def _parse_isa_xml_argument(value: str) -> tuple[str, Path]:
 
 
 def _parse_isa_xml_arguments(values: Sequence[str]) -> dict[str, AmdgpuIsaFactSource]:
+    paths: dict[str, Path] = {}
     specs: dict[str, AmdgpuIsaFactSource] = {}
     for value in values:
         key, path = _parse_isa_xml_argument(value)
-        if key in specs:
-            raise ValueError(f"AMDGPU target-ref ISA XML key '{key}' is duplicate")
+        if key in paths:
+            if paths[key] != path:
+                raise ValueError(f"AMDGPU target-ref ISA XML key '{key}' has conflicting paths '{paths[key]}' and '{path}'")
+            continue
+        paths[key] = path
         specs[key] = parse_amdgpu_isa_xml_path(path)
     return specs
 
@@ -91,14 +95,22 @@ def _descriptor_set_table_name(key: str) -> str:
 
 def _materialize_descriptor_ref_tables(
     isa_specs: Mapping[str, AmdgpuIsaFactSource],
+    descriptor_set_keys: Sequence[str],
 ) -> list[tuple[int, str, list[int | None]]]:
+    if not descriptor_set_keys:
+        raise ValueError("AMDGPU target-ref source generation requires at least one --descriptor-set")
     descriptor_ref_keys = amdgpu_descriptor_ref_keys()
+    descriptor_set_infos_by_key = {info.key: info for info in sorted_descriptor_set_infos()}
     descriptor_set_tables: list[tuple[int, str, list[int | None]]] = []
-    for descriptor_set_info in sorted_descriptor_set_infos():
+    for descriptor_set_key in descriptor_set_keys:
+        try:
+            descriptor_set_info = descriptor_set_infos_by_key[descriptor_set_key]
+        except KeyError as exc:
+            raise ValueError(f"AMDGPU target-ref generator got unknown descriptor set '{descriptor_set_key}'") from exc
         try:
             spec = isa_specs[descriptor_set_info.isa_xml_key]
         except KeyError as exc:
-            raise ValueError(f"AMDGPU target-ref generator is missing ISA XML key '{descriptor_set_info.isa_xml_key}'") from exc
+            raise ValueError(f"AMDGPU target-ref generator is missing ISA XML key '{descriptor_set_info.isa_xml_key}' for descriptor set '{descriptor_set_info.key}'") from exc
         descriptor_set = build_amdgpu_core_descriptor_set_from_spec(
             descriptor_set_info.generator_target,
             spec,
@@ -175,8 +187,9 @@ def _emit_source(
     *,
     public_header: str,
     isa_specs: Mapping[str, AmdgpuIsaFactSource],
+    descriptor_set_keys: Sequence[str],
 ) -> str:
-    descriptor_set_tables = _materialize_descriptor_ref_tables(isa_specs)
+    descriptor_set_tables = _materialize_descriptor_ref_tables(isa_specs, descriptor_set_keys)
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -270,6 +283,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=[],
         help="ISA XML fact source as key:path.",
     )
+    parser.add_argument(
+        "--descriptor-set",
+        action="append",
+        default=[],
+        help="Descriptor-set key to materialize into the generated source.",
+    )
     args = parser.parse_args(argv)
 
     isa_specs = _parse_isa_xml_arguments(args.isa_xml)
@@ -283,6 +302,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _emit_source(
             public_header=args.public_header,
             isa_specs=isa_specs,
+            descriptor_set_keys=args.descriptor_set,
         ),
         encoding="utf-8",
     )
