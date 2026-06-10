@@ -234,9 +234,46 @@ individual `LOOM_TARGET_*` and `LOOM_EXECUTE_*` overrides are evaluated. Bazel
 configuration writes complete native lists instead, so portable `-D...=OFF`
 options remove entries from the default set.
 
+AMDGPU has an additional compiler target selector list. `LOOM_TARGET_AMDGPU=ON`
+selects the product capability; `LOOM_TARGET_AMDGPU_TARGETS` selects which
+descriptor-backed AMDGPU processors are compiled into that capability. The
+default selector is `loom_defaults`, which expands to every descriptor-backed
+processor Loom currently supports:
+
+| Descriptor set | Exact processors |
+| --- | --- |
+| `amdgpu.cdna3.core` | `gfx940`, `gfx941`, `gfx942` |
+| `amdgpu.cdna4.core` | `gfx950` |
+| `amdgpu.rdna3.core` | `gfx1100`, `gfx1101`, `gfx1102`, `gfx1103`, `gfx1150`, `gfx1151`, `gfx1152`, `gfx1153` |
+| `amdgpu.rdna3_5.core` | `gfx1170`, `gfx1171`, `gfx1172` |
+| `amdgpu.rdna4.core` | `gfx1200`, `gfx1201` |
+| `amdgpu.rdna4.gfx125x.core` | `gfx1250`, `gfx1251` |
+
+The accepted Loom AMDGPU selector vocabulary is the intersection of the shared
+AMDGPU target map and Loom's descriptor-backed compiler support. It accepts:
+
+- Source selectors: `loom_defaults`, `iree_hal`.
+- Exact processors listed in the descriptor-set table above.
+- Generic code-object selectors: `gfx9-4-generic`, `gfx11-generic`,
+  `gfx12-generic`, `gfx12-5-generic`.
+- Fully covered family selectors: `gfx94X-all`, `gfx94X-dcgpu`,
+  `gfx950-all`, `gfx950-dcgpu`, `gfx110X-all`, `gfx110X-dgpu`,
+  `gfx110X-igpu`, `gfx115X-all`, `gfx115X-igpu`, `gfx117X-all`,
+  `gfx120X-all`, `gfx125X-all`.
+
+Older shared selectors such as `gfx9-generic`, `gfx90a`, `gfx908`,
+`gfx10-1-generic`, and `gfx10-3-generic` are still valid for runtime-side
+AMDGPU tooling, but they are not Loom compiler targets until matching Loom
+descriptor sets exist. The `iree_hal` source selector narrows Loom AMDGPU
+support to the descriptor-backed subset requested by the runtime
+`IREE_HAL_AMDGPU_TARGETS` setting. That is useful for executable-cache builds
+that want Loom linked with exactly the runtime HAL target horizon, while normal
+compiler and `loom-compile` builds should usually keep `loom_defaults`.
+
 | Option | Values | CMake | Bazel portable | Bazel native |
 | --- | --- | --- | --- | --- |
 | `LOOM_TARGET_AMDGPU` | `ON`, `OFF` | Builds Loom AMDGPU target support and production AMDGPU emission. | Adds or removes `amdgpu` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_TARGET_AMDGPU_TARGETS` | AMDGPU selectors | Selects descriptor-backed AMDGPU processors compiled into Loom AMDGPU target support. | Not exposed as a portable `-D` option. | `--//loom/config/target/amdgpu:targets=<complete-selector-list>` |
 | `LOOM_TARGET_IREE_VM` | `ON`, `OFF` | Builds Loom IREE VM target support and production IREE VM emission. | Adds or removes `iree_vm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_TARGET_SPIRV` | `ON`, `OFF` | Builds Loom SPIR-V target support and production SPIR-V emission. | Adds or removes `spirv` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_TARGET_WASM` | `ON`, `OFF` | Builds Loom WebAssembly target support and production Wasm emission. | Adds or removes `wasm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
@@ -252,6 +289,29 @@ The native Loom target flag is a complete list. The default target set is
 ```bash
 python dev.py bazel configure \
   --//loom/config/target:enable=amdgpu,iree_vm,spirv,x86
+```
+
+AMDGPU compiler target selection is also a complete list. Bazel uses
+comma-separated list values; CMake uses normal semicolon-separated CMake lists:
+
+```bash
+python dev.py bazel configure \
+  -DLOOM_TARGET_AMDGPU=ON \
+  --//loom/config/target/amdgpu:targets=gfx942,gfx120X-all,gfx12-5-generic
+
+python dev.py cmake configure \
+  -DLOOM_TARGET_AMDGPU=ON \
+  -DLOOM_TARGET_AMDGPU_TARGETS='gfx942;gfx120X-all;gfx12-5-generic'
+```
+
+Use the shared runtime selector only when Loom should intentionally match the
+runtime HAL target horizon:
+
+```bash
+python dev.py cmake configure \
+  -DLOOM_TARGET_AMDGPU=ON \
+  -DLOOM_TARGET_AMDGPU_TARGETS=iree_hal \
+  -DIREE_HAL_AMDGPU_TARGETS='gfx942;gfx1201'
 ```
 
 The portable spelling can disable a default target without exposing the
@@ -281,6 +341,15 @@ python dev.py bazel configure \
   -DLOOM_EXECUTE_IREE_HAL=ON \
   -DIREE_HAL_DRIVER_AMDGPU=ON \
   -DIREE_ROCM_PATH=/opt/rocm
+```
+
+CPU-only broad compiler validation should use the dedicated Loom AMDGPU compile
+slices. These do not enable the AMDGPU runtime HAL driver or require matching
+hardware:
+
+```bash
+python build_tools/devtools/ci.py iree-bazel-loom-amdgpu
+python build_tools/devtools/ci.py iree-cmake-loom-amdgpu
 ```
 
 The raw `//loom/config/target/arch:enable=...`,
