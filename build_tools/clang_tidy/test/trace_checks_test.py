@@ -1,0 +1,49 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+from __future__ import annotations
+
+import unittest
+
+import clang_tidy_test
+
+_ARGS = clang_tidy_test.parse_arguments()
+
+
+class TraceChecksTest(clang_tidy_test.ClangTidyAssertions):
+    def test_trace_zone_balance_is_diagnosed(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-trace-zone-balance",
+            source=clang_tidy_test.source_path(__file__, "trace_checks.c"),
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "plain_return_if_error_zone",
+                "hrx_plain_return_zone",
+                "[iree-trace-zone-balance]",
+            ],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "iree_clang_tidy_trace_zone_balanced",
+                "iree_clang_tidy_trace_zone_nested_balanced",
+                "iree_clang_tidy_trace_zone_cleanup_label",
+                "iree_clang_tidy_trace_zone_branch_return_balanced",
+                "iree_clang_tidy_trace_zone_branch_macro_return_balanced",
+                "iree_clang_tidy_trace_zone_branch_local_zone",
+                "iree_clang_tidy_trace_zone_return_and_end_if_error",
+                "iree_clang_tidy_trace_zone_return_and_end",
+                "iree_clang_tidy_trace_zone_hrx_return_and_end_if_error",
+            ],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

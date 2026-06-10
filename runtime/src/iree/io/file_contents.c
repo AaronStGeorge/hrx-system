@@ -69,14 +69,15 @@ IREE_API_EXPORT iree_status_t iree_io_file_contents_read_stdin(
   iree_host_size_t capacity = 4096;
   iree_host_size_t total_size = 0;
   iree_host_size_t data_offset = 0;
-  IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
-      sizeof(iree_io_file_contents_t), &total_size,
-      IREE_STRUCT_FIELD_ALIGNED(capacity, uint8_t,
-                                IREE_IO_FILE_CONTENTS_BASE_ALIGNMENT,
-                                &data_offset)));
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, IREE_STRUCT_LAYOUT(
+              sizeof(iree_io_file_contents_t), &total_size,
+              IREE_STRUCT_FIELD_ALIGNED(capacity, uint8_t,
+                                        IREE_IO_FILE_CONTENTS_BASE_ALIGNMENT,
+                                        &data_offset)));
   iree_io_file_contents_t* contents = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(host_allocator, total_size, (void**)&contents));
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_allocator_malloc(host_allocator, total_size, (void**)&contents));
   contents->buffer.data = (void*)((uint8_t*)contents + data_offset);
 
   iree_host_size_t size = 0;

@@ -494,10 +494,11 @@ static iree_status_t iree_hal_streaming_graph_create_dispatch_block(
     attrs->bindings.values = bindings_copy;
 
     // Add buffers to resource set.
-    IREE_RETURN_IF_ERROR(iree_hal_resource_set_insert_strided(
-        exec->resource_set, bindings.count, bindings.values,
-        offsetof(iree_hal_buffer_ref_t, buffer),
-        sizeof(iree_hal_buffer_ref_t)));
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_hal_resource_set_insert_strided(
+                exec->resource_set, bindings.count, bindings.values,
+                offsetof(iree_hal_buffer_ref_t, buffer),
+                sizeof(iree_hal_buffer_ref_t)));
   } else {
     attrs->bindings = iree_hal_buffer_ref_list_empty();
   }

@@ -270,8 +270,8 @@ static iree_status_t iree_hal_hip_stream_command_buffer_execution_barrier(
   }
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  IREE_RETURN_IF_ERROR(
-      iree_hal_hip_stream_command_buffer_flush_collectives(command_buffer));
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_hip_stream_command_buffer_flush_collectives(command_buffer));
 
   // Nothing to do for barriers between memory operations or dispatches--HIP
   // stream semantics guarantees execution and memory visibility in program

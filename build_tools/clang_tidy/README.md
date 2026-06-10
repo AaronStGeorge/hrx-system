@@ -31,7 +31,8 @@ file, and writes a per-source report:
 
 ```bash
 iree-bazel-test --repo_env=IREE_CLANG_TIDY_LLVM=auto \
-  //build_tools/clang_tidy:status_checks_test
+  //build_tools/clang_tidy:status_checks_test \
+  //build_tools/clang_tidy:trace_checks_test
 ```
 
 ## CMake
@@ -101,3 +102,32 @@ returns, `if` branches, status helper calls, C++ status wrappers, and known
 status-owning callback boundaries are checked directly. Loop-carried status
 variables and functions with `goto` cleanup paths are treated conservatively so
 diagnostics remain high signal.
+
+### `iree-trace-zone-balance`
+
+`iree-trace-zone-balance` treats trace zones as scoped C resources around
+status-return helper macros. A status-returning helper used inside an active
+zone must use the trace-zone-aware form so the failure path ends the zone:
+
+```c
+IREE_TRACE_ZONE_BEGIN(z0);
+IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, do_work());
+IREE_TRACE_ZONE_END(z0);
+return iree_ok_status();
+```
+
+Plain early-return helpers inside an active zone are diagnosed because their
+failure path skips the end macro:
+
+```c
+IREE_TRACE_ZONE_BEGIN(z0);
+IREE_RETURN_IF_ERROR(do_work());  // Use IREE_RETURN_AND_END_ZONE_IF_ERROR.
+IREE_TRACE_ZONE_END(z0);
+return iree_ok_status();
+```
+
+The check uses the preprocessor's macro expansion stream so disabled tracing,
+HRX wrapper macros, and multi-line helper invocations are modeled by the macro
+the developer wrote rather than by the helper's implementation detail. General
+proof of arbitrary `return` statements and block-local zone balance is handled
+conservatively to keep this check high signal.

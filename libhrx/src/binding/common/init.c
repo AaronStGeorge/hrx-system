@@ -344,9 +344,9 @@ static iree_status_t iree_hal_streaming_query_p2p_capabilities(
   registry->p2p_link_count = registry->device_count * registry->device_count;
   const iree_host_size_t topology_size =
       registry->p2p_link_count * sizeof(iree_hal_streaming_p2p_link_t);
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(registry->host_allocator,
-                                             topology_size,
-                                             (void**)&registry->p2p_topology));
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_allocator_malloc(registry->host_allocator, topology_size,
+                                (void**)&registry->p2p_topology));
   memset(registry->p2p_topology, 0, topology_size);
 
   // Populate P2P links for all device pairs.
