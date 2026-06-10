@@ -77,7 +77,10 @@ SEMGREP_PATH_PREFIXES = (
     "libhrx/",
 )
 SEMGREP_DEFAULT_MAX_JOBS = 14
+CLANG_TIDY_DEFAULT_CORE_DIVISOR = 2
+CLANG_TIDY_DEFAULT_MAX_JOBS = 96
 CLANG_TIDY_ASPECT = "//build_tools/clang_tidy:clang_tidy.bzl%collect_clang_tidy_aspect"
+CLANG_TIDY_CMAKE_GENERATED_INPUTS_TARGET = "iree_generated_compile_inputs"
 CLANG_TIDY_TRANSLATION_UNIT_EXTENSIONS = {
     ".c",
     ".cc",
@@ -975,6 +978,19 @@ def semgrep_jobs() -> int:
     return min(SEMGREP_DEFAULT_MAX_JOBS, max(1, int(cpu_count * 0.85)))
 
 
+def clang_tidy_jobs() -> int:
+    configured_jobs = os.environ.get("IREE_CLANG_TIDY_JOBS")
+    if configured_jobs:
+        try:
+            jobs = int(configured_jobs)
+        except ValueError:
+            return 1
+        return max(1, jobs)
+    cpu_count = os.cpu_count() or 1
+    default_jobs = max(1, (cpu_count + CLANG_TIDY_DEFAULT_CORE_DIVISOR - 1) // 2)
+    return min(cpu_count, CLANG_TIDY_DEFAULT_MAX_JOBS, default_jobs)
+
+
 def semgrep_scan_command(files: list[str]) -> list[str]:
     return [
         "semgrep",
@@ -1588,29 +1604,37 @@ def cmake_clang_tidy_plugin_path(build_dir: Path) -> Path | None:
 
 def cmake_clang_tidy_command(
     *,
+    run_clang_tidy: str,
     clang_tidy: str,
     plugin: Path,
     compile_commands_dir: Path,
     files: list[str],
-    fix: bool = False,
 ) -> list[str]:
-    command = [
+    return [
+        run_clang_tidy,
+        "-clang-tidy-binary",
         clang_tidy,
-        f"--load={plugin}",
-        f"--checks={CLANG_TIDY_CHECKS}",
-        f"-p={compile_commands_dir}",
-    ]
-    if fix:
-        command += [
-            "--fix-errors",
-            "--format-style=file",
-        ]
-    else:
-        command.append("--warnings-as-errors=*")
-    command += [
+        "-p",
+        str(compile_commands_dir),
+        f"-checks={CLANG_TIDY_CHECKS}",
+        f"-load={plugin}",
+        "-j",
+        str(clang_tidy_jobs()),
+        "-warnings-as-errors=*",
         *files,
     ]
-    return command
+
+
+def cmake_generated_compile_inputs_command(*, compile_commands_dir: Path) -> list[str]:
+    return [
+        "cmake",
+        "--build",
+        str(compile_commands_dir),
+        "--target",
+        CLANG_TIDY_CMAKE_GENERATED_INPUTS_TARGET,
+        "--parallel",
+        str(clang_tidy_jobs()),
+    ]
 
 
 def cmake_run_clang_tidy_fix_command(
@@ -1633,7 +1657,7 @@ def cmake_run_clang_tidy_fix_command(
         f"-checks={CLANG_TIDY_CHECKS}",
         f"-load={plugin}",
         "-j",
-        str(semgrep_jobs()),
+        str(clang_tidy_jobs()),
         "-fix",
         "-format",
         "-style=file",
@@ -1707,15 +1731,25 @@ def run_clang_tidy_cmake(
             return False
         return skip_step("clang-tidy", CLANG_TIDY_SETUP_HINT)
     llvm_config, clang_tidy, _ = tools
-    clang_apply_replacements = None
     run_clang_tidy = None
+    if candidate_files:
+        run_clang_tidy = clang_tidy_run_tool()
+        if not run_clang_tidy:
+            if clang_tidy_required(profile):
+                print(
+                    f"[fail] clang-tidy: {CLANG_TIDY_SETUP_HINT} with run-clang-tidy."
+                )
+                return False
+            return skip_step(
+                "clang-tidy", f"{CLANG_TIDY_SETUP_HINT} with run-clang-tidy"
+            )
+    clang_apply_replacements = None
     if fix:
         clang_apply_replacements = clang_tidy_apply_replacements_tool()
-        run_clang_tidy = clang_tidy_run_tool()
-        if not clang_apply_replacements or not run_clang_tidy:
+        if not clang_apply_replacements:
             print(
                 f"[fail] clang-tidy: {CLANG_TIDY_SETUP_HINT} with "
-                "clang-apply-replacements and run-clang-tidy for --fix."
+                "clang-apply-replacements for --fix."
             )
             return False
     if not require_tool("cmake", "clang-tidy CMake plugin"):
@@ -1785,6 +1819,19 @@ def run_clang_tidy_cmake(
         print("hint: run python dev.py cmake configure")
         return False
 
+    ok = (
+        run_command(
+            cmake_generated_compile_inputs_command(
+                compile_commands_dir=compile_commands_dir,
+            ),
+            "clang-tidy CMake generated compile inputs",
+            verbose,
+        )
+        and ok
+    )
+    if not ok:
+        return False
+
     if fix:
         ok = (
             run_command(
@@ -1805,6 +1852,7 @@ def run_clang_tidy_cmake(
             ok = (
                 run_command(
                     cmake_clang_tidy_command(
+                        run_clang_tidy=run_clang_tidy,
                         clang_tidy=clang_tidy,
                         plugin=plugin,
                         compile_commands_dir=compile_commands_dir,
@@ -1819,6 +1867,7 @@ def run_clang_tidy_cmake(
         ok = (
             run_command(
                 cmake_clang_tidy_command(
+                    run_clang_tidy=run_clang_tidy,
                     clang_tidy=clang_tidy,
                     plugin=plugin,
                     compile_commands_dir=compile_commands_dir,

@@ -345,7 +345,8 @@ static iree_status_t loom_check_execute_finish_status_failure(
       &result->detail, "%.*s returned status: ", (int)operation_name.size,
       operation_name.data);
   if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_status(&result->detail, failure_status);
+    status =
+        iree_string_builder_append_status(&result->detail, &failure_status);
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(&result->detail, "\n");
@@ -466,7 +467,8 @@ static iree_status_t loom_check_execute_pass_with_output(
   loom_target_compile_report_t compile_report = {0};
   loom_target_compile_report_t* compile_report_ref = NULL;
   loom_target_compile_report_row_storage_t compile_report_row_storage = {0};
-  if (output_kind == LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT) {
+  if (iree_status_is_ok(status) &&
+      output_kind == LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT) {
     status = loom_check_compile_report_row_storage_initialize(
         &diagnostic_arena, &compile_report_row_storage);
     if (iree_status_is_ok(status)) {
@@ -504,7 +506,8 @@ static iree_status_t loom_check_execute_pass_with_output(
                                                            &predicate_storage);
     const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
     loom_pass_registry_storage_t pass_registry_storage = {0};
-    if (environment != NULL && environment->pass_registry != NULL) {
+    if (iree_status_is_ok(status) && environment != NULL &&
+        environment->pass_registry != NULL) {
       const loom_pass_registry_t* pass_registries[] = {
           loom_pass_builtin_registry(),
           environment->pass_registry,

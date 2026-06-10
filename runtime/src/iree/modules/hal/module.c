@@ -1786,7 +1786,6 @@ IREE_VM_ABI_EXPORT(iree_hal_module_fence_query,  //
 
   iree_status_t query_status = iree_hal_fence_query(fence);
   rets->i0 = iree_status_consume_code(query_status);
-  iree_status_ignore(query_status);
 
   return iree_ok_status();
 }
@@ -2113,7 +2112,8 @@ IREE_API_EXPORT iree_status_t iree_hal_module_create(
   iree_host_size_t total_size =
       iree_vm_native_module_size() + sizeof(iree_hal_module_t);
   iree_vm_module_t* base_module = NULL;
-  IREE_RETURN_IF_ERROR(
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0,
       iree_allocator_malloc(host_allocator, total_size, (void**)&base_module));
   memset(base_module, 0, total_size);
   iree_status_t status =

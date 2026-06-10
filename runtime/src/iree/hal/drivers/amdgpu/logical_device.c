@@ -3025,9 +3025,9 @@ static iree_status_t iree_hal_amdgpu_logical_device_profiling_begin(
                       logical_device, false));
     }
     if (sink_session_begun) {
-      status = iree_status_join(
-          status, iree_hal_profile_sink_end_session(sink, &metadata,
-                                                    iree_status_code(status)));
+      iree_status_code_t status_code = iree_status_code(status);
+      status = iree_status_join(status, iree_hal_profile_sink_end_session(
+                                            sink, &metadata, status_code));
     }
     logical_device->profiling.next_clock_correlation_sample_id = 0;
     memset(&logical_device->profiling.metadata_cursor, 0,
@@ -3139,9 +3139,9 @@ static iree_status_t iree_hal_amdgpu_logical_device_profiling_end(
         status, iree_hal_amdgpu_logical_device_set_hsa_profiling_enabled(
                     logical_device, false));
   }
-  status =
-      iree_status_join(status, iree_hal_profile_sink_end_session(
-                                   sink, &metadata, iree_status_code(status)));
+  iree_status_code_t status_code = iree_status_code(status);
+  status = iree_status_join(
+      status, iree_hal_profile_sink_end_session(sink, &metadata, status_code));
 
   iree_hal_amdgpu_logical_device_reset_profile_options(logical_device);
   logical_device->profiling.session_id = 0;

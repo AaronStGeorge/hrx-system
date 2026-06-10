@@ -71,6 +71,27 @@ class PresubmitTest(unittest.TestCase):
         ):
             self.assertEqual(presubmit.semgrep_jobs(), 14)
 
+    def test_clang_tidy_default_jobs_are_capped_on_large_machines(self):
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(presubmit.os, "cpu_count", return_value=192),
+        ):
+            self.assertEqual(
+                presubmit.clang_tidy_jobs(),
+                presubmit.CLANG_TIDY_DEFAULT_MAX_JOBS,
+            )
+
+    def test_clang_tidy_default_jobs_use_half_machine(self):
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(presubmit.os, "cpu_count", return_value=64),
+        ):
+            self.assertEqual(presubmit.clang_tidy_jobs(), 32)
+
+    def test_clang_tidy_jobs_can_be_configured(self):
+        with mock.patch.dict(os.environ, {"IREE_CLANG_TIDY_JOBS": "48"}):
+            self.assertEqual(presubmit.clang_tidy_jobs(), 48)
+
     def test_clang_format_default_jobs_are_capped_on_large_machines(self):
         with (
             mock.patch.dict(os.environ, {}, clear=True),
@@ -230,35 +251,60 @@ class PresubmitTest(unittest.TestCase):
                 ["runtime/src/iree/base/status.c"],
             )
 
-    def test_cmake_clang_tidy_command_uses_compile_database(self):
-        command = presubmit.cmake_clang_tidy_command(
-            clang_tidy="clang-tidy",
-            plugin=Path(".tmp/plugin/libIREEClangTidyPlugin.so"),
-            compile_commands_dir=Path("build/cmake-debug"),
-            files=["runtime/src/iree/base/status.c"],
-        )
+    def test_cmake_clang_tidy_command_uses_parallel_driver(self):
+        with mock.patch.object(presubmit, "clang_tidy_jobs", return_value=17):
+            command = presubmit.cmake_clang_tidy_command(
+                run_clang_tidy="run-clang-tidy",
+                clang_tidy="clang-tidy",
+                plugin=Path(".tmp/plugin/libIREEClangTidyPlugin.so"),
+                compile_commands_dir=Path("build/cmake-debug"),
+                files=["runtime/src/iree/base/status.c"],
+            )
 
-        self.assertEqual(command[0], "clang-tidy")
-        self.assertIn("--load=.tmp/plugin/libIREEClangTidyPlugin.so", command)
-        self.assertIn(f"--checks={presubmit.CLANG_TIDY_CHECKS}", command)
-        self.assertIn("-p=build/cmake-debug", command)
+        self.assertEqual(command[0], "run-clang-tidy")
+        self.assertIn("-clang-tidy-binary", command)
+        self.assertIn("clang-tidy", command)
+        self.assertIn("-load=.tmp/plugin/libIREEClangTidyPlugin.so", command)
+        self.assertIn(f"-checks={presubmit.CLANG_TIDY_CHECKS}", command)
+        self.assertIn("-p", command)
+        self.assertIn("build/cmake-debug", command)
+        self.assertIn("-j", command)
+        self.assertIn("17", command)
+        self.assertIn("-warnings-as-errors=*", command)
         self.assertEqual(command[-1], "runtime/src/iree/base/status.c")
 
+    def test_cmake_generated_compile_inputs_command_uses_cmake_build(self):
+        with mock.patch.object(presubmit, "clang_tidy_jobs", return_value=23):
+            command = presubmit.cmake_generated_compile_inputs_command(
+                compile_commands_dir=Path("build/cmake-debug"),
+            )
+
+        self.assertEqual(command[0], "cmake")
+        self.assertIn("--build", command)
+        self.assertIn("build/cmake-debug", command)
+        self.assertIn("--target", command)
+        self.assertIn(presubmit.CLANG_TIDY_CMAKE_GENERATED_INPUTS_TARGET, command)
+        self.assertIn("--parallel", command)
+        self.assertIn("23", command)
+
     def test_cmake_clang_tidy_fix_command_uses_parallel_driver(self):
-        command = presubmit.cmake_run_clang_tidy_fix_command(
-            run_clang_tidy="run-clang-tidy",
-            clang_tidy="clang-tidy",
-            clang_apply_replacements="clang-apply-replacements",
-            plugin=Path(".tmp/plugin/libIREEClangTidyPlugin.so"),
-            compile_commands_dir=Path("build/cmake-debug"),
-            files=["runtime/src/iree/base/status.c"],
-        )
+        with mock.patch.object(presubmit, "clang_tidy_jobs", return_value=19):
+            command = presubmit.cmake_run_clang_tidy_fix_command(
+                run_clang_tidy="run-clang-tidy",
+                clang_tidy="clang-tidy",
+                clang_apply_replacements="clang-apply-replacements",
+                plugin=Path(".tmp/plugin/libIREEClangTidyPlugin.so"),
+                compile_commands_dir=Path("build/cmake-debug"),
+                files=["runtime/src/iree/base/status.c"],
+            )
 
         self.assertEqual(command[0], "run-clang-tidy")
         self.assertIn("-clang-tidy-binary", command)
         self.assertIn("clang-tidy", command)
         self.assertIn("-clang-apply-replacements-binary", command)
         self.assertIn("clang-apply-replacements", command)
+        self.assertIn("-j", command)
+        self.assertIn("19", command)
         self.assertIn("-fix", command)
         self.assertIn("-format", command)
         self.assertEqual(command[-1], "runtime/src/iree/base/status.c")

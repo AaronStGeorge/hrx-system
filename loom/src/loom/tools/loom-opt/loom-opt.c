@@ -1145,11 +1145,11 @@ int main(int argc, char** argv) {
         diagnostic_sink);
     if (!iree_status_is_ok(status) && pass_execution_started &&
         iree_status_is_ok(pass_pipeline_status)) {
+      iree_status_code_t status_code = iree_status_code(status);
       status = iree_status_join(
-          status,
-          loom_opt_write_pass_reproducer(
-              iree_make_cstring_view(FLAG_pass_reproducer), filename, source,
-              pass_registry, iree_status_code(status), allocator));
+          status, loom_opt_write_pass_reproducer(
+                      iree_make_cstring_view(FLAG_pass_reproducer), filename,
+                      source, pass_registry, status_code, allocator));
     }
   }
   if (iree_status_is_ok(status) && pass_run_result.error_count == 0 &&
@@ -1170,11 +1170,11 @@ int main(int argc, char** argv) {
     }
   }
 
-  bool had_status_error = !iree_status_is_ok(status);
-  bool had_error = had_status_error || pass_run_result.error_count != 0;
-  if (had_status_error) {
+  bool had_error = pass_run_result.error_count != 0;
+  if (!iree_status_is_ok(status)) {
     iree_status_fprint(stderr, status);
     iree_status_free(status);
+    had_error = true;
   }
 
   if (pass_report_initialized) {

@@ -1442,9 +1442,9 @@ iree_status_t iree_json_parse_codepoint(iree_string_view_t value,
   iree_host_size_t unescaped_length = 0;
   iree_status_t status =
       iree_json_unescape_string(value, 0, NULL, &unescaped_length);
-  if (!iree_status_is_ok(status) &&
-      !iree_status_is_resource_exhausted(status)) {
-    return status;
+  if (!iree_status_is_ok(status)) {
+    if (!iree_status_is_resource_exhausted(status)) return status;
+    iree_status_ignore(status);
   }
 
   // Allocate a small stack buffer for the unescaped character.

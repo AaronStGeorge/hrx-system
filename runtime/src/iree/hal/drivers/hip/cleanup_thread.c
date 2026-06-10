@@ -72,9 +72,10 @@ static int iree_hal_hip_cleanup_thread_main(void* param) {
             hipEventSynchronize(iree_hal_hip_event_handle(callback.event)));
       }
 
-      status = iree_status_join(
-          status, callback.callback(callback.user_data, callback.event,
-                                    iree_status_clone(status)));
+      iree_status_t callback_input_status = iree_status_clone(status);
+      iree_status_t callback_status = callback.callback(
+          callback.user_data, callback.event, callback_input_status);
+      status = iree_status_join(status, callback_status);
       iree_slim_mutex_lock(&thread->mutex);
       if (!iree_status_is_ok(status)) {
         iree_status_ignore(thread->failure_status);

@@ -79,10 +79,12 @@ function(loom_generated_textual_header)
   )
 
   iree_package_name(_PACKAGE_NAME)
-  add_custom_target("${_PACKAGE_NAME}_${_RULE_NAME}"
+  set(_GEN_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}")
+  add_custom_target("${_GEN_TARGET}"
     DEPENDS
       "${_OUTPUT}"
   )
+  iree_register_generated_compile_input("${_GEN_TARGET}")
 endfunction()
 
 function(loom_generated_cc_library)
@@ -198,10 +200,12 @@ function(loom_generated_cc_library)
   )
 
   iree_package_name(_PACKAGE_NAME)
-  add_custom_target("${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+  set(_GEN_TARGET "${_PACKAGE_NAME}_${_RULE_NAME}_gen")
+  add_custom_target("${_GEN_TARGET}"
     DEPENDS
       ${_OUTPUTS}
   )
+  iree_register_generated_compile_input("${_GEN_TARGET}")
   if(_RULE_TESTONLY)
     set(_TESTONLY_ARG TESTONLY)
   else()

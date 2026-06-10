@@ -3602,7 +3602,8 @@ void iree_hal_amdgpu_pm4_command_buffer_cancel_publication_reference(
 }
 
 void iree_hal_amdgpu_pm4_command_buffer_retire_publication_reference(
-    iree_hal_command_buffer_t* base_command_buffer, iree_status_t status) {
+    iree_hal_command_buffer_t* base_command_buffer,
+    iree_status_code_t status_code) {
   iree_hal_amdgpu_pm4_command_buffer_t* command_buffer =
       iree_hal_amdgpu_pm4_command_buffer_cast(base_command_buffer);
   iree_slim_mutex_lock(&command_buffer->publication_mutex);
@@ -3611,7 +3612,7 @@ void iree_hal_amdgpu_pm4_command_buffer_retire_publication_reference(
               "matching acquire");
   --command_buffer->publication_reference_count;
   if (command_buffer->publication_reference_count == 0 &&
-      iree_status_is_ok(status) &&
+      status_code == IREE_STATUS_OK &&
       !iree_hsa_signal_is_null(command_buffer->publication_signal)) {
     iree_hal_amdgpu_pm4_command_buffer_release_publication_resources_locked(
         command_buffer);

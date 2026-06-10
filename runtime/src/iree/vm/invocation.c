@@ -318,6 +318,8 @@ IREE_API_EXPORT iree_status_t iree_vm_invoke(
   iree_status_t status = iree_vm_begin_invoke(&state, context, function, flags,
                                               policy, inputs, host_allocator);
   while (iree_status_is_deferred(status)) {
+    status = iree_status_ignore(status);
+
     // Grab the wait frame from the stack holding the wait parameters.
     // This is optional: if an invocation yields for cooperative scheduling
     // purposes there will not be a wait frame on the stack and we'll just
@@ -841,6 +843,7 @@ static iree_status_t iree_vm_async_begin_invoke(void* user_data,
       iree_vm_invoke_fiber_leave(state->invocation_id, state->base.stack);
     });
     // Deferred until a wait completes or the next tick.
+    iree_status_ignore(status);
     status = iree_vm_async_tick_invoke(state, loop);
   } else if (iree_status_is_ok(status)) {
     // Completed synchronously. This is the happy path and lets us complete the
@@ -884,6 +887,7 @@ static iree_status_t iree_vm_async_resume_invoke(void* user_data,
       iree_vm_invoke_fiber_leave(state->invocation_id, state->base.stack);
     });
     // Deferred on a wait or yield. Enqueue waits/a resume.
+    iree_status_ignore(status);
     status = iree_vm_async_tick_invoke(state, loop);
   } else if (iree_status_is_ok(status)) {
     // Completed synchronously.

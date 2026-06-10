@@ -18,9 +18,9 @@
 
 namespace iree::hal::amdgpu::test {
 
-static bool IsProfilingUnsupported(iree_status_t status) {
-  return iree_status_is_unimplemented(status) ||
-         iree_status_is_invalid_argument(status);
+static bool IsProfilingUnsupported(iree_status_code_t status_code) {
+  return status_code == IREE_STATUS_UNIMPLEMENTED ||
+         status_code == IREE_STATUS_INVALID_ARGUMENT;
 }
 
 static iree_status_t SubmitProfiledQueueFill(TestLogicalDevice* test_device) {
@@ -849,14 +849,16 @@ static uint32_t SumQueueEventOperationCounts(
   return operation_count;
 }
 
-static bool IsHardwareCounterProfilingUnavailable(iree_status_t status) {
-  return IsProfilingUnsupported(status) || iree_status_is_not_found(status) ||
-         iree_status_is_failed_precondition(status);
+static bool IsHardwareCounterProfilingUnavailable(
+    iree_status_code_t status_code) {
+  return IsProfilingUnsupported(status_code) ||
+         status_code == IREE_STATUS_NOT_FOUND ||
+         status_code == IREE_STATUS_FAILED_PRECONDITION;
 }
 
-static bool IsQueueDeviceProfilingUnavailable(iree_status_t status) {
-  return IsProfilingUnsupported(status) ||
-         iree_status_is_failed_precondition(status);
+static bool IsQueueDeviceProfilingUnavailable(iree_status_code_t status_code) {
+  return IsProfilingUnsupported(status_code) ||
+         status_code == IREE_STATUS_FAILED_PRECONDITION;
 }
 
 static iree_status_t BeginHardwareCounterProfiling(

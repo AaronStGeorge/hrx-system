@@ -274,9 +274,11 @@ fixes through Bazel, applies them outside Bazel, then re-runs the check.""",
 
 With no input option, this checks local staged, unstaged, and untracked files.
 Repo-relative paths and git scopes use the configured CMake compile database.
---fix applies fixes through run-clang-tidy, then re-runs the check. Run
-`python dev.py cmake configure` first. Select a build tree with
---cmake-build-dir or IREE_CMAKE_BUILD_DIR.""",
+The scan materializes generated compile inputs, then runs through
+run-clang-tidy with parallelism controlled by IREE_CLANG_TIDY_JOBS. --fix
+applies fixes through run-clang-tidy, then re-runs the check. Run
+`python dev.py cmake configure` first. Select a build tree with --cmake-build-dir
+or IREE_CMAKE_BUILD_DIR.""",
         )
     if command == "presubmit":
         return CommandHelp(
@@ -801,11 +803,12 @@ python dev.py cmake clang-tidy runtime/src/iree/base/status.c
 python dev.py --cmake-build-dir build/cmake-asan cmake clang-tidy runtime/src/iree/base/status.c
 ```
 
-The command builds the IREE clang-tidy plugin with CMake and runs `clang-tidy`
-against source files using the configured CMake `compile_commands.json`.
-`--fix` applies fixes through `run-clang-tidy`, then re-runs the normal check.
-Select the CMake build tree with `--cmake-build-dir` or
-`IREE_CMAKE_BUILD_DIR`."""
+The command builds the IREE clang-tidy plugin with CMake, materializes generated
+compile inputs, and runs `run-clang-tidy` against source files using the
+configured CMake `compile_commands.json`. The scan uses parallelism controlled
+by `IREE_CLANG_TIDY_JOBS`. `--fix` applies fixes through `run-clang-tidy`, then
+re-runs the normal check. Select the CMake build tree with `--cmake-build-dir`
+or `IREE_CMAKE_BUILD_DIR`."""
 
     if command == "configure":
         return """## iree-cmake-configure

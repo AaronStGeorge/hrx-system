@@ -126,7 +126,8 @@ iree_status_t loom_run_measurement_scope_begin(
 }
 
 iree_status_t loom_run_measurement_scope_end(
-    loom_run_measurement_scope_t* scope, iree_status_t operation_status) {
+    loom_run_measurement_scope_t* scope,
+    iree_status_code_t operation_status_code) {
   if (!scope->is_recording) {
     return iree_ok_status();
   }
@@ -136,7 +137,7 @@ iree_status_t loom_run_measurement_scope_end(
   sample->duration_ns = end_time_ns >= scope->start_time_ns
                             ? end_time_ns - scope->start_time_ns
                             : 0;
-  sample->status_code = iree_status_code(operation_status);
+  sample->status_code = operation_status_code;
   *scope = (loom_run_measurement_scope_t){0};
   return iree_ok_status();
 }
@@ -150,6 +151,7 @@ iree_status_t loom_run_measurement_run_step(
   IREE_RETURN_IF_ERROR(
       loom_run_measurement_scope_begin(options, boundary, result, &scope));
   iree_status_t status = callback.fn(callback.user_data);
-  return iree_status_join(status,
-                          loom_run_measurement_scope_end(&scope, status));
+  iree_status_t scope_status =
+      loom_run_measurement_scope_end(&scope, iree_status_code(status));
+  return iree_status_join(status, scope_status);
 }

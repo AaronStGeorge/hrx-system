@@ -129,9 +129,10 @@ iree_status_t loom_run_measurement_scope_begin(
     loom_run_measurement_result_t* result,
     loom_run_measurement_scope_t* out_scope);
 
-// Ends |scope| and records |operation_status|'s status code in the sample.
+// Ends |scope| and records |operation_status_code| in the sample.
 iree_status_t loom_run_measurement_scope_end(
-    loom_run_measurement_scope_t* scope, iree_status_t operation_status);
+    loom_run_measurement_scope_t* scope,
+    iree_status_code_t operation_status_code);
 
 // Invokes |callback| inside a measured boundary and always closes the scope.
 iree_status_t loom_run_measurement_run_step(

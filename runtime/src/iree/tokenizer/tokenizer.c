@@ -1227,7 +1227,8 @@ iree_status_t iree_tokenizer_decode(const iree_tokenizer_t* tokenizer,
     //    buffer is full (no room for Stage 2 to consume tokens).
     // The pump loop's made_progress flag handles all internal "needs more
     // pumping" cases, so 0/0 at this level is always genuine exhaustion.
-    if (tokens_consumed == 0 && text_written == 0) {
+    if (iree_status_is_ok(status) && tokens_consumed == 0 &&
+        text_written == 0) {
       status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                                 "decode output buffer full");
     }
@@ -1555,7 +1556,8 @@ iree_status_t iree_tokenizer_decode_batch(
       tokens.values += tokens_consumed;
       tokens.count -= tokens_consumed;
       // Zero progress = output buffer exhausted (see one-shot decode comment).
-      if (tokens_consumed == 0 && text_written == 0) {
+      if (iree_status_is_ok(status) && tokens_consumed == 0 &&
+          text_written == 0) {
         status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                                   "decode output buffer full");
       }

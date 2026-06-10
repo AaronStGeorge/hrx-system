@@ -63,7 +63,7 @@ static bool iree_hal_hip_try_load_dylib(const char* file_path,
 
   IREE_IGNORE_ERROR(iree_string_builder_append_format(
       error_builder, "\n  Tried: %s\n    ", file_path));
-  IREE_IGNORE_ERROR(iree_string_builder_append_status(error_builder, status));
+  IREE_IGNORE_ERROR(iree_string_builder_append_status(error_builder, &status));
 
   iree_status_ignore(status);
   return false;

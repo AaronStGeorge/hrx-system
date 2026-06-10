@@ -214,8 +214,10 @@ class VMTestRunner : public BaseType,
       if (params.expects_failure) {                                         \
         iree_status_ignore(status);                                         \
       } else {                                                              \
+        iree::Status wrapped_status(std::move(status));                     \
+        std::string status_string = wrapped_status.ToString();              \
         GTEST_FAIL() << "Function expected success but failed with error: " \
-                     << iree::Status(std::move(status)).ToString();         \
+                     << status_string;                                      \
       }                                                                     \
     }                                                                       \
   }

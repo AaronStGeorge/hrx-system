@@ -270,7 +270,9 @@ static iree_host_size_t iree_hal_replay_recorder_executable_function_count(
                                                     iree_ok_status());
   }
   if (!iree_status_is_ok(status)) {
-    iree_hal_replay_recorder_fail(executable->recorder, status);
+    iree_hal_replay_recorder_fail(executable->recorder,
+                                  iree_status_code(status));
+    iree_status_ignore(status);
   }
   return count;
 }

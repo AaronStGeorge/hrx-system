@@ -245,7 +245,7 @@ TEST_P(DispatchReuseTest, DispatchProfilingRecordsCommandBufferDispatch) {
   iree_status_t profiling_status =
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS,
                       TestProfileSinkAsBase(&sink));
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "device dispatch profiling unsupported by backend";
   }
@@ -663,7 +663,7 @@ TEST_P(DispatchReuseTest, MultiDispatchProfilingFiltersCommandIndex) {
 
   DeviceProfilingScope profiling(device_);
   iree_status_t profiling_status = profiling.Begin(&profiling_options);
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "device dispatch profiling unsupported by backend";
   }

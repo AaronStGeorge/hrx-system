@@ -87,13 +87,14 @@ static iree_status_t iree_benchmark_loom_read_file_into_builder(
   return iree_ok_status();
 }
 
-static void iree_benchmark_loom_consume_status_json_error(
-    iree_status_t status, iree_benchmark_loom_status_json_error_t* out_error) {
-  out_error->code = iree_status_code(status);
+static void iree_benchmark_loom_format_status_json_error(
+    const iree_status_t* status,
+    iree_benchmark_loom_status_json_error_t* out_error) {
+  out_error->code = iree_status_code(*status);
   memset(out_error->message, 0, sizeof(out_error->message));
   iree_host_size_t required_length = 0;
-  if (iree_status_format(status, sizeof(out_error->message), out_error->message,
-                         &required_length)) {
+  if (iree_status_format(*status, sizeof(out_error->message),
+                         out_error->message, &required_length)) {
     out_error->message_length = required_length;
     if (out_error->message_length >= sizeof(out_error->message)) {
       out_error->message_length = sizeof(out_error->message) - 1;
@@ -109,7 +110,6 @@ static void iree_benchmark_loom_consume_status_json_error(
     out_error->message[index] = '\0';
     out_error->message_length = index;
   }
-  iree_status_free(status);
 }
 
 static iree_status_t iree_benchmark_loom_write_profile_artifact_identity_json(
@@ -475,12 +475,16 @@ iree_benchmark_loom_append_profile_summary_status_from_error(
     iree_string_view_t status, iree_string_view_t reason,
     iree_status_t error_status, iree_string_builder_t* profile_output) {
   iree_benchmark_loom_status_json_error_t error = {0};
-  iree_benchmark_loom_consume_status_json_error(error_status, &error);
-  return iree_benchmark_loom_append_profile_summary_status_row(
-      run, candidate, work_item_index, module, benchmark_plan, case_plan,
-      policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
-      error.code, iree_make_string_view(error.message, error.message_length),
-      profile_output);
+  iree_benchmark_loom_format_status_json_error(&error_status, &error);
+  iree_status_t append_status =
+      iree_benchmark_loom_append_profile_summary_status_row(
+          run, candidate, work_item_index, module, benchmark_plan, case_plan,
+          policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
+          error.code,
+          iree_make_string_view(error.message, error.message_length),
+          profile_output);
+  iree_status_free(error_status);
+  return append_status;
 }
 
 static iree_status_t iree_benchmark_loom_append_profile_summary_payload_row(
@@ -667,12 +671,16 @@ iree_benchmark_loom_append_profile_counter_status_from_error(
     iree_string_view_t status, iree_string_view_t reason,
     iree_status_t error_status, iree_string_builder_t* profile_output) {
   iree_benchmark_loom_status_json_error_t error = {0};
-  iree_benchmark_loom_consume_status_json_error(error_status, &error);
-  return iree_benchmark_loom_append_profile_counter_status_row(
-      run, candidate, work_item_index, module, benchmark_plan, case_plan,
-      policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
-      error.code, iree_make_string_view(error.message, error.message_length),
-      profile_output);
+  iree_benchmark_loom_format_status_json_error(&error_status, &error);
+  iree_status_t append_status =
+      iree_benchmark_loom_append_profile_counter_status_row(
+          run, candidate, work_item_index, module, benchmark_plan, case_plan,
+          policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
+          error.code,
+          iree_make_string_view(error.message, error.message_length),
+          profile_output);
+  iree_status_free(error_status);
+  return append_status;
 }
 
 static iree_status_t iree_benchmark_loom_append_profile_counter_payload_row(

@@ -144,7 +144,7 @@ TEST_P(QueueDispatchTest, DispatchWithConstantsAndBindingsWhileProfiling) {
   iree_status_t profiling_status =
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS,
                       TestProfileSinkAsBase(&sink));
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "device profiling data family unsupported by backend";
   }
@@ -234,7 +234,7 @@ TEST_P(QueueDispatchTest, DispatchHostQueueEventProfiling) {
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS |
                           IREE_HAL_DEVICE_PROFILING_DATA_HOST_EXECUTION_EVENTS,
                       TestProfileSinkAsBase(&sink));
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "host queue profiling unsupported by backend";
   }
@@ -320,7 +320,7 @@ TEST_P(QueueDispatchTest, DispatchDeviceQueueEventProfiling) {
   iree_status_t profiling_status =
       profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS,
                       TestProfileSinkAsBase(&sink));
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "device queue profiling unsupported by backend";
   }
@@ -378,7 +378,7 @@ TEST_P(QueueDispatchTest, DispatchProfileFilterCanSkipDirectDispatchEvents) {
       IREE_SV("iree-hal-cts-never-matches-*");
   DeviceProfilingScope profiling(device_);
   iree_status_t profiling_status = profiling.Begin(&profiling_options);
-  if (IsProfilingUnsupported(profiling_status)) {
+  if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
     iree_status_free(profiling_status);
     GTEST_SKIP() << "device profiling data family unsupported by backend";
   }
@@ -671,7 +671,7 @@ class QueueDispatchIndirectParametersTest : public CtsTestBase<> {
         profiling.Begin(IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS |
                             IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS,
                         TestProfileSinkAsBase(&sink));
-    if (IsProfilingUnsupported(profiling_status)) {
+    if (IsProfilingUnsupported(iree_status_code(profiling_status))) {
       iree_status_free(profiling_status);
       GTEST_SKIP() << "device profiling data family unsupported by backend";
     }

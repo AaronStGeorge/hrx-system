@@ -61,8 +61,8 @@ static void iree_hal_task_queue_debug_record_fail(
 
 static void iree_hal_task_queue_debug_record_destroy(
     iree_hal_task_queue_t* queue, const iree_hal_task_queue_op_t* operation,
-    iree_status_t failure_status) {
-  if (iree_status_is_ok(failure_status)) {
+    iree_status_code_t failure_status_code) {
+  if (failure_status_code == IREE_STATUS_OK) {
     iree_atomic_fetch_add(&queue->debug.destroyed_ok_operation_count, 1,
                           iree_memory_order_relaxed);
   } else {
@@ -94,10 +94,10 @@ static void iree_hal_task_queue_debug_record_fail(
 
 static void iree_hal_task_queue_debug_record_destroy(
     iree_hal_task_queue_t* queue, const iree_hal_task_queue_op_t* operation,
-    iree_status_t failure_status) {
+    iree_status_code_t failure_status_code) {
   (void)queue;
   (void)operation;
-  (void)failure_status;
+  (void)failure_status_code;
 }
 #endif  // !defined(NDEBUG)
 
@@ -560,7 +560,8 @@ static void iree_hal_task_queue_profile_start_host_execution(
 }
 
 static void iree_hal_task_queue_profile_finish_host_execution(
-    iree_hal_task_queue_op_t* operation, iree_status_t operation_status) {
+    iree_hal_task_queue_op_t* operation,
+    iree_status_code_t operation_status_code) {
   iree_hal_task_queue_profile_operation_t* profile_operation =
       iree_hal_task_queue_profile_operation(operation);
   if (!profile_operation) return;
@@ -577,7 +578,7 @@ static void iree_hal_task_queue_profile_finish_host_execution(
       iree_hal_local_profile_host_execution_event_info_default();
   event_info.type = profile_operation->type;
   event_info.flags = profile_operation->host_flags;
-  event_info.status_code = iree_status_code(operation_status);
+  event_info.status_code = operation_status_code;
   event_info.scope = profile_operation->scope;
   event_info.submission_id = profile_operation->submission_id;
   event_info.command_buffer_id = profile_operation->command_buffer_id;
@@ -641,8 +642,9 @@ static iree_status_t iree_hal_task_queue_op_unmap_binding_mappings(
 static void iree_hal_task_queue_op_destroy(iree_hal_task_queue_op_t* operation,
                                            iree_status_t failure_status) {
   iree_hal_task_queue_debug_record_destroy(operation->queue, operation,
-                                           failure_status);
-  iree_hal_task_queue_profile_finish_host_execution(operation, failure_status);
+                                           iree_status_code(failure_status));
+  iree_hal_task_queue_profile_finish_host_execution(
+      operation, iree_status_code(failure_status));
 
   // Failure/early-destroy backstop: success completion finalizes mappings
   // before signaling, but issue failures can destroy the operation directly.
@@ -714,7 +716,8 @@ static void iree_hal_task_queue_op_complete_with_epoch(
   if (iree_status_is_ok(status)) {
     // Publish profiling before user-visible completion. Waiters may flush and
     // end profiling immediately after signal semaphores are reached.
-    iree_hal_task_queue_profile_finish_host_execution(operation, status);
+    iree_hal_task_queue_profile_finish_host_execution(operation,
+                                                      iree_status_code(status));
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_semaphore_list_signal(operation->signal_semaphores,
@@ -738,7 +741,8 @@ static void iree_hal_task_queue_op_complete(
   if (iree_status_is_ok(status)) {
     // Publish profiling before user-visible completion. Waiters may flush and
     // end profiling immediately after signal semaphores are reached.
-    iree_hal_task_queue_profile_finish_host_execution(operation, status);
+    iree_hal_task_queue_profile_finish_host_execution(operation,
+                                                      iree_status_code(status));
   }
   if (iree_status_is_ok(status)) {
     // Signal all semaphores to their new values.

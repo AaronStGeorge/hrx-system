@@ -548,9 +548,10 @@ iree_status_t iree_hal_local_profile_recorder_create(
       iree_hal_profile_chunk_metadata_t metadata =
           iree_hal_local_profile_recorder_metadata(
               recorder, IREE_HAL_PROFILE_CONTENT_TYPE_SESSION);
-      status = iree_status_join(status, iree_hal_profile_sink_end_session(
-                                            recorder->options.sink, &metadata,
-                                            iree_status_code(status)));
+      iree_status_code_t status_code = iree_status_code(status);
+      status = iree_status_join(
+          status, iree_hal_profile_sink_end_session(recorder->options.sink,
+                                                    &metadata, status_code));
     }
     iree_hal_local_profile_recorder_destroy(recorder);
   }
@@ -1680,9 +1681,10 @@ iree_status_t iree_hal_local_profile_recorder_end(
   iree_hal_profile_chunk_metadata_t metadata =
       iree_hal_local_profile_recorder_metadata(
           recorder, IREE_HAL_PROFILE_CONTENT_TYPE_SESSION);
+  iree_status_code_t status_code = iree_status_code(status);
   status = iree_status_join(
-      status, iree_hal_profile_sink_end_session(
-                  recorder->options.sink, &metadata, iree_status_code(status)));
+      status, iree_hal_profile_sink_end_session(recorder->options.sink,
+                                                &metadata, status_code));
   recorder->active = false;
   return status;
 }

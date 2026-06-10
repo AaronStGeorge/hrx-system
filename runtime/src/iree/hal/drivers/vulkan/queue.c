@@ -8713,19 +8713,19 @@ static iree_status_t iree_hal_vulkan_queue_record_dispatch_bda_native(
     iree_hal_vulkan_queue_pending_submission_t* submission,
     const iree_hal_vulkan_pipeline_t* pipeline) {
   IREE_TRACE_ZONE_BEGIN(z0);
-  iree_status_t status = iree_ok_status();
-  status = iree_hal_vulkan_queue_allocate_native_command_buffer_under_lock(
-      queue, submission);
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_vulkan_queue_profile_prepare_native_timestamps_under_lock(
-        queue, submission);
-  }
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_vulkan_queue_allocate_native_command_buffer_under_lock(
+              queue, submission));
+  iree_status_t status =
+      iree_hal_vulkan_queue_profile_prepare_native_timestamps_under_lock(
+          queue, submission);
 
   const iree_host_size_t binding_count =
       pipeline->bda.binding_count_known ? pipeline->binding_count
                                         : submission->dispatch.binding_count;
   iree_device_size_t binding_table_length = 0;
-  if (!iree_device_size_checked_mul((iree_device_size_t)binding_count,
+  if (iree_status_is_ok(status) &&
+      !iree_device_size_checked_mul((iree_device_size_t)binding_count,
                                     pipeline->bda.binding_table_entry_length,
                                     &binding_table_length)) {
     IREE_TRACE_ZONE_END(z0);
