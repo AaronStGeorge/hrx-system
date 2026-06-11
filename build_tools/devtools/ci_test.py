@@ -249,14 +249,8 @@ class CiTest(unittest.TestCase):
             "-//runtime/src/iree/hal/drivers/amdgpu:system_test",
             runtime_resource_test.argv,
         )
-        loom_resource_test = next(
-            step for step in steps if step.name == "Test IREE AMDGPU Loom resources"
-        )
-        self.assertIn("//loom/...", loom_resource_test.argv)
-        self.assertNotIn("//runtime/...", loom_resource_test.argv)
-        self.assertIn(
-            "--test_tag_filters=" + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG,
-            loom_resource_test.argv,
+        self.assertFalse(
+            any(step.name == "Test IREE AMDGPU Loom resources" for step in steps)
         )
 
     def test_amdgpu_resource_slices_share_resource_tag_without_target_overlap(self):
@@ -266,21 +260,15 @@ class CiTest(unittest.TestCase):
         runtime_resource_test = next(
             step for step in steps if step.name == "Test IREE AMDGPU runtime resources"
         )
-        loom_resource_test = next(
-            step for step in steps if step.name == "Test IREE AMDGPU Loom resources"
-        )
 
         self.assertIn("//runtime/...", runtime_resource_test.argv)
         self.assertNotIn("//loom/...", runtime_resource_test.argv)
-        self.assertIn("//loom/...", loom_resource_test.argv)
-        self.assertNotIn("//runtime/...", loom_resource_test.argv)
-        self.assertIn(
-            "--test_tag_filters=" + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG,
-            runtime_resource_test.argv,
+        self.assertFalse(
+            any(step.name == "Test IREE AMDGPU Loom resources" for step in steps)
         )
         self.assertIn(
             "--test_tag_filters=" + ci_config.RUNTIME_AMDGPU_RESOURCE_TAG,
-            loom_resource_test.argv,
+            runtime_resource_test.argv,
         )
 
     def test_amdgpu_sanitizer_command_uses_amdgpu_sanitizer_xfails(self):

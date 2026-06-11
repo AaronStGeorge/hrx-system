@@ -12,10 +12,10 @@
 #include "iree/hal/drivers/amdgpu/abi/kernel_args.h"
 
 //===----------------------------------------------------------------------===//
-// HSACO metadata projection
+// HSACO Metadata Load Planning
 //===----------------------------------------------------------------------===//
 
-typedef struct iree_hal_amdgpu_hsaco_kernel_projection_t {
+typedef struct iree_hal_amdgpu_hsaco_kernel_load_plan_t {
   // Number of reflected HAL-visible parameter records.
   iree_host_size_t parameter_count;
   // Number of HAL binding pointers consumed by the native layout.
@@ -31,17 +31,18 @@ typedef struct iree_hal_amdgpu_hsaco_kernel_projection_t {
   iree_host_size_t implicit_args_byte_offset;
   // Byte length required for the immutable native kernarg layout record.
   iree_host_size_t layout_byte_length;
-} iree_hal_amdgpu_hsaco_kernel_projection_t;
+} iree_hal_amdgpu_hsaco_kernel_load_plan_t;
 
-typedef struct iree_hal_amdgpu_hsaco_projection_rebase_t {
+typedef struct iree_hal_amdgpu_hsaco_loaded_code_object_rebase_t {
   // Source ELF bytes used by the HSACO metadata parser.
   iree_const_byte_span_t source_code_object_data;
   // HSA-loader-owned loaded code-object bytes retained by the executable.
   iree_const_byte_span_t loaded_code_object_data;
-} iree_hal_amdgpu_hsaco_projection_rebase_t;
+} iree_hal_amdgpu_hsaco_loaded_code_object_rebase_t;
 
-static iree_status_t iree_hal_amdgpu_hsaco_projection_rebase_string_view(
-    const iree_hal_amdgpu_hsaco_projection_rebase_t* rebase,
+static iree_status_t
+iree_hal_amdgpu_hsaco_loaded_code_object_rebase_string_view(
+    const iree_hal_amdgpu_hsaco_loaded_code_object_rebase_t* rebase,
     const char* field_name, iree_string_view_t source_view,
     iree_string_view_t* out_view) {
   IREE_ASSERT_ARGUMENT(rebase);
@@ -111,7 +112,7 @@ static bool iree_hal_amdgpu_hsaco_metadata_arg_kind_is_hidden(
          kind == IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN_NONE;
 }
 
-static iree_status_t iree_hal_amdgpu_hsaco_projection_check_u16(
+static iree_status_t iree_hal_amdgpu_hsaco_load_plan_check_u16(
     iree_string_view_t symbol_name, iree_string_view_t field_name,
     iree_host_size_t value) {
   if (IREE_UNLIKELY(value > UINT16_MAX)) {
@@ -124,19 +125,19 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_check_u16(
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_amdgpu_hsaco_projection_analyze_kernel(
+static iree_status_t iree_hal_amdgpu_hsaco_load_plan_analyze_kernel(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
-    iree_hal_amdgpu_hsaco_kernel_projection_t* out_projection) {
+    iree_hal_amdgpu_hsaco_kernel_load_plan_t* out_load_plan) {
   IREE_ASSERT_ARGUMENT(kernel);
-  IREE_ASSERT_ARGUMENT(out_projection);
-  memset(out_projection, 0, sizeof(*out_projection));
-  out_projection->implicit_args_byte_offset =
+  IREE_ASSERT_ARGUMENT(out_load_plan);
+  memset(out_load_plan, 0, sizeof(*out_load_plan));
+  out_load_plan->implicit_args_byte_offset =
       IREE_HAL_AMDGPU_KERNARG_LAYOUT_IMPLICIT_ARGS_NONE;
 
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
       kernel->symbol_name, IREE_SV("kernarg segment size"),
       kernel->kernarg_segment_size));
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
       kernel->symbol_name, IREE_SV("kernarg segment alignment"),
       kernel->kernarg_segment_alignment));
 
@@ -187,8 +188,8 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_analyze_kernel(
               (int)kernel->symbol_name.size, kernel->symbol_name.data, i,
               arg->offset);
         }
-        ++out_projection->parameter_count;
-        ++out_projection->binding_count;
+        ++out_load_plan->parameter_count;
+        ++out_load_plan->binding_count;
         break;
       case IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_BY_VALUE:
         if (IREE_UNLIKELY(arg->size == 0)) {
@@ -198,21 +199,21 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_analyze_kernel(
               " has zero byte size",
               (int)kernel->symbol_name.size, kernel->symbol_name.data, i);
         }
-        IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+        IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
             kernel->symbol_name, IREE_SV("by_value argument size"), arg->size));
-        IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+        IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
             kernel->symbol_name, IREE_SV("constant source offset"),
-            out_projection->constant_byte_length));
+            out_load_plan->constant_byte_length));
         if (IREE_UNLIKELY(!iree_host_size_checked_add(
-                out_projection->constant_byte_length, arg->size,
-                &out_projection->constant_byte_length))) {
+                out_load_plan->constant_byte_length, arg->size,
+                &out_load_plan->constant_byte_length))) {
           return iree_make_status(
               IREE_STATUS_OUT_OF_RANGE,
               "AMDGPU kernel `%.*s` constant byte length overflows",
               (int)kernel->symbol_name.size, kernel->symbol_name.data);
         }
-        ++out_projection->parameter_count;
-        ++out_projection->constant_span_count;
+        ++out_load_plan->parameter_count;
+        ++out_load_plan->constant_span_count;
         break;
       default:
         return iree_make_status(
@@ -224,25 +225,25 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_analyze_kernel(
     }
   }
 
-  if (IREE_UNLIKELY(out_projection->constant_byte_length > UINT16_MAX)) {
+  if (IREE_UNLIKELY(out_load_plan->constant_byte_length > UINT16_MAX)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "AMDGPU kernel `%.*s` constant byte length %" PRIhsz
                             " exceeds uint16_t range",
                             (int)kernel->symbol_name.size,
                             kernel->symbol_name.data,
-                            out_projection->constant_byte_length);
+                            out_load_plan->constant_byte_length);
   }
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
       kernel->symbol_name, IREE_SV("parameter count"),
-      out_projection->parameter_count));
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+      out_load_plan->parameter_count));
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
       kernel->symbol_name, IREE_SV("binding count"),
-      out_projection->binding_count));
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+      out_load_plan->binding_count));
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
       kernel->symbol_name, IREE_SV("constant span count"),
-      out_projection->constant_span_count));
+      out_load_plan->constant_span_count));
 
-  out_projection->kernarg_byte_length = kernel->kernarg_segment_size;
+  out_load_plan->kernarg_byte_length = kernel->kernarg_segment_size;
   if (hidden_args_offset != IREE_HOST_SIZE_MAX) {
     if (IREE_UNLIKELY(explicit_kernarg_end > hidden_args_offset)) {
       return iree_make_status(
@@ -261,21 +262,21 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_analyze_kernel(
           "AMDGPU kernel `%.*s` implicit kernarg suffix overflows",
           (int)kernel->symbol_name.size, kernel->symbol_name.data);
     }
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_check_u16(
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_check_u16(
         kernel->symbol_name, IREE_SV("implicit kernarg suffix end"),
         implicit_args_end));
-    out_projection->implicit_args_byte_offset = hidden_args_offset;
-    out_projection->kernarg_byte_length =
-        iree_max(out_projection->kernarg_byte_length, implicit_args_end);
+    out_load_plan->implicit_args_byte_offset = hidden_args_offset;
+    out_load_plan->kernarg_byte_length =
+        iree_max(out_load_plan->kernarg_byte_length, implicit_args_end);
   }
 
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_kernarg_layout_storage_size(
-      out_projection->binding_count, out_projection->constant_span_count,
-      &out_projection->layout_byte_length));
+      out_load_plan->binding_count, out_load_plan->constant_span_count,
+      &out_load_plan->layout_byte_length));
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_amdgpu_hsaco_projection_add_layout_capacity(
+static iree_status_t iree_hal_amdgpu_hsaco_load_plan_add_layout_capacity(
     iree_host_size_t layout_byte_length,
     iree_host_size_t* inout_layout_blob_byte_length) {
   iree_host_size_t aligned_offset = 0;
@@ -308,14 +309,14 @@ iree_status_t iree_hal_amdgpu_executable_metadata_calculate_hsaco_counts(
   }
 
   for (iree_host_size_t i = 0; i < hsaco_metadata->kernel_count; ++i) {
-    iree_hal_amdgpu_hsaco_kernel_projection_t projection;
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_analyze_kernel(
-                             &hsaco_metadata->kernels[i], &projection),
-                         "projecting HSACO metadata for kernel `%.*s`",
+    iree_hal_amdgpu_hsaco_kernel_load_plan_t load_plan;
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_analyze_kernel(
+                             &hsaco_metadata->kernels[i], &load_plan),
+                         "planning native kernarg layout for kernel `%.*s`",
                          (int)hsaco_metadata->kernels[i].symbol_name.size,
                          hsaco_metadata->kernels[i].symbol_name.data);
     if (IREE_UNLIKELY(!iree_host_size_checked_add(
-            out_counts->parameter_count, projection.parameter_count,
+            out_counts->parameter_count, load_plan.parameter_count,
             &out_counts->parameter_count))) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "AMDGPU metadata parameter count overflow");
@@ -325,21 +326,21 @@ iree_status_t iree_hal_amdgpu_executable_metadata_calculate_hsaco_counts(
           IREE_STATUS_OUT_OF_RANGE,
           "AMDGPU metadata parameter count exceeds reflection offset range");
     }
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_add_layout_capacity(
-        projection.layout_byte_length, &out_counts->layout_blob_byte_length));
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_load_plan_add_layout_capacity(
+        load_plan.layout_byte_length, &out_counts->layout_blob_byte_length));
   }
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_layout_tables(
+static iree_status_t iree_hal_amdgpu_hsaco_load_plan_populate_layout_tables(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
-    const iree_hal_amdgpu_hsaco_kernel_projection_t* projection,
+    const iree_hal_amdgpu_hsaco_kernel_load_plan_t* load_plan,
     iree_hal_amdgpu_kernarg_layout_t* layout,
     iree_host_size_t layout_storage_capacity) {
   iree_hal_amdgpu_kernarg_binding_slot_t* binding_slots = layout->binding_slots;
   iree_hal_amdgpu_kernarg_constant_span_t* constant_spans =
       (iree_hal_amdgpu_kernarg_constant_span_t*)(binding_slots +
-                                                 projection->binding_count);
+                                                 load_plan->binding_count);
 
   iree_host_size_t binding_ordinal = 0;
   iree_host_size_t constant_span_ordinal = 0;
@@ -377,22 +378,22 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_layout_tables(
   }
 
   const iree_hal_amdgpu_kernarg_layout_params_t params = {
-      .kernarg_byte_length = projection->kernarg_byte_length,
+      .kernarg_byte_length = load_plan->kernarg_byte_length,
       .kernarg_alignment = kernel->kernarg_segment_alignment,
-      .constant_byte_length = projection->constant_byte_length,
-      .implicit_args_byte_offset = projection->implicit_args_byte_offset,
-      .binding_count = projection->binding_count,
+      .constant_byte_length = load_plan->constant_byte_length,
+      .implicit_args_byte_offset = load_plan->implicit_args_byte_offset,
+      .binding_count = load_plan->binding_count,
       .binding_slots = binding_slots,
-      .constant_span_count = projection->constant_span_count,
+      .constant_span_count = load_plan->constant_span_count,
       .constant_spans = constant_spans,
   };
   return iree_hal_amdgpu_kernarg_layout_initialize(
       &params, layout_storage_capacity, layout);
 }
 
-static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_parameters(
+static iree_status_t iree_hal_amdgpu_hsaco_load_plan_populate_parameters(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
-    const iree_hal_amdgpu_hsaco_projection_rebase_t* rebase,
+    const iree_hal_amdgpu_hsaco_loaded_code_object_rebase_t* rebase,
     iree_host_size_t parameter_capacity,
     iree_hal_executable_function_parameter_t* out_parameters) {
   IREE_ASSERT_ARGUMENT(out_parameters || parameter_capacity == 0);
@@ -415,8 +416,9 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_parameters(
     memset(parameter, 0, sizeof(*parameter));
     parameter->flags = IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_FLAG_NONE;
     parameter->size = (uint16_t)arg->size;
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
-        rebase, "parameter name", arg->name, &parameter->name));
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amdgpu_hsaco_loaded_code_object_rebase_string_view(
+            rebase, "parameter name", arg->name, &parameter->name));
     switch (arg->kind) {
       case IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER:
         parameter->type = IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING;
@@ -439,7 +441,7 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_parameters(
   return iree_ok_status();
 }
 
-static void iree_hal_amdgpu_hsaco_projection_populate_workgroup_size(
+static void iree_hal_amdgpu_hsaco_load_plan_populate_workgroup_size(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
     iree_hal_amdgpu_executable_export_t* out_export) {
   if (kernel->has_required_workgroup_size) {
@@ -477,7 +479,7 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
         "AMDGPU executable metadata layout blob is already populated");
   }
 
-  const iree_hal_amdgpu_hsaco_projection_rebase_t rebase = {
+  const iree_hal_amdgpu_hsaco_loaded_code_object_rebase_t rebase = {
       .source_code_object_data = hsaco_metadata->elf_data,
       .loaded_code_object_data = loaded_code_object_data,
   };
@@ -486,29 +488,33 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
       hsaco_metadata->kernel_count
           ? IREE_HAL_AMDGPU_EXECUTABLE_METADATA_SOURCE_HSACO_MESSAGEPACK
           : IREE_HAL_AMDGPU_EXECUTABLE_METADATA_SOURCE_ELF_SYMBOLS;
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
-      &rebase, "target", hsaco_metadata->target, &metadata->target));
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_hsaco_loaded_code_object_rebase_string_view(
+          &rebase, "target", hsaco_metadata->target, &metadata->target));
   metadata->code_object_data = loaded_code_object_data;
 
   iree_host_size_t parameter_offset = 0;
   for (iree_host_size_t i = 0; i < hsaco_metadata->kernel_count; ++i) {
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel =
         &hsaco_metadata->kernels[i];
-    iree_hal_amdgpu_hsaco_kernel_projection_t projection;
+    iree_hal_amdgpu_hsaco_kernel_load_plan_t load_plan;
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_projection_analyze_kernel(kernel, &projection),
-        "projecting HSACO metadata for kernel `%.*s`",
+        iree_hal_amdgpu_hsaco_load_plan_analyze_kernel(kernel, &load_plan),
+        "planning native kernarg layout for kernel `%.*s`",
         (int)kernel->symbol_name.size, kernel->symbol_name.data);
 
     iree_hal_amdgpu_executable_reflection_t* reflection =
         &metadata->reflection[i];
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
-        &rebase, "reflection name", kernel->reflection_name,
-        &reflection->name));
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
-        &rebase, "symbol name", kernel->symbol_name, &reflection->symbol_name));
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amdgpu_hsaco_loaded_code_object_rebase_string_view(
+            &rebase, "reflection name", kernel->reflection_name,
+            &reflection->name));
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amdgpu_hsaco_loaded_code_object_rebase_string_view(
+            &rebase, "symbol name", kernel->symbol_name,
+            &reflection->symbol_name));
     reflection->parameter_offset = (uint32_t)parameter_offset;
-    reflection->parameter_count = (uint32_t)projection.parameter_count;
+    reflection->parameter_count = (uint32_t)load_plan.parameter_count;
 
     iree_hal_amdgpu_executable_export_t* export_info = &metadata->exports[i];
     export_info->flags = IREE_HAL_AMDGPU_EXECUTABLE_EXPORT_FLAG_NONE;
@@ -517,29 +523,29 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
         kernel->private_segment_fixed_size;
     export_info->max_dynamic_workgroup_local_memory =
         UINT32_MAX - kernel->group_segment_fixed_size;
-    iree_hal_amdgpu_hsaco_projection_populate_workgroup_size(kernel,
-                                                             export_info);
+    iree_hal_amdgpu_hsaco_load_plan_populate_workgroup_size(kernel,
+                                                            export_info);
 
     iree_byte_span_t layout_storage = iree_byte_span_empty();
     IREE_RETURN_IF_ERROR(iree_hal_amdgpu_executable_metadata_append_layout(
-        metadata, projection.layout_byte_length, &export_info->kernarg_layout,
+        metadata, load_plan.layout_byte_length, &export_info->kernarg_layout,
         &layout_storage));
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_projection_populate_layout_tables(
-            kernel, &projection,
+        iree_hal_amdgpu_hsaco_load_plan_populate_layout_tables(
+            kernel, &load_plan,
             (iree_hal_amdgpu_kernarg_layout_t*)layout_storage.data,
             layout_storage.data_length),
         "initializing native kernarg layout for kernel `%.*s`",
         (int)kernel->symbol_name.size, kernel->symbol_name.data);
 
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_projection_populate_parameters(
-            kernel, &rebase, projection.parameter_count,
-            projection.parameter_count ? &metadata->parameters[parameter_offset]
-                                       : NULL),
+        iree_hal_amdgpu_hsaco_load_plan_populate_parameters(
+            kernel, &rebase, load_plan.parameter_count,
+            load_plan.parameter_count ? &metadata->parameters[parameter_offset]
+                                      : NULL),
         "populating reflected parameters for kernel `%.*s`",
         (int)kernel->symbol_name.size, kernel->symbol_name.data);
-    parameter_offset += projection.parameter_count;
+    parameter_offset += load_plan.parameter_count;
   }
 
   for (iree_host_size_t i = 0; i < hsaco_metadata->elf_kernel_symbol_count;
@@ -547,12 +553,14 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
     const iree_host_size_t export_ordinal = hsaco_metadata->kernel_count + i;
     const iree_hal_amdgpu_hsaco_metadata_elf_kernel_symbol_t* symbol =
         &hsaco_metadata->elf_kernel_symbols[i];
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
-        &rebase, "ELF-only reflection name", symbol->name,
-        &metadata->reflection[export_ordinal].name));
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
-        &rebase, "ELF-only symbol name", symbol->symbol_name,
-        &metadata->reflection[export_ordinal].symbol_name));
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amdgpu_hsaco_loaded_code_object_rebase_string_view(
+            &rebase, "ELF-only reflection name", symbol->name,
+            &metadata->reflection[export_ordinal].name));
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amdgpu_hsaco_loaded_code_object_rebase_string_view(
+            &rebase, "ELF-only symbol name", symbol->symbol_name,
+            &metadata->reflection[export_ordinal].symbol_name));
     metadata->exports[export_ordinal].flags =
         IREE_HAL_AMDGPU_EXECUTABLE_EXPORT_FLAG_CUSTOM_DIRECT_ONLY |
         IREE_HAL_AMDGPU_EXECUTABLE_EXPORT_FLAG_REQUIRES_DISPATCH_WORKGROUP_SIZE;

@@ -132,11 +132,21 @@ AMDGPU_TARGET_SELECTOR = "gfx942"
 RUNTIME_AMDGPU_RESOURCE_TAG = "iree-run-requirement=runtime.resource.amd_gpu"
 AMDGPU_BAZEL_RESOURCE_SLICES = (
     ("runtime", "//runtime", "//runtime/...", RUNTIME_AMDGPU_RESOURCE_TAG),
-    ("Loom", "//loom", "//loom/...", RUNTIME_AMDGPU_RESOURCE_TAG),
 )
 RUNTIME_CTEST_RESOURCE_LABEL_PREFIX = "runtime-resource="
 CTEST_RESOURCE_LABEL_EXCLUDE_REGEX = RUNTIME_CTEST_RESOURCE_LABEL_PREFIX
 AMDGPU_CTEST_RESOURCE_LABEL_REGEX = "runtime-resource=amd-gpu"
+LOOM_AMDGPU_HAL_EXECUTION_XFAILS = (
+    # Loom's AMDGPU HAL artifact provider still emits the legacy flatbuffer
+    # executable container. The AMDGPU HAL runtime now loads raw HSACO
+    # metadata directly, so these execution suites stay out of AMDGPU CI until
+    # Loom switches to a raw artifact shape.
+    bazel_xfail("//loom/src/loom/tools/iree-test-loom:amdgpu_execution_test"),
+    bazel_xfail("//loom/src/loom/tools/iree-benchmark-loom:amdgpu_execution_test"),
+)
+LOOM_AMDGPU_HAL_EXECUTION_CTEST_EXCLUDE_REGEX = ctest_exclude_regex(
+    LOOM_AMDGPU_HAL_EXECUTION_XFAILS
+)
 AMDGPU_XFAILS = (
     bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/cts/..."),
     bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu:allocator_test"),

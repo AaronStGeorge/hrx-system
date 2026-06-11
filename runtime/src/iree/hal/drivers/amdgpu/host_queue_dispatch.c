@@ -27,10 +27,10 @@ typedef struct iree_hal_amdgpu_host_queue_dispatch_plan_t {
   const iree_hal_amdgpu_device_kernel_args_t* kernel_args;
   // Storage for a workgroup-size override when dispatch config provides one.
   iree_hal_amdgpu_device_kernel_args_t override_kernel_args;
-  // Device ABI layout describing the kernarg bytes to emit.
-  const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* layout;
-  // Provider-neutral native kernarg layout, when this descriptor has one.
-  const iree_hal_amdgpu_kernarg_layout_t* native_layout;
+  // Native kernarg layout for normal metadata-described dispatches.
+  const iree_hal_amdgpu_kernarg_layout_t* kernarg_layout;
+  // Device ABI layout for custom direct-argument dispatches.
+  const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* custom_layout;
   // Number of queue-owned kernarg blocks required for the dispatch.
   uint32_t kernarg_block_count;
   // Number of operation resources retained until dispatch completion.
@@ -179,21 +179,6 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_binding(
                                         binding->length);
 }
 
-static iree_status_t iree_hal_amdgpu_host_queue_kernarg_block_count(
-    iree_host_size_t kernarg_byte_length, uint32_t* out_kernarg_block_count) {
-  iree_host_size_t kernarg_block_count = iree_host_size_ceil_div(
-      kernarg_byte_length, sizeof(iree_hal_amdgpu_kernarg_block_t));
-  if (kernarg_block_count == 0) kernarg_block_count = 1;
-  if (IREE_UNLIKELY(kernarg_block_count > UINT32_MAX)) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "dispatch kernargs require too many blocks (%" PRIhsz ", max=%u)",
-        kernarg_block_count, UINT32_MAX);
-  }
-  *out_kernarg_block_count = (uint32_t)kernarg_block_count;
-  return iree_ok_status();
-}
-
 static iree_status_t
 iree_hal_amdgpu_host_queue_validate_dispatch_indirect_parameters(
     const iree_hal_buffer_ref_t* workgroup_count_ref) {
@@ -238,12 +223,12 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
     const iree_hal_amdgpu_executable_dispatch_descriptor_t* descriptor,
     iree_const_byte_span_t constants, const iree_hal_buffer_ref_list_t bindings,
     iree_hal_dispatch_flags_t flags,
-    const iree_hal_amdgpu_device_dispatch_kernarg_layout_t** out_layout,
-    const iree_hal_amdgpu_kernarg_layout_t** out_native_layout,
+    const iree_hal_amdgpu_kernarg_layout_t** out_kernarg_layout,
+    const iree_hal_amdgpu_device_dispatch_kernarg_layout_t** out_custom_layout,
     uint32_t* out_kernarg_block_count,
     iree_host_size_t* out_operation_resource_count) {
-  *out_layout = NULL;
-  *out_native_layout = NULL;
+  *out_kernarg_layout = NULL;
+  *out_custom_layout = NULL;
   *out_kernarg_block_count = 0;
   *out_operation_resource_count = 0;
 
@@ -267,10 +252,11 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
           "custom dispatch argument data must be non-null when length is "
           "non-zero");
     }
-    *out_layout = &descriptor->custom_kernarg_layout;
+    *out_custom_layout = &descriptor->custom_kernarg_layout;
     *out_kernarg_block_count =
         iree_max(1u, descriptor->custom_kernarg_block_count);
-    if ((*out_layout)->total_kernarg_size == 0 && constants.data_length > 0) {
+    if ((*out_custom_layout)->total_kernarg_size == 0 &&
+        constants.data_length > 0) {
       const iree_host_size_t provided_kernarg_block_count =
           iree_host_size_ceil_div(constants.data_length,
                                   sizeof(iree_hal_amdgpu_kernarg_block_t));
@@ -295,10 +281,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
           "dispatch constant data must be non-null when length is non-zero");
     }
     const iree_host_size_t expected_constant_length =
-        descriptor->kernarg_layout
-            ? descriptor->kernarg_layout->constant_byte_length
-            : (iree_host_size_t)descriptor->kernel_args.constant_count *
-                  sizeof(uint32_t);
+        descriptor->kernarg_layout->constant_byte_length;
     if (IREE_UNLIKELY(constants.data_length != expected_constant_length)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -307,8 +290,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
           expected_constant_length, constants.data_length);
     }
     const iree_host_size_t expected_binding_count =
-        descriptor->kernarg_layout ? descriptor->kernarg_layout->binding_count
-                                   : descriptor->kernel_args.binding_count;
+        descriptor->kernarg_layout->binding_count;
     if (IREE_UNLIKELY(bindings.count != expected_binding_count)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -331,16 +313,8 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
           "dispatch bindings must be non-null when count is non-zero");
     }
     operation_resource_count = 1 + bindings.count;
-    if (descriptor->kernarg_layout) {
-      *out_native_layout = descriptor->kernarg_layout;
-      IREE_RETURN_IF_ERROR(iree_hal_amdgpu_host_queue_kernarg_block_count(
-          descriptor->kernarg_layout->kernarg_byte_length,
-          out_kernarg_block_count));
-    } else {
-      *out_layout = &descriptor->hal_kernarg_layout;
-      *out_kernarg_block_count =
-          iree_max(1u, descriptor->hal_kernarg_block_count);
-    }
+    *out_kernarg_layout = descriptor->kernarg_layout;
+    *out_kernarg_block_count = iree_max(1u, descriptor->kernarg_block_count);
   }
 
   if (iree_hal_dispatch_uses_indirect_parameters(flags)) {
@@ -386,7 +360,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_prepare_dispatch_plan(
 
   return iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
       queue, out_plan->descriptor, constants, bindings, flags,
-      &out_plan->layout, &out_plan->native_layout,
+      &out_plan->kernarg_layout, &out_plan->custom_layout,
       &out_plan->kernarg_block_count, &out_plan->operation_resource_count);
 }
 
@@ -526,28 +500,19 @@ static void iree_hal_amdgpu_host_queue_emplace_dispatch_kernargs(
     bool uses_custom_direct_arguments, void* kernarg_data) {
   if (uses_custom_direct_arguments) {
     iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
-        plan->layout, constants.data, constants.data_length, kernarg_data);
+        plan->custom_layout, constants.data, constants.data_length,
+        kernarg_data);
     iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
         plan->kernel_args, workgroup_count, dynamic_workgroup_local_memory,
-        plan->layout, kernarg_data);
+        plan->custom_layout, kernarg_data);
     return;
   }
 
-  if (plan->native_layout) {
-    iree_hal_amdgpu_kernarg_layout_emplace_explicit_args(
-        plan->native_layout, binding_ptrs, constants, kernarg_data);
-    iree_hal_amdgpu_host_queue_emplace_native_implicit_args(
-        plan->kernel_args, workgroup_count, dynamic_workgroup_local_memory,
-        plan->native_layout, kernarg_data);
-    return;
-  }
-
-  iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
-      plan->kernel_args, plan->layout, binding_ptrs,
-      (const uint32_t*)constants.data, kernarg_data);
-  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+  iree_hal_amdgpu_kernarg_layout_emplace_explicit_args(
+      plan->kernarg_layout, binding_ptrs, constants, kernarg_data);
+  iree_hal_amdgpu_host_queue_emplace_native_implicit_args(
       plan->kernel_args, workgroup_count, dynamic_workgroup_local_memory,
-      plan->layout, kernarg_data);
+      plan->kernarg_layout, kernarg_data);
 }
 
 static bool iree_hal_amdgpu_host_queue_should_profile_dispatch(
@@ -867,14 +832,14 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_indirect_dispatch(
   dispatch_packet->dispatch.completion_signal = dispatch_completion_signal;
 
   iree_amdgpu_kernel_implicit_args_t* implicit_args =
-      plan->native_layout
-          ? iree_hal_amdgpu_host_queue_native_implicit_args(
-                plan->native_layout, dispatch_kernarg_data)
-          : (plan->layout->has_implicit_args
+      uses_custom_direct_arguments
+          ? (plan->custom_layout->has_implicit_args
                  ? (iree_amdgpu_kernel_implicit_args_t*)(dispatch_kernarg_data +
-                                                         plan->layout
+                                                         plan->custom_layout
                                                              ->implicit_args_offset)
-                 : NULL);
+                 : NULL)
+          : iree_hal_amdgpu_host_queue_native_implicit_args(
+                plan->kernarg_layout, dispatch_kernarg_data);
   const uint16_t dispatch_setup = dispatch_packet->dispatch.setup;
   const iree_hsa_fence_scope_t dispatch_acquire_scope =
       iree_hal_amdgpu_host_queue_kernarg_acquire_scope(

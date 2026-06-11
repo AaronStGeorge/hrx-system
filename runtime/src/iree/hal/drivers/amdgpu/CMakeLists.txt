@@ -223,7 +223,6 @@ iree_cc_library(
     iree::base::core_headers
     iree::base::internal
     iree::base::internal::arena
-    iree::base::internal::flatcc::parsing
     iree::base::threading
     iree::base::threading::thread
     iree::hal
@@ -255,12 +254,8 @@ iree_cc_library(
     iree::hal::memory::tlsf_pool
     iree::hal::memory::tracing
     iree::hal::utils::elf_format
-    iree::hal::utils::executable_debug_info
-    iree::hal::utils::executable_header
     iree::hal::utils::files
     iree::hal::utils::resource_set
-    iree::schemas::amdgpu_executable_def_c_fbs
-    iree::schemas::executable_debug_info_c_fbs
   PUBLIC
 )
 endif()
@@ -605,10 +600,8 @@ iree_cc_test(
     ::headers
     iree::base
     iree::base::core_headers
-    iree::base::internal::flatcc::building
     iree::hal
     iree::hal::drivers::amdgpu::util::hsaco_metadata
-    iree::schemas::amdgpu_executable_def_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

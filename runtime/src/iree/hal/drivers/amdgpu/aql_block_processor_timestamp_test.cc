@@ -75,10 +75,9 @@ static DirectDispatchBlock MakeDirectDispatchBlock() {
   block.dispatch_command.payload_reference = sizeof(block.dispatch_command);
   block.dispatch_command.kernarg_length_qwords =
       sizeof(block.tail) / sizeof(uint64_t);
-  block.dispatch_command.payload.tail_length_qwords =
-      sizeof(block.tail) / sizeof(uint64_t);
-  block.dispatch_command.kernarg_strategy =
-      IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_CUSTOM_DIRECT;
+  block.dispatch_command.payload.binding_source_count = 0;
+  block.dispatch_command.kernarg_storage_mode =
+      IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STORAGE_MODE_CUSTOM_DIRECT;
   block.dispatch_command.implicit_args_offset_qwords = UINT16_MAX;
   block.dispatch_command.setup = 3;
   block.dispatch_command.workgroup_size[0] = 4;
