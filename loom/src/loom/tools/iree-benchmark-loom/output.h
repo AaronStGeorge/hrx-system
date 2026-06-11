@@ -105,7 +105,7 @@ typedef struct iree_benchmark_loom_artifact_bundle_t {
   char* target_listing_dir_storage;
   // Borrowed view into |hal_executable_dir_storage|.
   iree_string_view_t hal_executable_dir;
-  // Owned debug HAL executable package directory inside |dir|.
+  // Owned debug HAL executable artifact directory inside |dir|.
   char* hal_executable_dir_storage;
   // Owned file references observed while the run executed.
   iree_benchmark_loom_bundle_file_entry_t* file_entries;

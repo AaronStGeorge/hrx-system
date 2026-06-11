@@ -1,10 +1,10 @@
 // RUN: roundtrip
 
-kernel.def @index_madd_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_madd_global_b32() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c4, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -21,12 +21,12 @@ kernel.def @index_madd_global_b32(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @index_madd_u24_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_madd_u24_global_b32() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   %c8 = index.constant 8 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 7)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -43,12 +43,12 @@ kernel.def @index_madd_u24_global_b32(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @index_madd_u24_literal_lhs_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_madd_u24_literal_lhs_global_b32() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   %c8 = index.constant 8 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 7)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -65,12 +65,12 @@ kernel.def @index_madd_u24_literal_lhs_global_b32(%input: buffer, %output: buffe
 
 // ====
 
-kernel.def @index_madd_u24_literal_addend_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_madd_u24_literal_addend_global_b32() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   %c8 = index.constant 8 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 7)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -87,11 +87,11 @@ kernel.def @index_madd_u24_literal_addend_global_b32(%input: buffer, %output: bu
 
 // ====
 
-kernel.def @index_madd_constant_addend_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_madd_constant_addend_global_b32() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %zero = index.constant 0 : offset
@@ -107,11 +107,11 @@ kernel.def @index_madd_constant_addend_global_b32(%input: buffer, %output: buffe
 
 // ====
 
-kernel.def @index_shli_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_shli_global_b32() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 3)] : index
   %zero = index.constant 0 : offset
@@ -126,11 +126,11 @@ kernel.def @index_shli_global_b32(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @index_shli_previous_row_global_b128(%input: buffer, %output: buffer) {
+kernel.def @index_shli_previous_row_global_b128() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 1, 31)] : index
   %base_offset = index.constant 0 : offset
@@ -147,11 +147,11 @@ kernel.def @index_shli_previous_row_global_b128(%input: buffer, %output: buffer)
 
 // ====
 
-kernel.def @index_div_rem_power_of_two_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_div_rem_power_of_two_global_b32() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 31)] : index
   %base_offset = index.constant 0 : offset
@@ -167,11 +167,11 @@ kernel.def @index_div_rem_power_of_two_global_b32(%input: buffer, %output: buffe
 
 // ====
 
-kernel.def @index_div_rem_magic_mul_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_div_rem_magic_mul_global_b32() {
   %c1 = index.constant 1 : index
   %c25 = index.constant 25 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c25, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 24)] : index
   %base_offset = index.constant 0 : offset
@@ -187,11 +187,11 @@ kernel.def @index_div_rem_magic_mul_global_b32(%input: buffer, %output: buffer) 
 
 // ====
 
-kernel.def @index_div_rem_magic_add_global_b32(%input: buffer, %output: buffer) {
+kernel.def @index_div_rem_magic_add_global_b32() {
   %c1 = index.constant 1 : index
   %c49 = index.constant 49 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c49, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 48)] : index
   %base_offset = index.constant 0 : offset
@@ -207,11 +207,11 @@ kernel.def @index_div_rem_magic_add_global_b32(%input: buffer, %output: buffer) 
 
 // ====
 
-kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
+kernel.def @workitem_y_lds_uses_explicit_vaddr() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c64, %c1) : index
-} launch {
+} launch(%output: buffer) {
   %y0 = kernel.workitem.id<y> : index
   %y = index.assume %y0 [range(%y0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -228,12 +228,12 @@ kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
 
 // ====
 
-kernel.def @dispatch_id_xy_global_b32(%output: buffer) {
+kernel.def @dispatch_id_xy_global_b32() {
   %c1 = index.constant 1 : index
   %c8 = index.constant 8 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
-} launch {
+} launch(%output: buffer) {
   %dispatch_x0 = kernel.workitem.dispatch.id<x> : index
   %dispatch_x = index.assume %dispatch_x0 [range(%dispatch_x0, 0, 31)] : index
   %dispatch_y0 = kernel.workitem.dispatch.id<y> : index

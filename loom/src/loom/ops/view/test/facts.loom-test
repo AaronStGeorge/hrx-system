@@ -34,7 +34,7 @@ kernel.def @kernel_buffer_arg_memory_space_global(%buffer: buffer) {
   %workgroups = index.cast %config_space : i64 to index
   %one = index.constant 1 : index
   kernel.launch.config workgroups(%workgroups, %one, %one) workgroup_size(%one, %one, %one) : index
-} launch {
+} launch(%buffer: buffer) {
   %zero = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%zero] : buffer -> view<1xi64, %layout>
@@ -49,7 +49,7 @@ kernel.def @kernel_buffer_arg_memory_space_global(%buffer: buffer) {
   %workgroups = index.constant 1 : index
   %one = index.constant 1 : index
   kernel.launch.config workgroups(%workgroups, %one, %one) workgroup_size(%one, %one, %one) : index
-} launch {
+} launch(%buffer: buffer) {
   %zero = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%zero] : buffer -> view<1xi64, %layout>

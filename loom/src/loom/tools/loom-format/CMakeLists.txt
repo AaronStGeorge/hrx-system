@@ -43,7 +43,8 @@ loom_cc_binary(
     iree::base::tooling::flags
     iree::io::file_handle
     loom::error::diagnostic
-    loom::ops::op_registry
+    loom::target::configured::provider
+    loom::tooling::context
     loom::tooling::io::file
     loom::util::stream
 )

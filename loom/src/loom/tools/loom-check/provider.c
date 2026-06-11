@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 
+#include "loom/tooling/context/context.h"
 #include "loom/tools/loom-check/main.h"
 
 enum {
@@ -109,9 +110,8 @@ static iree_status_t loom_check_provider_register_context(
     void* user_data, loom_context_t* context) {
   loom_check_provider_environment_state_t* state =
       (loom_check_provider_environment_state_t*)user_data;
-  IREE_RETURN_IF_ERROR(loom_check_register_production_context(NULL, context));
-  return loom_target_environment_register_context(&state->target_environment,
-                                                  context);
+  return loom_tooling_context_register_tool_dialects_with_target_environment(
+      &state->target_environment, context);
 }
 
 static iree_status_t loom_check_provider_initialize_low_descriptor_registry(

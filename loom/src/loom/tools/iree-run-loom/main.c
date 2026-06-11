@@ -15,8 +15,8 @@
 #include "iree/base/tooling/flags.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
-#include "loom/ops/op_registry.h"
 #include "loom/tooling/compile/pipeline.h"
+#include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/execution_backend.h"
 #include "loom/tooling/execution/one_shot.h"
@@ -68,7 +68,7 @@ IREE_FLAG(string, emit_target_artifact, "",
           "Optional output path for the selected HAL backend's target-native "
           "artifact, such as AMDGPU HSACO.");
 IREE_FLAG(string, emit_hal_executable, "",
-          "Optional output path for the HAL executable package passed to the "
+          "Optional output path for the executable artifact passed to the HAL "
           "runtime loader.");
 IREE_FLAG(bool, emit_only, false,
           "Stops after HAL executable emission without dispatching.");
@@ -215,7 +215,7 @@ static iree_status_t iree_run_loom_register_context(void* user_data,
                                                     loom_context_t* context) {
   const iree_run_loom_configuration_t* configuration =
       (const iree_run_loom_configuration_t*)user_data;
-  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
+  IREE_RETURN_IF_ERROR(loom_tooling_context_register_tool_dialects(context));
   if (configuration->register_context.fn == NULL) {
     return iree_ok_status();
   }

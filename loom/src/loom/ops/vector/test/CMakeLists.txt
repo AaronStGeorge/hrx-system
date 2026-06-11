@@ -15,7 +15,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/block_quant_canonicalize.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -26,7 +26,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/block_quant_samples.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -37,7 +37,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/bytecode.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -48,7 +48,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/canonicalize.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -59,7 +59,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/facts.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -70,7 +70,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -81,7 +81,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -92,7 +92,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_atomics.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -103,7 +103,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_cleanup.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -114,7 +114,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_memory.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -125,7 +125,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )

@@ -13,7 +13,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
-#include "loom/ops/op_registry.h"
+#include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/executor.h"
@@ -44,7 +44,7 @@ static iree_status_t iree_test_loom_register_context(void* user_data,
                                                      loom_context_t* context) {
   const iree_test_loom_configuration_t* configuration =
       (const iree_test_loom_configuration_t*)user_data;
-  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
+  IREE_RETURN_IF_ERROR(loom_tooling_context_register_tool_dialects(context));
   if (configuration->register_context.fn == NULL) {
     return iree_ok_status();
   }

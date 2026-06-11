@@ -29,7 +29,6 @@ _ensure_runtime_py_on_path()
 from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.encoding import (  # noqa: E402
     AMDGPU_ENCODING_FIELD_IDS,
-    AMDGPU_ENCODING_FIELD_NAMES,
     AMDGPU_ENCODING_FORMAT_IDS,
 )
 from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
@@ -339,16 +338,9 @@ def _emit_header(
         'extern "C" {',
         "#endif",
         "",
-        "#ifndef LOOM_AMDGPU_ENCODING_FIELD_IDS_DEFINED_",
-        "#define LOOM_AMDGPU_ENCODING_FIELD_IDS_DEFINED_",
-        "enum {",
     ]
-    lines.extend(f"  LOOM_AMDGPU_ENCODING_FIELD_{_c_identifier(name)} = {AMDGPU_ENCODING_FIELD_IDS[name]}," for name in AMDGPU_ENCODING_FIELD_NAMES)
     lines.extend(
         [
-            "};",
-            "#endif  // LOOM_AMDGPU_ENCODING_FIELD_IDS_DEFINED_",
-            "",
             f"const loom_amdgpu_encoding_table_t* {table_function}(void);",
             "",
             "#ifdef __cplusplus",

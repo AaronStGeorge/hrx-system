@@ -21,7 +21,7 @@ typedef enum loom_target_compile_artifact_kind_e {
   LOOM_TARGET_COMPILE_ARTIFACT_KIND_NONE = 0,
   // IREE VM bytecode archive artifact.
   LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE = 1,
-  // IREE HAL executable container artifact.
+  // IREE HAL loader executable artifact.
   LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE = 2,
   // Target-native HAL kernel library artifact.
   LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_KERNEL_LIBRARY = 3,

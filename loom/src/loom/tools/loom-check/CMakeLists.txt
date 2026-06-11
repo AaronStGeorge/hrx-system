@@ -130,7 +130,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::ir
-    loom::ops::op_registry
   TESTONLY
   PUBLIC
 )
@@ -324,7 +323,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::base::tooling::flags
-    loom::ops::op_registry
   TESTONLY
   PUBLIC
 )
@@ -334,9 +332,34 @@ loom_cc_library(
     provider
   HDRS
     "provider.h"
+  SRCS
+    "provider.c"
   DEPS
+    ::main
     iree::base
     loom::target::provider
+    loom::tooling::context
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    test_provider
+  HDRS
+    "test_provider.h"
+  SRCS
+    "test_provider.c"
+  DEPS
+    ::execute
+    ::provider
+    iree::base
+    loom::codegen::low::allocation
+    loom::codegen::low::packet_hazard_plan
+    loom::codegen::low::packet_hazard_plan_json
+    loom::codegen::low::packet_progress
+    loom::ir
+    loom::target::test::provider
   TESTONLY
   PUBLIC
 )
@@ -358,24 +381,68 @@ loom_cc_test(
     loom::util::stream
 )
 
+set(_loom_check_platform_copts "")
+if(LOOM_EMIT_AMDGPU)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_AMDGPU=1")
+endif()
+if(LOOM_TARGET_ARCH_IREE_VM)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_IREE_VM=1")
+endif()
+if(LOOM_EMIT_LLVMIR)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_LLVMIR=1")
+endif()
+if(LOOM_TARGET_ARCH_SPIRV)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_SPIRV=1")
+endif()
+if(LOOM_EMIT_SPIRV)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_SPIRV=1")
+endif()
+if(LOOM_TARGET_ARCH_WASM)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_WASM=1")
+endif()
+if(LOOM_EMIT_WASM)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_WASM=1")
+endif()
+if(LOOM_TARGET_ARCH_X86)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_X86=1")
+endif()
+set(_loom_check_platform_deps "")
+if(LOOM_EMIT_AMDGPU)
+  list(APPEND _loom_check_platform_deps loom::target::arch::amdgpu::check::provider)
+endif()
+if(LOOM_TARGET_ARCH_IREE_VM)
+  list(APPEND _loom_check_platform_deps loom::target::arch::ireevm::check::check_provider)
+endif()
+if(LOOM_EMIT_LLVMIR)
+  list(APPEND _loom_check_platform_deps loom::target::emit::llvmir::check_provider)
+endif()
+if(LOOM_TARGET_ARCH_SPIRV)
+  list(APPEND _loom_check_platform_deps loom::target::arch::spirv::check::check_provider)
+endif()
+if(LOOM_EMIT_SPIRV)
+  list(APPEND _loom_check_platform_deps loom::target::emit::spirv::check_provider)
+endif()
+if(LOOM_TARGET_ARCH_WASM)
+  list(APPEND _loom_check_platform_deps loom::target::arch::wasm::check::check_provider)
+endif()
+if(LOOM_EMIT_WASM)
+  list(APPEND _loom_check_platform_deps loom::target::emit::wasm::check_provider)
+endif()
+if(LOOM_TARGET_ARCH_X86)
+  list(APPEND _loom_check_platform_deps loom::target::arch::x86::check::check_provider)
+endif()
 loom_cc_binary(
   NAME
-    loom-check-test
+    loom-check
   SRCS
-    "loom-check-test.c"
+    "loom-check.c"
+  COPTS
+    ${_loom_check_platform_copts}
   DEPS
-    ::execute
-    ::main
+    ::provider
+    ::test_provider
     iree::base
-    loom::codegen::low::allocation
-    loom::codegen::low::packet_hazard_plan
-    loom::codegen::low::packet_hazard_plan_json
-    loom::codegen::low::packet_progress
-    loom::ir
-    loom::ops::test
-    loom::pass::test::registry
-    loom::target::low_descriptor_registry_core_test
-    loom::target::test::lower
+    ${_loom_check_platform_deps}
   TESTONLY
 )
 

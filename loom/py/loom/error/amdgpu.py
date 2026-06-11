@@ -463,7 +463,7 @@ ERR_AMDGPU_025 = ErrorDef(
     message=(
         "AMDGPU HAL-kernel ABI direct argument {argument_index} requires "
         "descriptor register-class ID {expected_reg_class_id} with "
-        "{expected_unit_count} unit(s), but found {actual_type}"
+        "1-{expected_unit_count} unit(s), but found {actual_type}"
     ),
     params=(
         ErrorParam("argument_index", ParamKind.U32),

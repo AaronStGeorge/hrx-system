@@ -5,6 +5,14 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load(
+    "//loom/build_tools/amdgpu:descriptor_sets.bzl",
+    "loom_amdgpu_descriptor_set_compatible_with",
+)
+load(
+    "//loom/build_tools/amdgpu:target_config.bzl",
+    "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY",
+)
+load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
@@ -22,7 +30,7 @@ package(
 
 _AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
 
-_AMDGPU_HAL_VISIBILITY = ["//loom/src/loom/target/emit/native/amdgpu/hal:__pkg__"]
+_DESCRIPTOR_SET_RDNA3 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3.core"]
 
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
@@ -159,12 +167,13 @@ loom_cc_library(
 loom_cc_test(
     name = "spill_lowering_test",
     srcs = ["spill_lowering_test.cc"],
+    target_compatible_with = loom_amdgpu_descriptor_set_compatible_with(_DESCRIPTOR_SET_RDNA3),
     deps = [
         ":spill_lowering",
         "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -283,22 +292,11 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "hal_kernel_metadata",
-    hdrs = ["hal_kernel_metadata.h"],
-    visibility = _AMDGPU_HAL_VISIBILITY,
-    deps = [
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "hal_kernel_library",
     srcs = ["hal_kernel_library.c"],
     hdrs = ["hal_kernel_library.h"],
     visibility = _AMDGPU_TOOLING_VISIBILITY,
     deps = [
-        ":hal_kernel_metadata",
         ":kernel_assembly",
         ":kernel_hsaco",
         ":preflight",
@@ -341,12 +339,16 @@ loom_cc_test(
     srcs = ["hal_kernel_library_test.cc"],
     deps = [
         ":hal_kernel_library",
+        "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target/arch/amdgpu:error_defs",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/ops",
+        "//loom/src/loom/target/arch/amdgpu/records:target_records",
         "//loom/src/loom/testing:diagnostic_matchers",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -388,6 +390,7 @@ loom_cc_test(
         ":descriptor",
         ":hsaco",
         ":metadata",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/emit/native:elf",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -433,7 +436,7 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target/arch/amdgpu:target_info",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry_for_testing",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/hal:binding_materialization",
         "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
         "//loom/src/loom/target/arch/amdgpu/ops",

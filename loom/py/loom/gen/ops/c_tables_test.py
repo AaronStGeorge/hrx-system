@@ -1087,8 +1087,14 @@ def test_flags_attrs_do_not_shift_regular_attr_indices() -> None:
     assert "{LOOM_FORMAT_KIND_ATTR_VALUE, 2, 0}" not in tables_c
 
 
-def test_enum_keywords_with_dots_generate_valid_c_constants() -> None:
-    intrinsic_kind = EnumDef("Kind", [EnumCase("llvm.x86.rdtsc", 0)])
+def test_enum_keywords_with_punctuation_generate_valid_c_constants() -> None:
+    intrinsic_kind = EnumDef(
+        "Kind",
+        [
+            EnumCase("llvm.x86.rdtsc", 0),
+            EnumCase("gfx11-generic", 1),
+        ],
+    )
     op = Op(
         "test.intrinsic",
         group=Dialect("test"),
@@ -1100,8 +1106,11 @@ def test_enum_keywords_with_dots_generate_valid_c_constants() -> None:
     tables_c = generate_tables_c("test", 0, [op])
 
     assert "LOOM_TEST_INTRINSIC_KIND_LLVM_X86_RDTSC = 0," in ops_h
+    assert "LOOM_TEST_INTRINSIC_KIND_GFX11_GENERIC = 1," in ops_h
     assert "LOOM_TEST_INTRINSIC_KIND_LLVM.X86.RDTSC" not in ops_h
+    assert "LOOM_TEST_INTRINSIC_KIND_GFX11-GENERIC" not in ops_h
     assert '"llvm.x86.rdtsc"' in tables_c
+    assert '"gfx11-generic"' in tables_c
 
 
 def test_template_param_flags_uses_template_attr_and_instance_flags() -> None:

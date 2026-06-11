@@ -9,7 +9,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/target/arch/amdgpu/descriptors/cdna3_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/planning/wait_plan.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
@@ -73,6 +73,10 @@ class AmdgpuStorageLeaseTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     iree_arena_initialize(&block_pool_, &arena_);
+    loom_amdgpu_low_descriptor_registry_initialize(&low_registry_);
+    descriptor_set_ = loom_low_descriptor_registry_lookup(
+        &low_registry_.registry, IREE_SV("amdgpu.cdna3.core"));
+    ASSERT_NE(descriptor_set_, nullptr);
   }
 
   void TearDown() override {
@@ -82,9 +86,7 @@ class AmdgpuStorageLeaseTest : public ::testing::Test {
 
   iree_status_t BuildLeaseTable(const loom_low_descriptor_t* descriptor,
                                 loom_low_storage_lease_table_t* out_table) {
-    const loom_low_descriptor_set_t* descriptor_set =
-        loom_amdgpu_cdna3_core_descriptor_set();
-    InitializeScheduleFixture(descriptor_set, descriptor, &fixture_);
+    InitializeScheduleFixture(descriptor_set_, descriptor, &fixture_);
     loom_low_storage_lease_provider_t provider = {};
     loom_amdgpu_storage_lease_provider(&provider);
     return loom_low_storage_lease_build(&fixture_.schedule, &provider, &arena_,
@@ -93,15 +95,15 @@ class AmdgpuStorageLeaseTest : public ::testing::Test {
 
   iree_arena_block_pool_t block_pool_;
   iree_arena_allocator_t arena_;
+  loom_target_low_descriptor_registry_t low_registry_ = {};
+  const loom_low_descriptor_set_t* descriptor_set_ = nullptr;
   ScheduleFixture fixture_;
 };
 
 TEST_F(AmdgpuStorageLeaseTest, LeasesBufferStoreVgprSources) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_amdgpu_cdna3_core_descriptor_set();
   const loom_low_descriptor_t* descriptor =
       loom_amdgpu_descriptor_ref_descriptor(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORD);
+          descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORD);
   ASSERT_NE(descriptor, nullptr);
   ASSERT_EQ(descriptor->storage_lease_count, 2u);
 
@@ -133,11 +135,9 @@ TEST_F(AmdgpuStorageLeaseTest, LeasesBufferStoreVgprSources) {
 }
 
 TEST_F(AmdgpuStorageLeaseTest, LeasesGlobalLoadResult) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_amdgpu_cdna3_core_descriptor_set();
   const loom_low_descriptor_t* descriptor =
       loom_amdgpu_descriptor_ref_descriptor(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32);
+          descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32);
   ASSERT_NE(descriptor, nullptr);
   ASSERT_EQ(descriptor->storage_lease_count, 1u);
 
@@ -157,11 +157,9 @@ TEST_F(AmdgpuStorageLeaseTest, LeasesGlobalLoadResult) {
 }
 
 TEST_F(AmdgpuStorageLeaseTest, LeasesScalarLoadResult) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_amdgpu_cdna3_core_descriptor_set();
   const loom_low_descriptor_t* descriptor =
       loom_amdgpu_descriptor_ref_descriptor(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BUFFER_LOAD_DWORD);
+          descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_S_BUFFER_LOAD_DWORD);
   ASSERT_NE(descriptor, nullptr);
   ASSERT_EQ(descriptor->storage_lease_count, 1u);
 
@@ -180,11 +178,9 @@ TEST_F(AmdgpuStorageLeaseTest, LeasesScalarLoadResult) {
 }
 
 TEST_F(AmdgpuStorageLeaseTest, DoesNotLeaseLdsStoreSourcesAsVmem) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_amdgpu_cdna3_core_descriptor_set();
   const loom_low_descriptor_t* descriptor =
       loom_amdgpu_descriptor_ref_descriptor(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32);
+          descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32);
   ASSERT_NE(descriptor, nullptr);
   ASSERT_EQ(descriptor->storage_lease_count, 0u);
 

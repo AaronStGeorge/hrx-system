@@ -13,15 +13,12 @@
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/emit/native/amdgpu/hal/executable.h"
 #include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
 #include "loom/tooling/execution/hal/runtime.h"
 
 typedef struct loom_amdgpu_hal_artifact_storage_t {
-  // Target-native HSACO artifact and export metadata.
+  // Target-native HSACO artifact storage.
   loom_amdgpu_hal_kernel_library_t kernel_library;
-  // IREE HAL executable package consumed by the AMDGPU loader.
-  loom_amdgpu_hal_executable_t hal_executable;
 } loom_amdgpu_hal_artifact_storage_t;
 
 static iree_status_t loom_amdgpu_hal_artifact_provider_format_target_id(
@@ -30,26 +27,6 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_format_target_id(
   iree_string_builder_reset(builder);
   return loom_amdgpu_amdhsa_target_id_append(processor,
                                              iree_string_view_empty(), builder);
-}
-
-static iree_status_t loom_amdgpu_hal_artifact_processor_is_supported(
-    const loom_amdgpu_processor_info_t* processor, bool* out_supported) {
-  *out_supported = false;
-  if (iree_string_view_is_empty(processor->processor) ||
-      iree_string_view_is_empty(processor->descriptor_set_key) ||
-      processor->descriptor_set_ordinal ==
-          LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
-      processor->elf_machine_flags == 0 ||
-      processor->kernel_descriptor_profile ==
-          LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE) {
-    return iree_ok_status();
-  }
-
-  const loom_amdgpu_descriptor_set_info_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
-      processor->descriptor_set_ordinal, &descriptor_set));
-  *out_supported = descriptor_set->supports_descriptor_packet_encoding;
-  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
@@ -75,8 +52,8 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
     const loom_amdgpu_processor_info_t* processor =
         loom_amdgpu_target_info_processor_at(i);
     bool emit_supported = false;
-    status = loom_amdgpu_hal_artifact_processor_is_supported(processor,
-                                                             &emit_supported);
+    status = loom_amdgpu_target_info_processor_supports_hsaco(processor,
+                                                              &emit_supported);
     if (!iree_status_is_ok(status) || !emit_supported) {
       continue;
     }
@@ -112,6 +89,49 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
         provider->target_family_name.data);
   }
   return status;
+}
+
+static iree_status_t loom_amdgpu_hal_artifact_provider_select_target_key(
+    const loom_run_hal_artifact_provider_t* provider,
+    iree_string_view_t target_key, iree_allocator_t allocator,
+    loom_run_hal_device_target_t* out_target) {
+  IREE_ASSERT_ARGUMENT(provider);
+  IREE_ASSERT_ARGUMENT(out_target);
+  (void)allocator;
+
+  *out_target = (loom_run_hal_device_target_t){0};
+
+  const loom_amdgpu_processor_info_t* processor = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_target_info_lookup_processor(target_key, &processor));
+  bool emit_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_processor_supports_hsaco(
+      processor, &emit_supported));
+  if (!emit_supported) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "AMDGPU processor '%.*s' cannot be emitted as "
+                            "HSACO by Loom",
+                            (int)target_key.size, target_key.data);
+  }
+
+  const loom_target_bundle_t* target_bundle =
+      loom_amdgpu_target_bundle_for_descriptor_set(
+          processor->descriptor_set_ordinal);
+  if (target_bundle == NULL) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "AMDGPU processor '%.*s' has no Loom target "
+                            "bundle for descriptor set '%.*s'",
+                            (int)target_key.size, target_key.data,
+                            (int)processor->descriptor_set_key.size,
+                            processor->descriptor_set_key.data);
+  }
+
+  *out_target = (loom_run_hal_device_target_t){
+      .data = processor,
+      .target_bundle = target_bundle,
+      .target_key = processor->processor,
+  };
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_hal_artifact_provider_validate_target_symbol(
@@ -269,33 +289,23 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
       module, &library_options, allocator, &library_emitted,
       &storage->kernel_library);
   if (iree_status_is_ok(status) && library_emitted) {
-    status = loom_amdgpu_package_hal_executable(
-        storage->kernel_library.executable_format,
+    iree_const_byte_span_t hsaco_data =
         iree_make_const_byte_span(storage->kernel_library.hsaco_data,
-                                  storage->kernel_library.hsaco_data_length),
-        storage->kernel_library.exports, storage->kernel_library.export_count,
-        allocator, &storage->hal_executable);
-  }
-  if (iree_status_is_ok(status) && library_emitted) {
+                                  storage->kernel_library.hsaco_data_length);
     *out_artifact = (loom_run_hal_artifact_t){
-        .executable_format = storage->hal_executable.executable_format,
+        .executable_format = storage->kernel_library.executable_format,
         .target_bundle = target->target_bundle,
         .target_artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-        .target_artifact_data = iree_make_const_byte_span(
-            storage->kernel_library.hsaco_data,
-            storage->kernel_library.hsaco_data_length),
+        .target_artifact_data = hsaco_data,
         .target_listing_format = storage->kernel_library.target_listing_format,
         .target_listing_data = iree_make_const_byte_span(
             (const uint8_t*)storage->kernel_library.target_listing_data,
             storage->kernel_library.target_listing_data_length),
-        .executable_data = iree_make_const_byte_span(
-            storage->hal_executable.data, storage->hal_executable.data_length),
+        .executable_data = hsaco_data,
         .storage = storage,
     };
     *out_emitted = true;
   } else {
-    loom_amdgpu_hal_executable_deinitialize(&storage->hal_executable,
-                                            allocator);
     loom_amdgpu_hal_kernel_library_deinitialize(&storage->kernel_library,
                                                 allocator);
     iree_allocator_free(allocator, storage);
@@ -312,7 +322,6 @@ static void loom_amdgpu_hal_artifact_provider_deinitialize_artifact(
   }
   loom_amdgpu_hal_artifact_storage_t* storage =
       (loom_amdgpu_hal_artifact_storage_t*)artifact->storage;
-  loom_amdgpu_hal_executable_deinitialize(&storage->hal_executable, allocator);
   loom_amdgpu_hal_kernel_library_deinitialize(&storage->kernel_library,
                                               allocator);
   iree_allocator_free(allocator, storage);
@@ -325,6 +334,7 @@ const loom_run_hal_artifact_provider_t loom_amdgpu_hal_artifact_provider = {
     .target_family_name = IREE_SVL("AMDGPU"),
     .select_device_target =
         loom_amdgpu_hal_artifact_provider_select_device_target,
+    .select_target_key = loom_amdgpu_hal_artifact_provider_select_target_key,
     .resolve_device_target_ref =
         loom_amdgpu_hal_artifact_provider_resolve_device_target_ref,
     .emit_artifact = loom_amdgpu_hal_artifact_provider_emit_artifact,

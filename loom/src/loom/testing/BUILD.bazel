@@ -19,8 +19,7 @@ loom_cc_library(
     hdrs = ["context.h"],
     deps = [
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/test",
+        "//loom/src/loom/tooling/context",
         "//runtime/src/iree/base",
     ],
 )

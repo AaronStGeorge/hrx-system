@@ -75,6 +75,13 @@ def bazel_pattern_to_ctest_regex(pattern: str) -> str:
     return "^" + re.escape(f"{package_path}/{target_name}") + "$"
 
 
+def bazel_loom_src_label_to_cmake_target(label: str) -> str:
+    if not label.startswith("//loom/src/loom/") or ":" not in label:
+        raise ValueError(f"expected exact Loom src Bazel label: {label}")
+    package_path, target_name = label.removeprefix("//loom/src/loom/").split(":", 1)
+    return "loom_" + package_path.replace("/", "_") + "_" + target_name
+
+
 def bazel_xfail_targets(xfails: tuple[TestXfail, ...]) -> tuple[str, ...]:
     return tuple(
         f"-{xfail.bazel_pattern}" for xfail in xfails if xfail.bazel_pattern is not None
@@ -136,16 +143,31 @@ AMDGPU_BAZEL_RESOURCE_SLICES = (
 RUNTIME_CTEST_RESOURCE_LABEL_PREFIX = "runtime-resource="
 CTEST_RESOURCE_LABEL_EXCLUDE_REGEX = RUNTIME_CTEST_RESOURCE_LABEL_PREFIX
 AMDGPU_CTEST_RESOURCE_LABEL_REGEX = "runtime-resource=amd-gpu"
-LOOM_AMDGPU_HAL_EXECUTION_XFAILS = (
-    # Loom's AMDGPU HAL artifact provider still emits the legacy flatbuffer
-    # executable container. The AMDGPU HAL runtime now loads raw HSACO
-    # metadata directly, so these execution suites stay out of AMDGPU CI until
-    # Loom switches to a raw artifact shape.
-    bazel_xfail("//loom/src/loom/tools/iree-test-loom:amdgpu_execution_test"),
-    bazel_xfail("//loom/src/loom/tools/iree-benchmark-loom:amdgpu_execution_test"),
+LOOM_AMDGPU_BAZEL_COMPILE_TEST_TARGETS = (
+    "//loom/src/loom/target/arch/amdgpu:target_info_test",
+    "//loom/src/loom/target/arch/amdgpu:registers_test",
+    "//loom/src/loom/target/arch/amdgpu:provider_test",
+    "//loom/src/loom/target/arch/amdgpu/encoding:encoding_test",
+    "//loom/src/loom/target/arch/amdgpu/matrix:contract_test",
+    "//loom/src/loom/target/arch/amdgpu/matrix:projection_test",
+    "//loom/src/loom/target/arch/amdgpu/planning:matrix_wait_states_test",
+    "//loom/src/loom/target/arch/amdgpu/planning:storage_lease_test",
+    "//loom/src/loom/target/emit/native/amdgpu:descriptor_test",
+    "//loom/src/loom/target/emit/native/amdgpu:hal_kernel_library_test",
+    "//loom/src/loom/target/emit/native/amdgpu:hsaco_test",
+    "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco_test",
+    "//loom/src/loom/target/emit/native/amdgpu:metadata_test",
+    "//loom/src/loom/target/emit/native/amdgpu:spill_lowering_test",
+    "//loom/src/loom/target/emit/native/amdgpu:storage_layout_test",
+    "//loom/src/loom/tooling/target/amdgpu:artifact_provider_test",
 )
-LOOM_AMDGPU_HAL_EXECUTION_CTEST_EXCLUDE_REGEX = ctest_exclude_regex(
-    LOOM_AMDGPU_HAL_EXECUTION_XFAILS
+LOOM_AMDGPU_CMAKE_COMPILE_TEST_BUILD_TARGETS = tuple(
+    bazel_loom_src_label_to_cmake_target(target)
+    for target in LOOM_AMDGPU_BAZEL_COMPILE_TEST_TARGETS
+)
+LOOM_AMDGPU_CMAKE_COMPILE_CTEST_REGEXES = tuple(
+    bazel_pattern_to_ctest_regex(target)
+    for target in LOOM_AMDGPU_BAZEL_COMPILE_TEST_TARGETS
 )
 AMDGPU_XFAILS = (
     bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/cts/..."),

@@ -1,11 +1,11 @@
 spirv.target<vulkan1_3> @target {abi = hal_kernel}
 
-kernel.def target(@target) @cooperative_matrix_f16_two_tiles(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+kernel.def target(@target) @cooperative_matrix_f16_two_tiles() {
   %two = index.constant 2 : index
   %unit = index.constant 1 : index
   %subgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%two, %unit, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
   %workgroup_x = kernel.workgroup.id<x> : index
   %lhs_tile_bytes = index.constant 512 : index
   %acc_tile_bytes = index.constant 1024 : index
@@ -51,13 +51,13 @@ check.case @cooperative_matrix_f16_two_tiles_case {
   check.return
 }
 
-kernel.def target(@target) @dense_projection_tiled_f16_128(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+kernel.def target(@target) @dense_projection_tiled_f16_128() {
   %m_tiles = index.constant 8 : index
   %n_tiles = index.constant 8 : index
   %unit = index.constant 1 : index
   %subgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%n_tiles, %m_tiles, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
   %workgroup_n = kernel.workgroup.id<x> : index
   %workgroup_m = kernel.workgroup.id<y> : index
   %k_tiles = index.constant 8 : index
@@ -118,12 +118,12 @@ check.case @dense_projection_tiled_f16_128_case {
 
 check.benchmark<@dense_projection_tiled_f16_128_case>
 
-kernel.def target(@target) @narrow_score_tiled_f16_128x16_m1(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+kernel.def target(@target) @narrow_score_tiled_f16_128x16_m1() {
   %m_tiles = index.constant 8 : index
   %unit = index.constant 1 : index
   %subgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%unit, %m_tiles, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
   %workgroup_m = kernel.workgroup.id<y> : index
   %k_tiles = index.constant 8 : index
   %n_tiles = index.constant 1 : index
@@ -166,12 +166,12 @@ kernel.def target(@target) @narrow_score_tiled_f16_128x16_m1(%lhs_buffer: buffer
   kernel.return
 }
 
-kernel.def target(@target) @narrow_score_tiled_f16_128x16_m2(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+kernel.def target(@target) @narrow_score_tiled_f16_128x16_m2() {
   %m_tile_pairs = index.constant 4 : index
   %unit = index.constant 1 : index
   %subgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%unit, %m_tile_pairs, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
   %workgroup_pair = kernel.workgroup.id<y> : index
   %k_tiles = index.constant 8 : index
   %n_tiles = index.constant 1 : index

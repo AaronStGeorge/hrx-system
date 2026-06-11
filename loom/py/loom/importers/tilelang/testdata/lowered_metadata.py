@@ -73,10 +73,10 @@ def lazy_if_then_else(tir: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("lazy_if_then_else") @lazy_if_then_else(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("lazy_if_then_else") @lazy_if_then_else() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%n: i32, %i: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -138,10 +138,10 @@ def tvm_access_ptr_atomic(tir: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tvm_access_ptr_atomic") @tvm_access_ptr_atomic(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tvm_access_ptr_atomic") @tvm_access_ptr_atomic() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -181,10 +181,10 @@ def tl_infinity_constant(tir: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tl_infinity_constant") @tl_infinity_constant(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tl_infinity_constant") @tl_infinity_constant() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>

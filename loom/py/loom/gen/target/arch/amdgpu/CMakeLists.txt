@@ -11,6 +11,20 @@ iree_add_all_subdirs()
 
 iree_py_library(
   NAME
+    config_tables
+  MAIN
+    "amdgpu_config_tables.py"
+  SRCS
+    "__init__.py"
+    "amdgpu_config_tables.py"
+  DEPS
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::arch::amdgpu::encoding_info
+    loom::py::loom::target::arch::amdgpu::target_info
+)
+
+iree_py_library(
+  NAME
     target_info
   MAIN
     "amdgpu_target_info.py"

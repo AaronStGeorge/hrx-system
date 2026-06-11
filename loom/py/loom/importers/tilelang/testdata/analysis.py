@@ -69,10 +69,10 @@ def scoped_tl_assume(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scoped_tl_assume") @scoped_tl_assume(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scoped_tl_assume") @scoped_tl_assume() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%n: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -129,10 +129,10 @@ def effect_tir_assume(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") @effect_tir_assume(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume") @effect_tir_assume() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%n: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -183,10 +183,10 @@ def nonrestrict_buffer_annotation(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("nonrestrict_buffer_annotation") @nonrestrict_buffer_annotation(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("nonrestrict_buffer_annotation") @nonrestrict_buffer_annotation() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %src = buffer.view %src_handle[%c0_bytes] : buffer -> view<4xf32, %layout>
@@ -250,10 +250,10 @@ def effect_tir_assume_buffer_load(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume_buffer_load") @effect_tir_assume_buffer_load(%n: i32, %src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("effect_tir_assume_buffer_load") @effect_tir_assume_buffer_load() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%n: i32, %src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -307,11 +307,11 @@ def mixed_address_scalar_assume(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") @mixed_address_scalar_assume(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("mixed_address_scalar_assume") @mixed_address_scalar_assume(%n: i32) {
   %n_idx = index.cast %n : i32 to index
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%n_idx, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -371,7 +371,7 @@ def derived_dynamic_buffer_dimension(tilelang: Any, T: Any) -> TileLangImportInp
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") @derived_dynamic_buffer_dimension(%src_handle: buffer, %scale_handle: buffer, %dst_handle: buffer, %n: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") @derived_dynamic_buffer_dimension(%n: i32) {
   %n_idx = index.cast %n : i32 to index
   %c128 = index.constant 128 : index
   %add = index.add %n_idx, %c128 : index
@@ -379,7 +379,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("derived_dynamic_buffer_dimension") 
   %sub = index.sub %add, %c1 : index
   %div = index.div %sub, %c128 : index
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %scale_handle: buffer, %dst_handle: buffer, %n: i32) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -448,10 +448,10 @@ def assume_or_static_false(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("assume_or_static_false") @assume_or_static_false(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("assume_or_static_false") @assume_or_static_false() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer, %n: i32) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

@@ -1928,6 +1928,22 @@ static iree_status_t loom_low_lower_emit_preamble(
   return status;
 }
 
+static iree_status_t loom_low_lower_emit_entry_setup(
+    loom_low_lower_context_t* context) {
+  if (context->policy->emit_entry_setup.fn == NULL) {
+    return iree_ok_status();
+  }
+
+  loom_region_t* low_body = loom_low_lower_low_body(context);
+  loom_builder_ip_t saved_ip = loom_builder_enter_region(
+      &context->builder, context->low_func_op, low_body);
+  loom_builder_set_block(&context->builder, loom_region_entry_block(low_body));
+  iree_status_t status = context->policy->emit_entry_setup.fn(
+      context->policy->emit_entry_setup.user_data, context);
+  loom_builder_restore(&context->builder, saved_ip);
+  return status;
+}
+
 static iree_status_t loom_low_lower_prepare_branches(
     loom_low_lower_context_t* context, loom_region_t* source_body) {
   if (context->policy->prepare_branch.fn == NULL) {
@@ -2748,8 +2764,10 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
   iree_status_t status = loom_low_lower_emit_region_ops(
       context, source_body, /*map_source_blocks=*/true);
   loom_builder_restore(&context->builder, saved_ip);
-  IREE_ASSERT_EQ(context->lowering.selected_plan_emit_index,
-                 context->lowering.selected_plan_count);
+  if (iree_status_is_ok(status)) {
+    IREE_ASSERT_EQ(context->lowering.selected_plan_emit_index,
+                   context->lowering.selected_plan_count);
+  }
   return status;
 }
 
@@ -2910,6 +2928,9 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     }
     if (iree_status_is_ok(status) && context.result->error_count == 0) {
       status = loom_low_lower_emit_argument_resource_imports(&context);
+    }
+    if (iree_status_is_ok(status) && context.result->error_count == 0) {
+      status = loom_low_lower_emit_entry_setup(&context);
     }
     if (iree_status_is_ok(status) && context.result->error_count == 0) {
       status = loom_low_lower_emit_body(&context, source_body);

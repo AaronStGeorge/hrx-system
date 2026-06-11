@@ -27,5 +27,4 @@ loom_check_test_suite(
         "vector_to_scalar_memory.loom-test",
         "verify.loom-test",
     ],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

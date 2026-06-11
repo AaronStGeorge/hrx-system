@@ -15,12 +15,18 @@ iree_py_library(
     name = "target_info",
     srcs = [
         "__init__.py",
+        "names.py",
         "target_info.py",
     ],
     deps = [
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch:package_init",
     ],
+)
+
+iree_py_library(
+    name = "encoding_info",
+    srcs = ["encoding.py"],
 )
 
 iree_py_library(
@@ -64,10 +70,10 @@ iree_py_library(
         "descriptors/memory.py",
         "descriptors/sets.py",
         "descriptors/workgroup.py",
-        "encoding.py",
         "target_info.py",
     ],
     deps = [
+        ":encoding_info",
         ":isa_xml",
         ":target_info",
         "//loom/py/loom/target:low_descriptors",

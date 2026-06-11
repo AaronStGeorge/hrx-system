@@ -27,5 +27,4 @@ loom_check_test_suite(
         "mathf_structural.loom-test",
         "poison.loom-test",
     ],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

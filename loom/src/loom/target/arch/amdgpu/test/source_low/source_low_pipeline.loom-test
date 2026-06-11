@@ -51,10 +51,10 @@ pass.pipeline<module> @__loom_check_source_low pipeline {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @prepared_pipeline_probe(%arg: buffer) {
+kernel.def target(@target) @prepared_pipeline_probe() {
   %one = index.constant 1 : index
   kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
-} launch {
+} launch(%arg: buffer) {
   kernel.return
 }
 

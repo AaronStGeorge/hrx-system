@@ -91,8 +91,8 @@ loom_cc_library(
     srcs = ["main.c"],
     hdrs = ["main.h"],
     deps = [
-        "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/tooling/context",
         "//loom/src/loom/tooling/execution:session",
         "//loom/src/loom/tooling/execution/hal:artifact",
         "//loom/src/loom/tooling/execution/hal:testbench_actual",

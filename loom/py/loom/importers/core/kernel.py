@@ -29,6 +29,15 @@ class KernelArgumentSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class KernelConfigArgumentSpec:
+    """One imported host launch configuration argument."""
+
+    ordinal: int
+    name: str
+    type: Type = INDEX
+
+
+@dataclass(frozen=True, slots=True)
 class KernelLaunchConfigSpec:
     """Static launch configuration for simple kernel importers."""
 
@@ -44,6 +53,7 @@ class KernelModuleSpec:
     export_symbol: str
     callee: str
     arguments: Sequence[KernelArgumentSpec]
+    config_arguments: Sequence[KernelConfigArgumentSpec] = ()
     target_symbol: str | None = None
     artifact_symbol: str | None = None
     export_ordinal: int | None = None
@@ -74,6 +84,12 @@ class KernelModuleShell:
         return self.config.blocks[0]
 
 
+@dataclass(frozen=True, slots=True)
+class _AmdgpuTargetSelection:
+    kind: str
+    processor: str | None = None
+
+
 def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
     """Create a Loom module containing one target record and one kernel.def."""
     module, builder = loom.module_builder(ops=kernel_module_ops(spec.target_preset))
@@ -97,15 +113,31 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
             target_symbol,
             spec.target_preset,
         )
-    names = NameAllocator()
-    arguments_by_ordinal = {
+    config_names = NameAllocator()
+    config_arguments_by_ordinal = {
         argument.ordinal: builder.value(
-            names.reserve_or_fresh(argument.name, fallback="arg"),
+            config_names.reserve_or_fresh(argument.name, fallback="arg"),
+            argument.type,
+        )
+        for argument in spec.config_arguments
+    }
+    body_names = NameAllocator()
+    body_arguments_by_ordinal = {
+        argument.ordinal: builder.value(
+            body_names.reserve_or_fresh(argument.name, fallback="arg"),
             argument.type,
         )
         for argument in spec.arguments
     }
-    config = builder.region()
+    config = builder.region(
+        args=[
+            (
+                config_arguments_by_ordinal[argument.ordinal].name,
+                config_arguments_by_ordinal[argument.ordinal].type,
+            )
+            for argument in spec.config_arguments
+        ]
+    )
     body = builder.region()
     builder.kernel.def_(
         target=target_symbol,
@@ -113,7 +145,16 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         artifact=artifact_symbol,
         export_ordinal=spec.export_ordinal,
         callee=spec.callee,
-        args=[arguments_by_ordinal[argument.ordinal] for argument in spec.arguments],
+        config_args=[
+            (
+                config_arguments_by_ordinal[argument.ordinal].name,
+                config_arguments_by_ordinal[argument.ordinal].type,
+            )
+            for argument in spec.config_arguments
+        ],
+        args=[
+            body_arguments_by_ordinal[argument.ordinal] for argument in spec.arguments
+        ],
         config=config,
         body=body,
     )
@@ -127,7 +168,7 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         config_arguments_by_ordinal=_region_arguments_by_ordinal(
             builder,
             config,
-            spec.arguments,
+            spec.config_arguments,
         ),
         body_arguments_by_ordinal=_region_arguments_by_ordinal(
             builder,
@@ -208,7 +249,7 @@ def normalize_launch_tuple(values: tuple[int, ...]) -> tuple[int, int, int]:
 def _region_arguments_by_ordinal(
     builder: loom.LoomBuilder,
     region: Region,
-    arguments: Sequence[KernelArgumentSpec],
+    arguments: Sequence[KernelArgumentSpec | KernelConfigArgumentSpec],
 ) -> dict[int, ValueRef]:
     block = region.blocks[0]
     return {
@@ -220,7 +261,7 @@ def _region_arguments_by_ordinal(
 def kernel_module_ops(target_preset: str) -> tuple[Op, ...]:
     """Return the op declarations needed for a kernel module target preset."""
     ops = loom.default_ops()
-    if target_preset_amdgpu_kind(target_preset) is None:
+    if _amdgpu_target_selection(target_preset) is None:
         return ops
     from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS
 
@@ -229,7 +270,8 @@ def kernel_module_ops(target_preset: str) -> tuple[Op, ...]:
 
 def target_preset_amdgpu_kind(target_preset: str) -> str | None:
     """Return the canonical AMDGPU target kind selected by a target preset."""
-    return _amdgpu_target_kind(target_preset)
+    selection = _amdgpu_target_selection(target_preset)
+    return selection.kind if selection is not None else None
 
 
 def _build_target_record(
@@ -237,13 +279,16 @@ def _build_target_record(
     target_symbol: str,
     target_preset: str,
 ) -> None:
-    amdgpu_kind = target_preset_amdgpu_kind(target_preset)
-    if amdgpu_kind is not None:
+    amdgpu_selection = _amdgpu_target_selection(target_preset)
+    if amdgpu_selection is not None:
         from loom.target.arch.amdgpu.dialect import amdgpu_target
 
+        attributes = {"symbol": target_symbol, "kind": amdgpu_selection.kind}
+        if amdgpu_selection.processor is not None:
+            attributes["processor"] = amdgpu_selection.processor
         builder.ir.build(
             amdgpu_target.name,
-            attributes={"symbol": target_symbol, "kind": amdgpu_kind},
+            attributes=attributes,
         )
         return
     builder.target.generic(symbol=target_symbol, kind="reference")
@@ -273,20 +318,35 @@ def _artifact_format(target_preset: str) -> str:
     return "elf"
 
 
-def _amdgpu_target_kind(target_preset: str) -> str | None:
+def _amdgpu_target_selection(target_preset: str) -> _AmdgpuTargetSelection | None:
     target_cpu = _target_cpu(target_preset)
     if target_cpu is None:
         return None
     from loom.target.arch.amdgpu.dialect import AmdgpuTargetKind
+    from loom.target.arch.amdgpu.target_info import (
+        amdgpu_default_target_record_info_for_descriptor_set,
+        amdgpu_processor_info_by_name,
+        amdgpu_target_record_info_for_processor,
+    )
 
     available_kinds = {case.keyword for case in AmdgpuTargetKind.cases}
-    if target_cpu in available_kinds:
-        return target_cpu
-    if target_cpu.startswith("gfx11") and "gfx1100" in available_kinds:
-        return "gfx1100"
-    if target_cpu.startswith("gfx12") and "gfx1200" in available_kinds:
-        return "gfx1200"
-    return None
+
+    target_record = amdgpu_target_record_info_for_processor(target_cpu)
+    if target_record is not None and target_record.processor in available_kinds:
+        return _AmdgpuTargetSelection(kind=target_record.processor)
+
+    processor_info = amdgpu_processor_info_by_name(target_cpu)
+    if processor_info is None or not processor_info.descriptor_set_key:
+        return None
+    target_record = amdgpu_default_target_record_info_for_descriptor_set(
+        processor_info.descriptor_set_key
+    )
+    if target_record is None or target_record.processor not in available_kinds:
+        return None
+    return _AmdgpuTargetSelection(
+        kind=target_record.processor,
+        processor=target_cpu,
+    )
 
 
 def _target_cpu(target_preset: str) -> str | None:

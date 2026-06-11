@@ -20,6 +20,7 @@ from loom.importers.core import (
     ImportOptions,
     ImportResult,
     KernelArgumentSpec,
+    KernelConfigArgumentSpec,
     KernelModuleShell,
     KernelModuleSpec,
     create_kernel_module,
@@ -27,7 +28,11 @@ from loom.importers.core import (
     normalize_launch_tuple,
     sanitize_symbol,
 )
-from loom.importers.tilelang.abi import extract_bindings
+from loom.importers.tilelang.abi import (
+    collect_dynamic_scalar_source_groups_from,
+    extract_bindings,
+    source_binding_keys,
+)
 from loom.importers.tilelang.analysis import collect_address_layout_preferences
 from loom.importers.tilelang.context import TileLangConversionContext
 from loom.importers.tilelang.converter import TileLangConverter
@@ -260,6 +265,7 @@ def _build_loom_module(
                 )
                 for binding in bindings
             ],
+            config_arguments=_launch_config_arguments(bindings, launch_topology),
         )
     )
     converter = TileLangConverter(build_default_registry())
@@ -490,13 +496,54 @@ def _map_scalar_kernel_arguments(
     context: TileLangConversionContext,
 ) -> None:
     for binding in bindings:
-        argument = arguments_by_ordinal[binding.ordinal]
+        argument = arguments_by_ordinal.get(binding.ordinal)
+        if argument is None:
+            continue
         if binding.buffer is not None:
             context.map_value(binding.source, argument, str(argument.type))
             continue
         context.map_value(binding.source, argument, str(argument.type))
         for alias in binding.aliases:
             context.map_value(alias, argument, str(argument.type))
+
+
+def _launch_config_arguments(
+    bindings: tuple[TileLangBinding, ...],
+    launch_topology: _LaunchTopology,
+) -> tuple[KernelConfigArgumentSpec, ...]:
+    needed_keys = {
+        key
+        for group in collect_dynamic_scalar_source_groups_from(
+            _launch_topology_extents(launch_topology)
+        )
+        for source in (group.source, *group.aliases)
+        for key in source_binding_keys(source)
+    }
+    if not needed_keys:
+        return ()
+    config_arguments: list[KernelConfigArgumentSpec] = []
+    for binding in bindings:
+        if binding.buffer is not None:
+            continue
+        binding_keys = {
+            key
+            for source in (binding.source, *binding.aliases)
+            for key in source_binding_keys(source)
+        }
+        if needed_keys.isdisjoint(binding_keys):
+            continue
+        config_arguments.append(
+            KernelConfigArgumentSpec(
+                ordinal=binding.ordinal,
+                name=binding.name,
+                type=binding.type,
+            )
+        )
+    return tuple(config_arguments)
+
+
+def _launch_topology_extents(launch_topology: _LaunchTopology) -> tuple[object, ...]:
+    return (*launch_topology.workgroup_count, *launch_topology.workgroup_size)
 
 
 def _buffer_view_name(

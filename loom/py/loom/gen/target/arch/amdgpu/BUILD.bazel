@@ -18,6 +18,21 @@ GENERATOR_VISIBILITY = [
 ]
 
 iree_py_binary(
+    name = "config_tables",
+    srcs = [
+        "__init__.py",
+        "amdgpu_config_tables.py",
+    ],
+    main = "amdgpu_config_tables.py",
+    visibility = GENERATOR_VISIBILITY,
+    deps = [
+        "//loom/py/loom/gen/support",
+        "//loom/py/loom/target/arch/amdgpu:encoding_info",
+        "//loom/py/loom/target/arch/amdgpu:target_info",
+    ],
+)
+
+iree_py_binary(
     name = "target_info",
     srcs = [
         "__init__.py",

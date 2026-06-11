@@ -582,7 +582,8 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
                                               loom_low_lower_plan_t* out_plan) {
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
-  if (!loom_vector_dotf_isa(source_op)) {
+  if (!loom_vector_dotf_isa(source_op) && !loom_index_add_isa(source_op) &&
+      !loom_index_cmp_isa(source_op)) {
     return iree_ok_status();
   }
   return loom_amdgpu_select_plan_id(context, source_op, out_plan);
@@ -664,6 +665,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
                            .user_data = NULL},
     .map_argument = {.fn = loom_amdgpu_map_argument, .user_data = NULL},
     .emit_preamble = {.fn = loom_amdgpu_emit_preamble, .user_data = NULL},
+    .emit_entry_setup = {.fn = loom_amdgpu_emit_entry_setup, .user_data = NULL},
     .prepare_branch = {.fn = loom_amdgpu_prepare_branch, .user_data = NULL},
     .materialize_branch_arg = {.fn = loom_amdgpu_materialize_branch_arg,
                                .user_data = NULL},
@@ -691,8 +693,9 @@ const loom_target_low_legality_provider_t
     loom_amdgpu_low_legality_provider_storage = {
         .name = IREE_SVL("amdgpu"),
         .builtin_dialect_bits =
-            (1u << LOOM_DIALECT_BUFFER) | (1u << LOOM_DIALECT_VIEW) |
-            (1u << LOOM_DIALECT_VECTOR) | (1u << LOOM_DIALECT_KERNEL),
+            (1u << LOOM_DIALECT_INDEX) | (1u << LOOM_DIALECT_BUFFER) |
+            (1u << LOOM_DIALECT_VIEW) | (1u << LOOM_DIALECT_VECTOR) |
+            (1u << LOOM_DIALECT_KERNEL),
         .try_verify_op = loom_amdgpu_low_legality_try_verify_op,
 };
 

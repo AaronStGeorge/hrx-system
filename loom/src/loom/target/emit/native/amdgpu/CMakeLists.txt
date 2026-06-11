@@ -83,7 +83,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -96,7 +96,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly_wmma.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -109,7 +109,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_plan.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -122,7 +122,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_states.loom-test"
   SRC
-    loom::tools::loom-check::full::loom-check
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -218,7 +218,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_RDNA3_CORE AND LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_test(
   NAME
     spill_lowering_test
@@ -232,7 +232,7 @@ loom_cc_test(
     loom::codegen::low::builder
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::descriptors::shards_for_testing
+    loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
@@ -383,26 +383,12 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
-    hal_kernel_metadata
-  HDRS
-    "hal_kernel_metadata.h"
-  DEPS
-    iree::base
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-loom_cc_library(
-  NAME
     hal_kernel_library
   HDRS
     "hal_kernel_library.h"
   SRCS
     "hal_kernel_library.c"
   DEPS
-    ::hal_kernel_metadata
     ::kernel_assembly
     ::kernel_hsaco
     ::preflight
@@ -453,12 +439,16 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::codegen::low::text_asm
     loom::error::error_defs
     loom::format::text::parser
     loom::ir
     loom::ops::op_registry
+    loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::ops
+    loom::target::arch::amdgpu::records::target_records
+    loom::target::arch::amdgpu::target_info
     loom::testing::diagnostic_matchers
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
@@ -519,6 +509,7 @@ loom_cc_test(
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::target::arch::amdgpu::target_info
     loom::target::emit::native::elf
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
@@ -572,7 +563,7 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::low
-    loom::target::arch::amdgpu::descriptors::low_registry_for_testing
+    loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::hal::binding_materialization
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::ops

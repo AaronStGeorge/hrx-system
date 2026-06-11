@@ -285,10 +285,10 @@ func.def @forward_branch_local_accumulator(%input: buffer, %output: buffer, %con
 
 // ====
 
-kernel.def @forward_kernel_branch_local_accumulator(%input: buffer, %output: buffer, %cond: i1) {
+kernel.def @forward_kernel_branch_local_accumulator() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %cond: i1) {
   %zero_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<2xf32, %layout>
@@ -313,10 +313,10 @@ kernel.def @forward_kernel_branch_local_accumulator(%input: buffer, %output: buf
 }
 
 // ----
-kernel.def @forward_kernel_branch_local_accumulator(%input: buffer, %output: buffer, %cond: i1) {
+kernel.def @forward_kernel_branch_local_accumulator() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %cond: i1) {
   %zero_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<2xf32, %layout>
@@ -335,10 +335,10 @@ kernel.def @forward_kernel_branch_local_accumulator(%input: buffer, %output: buf
 
 // ====
 
-kernel.def @forward_imported_branch_accumulator(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
+kernel.def @forward_imported_branch_accumulator() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
   %zero_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<[%limit]x2xf32, %layout>
@@ -375,10 +375,10 @@ kernel.def @forward_imported_branch_accumulator(%input: buffer, %sum_output: buf
 }
 
 // ----
-kernel.def @forward_imported_branch_accumulator(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
+kernel.def @forward_imported_branch_accumulator() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
   %zero_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<[%limit]x2xf32, %layout>
@@ -409,10 +409,10 @@ kernel.def @forward_imported_branch_accumulator(%input: buffer, %sum_output: buf
 
 // ====
 
-kernel.def @forward_fragment_and_accumulator(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
+kernel.def @forward_fragment_and_accumulator() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
   %zero_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<[%limit]x2xf32, %layout>
@@ -459,10 +459,10 @@ kernel.def @forward_fragment_and_accumulator(%input: buffer, %sum_output: buffer
 }
 
 // ----
-kernel.def @forward_fragment_and_accumulator(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
+kernel.def @forward_fragment_and_accumulator() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %sum_output: buffer, %normalized_output: buffer, %limit: index) {
   %zero_bytes = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<[%limit]x2xf32, %layout>

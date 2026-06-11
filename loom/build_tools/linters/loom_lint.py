@@ -86,6 +86,11 @@ def _run_lint() -> int:
         cwd=REPO_ROOT,
     )
     ok &= _run(
+        "amdgpu target config",
+        [sys.executable, "loom/build_tools/amdgpu/target_config.py", "--check"],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
         "x86 target profiles",
         [
             sys.executable,

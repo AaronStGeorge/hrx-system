@@ -62,10 +62,10 @@ def broadcast_vector_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("broadcast_vector_store") @broadcast_vector_store(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("broadcast_vector_store") @broadcast_vector_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -104,10 +104,10 @@ def ramp_vector_load(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("ramp_vector_load") @ramp_vector_load(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("ramp_vector_load") @ramp_vector_load() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>

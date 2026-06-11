@@ -8,12 +8,9 @@
 
 #include "iree/testing/gtest.h"
 #include "loom/codegen/low/descriptors.h"
-#include "loom/target/arch/amdgpu/descriptors/cdna3_descriptors.h"
-#include "loom/target/arch/amdgpu/descriptors/cdna4_descriptors.h"
-#include "loom/target/arch/amdgpu/descriptors/rdna3_descriptors.h"
-#include "loom/target/arch/amdgpu/descriptors/rdna4_descriptors.h"
-#include "loom/target/arch/amdgpu/descriptors/rdna4_gfx125x_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/planning/occupancy_tables.h"
+#include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 namespace {
@@ -29,19 +26,36 @@ struct RegisterAltExpectation {
   loom_low_reg_class_alt_flags_t flags;
 };
 
+class AmdgpuRegistersTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    loom_amdgpu_low_descriptor_registry_initialize(&low_registry_);
+  }
+
+  const loom_low_descriptor_set_t* LookupDescriptorSet(
+      iree_string_view_t descriptor_set_key) const {
+    return loom_low_descriptor_registry_lookup(&low_registry_.registry,
+                                               descriptor_set_key);
+  }
+
+  loom_target_low_descriptor_registry_t low_registry_ = {};
+};
+
 void ExpectRegisterClass(const loom_low_descriptor_set_t* descriptor_set,
-                         uint16_t reg_class_id,
                          iree_string_view_t expected_name,
                          uint16_t expected_alloc_unit_bits,
                          uint16_t expected_allocatable_count,
-                         loom_low_reg_class_flags_t expected_flags) {
-  EXPECT_LT(reg_class_id, descriptor_set->reg_class_count)
+                         loom_low_reg_class_flags_t expected_flags,
+                         uint16_t* out_descriptor_reg_class_id = nullptr) {
+  uint16_t descriptor_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  const loom_low_reg_class_t* reg_class = nullptr;
+  ASSERT_TRUE(loom_low_descriptor_set_lookup_register_class(
+      descriptor_set, expected_name, &descriptor_reg_class_id, &reg_class))
       << ToString(expected_name);
-  if (reg_class_id >= descriptor_set->reg_class_count) {
-    return;
+  ASSERT_NE(reg_class, nullptr) << ToString(expected_name);
+  if (out_descriptor_reg_class_id != nullptr) {
+    *out_descriptor_reg_class_id = descriptor_reg_class_id;
   }
-  const loom_low_reg_class_t* reg_class =
-      &descriptor_set->reg_classes[reg_class_id];
   EXPECT_EQ(ToString(loom_low_descriptor_set_string(
                 descriptor_set, reg_class->name_string_offset)),
             ToString(expected_name));
@@ -168,151 +182,135 @@ void ExpectOccupancyPressureResource(
       << ToString(expected_name);
 }
 
-TEST(AmdgpuRegistersTest, DescriptorSetsExposeAddressableRegisterNamespaces) {
+TEST_F(AmdgpuRegistersTest,
+       SelectedDescriptorSetsExposeAddressableRegisterNamespaces) {
   struct DescriptorSetCase {
-    // Generated descriptor set under test.
-    const loom_low_descriptor_set_t* descriptor_set;
-    // Descriptor-set-local SGPR register-class ID.
-    uint16_t sgpr_id;
+    // Descriptor-set key under test when selected into this build.
+    iree_string_view_t descriptor_set_key;
     // Compiler-visible SGPR allocation namespace size.
     uint16_t sgpr_allocatable_count;
-    // Descriptor-set-local VGPR register-class ID.
-    uint16_t vgpr_id;
     // Compiler-visible VGPR allocation namespace size.
     uint16_t vgpr_allocatable_count;
-    // Descriptor-set-local SCC register-class ID.
-    uint16_t scc_id;
-    // Descriptor-set-local EXEC register-class ID.
-    uint16_t exec_id;
-    // Descriptor-set-local AGPR register-class ID, or NONE when absent.
-    uint16_t agpr_id;
-    // Descriptor-set-local MODE register-class ID, or NONE when absent.
-    uint16_t mode_id;
+    // True when the descriptor set exposes accumulator VGPR storage.
+    bool has_agpr;
+    // True when the descriptor set exposes the MODE register namespace.
+    bool has_mode;
   };
   const DescriptorSetCase cases[] = {
       {
-          loom_amdgpu_cdna3_core_descriptor_set(),
-          AMDGPU_CDNA3_CORE_REG_CLASS_ID_SGPR,
+          IREE_SV("amdgpu.cdna3.core"),
           102,
-          AMDGPU_CDNA3_CORE_REG_CLASS_ID_VGPR,
           256,
-          AMDGPU_CDNA3_CORE_REG_CLASS_ID_SCC,
-          AMDGPU_CDNA3_CORE_REG_CLASS_ID_EXEC,
-          AMDGPU_CDNA3_CORE_REG_CLASS_ID_AGPR,
-          LOOM_LOW_REG_CLASS_NONE,
+          true,
+          false,
       },
       {
-          loom_amdgpu_cdna4_core_descriptor_set(),
-          AMDGPU_CDNA4_CORE_REG_CLASS_ID_SGPR,
+          IREE_SV("amdgpu.cdna4.core"),
           106,
-          AMDGPU_CDNA4_CORE_REG_CLASS_ID_VGPR,
           256,
-          AMDGPU_CDNA4_CORE_REG_CLASS_ID_SCC,
-          AMDGPU_CDNA4_CORE_REG_CLASS_ID_EXEC,
-          AMDGPU_CDNA4_CORE_REG_CLASS_ID_AGPR,
-          LOOM_LOW_REG_CLASS_NONE,
+          true,
+          false,
       },
       {
-          loom_amdgpu_rdna3_core_descriptor_set(),
-          AMDGPU_RDNA3_CORE_REG_CLASS_ID_SGPR,
+          IREE_SV("amdgpu.rdna3.core"),
           106,
-          AMDGPU_RDNA3_CORE_REG_CLASS_ID_VGPR,
           256,
-          AMDGPU_RDNA3_CORE_REG_CLASS_ID_SCC,
-          AMDGPU_RDNA3_CORE_REG_CLASS_ID_EXEC,
-          LOOM_LOW_REG_CLASS_NONE,
-          LOOM_LOW_REG_CLASS_NONE,
+          false,
+          false,
       },
       {
-          loom_amdgpu_rdna4_core_descriptor_set(),
-          AMDGPU_RDNA4_CORE_REG_CLASS_ID_SGPR,
+          IREE_SV("amdgpu.rdna4.core"),
           106,
-          AMDGPU_RDNA4_CORE_REG_CLASS_ID_VGPR,
           256,
-          AMDGPU_RDNA4_CORE_REG_CLASS_ID_SCC,
-          AMDGPU_RDNA4_CORE_REG_CLASS_ID_EXEC,
-          LOOM_LOW_REG_CLASS_NONE,
-          LOOM_LOW_REG_CLASS_NONE,
+          false,
+          false,
       },
       {
-          loom_amdgpu_rdna4_gfx125x_core_descriptor_set(),
-          AMDGPU_RDNA4_GFX125X_CORE_REG_CLASS_ID_SGPR,
+          IREE_SV("amdgpu.rdna4.gfx125x.core"),
           106,
-          AMDGPU_RDNA4_GFX125X_CORE_REG_CLASS_ID_VGPR,
           1024,
-          AMDGPU_RDNA4_GFX125X_CORE_REG_CLASS_ID_SCC,
-          AMDGPU_RDNA4_GFX125X_CORE_REG_CLASS_ID_EXEC,
-          LOOM_LOW_REG_CLASS_NONE,
-          AMDGPU_RDNA4_GFX125X_CORE_REG_CLASS_ID_MODE,
+          false,
+          true,
       },
   };
 
+  iree_host_size_t checked_count = 0;
   for (const DescriptorSetCase& c : cases) {
-    ASSERT_NE(c.descriptor_set, nullptr);
-    ExpectRegisterClass(c.descriptor_set, c.sgpr_id, IREE_SV("amdgpu.sgpr"), 32,
+    const loom_low_descriptor_set_t* descriptor_set =
+        LookupDescriptorSet(c.descriptor_set_key);
+    if (descriptor_set == nullptr) {
+      continue;
+    }
+    ++checked_count;
+    ExpectRegisterClass(descriptor_set, IREE_SV("amdgpu.sgpr"), 32,
                         c.sgpr_allocatable_count,
                         LOOM_LOW_REG_CLASS_FLAG_PHYSICAL);
-    ExpectRegisterClass(c.descriptor_set, c.vgpr_id, IREE_SV("amdgpu.vgpr"), 32,
+    ExpectRegisterClass(descriptor_set, IREE_SV("amdgpu.vgpr"), 32,
                         c.vgpr_allocatable_count,
                         LOOM_LOW_REG_CLASS_FLAG_PHYSICAL);
     ExpectRegisterClass(
-        c.descriptor_set, c.scc_id, IREE_SV("amdgpu.scc"), 1, 1,
+        descriptor_set, IREE_SV("amdgpu.scc"), 1, 1,
         LOOM_LOW_REG_CLASS_FLAG_PHYSICAL | LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
     ExpectRegisterClass(
-        c.descriptor_set, c.exec_id, IREE_SV("amdgpu.exec"), 64, 1,
+        descriptor_set, IREE_SV("amdgpu.exec"), 64, 1,
         LOOM_LOW_REG_CLASS_FLAG_PHYSICAL | LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
 
-    if (c.agpr_id == LOOM_LOW_REG_CLASS_NONE) {
-      ExpectRegisterClassMissing(c.descriptor_set, IREE_SV("amdgpu.agpr"));
+    if (!c.has_agpr) {
+      ExpectRegisterClassMissing(descriptor_set, IREE_SV("amdgpu.agpr"));
     } else {
-      ExpectRegisterClass(c.descriptor_set, c.agpr_id, IREE_SV("amdgpu.agpr"),
-                          32, 256, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL);
+      ExpectRegisterClass(descriptor_set, IREE_SV("amdgpu.agpr"), 32, 256,
+                          LOOM_LOW_REG_CLASS_FLAG_PHYSICAL);
     }
 
-    if (c.mode_id == LOOM_LOW_REG_CLASS_NONE) {
-      ExpectRegisterClassMissing(c.descriptor_set, IREE_SV("amdgpu.mode"));
+    if (!c.has_mode) {
+      ExpectRegisterClassMissing(descriptor_set, IREE_SV("amdgpu.mode"));
     } else {
-      ExpectRegisterClass(c.descriptor_set, c.mode_id, IREE_SV("amdgpu.mode"),
-                          32, 1,
+      ExpectRegisterClass(descriptor_set, IREE_SV("amdgpu.mode"), 32, 1,
                           LOOM_LOW_REG_CLASS_FLAG_PHYSICAL |
                               LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
     }
   }
+  ASSERT_GT(checked_count, 0u);
 }
 
-TEST(AmdgpuRegistersTest, CdnaMfmaOperandsExposeAccumulatorRegisterNamespace) {
+TEST_F(AmdgpuRegistersTest,
+       SelectedCdnaMfmaOperandsExposeAccumulatorRegisterNamespace) {
   struct MfmaCase {
-    // Generated descriptor set under test.
-    const loom_low_descriptor_set_t* descriptor_set;
-    // Generated MFMA descriptor reference.
-    uint32_t descriptor_ref;
-    // Descriptor-set-local VGPR register-class ID.
-    uint16_t vgpr_id;
-    // Descriptor-set-local AGPR register-class ID.
-    uint16_t agpr_id;
+    // Descriptor-set key under test when selected into this build.
+    iree_string_view_t descriptor_set_key;
   };
   const MfmaCase cases[] = {
-      {
-          loom_amdgpu_cdna3_core_descriptor_set(),
-          AMDGPU_CDNA3_CORE_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_F16,
-          AMDGPU_CDNA3_CORE_REG_CLASS_ID_VGPR,
-          AMDGPU_CDNA3_CORE_REG_CLASS_ID_AGPR,
-      },
-      {
-          loom_amdgpu_cdna4_core_descriptor_set(),
-          AMDGPU_CDNA4_CORE_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_F16,
-          AMDGPU_CDNA4_CORE_REG_CLASS_ID_VGPR,
-          AMDGPU_CDNA4_CORE_REG_CLASS_ID_AGPR,
-      },
+      {IREE_SV("amdgpu.cdna3.core")},
+      {IREE_SV("amdgpu.cdna4.core")},
   };
 
+  iree_host_size_t checked_count = 0;
   for (const MfmaCase& c : cases) {
-    ExpectCdnaMfmaVgprAgprOperands(c.descriptor_set, c.descriptor_ref,
-                                   c.vgpr_id, c.agpr_id);
+    const loom_low_descriptor_set_t* descriptor_set =
+        LookupDescriptorSet(c.descriptor_set_key);
+    if (descriptor_set == nullptr) {
+      continue;
+    }
+    ++checked_count;
+    uint16_t vgpr_id = LOOM_LOW_REG_CLASS_NONE;
+    uint16_t agpr_id = LOOM_LOW_REG_CLASS_NONE;
+    ExpectRegisterClass(descriptor_set, IREE_SV("amdgpu.vgpr"), 32, 256,
+                        LOOM_LOW_REG_CLASS_FLAG_PHYSICAL, &vgpr_id);
+    ExpectRegisterClass(descriptor_set, IREE_SV("amdgpu.agpr"), 32, 256,
+                        LOOM_LOW_REG_CLASS_FLAG_PHYSICAL, &agpr_id);
+    const uint32_t descriptor_ref = loom_amdgpu_descriptor_ref_ordinal(
+        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_F16);
+    ASSERT_NE(descriptor_ref, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE)
+        << ToString(c.descriptor_set_key);
+    ExpectCdnaMfmaVgprAgprOperands(descriptor_set, descriptor_ref, vgpr_id,
+                                   agpr_id);
+  }
+  if (checked_count == 0) {
+    GTEST_SKIP() << "No CDNA descriptor set selected.";
   }
 }
 
-TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
+TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
   struct OccupancyCase {
     // Generated descriptor-set ordinal for the occupancy model.
     uint16_t descriptor_set_ordinal;

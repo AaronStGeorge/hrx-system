@@ -74,6 +74,7 @@ class BuilderParamKind(Enum):
     """Kind of public builder parameter and its lowering behavior."""
 
     ATTR = auto()
+    BLOCK_ARGS = auto()
     DESCRIPTOR_REF = auto()
     FLAGS = auto()
     FUNC_ARGS = auto()
@@ -101,6 +102,8 @@ class BuilderParam:
     attr_def: AttrDef | None = None
     binding_kind: str | None = None
     names_field: str | None = None
+    region_field: str | None = None
+    region_optional: bool = False
     stable_id_field: str | None = None
     ordinal_field: str | None = None
     static_field: str | None = None
@@ -259,6 +262,7 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
     layout = compute_layout(op)
     params: list[BuilderParam] = []
     covered_attrs: set[str] = set()
+    region_defs = {region.name: region for region in op.regions}
 
     def append_attr_param(name: str) -> None:
         attr_def = op.attr(name)
@@ -274,25 +278,45 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
         )
         covered_attrs.add(name)
 
+    def append_ref_param(name: str) -> None:
+        if name in ("iv",):
+            return
+        desc = layout.fields.get(name)
+        if desc and desc.kind == FieldKind.OPERAND:
+            params.append(
+                BuilderParam(
+                    name=name,
+                    kind=BuilderParamKind.OPERAND,
+                    type_hint="ValueRef | None" if desc.optional else "ValueRef",
+                    required=not desc.optional,
+                    doc=f"Operand: {name}",
+                )
+            )
+
+    def append_block_args_param(name: str) -> None:
+        region_def = region_defs.get(name)
+        has_derived_args = bool(
+            region_def is not None
+            and (region_def.arg_source or region_def.implicit_args)
+        )
+        if has_derived_args:
+            return
+        params.append(
+            BuilderParam(
+                name=f"{name}_args",
+                kind=BuilderParamKind.BLOCK_ARGS,
+                type_hint="Sequence[tuple[str, Type]]",
+                required=False,
+                region_field=name,
+                doc=f"Entry block args for region: {name}",
+            )
+        )
+
     def walk(elements: tuple[FormatElement, ...] | list[FormatElement]) -> None:
         for element in elements:
             match element:
                 case Ref(field=name):
-                    if name in ("iv",):
-                        continue
-                    desc = layout.fields.get(name)
-                    if desc and desc.kind == FieldKind.OPERAND:
-                        params.append(
-                            BuilderParam(
-                                name=name,
-                                kind=BuilderParamKind.OPERAND,
-                                type_hint=(
-                                    "ValueRef | None" if desc.optional else "ValueRef"
-                                ),
-                                required=not desc.optional,
-                                doc=f"Operand: {name}",
-                            )
-                        )
+                    append_ref_param(name)
 
                 case Refs(field=name) | TypedRefs(field=name):
                     params.append(
@@ -433,12 +457,16 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                     )
 
                 case RegionFmt(field=name):
+                    region_def = region_defs.get(name)
                     params.append(
                         BuilderParam(
                             name=name,
                             kind=BuilderParamKind.REGION,
                             type_hint="Region | None",
                             required=False,
+                            region_optional=region_def.optional
+                            if region_def is not None
+                            else False,
                             doc=f"Region: {name}",
                         )
                     )
@@ -462,6 +490,9 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                             doc=f"Function signature args: {name}",
                         )
                     )
+
+                case BlockArgs(region=name):
+                    append_block_args_param(name)
 
                 case Flags(field=name):
                     attr_def = op.attr(name)
@@ -554,7 +585,7 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                                 continue
                             append_attr_param(attr_def.name)
 
-                case Keyword() | TypeOf() | TypesOf() | BlockArgs() | Glue():
+                case Keyword() | TypeOf() | TypesOf() | Glue():
                     pass
 
                 case _:

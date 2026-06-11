@@ -39,8 +39,8 @@ class BufferBuilder(DialectBuilder):
     def memory_space(
         self,
         *,
-        buffer: ValueRef,
         memory_space: str,
+        buffer: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
         names: Sequence[str] | None = ...,

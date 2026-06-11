@@ -586,6 +586,10 @@ _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS = {
         base=_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
         overlay_descriptors=_gfx11_core_overlay_descriptors,
     ),
+    "rdna3_5": _AmdgpuCoreDescriptorSetBuilder(
+        base=_AMDGPU_RDNA3_5_CORE_DESCRIPTOR_SET_BASE,
+        overlay_descriptors=_gfx11_core_overlay_descriptors,
+    ),
     "rdna4": _AmdgpuCoreDescriptorSetBuilder(
         base=_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
         overlay_descriptors=_gfx12_core_overlay_descriptors,

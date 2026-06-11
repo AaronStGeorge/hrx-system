@@ -245,6 +245,8 @@ def extract_c_params(op: Op, shared_enums: SharedEnumMap) -> list[dict[str, Any]
     _pending_binding: dict[str, Any] | None = None
     # Track whether FuncArgs was seen (entry block args come from arg_types).
     _pending_func_args: bool = False
+    # Region fields whose explicit block args are not derivable from operands.
+    explicit_block_args_by_region: dict[str, str] = {}
     func_args_field_name = c_queries.func_args_field_name(op)
     func_like_body_region_name: str | None = None
     for interface in op.interfaces:
@@ -399,8 +401,19 @@ def extract_c_params(op: Op, shared_enums: SharedEnumMap) -> list[dict[str, Any]
                         "binding_kind": binding_kind,
                     }
 
-                case BlockArgs():
-                    pass
+                case BlockArgs(region=name):
+                    region_def = _find_region_def(op, name)
+                    has_derived_args = bool(region_def is not None and (region_def.arg_source or region_def.implicit_args))
+                    if not has_derived_args:
+                        param_name = f"{name}_arg_types"
+                        params.append(
+                            {
+                                "name": param_name,
+                                "kind": "block_args",
+                                "region": name,
+                            }
+                        )
+                        explicit_block_args_by_region[name] = param_name
 
                 case ResultType(field=name):
                     # When ResultType references a variadic result, the
@@ -455,6 +468,7 @@ def extract_c_params(op: Op, shared_enums: SharedEnumMap) -> list[dict[str, Any]
                             "optional": (region_def.optional if region_def else False),
                             "binding": binding,
                             "arg_source": arg_source,
+                            "block_args": explicit_block_args_by_region.pop(name, None),
                             "implicit_args": (region_def.implicit_args if region_def else ()),
                             "func_args": func_args,
                         }
@@ -690,6 +704,9 @@ def build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pre
             case "instance_flags":
                 c_params.append(f"uint8_t {param['name']}")
             case "func_args":
+                c_params.append(f"const loom_type_t* {param['name']}")
+                c_params.append(f"iree_host_size_t {param['name']}_count")
+            case "block_args":
                 c_params.append(f"const loom_type_t* {param['name']}")
                 c_params.append(f"iree_host_size_t {param['name']}_count")
             case "auto_region":

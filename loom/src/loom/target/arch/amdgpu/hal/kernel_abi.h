@@ -31,10 +31,10 @@ extern "C" {
 // Required kernarg alignment for HAL binding pointers.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT 8u
 
-// Kernarg storage for one direct scalar dispatch constant.
+// Kernarg storage for one 32-bit direct dispatch constant word.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE 4u
 
-// Required kernarg alignment for direct scalar dispatch constants.
+// Required kernarg alignment for direct dispatch constant words.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_ALIGNMENT 4u
 
 // Stable low.live_in source spelling for the AMDGPU kernarg segment pointer.
@@ -44,6 +44,13 @@ extern "C" {
 // Stable low.live_in source ID for the AMDGPU kernarg segment pointer.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE_ID \
   UINT64_C(0x7C8A03858206FDDC)
+
+// Stable low.live_in source spelling for the AMDGPU dispatch packet pointer.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE "amdgpu.dispatch_ptr"
+
+// Stable low.live_in source ID for the AMDGPU dispatch packet pointer.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE_ID \
+  UINT64_C(0x36D73B4B3758D0B2)
 
 // Stable low.live_in source spelling for workgroup_id.x in the first system
 // SGPR after enabled user SGPRs.
@@ -142,11 +149,11 @@ typedef struct loom_amdgpu_hal_kernarg_direct_arg_t {
   iree_string_view_t name;
   // Entry block argument index before ABI materialization removes arguments.
   uint16_t argument_index;
-  // Byte offset of the scalar entry in the kernarg segment.
+  // Byte offset of the direct argument in the kernarg segment.
   uint32_t kernarg_offset;
-  // Byte length of the scalar entry in the kernarg segment.
+  // Byte length of the direct argument in the kernarg segment.
   uint32_t kernarg_size;
-  // Byte alignment of the scalar entry in the kernarg segment.
+  // Byte alignment of the direct argument in the kernarg segment.
   uint32_t kernarg_alignment;
   // Target-low value type produced by materializing this argument.
   loom_type_t abi_type;
@@ -161,15 +168,15 @@ typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
   uint32_t kernarg_segment_alignment;
   // True when the kernel descriptor must request the kernarg segment pointer.
   bool uses_kernarg_segment_ptr;
-  // HAL dispatch constant count consumed by direct scalar arguments.
+  // HAL dispatch constant word count consumed by direct arguments.
   uint32_t constant_count;
   // Resource records in HAL binding/kernarg offset order.
   const loom_amdgpu_hal_kernarg_resource_t* resources;
   // Number of resource records in |resources|.
   iree_host_size_t resource_count;
-  // Direct scalar argument records in entry block argument order.
+  // Direct argument records in entry block argument order.
   const loom_amdgpu_hal_kernarg_direct_arg_t* direct_args;
-  // Number of direct scalar argument records in |direct_args|.
+  // Number of direct argument records in |direct_args|.
   iree_host_size_t direct_arg_count;
 } loom_amdgpu_hal_kernel_abi_layout_t;
 
@@ -197,9 +204,9 @@ iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
 // source_type attribute records the high-level resource handle type, but the
 // AMDGPU ABI layout is determined by the import kind and target-low result
 // type. The kernarg segment stores one 64-bit global pointer per binding in
-// binding-index order, then one 32-bit direct scalar argument per remaining
-// entry block argument. Later lowering materializes the target buffer
-// descriptor value consumed by packets that need one.
+// binding-index order, then tightly packed 32-bit direct constant words for
+// remaining entry block arguments. Later lowering materializes the target
+// buffer descriptor value consumed by packets that need one.
 //
 // The function must already have passed
 // loom_amdgpu_hal_kernel_abi_verify_low. Status is reserved for allocation and
@@ -231,6 +238,10 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
 
 // Returns true if |value_id| is defined by the kernarg segment pointer live-in.
 bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the dispatch packet pointer live-in.
+bool loom_amdgpu_hal_kernel_abi_is_dispatch_ptr_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
 
 // Returns true if |value_id| is defined by the workgroup_id.x live-in.
@@ -273,10 +284,12 @@ bool loom_amdgpu_hal_kernel_abi_is_m0_live_in(const loom_module_t* module,
 // Finds AMDGPU ABI live-ins that require fixed physical locations during
 // allocation.
 //
-// The returned array is arena-owned. The current ABI fixes the kernarg segment
-// pointer live-in to s[0:1], workgroup_id.x/y/z live-ins to the SGPRs
-// immediately following enabled user SGPRs, unpacked workitem_id.x/y/z live-ins
-// to v0/v1/v2, and packed workitem-id live-ins to v0 when present.
+// The returned array is arena-owned. The current ABI fixes hidden user SGPRs in
+// AMDHSA order: dispatch pointer, then kernarg segment pointer. Each pointer
+// consumes two SGPRs starting at the next available user-SGPR location.
+// workgroup_id.x/y/z live-ins use the SGPRs immediately following enabled user
+// SGPRs. Unpacked workitem_id.x/y/z live-ins use v0/v1/v2, and packed
+// workitem-id live-ins use v0 when present.
 //
 // The function must already have passed
 // loom_amdgpu_hal_kernel_abi_verify_low. Status is reserved for allocation and

@@ -15,7 +15,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/allocation_materialization.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -26,7 +26,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/dce.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -37,7 +37,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_to_low_options.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -48,7 +48,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_to_low_structured_control.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -59,7 +59,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -70,7 +70,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_diagnostics.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -81,7 +81,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_matrix.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -92,7 +92,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_report.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )
@@ -103,7 +103,7 @@ iree_native_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_structure.loom-test"
   SRC
-    loom::tools::loom-check::loom-check-test
+    loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
 )

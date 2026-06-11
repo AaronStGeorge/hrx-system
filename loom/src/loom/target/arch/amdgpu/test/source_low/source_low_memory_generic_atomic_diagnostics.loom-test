@@ -14,11 +14,11 @@ func.def target(@target) @unknown_atomic_is_not_flat(%input: buffer) {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @generic_dynamic_atomic_rejected(%input: buffer) {
+kernel.def target(@target) @generic_dynamic_atomic_rejected() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %generic = buffer.assume.memory_space<generic> %input : buffer

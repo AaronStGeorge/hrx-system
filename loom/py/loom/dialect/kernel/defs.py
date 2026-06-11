@@ -15,6 +15,7 @@ from loom.assembly import (
     RPAREN,
     Attr,
     AttrDict,
+    BlockArgs,
     FormatElement,
     FuncArgs,
     OptionalGroup,
@@ -54,8 +55,6 @@ from loom.dsl import (
     VECTOR,
     VIEW,
     AttrDef,
-    BlockArgCount,
-    BlockArgsMatchTypes,
     ContractFamily,
     Dialect,
     EnumCase,
@@ -241,8 +240,13 @@ _ENTRY_EXPORT_FORMAT: list[FormatElement] = [
     ),
 ]
 
-_ENTRY_SIGNATURE_FORMAT: list[FormatElement] = [
+_ENTRY_CONFIG_FORMAT: list[FormatElement] = [
     SymbolRef("callee"),
+    BlockArgs("config"),
+]
+
+_ENTRY_LAUNCH_FORMAT: list[FormatElement] = [
+    kw("launch"),
     Scope(
         [
             FuncArgs("args"),
@@ -292,10 +296,9 @@ kernel_def = Op(
     regions=[
         RegionDef(
             "config",
-            doc=("Launch configuration region. The region has projected copies of the kernel signature arguments and must terminate with kernel.launch.config."),
+            doc=("Launch configuration region. The region owns host launch inputs and must terminate with kernel.launch.config."),
             single_block=True,
             terminator="kernel.launch.config",
-            arg_source="args",
             buffer_arg_memory_space="global",
         ),
         RegionDef(
@@ -304,10 +307,6 @@ kernel_def = Op(
             terminator="kernel.return",
             buffer_arg_memory_space="global",
         ),
-    ],
-    constraints=[
-        BlockArgCount("config", "body"),
-        BlockArgsMatchTypes("config", "body"),
     ],
     interfaces=[
         FuncLikeInterface(
@@ -325,14 +324,14 @@ kernel_def = Op(
     format=[
         *_ENTRY_TARGET_FORMAT,
         *_ENTRY_EXPORT_FORMAT,
-        *_ENTRY_SIGNATURE_FORMAT,
+        *_ENTRY_CONFIG_FORMAT,
         Region("config"),
-        kw("launch"),
+        *_ENTRY_LAUNCH_FORMAT,
         Region("body"),
     ],
     examples=[
-        "kernel.def @entry(%buffer: buffer) {\n  %one = index.constant 1 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index\n} launch {\n  kernel.return\n}",
-        'kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) @matmul(%lhs: buffer, %rhs: buffer, %out: buffer) {\n  %one = index.constant 1 : index\n  %threads = index.constant 256 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index\n} launch {\n  kernel.return\n}',
+        "kernel.def @entry() {\n  %one = index.constant 1 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index\n} launch(%buffer: buffer) {\n  kernel.return\n}",
+        'kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) @matmul(%m: index, %n: index) {\n  %one = index.constant 1 : index\n  %threads = index.constant 256 : index\n  kernel.launch.config workgroups(%m, %n, %one) workgroup_size(%threads, %one, %one) : index\n} launch(%lhs: buffer, %rhs: buffer, %out: buffer) {\n  kernel.return\n}',
     ],
 )
 

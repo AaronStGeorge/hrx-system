@@ -46,7 +46,6 @@ loom_generated_cc_library(
     loom::target::test::target_record_table
     loom::target::types
     loom::util::fact_table
-  TESTONLY
 )
 
 loom_cc_test(

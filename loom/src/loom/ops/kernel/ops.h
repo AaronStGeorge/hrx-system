@@ -122,10 +122,10 @@ typedef enum loom_kernel_workgroup_scan_direction_e {
 } loom_kernel_workgroup_scan_direction_t;
 
 // LOOM_OP_KERNEL_DEF: Dispatchable source-level kernel entry. Kernel entries own launch and export contracts; ordinary func.def bodies remain helper/callable code.
-// kernel.def @entry(%buffer: buffer) {
+// kernel.def @entry() {
 //   %one = index.constant 1 : index
 //   kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
-// } launch {
+// } launch(%buffer: buffer) {
 //   kernel.return
 // }
 LOOM_DEFINE_ISA(loom_kernel_def_isa, LOOM_OP_KERNEL_DEF)
@@ -154,6 +154,8 @@ iree_status_t loom_kernel_def_build(
     loom_optional int64_t export_ordinal,
     loom_optional uint8_t export_linkage,
     loom_symbol_ref_t callee,
+    const loom_type_t* config_arg_types,
+    iree_host_size_t config_arg_types_count,
     const loom_type_t* arg_types,
     iree_host_size_t arg_types_count,
     loom_optional const loom_predicate_t* predicates,

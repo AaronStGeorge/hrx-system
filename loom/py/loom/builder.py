@@ -47,6 +47,7 @@ from loom.fields import FieldLayout
 from loom.ir import (
     LOCATION_UNKNOWN,
     VALUE_DEF_BLOCK_NONE,
+    VALUE_FLAG_BLOCK_ARG,
     Block,
     Module,
     Operation,
@@ -312,6 +313,21 @@ class IRBuilder:
         value = Value(name=name, type=value_type, **kwargs)
         value_id = self._module.add_value(value)
         return ValueRef(value_id, self)
+
+    def region(self, args: Sequence[tuple[str, Type]] = ()) -> Region:
+        """Create a single-block region with named block arguments."""
+        block = Block()
+        for arg_index, (name, arg_type) in enumerate(args):
+            value_id = self._module.add_value(
+                Value(
+                    name=name,
+                    type=arg_type,
+                    flags=VALUE_FLAG_BLOCK_ARG,
+                    def_result_index=arg_index,
+                )
+            )
+            block.arg_ids.append(value_id)
+        return Region(blocks=[block])
 
     # --- Operand resolution ---
 

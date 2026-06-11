@@ -55,15 +55,15 @@ typedef struct loom_run_hal_artifact_t {
   iree_string_view_t executable_format;
   // Target-neutral bundle resolved for the artifact, when available.
   const loom_target_bundle_t* target_bundle;
-  // Target-native artifact format before runtime-loader packaging.
+  // Target-native artifact format.
   loom_target_artifact_format_t target_artifact_format;
-  // Target-native artifact bytes before any runtime-loader packaging.
+  // Target-native artifact bytes.
   iree_const_byte_span_t target_artifact_data;
   // Target-owned textual listing format, such as `amdgpu-assembly`.
   iree_string_view_t target_listing_format;
   // Target-owned textual listing bytes for debug artifact bundles.
   iree_const_byte_span_t target_listing_data;
-  // Provider-owned HAL executable container bytes passed to the loader.
+  // Provider-owned executable bytes passed to the HAL loader.
   iree_const_byte_span_t executable_data;
   // Provider-owned storage released by |deinitialize_artifact|.
   void* storage;
@@ -72,6 +72,11 @@ typedef struct loom_run_hal_artifact_t {
 typedef iree_status_t (*loom_run_hal_select_device_target_fn_t)(
     const loom_run_hal_artifact_provider_t* provider,
     const struct loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
+    loom_run_hal_device_target_t* out_target);
+
+typedef iree_status_t (*loom_run_hal_select_target_key_fn_t)(
+    const loom_run_hal_artifact_provider_t* provider,
+    iree_string_view_t target_key, iree_allocator_t allocator,
     loom_run_hal_device_target_t* out_target);
 
 typedef void (*loom_run_hal_deinitialize_device_target_fn_t)(
@@ -109,7 +114,10 @@ struct loom_run_hal_artifact_provider_t {
   loom_target_pipeline_options_t default_pipeline_options;
   // Selects a concrete target supported by the active HAL executable cache.
   loom_run_hal_select_device_target_fn_t select_device_target;
-  // Releases storage owned by a target returned from |select_device_target|.
+  // Selects a concrete offline target by provider-owned key. This is used by
+  // compilation tools that do not have an active HAL runtime device.
+  loom_run_hal_select_target_key_fn_t select_target_key;
+  // Releases storage owned by a target returned from a target selection hook.
   loom_run_hal_deinitialize_device_target_fn_t deinitialize_device_target;
   // Resolves or materializes an in-module target record for a selected device.
   // Called lazily only when a private compile module has targetless kernels.

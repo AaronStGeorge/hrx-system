@@ -14,9 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/kernel/launch_config.h"
 #include "loom/ops/kernel/ops.h"
-#include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
-#include "loom/rewrite/rewriter.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/util/fact_table.h"
 
@@ -361,6 +359,43 @@ static bool loom_run_hal_testbench_find_parameter_index_for_value(
   return false;
 }
 
+static iree_string_view_t loom_run_hal_testbench_value_name(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (module == NULL || value_id >= module->values.count) {
+    return iree_string_view_empty();
+  }
+  const loom_string_id_t name_id = module->values.entries[value_id].name_id;
+  if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[name_id];
+}
+
+static bool loom_run_hal_testbench_find_parameter_index_for_name(
+    const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
+    iree_string_view_t name, iree_host_size_t* out_parameter_index) {
+  if (iree_string_view_is_empty(name)) {
+    *out_parameter_index = 0;
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < case_plan->parameter_count; ++i) {
+    const loom_testbench_parameter_plan_t* parameter =
+        &case_plan->parameters[i];
+    if (iree_string_view_equal(parameter->name, name)) {
+      *out_parameter_index = i;
+      return true;
+    }
+    if (iree_string_view_equal(
+            loom_run_hal_testbench_value_name(module, parameter->value_id),
+            name)) {
+      *out_parameter_index = i;
+      return true;
+    }
+  }
+  *out_parameter_index = 0;
+  return false;
+}
+
 static bool loom_run_hal_testbench_value_facts_from_sample_attr(
     loom_attribute_t attr, loom_value_facts_t* out_facts) {
   switch (attr.kind) {
@@ -416,6 +451,61 @@ loom_run_hal_testbench_apply_sample_constant_to_func_region_argument(
   return iree_ok_status();
 }
 
+static iree_status_t
+loom_run_hal_testbench_apply_sample_constant_to_named_region_args(
+    loom_run_hal_testbench_actual_provider_t* provider, loom_func_like_t func,
+    uint8_t region_index) {
+  loom_region_t* region = loom_func_like_region(func, region_index);
+  if (region == NULL || region->block_count == 0) {
+    return iree_ok_status();
+  }
+  loom_block_t* entry_block = loom_region_entry_block(region);
+  for (uint16_t argument_index = 0; argument_index < entry_block->arg_count;
+       ++argument_index) {
+    const loom_value_id_t argument_id =
+        loom_block_arg_id(entry_block, argument_index);
+    const iree_string_view_t argument_name = loom_run_hal_testbench_value_name(
+        provider->compile_module.module, argument_id);
+    iree_host_size_t parameter_index = 0;
+    if (!loom_run_hal_testbench_find_parameter_index_for_name(
+            provider->test_module, provider->sample_constant_case_plan,
+            argument_name, &parameter_index)) {
+      continue;
+    }
+    const iree_host_size_t parameter_sample_ordinal =
+        loom_testbench_case_sample_parameter_ordinal(
+            provider->sample_constant_case_plan,
+            provider->sample_constant_ordinal, parameter_index);
+    loom_attribute_t sample_value = loom_attr_absent();
+    IREE_RETURN_IF_ERROR(loom_testbench_parameter_sample_value(
+        &provider->sample_constant_case_plan->parameters[parameter_index],
+        parameter_sample_ordinal, &sample_value));
+    loom_value_facts_t facts = loom_value_facts_unknown();
+    if (!loom_run_hal_testbench_value_facts_from_sample_attr(sample_value,
+                                                             &facts)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_run_hal_testbench_apply_sample_constant_to_func_region_argument(
+            provider->compile_module.module, func, region_index, argument_index,
+            facts, &provider->sample_constant_argument_count));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_run_hal_testbench_apply_sample_constants_to_kernel_config(
+    loom_run_hal_testbench_actual_provider_t* provider, loom_func_like_t func) {
+  if (!loom_kernel_def_isa(func.op)) {
+    return iree_ok_status();
+  }
+  enum {
+    LOOM_RUN_HAL_TESTBENCH_KERNEL_CONFIG_REGION_INDEX = 0,
+  };
+  return loom_run_hal_testbench_apply_sample_constant_to_named_region_args(
+      provider, func, LOOM_RUN_HAL_TESTBENCH_KERNEL_CONFIG_REGION_INDEX);
+}
+
 static iree_status_t loom_run_hal_testbench_apply_sample_constants(
     loom_run_hal_testbench_actual_provider_t* provider,
     iree_string_view_t entry_symbol) {
@@ -467,6 +557,9 @@ static iree_status_t loom_run_hal_testbench_apply_sample_constants(
               &provider->sample_constant_argument_count));
     }
   }
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_testbench_apply_sample_constants_to_kernel_config(provider,
+                                                                     func));
   return iree_ok_status();
 }
 
@@ -515,146 +608,6 @@ static loom_diagnostic_sink_t loom_run_hal_testbench_counting_diagnostic_sink(
 static uint32_t loom_run_hal_testbench_max_errors(
     const loom_run_hal_testbench_actual_provider_t* provider) {
   return provider->max_errors == 0 ? 20 : provider->max_errors;
-}
-
-static bool loom_run_hal_testbench_symbol_refs_equal(loom_symbol_ref_t lhs,
-                                                     loom_symbol_ref_t rhs) {
-  return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
-}
-
-static iree_status_t loom_run_hal_testbench_validate_target_ref(
-    const loom_module_t* module, loom_symbol_ref_t target_ref) {
-  if (!loom_symbol_ref_is_valid(target_ref)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL device target resolver returned a null "
-                            "target record symbol");
-  }
-  if (target_ref.module_id != 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "HAL device target resolver returned non-local target ref {%u, %u}",
-        (unsigned)target_ref.module_id, (unsigned)target_ref.symbol_id);
-  }
-  if (target_ref.symbol_id >= module->symbols.count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "HAL device target resolver returned target symbol id %u, but module "
-        "has only %" PRIhsz " symbols",
-        (unsigned)target_ref.symbol_id, module->symbols.count);
-  }
-
-  const loom_symbol_t* symbol = &module->symbols.entries[target_ref.symbol_id];
-  if (symbol->defining_op == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "HAL device target resolver returned unbound target symbol id %u",
-        (unsigned)target_ref.symbol_id);
-  }
-  const loom_target_like_t target =
-      loom_target_like_cast(module, symbol->defining_op);
-  if (!loom_target_like_isa(target)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "HAL device target resolver returned symbol id %u, but its defining "
-        "op is not target-like",
-        (unsigned)target_ref.symbol_id);
-  }
-  if (!loom_run_hal_testbench_symbol_refs_equal(loom_target_like_symbol(target),
-                                                target_ref)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "HAL device target resolver returned symbol id %u, but the target-like "
-        "op defines a different symbol",
-        (unsigned)target_ref.symbol_id);
-  }
-  return iree_ok_status();
-}
-
-iree_status_t loom_run_hal_testbench_assign_targetless_kernel_targets(
-    const loom_run_hal_artifact_provider_t* artifact_provider,
-    const loom_run_hal_device_target_t* device_target, loom_module_t* module,
-    loom_run_hal_targetless_kernel_assignment_result_t* out_result) {
-  if (out_result != NULL) {
-    *out_result = (loom_run_hal_targetless_kernel_assignment_result_t){
-        .target_ref = loom_symbol_ref_null(),
-    };
-  }
-  if (artifact_provider == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL targetless kernel assignment requires an "
-                            "artifact provider");
-  }
-  if (device_target == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL targetless kernel assignment requires a "
-                            "selected device target");
-  }
-  if (module == NULL || module->body == NULL ||
-      module->body->block_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL targetless kernel assignment requires a "
-                            "module with a body block");
-  }
-
-  uint32_t targetless_kernel_count = 0;
-  loom_op_t* op = NULL;
-  loom_block_for_each_op(loom_module_block(module), op) {
-    if (loom_kernel_def_isa(op) &&
-        !loom_symbol_ref_is_valid(loom_kernel_def_target(op))) {
-      ++targetless_kernel_count;
-    }
-  }
-  if (out_result != NULL) {
-    out_result->targetless_kernel_count = targetless_kernel_count;
-  }
-  if (targetless_kernel_count == 0) {
-    return iree_ok_status();
-  }
-  if (artifact_provider->resolve_device_target_ref == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "HAL artifact provider '%.*s' cannot assign targetless kernels for "
-        "%.*s targets",
-        (int)artifact_provider->name.size, artifact_provider->name.data,
-        (int)artifact_provider->target_family_name.size,
-        artifact_provider->target_family_name.data);
-  }
-
-  loom_symbol_ref_t target_ref = loom_symbol_ref_null();
-  IREE_RETURN_IF_ERROR(artifact_provider->resolve_device_target_ref(
-      artifact_provider, module, device_target, &target_ref));
-  IREE_RETURN_IF_ERROR(
-      loom_run_hal_testbench_validate_target_ref(module, target_ref));
-
-  loom_rewriter_t rewriter = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_rewriter_initialize(&rewriter, module, &module->arena));
-  iree_status_t status = iree_ok_status();
-  uint32_t assigned_kernel_count = 0;
-  loom_block_for_each_op(loom_module_block(module), op) {
-    if (!loom_kernel_def_isa(op) ||
-        loom_symbol_ref_is_valid(loom_kernel_def_target(op))) {
-      continue;
-    }
-    status =
-        loom_rewriter_set_attr(&rewriter, op, loom_kernel_def_target_ATTR_INDEX,
-                               loom_attr_symbol(target_ref));
-    if (!iree_status_is_ok(status)) {
-      break;
-    }
-    ++assigned_kernel_count;
-  }
-  loom_rewriter_deinitialize(&rewriter);
-  if (!iree_status_is_ok(status)) {
-    return status;
-  }
-
-  if (out_result != NULL) {
-    out_result->target_ref = target_ref;
-    out_result->assigned_kernel_count = assigned_kernel_count;
-    out_result->changed = assigned_kernel_count != 0;
-  }
-  return iree_ok_status();
 }
 
 static iree_status_t
@@ -716,7 +669,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   provider->compile_module_initialized = true;
   IREE_RETURN_IF_ERROR(
       loom_run_hal_testbench_apply_sample_constants(provider, entry_symbol));
-  IREE_RETURN_IF_ERROR(loom_run_hal_testbench_assign_targetless_kernel_targets(
+  IREE_RETURN_IF_ERROR(loom_run_hal_assign_targetless_kernel_targets(
       provider->context->artifact_provider, &provider->compile_device_target,
       provider->compile_module.module, NULL));
 

@@ -22,7 +22,7 @@ package(
 
 _SPIRV_C_API_VISIBILITY = ["//loom/binding/c/target/spirv:__pkg__"]
 
-_SPIRV_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check/full:__pkg__"]
+_SPIRV_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check:__pkg__"]
 
 _SPIRV_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/spirv:__pkg__"]
 

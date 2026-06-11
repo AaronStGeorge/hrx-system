@@ -91,12 +91,12 @@ def tilekernels_group_count_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_kernel(%group_idx_handle: buffer, %out_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_kernel() {
   %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%group_idx_handle: buffer, %out_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %group_idx_noalias = buffer.assume.noalias %group_idx_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -248,12 +248,12 @@ def tilekernels_aux_fi_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%topk_idx_handle: buffer, %out_handle: buffer, %num_aux_topk: i32, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel() {
   %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%topk_idx_handle: buffer, %out_handle: buffer, %num_aux_topk: i32, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %topk_idx_noalias = buffer.assume.noalias %topk_idx_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

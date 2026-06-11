@@ -15,5 +15,4 @@ package(
 loom_check_test_suite(
     name = "test",
     srcs = ["legalize.loom-test"],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

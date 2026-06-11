@@ -24,9 +24,10 @@ belong to `iree-benchmark-loom` flags or embedding APIs.
 | Pattern | Checked source |
 | --- | --- |
 | Concrete helper call | `ffn_gate_up_swiglu_q6q8.loom` calls `@q6_signed_pack_dot4i` with `func.call` because it is exact bit manipulation. |
+| Dynamic extent byte fill | `memset_i8.loom` keeps a 64-bit pattern argument and narrows it at the byte store, matching runtime-style ABI pressure without runtime-specific names. |
 | Template provider selection | `ffn_gate_up_swiglu_q6q8.loom` applies `model.q6q8.accumulate_part` so libraries can provide alternate packed-dot implementations. |
 | Local unroll intent | `ffn_gate_up_swiglu_q6q8.loom` keeps block/part loops structured and marks the tiny trip-count loops with `unroll`. |
-| Logical indexing | Both files use index/view math for logical rows, blocks, lanes, and dense tensor coordinates. |
+| Logical indexing | The examples use index/view math for logical rows, blocks, lanes, byte positions, and dense tensor coordinates. |
 | Dynamic case parameters | `mlp_down_projection_residual_bf16.loom` names `rows` on a `check.param.choice` and threads it through shapes, launch geometry, and the kernel ABI. |
 | Benchmark slices | `mlp_down_projection_residual_bf16.loom` has an anonymous full sweep plus named decode/full rows with assignment dictionaries. |
 
@@ -57,6 +58,21 @@ expected tensor simple, while the dispatch still exercises unpack, dot, scale,
 reduction, SiLU, and store. Higher-fidelity math oracles belong in the external
 fixture/reference layer when the expected values are too large or too expensive
 to express inline.
+
+## Memset i8
+
+`memset_i8.loom` is the minimal byte-fill reference for dynamic extent kernels.
+It uses ordinary launch geometry and a guarded store for the tail workgroup. The
+pattern is intentionally an `i64` launch argument even though the stored element
+is `i8`; runtime and embedding ABIs often widen small scalar payloads, and the
+authored kernel should express the narrowing with `scalar.trunci` instead of
+requiring a source generator or target-specific ABI hook.
+
+The case sweeps a partial workgroup, an exact workgroup boundary, and a
+multi-workgroup tail. Its expected tensor uses the low byte of the wide pattern,
+so host dry-run and AMDGPU execution both keep the 64-bit-to-byte path visible.
+The named benchmark rows make those three shapes easy to select independently
+when debugging launch geometry or store lowering.
 
 ## MLP Down-Projection Residual
 

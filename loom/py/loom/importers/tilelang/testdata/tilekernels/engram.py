@@ -109,7 +109,7 @@ def tilekernels_engram_hash_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_kernel(%ngram_token_ids_handle: buffer, %multipliers_handle: buffer, %vocab_sizes_handle: buffer, %offsets_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_kernel(%num_tokens: i32) {
   %c2 = index.constant 2 : index
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c32 = index.constant 32 : index
@@ -118,7 +118,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   %sub = index.sub %add, %c1 : index
   %div = index.div %sub, %c32 : index
   kernel.launch.config workgroups(%c2, %div, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%ngram_token_ids_handle: buffer, %multipliers_handle: buffer, %vocab_sizes_handle: buffer, %offsets_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %ngram_token_ids_noalias = buffer.assume.noalias %ngram_token_ids_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

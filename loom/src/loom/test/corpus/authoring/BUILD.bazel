@@ -15,6 +15,7 @@ package(
 
 exports_files([
     "ffn_gate_up_swiglu_q6q8.loom",
+    "memset_i8.loom",
     "mlp_down_projection_residual_bf16.loom",
 ])
 
@@ -35,6 +36,20 @@ iree_executable_test(
     ],
     data = [
         "ffn_gate_up_swiglu_q6q8.loom",
+    ],
+    tags = ["hostonly"],
+    target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
+)
+
+iree_executable_test(
+    name = "memset_i8_plan_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location memset_i8.loom)",
+        "--dry_run",
+    ],
+    data = [
+        "memset_i8.loom",
     ],
     tags = ["hostonly"],
     target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
@@ -70,6 +85,32 @@ iree_executable_test(
     ],
     data = [
         "ffn_gate_up_swiglu_q6q8.loom",
+    ],
+    tags = [
+        "driver=amdgpu",
+        "manual",
+        "requires-gpu-amd",
+    ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
+)
+
+iree_executable_test(
+    name = "memset_i8_amdgpu_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location memset_i8.loom)",
+        "--device=amdgpu",
+        "--measure=dispatch_complete",
+        "--sample_compilation=per_sample",
+        "--iterations=1",
+        "--warmup_iterations=0",
+        "--batch_size=1",
+        "--min_time_ms=0",
+        "--max_batches=1",
+        "--input_ring_count=1",
+    ],
+    data = [
+        "memset_i8.loom",
     ],
     tags = [
         "driver=amdgpu",

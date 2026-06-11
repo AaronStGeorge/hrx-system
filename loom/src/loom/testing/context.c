@@ -6,11 +6,9 @@
 
 #include "loom/testing/context.h"
 
-#include "loom/ops/op_registry.h"
-#include "loom/ops/test/registry.h"
+#include "loom/tooling/context/context.h"
 
 iree_status_t loom_testing_context_register_all_dialects(
     loom_context_t* context) {
-  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
-  return loom_test_dialect_register(context);
+  return loom_tooling_context_register_tool_dialects(context);
 }

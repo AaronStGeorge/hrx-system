@@ -9,11 +9,11 @@ func.def @prefetch_static(%input: buffer) {
 
 // ====
 
-kernel.def @prefetch_workgroup_id(%input: buffer) {
+kernel.def @prefetch_workgroup_id() {
   %c1 = index.constant 1 : index
   %c1025 = index.constant 1025 : index
   kernel.launch.config workgroups(%c1025, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %gid = kernel.workgroup.id<x> : index
   %bounded_gid = index.assume %gid [range(%gid, 0, 1024)] : index
   %zero = index.constant 0 : offset
@@ -24,12 +24,12 @@ kernel.def @prefetch_workgroup_id(%input: buffer) {
 
 // ====
 
-kernel.def @prefetch_fixed_query_offset(%input: buffer) {
+kernel.def @prefetch_fixed_query_offset() {
   %c1 = index.constant 1 : index
   %c8 = index.constant 8 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %workgroup_size_x = kernel.workgroup.size<x> : index
   %workgroup_size_y = kernel.workgroup.size<y> : index
   %subgroup_size = kernel.subgroup.size : index

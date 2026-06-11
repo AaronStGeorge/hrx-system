@@ -581,6 +581,32 @@ static iree_status_t loom_amdgpu_hal_binding_materialize_direct_arg_pair(
       rewriter, second_arg, second_value);
 }
 
+static iree_status_t loom_amdgpu_hal_binding_materialize_direct_arg_load(
+    loom_rewriter_t* rewriter, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_hal_kernarg_direct_arg_t* direct_arg,
+    loom_value_id_t kernarg_ptr, loom_type_t sgpr_type,
+    loom_type_t sgpr_x2_type, loom_location_id_t location) {
+  loom_value_id_t loaded = LOOM_VALUE_ID_INVALID;
+  if (direct_arg->kernarg_size == sizeof(uint32_t) &&
+      loom_type_equal(direct_arg->abi_type, sgpr_type)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_build_scalar_load(
+        rewriter, descriptor_set, kernarg_ptr, direct_arg->kernarg_offset,
+        sgpr_type, location, &loaded));
+  } else if (direct_arg->kernarg_size == 2u * sizeof(uint32_t) &&
+             loom_type_equal(direct_arg->abi_type, sgpr_x2_type)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_build_s_load_dwordx2(
+        rewriter, descriptor_set, kernarg_ptr, direct_arg->kernarg_offset,
+        sgpr_x2_type, location, &loaded));
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU HAL binding materialization reached an unverified direct "
+        "argument layout");
+  }
+  return loom_amdgpu_hal_binding_materialize_direct_arg_value(
+      rewriter, direct_arg, loaded);
+}
+
 static iree_status_t loom_amdgpu_hal_binding_materialize_direct_args(
     loom_rewriter_t* rewriter, loom_op_t* function_op,
     const loom_amdgpu_hal_kernel_abi_layout_t* layout,
@@ -620,12 +646,9 @@ static iree_status_t loom_amdgpu_hal_binding_materialize_direct_args(
       continue;
     }
 
-    loom_value_id_t loaded = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_build_scalar_load(
-        rewriter, descriptor_set, kernarg_ptr, direct_arg->kernarg_offset,
-        sgpr_type, function_op->location, &loaded));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_materialize_direct_arg_value(
-        rewriter, direct_arg, loaded));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_materialize_direct_arg_load(
+        rewriter, descriptor_set, direct_arg, kernarg_ptr, sgpr_type,
+        sgpr_x2_type, function_op->location));
     ++*out_materialized_count;
   }
 
@@ -824,17 +847,11 @@ iree_status_t loom_amdgpu_hal_binding_materialize(
     if (iree_status_is_ok(status)) {
       loom_amdgpu_hal_binding_set_entry_insertion_point(&rewriter, function_op);
     }
-    if (iree_status_is_ok(status)) {
-      status = loom_amdgpu_hal_binding_materialize_direct_args(
-          &rewriter, function_op, &layout, kernarg_ptr, descriptor_set,
-          sgpr_type, sgpr_x2_type, &out_result->materialized_direct_arg_count);
-    }
   }
-  if (iree_status_is_ok(status) && layout.direct_arg_count != 0 &&
-      !layout.uses_kernarg_segment_ptr) {
+  if (iree_status_is_ok(status)) {
     status = loom_amdgpu_hal_binding_materialize_direct_args(
-        &rewriter, function_op, &layout, LOOM_VALUE_ID_INVALID, descriptor_set,
-        sgpr_type, sgpr_x2_type, &out_result->materialized_direct_arg_count);
+        &rewriter, function_op, &layout, kernarg_ptr, descriptor_set, sgpr_type,
+        sgpr_x2_type, &out_result->materialized_direct_arg_count);
   }
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_hal_binding_materialize_resources(

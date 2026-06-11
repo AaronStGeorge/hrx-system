@@ -58,10 +58,10 @@ def vector_float_trunc_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("vector_float_trunc_store") @vector_float_trunc_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_float_trunc_store") @vector_float_trunc_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -110,10 +110,10 @@ def scalar_reinterpret_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scalar_reinterpret_store") @scalar_reinterpret_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_reinterpret_store") @scalar_reinterpret_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -160,10 +160,10 @@ def vector_reinterpret_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("vector_reinterpret_store") @vector_reinterpret_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_reinterpret_store") @vector_reinterpret_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -210,10 +210,10 @@ def vector_int_to_float_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("vector_int_to_float_store") @vector_int_to_float_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_int_to_float_store") @vector_int_to_float_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>

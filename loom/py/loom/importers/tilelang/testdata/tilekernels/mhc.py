@@ -295,7 +295,7 @@ def tilekernels_mhc_expand_fwd_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("expand_to_mhc_fwd_kernel") @expand_to_mhc_fwd_kernel(%x_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("expand_to_mhc_fwd_kernel") @expand_to_mhc_fwd_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c32 = index.constant 32 : index
   %add = index.add %num_tokens_idx, %c32 : index
@@ -304,7 +304,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("expand_to_mhc_fwd_kernel") @expand_
   %div = index.div %sub, %c32 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%x_handle: buffer, %output_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -381,7 +381,7 @@ def tilekernels_mhc_head_compute_mix_fwd_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @mhc_head_compute_mix_fwd_kernel(%input_mix_handle: buffer, %mhc_scale_handle: buffer, %mhc_base_handle: buffer, %output_mix_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @mhc_head_compute_mix_fwd_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c2 = index.constant 2 : index
   %add = index.add %num_tokens_idx, %c2 : index
@@ -390,7 +390,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_head_compute_mix_fwd_kernel") @
   %div = index.div %sub, %c2 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%input_mix_handle: buffer, %mhc_scale_handle: buffer, %mhc_base_handle: buffer, %output_mix_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %input_mix_noalias = buffer.assume.noalias %input_mix_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -453,7 +453,7 @@ def tilekernels_mhc_pre_split_mixes_fwd_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @mhc_pre_split_mixes_fwd_kernel(%input_mixes_handle: buffer, %mhc_scale_handle: buffer, %mhc_base_handle: buffer, %pre_layer_mix_handle: buffer, %post_layer_mix_handle: buffer, %comb_res_mix_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @mhc_pre_split_mixes_fwd_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c2 = index.constant 2 : index
   %add = index.add %num_tokens_idx, %c2 : index
@@ -462,7 +462,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mhc_pre_split_mixes_fwd_kernel") @m
   %div = index.div %sub, %c2 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%input_mixes_handle: buffer, %mhc_scale_handle: buffer, %mhc_base_handle: buffer, %pre_layer_mix_handle: buffer, %post_layer_mix_handle: buffer, %comb_res_mix_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %input_mixes_noalias = buffer.assume.noalias %input_mixes_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -598,14 +598,14 @@ def tilekernels_mhc_sinkhorn_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn_kernel(%comb_res_mix_handle: buffer, %comb_res_mix_out_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("mhc_sinkhorn_kernel") @mhc_sinkhorn_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1 = index.constant 1 : index
   %add = index.add %num_tokens_idx, %c1 : index
   %sub = index.sub %add, %c1 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%sub, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%comb_res_mix_handle: buffer, %comb_res_mix_out_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %comb_res_mix_noalias = buffer.assume.noalias %comb_res_mix_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

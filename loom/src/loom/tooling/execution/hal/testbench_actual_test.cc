@@ -240,7 +240,7 @@ test.target<low_core> @target
 kernel.def target(@target) @entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");
@@ -249,7 +249,7 @@ kernel.def target(@target) @entry() {
 
   loom_run_hal_targetless_kernel_assignment_result_t result = {};
   loom_run_hal_device_target_t device_target = {};
-  IREE_ASSERT_OK(loom_run_hal_testbench_assign_targetless_kernel_targets(
+  IREE_ASSERT_OK(loom_run_hal_assign_targetless_kernel_targets(
       &hal_testbench_actual_test_artifact_provider, &device_target,
       module.get(), &result));
 
@@ -269,14 +269,14 @@ test.target<low_core> @target
 kernel.def @first() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 
 kernel.def @second() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");
@@ -285,7 +285,7 @@ kernel.def @second() {
 
   loom_run_hal_targetless_kernel_assignment_result_t result = {};
   loom_run_hal_device_target_t device_target = {};
-  IREE_ASSERT_OK(loom_run_hal_testbench_assign_targetless_kernel_targets(
+  IREE_ASSERT_OK(loom_run_hal_assign_targetless_kernel_targets(
       &hal_testbench_actual_test_artifact_provider, &device_target,
       module.get(), &result));
 
@@ -311,14 +311,14 @@ test.target<low_core> @explicit_target
 kernel.def target(@explicit_target) @explicit_entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 
 kernel.def @targetless_entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");
@@ -329,7 +329,7 @@ kernel.def @targetless_entry() {
 
   loom_run_hal_targetless_kernel_assignment_result_t result = {};
   loom_run_hal_device_target_t device_target = {};
-  IREE_ASSERT_OK(loom_run_hal_testbench_assign_targetless_kernel_targets(
+  IREE_ASSERT_OK(loom_run_hal_assign_targetless_kernel_targets(
       &hal_testbench_actual_test_artifact_provider, &device_target,
       module.get(), &result));
 

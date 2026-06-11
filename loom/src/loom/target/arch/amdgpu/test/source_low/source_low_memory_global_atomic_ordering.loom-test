@@ -2,10 +2,10 @@
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @global_atomic_release_reduce_i32(%input: buffer) {
+kernel.def target(@target) @global_atomic_release_reduce_i32() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space<global> %input : buffer
@@ -18,23 +18,23 @@ kernel.def target(@target) @global_atomic_release_reduce_i32(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_release_reduce_i32() {
   %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %14 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %13 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_atomic_add_u32>(%15, %14, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_atomic_add_u32>(%14, %13, %11, %12) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
 }
 
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @global_atomic_acquire_rmw_i32(%input: buffer) {
+kernel.def target(@target) @global_atomic_acquire_rmw_i32() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space<global> %input : buffer
@@ -47,11 +47,11 @@ kernel.def target(@target) @global_atomic_acquire_rmw_i32(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acquire_rmw_i32() {
   %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %15 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%16, %15, %13, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %16 as reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %14 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%15, %14, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %15 as reg<amdgpu.vgpr>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.buffer_gl1_inv>() : ()
   low.op<amdgpu.buffer_gl0_inv>() : ()
@@ -61,10 +61,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acquire_rm
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @global_atomic_acq_rel_rmw_i32(%input: buffer) {
+kernel.def target(@target) @global_atomic_acq_rel_rmw_i32() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space<global> %input : buffer
@@ -77,13 +77,13 @@ kernel.def target(@target) @global_atomic_acq_rel_rmw_i32(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_rmw_i32() {
   %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %15 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %14 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%16, %15, %13, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %16 as reg<amdgpu.vgpr>
+  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%15, %14, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %15 as reg<amdgpu.vgpr>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.buffer_gl1_inv>() : ()
   low.op<amdgpu.buffer_gl0_inv>() : ()
@@ -93,10 +93,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_rm
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
+kernel.def target(@target) @global_atomic_acq_rel_cmpxchg_i32() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space<global> %input : buffer
@@ -110,15 +110,15 @@ kernel.def target(@target) @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_cmpxchg_i32() {
   %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %16 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %17 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %15 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %16 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
-  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
-  %19 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
-  %20 = low.concat(%18, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %21 = low.op<amdgpu.buffer_atomic_cmpswap_b32_rtn>(%20, %17, %15, %16) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %20 as reg<amdgpu.vgpr x2>
+  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
+  %19 = low.concat(%17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %20 = low.op<amdgpu.buffer_atomic_cmpswap_b32_rtn>(%19, %16, %14, %15) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %19 as reg<amdgpu.vgpr x2>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.buffer_gl1_inv>() : ()
   low.op<amdgpu.buffer_gl0_inv>() : ()
@@ -128,10 +128,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_cm
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @global_atomic_seq_cst_reduce_i32(%input: buffer) {
+kernel.def target(@target) @global_atomic_seq_cst_reduce_i32() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space<global> %input : buffer
@@ -144,13 +144,13 @@ kernel.def target(@target) @global_atomic_seq_cst_reduce_i32(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_seq_cst_reduce_i32() {
   %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %14 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %13 = low.op<amdgpu.hal.buffer_descriptor>(%view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_atomic_add_u32>(%15, %14, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_atomic_add_u32>(%14, %13, %11, %12) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
   low.op<amdgpu.buffer_gl1_inv>() : ()
   low.op<amdgpu.buffer_gl0_inv>() : ()

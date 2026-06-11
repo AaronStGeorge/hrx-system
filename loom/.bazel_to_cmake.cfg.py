@@ -11,6 +11,45 @@ import bazel_to_cmake_config
 import bazel_to_cmake_converter
 import bazel_to_cmake_requirements
 
+
+def _load_generated_amdgpu_target_config():
+    config_path = os.path.join(
+        os.path.dirname(__file__),
+        "build_tools",
+        "amdgpu",
+        "target_config.bzl",
+    )
+    env = {}
+    with open(config_path, encoding="utf-8") as config_file:
+        exec(compile(config_file.read(), config_path, "exec"), env)
+    return env
+
+
+_LOOM_AMDGPU_TARGET_CONFIG = _load_generated_amdgpu_target_config()
+
+
+def _loom_amdgpu_config_cmake_options():
+    config = _LOOM_AMDGPU_TARGET_CONFIG
+    options = {}
+    for processor in config["LOOM_AMDGPU_SUPPORTED_EXACT_PROCESSORS"]:
+        processor_upper = processor.upper()
+        options[f"//loom/config/target/amdgpu:processor_{processor}"] = (
+            f"LOOM_TARGET_AMDGPU_PROCESSOR_{processor_upper}"
+        )
+        options[f"//loom/config/target/amdgpu:iree_hal_processor_{processor}"] = (
+            f"LOOM_TARGET_AMDGPU_IREE_HAL_PROCESSOR_{processor_upper}"
+        )
+    for capability in config["LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES"]:
+        capability_upper = capability.upper()
+        options[f"//loom/config/target/amdgpu:{capability}"] = (
+            f"LOOM_TARGET_AMDGPU_{capability_upper}"
+        )
+        options[f"//loom/config/target/amdgpu:iree_hal_{capability}"] = (
+            f"LOOM_TARGET_AMDGPU_IREE_HAL_{capability_upper}"
+        )
+    return options
+
+
 _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/emit:amdgpu": "LOOM_EMIT_AMDGPU",
     "//loom/config/emit:iree_vm": "LOOM_EMIT_IREE_VM",
@@ -36,6 +75,7 @@ _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/target/arch:wasm": "LOOM_TARGET_ARCH_WASM",
     "//loom/config/target/arch:x86": "LOOM_TARGET_ARCH_X86",
 }
+_LOOM_CONFIG_CMAKE_OPTIONS.update(_loom_amdgpu_config_cmake_options())
 
 _LOW_DESCRIPTOR_ROOTPATH_PATTERN = re.compile(r"\$\(rootpath ([^)]+)\)")
 
@@ -44,6 +84,18 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
     def _custom_initialize(self):
         self._loom_low_descriptor_archive_source_vars = {}
         self._loom_low_descriptor_archive_targets = {}
+        self.LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY = _LOOM_AMDGPU_TARGET_CONFIG[
+            "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY"
+        ]
+        self._loom_amdgpu_descriptor_set_capabilities = _LOOM_AMDGPU_TARGET_CONFIG[
+            "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITIES"
+        ]
+        self._loom_amdgpu_descriptor_set_defines = _LOOM_AMDGPU_TARGET_CONFIG[
+            "LOOM_AMDGPU_DESCRIPTOR_SET_DEFINES"
+        ]
+        self._loom_amdgpu_descriptor_set_generator_targets = _LOOM_AMDGPU_TARGET_CONFIG[
+            "LOOM_AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGETS"
+        ]
         self._loom_requirement_policy = bazel_to_cmake_requirements.load_project_policy(
             self._repo_root,
             "loom",
@@ -121,6 +173,78 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
 
     def loom_config_compatible_with(self, config_labels):
         return list(config_labels)
+
+    def loom_amdgpu_target_selectors_flag(self, **kwargs):
+        return None
+
+    def loom_amdgpu_target_config_settings(self, **kwargs):
+        return None
+
+    def _loom_amdgpu_descriptor_set_config_label(self, capability):
+        if capability not in self._loom_amdgpu_descriptor_set_capabilities:
+            raise ValueError(
+                f"Unknown Loom AMDGPU descriptor-set capability: {capability}"
+            )
+        return "//loom/config/target/amdgpu:" + capability
+
+    def loom_amdgpu_descriptor_set_compatible_with(self, capability):
+        return self.loom_config_compatible_with(
+            [self._loom_amdgpu_descriptor_set_config_label(capability)]
+        )
+
+    def loom_amdgpu_selected_descriptor_set_defines(self):
+        defines = []
+        for capability in self._loom_amdgpu_descriptor_set_capabilities:
+            defines = defines + self.select(
+                {
+                    self._loom_amdgpu_descriptor_set_config_label(capability): [
+                        self._loom_amdgpu_descriptor_set_defines[capability],
+                    ],
+                    "//conditions:default": [],
+                }
+            )
+        return defines
+
+    def loom_amdgpu_selected_descriptor_set_values(self, values):
+        result = []
+        for capability in self._loom_amdgpu_descriptor_set_capabilities:
+            selected_values = values.get(capability, [])
+            if isinstance(selected_values, str):
+                selected_values = [selected_values]
+            result = result + self.select(
+                {
+                    self._loom_amdgpu_descriptor_set_config_label(
+                        capability
+                    ): selected_values,
+                    "//conditions:default": [],
+                }
+            )
+        return result
+
+    def loom_amdgpu_selected_descriptor_set_generator_args(self, args):
+        return self.loom_amdgpu_selected_descriptor_set_values(args)
+
+    def loom_amdgpu_selected_descriptor_set_deps(self, targets):
+        return self.loom_amdgpu_selected_descriptor_set_values(targets)
+
+    def loom_amdgpu_low_descriptor_deps(self):
+        return self.loom_amdgpu_selected_descriptor_set_deps(
+            {
+                capability: ":"
+                + self._loom_amdgpu_descriptor_set_generator_targets[capability]
+                for capability in self._loom_amdgpu_descriptor_set_capabilities
+            }
+        )
+
+    def loom_amdgpu_encoding_table_deps(self):
+        return self.loom_amdgpu_selected_descriptor_set_deps(
+            {
+                capability: ":"
+                + self._loom_amdgpu_descriptor_set_generator_targets[capability]
+                + "_encoding_tables"
+                for capability in self._loom_amdgpu_descriptor_set_capabilities
+            }
+        )
 
     def _should_emit_python_target(self):
         return self._current_package().startswith("loom/py/loom")
@@ -251,19 +375,50 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         return _LOW_DESCRIPTOR_ROOTPATH_PATTERN.sub(replace_rootpath, arg)
 
     def _convert_generated_args(self, args):
-        converted_args = []
-        for arg in args or []:
-            arg = self._convert_low_descriptor_arg(arg)
-            converted_args.extend(self._convert_location_arg(arg))
-        return converted_args
+        def convert(args):
+            converted_args = []
+            for arg in args or []:
+                arg = self._convert_low_descriptor_arg(arg)
+                converted_args.extend(self._convert_location_arg(arg))
+            return converted_args
+
+        return self._convert_generated_values(args, convert)
 
     def _convert_generated_inputs(self, inputs):
-        converted_inputs = []
-        for label in inputs or []:
-            for converted_input in self._convert_low_descriptor_input_label(label):
-                if converted_input not in converted_inputs:
-                    converted_inputs.append(converted_input)
-        return converted_inputs
+        def convert(inputs):
+            converted_inputs = []
+            for label in inputs or []:
+                for converted_input in self._convert_low_descriptor_input_label(label):
+                    if converted_input not in converted_inputs:
+                        converted_inputs.append(converted_input)
+            return converted_inputs
+
+        return self._convert_generated_values(inputs, convert)
+
+    def _convert_generated_values(self, values, convert):
+        if values is None:
+            return None
+        if isinstance(values, bazel_to_cmake_converter.ConditionSelect):
+            return bazel_to_cmake_converter.ConditionSelect(
+                {
+                    label: convert(selected_values)
+                    for label, selected_values in values.conditions.items()
+                }
+            )
+        if isinstance(values, bazel_to_cmake_converter.MixedDeps):
+            return bazel_to_cmake_converter.MixedDeps(
+                unconditional=convert(values.unconditional),
+                selects=[
+                    bazel_to_cmake_converter.ConditionSelect(
+                        {
+                            label: convert(selected_values)
+                            for label, selected_values in select.conditions.items()
+                        }
+                    )
+                    for select in values.selects
+                ],
+            )
+        return convert(values)
 
     def loom_generated_textual_header(
         self,
@@ -290,15 +445,25 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         generator_block = self._convert_single_target_block("GENERATOR", generator)
         output_block = self._convert_string_arg_block("OUTPUT", output)
         output_flag_block = self._convert_string_arg_block("OUTPUT_FLAG", output_flag)
-        args_block = self._convert_string_list_block(
-            "ARGS", self._convert_generated_args(args) or None, sort=False
+        args_block, platform_args_block = self._convert_platform_select_strings(
+            name,
+            "ARGS",
+            self._convert_generated_args(args),
+            sort=False,
         )
-        inputs_block = self._convert_string_list_block(
-            "INPUTS", self._convert_generated_inputs(inputs) or None, sort=False
+        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
+            name,
+            "INPUTS",
+            self._convert_generated_inputs(inputs),
+            sort=False,
         )
         comment_block = self._convert_string_arg_block("COMMENT", comment)
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_args_block:
+            self._converter.body += platform_args_block
+        if platform_inputs_block:
+            self._converter.body += platform_inputs_block
         self._converter.body += (
             f"loom_generated_textual_header(\n"
             f"{name_block}"
@@ -357,11 +522,17 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         generated_hdrs_block = self._convert_string_list_block(
             "GENERATED_HDRS", generated_hdrs or None, sort=False
         )
-        args_block = self._convert_string_list_block(
-            "ARGS", self._convert_generated_args(args) or None, sort=False
+        args_block, platform_args_block = self._convert_platform_select_strings(
+            name,
+            "ARGS",
+            self._convert_generated_args(args),
+            sort=False,
         )
-        inputs_block = self._convert_string_list_block(
-            "INPUTS", self._convert_generated_inputs(inputs) or None, sort=False
+        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
+            name,
+            "INPUTS",
+            self._convert_generated_inputs(inputs),
+            sort=False,
         )
         extra_output_flags_block = self._convert_string_list_block(
             "EXTRA_OUTPUT_FLAGS", extra_output_flags or None, sort=False
@@ -373,6 +544,10 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_args_block:
+            self._converter.body += platform_args_block
+        if platform_inputs_block:
+            self._converter.body += platform_inputs_block
         self._converter.body += (
             f"loom_generated_cc_library(\n"
             f"{name_block}"
@@ -469,11 +644,17 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         generated_hdrs_block = self._convert_string_list_block(
             "GENERATED_HDRS", generated_hdrs, sort=False
         )
-        args_block = self._convert_string_list_block(
-            "ARGS", self._convert_generated_args(args) or None, sort=False
+        args_block, platform_args_block = self._convert_platform_select_strings(
+            name,
+            "ARGS",
+            self._convert_generated_args(args),
+            sort=False,
         )
-        inputs_block = self._convert_string_list_block(
-            "INPUTS", self._convert_generated_inputs(inputs) or None, sort=False
+        inputs_block, platform_inputs_block = self._convert_platform_select_strings(
+            name,
+            "INPUTS",
+            self._convert_generated_inputs(inputs),
+            sort=False,
         )
         deps_block = self._convert_target_list_block("DEPS", deps)
         ids_deps_block = self._convert_target_list_block("IDS_DEPS", ids_deps)
@@ -483,6 +664,10 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         header_only_block = self._convert_option_block("HEADER_ONLY", header_only)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
+        if platform_args_block:
+            self._converter.body += platform_args_block
+        if platform_inputs_block:
+            self._converter.body += platform_inputs_block
         self._converter.body += (
             f"{cmake_rule_name}(\n"
             f"{name_block}"
@@ -660,7 +845,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         src,
         data=None,
         tags=None,
-        runner="//loom/src/loom/tools/loom-check/full:loom-check",
+        runner="//loom/src/loom/tools/loom-check:loom-check",
         target_compatible_with=None,
         **kwargs,
     ):
@@ -698,7 +883,7 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         srcs,
         data=None,
         tags=None,
-        runner="//loom/src/loom/tools/loom-check/full:loom-check",
+        runner="//loom/src/loom/tools/loom-check:loom-check",
         test_name_prefix_to_strip="",
         target_compatible_with=None,
         **kwargs,

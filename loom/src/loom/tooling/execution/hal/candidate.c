@@ -104,11 +104,38 @@ iree_status_t loom_run_hal_candidate_compile(
   if (iree_status_is_ok(status)) {
     status = provider->select_device_target(provider, runtime, allocator,
                                             &out_candidate->device_target);
+    if (iree_status_is_ok(status)) {
+      out_candidate->owns_device_target = true;
+    }
   }
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_candidate_emit_selected_target(
         provider, run_module, options, allocator, out_candidate);
   }
+  loom_run_hal_candidate_record_report_status(options, out_candidate,
+                                              iree_status_code(status));
+  loom_run_hal_candidate_publish_compile_report(options, out_candidate);
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_candidate_deinitialize(out_candidate);
+  }
+  return status;
+}
+
+iree_status_t loom_run_hal_candidate_emit_target(
+    const loom_run_hal_artifact_provider_t* provider,
+    const loom_run_hal_device_target_t* target, loom_run_module_t* run_module,
+    const loom_run_candidate_compile_options_t* options,
+    iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate) {
+  if (target == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL candidate target emission requires a "
+                            "selected target");
+  }
+  loom_run_hal_candidate_initialize(provider, options, allocator,
+                                    out_candidate);
+  out_candidate->device_target = *target;
+  iree_status_t status = loom_run_hal_candidate_emit_selected_target(
+      provider, run_module, options, allocator, out_candidate);
   loom_run_hal_candidate_record_report_status(options, out_candidate,
                                               iree_status_code(status));
   loom_run_hal_candidate_publish_compile_report(options, out_candidate);
@@ -145,7 +172,7 @@ void loom_run_hal_candidate_deinitialize(loom_run_hal_candidate_t* candidate) {
     candidate->provider->deinitialize_artifact(
         candidate->provider, &candidate->artifact, candidate->host_allocator);
   }
-  if (candidate->provider != NULL &&
+  if (candidate->provider != NULL && candidate->owns_device_target &&
       candidate->provider->deinitialize_device_target != NULL) {
     candidate->provider->deinitialize_device_target(candidate->provider,
                                                     &candidate->device_target,

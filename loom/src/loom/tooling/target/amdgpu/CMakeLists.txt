@@ -26,7 +26,6 @@ loom_cc_library(
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
     loom::target::compile_report
-    loom::target::emit::native::amdgpu::hal::executable
     loom::target::emit::native::amdgpu::hal_kernel_library
     loom::target::types
     loom::tooling::execution::compile_options
@@ -69,7 +68,7 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::op_registry
-    loom::target::arch::amdgpu::descriptors::low_registry_for_testing
+    loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::target_info

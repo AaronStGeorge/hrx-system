@@ -144,7 +144,7 @@ func.def @preserves_static_for_iv_facts() {
 kernel.def @preserves_kernel_for_iv_facts() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   %start = index.constant 0 : index
   %limit = index.constant 4 : index
   %step = index.constant 2 : index
@@ -159,7 +159,7 @@ kernel.def @preserves_kernel_for_iv_facts() {
 kernel.def @preserves_kernel_for_iv_facts() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   %start = index.constant 0 : index
   %limit = index.constant 4 : index
   %step = index.constant 2 : index

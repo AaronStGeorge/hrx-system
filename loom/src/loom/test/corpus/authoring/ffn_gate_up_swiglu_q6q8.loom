@@ -1,5 +1,3 @@
-amdgpu.target<gfx1100> @target {subgroup_size = 32}
-
 // q6_K stores low bits and sign/high-bit state separately. The q6/q8 dot path
 // calls this concrete sign-pack helper directly.
 func.def inline @q6_signed_pack_dot4i(%code: vector<1xi32>) -> (vector<4xi8>) {
@@ -101,13 +99,13 @@ func.template<model.q6q8.accumulate_part> device priority(10) @q6q8_accumulate_p
   func.return %next : f32
 }
 
-kernel.def target(@target) @ffn_gate_up_swiglu_q6q8(%q8_input: buffer, %gate_weight: buffer, %up_weight: buffer, %output: buffer) {
+kernel.def @ffn_gate_up_swiglu_q6q8() {
   %rows = index.constant 31 : index
   %channel_groups = index.constant 1184 : index
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 512 : index
   kernel.launch.config workgroups(%rows, %channel_groups, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%q8_input: buffer, %gate_weight: buffer, %up_weight: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %row0 = kernel.workgroup.id<x> : index
   %channel_group0 = kernel.workgroup.id<y> : index

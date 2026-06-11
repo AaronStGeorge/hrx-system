@@ -48,7 +48,11 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
 
   const loom_amdgpu_hsaco_kernel_t kernel = {
       .metadata = record.metadata,
-      .descriptor_options = {.flags = record.descriptor_flags},
+      .descriptor_options =
+          {
+              .flags = record.descriptor_flags,
+              .user_sgpr_count = record.user_sgpr_count,
+          },
       .text = text,
   };
   const uint64_t instruction_count =

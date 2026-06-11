@@ -116,6 +116,18 @@ def collect_dynamic_scalar_sources(
     )
 
 
+def collect_dynamic_scalar_source_groups_from(
+    values: Iterable[object],
+    skip_sources: Iterable[object] = (),
+) -> tuple[DynamicScalarSourceGroup, ...]:
+    """Collect free scalar TIR variables from standalone source values."""
+
+    collector = _DynamicScalarCollector(skip_sources)
+    for value in values:
+        collector.visit(value)
+    return collector.groups()
+
+
 def collect_dynamic_scalar_source_groups(
     prim_func: object,
     skip_sources: Iterable[object],
@@ -129,6 +141,12 @@ def collect_dynamic_scalar_source_groups(
         collector.visit(value)
     collector.visit(getattr(prim_func, "body", None))
     return collector.groups()
+
+
+def source_binding_keys(value: object) -> tuple[object, ...]:
+    """Return identity and semantic keys that bind equivalent source scalars."""
+
+    return _source_binding_keys(value)
 
 
 class _DynamicScalarCollector:

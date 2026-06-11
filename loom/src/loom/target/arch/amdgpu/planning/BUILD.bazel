@@ -5,6 +5,14 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load(
+    "//loom/build_tools/amdgpu:descriptor_sets.bzl",
+    "loom_amdgpu_descriptor_set_compatible_with",
+)
+load(
+    "//loom/build_tools/amdgpu:target_config.bzl",
+    "LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY",
+)
+load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
@@ -18,6 +26,8 @@ package(
 )
 
 _AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/planning:occupancy_tables"
+
+_DESCRIPTOR_SET_CDNA3 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.cdna3.core"]
 
 _AMDGPU_ROOT_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu:__pkg__"]
 
@@ -210,12 +220,13 @@ loom_cc_library(
 loom_cc_test(
     name = "storage_lease_test",
     srcs = ["storage_lease_test.cc"],
+    target_compatible_with = loom_amdgpu_descriptor_set_compatible_with(_DESCRIPTOR_SET_CDNA3),
     deps = [
         ":storage_lease",
         ":wait_plan",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:storage_lease",
-        "//loom/src/loom/target/arch/amdgpu/descriptors:shards_for_testing",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

@@ -21,11 +21,6 @@
 extern "C" {
 #endif
 
-// Registers the production Loom dialect surface without the synthetic test
-// dialect. This is suitable for backend-owned .loom-test runners.
-iree_status_t loom_check_register_production_context(void* user_data,
-                                                     loom_context_t* context);
-
 // Runs loom-check using |environment| as the linked tool environment.
 int loom_check_main(int argc, char** argv,
                     const loom_check_environment_t* environment);

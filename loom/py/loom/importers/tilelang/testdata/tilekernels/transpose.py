@@ -132,7 +132,7 @@ def tilekernels_batched_transpose_gfx942(
 r"""
 amdgpu.target<gfx942> @hip_mcpu_gfx942
 
-kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_transpose_kernel(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
+kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_transpose_kernel(%num_batches: i32, %shape_x: i32, %shape_y: i32) {
   %shape_y_idx = index.cast %shape_y : i32 to index
   %c128 = index.constant 128 : index
   %div = index.div %shape_y_idx, %c128 : index
@@ -142,7 +142,7 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_
   %c256 = index.constant 256 : index
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%div, %div_2, %num_batches_idx) workgroup_size(%c256, %c1, %c1) : index
-} launch {
+} launch(%x_handle: buffer, %out_handle: buffer, %num_batches: i32, %shape_x: i32, %shape_y: i32, %stride_x: i32) {
   %c0_bytes = index.constant 0 : offset
   %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

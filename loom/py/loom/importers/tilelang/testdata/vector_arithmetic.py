@@ -47,10 +47,10 @@ def vector_add_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("vector_add_store") @vector_add_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_add_store") @vector_add_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -99,10 +99,10 @@ def vector_add_fastmath_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("vector_add_fastmath_store") @vector_add_fastmath_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_add_fastmath_store") @vector_add_fastmath_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -152,10 +152,10 @@ def vector_select_store(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("vector_select_store") @vector_select_store(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("vector_select_store") @vector_select_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>

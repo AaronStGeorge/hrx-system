@@ -146,6 +146,29 @@ iree_status_t loom_amdgpu_emit_sgpr_scale_u32(loom_low_lower_context_t* context,
                                               loom_type_t lane_type,
                                               loom_value_id_t* out_value);
 
+// Emits an SGPR x2 value zero-extending the supplied one-unit SGPR.
+iree_status_t loom_amdgpu_emit_sgpr64_from_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_value, loom_value_id_t* out_low_wide_value);
+
+// Emits an SGPR x2 unsigned integer constant.
+iree_status_t loom_amdgpu_emit_sgpr64_constant_u64(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t value, loom_value_id_t* out_low_wide_value);
+
+// Emits an SGPR x2 add using the target carry-chain instructions.
+iree_status_t loom_amdgpu_emit_sgpr64_add(loom_low_lower_context_t* context,
+                                          const loom_op_t* source_op,
+                                          loom_value_id_t low_lhs,
+                                          loom_value_id_t low_rhs,
+                                          loom_value_id_t* out_low_sum);
+
+// Emits an SGPR x2 base plus one-unit SGPR unsigned byte offset.
+iree_status_t loom_amdgpu_emit_sgpr64_add_u32_offset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_base, loom_value_id_t low_offset,
+    loom_value_id_t* out_low_sum);
+
 // Emits one binary VGPR descriptor op.
 iree_status_t loom_amdgpu_emit_vgpr_binary(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -164,6 +187,18 @@ iree_status_t loom_amdgpu_emit_vgpr_shift(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t shift,
     loom_value_id_t value, loom_type_t lane_type, loom_value_id_t* out_value);
+
+// Emits a VGPR x2 value zero-extending the supplied one-unit low register.
+iree_status_t loom_amdgpu_emit_vgpr64_from_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_value, loom_value_id_t* out_low_wide_value);
+
+// Emits a VGPR x2 add using the target carry-chain instructions.
+iree_status_t loom_amdgpu_emit_vgpr64_add(loom_low_lower_context_t* context,
+                                          const loom_op_t* source_op,
+                                          loom_value_id_t low_lhs,
+                                          loom_value_id_t low_rhs,
+                                          loom_value_id_t* out_low_sum);
 
 // Emits round-to-nearest-even conversion from one f32 lane to one BF16 lane.
 // The result is held in the low 16 bits of a one-unit VGPR.

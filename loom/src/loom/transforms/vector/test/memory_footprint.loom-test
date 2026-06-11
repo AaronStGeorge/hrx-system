@@ -97,44 +97,47 @@ func.def @dynamic_unit_axis_proven_by_scalar_assume_before_index_cast(%buffer: b
 
 // ====
 
-kernel.def @dynamic_unit_axis_proven_by_workgroup_id_launch_config(%buffer: buffer, %base: offset, %rows: index) {
+kernel.def @dynamic_unit_axis_proven_by_workgroup_id_launch_config(%rows: index) {
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%rows, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%buffer: buffer, %base: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %row = kernel.workgroup.id<x> : index
-  %view = buffer.view %buffer[%base] : buffer -> view<[%rows]x2xf32, %layout>
-  %loaded = vector.load %view[%row, 0] : view<[%rows]x2xf32, %layout> -> vector<2xf32>
+  %row_count = kernel.workgroup.count<x> : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%row_count]x2xf32, %layout>
+  %loaded = vector.load %view[%row, 0] : view<[%row_count]x2xf32, %layout> -> vector<2xf32>
   kernel.return
 }
 
 // ====
 
-kernel.def @dynamic_unit_axis_proven_by_workitem_id_launch_config(%buffer: buffer, %base: offset, %columns: index) {
+kernel.def @dynamic_unit_axis_proven_by_workitem_id_launch_config(%columns: index) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%columns, %c1, %c1) : index
-} launch {
+} launch(%buffer: buffer, %base: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %column = kernel.workitem.id<x> : index
-  %view = buffer.view %buffer[%base] : buffer -> view<[%columns]xf32, %layout>
-  %loaded = vector.load %view[%column] : view<[%columns]xf32, %layout> -> vector<1xf32>
+  %column_count = kernel.workgroup.size<x> : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%column_count]xf32, %layout>
+  %loaded = vector.load %view[%column] : view<[%column_count]xf32, %layout> -> vector<1xf32>
   kernel.return
 }
 
 // ====
 
-kernel.def @dynamic_unit_axis_rejects_offset_workgroup_id(%buffer: buffer, %base: offset, %rows: index) {
+kernel.def @dynamic_unit_axis_rejects_offset_workgroup_id(%rows: index) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%rows, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%buffer: buffer, %base: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %one = index.constant 1 : index
   %row = kernel.workgroup.id<x> : index
   %next_row = index.add %row, %one : index
-  %view = buffer.view %buffer[%base] : buffer -> view<[%rows]x2xf32, %layout>
+  %row_count = kernel.workgroup.count<x> : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%row_count]x2xf32, %layout>
   // ERROR@+1: SUBRANGE/005
-  %loaded = vector.load %view[%next_row, 0] : view<[%rows]x2xf32, %layout> -> vector<2xf32>
+  %loaded = vector.load %view[%next_row, 0] : view<[%row_count]x2xf32, %layout> -> vector<2xf32>
   kernel.return
 }
 

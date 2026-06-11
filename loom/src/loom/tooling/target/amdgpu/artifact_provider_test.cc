@@ -144,7 +144,7 @@ TEST_F(AmdgpuHalArtifactProviderTest,
 kernel.def @entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )"),
@@ -189,6 +189,20 @@ kernel.def @entry() {
     EXPECT_EQ(reused_ref.module_id, target_ref.module_id);
     EXPECT_EQ(reused_ref.symbol_id, target_ref.symbol_id);
   }
+}
+
+TEST_F(AmdgpuHalArtifactProviderTest, SelectTargetKeyBuildsOfflineTarget) {
+  loom_run_hal_device_target_t target = {};
+  IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.select_target_key(
+      &loom_amdgpu_hal_artifact_provider, IREE_SV("gfx1100"),
+      iree_allocator_system(), &target));
+
+  ASSERT_NE(target.data, nullptr);
+  EXPECT_NE(target.target_bundle, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(target.target_key, IREE_SV("gfx1100")));
+  const loom_amdgpu_processor_info_t* processor =
+      static_cast<const loom_amdgpu_processor_info_t*>(target.data);
+  EXPECT_TRUE(iree_string_view_equal(processor->processor, IREE_SV("gfx1100")));
 }
 
 TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
@@ -237,6 +251,9 @@ TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
       &report, iree_allocator_system(), &emitted, &artifact));
   EXPECT_TRUE(emitted);
   EXPECT_EQ(artifact.target_artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(artifact.target_artifact_data.data, artifact.executable_data.data);
+  EXPECT_EQ(artifact.target_artifact_data.data_length,
+            artifact.executable_data.data_length);
   EXPECT_NE(artifact.target_artifact_data.data, nullptr);
   if (artifact.target_artifact_data.data != nullptr) {
     EXPECT_GT(artifact.target_artifact_data.data_length, 0u);
@@ -287,6 +304,9 @@ TEST_F(AmdgpuHalArtifactProviderTest,
       iree_string_view_find(artifact.executable_format, IREE_SV("gfx942"), 0),
       IREE_STRING_VIEW_NPOS);
   EXPECT_EQ(artifact.target_artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(artifact.target_artifact_data.data, artifact.executable_data.data);
+  EXPECT_EQ(artifact.target_artifact_data.data_length,
+            artifact.executable_data.data_length);
   EXPECT_NE(artifact.target_artifact_data.data, nullptr);
   EXPECT_GT(artifact.target_artifact_data.data_length, 0u);
   EXPECT_EQ(artifact.target_bundle, nullptr);

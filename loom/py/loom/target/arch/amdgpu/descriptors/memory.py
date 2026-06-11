@@ -279,9 +279,17 @@ def _s_load_sized_overlay(
         AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
     )
     operand_forms: tuple[OperandForm, ...]
+    asm_forms: tuple[AsmForm, ...] | None
     if fixed_soffset is not None:
         fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
         operand_forms = ()
+        asm_forms = _asm(
+            mnemonic=f"{mnemonic}_offset_only",
+            results=("dst",),
+            operands=("base",),
+            immediates=("offset",),
+            named_immediates=True,
+        )
     else:
         operands = (
             *operands,
@@ -295,6 +303,7 @@ def _s_load_sized_overlay(
                 replacement_descriptor=offset_only_descriptor_key
             ),
         )
+        asm_forms = None
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name=instruction_name,
@@ -311,7 +320,7 @@ def _s_load_sized_overlay(
         operand_forms=operand_forms,
         constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=() if fixed_soffset is not None else None,
+        asm_forms=asm_forms,
     )
 
 
@@ -413,9 +422,16 @@ def _s_store_sized_overlay(
         AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
     )
     operand_forms: tuple[OperandForm, ...]
+    asm_forms: tuple[AsmForm, ...] | None
     if fixed_soffset is not None:
         fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
         operand_forms = ()
+        asm_forms = _asm(
+            mnemonic=f"{mnemonic}_offset_only",
+            operands=("value", "base"),
+            immediates=("offset",),
+            named_immediates=True,
+        )
     else:
         operands = (
             *operands,
@@ -429,6 +445,7 @@ def _s_store_sized_overlay(
                 replacement_descriptor=offset_only_descriptor_key
             ),
         )
+        asm_forms = None
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name=instruction_name,
@@ -444,7 +461,7 @@ def _s_store_sized_overlay(
         effects=(memory_effect,),
         operand_forms=operand_forms,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=() if fixed_soffset is not None else None,
+        asm_forms=asm_forms,
     )
 
 

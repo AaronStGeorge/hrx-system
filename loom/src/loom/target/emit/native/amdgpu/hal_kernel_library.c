@@ -272,54 +272,13 @@ void loom_amdgpu_hal_kernel_library_deinitialize(
   }
   iree_allocator_free(allocator, (void*)library->executable_format.data);
   iree_allocator_free(allocator, library->hsaco_data);
-  if (library->exports != NULL) {
-    for (iree_host_size_t i = 0; i < library->export_count; ++i) {
-      loom_amdgpu_hal_kernel_export_t* export = &library->exports[i];
-      iree_allocator_free(allocator, (void*)export->symbol_name.data);
-      iree_allocator_free(allocator, (void*)export->binding_flags);
-    }
-  }
-  iree_allocator_free(allocator, library->exports);
   iree_allocator_free(allocator, library->target_listing_data);
   *library = (loom_amdgpu_hal_kernel_library_t){0};
 }
 
-static iree_status_t loom_amdgpu_hal_kernel_library_clone_export(
-    const loom_amdgpu_hal_kernel_export_t* source,
-    loom_amdgpu_hal_kernel_export_t* out_export, iree_allocator_t allocator) {
-  *out_export = (loom_amdgpu_hal_kernel_export_t){
-      .workgroup_size = source->workgroup_size,
-      .constant_count = source->constant_count,
-      .binding_count = source->binding_count,
-  };
-
-  void* symbol_name_data = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_clone(allocator,
-                           iree_make_const_byte_span(source->symbol_name.data,
-                                                     source->symbol_name.size),
-                           &symbol_name_data));
-  out_export->symbol_name =
-      iree_make_string_view(symbol_name_data, source->symbol_name.size);
-
-  if (source->binding_count == 0) {
-    return iree_ok_status();
-  }
-  loom_amdgpu_hal_kernel_binding_flags_t* binding_flags = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-      allocator, source->binding_count, sizeof(*binding_flags),
-      (void**)&binding_flags));
-  memcpy(binding_flags, source->binding_flags,
-         source->binding_count * sizeof(*binding_flags));
-  out_export->binding_flags = binding_flags;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_hal_kernel_library_set_contents(
     iree_string_view_t executable_format, iree_const_byte_span_t hsaco,
-    const loom_amdgpu_hal_kernel_export_t* exports,
-    iree_host_size_t export_count, iree_allocator_t allocator,
-    loom_amdgpu_hal_kernel_library_t* out_library) {
+    iree_allocator_t allocator, loom_amdgpu_hal_kernel_library_t* out_library) {
   *out_library = (loom_amdgpu_hal_kernel_library_t){0};
 
   void* executable_format_data = NULL;
@@ -332,21 +291,6 @@ static iree_status_t loom_amdgpu_hal_kernel_library_set_contents(
         iree_make_string_view(executable_format_data, executable_format.size);
     out_library->hsaco_data = (uint8_t*)hsaco.data;
     out_library->hsaco_data_length = hsaco.data_length;
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_allocator_malloc_array(allocator, export_count,
-                                         sizeof(*out_library->exports),
-                                         (void**)&out_library->exports);
-  }
-  if (iree_status_is_ok(status)) {
-    out_library->export_count = export_count;
-    memset(out_library->exports, 0,
-           export_count * sizeof(*out_library->exports));
-    for (iree_host_size_t i = 0; i < export_count && iree_status_is_ok(status);
-         ++i) {
-      status = loom_amdgpu_hal_kernel_library_clone_export(
-          &exports[i], &out_library->exports[i], allocator);
-    }
   }
   if (!iree_status_is_ok(status)) {
     out_library->hsaco_data = NULL;
@@ -489,10 +433,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
     iree_arena_allocator_t* table_arena, iree_string_builder_t* target_listing,
     loom_target_compile_report_t* report,
-    loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
-    loom_amdgpu_hal_kernel_export_t* out_export) {
+    loom_amdgpu_kernel_hsaco_contribution_t* out_contribution) {
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){0};
-  *out_export = (loom_amdgpu_hal_kernel_export_t){0};
 
   const loom_low_descriptor_set_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
@@ -567,27 +509,10 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
         out_contribution->summary.group_segment_fixed_size);
   }
 
-  const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout = &plan->abi_layout;
-  loom_amdgpu_hal_kernel_binding_flags_t* binding_flags = NULL;
-  if (abi_layout->resource_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        table_arena, abi_layout->resource_count, sizeof(*binding_flags),
-        (void**)&binding_flags));
-    memset(binding_flags, 0,
-           abi_layout->resource_count * sizeof(*binding_flags));
-  }
-
   const loom_target_hal_kernel_abi_t* hal_kernel =
       &plan->entry->bundle_storage.bundle.export_plan->hal_kernel;
   IREE_RETURN_IF_ERROR(loom_target_require_concrete_hal_kernel_launch(
-      hal_kernel, IREE_SV("AMDGPU HAL kernel-library export")));
-  *out_export = (loom_amdgpu_hal_kernel_export_t){
-      .symbol_name = out_contribution->kernel.metadata.descriptor_symbol,
-      .workgroup_size = hal_kernel->required_workgroup_size,
-      .constant_count = abi_layout->constant_count,
-      .binding_flags = binding_flags,
-      .binding_count = abi_layout->resource_count,
-  };
+      hal_kernel, IREE_SV("AMDGPU HAL kernel-library entry")));
   return iree_ok_status();
 }
 
@@ -662,9 +587,6 @@ static iree_status_t loom_amdgpu_hal_kernel_library_entries(
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table_arena, entries.count,
                                                  sizeof(*contributions),
                                                  (void**)&contributions));
-  loom_amdgpu_hal_kernel_export_t* exports = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table_arena, entries.count, sizeof(*exports), (void**)&exports));
   iree_string_builder_t target_listing;
   if (capture_target_listing) {
     iree_string_builder_initialize(allocator, &target_listing);
@@ -674,7 +596,7 @@ static iree_status_t loom_amdgpu_hal_kernel_library_entries(
     status = loom_amdgpu_hal_kernel_library_build_kernel_contribution(
         module, low_registry, &plans[i], target_selection, diagnostic_emitter,
         table_arena, capture_target_listing ? &target_listing : NULL,
-        single_entry_report, &contributions[i], &exports[i]);
+        single_entry_report, &contributions[i]);
   }
   if (iree_status_is_ok(status) && diagnostic_emitter->error_count == 0) {
     iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
@@ -682,8 +604,7 @@ static iree_status_t loom_amdgpu_hal_kernel_library_entries(
         contributions, entries.count, &hsaco, table_arena, allocator);
     if (iree_status_is_ok(status)) {
       status = loom_amdgpu_hal_kernel_library_set_contents(
-          contributions[0].target, hsaco, exports, entries.count, allocator,
-          out_library);
+          contributions[0].target, hsaco, allocator, out_library);
     }
     if (iree_status_is_ok(status)) {
       hsaco = iree_const_byte_span_empty();

@@ -229,7 +229,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_AMDGPU)
+if(LOOM_TARGET_AMDGPU_DESCRIPTOR_SET_CDNA3_CORE AND LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_test(
   NAME
     storage_lease_test
@@ -243,7 +243,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
     loom::codegen::low::storage_lease
-    loom::target::arch::amdgpu::descriptors::shards_for_testing
+    loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

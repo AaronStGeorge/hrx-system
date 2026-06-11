@@ -22,10 +22,24 @@ func.def @scalar_sitofp_i32(%input: i32) -> (f32) {
 
 // ====
 
-kernel.def @scalar_sitofp_i8_load_store(%input: buffer, %output: buffer) {
+func.def @scalar_trunci_i32_to_i8(%input: i32) -> (i8) {
+  %converted = scalar.trunci %input : i32 to i8
+  func.return %converted : i8
+}
+
+// ====
+
+func.def @scalar_trunci_i32_to_i16(%input: i32) -> (i16) {
+  %converted = scalar.trunci %input : i32 to i16
+  func.return %converted : i16
+}
+
+// ====
+
+kernel.def @scalar_sitofp_i8_load_store() {
   %count = index.constant 1 : index
   kernel.launch.config workgroups(%count, %count, %count) workgroup_size(%count, %count, %count) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %index = index.constant 0 : index
   %input_global = buffer.assume.memory_space<global> %input : buffer
@@ -96,10 +110,10 @@ func.def @scalar_bitcast_f32_to_i32(%input: f32) -> (i32) {
 
 // ====
 
-kernel.def @scalar_bitcast_direct_i32_arg_f32_store(%output: buffer, %scale_bits: i32) {
+kernel.def @scalar_bitcast_direct_i32_arg_f32_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%output: buffer, %scale_bits: i32) {
   %zero_offset = index.constant 0 : offset
   %zero_index = index.constant 0 : index
   %output_view = buffer.view %output[%zero_offset] : buffer -> view<1xf32, #dense>

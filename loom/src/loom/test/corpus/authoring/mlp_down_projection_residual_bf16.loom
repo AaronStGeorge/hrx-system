@@ -1,5 +1,3 @@
-amdgpu.target<gfx1100> @target
-
 // The down-projection kernel calls this concrete per-row dot helper for each
 // output row handled by the workgroup.
 func.def inline @bf16_dot32(%input_values: vector<32xf32>, %weight_values: vector<32xbf16>) -> (f32) {
@@ -10,14 +8,14 @@ func.def inline @bf16_dot32(%input_values: vector<32xf32>, %weight_values: vecto
   func.return %sum : f32
 }
 
-kernel.def target(@target) @mlp_down_projection_residual_bf16(%rows: index, %input: buffer, %down_weight: buffer, %residual: buffer, %output: buffer) {
+kernel.def @mlp_down_projection_residual_bf16(%rows: index) {
   %row_block = index.constant 2 : index
   %row_count = index.assume %rows [range(%rows, 2, 3584), mul(%rows, 2)] : index
   %row_tiles = index.div %row_count, %row_block : index
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 592 : index
   kernel.launch.config workgroups(%row_tiles, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%rows: index, %input: buffer, %down_weight: buffer, %residual: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %row_count = index.assume %rows [range(%rows, 2, 3584), mul(%rows, 2)] : index
   %row_tile = kernel.workgroup.id<x> : index

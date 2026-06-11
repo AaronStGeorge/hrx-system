@@ -5,8 +5,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 list(APPEND CMAKE_MODULE_PATH
+  "${CMAKE_CURRENT_LIST_DIR}/build_tools/amdgpu"
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
 )
+
+include(loom_amdgpu_selectors)
 
 if(NOT DEFINED LOOM_BUILD)
   option(LOOM_BUILD
@@ -33,6 +36,12 @@ endif()
 option(LOOM_TARGET_AMDGPU
   "Enables Loom AMDGPU target support."
   ${LOOM_TARGET_AMDGPU_DEFAULT})
+if(NOT DEFINED LOOM_TARGET_AMDGPU_TARGETS)
+  set(LOOM_TARGET_AMDGPU_TARGETS
+    ${_LOOM_AMDGPU_DEFAULT_TARGET_SELECTORS}
+    CACHE STRING
+    "Loom AMDGPU target selectors to compile into AMDGPU target support.")
+endif()
 option(LOOM_TARGET_IREE_VM
   "Enables Loom IREE VM target support."
   ${LOOM_TARGET_IREE_VM_DEFAULT})
@@ -108,6 +117,10 @@ if(LOOM_TARGET_WASM)
 endif()
 if(LOOM_TARGET_X86)
   set(LOOM_TARGET_ARCH_X86 ON)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+  loom_amdgpu_configure_target_selectors()
 endif()
 
 option(LOOM_EXECUTE_DEFAULTS

@@ -51,11 +51,27 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
     name = "target_record_table",
-    testonly = True,
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
     deps = [
         "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "provider",
+    testonly = True,
+    srcs = ["provider.c"],
+    hdrs = ["provider.h"],
+    visibility = [
+        "//loom/src/loom/tools/loom-check:__pkg__",
+    ],
+    deps = [
+        ":lower",
+        "//loom/src/loom/pass/test:registry",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
+        "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",
     ],
 )

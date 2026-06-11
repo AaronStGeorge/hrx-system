@@ -79,12 +79,12 @@ def tilekernels_reduce_fused_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused_kernel(%x_handle: buffer, %topk_weights_handle: buffer, %token_topk_to_pos_handle: buffer, %out_handle: buffer, %num_expanded_tokens: i32, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%num_tokens_idx, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%x_handle: buffer, %topk_weights_handle: buffer, %token_topk_to_pos_handle: buffer, %out_handle: buffer, %num_expanded_tokens: i32, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %x_noalias = buffer.assume.noalias %x_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

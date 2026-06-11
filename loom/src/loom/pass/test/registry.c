@@ -507,11 +507,11 @@ static const loom_pass_descriptor_t kTestPassDescriptors[] = {
     },
 };
 
-static const loom_pass_registry_t kTestPassRegistry = {
+const loom_pass_registry_t loom_test_pass_registry_storage = {
     .descriptors = kTestPassDescriptors,
     .descriptor_count = IREE_ARRAYSIZE(kTestPassDescriptors),
 };
 
 const loom_pass_registry_t* loom_test_pass_registry(void) {
-  return &kTestPassRegistry;
+  return &loom_test_pass_registry_storage;
 }

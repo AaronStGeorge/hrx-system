@@ -39,10 +39,10 @@ def tileop_copy_1d(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_kernel") @tileop_copy_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_kernel") @tileop_copy_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -99,10 +99,10 @@ def tileop_copy_disable_tma_1d(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_disable_tma_kernel") @tileop_copy_disable_tma_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_disable_tma_kernel") @tileop_copy_disable_tma_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -152,10 +152,10 @@ def tileop_fill_1d(tilelang: Any, T: Any, tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_kernel") @tileop_fill_kernel(%dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_kernel") @tileop_fill_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -210,10 +210,10 @@ def tileop_fill_integer_zero_to_float(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_integer_zero_kernel") @tileop_fill_integer_zero_kernel(%dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_fill_integer_zero_kernel") @tileop_fill_integer_zero_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -260,10 +260,10 @@ def tileop_reduce_sum_1d(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_reduce_sum_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_reduce_sum_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -335,10 +335,10 @@ def tileop_reduce_sum_fastmath_1d(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_fastmath_kernel") @tileop_reduce_sum_fastmath_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_fastmath_kernel") @tileop_reduce_sum_fastmath_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -401,10 +401,10 @@ def tileop_reduce_abssum_1d(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tileop_reduce_abssum_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_abssum_kernel") @tileop_reduce_abssum_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -468,10 +468,10 @@ def tileop_reduce_absmax_1d(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tileop_reduce_absmax_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_kernel") @tileop_reduce_absmax_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -535,10 +535,10 @@ def tileop_reduce_absmax_widen_1d(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_widen_kernel") @tileop_reduce_absmax_widen_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_widen_kernel") @tileop_reduce_absmax_widen_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -600,10 +600,10 @@ def tileop_reduce_sum_2d(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tileop_reduce_sum_2d_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_2d_kernel") @tileop_reduce_sum_2d_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -687,10 +687,10 @@ def tileop_finalize_reducer_none(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel") @tileop_finalize_reducer_none_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel") @tileop_finalize_reducer_none_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -766,11 +766,11 @@ def tileop_cumsum_shared_1d(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_cumsum_shared_1d_kernel") @tileop_cumsum_shared_1d_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_cumsum_shared_1d_kernel") @tileop_cumsum_shared_1d_kernel() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -836,11 +836,11 @@ def tileop_finalize_reducer_all(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_all_kernel") @tileop_finalize_reducer_all_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_all_kernel") @tileop_finalize_reducer_all_kernel() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -904,10 +904,10 @@ def tileop_reduce_absmax_reshape_2d_to_3d(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_reshape_kernel") @tileop_reduce_absmax_reshape_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_absmax_reshape_kernel") @tileop_reduce_absmax_reshape_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -993,10 +993,10 @@ def tileop_copy_2d(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_2d_kernel") @tileop_copy_2d_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_copy_2d_kernel") @tileop_copy_2d_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -1056,11 +1056,11 @@ def tileop_gemm_dense_16x16x16(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("tileop_gemm_dense_16x16x16_kernel") @tileop_gemm_dense_16x16x16_kernel(%a_handle: buffer, %b_handle: buffer, %c_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_gemm_dense_16x16x16_kernel") @tileop_gemm_dense_16x16x16_kernel() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%a_handle: buffer, %b_handle: buffer, %c_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %a_noalias = buffer.assume.noalias %a_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

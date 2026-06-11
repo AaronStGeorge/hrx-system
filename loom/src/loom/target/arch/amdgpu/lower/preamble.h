@@ -21,9 +21,13 @@ iree_status_t loom_amdgpu_select_preamble_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan);
 
-// Emits preamble live-ins for the current low function.
+// Emits structural preamble live-ins for the current low function.
 iree_status_t loom_amdgpu_emit_preamble(void* user_data,
                                         loom_low_lower_context_t* context);
+
+// Emits entry-block setup packets that depend on structural ABI imports.
+iree_status_t loom_amdgpu_emit_entry_setup(void* user_data,
+                                           loom_low_lower_context_t* context);
 
 // Lowers a kernel preamble source op using its pre-bound live-in value.
 iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,

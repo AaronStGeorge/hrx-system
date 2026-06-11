@@ -87,7 +87,7 @@ loom_cc_library(
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     copts = _CONFIGURED_TARGET_COPTS,
-    visibility = ["//loom/src/loom/tools/loom-opt:__pkg__"],
+    visibility = ["//loom/src/loom/tools:__subpackages__"],
     deps = [
         "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",

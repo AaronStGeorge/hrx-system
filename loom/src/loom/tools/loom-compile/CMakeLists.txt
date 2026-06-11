@@ -44,14 +44,15 @@ loom_cc_binary(
     iree::base::tooling::flags
     iree::io::file_handle
     loom::error::diagnostic
-    loom::ops::op_registry
     loom::tooling::compile::pipeline
     loom::tooling::config
+    loom::tooling::context
     loom::tooling::execution::compile_options
     loom::tooling::execution::compile_report_capture
     loom::tooling::execution::execution_provider
     loom::tooling::execution::hal::artifact
     loom::tooling::execution::hal::candidate
+    loom::tooling::execution::hal::target_assignment
     loom::tooling::execution::session
     loom::tooling::io::file
     ${_loom_compile_platform_deps}
@@ -68,5 +69,18 @@ iree_execution_test_suite(
   LABELS
     "hostonly"
 )
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_execution_test_suite(
+  NAME
+    amdgpu_execution_test
+  MANIFESTS
+    "loom-compile-amdgpu.test.json"
+  TOOLS
+    "loom-compile=::loom-compile"
+  LABELS
+    "hostonly"
+)
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

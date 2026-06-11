@@ -74,7 +74,7 @@ def tilekernels_normalize_weight_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normalize_weight_kernel(%topk_weights_handle: buffer, %denominator_handle: buffer, %normalized_weights_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normalize_weight_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c128 = index.constant 128 : index
   %add = index.add %num_tokens_idx, %c128 : index
@@ -82,7 +82,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
   %sub = index.sub %add, %c1 : index
   %div = index.div %sub, %c128 : index
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%topk_weights_handle: buffer, %denominator_handle: buffer, %normalized_weights_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %topk_weights_noalias = buffer.assume.noalias %topk_weights_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

@@ -17,7 +17,14 @@
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/launch.h"
 
-#define LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT 2u
+#define LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT 2u
+
+typedef struct loom_amdgpu_kernel_record_hidden_user_sgprs_t {
+  // Descriptor flags requested by hidden user-SGPR live-ins.
+  loom_amdgpu_kernel_descriptor_flags_t descriptor_flags;
+  // Number of enabled hidden user SGPRs in AMDHSA order.
+  uint32_t user_sgpr_count;
+} loom_amdgpu_kernel_record_hidden_user_sgprs_t;
 
 typedef struct loom_amdgpu_kernel_record_workitem_id_t {
   // Predicate identifying the ABI live-in value.
@@ -214,42 +221,93 @@ static iree_status_t loom_amdgpu_kernel_record_collect_segment_usage(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
-    const loom_low_allocation_table_t* allocation,
-    const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout) {
-  if (!abi_layout->uses_kernarg_segment_ptr) {
-    return iree_ok_status();
+static iree_status_t loom_amdgpu_kernel_record_validate_hidden_ptr_assignment(
+    const loom_low_allocation_assignment_t* assignment,
+    iree_string_view_t label, uint32_t expected_location_base) {
+  if (assignment->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+      assignment->location_base != expected_location_base ||
+      assignment->location_count !=
+          LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU kernel emission requires the %.*s live-in to be fixed to "
+        "s[%" PRIu32 ":%" PRIu32 "]",
+        (int)label.size, label.data, expected_location_base,
+        expected_location_base +
+            LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT - 1);
   }
-  bool found = false;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_kernel_record_collect_hidden_user_sgprs(
+    const loom_low_allocation_table_t* allocation,
+    const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
+    loom_amdgpu_kernel_record_hidden_user_sgprs_t* out_hidden_user_sgprs) {
+  *out_hidden_user_sgprs = (loom_amdgpu_kernel_record_hidden_user_sgprs_t){0};
+
+  const loom_low_allocation_assignment_t* dispatch_ptr_assignment = NULL;
+  const loom_low_allocation_assignment_t* kernarg_ptr_assignment = NULL;
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
     if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
       continue;
     }
+    if (loom_amdgpu_hal_kernel_abi_is_dispatch_ptr_live_in(
+            allocation->module, assignment->value_id)) {
+      if (dispatch_ptr_assignment != NULL) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "AMDGPU kernel emission found duplicate dispatch pointer live-ins");
+      }
+      dispatch_ptr_assignment = assignment;
+      continue;
+    }
     if (!loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
             allocation->module, assignment->value_id)) {
       continue;
     }
-    if (found) {
+    if (kernarg_ptr_assignment != NULL) {
       return iree_make_status(
           IREE_STATUS_ALREADY_EXISTS,
           "AMDGPU kernel emission found duplicate kernarg segment pointer "
           "live-ins");
     }
-    found = true;
-    if (assignment->location_kind !=
-            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-        assignment->location_base != 0 ||
-        assignment->location_count !=
-            LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU kernel emission requires the kernarg segment pointer live-in "
-          "to be fixed to s[0:%u]",
-          LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT - 1);
-    }
+    kernarg_ptr_assignment = assignment;
   }
+
+  if (abi_layout->uses_kernarg_segment_ptr && kernarg_ptr_assignment == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU kernel emission requires a kernarg segment pointer live-in "
+        "when the HAL ABI layout uses kernargs");
+  }
+
+  uint32_t user_sgpr_count = 0;
+  loom_amdgpu_kernel_descriptor_flags_t descriptor_flags = 0;
+  if (dispatch_ptr_assignment != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_kernel_record_validate_hidden_ptr_assignment(
+            dispatch_ptr_assignment, IREE_SV("dispatch pointer"),
+            user_sgpr_count));
+    user_sgpr_count += LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT;
+    descriptor_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR;
+  }
+  if (kernarg_ptr_assignment != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_kernel_record_validate_hidden_ptr_assignment(
+            kernarg_ptr_assignment, IREE_SV("kernarg segment pointer"),
+            user_sgpr_count));
+    user_sgpr_count += LOOM_AMDGPU_KERNEL_RECORD_HIDDEN_PTR_USER_SGPR_COUNT;
+    descriptor_flags |=
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
+  }
+
+  *out_hidden_user_sgprs = (loom_amdgpu_kernel_record_hidden_user_sgprs_t){
+      .descriptor_flags = descriptor_flags,
+      .user_sgpr_count = user_sgpr_count,
+  };
   return iree_ok_status();
 }
 
@@ -573,8 +631,9 @@ iree_status_t loom_amdgpu_kernel_record_build(
   loom_amdgpu_storage_layout_segment_sizes_t segment_usage = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_segment_usage(
       schedule->module, schedule->function_op, &segment_usage));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_kernarg_live_in(
-      allocation, abi_layout));
+  loom_amdgpu_kernel_record_hidden_user_sgprs_t hidden_user_sgprs = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_hidden_user_sgprs(
+      allocation, abi_layout, &hidden_user_sgprs));
 
   const loom_target_hal_kernel_abi_t* hal_kernel =
       &schedule->target.bundle_storage.export_plan.hal_kernel;
@@ -591,14 +650,15 @@ iree_status_t loom_amdgpu_kernel_record_build(
   IREE_ASSERT(
       loom_amdgpu_processor_supports_wavefront_size(processor, wavefront_size));
 
-  const uint32_t user_sgpr_count =
-      abi_layout->uses_kernarg_segment_ptr
-          ? LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT
-          : 0;
-  loom_amdgpu_kernel_descriptor_flags_t descriptor_flags = 0;
+  const uint32_t user_sgpr_count = hidden_user_sgprs.user_sgpr_count;
+  loom_amdgpu_kernel_descriptor_flags_t descriptor_flags =
+      hidden_user_sgprs.descriptor_flags;
+  loom_amdgpu_kernel_descriptor_flags_t topology_descriptor_flags = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_descriptor_flags(
       allocation, user_sgpr_count,
-      processor->kernel_descriptor_has_packed_workitem_id, &descriptor_flags));
+      processor->kernel_descriptor_has_packed_workitem_id,
+      &topology_descriptor_flags));
+  descriptor_flags |= topology_descriptor_flags;
   uint32_t system_vgpr_workitem_id = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(

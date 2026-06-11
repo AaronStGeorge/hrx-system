@@ -568,7 +568,18 @@ static iree_status_t loom_target_low_legality_try_contract_query_op(
     case LOOM_TARGET_CONTRACT_QUERY_LEGAL:
       *out_handled = true;
       return iree_ok_status();
-    case LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED:
+    case LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED: {
+      bool provider_handled = false;
+      IREE_RETURN_IF_ERROR(loom_target_low_legality_try_provider_op(
+          context, op, &provider_handled));
+      if (provider_handled) {
+        *out_handled = true;
+        return iree_ok_status();
+      }
+      *out_handled = true;
+      return loom_target_low_legality_reject_contract_query(context, op,
+                                                            &result);
+    }
     case LOOM_TARGET_CONTRACT_QUERY_INVALID_IR:
       *out_handled = true;
       return loom_target_low_legality_reject_contract_query(context, op,

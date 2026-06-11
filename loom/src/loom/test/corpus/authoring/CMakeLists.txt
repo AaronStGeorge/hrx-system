@@ -26,6 +26,20 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
+    "memset_i8_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/memset_i8.loom}}"
+    "--dry_run"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
     "mlp_down_projection_residual_bf16_plan_test"
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom}}"
@@ -45,6 +59,30 @@ iree_native_test(
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom}}"
     "--device=amdgpu"
     "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup_iterations=0"
+    "--batch_size=1"
+    "--min_time_ms=0"
+    "--max_batches=1"
+    "--input_ring_count=1"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "driver=amdgpu"
+    "manual"
+    "requires-gpu-amd"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "memset_i8_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/memset_i8.loom}}"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--sample_compilation=per_sample"
     "--iterations=1"
     "--warmup_iterations=0"
     "--batch_size=1"

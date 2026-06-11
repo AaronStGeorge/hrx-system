@@ -2067,6 +2067,14 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     ),
 )
 
+_AMDGPU_RDNA3_5_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
+    key="amdgpu.rdna3_5.core",
+    reg_classes=_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE.reg_classes,
+    register_parts=_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE.register_parts,
+    resources=_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE.resources,
+    schedule_classes=_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE.schedule_classes,
+)
+
 _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     key="amdgpu.rdna4.core",
     reg_classes=(
@@ -2553,6 +2561,7 @@ def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
         _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_RDNA3_5_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
         _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE,
     )
@@ -2579,6 +2588,7 @@ __all__ = (
     "_AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE",
+    "_AMDGPU_RDNA3_5_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE",
     "_AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE",
     "_amdgpu_core_descriptor_set_bases",

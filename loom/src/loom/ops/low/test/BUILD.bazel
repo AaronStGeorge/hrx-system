@@ -23,5 +23,4 @@ loom_check_test_suite(
         "target_verify.loom-test",
         "verify.loom-test",
     ],
-    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

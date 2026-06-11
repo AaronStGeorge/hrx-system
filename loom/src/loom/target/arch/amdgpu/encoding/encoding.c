@@ -8,12 +8,12 @@
 
 #include <inttypes.h>
 
-#include "loom/target/arch/amdgpu/encoding/cdna3_encoding_tables.h"
-#include "loom/target/arch/amdgpu/encoding/cdna4_encoding_tables.h"
-#include "loom/target/arch/amdgpu/encoding/rdna3_encoding_tables.h"
-#include "loom/target/arch/amdgpu/encoding/rdna4_encoding_tables.h"
-#include "loom/target/arch/amdgpu/encoding/rdna4_gfx125x_encoding_tables.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+
+#define LOOM_AMDGPU_ENCODING_TABLE_DECL(descriptor_set_ordinal, table_fn) \
+  const loom_amdgpu_encoding_table_t* table_fn(void);
+#include "loom/target/arch/amdgpu/encoding/encoding_tables.inl"
+#undef LOOM_AMDGPU_ENCODING_TABLE_DECL
 
 static uint64_t loom_amdgpu_encoding_u64_mask(uint8_t bit_count) {
   if (bit_count == 0) {
@@ -388,16 +388,10 @@ loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
     uint16_t descriptor_set_ordinal) {
   const loom_amdgpu_encoding_table_t* const
       tables[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {
-          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3] =
-              loom_amdgpu_cdna3_encoding_table(),
-          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4] =
-              loom_amdgpu_cdna4_encoding_table(),
-          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3] =
-              loom_amdgpu_rdna3_encoding_table(),
-          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4] =
-              loom_amdgpu_rdna4_encoding_table(),
-          [LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X] =
-              loom_amdgpu_rdna4_gfx125x_encoding_table(),
+#define LOOM_AMDGPU_ENCODING_TABLE(descriptor_set_ordinal, table_fn) \
+  [descriptor_set_ordinal] = table_fn(),
+#include "loom/target/arch/amdgpu/encoding/encoding_tables.inl"
+#undef LOOM_AMDGPU_ENCODING_TABLE
       };
   if (descriptor_set_ordinal >= IREE_ARRAYSIZE(tables)) {
     return NULL;

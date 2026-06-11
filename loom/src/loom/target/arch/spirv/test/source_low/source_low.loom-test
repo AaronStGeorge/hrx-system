@@ -151,10 +151,10 @@ low.func.def target(@target_scalar_payloads) abi(shader_entry_point) abi_layout(
 
 spirv.target<vulkan1_3> @hal_target_scalar_payloads {abi = hal_kernel, contract_feature_bits = 37374}
 
-kernel.def target(@hal_target_scalar_payloads) @spirv_hal_direct_scalar_payload_abi(%i8: i8, %output: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target_scalar_payloads) @spirv_hal_direct_scalar_payload_abi() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%i8: i8, %output: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 1)] : offset
   %output_aligned = buffer.assume.alignment %output {minimum_alignment = 1} : buffer
   %output_view = buffer.view %output_aligned[%byte_offset_aligned] : buffer -> view<1xi8, #dense>
@@ -237,13 +237,13 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_result_va
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
 
-kernel.def target(@hal_target) @spirv_dynamic_builtin_storage_buffer_i32(%input: buffer, %output: buffer) {
+kernel.def target(@hal_target) @spirv_dynamic_builtin_storage_buffer_i32() {
   %groups_x = index.constant 4 : index
   %groups_z = index.constant 3 : index
   %one = index.constant 1 : index
   %two = index.constant 2 : index
   kernel.launch.config workgroups(%groups_x, %one, %groups_z) workgroup_size(%one, %two, %one) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup_x = kernel.workgroup.id<x> : index
   %local_y = kernel.workitem.id<y> : index
   %global_z = kernel.workitem.dispatch.id<z> : index
@@ -271,8 +271,8 @@ low.kernel.def target(@hal_target) workgroup_size(1, 2, 1) @spirv_dynamic_builti
   %global_z = OpLoadBuiltin.global_invocation_id.z
   %sum = OpIAdd %workgroup_x, %local_y
   %linear = OpIAdd %sum, %global_z
-  %31 = OpConstant.i32 2
-  %byte_index = OpShiftLeftLogical %linear, %31
+  %29 = OpConstant.i32 2
+  %byte_index = OpShiftLeftLogical %linear, %29
   %byte_offset_aligned = OpUConvert.i32.offset64 %byte_index
   %input_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %input_aligned, %byte_offset_aligned
   %loaded = OpLoad.storage_buffer.i32 %input_view
@@ -311,10 +311,10 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_result_va
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
 
-kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i32(%input: buffer, %output: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i32() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 4)] : offset
   %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
   %output_aligned = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
@@ -342,10 +342,10 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
 
-kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i32_guard(%input: buffer, %output: buffer, %byte_offset: offset, %limit: offset) {
+kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i32_guard() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %byte_offset: offset, %limit: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 4)] : offset
   %inside = index.cmp ult, %byte_offset_aligned, %limit : offset
   scf.if %inside {
@@ -380,10 +380,10 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
 
-kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_f32(%input: buffer, %output: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_f32() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 4)] : offset
   %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
   %output_aligned = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
@@ -417,10 +417,10 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
 
-kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i64(%input: buffer, %output: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i64() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 8)] : offset
   %input_aligned = buffer.assume.alignment %input {minimum_alignment = 8} : buffer
   %output_aligned = buffer.assume.alignment %output {minimum_alignment = 8} : buffer
@@ -452,10 +452,10 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel, contract_feature_bits = 37374}
 
-kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_feature_widths(%input_i8: buffer, %output_i8: buffer, %input_i16: buffer, %output_i16: buffer, %input_f16: buffer, %output_f16: buffer, %input_bf16: buffer, %output_bf16: buffer, %input_f64: buffer, %output_f64: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_feature_widths() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input_i8: buffer, %output_i8: buffer, %input_i16: buffer, %output_i16: buffer, %input_f16: buffer, %output_f16: buffer, %input_bf16: buffer, %output_bf16: buffer, %input_f64: buffer, %output_f64: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 8)] : offset
   %input_i8_aligned = buffer.assume.alignment %input_i8 {minimum_alignment = 8} : buffer
   %output_i8_aligned = buffer.assume.alignment %output_i8 {minimum_alignment = 8} : buffer
@@ -537,10 +537,10 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel, contract_feature_bits = 33278}
 
-kernel.def target(@hal_target) @spirv_hal_scalar_conversions(%input_i8: buffer, %output_ext_i32: buffer, %output_extui_i32: buffer, %output_sitofp_f32: buffer, %output_uitofp_f32: buffer, %input_i64: buffer, %output_trunc_i32: buffer, %input_f16: buffer, %output_extf_f32: buffer, %input_f32: buffer, %output_fptrunc_f16: buffer, %output_fptosi_i16: buffer, %input_i32_bits: buffer, %output_bitcast_f32: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target) @spirv_hal_scalar_conversions() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input_i8: buffer, %output_ext_i32: buffer, %output_extui_i32: buffer, %output_sitofp_f32: buffer, %output_uitofp_f32: buffer, %input_i64: buffer, %output_trunc_i32: buffer, %input_f16: buffer, %output_extf_f32: buffer, %input_f32: buffer, %output_fptrunc_f16: buffer, %output_fptosi_i16: buffer, %input_i32_bits: buffer, %output_bitcast_f32: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 8)] : offset
   %input_i8_aligned = buffer.assume.alignment %input_i8 {minimum_alignment = 8} : buffer
   %output_ext_i32_aligned = buffer.assume.alignment %output_ext_i32 {minimum_alignment = 8} : buffer
@@ -617,16 +617,16 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_scalar_con
   %extended_i32 = OpSConvert.i8.i32 %loaded_i8
   %output_ext_i32_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output_ext_i32_aligned, %byte_offset_aligned
   OpStore.storage_buffer.i32 %output_ext_i32_view, %extended_i32
-  %93 = OpBitcast.i8.u8 %loaded_i8
-  %94 = OpUConvert.u8.u32 %93
-  %extended_unsigned_i32 = OpBitcast.u32.i32 %94
+  %78 = OpBitcast.i8.u8 %loaded_i8
+  %79 = OpUConvert.u8.u32 %78
+  %extended_unsigned_i32 = OpBitcast.u32.i32 %79
   %output_extui_i32_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output_extui_i32_aligned, %byte_offset_aligned
   OpStore.storage_buffer.i32 %output_extui_i32_view, %extended_unsigned_i32
   %converted_f32 = OpConvertSToF.i8.f32 %loaded_i8
   %output_sitofp_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output_sitofp_f32_aligned, %byte_offset_aligned
   OpStore.storage_buffer.f32 %output_sitofp_f32_view, %converted_f32
-  %99 = OpBitcast.i32.u32 %extended_unsigned_i32
-  %converted_unsigned_f32 = OpConvertUToF.u32.f32 %99
+  %84 = OpBitcast.i32.u32 %extended_unsigned_i32
+  %converted_unsigned_f32 = OpConvertUToF.u32.f32 %84
   %output_uitofp_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output_uitofp_f32_aligned, %byte_offset_aligned
   OpStore.storage_buffer.f32 %output_uitofp_f32_view, %converted_unsigned_f32
   %input_i64_view = OpPtrAccessChain.storage_buffer.i64.byte_offset %input_i64_aligned, %byte_offset_aligned
@@ -659,11 +659,11 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_scalar_con
 
 spirv.target<vulkan1_3> @hal_target_coop_f16 {abi = hal_kernel, contract_feature_bits = 2318}
 
-kernel.def target(@hal_target_coop_f16) @spirv_hal_cooperative_matrix_f16(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target_coop_f16) @spirv_hal_cooperative_matrix_f16() {
   %unit = index.constant 1 : index
   %subgroup_size = index.constant 32 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 16)] : offset
   %m = index.constant 16 : index
   %n = index.constant 16 : index
@@ -706,11 +706,11 @@ low.kernel.def target(@hal_target_coop_f16) workgroup_size(32, 1, 1) @spirv_hal_
 
 spirv.target<vulkan1_3> @hal_target_coop_bf16 {abi = hal_kernel, contract_feature_bits = 22790}
 
-kernel.def target(@hal_target_coop_bf16) @spirv_hal_cooperative_matrix_bf16(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target_coop_bf16) @spirv_hal_cooperative_matrix_bf16() {
   %unit = index.constant 1 : index
   %subgroup_size = index.constant 32 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 16)] : offset
   %m = index.constant 16 : index
   %n = index.constant 16 : index
@@ -753,11 +753,11 @@ low.kernel.def target(@hal_target_coop_bf16) workgroup_size(32, 1, 1) @spirv_hal
 
 spirv.target<vulkan1_3> @hal_target_coop_u8 {abi = hal_kernel, contract_feature_bits = 2214}
 
-kernel.def target(@hal_target_coop_u8) @spirv_hal_cooperative_matrix_u8(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target_coop_u8) @spirv_hal_cooperative_matrix_u8() {
   %unit = index.constant 1 : index
   %subgroup_size = index.constant 32 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 16)] : offset
   %m = index.constant 16 : index
   %n = index.constant 16 : index
