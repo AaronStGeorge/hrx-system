@@ -251,6 +251,9 @@ TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
       &report, iree_allocator_system(), &emitted, &artifact));
   EXPECT_TRUE(emitted);
   EXPECT_EQ(artifact.target_artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(artifact.target_artifact_data.data, artifact.executable_data.data);
+  EXPECT_EQ(artifact.target_artifact_data.data_length,
+            artifact.executable_data.data_length);
   EXPECT_NE(artifact.target_artifact_data.data, nullptr);
   if (artifact.target_artifact_data.data != nullptr) {
     EXPECT_GT(artifact.target_artifact_data.data_length, 0u);
@@ -301,6 +304,9 @@ TEST_F(AmdgpuHalArtifactProviderTest,
       iree_string_view_find(artifact.executable_format, IREE_SV("gfx942"), 0),
       IREE_STRING_VIEW_NPOS);
   EXPECT_EQ(artifact.target_artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(artifact.target_artifact_data.data, artifact.executable_data.data);
+  EXPECT_EQ(artifact.target_artifact_data.data_length,
+            artifact.executable_data.data_length);
   EXPECT_NE(artifact.target_artifact_data.data, nullptr);
   EXPECT_GT(artifact.target_artifact_data.data_length, 0u);
   EXPECT_EQ(artifact.target_bundle, nullptr);

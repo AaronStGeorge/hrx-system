@@ -78,7 +78,7 @@ typedef struct loom_run_one_shot_options_t {
   loom_run_one_shot_binding_specs_t hal_expected_bindings;
   // Optional path receiving the target-native HAL artifact, such as HSACO.
   iree_string_view_t hal_target_artifact_output_path;
-  // Optional path receiving the HAL executable package passed to the loader.
+  // Optional path receiving the executable artifact passed to the HAL loader.
   iree_string_view_t hal_executable_output_path;
   // Stops after HAL executable emission without dispatching.
   bool hal_emit_only;

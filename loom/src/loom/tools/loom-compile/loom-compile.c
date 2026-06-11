@@ -83,7 +83,8 @@ IREE_FLAG_LIST(string, config_file,
                "Nested object keys are flattened with '.' separators.");
 IREE_FLAG(string, output, "-",
           "Output path for the primary runtime artifact. For VM this is the VM "
-          "bytecode archive; for HAL this is the HAL executable package.");
+          "bytecode archive; for HAL this is the executable artifact passed to "
+          "the selected HAL loader.");
 IREE_FLAG(string, emit_target_artifact, "",
           "Optional output path for a target-native artifact produced beside "
           "the primary runtime artifact, such as AMDGPU HSACO.");

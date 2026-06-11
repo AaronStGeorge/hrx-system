@@ -56,7 +56,7 @@ static iree_status_t loom_run_hal_write_candidate_artifacts(
       request->host_allocator));
   return loom_run_hal_write_artifact(
       request->options->hal_executable_output_path,
-      candidate->artifact.executable_data, IREE_SV("executable package"),
+      candidate->artifact.executable_data, IREE_SV("executable"),
       request->host_allocator);
 }
 

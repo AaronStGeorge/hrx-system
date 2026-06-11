@@ -55,15 +55,15 @@ typedef struct loom_run_hal_artifact_t {
   iree_string_view_t executable_format;
   // Target-neutral bundle resolved for the artifact, when available.
   const loom_target_bundle_t* target_bundle;
-  // Target-native artifact format before runtime-loader packaging.
+  // Target-native artifact format.
   loom_target_artifact_format_t target_artifact_format;
-  // Target-native artifact bytes before any runtime-loader packaging.
+  // Target-native artifact bytes.
   iree_const_byte_span_t target_artifact_data;
   // Target-owned textual listing format, such as `amdgpu-assembly`.
   iree_string_view_t target_listing_format;
   // Target-owned textual listing bytes for debug artifact bundles.
   iree_const_byte_span_t target_listing_data;
-  // Provider-owned HAL executable container bytes passed to the loader.
+  // Provider-owned executable bytes passed to the HAL loader.
   iree_const_byte_span_t executable_data;
   // Provider-owned storage released by |deinitialize_artifact|.
   void* storage;

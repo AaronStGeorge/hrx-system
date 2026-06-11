@@ -13,15 +13,12 @@
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/emit/native/amdgpu/hal/executable.h"
 #include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
 #include "loom/tooling/execution/hal/runtime.h"
 
 typedef struct loom_amdgpu_hal_artifact_storage_t {
   // Target-native HSACO artifact and export metadata.
   loom_amdgpu_hal_kernel_library_t kernel_library;
-  // IREE HAL executable package consumed by the AMDGPU loader.
-  loom_amdgpu_hal_executable_t hal_executable;
 } loom_amdgpu_hal_artifact_storage_t;
 
 static iree_status_t loom_amdgpu_hal_artifact_provider_format_target_id(
@@ -292,33 +289,23 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
       module, &library_options, allocator, &library_emitted,
       &storage->kernel_library);
   if (iree_status_is_ok(status) && library_emitted) {
-    status = loom_amdgpu_package_hal_executable(
-        storage->kernel_library.executable_format,
+    iree_const_byte_span_t hsaco_data =
         iree_make_const_byte_span(storage->kernel_library.hsaco_data,
-                                  storage->kernel_library.hsaco_data_length),
-        storage->kernel_library.exports, storage->kernel_library.export_count,
-        allocator, &storage->hal_executable);
-  }
-  if (iree_status_is_ok(status) && library_emitted) {
+                                  storage->kernel_library.hsaco_data_length);
     *out_artifact = (loom_run_hal_artifact_t){
-        .executable_format = storage->hal_executable.executable_format,
+        .executable_format = storage->kernel_library.executable_format,
         .target_bundle = target->target_bundle,
         .target_artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-        .target_artifact_data = iree_make_const_byte_span(
-            storage->kernel_library.hsaco_data,
-            storage->kernel_library.hsaco_data_length),
+        .target_artifact_data = hsaco_data,
         .target_listing_format = storage->kernel_library.target_listing_format,
         .target_listing_data = iree_make_const_byte_span(
             (const uint8_t*)storage->kernel_library.target_listing_data,
             storage->kernel_library.target_listing_data_length),
-        .executable_data = iree_make_const_byte_span(
-            storage->hal_executable.data, storage->hal_executable.data_length),
+        .executable_data = hsaco_data,
         .storage = storage,
     };
     *out_emitted = true;
   } else {
-    loom_amdgpu_hal_executable_deinitialize(&storage->hal_executable,
-                                            allocator);
     loom_amdgpu_hal_kernel_library_deinitialize(&storage->kernel_library,
                                                 allocator);
     iree_allocator_free(allocator, storage);
@@ -335,7 +322,6 @@ static void loom_amdgpu_hal_artifact_provider_deinitialize_artifact(
   }
   loom_amdgpu_hal_artifact_storage_t* storage =
       (loom_amdgpu_hal_artifact_storage_t*)artifact->storage;
-  loom_amdgpu_hal_executable_deinitialize(&storage->hal_executable, allocator);
   loom_amdgpu_hal_kernel_library_deinitialize(&storage->kernel_library,
                                               allocator);
   iree_allocator_free(allocator, storage);

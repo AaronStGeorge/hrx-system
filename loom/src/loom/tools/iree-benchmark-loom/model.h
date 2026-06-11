@@ -153,7 +153,7 @@ typedef struct iree_benchmark_loom_benchmark_result_t {
   iree_string_view_t target_artifact_path;
   // Target-native textual listing path for debug/full bundles, if any.
   iree_string_view_t target_listing_path;
-  // HAL executable package artifact path for debug/full bundles, if any.
+  // HAL executable artifact path for debug/full bundles, if any.
   iree_string_view_t hal_executable_path;
   // True when benchmark setup and timing completed.
   bool executed;
@@ -213,7 +213,7 @@ typedef struct iree_benchmark_loom_hal_actual_provider_t {
   char* target_listing_path_storage;
   // Borrowed view into |hal_executable_path_storage|.
   iree_string_view_t hal_executable_path;
-  // Owned debug/full bundle HAL executable package path.
+  // Owned debug/full bundle HAL executable artifact path.
   char* hal_executable_path_storage;
   // True when |compile_report_capture| owns initialized capture state.
   bool compile_report_capture_initialized;

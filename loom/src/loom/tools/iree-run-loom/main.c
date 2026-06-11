@@ -68,7 +68,7 @@ IREE_FLAG(string, emit_target_artifact, "",
           "Optional output path for the selected HAL backend's target-native "
           "artifact, such as AMDGPU HSACO.");
 IREE_FLAG(string, emit_hal_executable, "",
-          "Optional output path for the HAL executable package passed to the "
+          "Optional output path for the executable artifact passed to the HAL "
           "runtime loader.");
 IREE_FLAG(bool, emit_only, false,
           "Stops after HAL executable emission without dispatching.");

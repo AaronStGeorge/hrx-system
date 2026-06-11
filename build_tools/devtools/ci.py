@@ -515,10 +515,6 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
         xfail_regex = ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX
     else:
         xfail_regex = ci_config.AMDGPU_CTEST_EXCLUDE_REGEX
-    xfail_regex = combine_ctest_regex(
-        xfail_regex,
-        ci_config.LOOM_AMDGPU_HAL_EXECUTION_CTEST_EXCLUDE_REGEX,
-    )
     build_targets = (
         ci_config.AMDGPU_CMAKE_TEST_BUILD_TARGETS
         if tests_enabled

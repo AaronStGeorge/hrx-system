@@ -77,14 +77,6 @@ PACKAGE_POLICIES = [
         forbidden_deps = ["//runtime/src/iree/hal/drivers/amdgpu/..."],
     ),
     package_policy(
-        packages = ["loom/src/loom/target/emit/native/amdgpu"],
-        forbidden_deps = [
-            "//runtime/src/iree/base/internal/flatcc:building",
-            "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
-            "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
-        ],
-    ),
-    package_policy(
         packages = ["loom/src/loom/target/emit/native/x86/..."],
         build_requirements = [TARGET_ARCH_X86],
     ),

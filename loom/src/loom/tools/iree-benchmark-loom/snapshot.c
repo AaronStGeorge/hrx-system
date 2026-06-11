@@ -87,7 +87,7 @@ typedef struct iree_benchmark_loom_snapshot_state_t {
   iree_host_size_t target_artifact_count;
   // Number of target listing files observed.
   iree_host_size_t target_listing_count;
-  // Number of HAL executable package files observed.
+  // Number of HAL executable artifact files observed.
   iree_host_size_t hal_executable_count;
   // True after |device_json| receives a device object.
   bool has_device_json;

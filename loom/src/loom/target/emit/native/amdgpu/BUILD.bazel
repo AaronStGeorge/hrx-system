@@ -32,8 +32,6 @@ _AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
 
 _DESCRIPTOR_SET_RDNA3 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3.core"]
 
-_AMDGPU_HAL_VISIBILITY = ["//loom/src/loom/target/emit/native/amdgpu/hal:__pkg__"]
-
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
 #===------------------------------------------------------------------------===#
@@ -308,7 +306,6 @@ loom_cc_library(
 loom_cc_library(
     name = "hal_kernel_metadata",
     hdrs = ["hal_kernel_metadata.h"],
-    visibility = _AMDGPU_HAL_VISIBILITY,
     deps = [
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
