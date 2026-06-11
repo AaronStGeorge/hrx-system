@@ -268,9 +268,9 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
-        self.assertIn(".tmp/iree-bazel-try/run-<pid>/BUILD.bazel", description)
+        self.assertIn(".iree/bazel-try/run-<pid>/BUILD.bazel", description)
         self.assertIn("bazel build", description)
-        self.assertIn("//.tmp/iree-bazel-try/run-<pid>:snippet", description)
+        self.assertIn("//.iree/bazel-try/run-<pid>:snippet", description)
         self.assertIn("# compile only", description)
 
     def test_cmake_try_generates_scratch_build(self):
@@ -742,7 +742,7 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("## iree-bazel-try", try_output)
         self.assertIn("one-shot C/C++ probes", try_output)
-        self.assertIn(".tmp/iree-bazel-try/", try_output)
+        self.assertIn(".iree/bazel-try/", try_output)
         self.assertNotIn("## iree-bazel-fuzz", try_output)
 
         self.assertIn("## iree-bazel-fuzz", fuzz_output)

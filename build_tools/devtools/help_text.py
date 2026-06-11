@@ -387,8 +387,9 @@ while the binary runs.""",
   python dev.py bazel try -k -e 'int main() { return 0; }'
   python dev.py bazel try -c -o build/snippet -e 'int main() { return 0; }'
 
-Temporary packages are written under .tmp/iree-bazel-try/ so Bazel can address
-them as // workspace labels. The tool infers common deps from quoted iree/...,
+Temporary packages are written under .iree/bazel-try/ so Bazel can address
+them as // workspace labels while .tmp/ remains hidden from Bazel package
+scans. The tool infers common deps from quoted iree/...,
 loom/..., and loomc/... includes and accepts explicit --dep labels.""",
         )
     if command == "try" and lane == "cmake":
@@ -733,8 +734,9 @@ it."""
         return """## iree-bazel-try
 
 Use `iree-bazel-try` for one-shot C/C++ probes without creating a permanent
-BUILD target. It writes a temporary package under `.tmp/iree-bazel-try/` so the
-snippet has a valid Bazel workspace label, builds it with Bazel, then execs the
+BUILD target. It writes a temporary package under `.iree/bazel-try/` so the
+snippet has a valid Bazel workspace label while `.tmp/` remains hidden from
+Bazel package scans. The tool builds the snippet with Bazel, then execs the
 snippet unless `--compile-only` is used. The scratch package is removed by
 default.
 

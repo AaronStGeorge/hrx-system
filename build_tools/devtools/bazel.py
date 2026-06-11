@@ -22,12 +22,13 @@ from build_tools.bazel import compile_commands_merge
 from build_tools.devtools import fuzz
 from build_tools.devtools.command_plan import quote_command
 from build_tools.devtools.environment import (
-    DEFAULT_LOCAL_TMP_ROOT,
     LOCAL_TMP_ROOT,
     REPO_ROOT,
 )
 
-BAZEL_TRY_ROOT = DEFAULT_LOCAL_TMP_ROOT / "iree-bazel-try"
+LOCAL_STATE_ROOT = REPO_ROOT / ".iree"
+BAZEL_TRY_ROOT = LOCAL_STATE_ROOT / "bazel-try"
+BAZEL_TRY_LABEL_ROOT = "//.iree/bazel-try"
 BAZEL_COMPILE_COMMANDS_ROOT = LOCAL_TMP_ROOT / "iree-bazel-compile-commands"
 DEFAULT_TRY_BINARY_NAME = "snippet"
 DEFAULT_COMPILE_COMMANDS_OUTPUT = REPO_ROOT / "compile_commands.json"
@@ -417,6 +418,10 @@ def cleanup_try_scratch(scratch_dir: Path) -> None:
         BAZEL_TRY_ROOT.rmdir()
     except OSError:
         pass
+    try:
+        LOCAL_STATE_ROOT.rmdir()
+    except OSError:
+        pass
 
 
 def cleanup_compile_commands_scratch(scratch_dir: Path) -> None:
@@ -765,7 +770,7 @@ class BazelTryStep:
 
     def describe(self) -> str:
         scratch = BAZEL_TRY_ROOT / "run-<pid>"
-        label = "//.tmp/iree-bazel-try/run-<pid>:snippet"
+        label = f"{BAZEL_TRY_LABEL_ROOT}/run-<pid>:snippet"
         lines = [
             f"# write {scratch}/BUILD.bazel",
             quote_command([self.bazel, "build", *self.command.bazel_args, label]),
@@ -799,7 +804,7 @@ class BazelTryStep:
                 testonly=True,
             )
             label = (
-                f"//.tmp/iree-bazel-try/{scratch_dir.name}:{DEFAULT_TRY_BINARY_NAME}"
+                f"{BAZEL_TRY_LABEL_ROOT}/{scratch_dir.name}:{DEFAULT_TRY_BINARY_NAME}"
             )
             build_result = run_quietly(
                 [self.bazel, "build", *self.command.bazel_args, label],

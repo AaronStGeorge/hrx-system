@@ -16,6 +16,7 @@
 # Bazel output symlinks and local developer scratch/state.
 /bazel-*
 /.tmp/
+/.iree/
 
 # CMake and other local build trees.
 /build/
