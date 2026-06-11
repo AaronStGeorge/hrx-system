@@ -2764,8 +2764,10 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
   iree_status_t status = loom_low_lower_emit_region_ops(
       context, source_body, /*map_source_blocks=*/true);
   loom_builder_restore(&context->builder, saved_ip);
-  IREE_ASSERT_EQ(context->lowering.selected_plan_emit_index,
-                 context->lowering.selected_plan_count);
+  if (iree_status_is_ok(status)) {
+    IREE_ASSERT_EQ(context->lowering.selected_plan_emit_index,
+                   context->lowering.selected_plan_count);
+  }
   return status;
 }
 

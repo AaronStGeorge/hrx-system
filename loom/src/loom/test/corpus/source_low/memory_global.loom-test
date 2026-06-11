@@ -615,3 +615,29 @@ kernel.def @rank2_vector_tile_transpose() {
   vector.store %ntc_tile, %output_view[%tile_base, 0] : vector<4x4xf32>, view<64x4xf32, #dense>
   kernel.return
 }
+
+// ====
+
+kernel.def target(@target) @grid_stride_store_offset() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch(%target: buffer, %byte_length: offset, %pattern: i32) {
+  %lane_index = kernel.workitem.id<x> : index
+  %lane = index.cast %lane_index : index to offset
+  %step_index = index.constant 64 : index
+  %step = index.cast %step_index : index to offset
+  %target_global = buffer.assume.memory_space<global> %target : buffer
+  %value = vector.from_elements %pattern : vector<1xi32>
+  cfg.br ^loop(%lane: offset)
+^loop(%byte_offset: offset):
+  %inside = index.cmp ult, %byte_offset, %byte_length : offset
+  cfg.cond_br %inside, ^body, ^done
+^body:
+  %target_view = buffer.view %target_global[%byte_offset] : buffer -> view<1xi32, #dense>
+  vector.store %value, %target_view[0] : vector<1xi32>, view<1xi32, #dense>
+  %next = index.add %byte_offset, %step : offset
+  cfg.br ^loop(%next: offset)
+^done:
+  kernel.return
+}
