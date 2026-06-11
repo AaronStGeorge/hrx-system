@@ -88,8 +88,10 @@ static bool is_unavailable(iree_status_t status) {
 
 A by-value `iree_status_t` parameter means the callee participates in ownership.
 The callee must return it, store it into an owning destination, consume it,
-clone it before fanout, or transfer it to another owning status API. Observer
-helpers should expose the non-owning representation they actually need:
+or transfer it to another owning status API. If the caller still needs the
+original after such a call, the caller passes `iree_status_clone(status)` and
+keeps owning the original. Observer helpers should expose the non-owning
+representation they actually need:
 
 ```c
 static bool is_unavailable(iree_status_code_t status_code) {
@@ -97,8 +99,8 @@ static bool is_unavailable(iree_status_code_t status_code) {
 }
 
 static iree_status_t append_status(iree_string_builder_t* builder,
-                                   const iree_status_t* status) {
-  return iree_status_format_to(*status, append_chunk, builder)
+                                   const iree_status_t status) {
+  return iree_status_format_to(status, append_chunk, builder)
              ? iree_ok_status()
              : iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                                 "failed to format status");
@@ -108,9 +110,9 @@ static iree_status_t append_status(iree_string_builder_t* builder,
 The check intentionally keeps exceptions narrow. Status primitives that define
 the observer API, known status sinks, C++ `iree::Status` formatting internals,
 and documented borrowed callback boundaries are modeled explicitly. Ordinary
-debug/reporting helpers should use `iree_status_code_t`, `const iree_status_t*`,
-or `const iree_status_t&` instead of accepting a by-value status they do not
-own.
+debug/reporting helpers should use `iree_status_code_t`, `const iree_status_t`,
+or `const iree_status_t&` instead of accepting an owned status they do not
+consume.
 
 ### `iree-status-lifetime`
 

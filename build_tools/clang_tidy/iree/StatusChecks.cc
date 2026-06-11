@@ -42,6 +42,10 @@ bool IsStatusType(QualType Type) {
   return IsNamedTypedef(Type, "iree_status_t");
 }
 
+bool IsBorrowedStatusType(QualType Type) {
+  return IsStatusType(Type) && Type.isConstQualified();
+}
+
 QualType ReturnTypeFromCalleeExpr(const Expr* Callee) {
   if (!Callee) {
     return QualType();
@@ -63,6 +67,25 @@ QualType ReturnTypeFromCalleeExpr(const Expr* Callee) {
   return QualType();
 }
 
+QualType ParameterTypeFromCalleeExpr(const Expr* Callee, unsigned Index) {
+  if (!Callee) {
+    return QualType();
+  }
+  QualType CalleeType = Callee->IgnoreParenImpCasts()->getType();
+  if (CalleeType.isNull() || CalleeType->isDependentType()) {
+    return QualType();
+  }
+  CalleeType = CalleeType.getLocalUnqualifiedType();
+  if (const auto* Pointer = CalleeType->getAs<PointerType>()) {
+    CalleeType = Pointer->getPointeeType().getLocalUnqualifiedType();
+  }
+  const auto* Proto = CalleeType->getAs<FunctionProtoType>();
+  if (!Proto || Index >= Proto->getNumParams()) {
+    return QualType();
+  }
+  return Proto->getParamType(Index);
+}
+
 QualType ReturnTypeFromCall(const CallExpr* Call) {
   if (!Call) {
     return QualType();
@@ -71,6 +94,17 @@ QualType ReturnTypeFromCall(const CallExpr* Call) {
     return Callee->getReturnType();
   }
   return ReturnTypeFromCalleeExpr(Call->getCallee());
+}
+
+QualType ParameterTypeFromCall(const CallExpr* Call, unsigned Index) {
+  if (!Call) {
+    return QualType();
+  }
+  if (const FunctionDecl* Callee = Call->getDirectCallee();
+      Callee && Index < Callee->getNumParams()) {
+    return Callee->getParamDecl(Index)->getType();
+  }
+  return ParameterTypeFromCalleeExpr(Call->getCallee(), Index);
 }
 
 StringRef CalleeName(const CallExpr* Call) {
@@ -418,7 +452,9 @@ class GotoFinder {
 struct StatusParameterUseState {
   bool Observed = false;
   bool OwnsOrEscapes = false;
+  bool ExplicitBorrowed = false;
   SourceLocation ObserveLocation;
+  SourceLocation OwnsOrEscapesLocation;
 };
 
 const VarDecl* ReferencedStatusParameter(const Expr* Expr) {
@@ -453,26 +489,6 @@ bool IsStatusCppObserverMethod(const FunctionDecl* Function) {
          Method->getName() == "ToString";
 }
 
-bool IsPointerToNamedTypedef(QualType Type, StringRef Name) {
-  Type = Type.getNonReferenceType();
-  Type = Type.getLocalUnqualifiedType();
-  const auto* Pointer = Type->getAs<PointerType>();
-  if (!Pointer) {
-    return false;
-  }
-  return IsNamedTypedef(Pointer->getPointeeType(), Name);
-}
-
-bool IsKnownBorrowedStatusCallbackDefinition(const FunctionDecl* Function) {
-  if (!Function->getReturnType()->isVoidType() ||
-      Function->getNumParams() != 3) {
-    return false;
-  }
-  return IsPointerToNamedTypedef(Function->getParamDecl(0)->getType(),
-                                 "iree_hal_amdgpu_reclaim_entry_t") &&
-         IsStatusType(Function->getParamDecl(2)->getType());
-}
-
 class BorrowedStatusParameterAnalyzer {
  public:
   explicit BorrowedStatusParameterAnalyzer(BorrowedStatusParameterCheck& Check)
@@ -487,14 +503,15 @@ class BorrowedStatusParameterAnalyzer {
         IsBorrowedStatusCheckExemptFunction(Identifier->getName())) {
       return;
     }
-    if (IsStatusCppObserverMethod(Function) ||
-        IsKnownBorrowedStatusCallbackDefinition(Function)) {
+    if (IsStatusCppObserverMethod(Function)) {
       return;
     }
     for (const ParmVarDecl* Param : Function->parameters()) {
       if (!Param->getType()->isReferenceType() &&
           IsStatusType(Param->getType())) {
-        State_[Param->getCanonicalDecl()] = StatusParameterUseState();
+        StatusParameterUseState ParamState;
+        ParamState.ExplicitBorrowed = IsBorrowedStatusType(Param->getType());
+        State_[Param->getCanonicalDecl()] = ParamState;
       }
     }
     if (State_.empty()) {
@@ -503,6 +520,17 @@ class BorrowedStatusParameterAnalyzer {
     FunctionReturnsStatus_ = IsStatusType(Function->getReturnType());
     analyzeStatement(Function->getBody());
     for (const auto& [Param, State] : State_) {
+      if (State.ExplicitBorrowed) {
+        if (State.OwnsOrEscapes) {
+          Check_.diag(State.OwnsOrEscapesLocation.isValid()
+                          ? State.OwnsOrEscapesLocation
+                          : Param->getLocation(),
+                      "const iree_status_t parameter %0 is borrowed and must "
+                      "not be consumed, returned, stored, or transferred")
+              << Param;
+        }
+        continue;
+      }
       if (!State.Observed || State.OwnsOrEscapes) {
         continue;
       }
@@ -526,12 +554,15 @@ class BorrowedStatusParameterAnalyzer {
     }
   }
 
-  void markOwnsOrEscapes(const VarDecl* Param) {
+  void markOwnsOrEscapes(const VarDecl* Param, SourceLocation Location) {
     auto It = State_.find(Param);
     if (It == State_.end()) {
       return;
     }
     It->second.OwnsOrEscapes = true;
+    if (!It->second.OwnsOrEscapesLocation.isValid()) {
+      It->second.OwnsOrEscapesLocation = Location;
+    }
   }
 
   bool referencesTrackedStatusParameter(const Expr* Expr) {
@@ -563,17 +594,24 @@ class BorrowedStatusParameterAnalyzer {
     return false;
   }
 
-  void markReferencedParametersOwnOrEscaped(const Expr* Expr) {
-    Expr = IgnoreExprNoise(Expr);
-    if (!Expr) {
+  void markReferencedParametersOwnOrEscaped(const Expr* Expression) {
+    Expression = IgnoreExprNoise(Expression);
+    if (!Expression) {
       return;
     }
-    if (const VarDecl* Param = ReferencedStatusParameter(Expr);
+    if (const auto* Call = dyn_cast<CallExpr>(Expression);
+        Call && IsKnownStatusClone(CalleeName(Call))) {
+      for (const Expr* Arg : Call->arguments()) {
+        analyzeExpression(Arg, /*transferred=*/false);
+      }
+      return;
+    }
+    if (const VarDecl* Param = ReferencedStatusParameter(Expression);
         Param && State_.contains(Param)) {
-      markOwnsOrEscapes(Param);
+      markOwnsOrEscapes(Param, Expression->getExprLoc());
       return;
     }
-    for (const Stmt* Child : Expr->children()) {
+    for (const Stmt* Child : Expression->children()) {
       if (const auto* ChildExpr = dyn_cast_or_null<clang::Expr>(Child)) {
         markReferencedParametersOwnOrEscaped(ChildExpr);
       }
@@ -593,7 +631,7 @@ class BorrowedStatusParameterAnalyzer {
       for (const LambdaCapture& Capture : Lambda->captures()) {
         if (const auto* Param =
                 dyn_cast_or_null<ParmVarDecl>(Capture.getCapturedVar())) {
-          markOwnsOrEscapes(Param->getCanonicalDecl());
+          markOwnsOrEscapes(Param->getCanonicalDecl(), Capture.getLocation());
         }
       }
       return;
@@ -636,7 +674,7 @@ class BorrowedStatusParameterAnalyzer {
     if (const VarDecl* Param = ReferencedStatusParameter(Expr);
         Param && State_.contains(Param)) {
       if (transferred) {
-        markOwnsOrEscapes(Param);
+        markOwnsOrEscapes(Param, Expr->getExprLoc());
       } else {
         markObserved(Param, Expr->getExprLoc());
       }
@@ -714,7 +752,13 @@ class BorrowedStatusParameterAnalyzer {
     }
     if (IsKnownStatusClone(Name)) {
       for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
-        analyzeExpression(Call->getArg(I), /*transferred=*/true);
+        const Expr* Arg = Call->getArg(I);
+        if (const VarDecl* Param = ReferencedStatusParameter(Arg);
+            Param && State_.contains(Param) && State_[Param].ExplicitBorrowed) {
+          analyzeExpression(Arg, /*transferred=*/false);
+        } else {
+          analyzeExpression(Arg, /*transferred=*/true);
+        }
       }
       return;
     }
@@ -733,14 +777,14 @@ class BorrowedStatusParameterAnalyzer {
 
     for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
       const Expr* Arg = Call->getArg(I);
-      QualType ParamType;
-      if (const FunctionDecl* Callee = Call->getDirectCallee();
-          Callee && I < Callee->getNumParams()) {
-        ParamType = Callee->getParamDecl(I)->getType();
-      }
+      QualType ParamType = ParameterTypeFromCall(Call, I);
+      const bool ParamIsBorrowedStatus =
+          !ParamType.isNull() && IsBorrowedStatusType(ParamType);
       const bool ArgIsStatus = IsStatusType(Arg->getType()) ||
                                (!ParamType.isNull() && IsStatusType(ParamType));
-      if (transferred || ArgIsStatus) {
+      if (ParamIsBorrowedStatus) {
+        analyzeExpression(Arg, /*transferred=*/false);
+      } else if (transferred || ArgIsStatus) {
         markReferencedParametersOwnOrEscaped(Arg);
       } else if (referencesTrackedStatusParameter(Arg)) {
         analyzeExpression(Arg, /*transferred=*/false);
@@ -933,11 +977,7 @@ class StatusTransferOrderAnalyzer {
 
     for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
       const Expr* Arg = Call->getArg(I);
-      QualType ParamType;
-      if (const FunctionDecl* Callee = Call->getDirectCallee();
-          Callee && I < Callee->getNumParams()) {
-        ParamType = Callee->getParamDecl(I)->getType();
-      }
+      QualType ParamType = ParameterTypeFromCall(Call, I);
       const bool ArgIsStatus = IsStatusType(Arg->getType()) ||
                                (!ParamType.isNull() && IsStatusType(ParamType));
       collectExpressionUses(Arg, /*transferred=*/transferred || ArgIsStatus,
@@ -1995,12 +2035,12 @@ class StatusLifetimeAnalyzer {
           reportVariable(Var, Call->getArg(I)->getExprLoc(), State);
         }
       }
-      QualType ParamType;
-      if (const FunctionDecl* Callee = Call->getDirectCallee();
-          Callee && I < Callee->getNumParams()) {
-        ParamType = Callee->getParamDecl(I)->getType();
-      }
-      if (ParamType.isNull() ? ArgValue.IsStatus : IsStatusType(ParamType)) {
+      QualType ParamType = ParameterTypeFromCall(Call, I);
+      const bool ParamIsStatus =
+          ParamType.isNull() ? ArgValue.IsStatus : IsStatusType(ParamType);
+      const bool ParamIsBorrowedStatus =
+          !ParamType.isNull() && IsBorrowedStatusType(ParamType);
+      if (ParamIsStatus && !ParamIsBorrowedStatus) {
         if (!IsStatusObserver(Name)) {
           HasUnknownStatusArgument = true;
           if (const VarDecl* Var = ForwardedStatusLocal(Call->getArg(I))) {

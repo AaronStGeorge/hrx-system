@@ -26,6 +26,7 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             output,
             [
                 "borrowed_parameter_status",
+                "const_status_consumed",
                 "[iree-status-borrowed-parameter]",
             ],
         )
@@ -34,6 +35,9 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             [
                 "returned_parameter_status",
                 "consumed_parameter_status",
+                "const_borrowed_parameter_status",
+                "const_clone_stored_parameter_status",
+                "const_callback_parameter_status",
                 "stored_parameter_status",
                 "joined_parameter_status",
                 "annotated_parameter_status",
@@ -135,6 +139,8 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "consumed_code_status",
                 "reported_free_status",
                 "observer_only_status",
+                "const_borrowed_observed_status",
+                "const_callback_observed_status",
             ],
         )
 

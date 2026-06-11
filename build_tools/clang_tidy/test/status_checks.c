@@ -10,6 +10,8 @@ typedef struct iree_status_handle_t* iree_status_t;
 typedef struct iree_hal_amdgpu_reclaim_entry_t iree_hal_amdgpu_reclaim_entry_t;
 typedef intptr_t iree_host_size_t;
 typedef int iree_status_code_t;
+typedef void (*iree_clang_tidy_status_const_callback_t)(
+    void* user_data, const iree_status_t status);
 
 iree_status_t iree_ok_status(void);
 int iree_status_is_ok(iree_status_t status);
@@ -40,6 +42,8 @@ iree_status_t iree_clang_tidy_status_named_call_source(void);
 iree_status_t iree_clang_tidy_status_returned_source(void);
 iree_status_t iree_clang_tidy_status_void_cast_source(void);
 iree_status_t iree_clang_tidy_status_transfer_order_sink(iree_status_t status);
+void iree_clang_tidy_status_lifetime_const_borrowed_observer(
+    const iree_status_t status);
 
 #define IREE_LIKELY(x) (__builtin_expect(!!(x), 1))
 #define IREE_STATUS_OK 0
@@ -328,6 +332,22 @@ void iree_clang_tidy_status_lifetime_reported_free(void* file) {
   iree_status_free(reported_free_status);
 }
 
+iree_status_t iree_clang_tidy_status_lifetime_const_borrowed_observed(void) {
+  iree_status_t const_borrowed_observed_status =
+      iree_clang_tidy_status_assigned_source();
+  iree_clang_tidy_status_lifetime_const_borrowed_observer(
+      const_borrowed_observed_status);
+  return const_borrowed_observed_status;
+}
+
+iree_status_t iree_clang_tidy_status_lifetime_const_callback_observed(
+    iree_clang_tidy_status_const_callback_t callback, void* user_data) {
+  iree_status_t const_callback_observed_status =
+      iree_clang_tidy_status_assigned_source();
+  callback(user_data, const_callback_observed_status);
+  return const_callback_observed_status;
+}
+
 int iree_clang_tidy_status_borrowed_parameter(
     iree_status_t borrowed_parameter_status) {
   return iree_status_is_ok(borrowed_parameter_status);
@@ -336,6 +356,31 @@ int iree_clang_tidy_status_borrowed_parameter(
 int iree_clang_tidy_status_borrowed_parameter_code(
     iree_status_code_t status_code) {
   return status_code == IREE_STATUS_OK;
+}
+
+int iree_clang_tidy_status_borrowed_parameter_const(
+    const iree_status_t const_borrowed_parameter_status) {
+  iree_status_t cloned_status =
+      iree_status_clone(const_borrowed_parameter_status);
+  iree_status_free(cloned_status);
+  return iree_status_is_ok(const_borrowed_parameter_status);
+}
+
+void iree_clang_tidy_status_borrowed_parameter_const_consumed(
+    const iree_status_t const_status_consumed) {
+  iree_status_free(const_status_consumed);
+}
+
+void iree_clang_tidy_status_borrowed_parameter_const_clone_stored(
+    const iree_status_t const_clone_stored_parameter_status,
+    iree_status_t* out_status) {
+  *out_status = iree_status_clone(const_clone_stored_parameter_status);
+}
+
+void iree_clang_tidy_status_borrowed_parameter_const_callback(
+    iree_clang_tidy_status_const_callback_t callback, void* user_data,
+    const iree_status_t const_callback_parameter_status) {
+  callback(user_data, const_callback_parameter_status);
 }
 
 iree_status_t iree_clang_tidy_status_borrowed_parameter_returned(
@@ -377,7 +422,7 @@ void iree_clang_tidy_status_borrowed_parameter_sink(
 
 void iree_clang_tidy_status_borrowed_parameter_reclaim_callback(
     iree_hal_amdgpu_reclaim_entry_t* entry, void* user_data,
-    iree_status_t reclaim_callback_parameter_status) {
+    const iree_status_t reclaim_callback_parameter_status) {
   (void)entry;
   *(iree_status_code_t*)user_data =
       iree_status_code(reclaim_callback_parameter_status);

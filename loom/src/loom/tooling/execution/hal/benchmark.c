@@ -192,11 +192,11 @@ static iree_status_t loom_run_hal_benchmark_execute_batch(void* user_data) {
 }
 
 static void loom_run_hal_profile_summary_record_error(
-    loom_run_hal_profile_summary_t* profile, const iree_status_t* status) {
+    loom_run_hal_profile_summary_t* profile, const iree_status_t status) {
   profile->has_error = true;
-  profile->error_code = iree_status_code(*status);
+  profile->error_code = iree_status_code(status);
   iree_host_size_t required_length = 0;
-  if (iree_status_format(*status, sizeof(profile->error_message),
+  if (iree_status_format(status, sizeof(profile->error_message),
                          profile->error_message, &required_length)) {
     profile->error_message_length = required_length;
     if (profile->error_message_length >= sizeof(profile->error_message)) {
@@ -400,7 +400,7 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
                              .user_data = &context,
                          });
   } else {
-    loom_run_hal_profile_summary_record_error(out_profile, &status);
+    loom_run_hal_profile_summary_record_error(out_profile, status);
     iree_status_ignore(status);
     status = iree_ok_status();
   }
@@ -446,7 +446,7 @@ static iree_status_t loom_run_hal_benchmark_profile_final_batch(
     status = loom_run_hal_benchmark_run_profiled_batch(
         runtime, &profile_batch, options, allocator, out_profile);
   } else {
-    loom_run_hal_profile_summary_record_error(out_profile, &status);
+    loom_run_hal_profile_summary_record_error(out_profile, status);
     iree_status_ignore(status);
     status = iree_ok_status();
   }
@@ -490,7 +490,7 @@ static iree_status_t loom_run_hal_benchmark_profile_final_sequence_batch(
     status = loom_run_hal_benchmark_run_profiled_batch(
         runtime, &profile_batch, options, allocator, out_profile);
   } else {
-    loom_run_hal_profile_summary_record_error(out_profile, &status);
+    loom_run_hal_profile_summary_record_error(out_profile, status);
     iree_status_ignore(status);
     status = iree_ok_status();
   }

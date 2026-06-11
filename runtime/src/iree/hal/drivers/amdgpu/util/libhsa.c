@@ -267,7 +267,7 @@ static iree_status_t iree_hal_amdgpu_libhsa_try_load_library_from_file(
     status = iree_string_builder_append_format(
         error_builder, "\n  Tried: %s\n    ", file_path);
     if (iree_status_is_ok(status)) {
-      status = iree_string_builder_append_status(error_builder, &load_status);
+      status = iree_string_builder_append_status(error_builder, load_status);
     }
     iree_status_free(load_status);
   }

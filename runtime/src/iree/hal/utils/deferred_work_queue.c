@@ -264,8 +264,8 @@ static void iree_hal_deferred_work_queue_ready_action_list_initialize(
 // Ready action entry struct.
 typedef struct iree_hal_deferred_work_queue_completion_list_node_t {
   // The callback and user data for that callback. To be called when the
-  // associated event has completed. The status passed to the callback is
-  // borrowed and must not be consumed by the callback.
+  // associated event has completed. The callback takes ownership of the status
+  // and returns any additional failure status produced by callback work.
   iree_status_t (*callback)(iree_status_t, void* user_data);
   void* user_data;
   // The event to wait for on the completion thread.
@@ -1128,6 +1128,7 @@ iree_hal_deferred_work_queue_execution_device_signal_host_callback(
   IREE_ASSERT_EQ(action->state, IREE_HAL_QUEUE_ACTION_STATE_ALIVE);
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
     iree_hal_deferred_work_queue_action_fail(action, status);
+    iree_status_free(status);
     IREE_TRACE_ZONE_END(z0);
     return iree_ok_status();
   }
@@ -1532,17 +1533,16 @@ static void iree_hal_deferred_work_queue_worker_process_ready_list(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_slim_mutex_lock(&actions->action_mutex);
-  iree_status_t status = actions->status;
-  if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
+  if (IREE_UNLIKELY(!iree_status_is_ok(actions->status))) {
     iree_hal_deferred_work_queue_ready_action_list_fail_locked(
-        &actions->working_area.ready_worklist, status);
+        &actions->working_area.ready_worklist, actions->status);
     iree_slim_mutex_unlock(&actions->action_mutex);
-    iree_status_ignore(status);
     IREE_TRACE_ZONE_END(z0);
     return;
   }
   iree_slim_mutex_unlock(&actions->action_mutex);
 
+  iree_status_t status = iree_ok_status();
   while (true) {
     iree_hal_deferred_work_queue_entry_list_node_t* entry =
         iree_hal_deferred_work_queue_entry_list_pop(
@@ -1605,7 +1605,8 @@ static void iree_hal_deferred_work_queue_worker_process_completion(
     }
 
     if (entry->callback) {
-      iree_status_t callback_status = entry->callback(status, entry->user_data);
+      iree_status_t callback_status =
+          entry->callback(iree_status_clone(status), entry->user_data);
       status = iree_status_join(status, callback_status);
     }
 

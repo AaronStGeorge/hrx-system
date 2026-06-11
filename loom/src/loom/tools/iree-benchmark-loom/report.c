@@ -34,12 +34,11 @@ static iree_string_view_t iree_benchmark_loom_selected_device_uri(
 }
 
 iree_status_t iree_benchmark_loom_write_status_object_json(
-    const iree_status_t* status, loom_output_stream_t* stream) {
-  const iree_status_code_t code = iree_status_code(*status);
+    const iree_status_t status, loom_output_stream_t* stream) {
+  const iree_status_code_t code = iree_status_code(status);
   char message[512];
   iree_host_size_t required_length = 0;
-  if (!iree_status_format(*status, sizeof(message), message,
-                          &required_length)) {
+  if (!iree_status_format(status, sizeof(message), message, &required_length)) {
     const char* status_string = iree_status_code_string(code);
     iree_host_size_t index = 0;
     for (; status_string[index] != '\0' && index + 1 < sizeof(message);
@@ -82,7 +81,7 @@ static iree_status_t iree_benchmark_loom_write_optional_i64_query_json(
     return loom_output_stream_write_format(stream, "%" PRIi64, value);
   }
   iree_status_t write_status =
-      iree_benchmark_loom_write_status_object_json(&status, stream);
+      iree_benchmark_loom_write_status_object_json(status, stream);
   iree_status_free(status);
   return write_status;
 }
@@ -456,7 +455,7 @@ iree_status_t iree_benchmark_loom_write_hal_context_identity_fields_json(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
     } else {
       iree_status_t write_status = iree_benchmark_loom_write_status_object_json(
-          &capabilities_status, stream);
+          capabilities_status, stream);
       iree_status_free(capabilities_status);
       IREE_RETURN_IF_ERROR(write_status);
     }
