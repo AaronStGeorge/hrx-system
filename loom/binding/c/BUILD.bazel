@@ -52,6 +52,13 @@ LOOMC_TARGET_SPIRV_PUBLIC_HDRS = [
     "include/loomc/target/spirv/profile.h",
 ]
 
+LOOMC_TARGET_AMDGPU_PUBLIC_HDRS = [
+    "include/loomc/target/amdgpu.h",
+    "include/loomc/target/amdgpu/base.h",
+    "include/loomc/target/amdgpu/emit.h",
+    "include/loomc/target/amdgpu/profile.h",
+]
+
 LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS = [
     "include/loomc/target/spirv/vulkaninfo.h",
 ]
@@ -77,6 +84,7 @@ _LOOMC_FULL_COMPATIBLE_WITH = loom_config_compatible_with([
 ])
 
 exports_files(
+    LOOMC_TARGET_AMDGPU_PUBLIC_HDRS +
     LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS +
     LOOMC_TARGET_SPIRV_PUBLIC_HDRS +
     LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS +

@@ -45,6 +45,8 @@ _AMDGPU_TARGET_ID_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/target_id:__
 
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
+_AMDGPU_BINDING_VISIBILITY = ["//loom/binding/c/target/amdgpu:__pkg__"]
+
 _AMDGPU_PROVIDER_VISIBILITY = [
     "//loom/src/loom/target/all:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
@@ -52,7 +54,7 @@ _AMDGPU_PROVIDER_VISIBILITY = [
     "//loom/src/loom/tools/iree-benchmark-loom:__pkg__",
     "//loom/src/loom/tools/loom-compile:__pkg__",
     "//loom/src/loom/tooling/target/amdgpu/execution:__pkg__",
-] + _AMDGPU_CHECK_VISIBILITY
+] + _AMDGPU_BINDING_VISIBILITY + _AMDGPU_CHECK_VISIBILITY
 
 #===------------------------------------------------------------------------===#
 # AMDGPU low descriptors
@@ -135,7 +137,8 @@ loom_generated_cc_library(
         _AMDGPU_PLANNING_VISIBILITY +
         _AMDGPU_RECORDS_VISIBILITY +
         _AMDGPU_TARGET_ID_VISIBILITY +
-        _AMDGPU_TOOLING_VISIBILITY
+        _AMDGPU_TOOLING_VISIBILITY +
+        _AMDGPU_BINDING_VISIBILITY
     ),
     deps = [
         ":target_info_defs",

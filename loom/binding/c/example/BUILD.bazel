@@ -23,6 +23,11 @@ LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/emit:spirv",
 ])
 
+LOOMC_TARGET_AMDGPU_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/target/arch:amdgpu",
+    "//loom/config/emit:amdgpu",
+])
+
 LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:spirv_vulkan_hal",
 ])
@@ -58,6 +63,28 @@ loom_cc_binary(
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c/target/spirv",
+    ],
+)
+
+loom_cc_binary(
+    name = "emit_amdgpu_offline",
+    srcs = ["emit_amdgpu_offline.c"],
+    target_compatible_with = LOOMC_TARGET_AMDGPU_COMPATIBLE_WITH,
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/amdgpu",
+    ],
+)
+
+loom_cc_binary(
+    name = "emit_amdgpu_hsa",
+    srcs = ["emit_amdgpu_hsa.c"],
+    target_compatible_with = LOOMC_TARGET_AMDGPU_COMPATIBLE_WITH,
+    deps = [
+        "//build_tools:dl",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/amdgpu",
+        "//third_party:hsa_runtime_headers",
     ],
 )
 
@@ -102,9 +129,45 @@ loom_cc_binary(
 )
 
 loom_cc_test(
+    name = "emit_amdgpu_offline_test",
+    srcs = ["emit_amdgpu_offline.c"],
+    target_compatible_with = LOOMC_TARGET_AMDGPU_COMPATIBLE_WITH,
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/amdgpu",
+    ],
+)
+
+loom_cc_test(
+    name = "emit_amdgpu_hsa_test",
+    srcs = ["emit_amdgpu_hsa.c"],
+    resource_group = "loom-amdgpu-tests",
+    tags = [
+        "driver=amdgpu",
+        "iree-run-requirement=runtime.resource.amd_gpu",
+        "nodocker",
+        "requires-gpu-amd",
+        "runtime-resource=amd-gpu",
+    ],
+    target_compatible_with = LOOMC_TARGET_AMDGPU_COMPATIBLE_WITH,
+    deps = [
+        "//build_tools:dl",
+        "//loom/binding/c:loomc",
+        "//loom/binding/c/target/amdgpu",
+        "//third_party:hsa_runtime_headers",
+    ],
+)
+
+loom_cc_test(
     name = "emit_spirv_vulkan_test",
     srcs = ["emit_spirv_vulkan.c"],
+    resource_group = "loom-vulkan-tests",
     sanitizer_suppressions = vulkan_suppressions,
+    tags = [
+        "driver=vulkan",
+        "iree-run-requirement=runtime.resource.vulkan_device",
+        "runtime-resource=vulkan-device",
+    ],
     target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//build_tools:dl",
@@ -117,6 +180,12 @@ loom_cc_test(
 loom_cc_test(
     name = "emit_spirv_iree_hal_test",
     srcs = ["emit_spirv_iree_hal.c"],
+    resource_group = "loom-vulkan-tests",
+    tags = [
+        "driver=vulkan",
+        "iree-run-requirement=runtime.resource.vulkan_device",
+        "runtime-resource=vulkan-device",
+    ],
     target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
