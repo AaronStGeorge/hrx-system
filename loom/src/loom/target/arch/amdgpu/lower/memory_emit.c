@@ -542,8 +542,29 @@ static iree_status_t loom_amdgpu_emit_memory_saddr_dynamic_term(
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, term->index, &low_index));
   loom_value_id_t low_wide_index = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_from_u32(
-      context, source_op, low_index, &low_wide_index));
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_type_t low_index_type = loom_module_value_type(module, low_index);
+  bool index_is_sgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, low_index_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &index_is_sgpr));
+  if (!index_is_sgpr) {
+    IREE_ASSERT_UNREACHABLE(
+        "AMDGPU scalar memory address term selected non-SGPR value");
+    IREE_BUILTIN_UNREACHABLE();
+  }
+  const uint32_t index_unit_count =
+      loom_low_register_type_unit_count(low_index_type);
+  if (index_unit_count == 2) {
+    low_wide_index = low_index;
+  } else {
+    if (index_unit_count != 1) {
+      IREE_ASSERT_UNREACHABLE(
+          "AMDGPU scalar memory address term selected unsupported SGPR width");
+      IREE_BUILTIN_UNREACHABLE();
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_from_u32(
+        context, source_op, low_index, &low_wide_index));
+  }
   loom_value_id_t low_wide_offset = low_wide_index;
   for (uint8_t i = 0; i < term->stride_value_count; ++i) {
     loom_value_id_t low_stride = LOOM_VALUE_ID_INVALID;

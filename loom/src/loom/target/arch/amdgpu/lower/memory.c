@@ -188,6 +188,23 @@ static bool loom_amdgpu_memory_dynamic_index_can_materialize_soffset(
                                                 view_regions, value_id);
 }
 
+static bool loom_amdgpu_memory_dynamic_index_can_materialize_u32_soffset(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions, loom_value_id_t value_id) {
+  if (!loom_amdgpu_memory_dynamic_index_can_materialize_soffset(
+          module, fact_table, view_regions, value_id)) {
+    return false;
+  }
+  const loom_type_t type = loom_module_value_type(module, value_id);
+  if (!loom_type_is_scalar(type) ||
+      loom_type_element_type(type) != LOOM_SCALAR_TYPE_OFFSET) {
+    return true;
+  }
+  return fact_table != NULL &&
+         loom_value_facts_fit_unsigned_bit_count(
+             loom_value_fact_table_lookup(fact_table, value_id), 32);
+}
+
 static bool loom_amdgpu_memory_dynamic_term_needs_scaled_materialization(
     const loom_low_source_memory_dynamic_term_t* term) {
   return term->stride_value_count != 0 ||
@@ -214,7 +231,7 @@ static bool loom_amdgpu_memory_dynamic_term_can_materialize_soffset(
     return false;
   }
   for (uint8_t i = 0; i < term->stride_value_count; ++i) {
-    if (!loom_amdgpu_memory_dynamic_index_can_materialize_soffset(
+    if (!loom_amdgpu_memory_dynamic_index_can_materialize_u32_soffset(
             module, fact_table, view_regions, term->stride_values[i])) {
       return false;
     }
@@ -1840,6 +1857,16 @@ static bool loom_amdgpu_memory_access_try_select_global_saddr(
 static bool loom_amdgpu_memory_dynamic_term_can_flat_address(
     const loom_module_t* module,
     const loom_low_source_memory_dynamic_term_t* term) {
+  if (term->byte_stride == 1 && term->stride_value_count == 0 &&
+      term->index < module->values.count &&
+      (term->byte_shift == 0 ||
+       term->byte_shift == LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE)) {
+    const loom_type_t index_type = loom_module_value_type(module, term->index);
+    if (loom_type_is_scalar(index_type) &&
+        loom_type_element_type(index_type) == LOOM_SCALAR_TYPE_OFFSET) {
+      return true;
+    }
+  }
   if (loom_value_facts_is_float(term->byte_facts) ||
       term->byte_facts.range_lo < 0 || term->byte_stride <= 0 ||
       term->byte_stride > UINT32_MAX) {
@@ -1856,16 +1883,7 @@ static bool loom_amdgpu_memory_dynamic_term_can_flat_address(
       term->byte_shift >= 32) {
     return false;
   }
-  if (term->byte_facts.range_hi / term->byte_stride <= UINT32_MAX) {
-    return true;
-  }
-  if (term->byte_stride != 1 || term->stride_value_count != 0 ||
-      term->index >= module->values.count) {
-    return false;
-  }
-  const loom_type_t index_type = loom_module_value_type(module, term->index);
-  return loom_type_is_scalar(index_type) &&
-         loom_type_element_type(index_type) == LOOM_SCALAR_TYPE_OFFSET;
+  return term->byte_facts.range_hi / term->byte_stride <= UINT32_MAX;
 }
 
 void loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
