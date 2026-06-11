@@ -57,6 +57,26 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "kernarg_layout",
+    srcs = ["kernarg_layout.c"],
+    hdrs = ["kernarg_layout.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "executable_metadata",
+    srcs = ["executable_metadata.c"],
+    hdrs = ["executable_metadata.h"],
+    deps = [
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "amdgpu",
     srcs = [
         "allocator.c",
@@ -395,6 +415,29 @@ iree_runtime_cc_test(
         ":headers",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "kernarg_layout_test",
+    srcs = ["kernarg_layout_test.cc"],
+    deps = [
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "executable_metadata_test",
+    srcs = ["executable_metadata_test.cc"],
+    deps = [
+        ":executable_metadata",
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

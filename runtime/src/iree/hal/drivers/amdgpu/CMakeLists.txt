@@ -62,6 +62,36 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    kernarg_layout
+  HDRS
+    "kernarg_layout.h"
+  SRCS
+    "kernarg_layout.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    executable_metadata
+  HDRS
+    "executable_metadata.h"
+  SRCS
+    "executable_metadata.c"
+  DEPS
+    ::kernarg_layout
+    iree::base
+    iree::hal
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     amdgpu
   HDRS
     "api.h"
@@ -465,6 +495,47 @@ iree_cc_test(
     ::headers
     iree::base
     iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    kernarg_layout_test
+  SRCS
+    "kernarg_layout_test.cc"
+  DEPS
+    ::kernarg_layout
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    executable_metadata_test
+  SRCS
+    "executable_metadata_test.cc"
+  DEPS
+    ::executable_metadata
+    ::kernarg_layout
+    iree::base
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
