@@ -126,7 +126,7 @@ kernel.def export("dispatch") @entry() {
   %workgroup_size_y = index.constant 6 : index
   %workgroup_size_x = index.constant 5 : index
   kernel.launch.config workgroups(%workgroups_x, %workgroups_y, %workgroups_z) workgroup_size(%workgroup_size_x, %workgroup_size_y, %workgroup_size_z) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");
@@ -147,7 +147,7 @@ global.variable @state : index = 0
 kernel.def export("dispatch") @entry() {
   %one = index.constant 1 : index
   kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");

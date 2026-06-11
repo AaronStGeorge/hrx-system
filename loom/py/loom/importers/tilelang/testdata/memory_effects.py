@@ -61,10 +61,10 @@ def scalar_atomic_add(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add") @scalar_atomic_add(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add") @scalar_atomic_add() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -112,10 +112,10 @@ def scalar_atomic_add_return(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add_return") @scalar_atomic_add_return(%dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("scalar_atomic_add_return") @scalar_atomic_add_return() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -163,10 +163,10 @@ def device_asserts(tilelang: Any, T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("device_asserts_kernel") @device_asserts_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("device_asserts_kernel") @device_asserts_kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

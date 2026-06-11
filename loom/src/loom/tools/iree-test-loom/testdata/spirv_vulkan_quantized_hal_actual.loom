@@ -1,11 +1,11 @@
 spirv.target<vulkan1_3> @target {abi = hal_kernel}
 
-kernel.def target(@target) @quantized_projection_u8_scalar_128(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+kernel.def target(@target) @quantized_projection_u8_scalar_128() {
   %m_count = index.constant 128 : index
   %n_count = index.constant 128 : index
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%n_count, %m_count, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
   %column = kernel.workgroup.id<x> : index
   %row = kernel.workgroup.id<y> : index
   %k_count = index.constant 128 : index

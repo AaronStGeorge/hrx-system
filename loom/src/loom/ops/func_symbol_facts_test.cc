@@ -185,7 +185,7 @@ test.record @artifact
 kernel.def target(@target) export("dispatch") artifact(@artifact) ordinal(5) linkage(dso_local) @kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");

@@ -1,11 +1,11 @@
 // RUN: emit source-low diagnostics=memory output=low
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @lds_b32_diagnostics(%output: buffer) {
+kernel.def target(@target) @lds_b32_diagnostics() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -45,11 +45,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b32_diagnostics() {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @lds_padded_diagnostics(%output: buffer) {
+kernel.def target(@target) @lds_padded_diagnostics() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -96,11 +96,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_padded_diagnostics(
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @lds_read2_write2_diagnostics(%output: buffer) {
+kernel.def target(@target) @lds_read2_write2_diagnostics() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -145,11 +145,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_read2_write2_diagno
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @lds_conflict_risk_diagnostics(%output: buffer) {
+kernel.def target(@target) @lds_conflict_risk_diagnostics() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -259,7 +259,7 @@ amdgpu.target<gfx1100> @target
 kernel.def target(@target) @lds_i8x8_strided_load_rejected() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch() {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -276,10 +276,10 @@ kernel.def target(@target) @lds_i8x8_strided_load_rejected() {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @cache_policy_non_temporal_load_rejected(%input: buffer) {
+kernel.def target(@target) @cache_policy_non_temporal_load_rejected() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -296,7 +296,7 @@ amdgpu.target<gfx1100> @target
 kernel.def target(@target) @cache_policy_workgroup_store_rejected() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch() {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -313,10 +313,10 @@ kernel.def target(@target) @cache_policy_workgroup_store_rejected() {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @global_atomic_system_scope_rejected(%input: buffer) {
+kernel.def target(@target) @global_atomic_system_scope_rejected() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -332,12 +332,12 @@ kernel.def target(@target) @global_atomic_system_scope_rejected(%input: buffer) 
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @global_dynamic_offset_sum_flat(%input: buffer) {
+kernel.def target(@target) @global_dynamic_offset_sum_flat() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c4, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %base_x = index.constant 4294966000 : index
   %x = index.add %x0, %base_x : index
@@ -357,34 +357,34 @@ low.kernel.def target(@target) workgroup_size(64, 4, 1) @global_dynamic_offset_s
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %x0 = v_and_b32_lit %packed_tid, 1023
   %base_x = s_mov_b32 4294966000
-  %19 = v_mov_b32 4294966000
-  %x = v_add_u32 %x0, %19
-  %21 = v_lshrrev_b32_src0_inline %packed_tid, 10
-  %y0 = v_and_b32_lit %21, 1023
+  %18 = v_mov_b32 4294966000
+  %x = v_add_u32 %x0, %18
+  %20 = v_lshrrev_b32_src0_inline %packed_tid, 10
+  %y0 = v_and_b32_lit %20, 1023
   %base_y = s_mov_b32 2000
-  %24 = v_mov_b32 2000
-  %y = v_add_u32 %y0, %24
-  %26 = s_mov_b32 704
-  %27 = s_mov_b32 1
-  %28 = concat(%26, %27) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %29 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %30 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %31 = slice %28[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %32 = slice %28[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %33 = s_add_u32 %29, %31
-  %34 = s_addc_u32 %30, %32
-  %35 = concat(%33, %34) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %36 = v_mov_b32 0
-  %37 = slice %35[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %38 = slice %35[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %39, %40 = v_add_co_u32 %37, %x0
-  %41 = v_mov_b32_copy %38
-  %42, %43 = v_add_co_ci_u32 %41, %36, %40
-  %44 = v_mov_b32 0
-  %45, %46 = v_add_co_u32 %39, %y0
-  %47, %48 = v_add_co_ci_u32 %42, %44, %46
-  %49 = concat(%45, %47) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %loaded = global_load_b32_vaddr %49
+  %23 = v_mov_b32 2000
+  %y = v_add_u32 %y0, %23
+  %25 = s_mov_b32 704
+  %26 = s_mov_b32 1
+  %27 = concat(%25, %26) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %28 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %29 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %30 = slice %27[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %31 = slice %27[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %32 = s_add_u32 %28, %30
+  %33 = s_addc_u32 %29, %31
+  %34 = concat(%32, %33) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %35 = v_mov_b32 0
+  %36 = slice %34[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %37 = slice %34[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %38, %39 = v_add_co_u32 %36, %x0
+  %40 = v_mov_b32_copy %37
+  %41, %42 = v_add_co_ci_u32 %40, %35, %39
+  %43 = v_mov_b32 0
+  %44, %45 = v_add_co_u32 %38, %y0
+  %46, %47 = v_add_co_ci_u32 %41, %43, %45
+  %48 = concat(%44, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %loaded = global_load_b32_vaddr %48
   return
 }
 
@@ -396,7 +396,7 @@ kernel.def target(@target) @index_add_result_width_rejected() {
   %c1 = index.constant 1 : index
   %c512 = index.constant 512 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c512, %c1, %c1) : index
-} launch {
+} launch() {
   %x = kernel.workitem.id<x> : index
   %base = index.constant 4294967000 : index
   // ERROR@+1: TARGET/003 {subject_kind="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
@@ -419,7 +419,7 @@ kernel.def target(@target) @index_madd_result_width_rejected() {
   %c1 = index.constant 1 : index
   %c512 = index.constant 512 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c512, %c1, %c1) : index
-} launch {
+} launch() {
   %x = kernel.workitem.id<x> : index
   %scale = index.constant 2 : index
   %base = index.constant 4294967000 : index
@@ -442,7 +442,7 @@ amdgpu.target<gfx1100> @target
 kernel.def target(@target) @workgroup_count_dynamic_workgroup_size_rejected(%workgroups: index, %size: index) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
-} launch {
+} launch() {
   // ERROR@+1: AMDGPU/023 {constraint_key="launch.workgroup_count_fixed_workgroup_size"}
   %count = kernel.workgroup.count<x> : index
   kernel.return
@@ -456,7 +456,7 @@ kernel.def target(@target) @workgroup_count_non_power_of_two_workgroup_size_reje
   %c1 = index.constant 1 : index
   %c3 = index.constant 3 : index
   kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%c3, %c1, %c1) : index
-} launch {
+} launch() {
   // ERROR@+1: AMDGPU/023 {constraint_key="launch.workgroup_count_power_of_two_workgroup_size"}
   %count = kernel.workgroup.count<x> : index
   kernel.return
@@ -469,7 +469,7 @@ amdgpu.target<gfx1100> @target
 kernel.def target(@target) @subgroup_id_rejected(%size: index) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
-} launch {
+} launch() {
   // ERROR@+1: AMDGPU/023 {constraint_key="launch.subgroup_index_fixed_workgroup_size"}
   %id = kernel.subgroup.id : index
   kernel.return
@@ -487,7 +487,7 @@ amdgpu.target<gfx1100> @target
 kernel.def target(@target) @subgroup_lane_id_rejected(%size: index) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%size, %c1, %c1) : index
-} launch {
+} launch() {
   // ERROR@+1: AMDGPU/023 {constraint_key="launch.subgroup_index_fixed_workgroup_size"}
   %id = kernel.subgroup.lane.id : index
   kernel.return
@@ -502,10 +502,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @subgroup_lane_id_rejecte
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @workgroup_vote_count_rejected(%predicate: i1) {
+kernel.def target(@target) @workgroup_vote_count_rejected() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%predicate: i1) {
   // ERROR@+1: AMDGPU/023 {constraint_key="collective.packet_lowering"}
   %count = kernel.workgroup.vote.count %predicate : i1 -> i32
   kernel.return
@@ -527,11 +527,11 @@ func.def target(@target) @vector_transpose_dynamic_shape_rejected(%n: index) {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @fragment_rhs_dense_layout_rejected(%rhs_buffer: buffer) {
+kernel.def target(@target) @fragment_rhs_dense_layout_rejected() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%rhs_buffer: buffer) {
   %base = index.constant 0 : offset
   %k = index.constant 16 : index
   %n = index.constant 16 : index
@@ -545,11 +545,11 @@ kernel.def target(@target) @fragment_rhs_dense_layout_rejected(%rhs_buffer: buff
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @fragment_payload_rejected(%lhs_buffer: buffer) {
+kernel.def target(@target) @fragment_payload_rejected() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%lhs_buffer: buffer) {
   %base = index.constant 0 : offset
   %m = index.constant 16 : index
   %k = index.constant 16 : index
@@ -563,11 +563,11 @@ kernel.def target(@target) @fragment_payload_rejected(%lhs_buffer: buffer) {
 
 amdgpu.target<gfx950> @target
 
-kernel.def target(@target) @fragment_target_layout_rejected(%lhs_buffer: buffer) {
+kernel.def target(@target) @fragment_target_layout_rejected() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%lhs_buffer: buffer) {
   %base = index.constant 0 : offset
   %m = index.constant 16 : index
   %k = index.constant 16 : index

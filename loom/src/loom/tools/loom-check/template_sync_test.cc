@@ -178,7 +178,7 @@ TEST_F(TemplateSyncTest, UsesKernelDefAsCaseSymbol) {
       "  %c1 = index.constant 1 : index\n"
       "  kernel.launch.config workgroups(%c1, %c1, %c1) "
       "workgroup_size(%c1, %c1, %c1) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  %id = kernel.workgroup.id<x> : index\n"
       "  kernel.return\n"
       "}\n",
@@ -247,7 +247,7 @@ TEST_F(TemplateSyncTest, PreservesTargetDeclarationOverlay) {
       "  %c1 = index.constant 1 : index\n"
       "  kernel.launch.config workgroups(%c1, %c1, %c1) "
       "workgroup_size(%c1, %c1, %c1) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  kernel.return\n"
       "}\n"
       "\n"
@@ -259,7 +259,7 @@ TEST_F(TemplateSyncTest, PreservesTargetDeclarationOverlay) {
       "  %c1 = index.constant 1 : index\n"
       "  kernel.launch.config workgroups(%c1, %c1, %c1) "
       "workgroup_size(%c1, %c1, %c1) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  %id = kernel.workgroup.id<x> : index\n"
       "  kernel.return\n"
       "}\n",
@@ -271,7 +271,7 @@ TEST_F(TemplateSyncTest, PreservesTargetDeclarationOverlay) {
                         "  %c1 = index.constant 1 : index\n"
                         "  kernel.launch.config workgroups(%c1, %c1, %c1) "
                         "workgroup_size(%c1, %c1, %c1) : index\n"
-                        "} launch {\n"
+                        "} launch() {\n"
                         "  %id = kernel.workgroup.id<x> : index\n"
                         "  kernel.return\n"),
             std::string::npos);

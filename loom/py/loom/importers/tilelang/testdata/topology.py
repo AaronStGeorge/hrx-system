@@ -81,11 +81,11 @@ def call_extern_match_any_sync(tir: Any, tvm: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("call_extern_match_any_sync") @call_extern_match_any_sync(%value: i32, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("call_extern_match_any_sync") @call_extern_match_any_sync() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%value: i32, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -137,12 +137,12 @@ def launch_thread_attrs(tir: Any, tvm: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("launch_thread_attrs") @launch_thread_attrs(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("launch_thread_attrs") @launch_thread_attrs() {
   %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -194,10 +194,10 @@ def shared_storage_sync(tir: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") @shared_storage_sync(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("shared_storage_sync") @shared_storage_sync() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -241,11 +241,11 @@ def warp_sync(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("warp_sync_kernel") @warp_sync_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("warp_sync_kernel") @warp_sync_kernel() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -293,11 +293,11 @@ def thread_binding_loop(tir: Any, tvm: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") @thread_binding_loop(%src: buffer, %dst: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("thread_binding_loop") @thread_binding_loop() {
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%src: buffer, %dst: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -332,11 +332,11 @@ def thread_index_to_i64(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("thread_index_to_i64_kernel") @thread_index_to_i64_kernel(%dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("thread_index_to_i64_kernel") @thread_index_to_i64_kernel() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %dst_noalias = buffer.assume.noalias %dst_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -383,11 +383,11 @@ def warp_shuffle(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_kernel") @warp_shuffle_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_kernel") @warp_shuffle_kernel() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -451,11 +451,11 @@ def warp_shuffle_loop_offsets(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_loop_offsets_kernel") @warp_shuffle_loop_offsets_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_loop_offsets_kernel") @warp_shuffle_loop_offsets_kernel() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -523,11 +523,11 @@ def warp_reduce_float(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_float_kernel") @warp_reduce_float_kernel(%src_handle: buffer, %dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_float_kernel") @warp_reduce_float_kernel() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -591,11 +591,11 @@ def warp_reduce_integer(T: Any) -> TileLangImportInput:
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_integer_kernel") @warp_reduce_integer_kernel(%src_handle: buffer, %dst_handle: buffer, %unsigned_src_handle: buffer, %unsigned_dst_handle: buffer) {
+kernel.def target(@hip_mcpu_gfx1100) export("warp_reduce_integer_kernel") @warp_reduce_integer_kernel() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%src_handle: buffer, %dst_handle: buffer, %unsigned_src_handle: buffer, %unsigned_dst_handle: buffer) {
   %c0_bytes = index.constant 0 : offset
   %src_noalias = buffer.assume.noalias %src_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

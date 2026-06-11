@@ -95,12 +95,12 @@ def tilekernels_topk_gate_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kernel(%scores_handle: buffer, %topk_idx_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index
   kernel.launch.config workgroups(%num_tokens_idx, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
-} launch {
+} launch(%scores_handle: buffer, %topk_idx_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %scores_noalias = buffer.assume.noalias %scores_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

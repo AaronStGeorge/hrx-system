@@ -240,7 +240,7 @@ test.target<low_core> @target
 kernel.def target(@target) @entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");
@@ -269,14 +269,14 @@ test.target<low_core> @target
 kernel.def @first() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 
 kernel.def @second() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");
@@ -311,14 +311,14 @@ test.target<low_core> @explicit_target
 kernel.def target(@explicit_target) @explicit_entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 
 kernel.def @targetless_entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )");

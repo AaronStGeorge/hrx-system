@@ -37,10 +37,10 @@ func.def @forwards_empty_block(%cond: i1) {
 
 // ====
 
-kernel.def @preserves_convergent_return_join(%cond: i1, %value: i32) {
+kernel.def @preserves_convergent_return_join() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%cond: i1, %value: i32) {
   cfg.cond_br %cond, ^taken, ^exit
 ^taken:
   test.use %value : i32
@@ -50,10 +50,10 @@ kernel.def @preserves_convergent_return_join(%cond: i1, %value: i32) {
 }
 
 // ----
-kernel.def @preserves_convergent_return_join(%cond: i1, %value: i32) {
+kernel.def @preserves_convergent_return_join() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%cond: i1, %value: i32) {
   cfg.cond_br %cond, ^taken, ^exit
 ^taken:
   test.use %value : i32

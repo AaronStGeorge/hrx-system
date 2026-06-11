@@ -228,11 +228,11 @@ low.func.def target(@target) abi(hal_kernel) @scf_select_chained_vgpr_i32(%value
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @index_minmax_vgpr_select(%output: buffer) {
+kernel.def target(@target) @index_minmax_vgpr_select() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %limit = index.constant 31 : index
@@ -251,14 +251,14 @@ kernel.def target(@target) @index_minmax_vgpr_select(%output: buffer) {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @index_minmax_vgpr_select() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %17 = v_mov_b32 31
-  %min = v_min_i32 %tid, %17
-  %max = v_max_i32 %tid, %17
+  %16 = v_mov_b32 31
+  %min = v_min_i32 %tid, %16
+  %max = v_max_i32 %tid, %16
   %cond = v_cmp_lt_i32_src1_inline %tid {rhs = 31}
   %selected = v_cndmask_b32 %max, %min, %cond
   %stored = v_mov_b32 1
-  %24 = v_lshlrev_b32_src0_inline %selected, 2
-  global_store_b32_saddr %24, %stored, %output_view
+  %23 = v_lshlrev_b32_src0_inline %selected, 2
+  global_store_b32_saddr %23, %stored, %output_view
   return
 }
 

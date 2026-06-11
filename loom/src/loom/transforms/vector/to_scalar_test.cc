@@ -182,13 +182,13 @@ static void ExpectModuleVerifies(const loom_module_t* module) {
 
 TEST_F(VectorToScalarTest, TargetFragmentLayoutEnablesDistributedMmaFallback) {
   loom_module_t* module = Parse(
-      IREE_SV("kernel.def @physical_mma(%lhs_data: vector<2xf16>, "
-              "%rhs_data: vector<2xf16>, %init_data: vector<2xf32>) {\n"
+      IREE_SV("kernel.def @physical_mma() {\n"
               "  %c1 = index.constant 1 : index\n"
               "  %c2 = index.constant 2 : index\n"
               "  kernel.launch.config workgroups(%c1, %c1, %c1) "
               "workgroup_size(%c2, %c1, %c1) : index\n"
-              "} launch {\n"
+              "} launch(%lhs_data: vector<2xf16>, %rhs_data: vector<2xf16>, "
+              "%init_data: vector<2xf32>) {\n"
               "  %m = index.constant 2 : index\n"
               "  %n = index.constant 2 : index\n"
               "  %k = index.constant 2 : index\n"

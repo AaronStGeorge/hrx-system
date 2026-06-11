@@ -6,7 +6,7 @@ kernel.def target(@target) @single_wave_barrier() {
   %one = index.constant 1 : index
   %threads = index.constant 32 : index
   kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index
-} launch {
+} launch() {
   kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   kernel.return
 }
@@ -25,7 +25,7 @@ kernel.def target(@target) @multi_wave_barrier() {
   %one = index.constant 1 : index
   %threads = index.constant 64 : index
   kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%threads, %one, %one) : index
-} launch {
+} launch() {
   kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   kernel.return
 }

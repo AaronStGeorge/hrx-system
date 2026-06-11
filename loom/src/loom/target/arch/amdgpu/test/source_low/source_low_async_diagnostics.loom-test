@@ -31,10 +31,10 @@ func.def target(@target) @async_copy_transfer_rejected(%input: buffer) {
 
 amdgpu.target<gfx950> @target
 
-kernel.def target(@target) @async_gather_destination_read_before_wait(%input: buffer, %output: buffer) {
+kernel.def target(@target) @async_gather_destination_read_before_wait() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -58,12 +58,12 @@ kernel.def target(@target) @async_gather_destination_read_before_wait(%input: bu
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx950> @target
-kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected(%input: buffer) {
+kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c4, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %base_x = index.constant 4294966000 : index
   %x = index.add %x0, %base_x : index

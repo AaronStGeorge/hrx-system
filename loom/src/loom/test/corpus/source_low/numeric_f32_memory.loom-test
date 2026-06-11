@@ -1,9 +1,9 @@
 // RUN: roundtrip
 
-kernel.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+kernel.def @f32_arith() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -22,10 +22,10 @@ kernel.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer)
 
 // ====
 
-kernel.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+kernel.def @f32_fma() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -43,10 +43,10 @@ kernel.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @f32_arcp_div(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+kernel.def @f32_arcp_div() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -62,10 +62,10 @@ kernel.def @f32_arcp_div(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buff
 
 // ====
 
-kernel.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+kernel.def @f32_scalarized() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -183,10 +183,10 @@ func.def @f32_uniform_vector_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer
 
 // ====
 
-kernel.def @f32_direct_arg_scale(%output: buffer, %scale: f32) {
+kernel.def @f32_direct_arg_scale() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%output: buffer, %scale: f32) {
   %zero_offset = index.constant 0 : offset
   %zero_index = index.constant 0 : index
   %output_view = buffer.view %output[%zero_offset] : buffer -> view<1xf32, #dense>

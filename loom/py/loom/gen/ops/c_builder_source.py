@@ -171,6 +171,13 @@ def _generate_builder_implementation(
                 max_value="UINT16_MAX",
                 label=f"{op.name} predicate",
             )
+        elif param["kind"] == "block_args":
+            _emit_builder_count_check(
+                lines,
+                count=f"{param['name']}_count",
+                max_value="UINT16_MAX",
+                label=f"{op.name} block argument",
+            )
         elif param["kind"] == "attr" and param["attr_type"] == "i64_array":
             _emit_builder_count_check(
                 lines,
@@ -434,7 +441,7 @@ def _generate_builder_implementation(
         if optional_region:
             optional_flag = c_builder_model.build_flag_bit_name(prefix, param)
             lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
-        has_block_args = bool(param.get("implicit_args")) or bool(param.get("binding")) or bool(param.get("arg_source")) or bool(param.get("func_args"))
+        has_block_args = bool(param.get("implicit_args")) or bool(param.get("binding")) or bool(param.get("arg_source")) or bool(param.get("block_args")) or bool(param.get("func_args"))
         lines.append(f"{region_indent}// Auto-create {name} region with entry block.")
         lines.append(f"{region_indent}{{")
         if has_block_args:
@@ -448,7 +455,14 @@ def _generate_builder_implementation(
 
         # Binding list args (capture or element).
         binding = param.get("binding")
-        if binding:
+        block_args = param.get("block_args")
+        if block_args:
+            lines.append(f"{inner_indent}for (iree_host_size_t _i = 0; _i < {block_args}_count; ++_i) {{")
+            lines.append(f"{inner_indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+            lines.append(f"{inner_indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+            lines.append(f"{inner_indent}      builder, _block, {block_args}[_i], &_arg_id));")
+            lines.append(f"{inner_indent}}}")
+        elif binding:
             binding_name = binding["name"]
             binding_kind = binding["binding_kind"]
             if binding_kind == "capture":

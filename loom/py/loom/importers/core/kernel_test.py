@@ -6,6 +6,7 @@
 
 from loom.importers.core import (
     KernelArgumentSpec,
+    KernelConfigArgumentSpec,
     KernelModuleSpec,
     create_kernel_module,
     kernel_module_ops,
@@ -38,12 +39,19 @@ def _printed_kernel_module_for_target_preset(target_preset: str) -> str:
     )
 
 
-def test_create_kernel_module_exposes_projected_region_arguments() -> None:
+def test_create_kernel_module_splits_config_and_body_arguments() -> None:
     shell = create_kernel_module(
         KernelModuleSpec(
             target_preset="hip -mcpu=gfx1100",
             export_symbol="kernel",
             callee="kernel",
+            config_arguments=[
+                KernelConfigArgumentSpec(
+                    ordinal=0,
+                    name="n",
+                    type=I32,
+                )
+            ],
             arguments=[
                 KernelArgumentSpec(
                     ordinal=0,
@@ -95,7 +103,7 @@ kernel.def target(@hip_mcpu_gfx1100) export(\"kernel\") @kernel() {
   %wg_size_y = index.constant 1 : index
   %wg_size_z = index.constant 1 : index
   kernel.launch.config workgroups(%wg_count_x, %wg_count_y, %wg_count_z) workgroup_size(%wg_size_x, %wg_size_y, %wg_size_z) : index
-} launch {
+} launch() {
   kernel.return
 }
 """
@@ -134,7 +142,7 @@ kernel.def target(@hip_mcpu_gfx942) export(\"kernel\") @kernel() {
   %wg_size_y = index.constant 1 : index
   %wg_size_z = index.constant 1 : index
   kernel.launch.config workgroups(%wg_count_x, %wg_count_y, %wg_count_z) workgroup_size(%wg_size_x, %wg_size_y, %wg_size_z) : index
-} launch {
+} launch() {
   kernel.return
 }
 """

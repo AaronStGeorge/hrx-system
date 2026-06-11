@@ -91,7 +91,7 @@ def tilekernels_mask_indices_by_tp_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_indices_by_tp_kernel(%indices_handle: buffer, %masked_indices_handle: buffer, %per_gpu: i32, %per_dp: i32, %num_tp_ranks: i32, %tp_rank: i32, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_indices_by_tp_kernel(%num_tokens: i32) {
   %num_tokens_idx = index.cast %num_tokens : i32 to index
   %c2 = index.constant 2 : index
   %c128 = index.constant 128 : index
@@ -100,7 +100,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("mask_indices_by_tp_kernel") @mask_i
   %sub = index.sub %madd, %c1 : index
   %div = index.div %sub, %c128 : index
   kernel.launch.config workgroups(%div, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%indices_handle: buffer, %masked_indices_handle: buffer, %per_gpu: i32, %per_dp: i32, %num_tp_ranks: i32, %tp_rank: i32, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %indices_noalias = buffer.assume.noalias %indices_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>
@@ -249,12 +249,12 @@ def tilekernels_inplace_unique_group_indices_gfx1100(
 r"""
 amdgpu.target<gfx1100> @hip_mcpu_gfx1100
 
-kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel") @inplace_unique_group_indices_kernel(%group_indices_handle: buffer, %num_tokens: i32) {
+kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel") @inplace_unique_group_indices_kernel() {
   %c8 = index.constant 8 : index
   %c1 = index.constant 1 : index
   %c128 = index.constant 128 : index
   kernel.launch.config workgroups(%c8, %c1, %c1) workgroup_size(%c128, %c1, %c1) : index
-} launch {
+} launch(%group_indices_handle: buffer, %num_tokens: i32) {
   %c0_bytes = index.constant 0 : offset
   %group_indices_noalias = buffer.assume.noalias %group_indices_handle : buffer
   %layout = encoding.layout.dense : encoding<layout>

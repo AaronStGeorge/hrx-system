@@ -67,7 +67,7 @@ TEST_F(OneShotTest, AppliesStaticHalWorkgroupCountFromSingleKernel) {
       "  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, "
       "%workgroups_z) workgroup_size(%workgroup_size_x, %workgroup_size_y, "
       "%workgroup_size_z) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  kernel.return\n"
       "}\n";
 
@@ -91,7 +91,7 @@ TEST_F(OneShotTest, AppliesStaticHalWorkgroupCountFromNamedKernel) {
       "  %unit = index.constant 1 : index\n"
       "  kernel.launch.config workgroups(%unit, %unit, %unit) "
       "workgroup_size(%unit, %unit, %unit) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  kernel.return\n"
       "}\n"
       "\n"
@@ -102,7 +102,7 @@ TEST_F(OneShotTest, AppliesStaticHalWorkgroupCountFromNamedKernel) {
       "  %workgroups_z = index.constant 9 : index\n"
       "  kernel.launch.config workgroups(%workgroups_x, %workgroups_y, "
       "%workgroups_z) workgroup_size(%unit, %unit, %unit) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  kernel.return\n"
       "}\n";
 
@@ -126,7 +126,7 @@ TEST_F(OneShotTest, LeavesDefaultForAmbiguousImplicitKernel) {
       "  %unit = index.constant 1 : index\n"
       "  kernel.launch.config workgroups(%unit, %unit, %unit) "
       "workgroup_size(%unit, %unit, %unit) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  kernel.return\n"
       "}\n"
       "\n"
@@ -134,7 +134,7 @@ TEST_F(OneShotTest, LeavesDefaultForAmbiguousImplicitKernel) {
       "  %extent = index.constant 2 : index\n"
       "  kernel.launch.config workgroups(%extent, %extent, %extent) "
       "workgroup_size(%extent, %extent, %extent) : index\n"
-      "} launch {\n"
+      "} launch() {\n"
       "  kernel.return\n"
       "}\n";
 

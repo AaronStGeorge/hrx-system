@@ -101,13 +101,13 @@ func.template<model.q6q8.accumulate_part> device priority(10) @q6q8_accumulate_p
   func.return %next : f32
 }
 
-kernel.def target(@target) @ffn_gate_up_swiglu_q6q8(%q8_input: buffer, %gate_weight: buffer, %up_weight: buffer, %output: buffer) {
+kernel.def target(@target) @ffn_gate_up_swiglu_q6q8() {
   %rows = index.constant 31 : index
   %channel_groups = index.constant 1184 : index
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 512 : index
   kernel.launch.config workgroups(%rows, %channel_groups, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%q8_input: buffer, %gate_weight: buffer, %up_weight: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %row0 = kernel.workgroup.id<x> : index
   %channel_group0 = kernel.workgroup.id<y> : index

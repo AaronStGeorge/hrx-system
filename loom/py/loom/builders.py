@@ -26,12 +26,10 @@ from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dsl import Op, TypeDef
 from loom.fields import compute_layout
 from loom.ir import (
-    VALUE_FLAG_BLOCK_ARG,
     Block,
     Module,
     Region,
     Type,
-    Value,
 )
 from loom.stable_id import stable_id_from_string
 
@@ -105,18 +103,7 @@ class LoomBuilder:
 
     def region(self, args: Sequence[tuple[str, Type]] = ()) -> Region:
         """Create a single-block region with named block arguments."""
-        block = Block()
-        for arg_index, (name, arg_type) in enumerate(args):
-            value_id = self.module.add_value(
-                Value(
-                    name=name,
-                    type=arg_type,
-                    flags=VALUE_FLAG_BLOCK_ARG,
-                    def_result_index=arg_index,
-                )
-            )
-            block.arg_ids.append(value_id)
-        return Region(blocks=[block])
+        return self._ir.region(args)
 
     @contextmanager
     def insertion_block(self, block: Block | None) -> Iterator[None]:
@@ -195,6 +182,7 @@ class OpCallable:
         operand_segment_counts: list[int] = []
         successors: list[Block] = []
         func_args: list[ValueRef | int] = []
+        block_args_by_region: dict[str, Sequence[tuple[str, Type]]] = {}
         regions: list[Region] = []
 
         for param in self._signature.params:
@@ -224,14 +212,30 @@ class OpCallable:
                 case BuilderParamKind.FLAGS:
                     if value is not None:
                         attributes[param.name] = value
+                case BuilderParamKind.BLOCK_ARGS:
+                    region_field = param.region_field
+                    if region_field is None:
+                        raise ValueError(
+                            f"{op.name}: block-argument parameter "
+                            f"'{param.name}' has no region field"
+                        )
+                    block_args_by_region[region_field] = value or []
                 case BuilderParamKind.FUNC_ARGS:
                     func_args.extend(value or [])
                 case BuilderParamKind.PREDICATE_LIST:
                     if value:
                         attributes[param.name] = value
                 case BuilderParamKind.REGION:
-                    if value is not None:
-                        regions.append(cast(Region, value))
+                    region = cast(Region | None, value)
+                    entry_args = block_args_by_region.pop(param.name, ())
+                    if region is None and not param.region_optional:
+                        region = self._ir.region(entry_args)
+                    elif region is not None and entry_args:
+                        _ensure_region_entry_args(
+                            self._ir, op.name, param.name, region, entry_args
+                        )
+                    if region is not None:
+                        regions.append(region)
                 case BuilderParamKind.REGION_TABLE_DEFAULT:
                     regions.append(cast(Region, value))
                 case BuilderParamKind.REGION_TABLE_CASES:
@@ -398,6 +402,8 @@ def _validate_and_normalize_kwargs(
 
 def _default_value(param: BuilderParam) -> Any:
     match param.kind:
+        case BuilderParamKind.BLOCK_ARGS:
+            return []
         case BuilderParamKind.FUNC_ARGS:
             return []
         case BuilderParamKind.OPERAND_DICT:
@@ -452,6 +458,46 @@ def _normalize_result_names(
             f"match fixed result count {len(op.results)}"
         )
     return result_name_list
+
+
+def _ensure_region_entry_args(
+    ir_builder: IRBuilder,
+    op_name: str,
+    region_name: str,
+    region: Region,
+    args: Sequence[tuple[str, Type]],
+) -> None:
+    if not region.blocks:
+        region.blocks.append(ir_builder.region(args).blocks[0])
+        return
+
+    entry_block = region.blocks[0]
+    if not entry_block.arg_ids:
+        entry_block.arg_ids.extend(ir_builder.region(args).blocks[0].arg_ids)
+        return
+
+    if len(entry_block.arg_ids) != len(args):
+        raise ValueError(
+            f"{op_name}: region '{region_name}' entry block has "
+            f"{len(entry_block.arg_ids)} args but builder received "
+            f"{len(args)} block args."
+        )
+    for arg_index, (value_id, (expected_name, expected_type)) in enumerate(
+        zip(entry_block.arg_ids, args, strict=True)
+    ):
+        value = ir_builder.module.values[value_id]
+        if value.type != expected_type:
+            raise ValueError(
+                f"{op_name}: region '{region_name}' arg {arg_index} "
+                f"has type {value.type!r} but builder received "
+                f"{expected_type!r}."
+            )
+        if expected_name and value.name != expected_name:
+            raise ValueError(
+                f"{op_name}: region '{region_name}' arg {arg_index} "
+                f"is named {value.name!r} but builder received "
+                f"{expected_name!r}."
+            )
 
 
 def _require_param_field(param: BuilderParam, field_name: str) -> str:

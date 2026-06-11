@@ -21,12 +21,12 @@ func.def @descriptor_b128_off_zero(%input: buffer) -> (vector<4xi32>) {
 
 // ====
 
-kernel.def target(@target) @i32_readonly_uniform_smem(%input: buffer, %output: buffer) {
+kernel.def target(@target) @i32_readonly_uniform_smem() {
   %unit = index.constant 1 : index
   %workgroups = index.constant 16 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup = kernel.workgroup.id<x> : index
   %base = index.constant 0 : offset
   %input_global = buffer.assume.memory_space<global> %input : buffer
@@ -43,11 +43,11 @@ kernel.def target(@target) @i32_readonly_uniform_smem(%input: buffer, %output: b
 
 // ====
 
-kernel.def target(@target) @f32x4_readonly_uniform_smem_copy(%input: buffer, %output: buffer) {
+kernel.def target(@target) @f32x4_readonly_uniform_smem_copy() {
   %unit = index.constant 1 : index
   %workgroups = index.constant 16 : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup0 = kernel.workgroup.id<x> : index
   %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 15)] : index
   %base = index.constant 0 : offset
@@ -69,11 +69,11 @@ kernel.def target(@target) @f32x4_readonly_uniform_smem_copy(%input: buffer, %ou
 
 // ====
 
-kernel.def target(@target) @f32x8_readonly_uniform_smem_copy(%input: buffer, %output: buffer) {
+kernel.def target(@target) @f32x8_readonly_uniform_smem_copy() {
   %unit = index.constant 1 : index
   %workgroups = index.constant 16 : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup0 = kernel.workgroup.id<x> : index
   %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 15)] : index
   %base = index.constant 0 : offset
@@ -95,12 +95,12 @@ kernel.def target(@target) @f32x8_readonly_uniform_smem_copy(%input: buffer, %ou
 
 // ====
 
-kernel.def target(@target) @i32_workgroup_global_saddr(%input: buffer, %output: buffer) {
+kernel.def target(@target) @i32_workgroup_global_saddr() {
   %unit = index.constant 1 : index
   %workgroups = index.constant 16 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup = kernel.workgroup.id<x> : index
   %column = kernel.workitem.id<x> : index
   %base = index.constant 0 : offset
@@ -113,11 +113,11 @@ kernel.def target(@target) @i32_workgroup_global_saddr(%input: buffer, %output: 
 
 // ====
 
-kernel.def target(@target) @i32_zero_workgroup_saddr_term(%input: buffer, %output: buffer) {
+kernel.def target(@target) @i32_zero_workgroup_saddr_term() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup0 = kernel.workgroup.id<x> : index
   %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 0)] : index
   %column = kernel.workitem.id<x> : index
@@ -133,12 +133,12 @@ kernel.def target(@target) @i32_zero_workgroup_saddr_term(%input: buffer, %outpu
 
 // ====
 
-kernel.def target(@target) @i32_dynamic_leading_dim_global_saddr(%output: buffer, %columns_i32: i32) {
+kernel.def target(@target) @i32_dynamic_leading_dim_global_saddr() {
   %unit = index.constant 1 : index
   %workgroups_x = index.constant 2 : index
   %workgroup_size = index.constant 32 : index
   kernel.launch.config workgroups(%workgroups_x, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%output: buffer, %columns_i32: i32) {
   %workgroup = kernel.workgroup.id<x> : index
   %column = kernel.workitem.id<x> : index
   %base = index.constant 0 : offset
@@ -152,12 +152,12 @@ kernel.def target(@target) @i32_dynamic_leading_dim_global_saddr(%output: buffer
 
 // ====
 
-kernel.def target(@target) @i32_readonly_uniform_smem_non_power_two_stride(%input: buffer, %output: buffer) {
+kernel.def target(@target) @i32_readonly_uniform_smem_non_power_two_stride() {
   %unit = index.constant 1 : index
   %workgroups = index.constant 2 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup = kernel.workgroup.id<x> : index
   %base = index.constant 0 : offset
   %input_global = buffer.assume.memory_space<global> %input : buffer
@@ -172,12 +172,12 @@ kernel.def target(@target) @i32_readonly_uniform_smem_non_power_two_stride(%inpu
 
 // ====
 
-kernel.def target(@target) @i32_readonly_uniform_smem_scalar_branch(%input: buffer, %output: buffer) {
+kernel.def target(@target) @i32_readonly_uniform_smem_scalar_branch() {
   %unit = index.constant 1 : index
   %workgroups = index.constant 16 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %workgroup = kernel.workgroup.id<x> : index
   %base = index.constant 0 : offset
   %input_global = buffer.assume.memory_space<global> %input : buffer
@@ -199,11 +199,11 @@ kernel.def target(@target) @i32_readonly_uniform_smem_scalar_branch(%input: buff
 
 // ====
 
-kernel.def target(@target) @i32_readonly_uniform_smem_loop_bound(%control: buffer, %input: buffer, %output: buffer) {
+kernel.def target(@target) @i32_readonly_uniform_smem_loop_bound() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%control: buffer, %input: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %start = index.constant 0 : index
   %step = index.constant 1 : index
@@ -226,11 +226,11 @@ kernel.def target(@target) @i32_readonly_uniform_smem_loop_bound(%control: buffe
 
 // ====
 
-kernel.def target(@target) @f32_readonly_uniform_smem_vector_math(%control: buffer, %input: buffer, %output: buffer) {
+kernel.def target(@target) @f32_readonly_uniform_smem_vector_math() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%control: buffer, %input: buffer, %output: buffer) {
   %lane0 = kernel.workitem.id<x> : index
   %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
   %base = index.constant 0 : offset
@@ -251,10 +251,10 @@ kernel.def target(@target) @f32_readonly_uniform_smem_vector_math(%control: buff
 
 // ====
 
-kernel.def target(@target) @i32_readonly_uniform_smem_address(%control: buffer, %output: buffer) {
+kernel.def target(@target) @i32_readonly_uniform_smem_address() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%control: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %control_global = buffer.assume.memory_space<global> %control : buffer
   %control_noalias = buffer.assume.noalias %control_global : buffer
@@ -271,10 +271,10 @@ kernel.def target(@target) @i32_readonly_uniform_smem_address(%control: buffer, 
 
 // ====
 
-kernel.def @i32_b128(%input: buffer, %output: buffer) {
+kernel.def @i32_b128() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -291,11 +291,11 @@ kernel.def @i32_b128(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @f32x8_split_b128(%input: buffer, %output: buffer) {
+kernel.def @f32x8_split_b128() {
   %c1 = index.constant 1 : index
   %workgroup_size = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%workgroup_size, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -310,10 +310,10 @@ kernel.def @f32x8_split_b128(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
+kernel.def @i32_scalar_2d_store() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %x0 = kernel.workitem.id<x> : index
   %x = index.assume %x0 [range(%x0, 0, 7)] : index
   %y0 = kernel.workitem.id<y> : index
@@ -328,10 +328,10 @@ kernel.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @i32_view_scalar_2d_store(%input: buffer, %output: buffer) {
+kernel.def @i32_view_scalar_2d_store() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %column0 = kernel.workitem.id<x> : index
   %column = index.assume %column0 [range(%column0, 0, 7)] : index
   %row0 = kernel.workitem.id<y> : index
@@ -346,10 +346,10 @@ kernel.def @i32_view_scalar_2d_store(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
+kernel.def @i32_dynamic_constant_index() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero_offset = index.constant 0 : offset
@@ -363,10 +363,10 @@ kernel.def @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @i32_scalar_arg_index(%input: buffer, %output: buffer, %column_i32: i32) {
+kernel.def @i32_scalar_arg_index() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %column_i32: i32) {
   %base = index.constant 0 : offset
   %column0 = index.cast %column_i32 : i32 to index
   %column = index.assume %column0 [range(%column0, 0, 7)] : index
@@ -379,10 +379,10 @@ kernel.def @i32_scalar_arg_index(%input: buffer, %output: buffer, %column_i32: i
 
 // ====
 
-kernel.def @i32_dynamic_view_base(%control: buffer, %output: buffer, %offset_i32: i32) {
+kernel.def @i32_dynamic_view_base() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%control: buffer, %output: buffer, %offset_i32: i32) {
   %base0 = index.cast %offset_i32 : i32 to offset
   %base = index.assume %base0 [range(%base0, 0, 4092), mul(%base0, 4)] : offset
   %zero = index.constant 0 : offset
@@ -395,10 +395,10 @@ kernel.def @i32_dynamic_view_base(%control: buffer, %output: buffer, %offset_i32
 
 // ====
 
-kernel.def @i32_dynamic_view_base_loaded(%control: buffer, %output: buffer) {
+kernel.def @i32_dynamic_view_base_loaded() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%control: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %header_view = buffer.view %control[%zero] : buffer -> view<8xi32, #dense>
   %base_i32 = view.load %header_view[7] : view<8xi32, #dense> -> i32
@@ -412,10 +412,10 @@ kernel.def @i32_dynamic_view_base_loaded(%control: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @i32x4_dynamic_view_base_b128(%input: buffer, %output: buffer, %offset_i32: i32) {
+kernel.def @i32x4_dynamic_view_base_b128() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %offset_i32: i32) {
   %base0 = index.cast %offset_i32 : i32 to offset
   %base = index.assume %base0 [range(%base0, 0, 4096), mul(%base0, 16)] : offset
   %zero = index.constant 0 : offset
@@ -428,11 +428,11 @@ kernel.def @i32x4_dynamic_view_base_b128(%input: buffer, %output: buffer, %offse
 
 // ====
 
-kernel.def @f32x4_dynamic_view_base_flat(%input: buffer, %output: buffer, %offset_i32: i32) {
+kernel.def @f32x4_dynamic_view_base_flat() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 256 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %offset_i32: i32) {
   %input_base0 = index.cast %offset_i32 : i32 to offset
   %input_base = index.assume %input_base0 [range(%input_base0, 0, 2147483647)] : offset
   %lane0 = kernel.workitem.id<x> : index
@@ -454,10 +454,10 @@ kernel.def @f32x4_dynamic_view_base_flat(%input: buffer, %output: buffer, %offse
 
 // ====
 
-kernel.def @f16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
+kernel.def @f16_view_scalar() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %column_i32: i32) {
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %column0 = index.cast %column_i32 : i32 to index
@@ -473,10 +473,10 @@ kernel.def @f16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
 
 // ====
 
-kernel.def @bf16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
+kernel.def @bf16_view_scalar() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %column_i32: i32) {
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %column0 = index.cast %column_i32 : i32 to index
@@ -492,10 +492,10 @@ kernel.def @bf16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) 
 
 // ====
 
-kernel.def @f16x2_b32(%input: buffer, %output: buffer) {
+kernel.def @f16x2_b32() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -508,10 +508,10 @@ kernel.def @f16x2_b32(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @f16x4_b64(%input: buffer, %output: buffer) {
+kernel.def @f16x4_b64() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -524,10 +524,10 @@ kernel.def @f16x4_b64(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @bf16x2_b32(%input: buffer, %output: buffer) {
+kernel.def @bf16x2_b32() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -540,10 +540,10 @@ kernel.def @bf16x2_b32(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @bf16x4_b64(%input: buffer, %output: buffer) {
+kernel.def @bf16x4_b64() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -570,10 +570,10 @@ func.def @bf16_strided_gather_dot2(%latent: vector<2xbf16>, %weights: buffer, %o
 
 // ====
 
-kernel.def @i32_dynamic_flat_store(%input: buffer, %output: buffer, %row_count_i32: i32, %row_i32: i32) {
+kernel.def @i32_dynamic_flat_store() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer, %row_count_i32: i32, %row_i32: i32) {
   %base = index.constant 0 : offset
   %start = index.constant 0 : index
   %row_count0 = index.cast %row_count_i32 : i32 to index
@@ -589,11 +589,11 @@ kernel.def @i32_dynamic_flat_store(%input: buffer, %output: buffer, %row_count_i
 
 // ====
 
-kernel.def @rank2_vector_tile_transpose(%input: buffer, %output: buffer) {
+kernel.def @rank2_vector_tile_transpose() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 16 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %base = index.constant 0 : offset
   %block = kernel.workitem.id<x> : index
   %tile_width = index.constant 4 : index

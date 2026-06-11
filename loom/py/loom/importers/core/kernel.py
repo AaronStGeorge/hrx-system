@@ -29,6 +29,15 @@ class KernelArgumentSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class KernelConfigArgumentSpec:
+    """One imported host launch configuration argument."""
+
+    ordinal: int
+    name: str
+    type: Type = INDEX
+
+
+@dataclass(frozen=True, slots=True)
 class KernelLaunchConfigSpec:
     """Static launch configuration for simple kernel importers."""
 
@@ -44,6 +53,7 @@ class KernelModuleSpec:
     export_symbol: str
     callee: str
     arguments: Sequence[KernelArgumentSpec]
+    config_arguments: Sequence[KernelConfigArgumentSpec] = ()
     target_symbol: str | None = None
     artifact_symbol: str | None = None
     export_ordinal: int | None = None
@@ -103,15 +113,31 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
             target_symbol,
             spec.target_preset,
         )
-    names = NameAllocator()
-    arguments_by_ordinal = {
+    config_names = NameAllocator()
+    config_arguments_by_ordinal = {
         argument.ordinal: builder.value(
-            names.reserve_or_fresh(argument.name, fallback="arg"),
+            config_names.reserve_or_fresh(argument.name, fallback="arg"),
+            argument.type,
+        )
+        for argument in spec.config_arguments
+    }
+    body_names = NameAllocator()
+    body_arguments_by_ordinal = {
+        argument.ordinal: builder.value(
+            body_names.reserve_or_fresh(argument.name, fallback="arg"),
             argument.type,
         )
         for argument in spec.arguments
     }
-    config = builder.region()
+    config = builder.region(
+        args=[
+            (
+                config_arguments_by_ordinal[argument.ordinal].name,
+                config_arguments_by_ordinal[argument.ordinal].type,
+            )
+            for argument in spec.config_arguments
+        ]
+    )
     body = builder.region()
     builder.kernel.def_(
         target=target_symbol,
@@ -119,7 +145,16 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         artifact=artifact_symbol,
         export_ordinal=spec.export_ordinal,
         callee=spec.callee,
-        args=[arguments_by_ordinal[argument.ordinal] for argument in spec.arguments],
+        config_args=[
+            (
+                config_arguments_by_ordinal[argument.ordinal].name,
+                config_arguments_by_ordinal[argument.ordinal].type,
+            )
+            for argument in spec.config_arguments
+        ],
+        args=[
+            body_arguments_by_ordinal[argument.ordinal] for argument in spec.arguments
+        ],
         config=config,
         body=body,
     )
@@ -133,7 +168,7 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         config_arguments_by_ordinal=_region_arguments_by_ordinal(
             builder,
             config,
-            spec.arguments,
+            spec.config_arguments,
         ),
         body_arguments_by_ordinal=_region_arguments_by_ordinal(
             builder,
@@ -214,7 +249,7 @@ def normalize_launch_tuple(values: tuple[int, ...]) -> tuple[int, int, int]:
 def _region_arguments_by_ordinal(
     builder: loom.LoomBuilder,
     region: Region,
-    arguments: Sequence[KernelArgumentSpec],
+    arguments: Sequence[KernelArgumentSpec | KernelConfigArgumentSpec],
 ) -> dict[int, ValueRef]:
     block = region.blocks[0]
     return {

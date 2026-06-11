@@ -22,9 +22,10 @@ class KernelBuilder(DialectBuilder):
         export_ordinal: int | None = ...,
         export_linkage: str | None = ...,
         callee: str,
+        config_args: Sequence[tuple[str, Type]] = ...,
+        config: Region | None = ...,
         args: list[ValueRef] = ...,
         predicates: list[Predicate] = ...,
-        config: Region | None = ...,
         body: Region | None = ...,
         location_id: int | None = ...,
     ) -> None: ...

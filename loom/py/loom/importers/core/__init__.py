@@ -20,6 +20,7 @@ from loom.diagnostics import (
 )
 from loom.importers.core.kernel import (
     KernelArgumentSpec,
+    KernelConfigArgumentSpec,
     KernelLaunchConfigSpec,
     KernelModuleShell,
     KernelModuleSpec,
@@ -58,6 +59,7 @@ __all__ = [
     "ImportOptions",
     "ImportResult",
     "KernelArgumentSpec",
+    "KernelConfigArgumentSpec",
     "KernelLaunchConfigSpec",
     "KernelModuleShell",
     "KernelModuleSpec",

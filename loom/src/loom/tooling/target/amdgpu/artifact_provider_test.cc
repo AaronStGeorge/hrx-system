@@ -144,7 +144,7 @@ TEST_F(AmdgpuHalArtifactProviderTest,
 kernel.def @entry() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch {
+} launch() {
   kernel.return
 }
 )"),

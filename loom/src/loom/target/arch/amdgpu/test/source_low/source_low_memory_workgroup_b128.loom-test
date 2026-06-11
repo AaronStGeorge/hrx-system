@@ -2,10 +2,10 @@
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @lds_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def target(@target) @lds_b128_roundtrip() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -25,23 +25,23 @@ kernel.def target(@target) @lds_b128_roundtrip(%input: buffer, %output: buffer) 
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_b128_roundtrip() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %25 = v_mov_b32 0
-  %loaded = global_load_b128_saddr %25, %input_view
-  ds_write_b128 %25, %loaded
-  %roundtrip = ds_read_b128 %25
-  global_store_b128_saddr %25, %roundtrip, %output_view
+  %21 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %23 = v_mov_b32 0
+  %loaded = global_load_b128_saddr %23, %input_view
+  ds_write_b128 %23, %loaded
+  %roundtrip = ds_read_b128 %23
+  global_store_b128_saddr %23, %roundtrip, %output_view
   return
 }
 
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @lds_b128_xor_swizzle_roundtrip(%input: buffer, %output: buffer) {
+kernel.def target(@target) @lds_b128_xor_swizzle_roundtrip() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -67,27 +67,27 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b128_xor_swizzle_ro
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %46 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
+  %44 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
   %shifted = v_lshrrev_b32_lit %tid, 4
-  %50 = v_mov_b32 3
-  %swizzle_bits = v_and_b32 %shifted, %50
+  %48 = v_mov_b32 3
+  %swizzle_bits = v_and_b32 %shifted, %48
   %swizzled = v_xor_b32 %tid, %swizzle_bits
-  %54 = v_lshlrev_b32_src0_inline %tid, 4
-  %loaded = global_load_b128_saddr %54, %input_view
-  %57 = v_lshlrev_b32_src0_inline %swizzled, 4
-  ds_write_b128 %57, %loaded
-  %roundtrip = ds_read_b128 %57
-  global_store_b128_saddr %54, %roundtrip, %output_view
+  %52 = v_lshlrev_b32_src0_inline %tid, 4
+  %loaded = global_load_b128_saddr %52, %input_view
+  %55 = v_lshlrev_b32_src0_inline %swizzled, 4
+  ds_write_b128 %55, %loaded
+  %roundtrip = ds_read_b128 %55
+  global_store_b128_saddr %52, %roundtrip, %output_view
   return
 }
 
 // ====
 
 amdgpu.target<gfx1100> @target
-kernel.def target(@target) @lds_b128_large_static_offset_roundtrip(%input: buffer, %output: buffer) {
+kernel.def target(@target) @lds_b128_large_static_offset_roundtrip() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer, %output: buffer) {
   %tid0 = kernel.workitem.id<x> : index
   %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
@@ -108,11 +108,11 @@ kernel.def target(@target) @lds_b128_large_static_offset_roundtrip(%input: buffe
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_b128_large_static_offset_roundtrip() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %24 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
-  %26 = v_mov_b32 0
-  %loaded = global_load_b128_saddr %26, %input_view
-  ds_write_b128 %26, %loaded {offset = 1024}
-  %roundtrip = ds_read_b128 %26 {offset = 1024}
-  global_store_b128_saddr %26, %roundtrip, %output_view
+  %22 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
+  %24 = v_mov_b32 0
+  %loaded = global_load_b128_saddr %24, %input_view
+  ds_write_b128 %24, %loaded {offset = 1024}
+  %roundtrip = ds_read_b128 %24 {offset = 1024}
+  global_store_b128_saddr %24, %roundtrip, %output_view
   return
 }

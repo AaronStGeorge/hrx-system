@@ -1,9 +1,9 @@
 // RUN: roundtrip
 
-kernel.def @async_gather_dword(%input: buffer) {
+kernel.def @async_gather_dword() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -20,10 +20,10 @@ kernel.def @async_gather_dword(%input: buffer) {
 
 // ====
 
-kernel.def @async_gather_b128(%input: buffer) {
+kernel.def @async_gather_b128() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -40,10 +40,10 @@ kernel.def @async_gather_b128(%input: buffer) {
 
 // ====
 
-kernel.def @async_gather_two_stage(%input: buffer) {
+kernel.def @async_gather_two_stage() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
@@ -65,10 +65,10 @@ kernel.def @async_gather_two_stage(%input: buffer) {
 
 // ====
 
-kernel.def @async_gather_multi_packet_newer_group(%input: buffer) {
+kernel.def @async_gather_multi_packet_newer_group() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 3072 : offset
@@ -92,10 +92,10 @@ kernel.def @async_gather_multi_packet_newer_group(%input: buffer) {
 
 // ====
 
-kernel.def @async_gather_second_lds_slot(%input: buffer) {
+kernel.def @async_gather_second_lds_slot() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
-} launch {
+} launch(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %pad_bytes = index.constant 256 : offset

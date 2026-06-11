@@ -15,6 +15,6 @@ kernel.def target(@matmul_hal_target) export("matmul") artifact(@matmul_hal_exec
   %c16 = index.constant 16 : index
   %c4 = index.constant 4 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c16, %c4, %c1) : index
-} launch {
+} launch() {
   kernel.return
 }
