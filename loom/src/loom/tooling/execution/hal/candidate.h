@@ -28,6 +28,8 @@ typedef struct loom_run_hal_candidate_t {
   const loom_run_hal_artifact_provider_t* provider;
   // HAL device target selected during candidate compilation.
   loom_run_hal_device_target_t device_target;
+  // True when |device_target| storage is owned by this candidate.
+  bool owns_device_target;
   // True when artifact bytes were produced.
   bool compiled;
   // HAL artifact bytes produced by |provider|.
@@ -40,6 +42,15 @@ typedef struct loom_run_hal_candidate_t {
 iree_status_t loom_run_hal_candidate_compile(
     const loom_run_hal_artifact_provider_t* provider,
     const loom_run_hal_runtime_t* runtime, loom_run_module_t* run_module,
+    const loom_run_candidate_compile_options_t* options,
+    iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate);
+
+// Emits |run_module| to a HAL artifact candidate using |target| as the
+// selected target overlay. The caller retains ownership of |target| storage and
+// must keep it live until |out_candidate| is deinitialized.
+iree_status_t loom_run_hal_candidate_emit_target(
+    const loom_run_hal_artifact_provider_t* provider,
+    const loom_run_hal_device_target_t* target, loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* options,
     iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate);
 

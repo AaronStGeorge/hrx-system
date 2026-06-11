@@ -74,6 +74,11 @@ typedef iree_status_t (*loom_run_hal_select_device_target_fn_t)(
     const struct loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
     loom_run_hal_device_target_t* out_target);
 
+typedef iree_status_t (*loom_run_hal_select_target_key_fn_t)(
+    const loom_run_hal_artifact_provider_t* provider,
+    iree_string_view_t target_key, iree_allocator_t allocator,
+    loom_run_hal_device_target_t* out_target);
+
 typedef void (*loom_run_hal_deinitialize_device_target_fn_t)(
     const loom_run_hal_artifact_provider_t* provider,
     loom_run_hal_device_target_t* target, iree_allocator_t allocator);
@@ -109,7 +114,10 @@ struct loom_run_hal_artifact_provider_t {
   loom_target_pipeline_options_t default_pipeline_options;
   // Selects a concrete target supported by the active HAL executable cache.
   loom_run_hal_select_device_target_fn_t select_device_target;
-  // Releases storage owned by a target returned from |select_device_target|.
+  // Selects a concrete offline target by provider-owned key. This is used by
+  // compilation tools that do not have an active HAL runtime device.
+  loom_run_hal_select_target_key_fn_t select_target_key;
+  // Releases storage owned by a target returned from a target selection hook.
   loom_run_hal_deinitialize_device_target_fn_t deinitialize_device_target;
   // Resolves or materializes an in-module target record for a selected device.
   // Called lazily only when a private compile module has targetless kernels.

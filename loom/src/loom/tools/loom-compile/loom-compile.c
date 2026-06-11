@@ -20,6 +20,7 @@
 #include "loom/tooling/execution/execution_provider.h"
 #include "loom/tooling/execution/hal/artifact.h"
 #include "loom/tooling/execution/hal/candidate.h"
+#include "loom/tooling/execution/hal/target_assignment.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 
@@ -62,6 +63,11 @@ IREE_FLAG(string, loom_backend, "vm",
           "backend.");
 IREE_FLAG(string, loom_module_name, "loom",
           "Module name to store in VM bytecode archives.");
+IREE_FLAG(string, target, "",
+          "Optional HAL backend target key, such as 'gfx1100'. When present, "
+          "targetless kernels are assigned to the selected target before the "
+          "compile pipeline, and compatible explicit targets are specialized "
+          "with the same backend-owned target facts.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before artifact emission. Use 'default' or "
           "empty for the shared prepared-low compile pipeline, 'none' to "
@@ -254,6 +260,8 @@ static iree_status_t loom_compile_report_options_initialize(
 static iree_status_t loom_compile_run_pass_pipeline(
     const loom_run_execution_environment_t* environment,
     loom_run_session_t* session, loom_run_module_t* run_module,
+    const loom_run_hal_artifact_provider_t* hal_artifact_provider,
+    const loom_run_hal_device_target_t* hal_target,
     const loom_run_candidate_compile_options_t* compile_options,
     loom_pass_run_result_t* out_run_result) {
   loom_compile_pipeline_options_t pipeline_options = {0};
@@ -261,8 +269,18 @@ static iree_status_t loom_compile_run_pass_pipeline(
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
   pipeline_options.compile_root_symbol =
       iree_make_cstring_view(FLAG_compile_root);
+  if (hal_artifact_provider != NULL) {
+    pipeline_options.target_pipeline_options =
+        hal_artifact_provider->default_pipeline_options;
+  }
   pipeline_options.target_environment =
       loom_run_execution_environment_target_environment(environment);
+  if (hal_target != NULL) {
+    pipeline_options.target_selection = (loom_target_selection_t){
+        .bundle = hal_target->target_bundle,
+        .data = hal_target->data,
+    };
+  }
   pipeline_options.low_descriptor_registry =
       loom_run_session_low_descriptor_registry(session);
   pipeline_options.diagnostic_sink = (loom_diagnostic_sink_t){
@@ -367,6 +385,7 @@ static iree_status_t loom_compile_write_report(
 
 static iree_status_t loom_compile_emit_hal(
     const loom_run_hal_artifact_provider_t* artifact_provider,
+    const loom_run_hal_device_target_t* hal_target,
     loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* compile_options,
     const loom_run_compile_report_capture_t* compile_report_capture,
@@ -385,8 +404,13 @@ static iree_status_t loom_compile_emit_hal(
   }
 
   loom_run_hal_candidate_t candidate = {0};
-  iree_status_t status = loom_run_hal_candidate_emit_module_target(
-      artifact_provider, run_module, compile_options, allocator, &candidate);
+  iree_status_t status = hal_target != NULL
+                             ? loom_run_hal_candidate_emit_target(
+                                   artifact_provider, hal_target, run_module,
+                                   compile_options, allocator, &candidate)
+                             : loom_run_hal_candidate_emit_module_target(
+                                   artifact_provider, run_module,
+                                   compile_options, allocator, &candidate);
   if (iree_status_is_ok(status) && candidate.compiled) {
     status = loom_compile_write_bytes(
         output_path, candidate.artifact.executable_data, allocator);
@@ -474,6 +498,81 @@ static iree_status_t loom_compile_make_unknown_backend_status(
   return status;
 }
 
+static iree_status_t loom_compile_select_backend(
+    iree_string_view_t backend_name,
+    const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry,
+    iree_allocator_t allocator,
+    const loom_run_hal_artifact_provider_t** out_artifact_provider,
+    bool* out_is_vm_backend) {
+  *out_artifact_provider = NULL;
+  *out_is_vm_backend = false;
+  const loom_run_hal_artifact_provider_t* artifact_provider =
+      loom_run_hal_artifact_provider_registry_lookup(artifact_provider_registry,
+                                                     backend_name);
+  if (artifact_provider != NULL) {
+    *out_artifact_provider = artifact_provider;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(backend_name, IREE_SV("vm"))) {
+    *out_is_vm_backend = true;
+    return iree_ok_status();
+  }
+  return loom_compile_make_unknown_backend_status(
+      backend_name, artifact_provider_registry, allocator);
+}
+
+static iree_status_t loom_compile_select_explicit_hal_target(
+    const loom_run_hal_artifact_provider_t* artifact_provider,
+    iree_allocator_t allocator, bool* out_target_selected,
+    loom_run_hal_device_target_t* out_target) {
+  *out_target_selected = false;
+  *out_target = (loom_run_hal_device_target_t){0};
+
+  const iree_string_view_t target_key =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_target));
+  if (iree_string_view_is_empty(target_key)) {
+    return iree_ok_status();
+  }
+  if (artifact_provider == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "--target is only valid for HAL artifact backends");
+  }
+  if (artifact_provider->select_target_key == NULL) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "HAL artifact provider '%.*s' does not support explicit offline "
+        "target selection",
+        (int)artifact_provider->name.size, artifact_provider->name.data);
+  }
+
+  IREE_RETURN_IF_ERROR(artifact_provider->select_target_key(
+      artifact_provider, target_key, allocator, out_target));
+  *out_target_selected = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_compile_require_targeted_hal_kernels(
+    const loom_run_hal_artifact_provider_t* artifact_provider,
+    const loom_run_hal_device_target_t* explicit_target,
+    loom_module_t* module) {
+  if (artifact_provider == NULL || explicit_target != NULL) {
+    return iree_ok_status();
+  }
+  uint32_t targetless_kernel_count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_count_targetless_kernels(module, &targetless_kernel_count));
+  if (targetless_kernel_count == 0) {
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "HAL backend '%.*s' cannot compile %u targetless kernel%s without an "
+      "explicit --target= key or target(...) attrs in the source module",
+      (int)artifact_provider->name.size, artifact_provider->name.data,
+      (unsigned)targetless_kernel_count,
+      targetless_kernel_count == 1 ? "" : "s");
+}
+
 int main(int argc, char** argv) {
   IREE_TRACE_APP_ENTER();
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -503,6 +602,10 @@ int main(int argc, char** argv) {
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
   loom_run_compile_report_capture_t compile_report_capture = {0};
+  const loom_run_hal_artifact_provider_t* hal_artifact_provider = NULL;
+  bool is_vm_backend = false;
+  loom_run_hal_device_target_t explicit_hal_target = {0};
+  bool explicit_hal_target_selected = false;
   bool emitted = false;
   bool report_written = false;
   int exit_code = 0;
@@ -533,6 +636,28 @@ int main(int argc, char** argv) {
     status = loom_run_compile_report_capture_initialize(
         &compile_report_options, allocator, &compile_report_capture);
   }
+  const iree_string_view_t backend_name =
+      iree_make_cstring_view(FLAG_loom_backend);
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_select_backend(
+        backend_name, &kLoomCompileHalArtifactProviderRegistry, allocator,
+        &hal_artifact_provider, &is_vm_backend);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_select_explicit_hal_target(
+        hal_artifact_provider, allocator, &explicit_hal_target_selected,
+        &explicit_hal_target);
+  }
+  if (iree_status_is_ok(status) && explicit_hal_target_selected) {
+    status = loom_run_hal_assign_targetless_kernel_targets(
+        hal_artifact_provider, &explicit_hal_target, run_module.module, NULL);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_require_targeted_hal_kernels(
+        hal_artifact_provider,
+        explicit_hal_target_selected ? &explicit_hal_target : NULL,
+        run_module.module);
+  }
 
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
@@ -547,8 +672,10 @@ int main(int argc, char** argv) {
   }
   if (iree_status_is_ok(status)) {
     loom_pass_run_result_t pass_run_result = {0};
-    status = loom_compile_run_pass_pipeline(&environment, &session, &run_module,
-                                            &compile_options, &pass_run_result);
+    status = loom_compile_run_pass_pipeline(
+        &environment, &session, &run_module, hal_artifact_provider,
+        explicit_hal_target_selected ? &explicit_hal_target : NULL,
+        &compile_options, &pass_run_result);
     if (iree_status_is_ok(status) && pass_run_result.error_count != 0) {
       exit_code = 1;
     }
@@ -558,22 +685,16 @@ int main(int argc, char** argv) {
         loom_tooling_config_require_resolved_module(run_module.module, NULL);
   }
 
-  const iree_string_view_t backend_name =
-      iree_make_cstring_view(FLAG_loom_backend);
   if (iree_status_is_ok(status) && exit_code == 0) {
-    const loom_run_hal_artifact_provider_t* artifact_provider =
-        loom_run_hal_artifact_provider_registry_lookup(
-            &kLoomCompileHalArtifactProviderRegistry, backend_name);
-    if (artifact_provider != NULL) {
-      status = loom_compile_emit_hal(artifact_provider, &run_module,
-                                     &compile_options, &compile_report_capture,
-                                     allocator, &emitted, &report_written);
-    } else if (iree_string_view_equal(backend_name, IREE_SV("vm"))) {
+    if (hal_artifact_provider != NULL) {
+      status = loom_compile_emit_hal(
+          hal_artifact_provider,
+          explicit_hal_target_selected ? &explicit_hal_target : NULL,
+          &run_module, &compile_options, &compile_report_capture, allocator,
+          &emitted, &report_written);
+    } else if (is_vm_backend) {
       status = loom_compile_emit_vm(&run_module, &compile_options, allocator,
                                     &emitted);
-    } else {
-      status = loom_compile_make_unknown_backend_status(
-          backend_name, &kLoomCompileHalArtifactProviderRegistry, allocator);
     }
   }
   if (iree_status_is_ok(status) && !report_written) {
@@ -589,6 +710,11 @@ int main(int argc, char** argv) {
     exit_code = 1;
   }
 
+  if (explicit_hal_target_selected && hal_artifact_provider != NULL &&
+      hal_artifact_provider->deinitialize_device_target != NULL) {
+    hal_artifact_provider->deinitialize_device_target(
+        hal_artifact_provider, &explicit_hal_target, allocator);
+  }
   loom_run_compile_report_capture_deinitialize(&compile_report_capture);
   loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);

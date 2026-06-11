@@ -249,7 +249,7 @@ kernel.def target(@target) @entry() {
 
   loom_run_hal_targetless_kernel_assignment_result_t result = {};
   loom_run_hal_device_target_t device_target = {};
-  IREE_ASSERT_OK(loom_run_hal_testbench_assign_targetless_kernel_targets(
+  IREE_ASSERT_OK(loom_run_hal_assign_targetless_kernel_targets(
       &hal_testbench_actual_test_artifact_provider, &device_target,
       module.get(), &result));
 
@@ -285,7 +285,7 @@ kernel.def @second() {
 
   loom_run_hal_targetless_kernel_assignment_result_t result = {};
   loom_run_hal_device_target_t device_target = {};
-  IREE_ASSERT_OK(loom_run_hal_testbench_assign_targetless_kernel_targets(
+  IREE_ASSERT_OK(loom_run_hal_assign_targetless_kernel_targets(
       &hal_testbench_actual_test_artifact_provider, &device_target,
       module.get(), &result));
 
@@ -329,7 +329,7 @@ kernel.def @targetless_entry() {
 
   loom_run_hal_targetless_kernel_assignment_result_t result = {};
   loom_run_hal_device_target_t device_target = {};
-  IREE_ASSERT_OK(loom_run_hal_testbench_assign_targetless_kernel_targets(
+  IREE_ASSERT_OK(loom_run_hal_assign_targetless_kernel_targets(
       &hal_testbench_actual_test_artifact_provider, &device_target,
       module.get(), &result));
 

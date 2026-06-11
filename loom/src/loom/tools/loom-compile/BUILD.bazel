@@ -9,6 +9,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
     "loom_cc_binary",
+    "loom_config_compatible_with",
 )
 
 package(
@@ -31,6 +32,10 @@ _AMDGPU_COMPILE_DEPS = iree_select({
     ],
     "//conditions:default": [],
 })
+
+_AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/target:amdgpu_artifacts",
+])
 
 _IREE_VM_COMPILE_COPTS = iree_select({
     "//loom/config/emit:iree_vm": [
@@ -77,6 +82,7 @@ loom_cc_binary(
         "//loom/src/loom/tooling/execution:session",
         "//loom/src/loom/tooling/execution/hal:artifact",
         "//loom/src/loom/tooling/execution/hal:candidate",
+        "//loom/src/loom/tooling/execution/hal:target_assignment",
         "//loom/src/loom/tooling/io:file",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
@@ -90,6 +96,16 @@ iree_execution_test_suite(
     tags = ["hostonly"],
     tools = {
         "iree-run-module": "//tools:iree-run-module",
+        "loom-compile": ":loom-compile",
+    },
+)
+
+iree_execution_test_suite(
+    name = "amdgpu_execution_test",
+    manifests = ["loom-compile-amdgpu.test.json"],
+    tags = ["hostonly"],
+    target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
+    tools = {
         "loom-compile": ":loom-compile",
     },
 )
