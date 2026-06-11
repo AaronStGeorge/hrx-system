@@ -40,6 +40,7 @@ static iree_status_t loom_pass_tool_run_program(
       .diagnostic_emitter = options->diagnostic_emitter,
       .environment = options->environment,
       .report = options->report,
+      .trace = options->trace,
   };
   if (program->root_kind == LOOM_PASS_MODULE) {
     return loom_pass_interpreter_run_module(program, module,

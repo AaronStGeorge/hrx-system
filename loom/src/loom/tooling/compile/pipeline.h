@@ -18,6 +18,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
 #include "loom/pass/interpreter.h"
+#include "loom/pass/trace.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/pipeline.h"
@@ -68,6 +69,8 @@ typedef struct loom_compile_pipeline_options_t {
   loom_target_compile_report_t* report;
   // Optional caller-owned row storage for detailed compile report rows.
   loom_target_compile_report_row_storage_t report_row_storage;
+  // Optional caller-owned trace configuration for selected pass boundaries.
+  const loom_pass_trace_options_t* trace_options;
 } loom_compile_pipeline_options_t;
 
 // Initializes compile pipeline options with the artifact-front-door default:

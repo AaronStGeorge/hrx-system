@@ -13,13 +13,13 @@ package(
 )
 
 loom_cc_library(
-    name = "file",
-    srcs = ["file.c"],
-    hdrs = ["file.h"],
+    name = "trace_cli",
+    srcs = ["trace_cli.c"],
+    hdrs = ["trace_cli.h"],
     deps = [
-        "//loom/src/loom/util:stream",
+        "//loom/src/loom/pass:trace",
+        "//loom/src/loom/tooling/io:file",
         "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:path",
-        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/base/tooling:flags",
     ],
 )

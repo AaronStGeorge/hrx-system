@@ -146,6 +146,7 @@ loom_cc_library(
         "//loom/src/loom/tooling/execution:__pkg__",
         "//loom/src/loom/tooling/target/spirv:__pkg__",
         "//loom/src/loom/tools/loom-check:__pkg__",
+        "//loom/src/loom/tools/loom-compile:__pkg__",
     ],
     deps = [
         ":types",

@@ -36,6 +36,8 @@ typedef struct loom_pass_tool_run_options_t {
   iree_diagnostic_emitter_t diagnostic_emitter;
   // Optional caller-owned execution report appended as passes run.
   loom_pass_report_t* report;
+  // Optional caller-owned IR trace receiving selected pass boundaries.
+  loom_pass_trace_t* trace;
 } loom_pass_tool_run_options_t;
 
 // Compiles and executes one pass.pipeline op on |module|. Module-root pipelines

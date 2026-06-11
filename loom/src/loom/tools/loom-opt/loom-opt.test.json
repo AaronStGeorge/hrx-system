@@ -57,6 +57,72 @@
       }
     },
     {
+      "name": "dumps selected pass IR as JSONL",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pass=dce",
+          "--dump-ir-after=dce",
+          "--dump-ir-format=jsonl",
+          "--dump-ir-output=stderr",
+          "--output={tmp}/dumped.loom"
+        ],
+        "stdin": {
+          "text": "func.def @trace_smoke(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n"
+        }
+      },
+      "stderr": {
+        "contains": [
+          "\"tool\":\"loom-opt\"",
+          "\"stage\":\"command-line\"",
+          "\"pass\":\"dce\"",
+          "\"point\":\"after\"",
+          "\"ir\":\""
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/dumped.loom",
+          "non_empty": true
+        }
+      ]
+    },
+    {
+      "name": "dumps selected before and after IR to a bundle",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pass=dce",
+          "--dump-ir-before=dce",
+          "--dump-ir-after=dce",
+          "--dump-ir-format=jsonl",
+          "--dump-ir-output={tmp}/trace-bundle/",
+          "--output={tmp}/bundle-out.loom"
+        ],
+        "stdin": {
+          "text": "func.def @trace_bundle(%x: i32) -> (i32) {\n  %dead = scalar.constant 42 : i32\n  func.return %x : i32\n}\n"
+        }
+      },
+      "files": [
+        {
+          "path": "{tmp}/trace-bundle/trace.jsonl",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/trace-bundle/ir/000000-before-dce.loom",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/trace-bundle/ir/000001-after-dce.loom",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/bundle-out.loom",
+          "non_empty": true
+        }
+      ]
+    },
+    {
       "name": "materializes config values",
       "run": {
         "tool": "loom-opt",
@@ -100,10 +166,13 @@
         "args": [
           "--pipeline=@boom",
           "--pass-reproducer={tmp}/pass.repro",
+          "--dump-ir-after=dce",
+          "--dump-ir-format=jsonl",
+          "--dump-ir-output={tmp}/failed-pass-trace.jsonl",
           "--output={tmp}/unused.loom"
         ],
         "stdin": {
-          "text": "pass.pipeline<module> @boom pipeline {\n  fail \"boom\"\n}\n\nfunc.def @reproducer_input(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n"
+          "text": "pass.pipeline<module> @boom pipeline {\n  for func {\n    dce\n  }\n  fail \"boom\"\n}\n\nfunc.def @reproducer_input(%x: i32) -> (i32) {\n  func.return %x : i32\n}\n"
         }
       },
       "exit": {
@@ -118,6 +187,10 @@
       "files": [
         {
           "path": "{tmp}/pass.repro",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/failed-pass-trace.jsonl",
           "non_empty": true
         }
       ]

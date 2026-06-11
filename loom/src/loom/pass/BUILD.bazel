@@ -176,6 +176,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "trace",
+    srcs = ["trace.c"],
+    hdrs = ["trace.h"],
+    deps = [
+        ":program",
+        ":types",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "interpreter",
     srcs = ["interpreter.c"],
     hdrs = ["interpreter.h"],
@@ -184,6 +199,7 @@ loom_cc_library(
         ":predicate",
         ":program",
         ":report",
+        ":trace",
         ":value_facts",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",

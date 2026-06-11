@@ -38,6 +38,7 @@ loom_cc_binary(
     loom::tooling::context
     loom::tooling::execution::session
     loom::tooling::io::file
+    loom::tooling::pass::trace_cli
     loom::util::json
     loom::util::stream
     loom::verify

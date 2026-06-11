@@ -77,6 +77,30 @@ static iree_status_t loom_compile_build_default_pipeline(
   }
 }
 
+static iree_string_view_t loom_compile_default_pipeline_stage_name(
+    loom_compile_default_pipeline_t default_pipeline) {
+  switch (default_pipeline) {
+    case LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW:
+      return IREE_SV("source-low");
+    case LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW:
+      return IREE_SV("prepared-low");
+    default:
+      return IREE_SV("default");
+  }
+}
+
+static iree_string_view_t loom_compile_pipeline_stage_name(
+    const loom_compile_pipeline_options_t* options,
+    iree_string_view_t pipeline) {
+  if (loom_compile_pipeline_is_default(pipeline)) {
+    return loom_compile_default_pipeline_stage_name(options->default_pipeline);
+  }
+  if (iree_string_view_starts_with_char(pipeline, '@')) {
+    return IREE_SV("module-pipeline");
+  }
+  return IREE_SV("command-line");
+}
+
 static iree_status_t loom_compile_run_default_pipeline(
     loom_module_t* module, const loom_compile_pipeline_options_t* options,
     const loom_pass_tool_run_options_t* run_options,
@@ -163,6 +187,16 @@ iree_status_t loom_compile_run_pipeline(
     loom_target_compile_report_initialize_if_empty(
         options->report, &options->report_row_storage);
   }
+
+  loom_pass_trace_options_t trace_options = {0};
+  loom_pass_trace_t trace = {0};
+  loom_pass_trace_t* trace_ptr = NULL;
+  if (loom_pass_trace_options_is_enabled(options->trace_options)) {
+    trace_options = *options->trace_options;
+    trace_options.stage = loom_compile_pipeline_stage_name(options, pipeline);
+    loom_pass_trace_initialize(&trace_options, &trace);
+    trace_ptr = &trace;
+  }
   loom_pass_tool_run_options_t run_options = {
       .registry = pass_registry,
       .environment = loom_low_pass_environment_storage_initialize(
@@ -174,6 +208,7 @@ iree_status_t loom_compile_run_pipeline(
           loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,
       .diagnostic_emitter = loom_target_entry_emitter(&pass_emitter),
+      .trace = trace_ptr,
   };
 
   iree_status_t status = iree_ok_status();
