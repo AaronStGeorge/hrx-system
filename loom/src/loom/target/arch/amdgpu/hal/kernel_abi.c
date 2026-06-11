@@ -24,6 +24,7 @@
   (4u + 2u * LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT)
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_RESOURCE_COUNT \
   (UINT32_MAX / LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE)
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_ARG_MAX_UNIT_COUNT 2u
 
 typedef enum loom_amdgpu_hal_kernel_abi_source_kind_e {
   LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN = 0,
@@ -319,6 +320,46 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_register_value_matches(
       register_type_resolver, type, &actual_class_id, NULL);
   *out_matches = found_actual_class && actual_class_id == expected_class_id &&
                  loom_low_register_type_unit_count(type) == unit_count;
+  return iree_ok_status();
+}
+
+static bool loom_amdgpu_hal_kernel_abi_direct_arg_unit_count_supported(
+    uint32_t unit_count) {
+  return unit_count >= 1 &&
+         unit_count <= LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_ARG_MAX_UNIT_COUNT;
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_abi_direct_arg_type_matches(
+    const loom_module_t* module,
+    const loom_low_register_type_resolver_t* register_type_resolver,
+    loom_value_id_t value_id, bool* out_matches) {
+  *out_matches = false;
+  uint16_t expected_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
+      register_type_resolver->descriptor_set,
+      LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, &expected_class_id, NULL));
+  loom_type_t type = loom_module_value_type(module, value_id);
+  uint16_t actual_class_id = LOOM_LOW_REG_CLASS_NONE;
+  bool found_actual_class = loom_low_register_type_resolver_try_resolve(
+      register_type_resolver, type, &actual_class_id, NULL);
+  const uint32_t unit_count = loom_low_register_type_unit_count(type);
+  *out_matches =
+      found_actual_class && actual_class_id == expected_class_id &&
+      loom_amdgpu_hal_kernel_abi_direct_arg_unit_count_supported(unit_count);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_abi_direct_arg_size_from_type(
+    loom_type_t type, uint32_t* out_size) {
+  const uint32_t unit_count = loom_low_register_type_unit_count(type);
+  if (!loom_amdgpu_hal_kernel_abi_direct_arg_unit_count_supported(unit_count)) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU HAL kernel ABI layout called with an unverified direct "
+        "argument type");
+  }
+  *out_size =
+      unit_count * LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
   return iree_ok_status();
 }
 
@@ -629,23 +670,22 @@ static iree_string_view_t loom_amdgpu_hal_kernel_abi_value_name(
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_direct_arg_from_block_arg(
     const loom_module_t* module, const loom_block_t* entry_block,
-    uint16_t argument_index, uint32_t resource_count,
+    uint16_t argument_index, uint32_t kernarg_offset,
     loom_amdgpu_hal_kernarg_direct_arg_t* out_direct_arg) {
   const loom_value_id_t arg_id = loom_block_arg_id(entry_block, argument_index);
-  const uint64_t kernarg_offset =
-      (uint64_t)resource_count *
-          LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE +
-      (uint64_t)argument_index *
-          LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
+  const loom_type_t abi_type = loom_module_value_type(module, arg_id);
+  uint32_t kernarg_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_direct_arg_size_from_type(
+      abi_type, &kernarg_size));
   *out_direct_arg = (loom_amdgpu_hal_kernarg_direct_arg_t){
       .arg_id = arg_id,
       .name = loom_amdgpu_hal_kernel_abi_value_name(module, arg_id),
       .argument_index = argument_index,
-      .kernarg_offset = (uint32_t)kernarg_offset,
-      .kernarg_size = LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE,
+      .kernarg_offset = kernarg_offset,
+      .kernarg_size = kernarg_size,
       .kernarg_alignment =
           LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_ALIGNMENT,
-      .abi_type = loom_module_value_type(module, arg_id),
+      .abi_type = abi_type,
   };
   return iree_ok_status();
 }
@@ -654,6 +694,7 @@ typedef struct loom_amdgpu_hal_kernel_abi_layout_attr_keys_t {
   loom_string_id_t constant_count;
   loom_string_id_t direct_arg_count;
   loom_string_id_t direct_arg_names;
+  loom_string_id_t direct_arg_sizes;
   loom_string_id_t resource_count;
   loom_string_id_t uses_kernarg_segment_ptr;
 } loom_amdgpu_hal_kernel_abi_layout_attr_keys_t;
@@ -668,6 +709,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_intern_layout_attr_keys(
       module, IREE_SV("direct_arg_count"), &out_keys->direct_arg_count));
   IREE_RETURN_IF_ERROR(loom_module_intern_string(
       module, IREE_SV("direct_arg_names"), &out_keys->direct_arg_names));
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, IREE_SV("direct_arg_sizes"), &out_keys->direct_arg_sizes));
   IREE_RETURN_IF_ERROR(loom_module_intern_string(
       module, IREE_SV("resource_count"), &out_keys->resource_count));
   return loom_module_intern_string(module, IREE_SV("uses_kernarg_segment_ptr"),
@@ -719,6 +762,27 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_make_direct_arg_names_attr(
       out_attr);
 }
 
+static iree_status_t loom_amdgpu_hal_kernel_abi_make_direct_arg_sizes_attr(
+    const loom_amdgpu_hal_kernel_abi_layout_t* layout,
+    iree_arena_allocator_t* scratch_arena, loom_attribute_t* out_attr) {
+  if (layout->direct_arg_count > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU HAL ABI layout has too many direct argument sizes");
+  }
+  int64_t* entries = NULL;
+  if (layout->direct_arg_count != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(scratch_arena, layout->direct_arg_count,
+                                  sizeof(*entries), (void**)&entries));
+  }
+  for (iree_host_size_t i = 0; i < layout->direct_arg_count; ++i) {
+    entries[i] = layout->direct_args[i].kernarg_size;
+  }
+  *out_attr = loom_attr_i64_array(entries, (uint16_t)layout->direct_arg_count);
+  return iree_ok_status();
+}
+
 bool loom_amdgpu_hal_kernel_abi_has_layout_attr(const loom_op_t* function_op) {
   return loom_low_kernel_def_isa(function_op) &&
          !loom_attr_is_absent(loom_op_attrs(
@@ -743,6 +807,9 @@ iree_status_t loom_amdgpu_hal_kernel_abi_make_layout_attr(
   loom_attribute_t direct_arg_names_attr = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_make_direct_arg_names_attr(
       module, layout, scratch_arena, &direct_arg_names_attr));
+  loom_attribute_t direct_arg_sizes_attr = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_make_direct_arg_sizes_attr(
+      layout, scratch_arena, &direct_arg_sizes_attr));
 
   loom_named_attr_t entries[] = {
       {.name_id = keys.constant_count,
@@ -750,6 +817,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_make_layout_attr(
       {.name_id = keys.direct_arg_count,
        .value = loom_attr_i64(layout->direct_arg_count)},
       {.name_id = keys.direct_arg_names, .value = direct_arg_names_attr},
+      {.name_id = keys.direct_arg_sizes, .value = direct_arg_sizes_attr},
       {.name_id = keys.resource_count,
        .value = loom_attr_i64(layout->resource_count)},
       {.name_id = keys.uses_kernarg_segment_ptr,
@@ -808,14 +876,14 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_direct_arguments(
   for (uint16_t i = 0; i < entry_block->arg_count; ++i) {
     const loom_value_id_t arg_id = loom_block_arg_id(entry_block, i);
     bool type_matches = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_register_value_matches(
-        module, register_type_resolver, arg_id,
-        LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 1, &type_matches));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_direct_arg_type_matches(
+        module, register_type_resolver, arg_id, &type_matches));
     if (!type_matches) {
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_hal_kernel_abi_emit_direct_arg_type_error(
-              module, function_op, arg_id, i, expected_reg_class_id, 1,
-              max_errors, emitter, result));
+              module, function_op, arg_id, i, expected_reg_class_id,
+              LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_ARG_MAX_UNIT_COUNT, max_errors,
+              emitter, result));
     }
   }
   return iree_ok_status();
@@ -1300,13 +1368,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
   const uint64_t kernarg_resource_bytes =
       (uint64_t)resource_count *
       LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE;
-  const uint64_t kernarg_direct_arg_bytes =
-      (uint64_t)direct_arg_count *
-      LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
-  const uint64_t kernarg_segment_size = iree_align_uint64(
-      kernarg_resource_bytes + kernarg_direct_arg_bytes,
-      LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT);
-  if (kernarg_segment_size > UINT32_MAX || direct_arg_count > UINT32_MAX) {
+  if (direct_arg_count > UINT32_MAX) {
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU HAL kernel ABI layout called with an "
                             "unverified direct argument set");
@@ -1361,14 +1423,33 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
   }
 
   loom_amdgpu_hal_kernarg_direct_arg_t* direct_args = NULL;
+  uint64_t kernarg_direct_args_end = kernarg_resource_bytes;
+  uint64_t constant_count = 0;
   if (direct_arg_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         arena, direct_arg_count, sizeof(*direct_args), (void**)&direct_args));
     memset(direct_args, 0, direct_arg_count * sizeof(*direct_args));
     for (uint16_t i = 0; i < entry_block->arg_count; ++i) {
+      if (kernarg_direct_args_end > UINT32_MAX) {
+        return iree_make_status(IREE_STATUS_INTERNAL,
+                                "AMDGPU HAL kernel ABI layout called with an "
+                                "oversized direct argument set");
+      }
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_direct_arg_from_block_arg(
-          module, entry_block, i, (uint32_t)resource_count, &direct_args[i]));
+          module, entry_block, i, (uint32_t)kernarg_direct_args_end,
+          &direct_args[i]));
+      kernarg_direct_args_end += direct_args[i].kernarg_size;
+      constant_count += direct_args[i].kernarg_size /
+                        LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
     }
+  }
+  const uint64_t kernarg_segment_size = iree_align_uint64(
+      kernarg_direct_args_end,
+      LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT);
+  if (kernarg_segment_size > UINT32_MAX || constant_count > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "AMDGPU HAL kernel ABI layout called with an "
+                            "unverified direct argument set");
   }
 
   *out_layout = (loom_amdgpu_hal_kernel_abi_layout_t){
@@ -1377,7 +1458,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
       .kernarg_segment_alignment =
           LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT,
       .uses_kernarg_segment_ptr = resource_count != 0 || direct_arg_used,
-      .constant_count = (uint32_t)direct_arg_count,
+      .constant_count = (uint32_t)constant_count,
       .resources = resources,
       .resource_count = resource_count,
       .direct_args = direct_args,
@@ -1397,6 +1478,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_lookup_layout_attr_keys(
           loom_module_lookup_string(module, IREE_SV("direct_arg_count")),
       .direct_arg_names =
           loom_module_lookup_string(module, IREE_SV("direct_arg_names")),
+      .direct_arg_sizes =
+          loom_module_lookup_string(module, IREE_SV("direct_arg_sizes")),
       .resource_count =
           loom_module_lookup_string(module, IREE_SV("resource_count")),
       .uses_kernarg_segment_ptr = loom_module_lookup_string(
@@ -1405,6 +1488,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_lookup_layout_attr_keys(
   if (out_keys->constant_count == LOOM_STRING_ID_INVALID ||
       out_keys->direct_arg_count == LOOM_STRING_ID_INVALID ||
       out_keys->direct_arg_names == LOOM_STRING_ID_INVALID ||
+      out_keys->direct_arg_sizes == LOOM_STRING_ID_INVALID ||
       out_keys->resource_count == LOOM_STRING_ID_INVALID ||
       out_keys->uses_kernarg_segment_ptr == LOOM_STRING_ID_INVALID) {
     return iree_make_status(
@@ -1451,6 +1535,42 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_decode_u32_layout_attr(
         "AMDGPU HAL ABI layout attr integer field is outside u32 range");
   }
   *out_value = (uint32_t)value;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_abi_decode_direct_arg_size(
+    const loom_attribute_t* direct_arg_sizes_attr, uint32_t direct_arg_count,
+    uint32_t argument_index, uint32_t* out_size) {
+  if (direct_arg_sizes_attr->kind != LOOM_ATTR_I64_ARRAY ||
+      direct_arg_sizes_attr->count != direct_arg_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL ABI layout attr direct argument sizes are inconsistent");
+  }
+  if (direct_arg_sizes_attr->count != 0 &&
+      direct_arg_sizes_attr->i64_array == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL ABI layout attr direct argument sizes are malformed");
+  }
+  const int64_t size = direct_arg_sizes_attr->i64_array[argument_index];
+  if (size <= 0 ||
+      (size % LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE) != 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL ABI layout attr direct argument size is not a whole "
+        "number of constant words");
+  }
+  const int64_t max_size =
+      (int64_t)LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_ARG_MAX_UNIT_COUNT *
+      LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
+  if (size > max_size) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL ABI layout attr direct argument size exceeds supported "
+        "direct argument width");
+  }
+  *out_size = (uint32_t)size;
   return iree_ok_status();
 }
 
@@ -1527,6 +1647,10 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_require_layout_attr(
       top_attrs, keys.direct_arg_names, LOOM_ATTR_DICT,
       &direct_arg_names_attr));
+  const loom_attribute_t* direct_arg_sizes_attr = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_require_layout_attr(
+      top_attrs, keys.direct_arg_sizes, LOOM_ATTR_I64_ARRAY,
+      &direct_arg_sizes_attr));
 
   uint32_t resource_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_decode_u32_layout_attr(
@@ -1547,25 +1671,9 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HAL ABI layout attr resource count exceeds ABI capacity");
   }
-  if (constant_count != direct_arg_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU HAL ABI layout attr constant count is inconsistent");
-  }
   const uint64_t kernarg_resource_bytes =
       (uint64_t)resource_count *
       LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE;
-  const uint64_t kernarg_direct_arg_bytes =
-      (uint64_t)direct_arg_count *
-      LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
-  const uint64_t kernarg_segment_size = iree_align_uint64(
-      kernarg_resource_bytes + kernarg_direct_arg_bytes,
-      LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT);
-  if (kernarg_segment_size > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU HAL ABI layout attr kernarg segment exceeds u32 range");
-  }
 
   loom_amdgpu_hal_kernarg_resource_t* resources = NULL;
   if (resource_count != 0) {
@@ -1591,6 +1699,8 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
         arena, direct_arg_count, sizeof(*direct_args), (void**)&direct_args));
     memset(direct_args, 0, direct_arg_count * sizeof(*direct_args));
   }
+  uint64_t kernarg_direct_args_end = kernarg_resource_bytes;
+  uint64_t decoded_constant_count = 0;
   for (uint32_t i = 0; i < direct_arg_count; ++i) {
     loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_lookup_direct_arg_name_key(
@@ -1602,20 +1712,41 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
           IREE_STATUS_INVALID_ARGUMENT,
           "AMDGPU HAL ABI layout attr has a malformed direct argument name");
     }
+    uint32_t kernarg_size = 0;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_decode_direct_arg_size(
+        direct_arg_sizes_attr, direct_arg_count, i, &kernarg_size));
+    if (kernarg_direct_args_end > UINT32_MAX) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU HAL ABI layout attr kernarg segment exceeds u32 range");
+    }
     direct_args[i] = (loom_amdgpu_hal_kernarg_direct_arg_t){
         .arg_id = LOOM_VALUE_ID_INVALID,
         .name = loom_amdgpu_hal_kernel_abi_module_string(
             module, loom_attr_as_string_id(*name_attr)),
         .argument_index = (uint16_t)i,
-        .kernarg_offset =
-            (uint32_t)(kernarg_resource_bytes +
-                       (uint64_t)i *
-                           LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE),
-        .kernarg_size = LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE,
+        .kernarg_offset = (uint32_t)kernarg_direct_args_end,
+        .kernarg_size = kernarg_size,
         .kernarg_alignment =
             LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_ALIGNMENT,
         .abi_type = loom_type_none(),
     };
+    kernarg_direct_args_end += kernarg_size;
+    decoded_constant_count +=
+        kernarg_size / LOOM_AMDGPU_HAL_KERNEL_ABI_DIRECT_SCALAR_KERNARG_SIZE;
+  }
+  if (decoded_constant_count != constant_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL ABI layout attr constant count is inconsistent");
+  }
+  const uint64_t kernarg_segment_size = iree_align_uint64(
+      kernarg_direct_args_end,
+      LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT);
+  if (kernarg_segment_size > UINT32_MAX) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL ABI layout attr kernarg segment exceeds u32 range");
   }
 
   *out_layout = (loom_amdgpu_hal_kernel_abi_layout_t){

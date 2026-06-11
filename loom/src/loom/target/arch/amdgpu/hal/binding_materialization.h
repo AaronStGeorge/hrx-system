@@ -50,12 +50,12 @@ typedef struct loom_amdgpu_hal_binding_materialization_result_t {
 //
 // The expansion inserts or reuses a low.live_in<amdgpu.kernarg_segment_ptr>
 // value, loads one 64-bit binding pointer from each kernarg slot assigned by
-// low.resource<hal_binding>, loads one 32-bit scalar from each direct argument
-// slot, removes direct entry block arguments, and replaces resource imports
-// with reg<amdgpu.sgpr x2>. Direct scalar arguments are loaded from the HAL
-// constant segment, packing adjacent 32-bit arguments into wider SMEM loads
-// when the target-low descriptor set supports the packet. Separate
-// amdgpu.hal.buffer_descriptor pseudos materialize range, flags, and
+// low.resource<hal_binding>, loads direct entry block arguments from the HAL
+// constant segment, removes those direct arguments, and replaces resource
+// imports with reg<amdgpu.sgpr x2>. One semantic direct argument may consume
+// multiple 32-bit HAL constants; adjacent 32-bit arguments may be packed into
+// wider SMEM loads when the target-low descriptor set supports the packet.
+// Separate amdgpu.hal.buffer_descriptor pseudos materialize range, flags, and
 // pointer-high descriptor bits only for selected descriptor-consuming packets.
 iree_status_t loom_amdgpu_hal_binding_materialize(
     loom_module_t* module, loom_op_t* function_op,
