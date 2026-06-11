@@ -21,7 +21,7 @@ extern "C" {
 
 // Writes a borrowed status as a structured JSON object.
 iree_status_t iree_benchmark_loom_write_status_object_json(
-    const iree_status_t* status, loom_output_stream_t* stream);
+    const iree_status_t status, loom_output_stream_t* stream);
 
 // Writes the run identifier field shared by every JSONL row.
 iree_status_t iree_benchmark_loom_write_run_id_field_json(

@@ -291,9 +291,7 @@ iree_status_t LoadHsaLibrary(HsaApi* api) {
 
 void UnloadHsaApi(HsaApi* api) {
   IREE_ASSERT_ARGUMENT(api);
-  if (api->library != nullptr) {
-    iree_dynamic_library_release(api->library);
-  }
+  iree_dynamic_library_release(api->library);
   *api = {};
 }
 

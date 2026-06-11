@@ -771,8 +771,7 @@ static iree_status_t loom_check_emit_finish_status_failure(
       "emit target '%.*s' failed: ", (int)emit_target_name.size,
       emit_target_name.data);
   if (iree_status_is_ok(status)) {
-    status =
-        iree_string_builder_append_status(&result->detail, &failure_status);
+    status = iree_string_builder_append_status(&result->detail, failure_status);
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(&result->detail, "\n");

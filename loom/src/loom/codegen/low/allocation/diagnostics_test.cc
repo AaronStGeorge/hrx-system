@@ -7,6 +7,7 @@
 #include "loom/codegen/low/allocation/diagnostics.h"
 
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
 
 namespace loom {
 namespace {
@@ -26,11 +27,11 @@ TEST(LowAllocationDiagnosticsTest, EmptyTableEmitsNoDiagnostics) {
       /*.user_data=*/nullptr,
   };
 
-  EXPECT_TRUE(iree_status_is_ok(loom_low_allocation_diagnostics_emit(
+  IREE_EXPECT_OK(loom_low_allocation_diagnostics_emit(
       &table,
       LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS |
           LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS,
-      emitter)));
+      emitter));
 }
 
 }  // namespace

@@ -95,6 +95,7 @@ void hrx_device_retain(hrx_device_t device) {
 }
 
 void hrx_device_release(hrx_device_t device) {
+  if (!device) return;
   iree_hal_device_t* hal_device = device->hal_device;
   iree_hal_device_group_t* hal_device_group = device->hal_device_group;
   if (iree_atomic_ref_count_dec(&device->ref_count) == 1) {

@@ -534,9 +534,7 @@ static void BM_AcceptRate(::benchmark::State& state,
     }
     if (!ctx_data.PollForCompletions(2)) {
       state.SkipWithError("Accept/connect timeout");
-      if (accept_op.accepted_socket) {
-        iree_async_socket_release(accept_op.accepted_socket);
-      }
+      iree_async_socket_release(accept_op.accepted_socket);
       iree_async_socket_release(client);
       break;
     }

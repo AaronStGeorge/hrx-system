@@ -9,18 +9,10 @@
 #include "hrx_internal.h"
 
 static void hrx_module_destroy_partial(hrx_module_t module) {
-  if (module->context) {
-    iree_vm_context_release(module->context);
-  }
-  if (module->hal_module) {
-    iree_vm_module_release(module->hal_module);
-  }
-  if (module->bytecode_module) {
-    iree_vm_module_release(module->bytecode_module);
-  }
-  if (module->device) {
-    hrx_device_release(module->device);
-  }
+  iree_vm_context_release(module->context);
+  iree_vm_module_release(module->hal_module);
+  iree_vm_module_release(module->bytecode_module);
+  hrx_device_release(module->device);
   free(module);
 }
 
@@ -122,6 +114,7 @@ void hrx_module_retain(hrx_module_t module) {
 }
 
 void hrx_module_release(hrx_module_t module) {
+  if (!module) return;
   iree_vm_context_release(module->context);
   iree_vm_module_release(module->hal_module);
   iree_vm_module_release(module->bytecode_module);
@@ -173,6 +166,7 @@ void hrx_function_retain(hrx_function_t function) {
 }
 
 void hrx_function_release(hrx_function_t function) {
+  if (!function) return;
   hrx_module_release(function->module);
   if (iree_atomic_ref_count_dec(&function->ref_count) == 1) {
     free(function);

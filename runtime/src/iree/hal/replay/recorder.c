@@ -455,9 +455,7 @@ IREE_API_EXPORT iree_status_t iree_hal_replay_recorder_create(
   if (iree_status_is_ok(status)) {
     *out_recorder = recorder;
   } else {
-    if (recorder) {
-      iree_hal_replay_recorder_release(recorder);
-    }
+    iree_hal_replay_recorder_release(recorder);
   }
   iree_hal_replay_file_writer_free(writer);
   IREE_TRACE_ZONE_END(z0);

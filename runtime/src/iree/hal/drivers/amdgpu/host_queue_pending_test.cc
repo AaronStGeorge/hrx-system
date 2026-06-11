@@ -362,7 +362,7 @@ static bool HostActionStateWasCalled(void* user_data) {
 }
 
 static void RecordHostAction(iree_hal_amdgpu_reclaim_entry_t* entry,
-                             void* user_data, iree_status_t status) {
+                             void* user_data, const iree_status_t status) {
   HostActionState* state = (HostActionState*)user_data;
   iree_atomic_store(&state->had_entry, entry ? 1 : 0,
                     iree_memory_order_release);

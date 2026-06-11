@@ -88,13 +88,13 @@ static iree_status_t iree_benchmark_loom_read_file_into_builder(
 }
 
 static void iree_benchmark_loom_format_status_json_error(
-    const iree_status_t* status,
+    const iree_status_t status,
     iree_benchmark_loom_status_json_error_t* out_error) {
-  out_error->code = iree_status_code(*status);
+  out_error->code = iree_status_code(status);
   memset(out_error->message, 0, sizeof(out_error->message));
   iree_host_size_t required_length = 0;
-  if (iree_status_format(*status, sizeof(out_error->message),
-                         out_error->message, &required_length)) {
+  if (iree_status_format(status, sizeof(out_error->message), out_error->message,
+                         &required_length)) {
     out_error->message_length = required_length;
     if (out_error->message_length >= sizeof(out_error->message)) {
       out_error->message_length = sizeof(out_error->message) - 1;
@@ -475,7 +475,7 @@ iree_benchmark_loom_append_profile_summary_status_from_error(
     iree_string_view_t status, iree_string_view_t reason,
     iree_status_t error_status, iree_string_builder_t* profile_output) {
   iree_benchmark_loom_status_json_error_t error = {0};
-  iree_benchmark_loom_format_status_json_error(&error_status, &error);
+  iree_benchmark_loom_format_status_json_error(error_status, &error);
   iree_status_t append_status =
       iree_benchmark_loom_append_profile_summary_status_row(
           run, candidate, work_item_index, module, benchmark_plan, case_plan,
@@ -671,7 +671,7 @@ iree_benchmark_loom_append_profile_counter_status_from_error(
     iree_string_view_t status, iree_string_view_t reason,
     iree_status_t error_status, iree_string_builder_t* profile_output) {
   iree_benchmark_loom_status_json_error_t error = {0};
-  iree_benchmark_loom_format_status_json_error(&error_status, &error);
+  iree_benchmark_loom_format_status_json_error(error_status, &error);
   iree_status_t append_status =
       iree_benchmark_loom_append_profile_counter_status_row(
           run, candidate, work_item_index, module, benchmark_plan, case_plan,

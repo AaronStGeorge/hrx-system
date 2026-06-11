@@ -36,6 +36,7 @@ void hrx_value_list_retain(hrx_value_list_t list) {
 }
 
 void hrx_value_list_release(hrx_value_list_t list) {
+  if (!list) return;
   iree_vm_list_release(list->vm_list);
   if (iree_atomic_ref_count_dec(&list->ref_count) == 1) {
     free(list);

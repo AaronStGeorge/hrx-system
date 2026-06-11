@@ -1181,9 +1181,7 @@ static iree_status_t loom_testbench_write_single_file(
         iree_numpy_npy_save_ndarray(stream, IREE_NUMPY_NPY_SAVE_OPTION_DEFAULT,
                                     buffer_view, options->host_allocator);
   }
-  if (stream) {
-    iree_io_stream_release(stream);
-  }
+  iree_io_stream_release(stream);
   iree_vm_variant_reset(&variant);
   return status;
 }

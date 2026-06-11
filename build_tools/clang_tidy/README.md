@@ -31,6 +31,7 @@ file, and writes a per-source report:
 
 ```bash
 iree-bazel-test --repo_env=IREE_CLANG_TIDY_LLVM=auto \
+  //build_tools/clang_tidy:refcount_checks_test \
   //build_tools/clang_tidy:status_checks_test \
   //build_tools/clang_tidy:trace_checks_test
 ```
@@ -88,8 +89,10 @@ static bool is_unavailable(iree_status_t status) {
 
 A by-value `iree_status_t` parameter means the callee participates in ownership.
 The callee must return it, store it into an owning destination, consume it,
-clone it before fanout, or transfer it to another owning status API. Observer
-helpers should expose the non-owning representation they actually need:
+or transfer it to another owning status API. If the caller still needs the
+original after such a call, the caller passes `iree_status_clone(status)` and
+keeps owning the original. Observer helpers should expose the non-owning
+representation they actually need:
 
 ```c
 static bool is_unavailable(iree_status_code_t status_code) {
@@ -97,8 +100,8 @@ static bool is_unavailable(iree_status_code_t status_code) {
 }
 
 static iree_status_t append_status(iree_string_builder_t* builder,
-                                   const iree_status_t* status) {
-  return iree_status_format_to(*status, append_chunk, builder)
+                                   const iree_status_t status) {
+  return iree_status_format_to(status, append_chunk, builder)
              ? iree_ok_status()
              : iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                                 "failed to format status");
@@ -108,9 +111,9 @@ static iree_status_t append_status(iree_string_builder_t* builder,
 The check intentionally keeps exceptions narrow. Status primitives that define
 the observer API, known status sinks, C++ `iree::Status` formatting internals,
 and documented borrowed callback boundaries are modeled explicitly. Ordinary
-debug/reporting helpers should use `iree_status_code_t`, `const iree_status_t*`,
-or `const iree_status_t&` instead of accepting a by-value status they do not
-own.
+debug/reporting helpers should use `iree_status_code_t`, `const iree_status_t`,
+or `const iree_status_t&` instead of accepting an owned status they do not
+consume.
 
 ### `iree-status-lifetime`
 
@@ -127,6 +130,9 @@ status = do_cleanup();  // Overwrites an owned status.
 iree_status_t status = do_work();
 iree_status_ignore(status);
 return status;  // Uses a consumed status value.
+
+iree_status_t status = iree_ok_status();
+status = do_work();  // OK initializer was never used.
 ```
 
 The accepted terminal actions mirror `runtime/src/iree/base/status.h`: return
@@ -134,6 +140,22 @@ the status, store it into an owning destination, consume it with
 `iree_status_free`/`iree_status_ignore`/`iree_status_consume_code`, or transfer
 it through helpers such as `iree_status_join`, `iree_status_annotate`, and
 `iree_status_freeze` while continuing to own the returned status.
+
+`iree_status_ignore` is reserved for failures that were deliberately not
+handled. Once a status has been reported through formatting or printing helpers,
+the local owner should release it with `iree_status_free` instead:
+
+```c
+iree_status_fprint(stderr, status);
+iree_status_free(status);
+```
+
+An `iree_ok_status()` initializer should represent the real initial state of a
+terminal status accumulator. If the next same-scope assignment replaces it
+before a branch, loop, observer, cleanup join, or ownership transfer can use
+that initial OK value, initialize the variable from the producer directly or use
+the appropriate return-if-error helper. The simple adjacent declaration and
+assignment form is fixable with `clang-tidy --fix`.
 
 The lifetime model focuses on local ownership states that can be proven from
 the AST with high confidence. Straight-line code, block scope, local transfers,
@@ -177,11 +199,90 @@ status transfer helpers, C++ status wrapper constructors, and status observer
 functions. Pure observer expressions such as multiple `iree_status_is_*` checks
 do not transfer ownership and are accepted.
 
+### `iree-refcount-lifecycle`
+
+`iree-refcount-lifecycle` treats `iree_atomic_ref_count_t` as an object
+lifetime primitive, not as a generic atomic counter. A refcounted IREE C object
+is anchored by an offset-zero `iree_atomic_ref_count_t ref_count` field. The VM
+type-erased reference base uses an explicit `counter` field in
+`runtime/src/iree/vm/ref.h` because VM descriptors store the counter offset.
+Other structures are not inferred to be refcounted merely because they mention
+the primitive.
+
+Anchored refcounted objects should expose retain/release operations with the
+normal C ownership contract:
+
+```c
+void iree_hal_buffer_retain(iree_hal_buffer_t* buffer);
+void iree_hal_buffer_release(iree_hal_buffer_t* buffer);
+```
+
+Retain and release operations that mutate the reference count return `void`.
+Release functions are null-safe so cleanup code can call them unconditionally
+without adding noisy guards:
+
+```c
+iree_hal_buffer_release(buffer);
+buffer = NULL;
+```
+
+In straight-line code, a direct one-argument release statement consumes that
+handle spelling until it is reassigned. Later dereferences or repeated releases
+of the same handle are diagnosed:
+
+```c
+iree_hal_buffer_release(buffer);
+buffer->data = NULL;  // The handle was already released.
+
+iree_hal_buffer_release(buffer);
+iree_hal_buffer_release(buffer);  // No remaining modeled reference edge.
+```
+
+Explicit direct retains in the same block add modeled reference edges, so code
+that deliberately drops multiple owned references stays valid:
+
+```c
+iree_hal_buffer_retain(buffer);
+iree_hal_buffer_release(buffer);
+iree_hal_buffer_release(buffer);
+```
+
+This rule is intentionally local. It does not yet merge release state across
+branch exits, and assignment resets the handle state:
+
+```c
+iree_hal_buffer_release(buffer);
+buffer = NULL;
+
+iree_hal_buffer_release(buffer);
+buffer = replacement_buffer;
+```
+
+If a release drops one retained edge while another owner keeps the object alive,
+the code should still avoid reading through the released handle spelling. Take
+needed scalar values before the release, release after the last read, or model
+the retained edge explicitly with a direct retain/release pair.
+
+The decrement result carries the last-reference decision and must be checked:
+
+```c
+if (iree_atomic_ref_count_dec(&buffer->ref_count) == 1) {
+  iree_hal_buffer_destroy(buffer);
+}
+```
+
+Additional atomic counters in refcounted objects should use explicit atomic
+integer types such as `iree_atomic_uint32_t`, with names and comments describing
+the synchronization contract. Reusing `iree_atomic_ref_count_t` for queue depth,
+pending work, or latch state hides the difference between object lifetime and
+ordinary atomic coordination.
+
 ### `iree-trace-zone-balance`
 
-`iree-trace-zone-balance` treats trace zones as scoped C resources around
-status-return helper macros. A status-returning helper used inside an active
-zone must use the trace-zone-aware form so the failure path ends the zone:
+`iree-trace-zone-balance` treats trace zones as scoped C resources. A terminal
+path inside an active zone must end the zone before leaving the function. A
+status-returning helper used inside an active zone must use the
+trace-zone-aware form so the failure path ends the zone:
 
 ```c
 IREE_TRACE_ZONE_BEGIN(z0);
@@ -200,8 +301,34 @@ IREE_TRACE_ZONE_END(z0);
 return iree_ok_status();
 ```
 
+Plain source returns and known return macros such as `HIP_RETURN_ERROR` are
+also diagnosed when they leave an active zone:
+
+```c
+IREE_TRACE_ZONE_BEGIN(z0);
+return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "bad input");
+```
+
+Falling off the end of a function with an active zone is diagnosed for the same
+reason: a zone is a scoped C resource and the function must close it on every
+terminal path.
+
+The reliable shapes are to use `IREE_RETURN_AND_END_ZONE` for immediate return
+expressions, `IREE_RETURN_AND_END_ZONE_IF_ERROR` for conditional status helper
+returns, or an explicit `IREE_TRACE_ZONE_END` immediately before returning a
+status that is already carried in a local variable.
+
+End macros using statically named zones are checked against the active zone
+stack. Ending a zone after this function has already ended it, ending an outer
+zone while an inner zone is active, or passing the wrong static zone ID to a
+return-and-end helper is diagnosed. Dynamic zone ID carriers such as
+`iree_zone_id_t zone_id` are treated conservatively because they often model an
+explicit ownership transfer across helper boundaries.
+
 The check uses the preprocessor's macro expansion stream so disabled tracing,
 HRX wrapper macros, and multi-line helper invocations are modeled by the macro
-the developer wrote rather than by the helper's implementation detail. General
-proof of arbitrary `return` statements and block-local zone balance is handled
-conservatively to keep this check high signal.
+the developer wrote rather than by the helper's implementation detail. Return
+statements generated inside macro bodies are not diagnosed independently; known
+return macros are checked at the macro expansion site. Ambiguous block-local,
+loop, and switch zone balance is handled conservatively to keep this check high
+signal.

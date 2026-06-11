@@ -194,16 +194,21 @@ typedef enum iree_status_code_e {
 // leave ownership unchanged. A status that was only checked still needs to be
 // returned, stored, or consumed on every non-OK path.
 //
-// A function parameter typed as iree_status_t by value participates in that
-// ownership protocol. Callbacks and helpers that accept a by-value status must
-// return it, store it into an owning destination, consume it, clone it before
-// fanout, or transfer it to another owning status API. If a callee only needs
-// to test success/failure or record a scalar result, pass iree_status_code_t
-// instead. If a C callee needs to inspect the full formatted status without
-// consuming it, pass const iree_status_t* and document that the pointer is
-// borrowed. In C++ helpers, pass const iree_status_t& for the same borrowed
-// full-status case. These non-owning signatures make it visible that the caller
-// still owns the original status after the call returns.
+// A function parameter typed as non-const iree_status_t by value participates
+// in that ownership protocol. Callbacks and helpers that accept a non-const
+// by-value status receive ownership: they must return it, store it into an
+// owning destination, consume it, or transfer it to another owning status API.
+// If the caller still needs the original status after such a call, the caller
+// must pass iree_status_clone(status) and keep owning the original.
+//
+// If a callee only needs to test success/failure or record a scalar result,
+// pass iree_status_code_t instead. If a C callee needs to inspect, format, or
+// clone the full status without consuming the caller's owned value, spell the
+// parameter as const iree_status_t. The const qualifier is an IREE/tooling
+// convention rather than a C ownership guarantee: clang-tidy treats it as a
+// borrowed full-status parameter and rejects consuming, returning, storing, or
+// otherwise transferring the borrowed value. In C++ helpers, pass
+// const iree_status_t& for the same borrowed full-status case.
 //
 // iree_status_free and iree_status_ignore both consume ownership, but they
 // communicate different intent. Use iree_status_free when the failure has been

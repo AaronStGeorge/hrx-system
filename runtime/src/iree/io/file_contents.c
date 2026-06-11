@@ -23,9 +23,7 @@ IREE_API_EXPORT void iree_io_file_contents_free(
     iree_io_file_contents_t* contents) {
   if (!contents) return;
   iree_allocator_t allocator = contents->allocator;
-  if (contents->mapping) {
-    iree_io_file_mapping_release(contents->mapping);
-  }
+  iree_io_file_mapping_release(contents->mapping);
   iree_allocator_free(allocator, contents);
 }
 

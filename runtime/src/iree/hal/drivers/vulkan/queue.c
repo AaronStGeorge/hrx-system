@@ -1691,9 +1691,7 @@ static void iree_hal_vulkan_queue_staging_ring_release(
     iree_hal_resource_t* resource = waiter->resource;
     waiter->resource = NULL;
     waiter->fn(waiter->user_data);
-    if (resource) {
-      iree_hal_resource_release(resource);
-    }
+    iree_hal_resource_release(resource);
   }
 }
 
@@ -3608,9 +3606,7 @@ static void iree_hal_vulkan_queue_set_completion_action(
 
 static void iree_hal_vulkan_queue_release_completion_action(
     iree_hal_vulkan_queue_pending_submission_t* submission) {
-  if (submission->completion_action.resource) {
-    iree_hal_resource_release(submission->completion_action.resource);
-  }
+  iree_hal_resource_release(submission->completion_action.resource);
   submission->completion_action =
       iree_hal_vulkan_queue_completion_action_null();
 }
@@ -3625,9 +3621,7 @@ static void iree_hal_vulkan_queue_consume_completion_action(
   if (action.fn) {
     action.fn(action.user_data, completion_status);
   }
-  if (action.resource) {
-    iree_hal_resource_release(action.resource);
-  }
+  iree_hal_resource_release(action.resource);
 }
 
 // Captures a retained semaphore list into caller-owned storage.
@@ -6369,10 +6363,8 @@ void iree_hal_vulkan_queue_retire_frontier(iree_hal_vulkan_queue_t* queue) {
                   iree_status_code(wake_status) == IREE_STATUS_DATA_LOSS,
               "Vulkan queue completion wakeup failed during teardown");
   iree_status_free(wake_status);
-  if (queue->completion_thread) {
-    iree_thread_release(queue->completion_thread);
-    queue->completion_thread = NULL;
-  }
+  iree_thread_release(queue->completion_thread);
+  queue->completion_thread = NULL;
   iree_async_frontier_tracker_retire_axis(
       queue->frontier_tracker, queue->axis,
       iree_status_from_code(IREE_STATUS_CANCELLED));

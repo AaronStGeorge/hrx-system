@@ -1455,9 +1455,9 @@ static void iree_hal_webgpu_queue_write_state_fail(
     iree_hal_webgpu_queue_write_state_t* state, iree_status_t error) {
   iree_hal_semaphore_list_fail(state->signal_semaphore_list, error);
   iree_hal_webgpu_queue_advance_tracker(state->queue, state->epoch);
-  if (state->source_buffer) iree_hal_buffer_release(state->source_buffer);
-  if (state->target_storage) iree_hal_buffer_release(state->target_storage);
-  if (state->target_file) iree_hal_file_release(state->target_file);
+  iree_hal_buffer_release(state->source_buffer);
+  iree_hal_buffer_release(state->target_storage);
+  iree_hal_file_release(state->target_file);
   if (state->staging_handle) {
     iree_hal_webgpu_import_buffer_destroy(state->staging_handle);
   }
@@ -1602,14 +1602,10 @@ static void iree_hal_webgpu_queue_write_phase3(
   state->staging_handle = 0;
 
   // Release target resources.
-  if (state->target_storage) {
-    iree_hal_buffer_release(state->target_storage);
-    state->target_storage = NULL;
-  }
-  if (state->target_file) {
-    iree_hal_file_release(state->target_file);
-    state->target_file = NULL;
-  }
+  iree_hal_buffer_release(state->target_storage);
+  state->target_storage = NULL;
+  iree_hal_file_release(state->target_file);
+  state->target_file = NULL;
 
   // Signal or fail.
   if (iree_status_is_ok(status)) {

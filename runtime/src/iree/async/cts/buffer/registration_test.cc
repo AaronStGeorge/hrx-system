@@ -40,7 +40,7 @@ namespace iree::async::cts {
 // failure, etc.).
 struct SlabDeleter {
   void operator()(iree_async_slab_t* slab) const {
-    if (slab) iree_async_slab_release(slab);
+    iree_async_slab_release(slab);
   }
 };
 using AsyncSlabPtr = std::unique_ptr<iree_async_slab_t, SlabDeleter>;
@@ -49,7 +49,7 @@ using AsyncSlabPtr = std::unique_ptr<iree_async_slab_t, SlabDeleter>;
 // destruction.
 struct RegionDeleter {
   void operator()(iree_async_region_t* region) const {
-    if (region) iree_async_region_release(region);
+    iree_async_region_release(region);
   }
 };
 using AsyncRegionPtr = std::unique_ptr<iree_async_region_t, RegionDeleter>;

@@ -5,8 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "clang-tidy/ClangTidyModule.h"
+#include "iree/RefCountChecks.h"
 #include "iree/SmokeCheck.h"
 #include "iree/StatusChecks.h"
+#include "iree/StyleChecks.h"
 #include "iree/TraceChecks.h"
 
 namespace clang::tidy::iree {
@@ -22,6 +24,14 @@ class IreeTidyModule final : public ClangTidyModule {
     CheckFactories.registerCheck<StatusLifetimeCheck>("iree-status-lifetime");
     CheckFactories.registerCheck<StatusTransferOrderCheck>(
         "iree-status-transfer-order");
+    CheckFactories.registerCheck<DirectGotoCheck>("iree-direct-goto");
+    CheckFactories.registerCheck<GuardedReleaseCheck>("iree-guarded-release");
+    CheckFactories.registerCheck<RefCountLifecycleCheck>(
+        "iree-refcount-lifecycle");
+    CheckFactories.registerCheck<TestStatusMacroCheck>(
+        "iree-test-status-macro-scope");
+    CheckFactories.registerCheck<TestStatusPredicateCheck>(
+        "iree-test-status-predicate");
     CheckFactories.registerCheck<TraceZoneCheck>("iree-trace-zone-balance");
   }
 };

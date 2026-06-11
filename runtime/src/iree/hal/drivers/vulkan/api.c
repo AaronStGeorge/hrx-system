@@ -263,7 +263,6 @@ IREE_API_EXPORT iree_status_t iree_hal_vulkan_syms_create_from_system_loader(
 }
 
 IREE_API_EXPORT void iree_hal_vulkan_syms_retain(iree_hal_vulkan_syms_t* syms) {
-  IREE_ASSERT_ARGUMENT(syms);
   if (syms) {
     iree_atomic_ref_count_inc(&syms->ref_count);
   }
@@ -271,7 +270,6 @@ IREE_API_EXPORT void iree_hal_vulkan_syms_retain(iree_hal_vulkan_syms_t* syms) {
 
 IREE_API_EXPORT void iree_hal_vulkan_syms_release(
     iree_hal_vulkan_syms_t* syms) {
-  IREE_ASSERT_ARGUMENT(syms);
   if (syms && iree_atomic_ref_count_dec(&syms->ref_count) == 1) {
     iree_allocator_t host_allocator = syms->host_allocator;
     iree_hal_vulkan_libvulkan_deinitialize(&syms->libvulkan);

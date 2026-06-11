@@ -14,6 +14,10 @@
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
+#include "clang/Basic/Diagnostic.h"
+#include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/Lex/Lexer.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -38,6 +42,10 @@ bool IsStatusType(QualType Type) {
   return IsNamedTypedef(Type, "iree_status_t");
 }
 
+bool IsBorrowedStatusType(QualType Type) {
+  return IsStatusType(Type) && Type.isConstQualified();
+}
+
 QualType ReturnTypeFromCalleeExpr(const Expr* Callee) {
   if (!Callee) {
     return QualType();
@@ -59,6 +67,25 @@ QualType ReturnTypeFromCalleeExpr(const Expr* Callee) {
   return QualType();
 }
 
+QualType ParameterTypeFromCalleeExpr(const Expr* Callee, unsigned Index) {
+  if (!Callee) {
+    return QualType();
+  }
+  QualType CalleeType = Callee->IgnoreParenImpCasts()->getType();
+  if (CalleeType.isNull() || CalleeType->isDependentType()) {
+    return QualType();
+  }
+  CalleeType = CalleeType.getLocalUnqualifiedType();
+  if (const auto* Pointer = CalleeType->getAs<PointerType>()) {
+    CalleeType = Pointer->getPointeeType().getLocalUnqualifiedType();
+  }
+  const auto* Proto = CalleeType->getAs<FunctionProtoType>();
+  if (!Proto || Index >= Proto->getNumParams()) {
+    return QualType();
+  }
+  return Proto->getParamType(Index);
+}
+
 QualType ReturnTypeFromCall(const CallExpr* Call) {
   if (!Call) {
     return QualType();
@@ -67,6 +94,17 @@ QualType ReturnTypeFromCall(const CallExpr* Call) {
     return Callee->getReturnType();
   }
   return ReturnTypeFromCalleeExpr(Call->getCallee());
+}
+
+QualType ParameterTypeFromCall(const CallExpr* Call, unsigned Index) {
+  if (!Call) {
+    return QualType();
+  }
+  if (const FunctionDecl* Callee = Call->getDirectCallee();
+      Callee && Index < Callee->getNumParams()) {
+    return Callee->getParamDecl(Index)->getType();
+  }
+  return ParameterTypeFromCalleeExpr(Call->getCallee(), Index);
 }
 
 StringRef CalleeName(const CallExpr* Call) {
@@ -159,6 +197,13 @@ bool IsStatusObserver(StringRef Name) {
          Name == "iree_status_enumerate_payloads";
 }
 
+bool IsStatusReportingObserver(StringRef Name) {
+  return Name == "iree_status_format" || Name == "iree_status_format_to" ||
+         Name == "iree_status_to_string" || Name == "iree_status_fprint" ||
+         Name == "iree_status_format_message" ||
+         Name == "iree_status_format_message_to";
+}
+
 bool IsKnownStatusNoOwnerProducer(StringRef Name) {
   return Name == "iree_ok_status" || Name == "iree_status_from_code" ||
          Name == "iree_status_ignore" ||
@@ -231,6 +276,12 @@ bool IsNoReturnCall(const CallExpr* Call) {
          Name == "__builtin_trap" || Name == "iree_abort";
 }
 
+bool IsIreeOkStatusCall(const Expr* Expr) {
+  Expr = IgnoreExprNoise(Expr);
+  const auto* Call = dyn_cast_or_null<CallExpr>(Expr);
+  return Call && CalleeName(Call) == "iree_ok_status";
+}
+
 struct StatusValue {
   bool IsStatus = false;
   bool MayOwn = false;
@@ -267,8 +318,13 @@ struct VariableState {
   bool MayOwn = false;
   bool MayBeConsumed = false;
   bool Unknown = false;
+  bool Reported = false;
+  bool OkInitializerLive = false;
   SourceLocation OwnershipLocation;
   SourceLocation ConsumeLocation;
+  SourceLocation ReportLocation;
+  SourceLocation OkInitLocation;
+  SourceRange OkInitRange;
 
   static VariableState NoOwner() { return VariableState(); }
 
@@ -284,11 +340,26 @@ struct VariableState {
     State.Unknown = true;
     return State;
   }
+
+  static VariableState OkInitialized(SourceLocation Location,
+                                     SourceRange Range) {
+    VariableState State;
+    State.OkInitializerLive = true;
+    State.OkInitLocation = Location;
+    State.OkInitRange = Range;
+    return State;
+  }
 };
 
 struct AnalysisState {
   llvm::DenseMap<const VarDecl*, VariableState> Variables;
   bool Terminal = false;
+  bool SuppressOkOverwriteDiagnostics = false;
+};
+
+struct ImmediateOkOverwriteFix {
+  const Expr* ReplacementExpr = nullptr;
+  const Stmt* RemovalStatement = nullptr;
 };
 
 VariableState MergeVariableState(const VariableState& Lhs,
@@ -299,11 +370,19 @@ VariableState MergeVariableState(const VariableState& Lhs,
   VariableState Result;
   Result.MayOwn = Lhs.MayOwn || Rhs.MayOwn;
   Result.MayBeConsumed = Lhs.MayBeConsumed || Rhs.MayBeConsumed;
+  Result.Reported = Lhs.Reported || Rhs.Reported;
+  Result.OkInitializerLive = Lhs.OkInitializerLive && Rhs.OkInitializerLive;
   Result.OwnershipLocation = Lhs.OwnershipLocation.isValid()
                                  ? Lhs.OwnershipLocation
                                  : Rhs.OwnershipLocation;
   Result.ConsumeLocation =
       Lhs.ConsumeLocation.isValid() ? Lhs.ConsumeLocation : Rhs.ConsumeLocation;
+  Result.ReportLocation =
+      Lhs.ReportLocation.isValid() ? Lhs.ReportLocation : Rhs.ReportLocation;
+  Result.OkInitLocation =
+      Lhs.OkInitLocation.isValid() ? Lhs.OkInitLocation : Rhs.OkInitLocation;
+  Result.OkInitRange =
+      Lhs.OkInitRange.isValid() ? Lhs.OkInitRange : Rhs.OkInitRange;
   return Result;
 }
 
@@ -315,6 +394,8 @@ AnalysisState MergeStates(const AnalysisState& Lhs, const AnalysisState& Rhs) {
     return Lhs;
   }
   AnalysisState Result = Lhs;
+  Result.SuppressOkOverwriteDiagnostics =
+      Lhs.SuppressOkOverwriteDiagnostics && Rhs.SuppressOkOverwriteDiagnostics;
   for (const auto& [Var, RhsState] : Rhs.Variables) {
     auto It = Result.Variables.find(Var);
     if (It == Result.Variables.end()) {
@@ -371,7 +452,9 @@ class GotoFinder {
 struct StatusParameterUseState {
   bool Observed = false;
   bool OwnsOrEscapes = false;
+  bool ExplicitBorrowed = false;
   SourceLocation ObserveLocation;
+  SourceLocation OwnsOrEscapesLocation;
 };
 
 const VarDecl* ReferencedStatusParameter(const Expr* Expr) {
@@ -406,26 +489,6 @@ bool IsStatusCppObserverMethod(const FunctionDecl* Function) {
          Method->getName() == "ToString";
 }
 
-bool IsPointerToNamedTypedef(QualType Type, StringRef Name) {
-  Type = Type.getNonReferenceType();
-  Type = Type.getLocalUnqualifiedType();
-  const auto* Pointer = Type->getAs<PointerType>();
-  if (!Pointer) {
-    return false;
-  }
-  return IsNamedTypedef(Pointer->getPointeeType(), Name);
-}
-
-bool IsKnownBorrowedStatusCallbackDefinition(const FunctionDecl* Function) {
-  if (!Function->getReturnType()->isVoidType() ||
-      Function->getNumParams() != 3) {
-    return false;
-  }
-  return IsPointerToNamedTypedef(Function->getParamDecl(0)->getType(),
-                                 "iree_hal_amdgpu_reclaim_entry_t") &&
-         IsStatusType(Function->getParamDecl(2)->getType());
-}
-
 class BorrowedStatusParameterAnalyzer {
  public:
   explicit BorrowedStatusParameterAnalyzer(BorrowedStatusParameterCheck& Check)
@@ -440,14 +503,15 @@ class BorrowedStatusParameterAnalyzer {
         IsBorrowedStatusCheckExemptFunction(Identifier->getName())) {
       return;
     }
-    if (IsStatusCppObserverMethod(Function) ||
-        IsKnownBorrowedStatusCallbackDefinition(Function)) {
+    if (IsStatusCppObserverMethod(Function)) {
       return;
     }
     for (const ParmVarDecl* Param : Function->parameters()) {
       if (!Param->getType()->isReferenceType() &&
           IsStatusType(Param->getType())) {
-        State_[Param->getCanonicalDecl()] = StatusParameterUseState();
+        StatusParameterUseState ParamState;
+        ParamState.ExplicitBorrowed = IsBorrowedStatusType(Param->getType());
+        State_[Param->getCanonicalDecl()] = ParamState;
       }
     }
     if (State_.empty()) {
@@ -456,6 +520,17 @@ class BorrowedStatusParameterAnalyzer {
     FunctionReturnsStatus_ = IsStatusType(Function->getReturnType());
     analyzeStatement(Function->getBody());
     for (const auto& [Param, State] : State_) {
+      if (State.ExplicitBorrowed) {
+        if (State.OwnsOrEscapes) {
+          Check_.diag(State.OwnsOrEscapesLocation.isValid()
+                          ? State.OwnsOrEscapesLocation
+                          : Param->getLocation(),
+                      "const iree_status_t parameter %0 is borrowed and must "
+                      "not be consumed, returned, stored, or transferred")
+              << Param;
+        }
+        continue;
+      }
       if (!State.Observed || State.OwnsOrEscapes) {
         continue;
       }
@@ -479,12 +554,15 @@ class BorrowedStatusParameterAnalyzer {
     }
   }
 
-  void markOwnsOrEscapes(const VarDecl* Param) {
+  void markOwnsOrEscapes(const VarDecl* Param, SourceLocation Location) {
     auto It = State_.find(Param);
     if (It == State_.end()) {
       return;
     }
     It->second.OwnsOrEscapes = true;
+    if (!It->second.OwnsOrEscapesLocation.isValid()) {
+      It->second.OwnsOrEscapesLocation = Location;
+    }
   }
 
   bool referencesTrackedStatusParameter(const Expr* Expr) {
@@ -516,17 +594,24 @@ class BorrowedStatusParameterAnalyzer {
     return false;
   }
 
-  void markReferencedParametersOwnOrEscaped(const Expr* Expr) {
-    Expr = IgnoreExprNoise(Expr);
-    if (!Expr) {
+  void markReferencedParametersOwnOrEscaped(const Expr* Expression) {
+    Expression = IgnoreExprNoise(Expression);
+    if (!Expression) {
       return;
     }
-    if (const VarDecl* Param = ReferencedStatusParameter(Expr);
+    if (const auto* Call = dyn_cast<CallExpr>(Expression);
+        Call && IsKnownStatusClone(CalleeName(Call))) {
+      for (const Expr* Arg : Call->arguments()) {
+        analyzeExpression(Arg, /*transferred=*/false);
+      }
+      return;
+    }
+    if (const VarDecl* Param = ReferencedStatusParameter(Expression);
         Param && State_.contains(Param)) {
-      markOwnsOrEscapes(Param);
+      markOwnsOrEscapes(Param, Expression->getExprLoc());
       return;
     }
-    for (const Stmt* Child : Expr->children()) {
+    for (const Stmt* Child : Expression->children()) {
       if (const auto* ChildExpr = dyn_cast_or_null<clang::Expr>(Child)) {
         markReferencedParametersOwnOrEscaped(ChildExpr);
       }
@@ -546,7 +631,7 @@ class BorrowedStatusParameterAnalyzer {
       for (const LambdaCapture& Capture : Lambda->captures()) {
         if (const auto* Param =
                 dyn_cast_or_null<ParmVarDecl>(Capture.getCapturedVar())) {
-          markOwnsOrEscapes(Param->getCanonicalDecl());
+          markOwnsOrEscapes(Param->getCanonicalDecl(), Capture.getLocation());
         }
       }
       return;
@@ -589,7 +674,7 @@ class BorrowedStatusParameterAnalyzer {
     if (const VarDecl* Param = ReferencedStatusParameter(Expr);
         Param && State_.contains(Param)) {
       if (transferred) {
-        markOwnsOrEscapes(Param);
+        markOwnsOrEscapes(Param, Expr->getExprLoc());
       } else {
         markObserved(Param, Expr->getExprLoc());
       }
@@ -667,7 +752,13 @@ class BorrowedStatusParameterAnalyzer {
     }
     if (IsKnownStatusClone(Name)) {
       for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
-        analyzeExpression(Call->getArg(I), /*transferred=*/true);
+        const Expr* Arg = Call->getArg(I);
+        if (const VarDecl* Param = ReferencedStatusParameter(Arg);
+            Param && State_.contains(Param) && State_[Param].ExplicitBorrowed) {
+          analyzeExpression(Arg, /*transferred=*/false);
+        } else {
+          analyzeExpression(Arg, /*transferred=*/true);
+        }
       }
       return;
     }
@@ -686,14 +777,14 @@ class BorrowedStatusParameterAnalyzer {
 
     for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
       const Expr* Arg = Call->getArg(I);
-      QualType ParamType;
-      if (const FunctionDecl* Callee = Call->getDirectCallee();
-          Callee && I < Callee->getNumParams()) {
-        ParamType = Callee->getParamDecl(I)->getType();
-      }
+      QualType ParamType = ParameterTypeFromCall(Call, I);
+      const bool ParamIsBorrowedStatus =
+          !ParamType.isNull() && IsBorrowedStatusType(ParamType);
       const bool ArgIsStatus = IsStatusType(Arg->getType()) ||
                                (!ParamType.isNull() && IsStatusType(ParamType));
-      if (transferred || ArgIsStatus) {
+      if (ParamIsBorrowedStatus) {
+        analyzeExpression(Arg, /*transferred=*/false);
+      } else if (transferred || ArgIsStatus) {
         markReferencedParametersOwnOrEscaped(Arg);
       } else if (referencesTrackedStatusParameter(Arg)) {
         analyzeExpression(Arg, /*transferred=*/false);
@@ -886,11 +977,7 @@ class StatusTransferOrderAnalyzer {
 
     for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
       const Expr* Arg = Call->getArg(I);
-      QualType ParamType;
-      if (const FunctionDecl* Callee = Call->getDirectCallee();
-          Callee && I < Callee->getNumParams()) {
-        ParamType = Callee->getParamDecl(I)->getType();
-      }
+      QualType ParamType = ParameterTypeFromCall(Call, I);
       const bool ArgIsStatus = IsStatusType(Arg->getType()) ||
                                (!ParamType.isNull() && IsStatusType(ParamType));
       collectExpressionUses(Arg, /*transferred=*/transferred || ArgIsStatus,
@@ -1013,6 +1100,175 @@ class StatusLifetimeAnalyzer {
     }
   }
 
+  void diagnoseReportedIgnore(const VarDecl* Var, SourceLocation Location,
+                              const VariableState& State) {
+    if (State.ReportLocation.isValid()) {
+      Check_.diag(Location,
+                  "iree_status_t %0 was reported here before being passed to "
+                  "iree_status_ignore; use iree_status_free for statuses that "
+                  "have already been handled")
+          << Var << State.ReportLocation;
+    } else {
+      Check_.diag(Location,
+                  "iree_status_t %0 was passed to iree_status_ignore after "
+                  "being reported; use iree_status_free for statuses that have "
+                  "already been handled")
+          << Var;
+    }
+  }
+
+  bool isFileSourceRange(SourceRange Range) const {
+    return Range.isValid() && Range.getBegin().isFileID() &&
+           Range.getEnd().isFileID();
+  }
+
+  std::optional<std::string> sourceText(SourceRange Range) const {
+    if (!isFileSourceRange(Range)) {
+      return std::nullopt;
+    }
+    StringRef Text = Lexer::getSourceText(CharSourceRange::getTokenRange(Range),
+                                          Context_.getSourceManager(),
+                                          Context_.getLangOpts());
+    if (Text.empty()) {
+      return std::nullopt;
+    }
+    return Text.str();
+  }
+
+  std::optional<CharSourceRange> statementRemovalRange(
+      const Stmt* Statement) const {
+    if (!Statement || !isFileSourceRange(Statement->getSourceRange())) {
+      return std::nullopt;
+    }
+    std::optional<SourceLocation> Begin = statementRemovalBegin(Statement);
+    if (!Begin) {
+      return std::nullopt;
+    }
+    std::optional<unsigned> EndOffset = statementRemovalEndOffset(Statement);
+    if (!EndOffset) {
+      return std::nullopt;
+    }
+    auto BeginOffset =
+        Context_.getSourceManager().getDecomposedLoc(*Begin).second;
+    if (*EndOffset <= BeginOffset) {
+      return std::nullopt;
+    }
+    SourceLocation End = Begin->getLocWithOffset(*EndOffset - BeginOffset - 1);
+    return CharSourceRange::getCharRange(*Begin, End);
+  }
+
+  std::optional<SourceLocation> statementRemovalBegin(
+      const Stmt* Statement) const {
+    const SourceManager& SourceManager = Context_.getSourceManager();
+    SourceLocation Begin = Statement->getBeginLoc();
+    if (!Begin.isFileID()) {
+      return std::nullopt;
+    }
+    auto Decomposed = SourceManager.getDecomposedLoc(Begin);
+    bool Invalid = false;
+    StringRef Buffer = SourceManager.getBufferData(Decomposed.first, &Invalid);
+    if (Invalid || Decomposed.second > Buffer.size()) {
+      return std::nullopt;
+    }
+
+    unsigned LineStart = Decomposed.second;
+    while (LineStart > 0 && Buffer[LineStart - 1] != '\n' &&
+           Buffer[LineStart - 1] != '\r') {
+      --LineStart;
+    }
+    for (unsigned I = LineStart; I < Decomposed.second; ++I) {
+      if (Buffer[I] != ' ' && Buffer[I] != '\t') {
+        return std::nullopt;
+      }
+    }
+    return SourceManager.getLocForStartOfFile(Decomposed.first)
+        .getLocWithOffset(LineStart);
+  }
+
+  std::optional<unsigned> statementRemovalEndOffset(
+      const Stmt* Statement) const {
+    const SourceManager& SourceManager = Context_.getSourceManager();
+    SourceLocation Begin = Statement->getBeginLoc();
+    if (!Begin.isFileID()) {
+      return std::nullopt;
+    }
+    auto Decomposed = SourceManager.getDecomposedLoc(Begin);
+    bool Invalid = false;
+    StringRef Buffer = SourceManager.getBufferData(Decomposed.first, &Invalid);
+    if (Invalid || Decomposed.second > Buffer.size()) {
+      return std::nullopt;
+    }
+
+    for (unsigned I = Decomposed.second; I < Buffer.size(); ++I) {
+      if (Buffer[I] == '\r' || Buffer[I] == '\n') {
+        return std::nullopt;
+      }
+      if (Buffer[I] != ';') {
+        continue;
+      }
+      for (unsigned End = I + 1; End < Buffer.size(); ++End) {
+        if (Buffer[End] == ' ' || Buffer[End] == '\t') {
+          continue;
+        }
+        if (Buffer[End] == '\r') {
+          if (End + 1 < Buffer.size() && Buffer[End + 1] == '\n') {
+            return End + 2;
+          }
+          return End + 1;
+        }
+        if (Buffer[End] == '\n') {
+          return End + 1;
+        }
+        return std::nullopt;
+      }
+      return Buffer.size();
+    }
+    return std::nullopt;
+  }
+
+  void appendImmediateOkOverwriteFix(DiagnosticBuilder& Diagnostic,
+                                     const BinaryOperator* Assignment,
+                                     const VariableState& State) const {
+    auto It = ImmediateOkOverwriteFixes_.find(Assignment);
+    if (It == ImmediateOkOverwriteFixes_.end()) {
+      return;
+    }
+    std::optional<std::string> ReplacementText =
+        sourceText(It->second.ReplacementExpr->getSourceRange());
+    std::optional<CharSourceRange> RemovalRange =
+        statementRemovalRange(It->second.RemovalStatement);
+    if (!ReplacementText || !RemovalRange ||
+        !isFileSourceRange(State.OkInitRange)) {
+      return;
+    }
+    Diagnostic << FixItHint::CreateRemoval(*RemovalRange)
+               << FixItHint::CreateReplacement(
+                      CharSourceRange::getTokenRange(State.OkInitRange),
+                      *ReplacementText);
+  }
+
+  void diagnoseImmediateOkOverwrite(const VarDecl* Var,
+                                    const BinaryOperator* Assignment,
+                                    const VariableState& State) {
+    if (State.OkInitLocation.isValid()) {
+      DiagnosticBuilder Diagnostic = Check_.diag(
+          Assignment->getOperatorLoc(),
+          "iree_status_t %0 initialized to iree_ok_status here is overwritten "
+          "before the initializer is used; initialize from the producer "
+          "directly or use a return-if-error helper");
+      Diagnostic << Var << State.OkInitLocation;
+      appendImmediateOkOverwriteFix(Diagnostic, Assignment, State);
+    } else {
+      DiagnosticBuilder Diagnostic = Check_.diag(
+          Assignment->getOperatorLoc(),
+          "iree_status_t %0 initialized to iree_ok_status is overwritten "
+          "before the initializer is used; initialize from the producer "
+          "directly or use a return-if-error helper");
+      Diagnostic << Var;
+      appendImmediateOkOverwriteFix(Diagnostic, Assignment, State);
+    }
+  }
+
   void diagnoseLeak(const VarDecl* Var, SourceLocation Location,
                     const VariableState& State) {
     if (!State.MayOwn || State.Unknown) {
@@ -1057,8 +1313,21 @@ class StatusLifetimeAnalyzer {
     if (!VarState || VarState->Unknown) {
       return;
     }
+    VarState->OkInitializerLive = false;
     if (VarState->MayBeConsumed) {
       diagnoseUseAfterConsume(Var, Location, *VarState);
+    }
+  }
+
+  void reportVariable(const VarDecl* Var, SourceLocation Location,
+                      AnalysisState& State) {
+    VariableState* VarState = findState(Var, State);
+    if (!VarState || VarState->Unknown) {
+      return;
+    }
+    VarState->Reported = true;
+    if (!VarState->ReportLocation.isValid()) {
+      VarState->ReportLocation = Location;
     }
   }
 
@@ -1068,6 +1337,7 @@ class StatusLifetimeAnalyzer {
     if (!VarState || VarState->Unknown) {
       return;
     }
+    VarState->OkInitializerLive = false;
     if (VarState->MayBeConsumed) {
       diagnoseDoubleConsume(Var, Location, *VarState);
     }
@@ -1076,6 +1346,15 @@ class StatusLifetimeAnalyzer {
       VarState->MayBeConsumed = true;
       VarState->ConsumeLocation = Location;
     }
+  }
+
+  void ignoreVariable(const VarDecl* Var, SourceLocation Location,
+                      AnalysisState& State) {
+    VariableState* VarState = findState(Var, State);
+    if (VarState && !VarState->Unknown && VarState->Reported) {
+      diagnoseReportedIgnore(Var, Location, *VarState);
+    }
+    consumeVariable(Var, Location, State);
   }
 
   void storeVariable(const VarDecl* Var, SourceLocation Location,
@@ -1177,6 +1456,7 @@ class StatusLifetimeAnalyzer {
     }
     if (isa<DoStmt>(Statement) || isa<SwitchStmt>(Statement)) {
       AnalysisState InnerState = State;
+      InnerState.SuppressOkOverwriteDiagnostics = true;
       for (const Stmt* Child : Statement->children()) {
         analyzeStatement(Child, InnerState);
       }
@@ -1193,12 +1473,46 @@ class StatusLifetimeAnalyzer {
     }
   }
 
+  void recordImmediateOkOverwriteFix(const Stmt* DeclarationStatement,
+                                     const Stmt* AssignmentStatement) {
+    const auto* Declaration = dyn_cast_or_null<DeclStmt>(DeclarationStatement);
+    if (!Declaration || !Declaration->isSingleDecl()) {
+      return;
+    }
+    const auto* Var = dyn_cast_or_null<VarDecl>(Declaration->getSingleDecl());
+    if (!Var || !Var->hasLocalStorage() || IsMacroStatusTemporary(Var) ||
+        !Var->hasInit() || !IsStatusType(Var->getType()) ||
+        !IsIreeOkStatusCall(Var->getInit())) {
+      return;
+    }
+
+    const auto* AssignmentExpr = dyn_cast_or_null<Expr>(AssignmentStatement);
+    const auto* Assignment =
+        dyn_cast_or_null<BinaryOperator>(IgnoreExprNoise(AssignmentExpr));
+    if (!Assignment || Assignment->getOpcode() != BO_Assign) {
+      return;
+    }
+    const VarDecl* LhsVar = ReferencedStatusLocal(Assignment->getLHS());
+    if (LhsVar != Var->getCanonicalDecl()) {
+      return;
+    }
+
+    ImmediateOkOverwriteFixes_[Assignment] = ImmediateOkOverwriteFix{
+        Assignment->getRHS(),
+        AssignmentStatement,
+    };
+  }
+
   void analyzeCompound(const CompoundStmt* Compound, AnalysisState& State,
                        bool is_function_body) {
     SmallVector<const VarDecl*, 8> BlockVariables;
+    const Stmt* PreviousChild = nullptr;
     for (const Stmt* Child : Compound->body()) {
       if (State.Terminal) {
         break;
+      }
+      if (PreviousChild) {
+        recordImmediateOkOverwriteFix(PreviousChild, Child);
       }
       if (const auto* DeclarationStatement = dyn_cast<DeclStmt>(Child)) {
         for (const Decl* D : DeclarationStatement->decls()) {
@@ -1210,6 +1524,7 @@ class StatusLifetimeAnalyzer {
         }
       }
       analyzeStatement(Child, State);
+      PreviousChild = Child;
     }
     if (!State.Terminal) {
       if (is_function_body) {
@@ -1254,6 +1569,11 @@ class StatusLifetimeAnalyzer {
       const VarDecl* CanonicalVar = Var->getCanonicalDecl();
       if (!Var->hasInit()) {
         State.Variables[CanonicalVar] = VariableState::UnknownState();
+        continue;
+      }
+      if (IsIreeOkStatusCall(Var->getInit())) {
+        State.Variables[CanonicalVar] = VariableState::OkInitialized(
+            Var->getLocation(), Var->getInit()->getSourceRange());
         continue;
       }
       StatusValue InitValue =
@@ -1400,11 +1720,18 @@ class StatusLifetimeAnalyzer {
       }
     }
 
+    const bool SuppressOkOverwriteDiagnostics =
+        State.SuppressOkOverwriteDiagnostics;
+    ThenState.SuppressOkOverwriteDiagnostics = true;
     analyzeStatement(If->getThen(), ThenState);
+    ThenState.SuppressOkOverwriteDiagnostics = SuppressOkOverwriteDiagnostics;
     if (const Stmt* Else = If->getElse()) {
+      ElseState.SuppressOkOverwriteDiagnostics = true;
       analyzeStatement(Else, ElseState);
+      ElseState.SuppressOkOverwriteDiagnostics = SuppressOkOverwriteDiagnostics;
     }
     State = MergeStates(ThenState, ElseState);
+    State.SuppressOkOverwriteDiagnostics = SuppressOkOverwriteDiagnostics;
   }
 
   void markConditionTrueFacts(const Expr* Condition, AnalysisState& State) {
@@ -1420,6 +1747,7 @@ class StatusLifetimeAnalyzer {
     analyzeExpression(For->getCond(), InnerState);
 
     AnalysisState BodyState = InnerState;
+    BodyState.SuppressOkOverwriteDiagnostics = true;
     markConditionTrueFacts(For->getCond(), BodyState);
     analyzeStatement(For->getBody(), BodyState);
     analyzeExpression(For->getInc(), BodyState);
@@ -1432,6 +1760,7 @@ class StatusLifetimeAnalyzer {
     analyzeExpression(While->getCond(), InnerState);
 
     AnalysisState BodyState = InnerState;
+    BodyState.SuppressOkOverwriteDiagnostics = true;
     markConditionTrueFacts(While->getCond(), BodyState);
     analyzeStatement(While->getBody(), BodyState);
 
@@ -1589,6 +1918,12 @@ class StatusLifetimeAnalyzer {
       bool RhsConsumedLhs =
           LhsAfterRhs && (!LhsBefore.MayOwn || !LhsAfterRhs->MayOwn ||
                           LhsAfterRhs->MayBeConsumed || LhsAfterRhs->Unknown);
+      if (!State.SuppressOkOverwriteDiagnostics &&
+          LhsBefore.OkInitializerLive && LhsAfterRhs &&
+          LhsAfterRhs->OkInitializerLive && RhsValue.IsStatus &&
+          !IsIreeOkStatusCall(Binary->getRHS())) {
+        diagnoseImmediateOkOverwrite(LhsVar, Binary, LhsBefore);
+      }
       if (LhsBefore.MayOwn && !LhsBefore.Unknown && !RhsConsumedLhs) {
         diagnoseLeak(LhsVar, Binary->getOperatorLoc(), LhsBefore);
       }
@@ -1631,7 +1966,18 @@ class StatusLifetimeAnalyzer {
     }
 
     if (IsKnownStatusConsumer(Name) && Call->getNumArgs() >= 1) {
-      analyzeTransferredExpression(Call->getArg(0), State);
+      if (Name == "iree_status_ignore") {
+        const Expr* Arg = Call->getArg(0);
+        if (const VarDecl* Var = ForwardedStatusLocal(Arg)) {
+          SourceLocation Location = Arg->getExprLoc();
+          useVariable(Var, Location, State);
+          ignoreVariable(Var, Location, State);
+        } else {
+          analyzeTransferredExpression(Arg, State);
+        }
+      } else {
+        analyzeTransferredExpression(Call->getArg(0), State);
+      }
       for (unsigned I = 1; I < Call->getNumArgs(); ++I) {
         analyzeExpression(Call->getArg(I), State);
       }
@@ -1683,12 +2029,18 @@ class StatusLifetimeAnalyzer {
     bool HasUnknownStatusArgument = false;
     for (unsigned I = 0; I < Call->getNumArgs(); ++I) {
       StatusValue ArgValue = analyzeExpression(Call->getArg(I), State);
-      QualType ParamType;
-      if (const FunctionDecl* Callee = Call->getDirectCallee();
-          Callee && I < Callee->getNumParams()) {
-        ParamType = Callee->getParamDecl(I)->getType();
+      if (IsStatusReportingObserver(Name)) {
+        if (const VarDecl* Var =
+                ReferencedStatusLocalThroughCasts(Call->getArg(I))) {
+          reportVariable(Var, Call->getArg(I)->getExprLoc(), State);
+        }
       }
-      if (ParamType.isNull() ? ArgValue.IsStatus : IsStatusType(ParamType)) {
+      QualType ParamType = ParameterTypeFromCall(Call, I);
+      const bool ParamIsStatus =
+          ParamType.isNull() ? ArgValue.IsStatus : IsStatusType(ParamType);
+      const bool ParamIsBorrowedStatus =
+          !ParamType.isNull() && IsBorrowedStatusType(ParamType);
+      if (ParamIsStatus && !ParamIsBorrowedStatus) {
         if (!IsStatusObserver(Name)) {
           HasUnknownStatusArgument = true;
           if (const VarDecl* Var = ForwardedStatusLocal(Call->getArg(I))) {
@@ -1735,6 +2087,8 @@ class StatusLifetimeAnalyzer {
 
   StatusLifetimeCheck& Check_;
   ASTContext& Context_;
+  llvm::DenseMap<const BinaryOperator*, ImmediateOkOverwriteFix>
+      ImmediateOkOverwriteFixes_;
 };
 
 }  // namespace

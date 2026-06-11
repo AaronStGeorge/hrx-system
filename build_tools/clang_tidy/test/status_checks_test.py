@@ -26,6 +26,7 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             output,
             [
                 "borrowed_parameter_status",
+                "const_status_consumed",
                 "[iree-status-borrowed-parameter]",
             ],
         )
@@ -34,6 +35,9 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
             [
                 "returned_parameter_status",
                 "consumed_parameter_status",
+                "const_borrowed_parameter_status",
+                "const_clone_stored_parameter_status",
+                "const_callback_parameter_status",
                 "stored_parameter_status",
                 "joined_parameter_status",
                 "annotated_parameter_status",
@@ -101,6 +105,9 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "used_after_transfer_status",
                 "lost_on_return_status",
                 "code_predicate_status",
+                "reported_ignore_status",
+                "formatted_ignore_status",
+                "immediate_ok_overwrite_status",
                 "[iree-status-lifetime]",
             ],
         )
@@ -119,6 +126,8 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "joined_secondary_status",
                 "loop_break_status",
                 "ok_and_status",
+                "conditional_ok_status",
+                "joined_ok_status",
                 "consumed_predicate_status",
                 "atomic_escape_status",
                 "atomic_builtin_status",
@@ -128,6 +137,10 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "annotated_status",
                 "stored_status",
                 "consumed_code_status",
+                "reported_free_status",
+                "observer_only_status",
+                "const_borrowed_observed_status",
+                "const_callback_observed_status",
             ],
         )
 
@@ -151,6 +164,34 @@ class StatusChecksTest(clang_tidy_test.ClangTidyAssertions):
                 "cpp_status_or_status",
                 "[iree-status-lifetime]",
             ],
+        )
+
+    def test_status_lifetime_fixes_immediate_ok_overwrite(self):
+        output, fixed_source = clang_tidy_test.run_clang_tidy_fix(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-status-lifetime",
+            source=clang_tidy_test.source_path(__file__, "status_checks.c"),
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "fix_status",
+                "[iree-status-lifetime]",
+            ],
+        )
+        self.assertIn(
+            "iree_status_t fix_status = iree_clang_tidy_status_fix_source();",
+            fixed_source,
+        )
+        self.assertIn("  return fix_status;", fixed_source)
+        self.assertNotIn(
+            "  fix_status = iree_clang_tidy_status_fix_source();",
+            fixed_source,
+        )
+        self.assertIn(
+            "iree_status_t conditional_ok_status = iree_ok_status();",
+            fixed_source,
         )
 
     def test_status_transfer_order_is_diagnosed(self):

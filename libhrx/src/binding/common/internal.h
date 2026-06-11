@@ -631,6 +631,14 @@ typedef enum iree_hal_streaming_host_register_flag_bits_e {
   IREE_HAL_STREAMING_HOST_REGISTER_FLAG_READ_ONLY = 1ull << 3,
 } iree_hal_streaming_host_register_flags_t;
 
+// Describes how a streaming buffer wrapper keeps its context alive.
+typedef enum iree_hal_streaming_buffer_context_ownership_e {
+  // The containing context owns the wrapper and must outlive it.
+  IREE_HAL_STREAMING_BUFFER_CONTEXT_BORROWED = 0,
+  // The wrapper owns a reference to its context.
+  IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED = 1,
+} iree_hal_streaming_buffer_context_ownership_t;
+
 // Buffer wrapper for device memory.
 typedef struct iree_hal_streaming_buffer_t {
   // Device address obtained from the buffer handle.
@@ -650,8 +658,11 @@ typedef struct iree_hal_streaming_buffer_t {
   // alias pointing to hrx_buf->hal_buffer.
   hrx_buffer_t hrx_buf;
 
-  // Owning context.
+  // Context used for allocation, table lookup, and device accounting.
   iree_hal_streaming_context_t* context;
+
+  // Whether this wrapper owns a reference to |context|.
+  iree_hal_streaming_buffer_context_ownership_t context_ownership;
 
   // Platform-specific memory type.
   int memory_type;

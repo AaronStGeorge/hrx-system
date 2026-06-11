@@ -47,8 +47,8 @@ typedef struct RetireCallbackState {
 
 static void VerifySemaphoreNotVisibleBeforePreSignalAction(
     iree_hal_amdgpu_reclaim_entry_t* entry, void* user_data,
-    iree_status_t status) {
-  IREE_EXPECT_OK(status);
+    const iree_status_t status) {
+  IREE_EXPECT_OK(iree_status_clone(status));
   EXPECT_NE(entry, nullptr);
   auto* state = static_cast<PreSignalActionState*>(user_data);
   EXPECT_EQ(iree_async_semaphore_query(state->semaphore), 0u);

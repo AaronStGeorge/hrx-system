@@ -7,8 +7,10 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -53,6 +55,39 @@ def run_clang_tidy(
     if completed.returncode != 0:
         raise RuntimeError(output)
     return output
+
+
+def run_clang_tidy_fix(
+    *,
+    clang_tidy: Path,
+    plugin: Path,
+    checks: str,
+    source: Path,
+    compiler_args: list[str] | None = None,
+) -> tuple[str, str]:
+    if compiler_args is None:
+        compiler_args = ["-std=c11"]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        fixed_source = Path(temp_dir) / source.name
+        shutil.copy2(source, fixed_source)
+        completed = subprocess.run(
+            [
+                str(clang_tidy),
+                f"--load={plugin}",
+                f"--checks={checks}",
+                "--fix",
+                str(fixed_source),
+                "--",
+                *compiler_args,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        output = completed.stdout + completed.stderr
+        if completed.returncode != 0:
+            raise RuntimeError(output)
+        return output, fixed_source.read_text()
 
 
 class ClangTidyAssertions(unittest.TestCase):

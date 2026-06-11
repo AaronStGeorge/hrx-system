@@ -165,10 +165,8 @@ static void iree_hal_vmvx_worker_state_deinitialize(
     iree_hal_vmvx_worker_state_t* state) {
   IREE_ASSERT_ARGUMENT(state);
   IREE_TRACE_ZONE_BEGIN(z0);
-  if (state->context) {
-    iree_vm_context_release(state->context);
-    state->context = NULL;
-  }
+  iree_vm_context_release(state->context);
+  state->context = NULL;
   IREE_TRACE_ZONE_END(z0);
 }
 

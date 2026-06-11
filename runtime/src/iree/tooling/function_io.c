@@ -601,9 +601,10 @@ static iree_status_t iree_tooling_parse_file_into(
   // Today we only support numpy files here but could make this pluggable or at
   // least a little smarter (sniff file header/etc) instead of relying on ext.
   if (!iree_string_view_ends_with(path, IREE_SV(".npy"))) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "only numpy (.npy) files are supported for metadata-less variant I/O");
+    IREE_RETURN_AND_END_ZONE(
+        z0, iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                             "only numpy (.npy) files are supported for "
+                             "metadata-less variant I/O"));
   }
 
   // Open (or retrieve) the file.

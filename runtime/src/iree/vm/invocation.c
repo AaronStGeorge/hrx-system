@@ -706,10 +706,8 @@ IREE_API_EXPORT void iree_vm_abort_invoke(iree_vm_invoke_state_t* state) {
     state->results = iree_byte_span_empty();
   }
 
-  if (state->context) {
-    iree_vm_context_release(state->context);
-    state->context = NULL;
-  }
+  iree_vm_context_release(state->context);
+  state->context = NULL;
 
   iree_status_free(state->status);
   state->status = iree_status_from_code(IREE_STATUS_INTERNAL);

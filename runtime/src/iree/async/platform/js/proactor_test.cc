@@ -27,10 +27,8 @@ class JsProactorTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    if (proactor_) {
-      iree_async_proactor_release(proactor_);
-      proactor_ = NULL;
-    }
+    iree_async_proactor_release(proactor_);
+    proactor_ = NULL;
   }
 
   // Initializes a NOP operation with the given completion callback.

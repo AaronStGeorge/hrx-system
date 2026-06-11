@@ -2318,14 +2318,10 @@ HIPAPI hipError_t hipDevicePrimaryCtxReset(hipDevice_t dev) {
     device->primary_context_ref_count = 0;
 
     // Also clear memory pools.
-    if (device->current_mem_pool) {
-      hrx_mem_pool_release(device->current_mem_pool);
-      device->current_mem_pool = NULL;
-    }
-    if (device->default_mem_pool) {
-      hrx_mem_pool_release(device->default_mem_pool);
-      device->default_mem_pool = NULL;
-    }
+    hrx_mem_pool_release(device->current_mem_pool);
+    device->current_mem_pool = NULL;
+    hrx_mem_pool_release(device->default_mem_pool);
+    device->default_mem_pool = NULL;
 
     iree_slim_mutex_unlock(&device->primary_context_mutex);
   }
@@ -3199,9 +3195,7 @@ static void iree_hip_free_and_reset_contiguous_pool(
     // was created (it stores and retains its creating context); otherwise that
     // context leaks for the pool's lifetime. Carried over from #46, adapted to
     // the per-device pool.
-    if (p->buffer->context) {
-      iree_hal_streaming_context_release(p->buffer->context);
-    }
+    iree_hal_streaming_context_release(p->buffer->context);
     iree_allocator_free(p->host_allocator, p->buffer);
   }
   if (p->allocs) {
@@ -3288,7 +3282,7 @@ static hipError_t iree_hip_ensure_pool(iree_hal_streaming_context_t* context) {
               actual_pool_size);
       iree_status_fprint(stderr, status);
     }
-    iree_status_ignore(status);
+    iree_status_free(status);
     // Free the tracking table too: a half-initialized slot must stay all-NULL
     // so reset/lookup logic can treat p->buffer as the single liveness flag.
     iree_allocator_free(context->host_allocator, p->allocs);

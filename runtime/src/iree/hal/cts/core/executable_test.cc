@@ -27,14 +27,10 @@ class ExecutableTest : public CtsTestBase<> {
   }
 
   void TearDown() override {
-    if (executable_) {
-      iree_hal_executable_release(executable_);
-      executable_ = nullptr;
-    }
-    if (executable_cache_) {
-      iree_hal_executable_cache_release(executable_cache_);
-      executable_cache_ = nullptr;
-    }
+    iree_hal_executable_release(executable_);
+    executable_ = nullptr;
+    iree_hal_executable_cache_release(executable_cache_);
+    executable_cache_ = nullptr;
     CtsTestBase::TearDown();
   }
 

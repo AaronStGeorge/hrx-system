@@ -36,7 +36,10 @@ filegroup(
 
 filegroup(
     name = "testdata",
-    srcs = glob(["test/*"]),
+    srcs = glob([
+        "fixtures/*",
+        "test/*",
+    ]),
 )
 
 py_binary(
@@ -49,10 +52,14 @@ cc_binary(
     name = "IREEClangTidyPlugin.so",
     srcs = [
         "iree/IreeTidyModule.cc",
+        "iree/RefCountChecks.cc",
+        "iree/RefCountChecks.h",
         "iree/SmokeCheck.cc",
         "iree/SmokeCheck.h",
         "iree/StatusChecks.cc",
         "iree/StatusChecks.h",
+        "iree/StyleChecks.cc",
+        "iree/StyleChecks.h",
         "iree/TraceChecks.cc",
         "iree/TraceChecks.h",
     ],
@@ -110,6 +117,27 @@ py_test(
 )
 
 py_test(
+    name = "refcount_checks_test",
+    srcs = [
+        "test/clang_tidy_test.py",
+        "test/refcount_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :IREEClangTidyPlugin.so)",
+    ],
+    data = [
+        "test/refcount_checks.c",
+        ":IREEClangTidyPlugin.so",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["test"],
+    main = "test/refcount_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
     name = "trace_checks_test",
     srcs = [
         "test/clang_tidy_test.py",
@@ -126,6 +154,29 @@ py_test(
     ],
     imports = ["test"],
     main = "test/trace_checks_test.py",
+    tags = ["manual"],
+    target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
+)
+
+py_test(
+    name = "style_checks_test",
+    srcs = [
+        "test/clang_tidy_test.py",
+        "test/style_checks_test.py",
+    ],
+    args = [
+        "--clang-tidy=$(location @iree_clang_tidy_llvm//:clang-tidy)",
+        "--plugin=$(location :IREEClangTidyPlugin.so)",
+    ],
+    data = [
+        "fixtures/status_macro_scope.c",
+        "test/status_macro_scope_test.cc",
+        "test/style_checks.c",
+        ":IREEClangTidyPlugin.so",
+        "@iree_clang_tidy_llvm//:clang-tidy",
+    ],
+    imports = ["test"],
+    main = "test/style_checks_test.py",
     tags = ["manual"],
     target_compatible_with = CLANG_TIDY_LLVM_TARGET_COMPATIBLE_WITH,
 )

@@ -6,6 +6,7 @@
 
 #include "iree/TraceChecks.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -19,6 +20,7 @@
 #include "clang/Lex/PPCallbacks.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -33,13 +35,22 @@ struct TraceMacro {
 
 struct TraceZone {
   std::string Id;
+  llvm::SmallVector<std::string, 4> Aliases;
   SourceLocation BeginLocation;
 };
 
 struct TraceState {
   llvm::SmallVector<TraceZone, 8> Zones;
+  llvm::SmallVector<std::string, 8> KnownZoneIds;
   bool Terminal = false;
   bool Unknown = false;
+  bool SuppressEndDiagnostics = false;
+};
+
+enum class EndZoneResult {
+  kValid,
+  kInvalid,
+  kDynamic,
 };
 
 std::string Trim(std::string Text) {
@@ -53,6 +64,7 @@ TraceMacroKind TraceMacroKindForName(StringRef Name) {
       Name == "IREE_TRACE_ZONE_BEGIN_NAMED" ||
       Name == "IREE_TRACE_ZONE_BEGIN_NAMED_DYNAMIC" ||
       Name == "IREE_TRACE_ZONE_BEGIN_EXTERNAL" ||
+      Name == "IREE_HAL_EXECUTABLE_LIBRARY_CALL_TRACE_ZONE_BEGIN" ||
       Name == "HRX_TRACE_ZONE_BEGIN") {
     return TraceMacroKind::kBegin;
   }
@@ -75,6 +87,12 @@ TraceMacroKind TraceMacroKindForName(StringRef Name) {
   if (Name == "IREE_RETURN_AND_END_ZONE" || Name == "HRX_RETURN_AND_END_ZONE" ||
       Name == "HRX_RETURN_VOID_AND_END_ZONE") {
     return TraceMacroKind::kReturnAndEnd;
+  }
+  if (Name == "IREE_TRACE_ZONE_ADOPT") {
+    return TraceMacroKind::kAdopt;
+  }
+  if (Name == "IREE_TRACE_ZONE_TRANSFER") {
+    return TraceMacroKind::kTransfer;
   }
   return TraceMacroKind::kNone;
 }
@@ -144,7 +162,14 @@ class TraceZoneAnalyzer {
       return;
     }
     TraceState State;
-    analyzeStatement(Body, State);
+    if (const auto* Compound = dyn_cast<CompoundStmt>(Body)) {
+      analyzeFunctionCompound(Compound, State);
+    } else {
+      analyzeStatement(Body, State);
+    }
+    if (!State.Terminal && !State.Zones.empty()) {
+      diagnoseActiveFunctionEnd(Body->getEndLoc(), State);
+    }
   }
 
  private:
@@ -207,6 +232,9 @@ class TraceZoneAnalyzer {
         return 2;
       case TraceMacroKind::kReturn:
         return 1;
+      case TraceMacroKind::kAdopt:
+      case TraceMacroKind::kTransfer:
+        return 3;
     }
     return 0;
   }
@@ -262,6 +290,73 @@ class TraceZoneAnalyzer {
     return State.Zones.empty() ? nullptr : &State.Zones.back();
   }
 
+  bool zoneHasAlias(const TraceZone& Zone, StringRef ZoneId) const {
+    for (StringRef Alias : Zone.Aliases) {
+      if (Alias == ZoneId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool zonesEquivalent(const TraceZone& Lhs, const TraceZone& Rhs) const {
+    for (StringRef LhsAlias : Lhs.Aliases) {
+      if (zoneHasAlias(Rhs, LhsAlias)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool isKnownZoneId(const TraceState& State, StringRef ZoneId) const {
+    for (StringRef KnownZoneId : State.KnownZoneIds) {
+      if (KnownZoneId == ZoneId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void addKnownZoneId(TraceState& State, StringRef ZoneId) {
+    if (ZoneId.empty() || ZoneId == "<unknown>" ||
+        isKnownZoneId(State, ZoneId)) {
+      return;
+    }
+    State.KnownZoneIds.push_back(ZoneId.str());
+  }
+
+  TraceZone* findZoneByAlias(TraceState& State, StringRef ZoneId) {
+    for (TraceZone& Zone : llvm::reverse(State.Zones)) {
+      if (zoneHasAlias(Zone, ZoneId)) {
+        return &Zone;
+      }
+    }
+    return nullptr;
+  }
+
+  void addZoneAlias(TraceState& State, StringRef SourceId, StringRef TargetId) {
+    if (State.Unknown || SourceId.empty() || TargetId.empty() ||
+        TargetId == "<unknown>") {
+      return;
+    }
+    TraceZone* Zone = findZoneByAlias(State, SourceId);
+    if (!Zone || zoneHasAlias(*Zone, TargetId)) {
+      return;
+    }
+    Zone->Aliases.push_back(TargetId.str());
+    addKnownZoneId(State, TargetId);
+  }
+
+  void removeZoneAlias(TraceState& State, StringRef ZoneId) {
+    if (State.Unknown || ZoneId.empty()) {
+      return;
+    }
+    for (TraceZone& Zone : State.Zones) {
+      llvm::erase_if(Zone.Aliases,
+                     [&](const std::string& Alias) { return Alias == ZoneId; });
+    }
+  }
+
   void diagnoseActiveReturn(SourceLocation Location, const TraceState& State,
                             StringRef ReturnKind) {
     const TraceZone* Zone = activeZone(State);
@@ -281,27 +376,127 @@ class TraceZoneAnalyzer {
     }
   }
 
+  void diagnoseActiveFunctionEnd(SourceLocation Location,
+                                 const TraceState& State) {
+    const TraceZone* Zone = activeZone(State);
+    if (!Zone || State.Unknown) {
+      return;
+    }
+    if (Zone->BeginLocation.isValid()) {
+      Check_.diag(Location,
+                  "function exits with active trace zone %0; end the zone "
+                  "before the function exits")
+          << Zone->Id << Zone->BeginLocation;
+    } else {
+      Check_.diag(Location,
+                  "function exits with active trace zone %0; end the zone "
+                  "before the function exits")
+          << Zone->Id;
+    }
+  }
+
+  void diagnoseUnmatchedEnd(SourceLocation Location, const TraceMacro& Macro) {
+    Check_.diag(Location, "%0 ends trace zone %1 but no trace zone is active")
+        << Macro.Name << Macro.ZoneId;
+  }
+
+  void diagnoseMismatchedEnd(SourceLocation Location, const TraceState& State,
+                             const TraceMacro& Macro) {
+    const TraceZone* Zone = activeZone(State);
+    if (!Zone || State.Unknown) {
+      return;
+    }
+    if (Zone->BeginLocation.isValid()) {
+      Check_.diag(Location,
+                  "%0 ends trace zone %1 but the active trace zone is %2")
+          << Macro.Name << Macro.ZoneId << Zone->Id << Zone->BeginLocation;
+    } else {
+      Check_.diag(Location,
+                  "%0 ends trace zone %1 but the active trace zone is %2")
+          << Macro.Name << Macro.ZoneId << Zone->Id;
+    }
+  }
+
   void beginZone(const TraceMacro& Macro, SourceLocation Location,
                  TraceState& State) {
     std::string ZoneId = Macro.ZoneId.empty() ? "<unknown>" : Macro.ZoneId;
-    State.Zones.push_back(TraceZone{std::move(ZoneId), Location});
+    addKnownZoneId(State, ZoneId);
+    TraceZone Zone;
+    Zone.Id = std::move(ZoneId);
+    Zone.Aliases.push_back(Zone.Id);
+    Zone.BeginLocation = Location;
+    State.Zones.push_back(std::move(Zone));
   }
 
-  void endZone(const TraceMacro& Macro, TraceState& State) {
-    if (State.Zones.empty() || State.Unknown) {
-      return;
+  EndZoneResult validateEndZone(const TraceMacro& Macro,
+                                SourceLocation Location,
+                                const TraceState& State) {
+    if (State.Unknown) {
+      return EndZoneResult::kDynamic;
+    }
+    if (State.Zones.empty()) {
+      if (Macro.ZoneId.empty() || !isKnownZoneId(State, Macro.ZoneId)) {
+        return EndZoneResult::kDynamic;
+      }
+      if (!State.SuppressEndDiagnostics) {
+        diagnoseUnmatchedEnd(Location, Macro);
+      }
+      return EndZoneResult::kInvalid;
     }
     if (Macro.ZoneId.empty()) {
-      State.Zones.pop_back();
-      return;
+      return EndZoneResult::kValid;
     }
     const TraceZone& Zone = State.Zones.back();
-    if (Zone.Id != "<unknown>" && Zone.Id != Macro.ZoneId) {
-      State.Unknown = true;
-      State.Zones.clear();
+    if (Zone.Id == "<unknown>" || zoneHasAlias(Zone, Macro.ZoneId)) {
+      return EndZoneResult::kValid;
+    }
+    if (!isKnownZoneId(State, Macro.ZoneId)) {
+      return EndZoneResult::kDynamic;
+    }
+    if (!State.SuppressEndDiagnostics) {
+      diagnoseMismatchedEnd(Location, State, Macro);
+    }
+    return EndZoneResult::kInvalid;
+  }
+
+  void markUnknown(TraceState& State) {
+    State.Unknown = true;
+    State.Zones.clear();
+  }
+
+  void endZone(const TraceMacro& Macro, SourceLocation Location,
+               TraceState& State) {
+    if (State.Unknown) {
+      return;
+    }
+    EndZoneResult Result = validateEndZone(Macro, Location, State);
+    if (Result == EndZoneResult::kInvalid ||
+        Result == EndZoneResult::kDynamic) {
+      markUnknown(State);
       return;
     }
     State.Zones.pop_back();
+  }
+
+  void adoptZone(const TraceMacro& Macro, SourceLocation Location,
+                 TraceState& State) {
+    beginZone(Macro, Location, State);
+  }
+
+  void transferZone(const TraceMacro& Macro, SourceLocation Location,
+                    TraceState& State) {
+    endZone(Macro, Location, State);
+  }
+
+  void validateEndZoneWithoutPop(const TraceMacro& Macro,
+                                 SourceLocation Location, TraceState& State) {
+    if (State.Unknown) {
+      return;
+    }
+    EndZoneResult Result = validateEndZone(Macro, Location, State);
+    if (Result == EndZoneResult::kInvalid) {
+      markUnknown(State);
+    }
   }
 
   bool sameZones(const TraceState& Lhs, const TraceState& Rhs) const {
@@ -310,10 +505,91 @@ class TraceZoneAnalyzer {
     }
     for (size_t I = 0; I < Lhs.Zones.size(); ++I) {
       if (Lhs.Zones[I].Id != Rhs.Zones[I].Id) {
+        if (zonesEquivalent(Lhs.Zones[I], Rhs.Zones[I])) {
+          continue;
+        }
         return false;
       }
     }
     return true;
+  }
+
+  void addZoneAliases(TraceZone& Target, const TraceZone& Source) {
+    for (StringRef Alias : Source.Aliases) {
+      if (!zoneHasAlias(Target, Alias)) {
+        Target.Aliases.push_back(Alias.str());
+      }
+    }
+  }
+
+  TraceState mergeEquivalentStates(const TraceState& ThenState,
+                                   const TraceState& ElseState) {
+    TraceState MergedState = ThenState;
+    for (size_t I = 0; I < MergedState.Zones.size(); ++I) {
+      addZoneAliases(MergedState.Zones[I], ElseState.Zones[I]);
+    }
+    for (StringRef KnownZoneId : ElseState.KnownZoneIds) {
+      addKnownZoneId(MergedState, KnownZoneId);
+    }
+    return MergedState;
+  }
+
+  const TraceZone* firstDifferentZone(const TraceState& Lhs,
+                                      const TraceState& Rhs) const {
+    size_t CommonSize = std::min(Lhs.Zones.size(), Rhs.Zones.size());
+    for (size_t I = 0; I < CommonSize; ++I) {
+      if (Lhs.Zones[I].Id != Rhs.Zones[I].Id) {
+        return &Rhs.Zones[I];
+      }
+    }
+    if (Rhs.Zones.size() > Lhs.Zones.size()) {
+      return &Rhs.Zones[CommonSize];
+    }
+    if (Lhs.Zones.size() > Rhs.Zones.size()) {
+      return &Lhs.Zones[CommonSize];
+    }
+    return nullptr;
+  }
+
+  void diagnoseBranchStackMismatch(SourceLocation Location,
+                                   const TraceState& LhsState,
+                                   const TraceState& RhsState,
+                                   StringRef BranchName) {
+    if (LhsState.Terminal || RhsState.Terminal || LhsState.Unknown ||
+        RhsState.Unknown || sameZones(LhsState, RhsState)) {
+      return;
+    }
+    const TraceZone* Zone = firstDifferentZone(LhsState, RhsState);
+    if (!Zone) {
+      return;
+    }
+    if (RhsState.Zones.size() > LhsState.Zones.size()) {
+      if (Zone->BeginLocation.isValid()) {
+        Check_.diag(Location,
+                    "%0 branch falls through with trace zone %1 still active; "
+                    "end branch-local trace zones before branch exit")
+            << BranchName << Zone->Id << Zone->BeginLocation;
+      } else {
+        Check_.diag(Location,
+                    "%0 branch falls through with trace zone %1 still active; "
+                    "end branch-local trace zones before branch exit")
+            << BranchName << Zone->Id;
+      }
+      return;
+    }
+    if (Zone->BeginLocation.isValid()) {
+      Check_.diag(Location,
+                  "%0 branch changes trace-zone stack around trace zone %1 "
+                  "before branch exit; fallthrough branches must preserve "
+                  "active trace zones")
+          << BranchName << Zone->Id << Zone->BeginLocation;
+    } else {
+      Check_.diag(Location,
+                  "%0 branch changes trace-zone stack around trace zone %1 "
+                  "before branch exit; fallthrough branches must preserve "
+                  "active trace zones")
+          << BranchName << Zone->Id;
+    }
   }
 
   TraceState mergeStates(const TraceState& EntryState,
@@ -342,13 +618,7 @@ class TraceZoneAnalyzer {
       Unknown.Zones.clear();
       return Unknown;
     }
-    return ThenState;
-  }
-
-  void dropBlockLocalZones(const TraceState& EntryState, TraceState& State) {
-    if (!State.Terminal && !State.Unknown) {
-      State.Zones.resize(EntryState.Zones.size());
-    }
+    return mergeEquivalentStates(ThenState, ElseState);
   }
 
   bool handleTraceMacro(const Stmt* Statement, TraceState& State) {
@@ -360,9 +630,12 @@ class TraceZoneAnalyzer {
         beginZone(Macro, Statement->getBeginLoc(), State);
         return true;
       case TraceMacroKind::kEnd:
-        endZone(Macro, State);
+        endZone(Macro, Statement->getBeginLoc(), State);
         return true;
       case TraceMacroKind::kReturn:
+        if (!State.Zones.empty()) {
+          diagnoseActiveReturn(Statement->getBeginLoc(), State, Macro.Name);
+        }
         State.Terminal = true;
         return true;
       case TraceMacroKind::kReturnIfError:
@@ -374,15 +647,63 @@ class TraceZoneAnalyzer {
       case TraceMacroKind::kReturnAndEndIfError:
         // The macro is a conditional failure path: it ends the zone only on
         // failure and falls through with the zone still active on success.
+        validateEndZoneWithoutPop(Macro, Statement->getBeginLoc(), State);
         return true;
       case TraceMacroKind::kReturnAndEnd:
-        if (!State.Zones.empty()) {
-          endZone(Macro, State);
-        }
+        endZone(Macro, Statement->getBeginLoc(), State);
         State.Terminal = true;
+        return true;
+      case TraceMacroKind::kAdopt:
+        adoptZone(Macro, Statement->getBeginLoc(), State);
+        return true;
+      case TraceMacroKind::kTransfer:
+        transferZone(Macro, Statement->getBeginLoc(), State);
         return true;
     }
     return false;
+  }
+
+  std::string zoneIdFromExpr(const Expr* Expression) const {
+    if (!Expression) {
+      return "";
+    }
+    Expression = Expression->IgnoreParenImpCasts();
+    if (const auto* DeclRef = dyn_cast<DeclRefExpr>(Expression)) {
+      return DeclRef->getDecl()->getNameAsString();
+    }
+    return "";
+  }
+
+  bool isZeroLiteral(const Expr* Expression) const {
+    if (!Expression) {
+      return false;
+    }
+    Expression = Expression->IgnoreParenImpCasts();
+    if (const auto* Integer = dyn_cast<IntegerLiteral>(Expression)) {
+      return Integer->getValue() == 0;
+    }
+    return false;
+  }
+
+  bool handleZoneAssignment(const Stmt* Statement, TraceState& State) {
+    const auto* Assignment = dyn_cast<BinaryOperator>(Statement);
+    if (!Assignment || !Assignment->isAssignmentOp()) {
+      return false;
+    }
+    std::string TargetId = zoneIdFromExpr(Assignment->getLHS());
+    if (TargetId.empty()) {
+      return false;
+    }
+    if (isZeroLiteral(Assignment->getRHS())) {
+      removeZoneAlias(State, TargetId);
+      return true;
+    }
+    std::string SourceId = zoneIdFromExpr(Assignment->getRHS());
+    if (SourceId.empty()) {
+      return false;
+    }
+    addZoneAlias(State, SourceId, TargetId);
+    return true;
   }
 
   void analyzeStatement(const Stmt* Statement, TraceState& State) {
@@ -392,11 +713,17 @@ class TraceZoneAnalyzer {
     if (handleTraceMacro(Statement, State)) {
       return;
     }
+    if (handleZoneAssignment(Statement, State)) {
+      return;
+    }
     if (const auto* Compound = dyn_cast<CompoundStmt>(Statement)) {
       analyzeCompound(Compound, State);
       return;
     }
     if (isa<ReturnStmt>(Statement)) {
+      if (!Statement->getBeginLoc().isMacroID() && !State.Zones.empty()) {
+        diagnoseActiveReturn(Statement->getBeginLoc(), State, "return");
+      }
       State.Terminal = true;
       return;
     }
@@ -415,19 +742,23 @@ class TraceZoneAnalyzer {
       return;
     }
     if (const auto* For = dyn_cast<ForStmt>(Statement)) {
-      analyzeLoopLike(For->getBody(), State);
+      analyzeLoopLike(For->getBody(), State,
+                      isInfiniteLoopCondition(For->getCond()));
       return;
     }
     if (const auto* While = dyn_cast<WhileStmt>(Statement)) {
-      analyzeLoopLike(While->getBody(), State);
+      analyzeLoopLike(While->getBody(), State,
+                      isInfiniteLoopCondition(While->getCond()));
       return;
     }
     if (const auto* Do = dyn_cast<DoStmt>(Statement)) {
-      analyzeLoopLike(Do->getBody(), State);
+      analyzeLoopLike(Do->getBody(), State,
+                      isInfiniteLoopCondition(Do->getCond()));
       return;
     }
     if (const auto* Switch = dyn_cast<SwitchStmt>(Statement)) {
-      analyzeLoopLike(Switch->getBody(), State);
+      analyzeLoopLike(Switch->getBody(), State,
+                      /*LoopCannotFallThrough=*/false);
       return;
     }
     for (const Stmt* Child : Statement->children()) {
@@ -436,14 +767,22 @@ class TraceZoneAnalyzer {
   }
 
   void analyzeCompound(const CompoundStmt* Compound, TraceState& State) {
-    TraceState EntryState = State;
     for (const Stmt* Child : Compound->body()) {
       if (State.Terminal) {
         break;
       }
       analyzeStatement(Child, State);
     }
-    dropBlockLocalZones(EntryState, State);
+  }
+
+  void analyzeFunctionCompound(const CompoundStmt* Compound,
+                               TraceState& State) {
+    for (const Stmt* Child : Compound->body()) {
+      if (State.Terminal) {
+        break;
+      }
+      analyzeStatement(Child, State);
+    }
   }
 
   void analyzeIf(const IfStmt* If, TraceState& State) {
@@ -454,17 +793,53 @@ class TraceZoneAnalyzer {
     TraceState ElseState = State;
     if (const Stmt* Else = If->getElse()) {
       analyzeStatement(Else, ElseState);
+      diagnoseBranchStackMismatch(If->getEndLoc(), ThenState, ElseState, "if");
+    } else {
+      diagnoseBranchStackMismatch(If->getThen()->getEndLoc(), EntryState,
+                                  ThenState, "then");
     }
 
     State = mergeStates(EntryState, ThenState, ElseState);
   }
 
-  void analyzeLoopLike(const Stmt* Body, TraceState& State) {
+  bool isInfiniteLoopCondition(const Expr* Condition) const {
+    if (!Condition) {
+      return true;
+    }
+    Expr::EvalResult Result;
+    if (!Condition->EvaluateAsInt(Result, Context_)) {
+      return false;
+    }
+    return Result.Val.getInt().getBoolValue();
+  }
+
+  bool containsEscapingLoopControl(const Stmt* Statement) const {
+    if (!Statement) {
+      return false;
+    }
+    if (isa<BreakStmt>(Statement) || isa<GotoStmt>(Statement) ||
+        isa<IndirectGotoStmt>(Statement)) {
+      return true;
+    }
+    for (const Stmt* Child : Statement->children()) {
+      if (containsEscapingLoopControl(Child)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void analyzeLoopLike(const Stmt* Body, TraceState& State,
+                       bool LoopCannotFallThrough) {
     TraceState BodyState = State;
+    BodyState.SuppressEndDiagnostics = true;
     analyzeStatement(Body, BodyState);
     // A loop or switch body may execute zero times or leave through break, so
     // the outer state remains the entry state. Diagnostics inside the body
     // still report active-zone status returns.
+    if (LoopCannotFallThrough && !containsEscapingLoopControl(Body)) {
+      State.Terminal = true;
+    }
   }
 
   TraceZoneCheck& Check_;

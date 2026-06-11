@@ -436,9 +436,7 @@ void iree_hal_streaming_context_symbol_map_deinitialize(
   iree_hal_streaming_context_module_entry_t* module_entry = map->modules;
   while (module_entry) {
     iree_hal_streaming_context_module_entry_t* next = module_entry->next;
-    if (module_entry->module) {
-      iree_hal_streaming_module_release(module_entry->module);
-    }
+    iree_hal_streaming_module_release(module_entry->module);
     iree_allocator_free(host_allocator, module_entry);
     module_entry = next;
   }
