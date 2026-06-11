@@ -48,16 +48,7 @@ typedef struct iree_clang_tidy_style_resource_t
     iree_clang_tidy_style_resource_t;
 typedef struct iree_clang_tidy_style_pool_t iree_clang_tidy_style_pool_t;
 typedef unsigned long iree_clang_tidy_style_handle_t;
-typedef int iree_atomic_ref_count_t;
 typedef int iree_status_t;
-
-typedef struct iree_clang_tidy_style_refcounted_t {
-  iree_atomic_ref_count_t ref_count;
-} iree_clang_tidy_style_refcounted_t;
-
-typedef struct iree_clang_tidy_style_refcount_misused_counter_t {
-  iree_atomic_ref_count_t pending_submissions;
-} iree_clang_tidy_style_refcount_misused_counter_t;
 
 void iree_clang_tidy_style_resource_release(
     iree_clang_tidy_style_resource_t* resource);
@@ -73,96 +64,6 @@ void iree_clang_tidy_style_extra_cleanup(void);
 
 typedef void (*iree_clang_tidy_style_release_fn_t)(
     iree_clang_tidy_style_resource_t* resource);
-
-void iree_atomic_ref_count_inc(iree_atomic_ref_count_t* ref_count);
-int iree_atomic_ref_count_dec(iree_atomic_ref_count_t* ref_count);
-iree_status_t iree_ok_status(void);
-
-iree_status_t iree_clang_tidy_style_refcount_status_retain(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  iree_atomic_ref_count_inc(&resource->ref_count);
-  return iree_ok_status();
-}
-
-iree_status_t iree_clang_tidy_style_refcount_status_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
-    return iree_ok_status();
-  }
-  return iree_ok_status();
-}
-
-void iree_clang_tidy_style_refcount_void_retain(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  iree_atomic_ref_count_inc(&resource->ref_count);
-}
-
-void iree_clang_tidy_style_refcount_void_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  if (!resource) {
-    return;
-  }
-  if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
-  }
-}
-
-void iree_clang_tidy_style_refcount_unguarded_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
-  }
-}
-
-void iree_clang_tidy_style_refcount_asserting_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  IREE_ASSERT_ARGUMENT(resource);
-  if (resource && iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
-  }
-}
-
-void iree_clang_tidy_style_refcount_ignored_dec(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  (void)iree_atomic_ref_count_dec(&resource->ref_count);
-}
-
-void iree_clang_tidy_style_refcount_early_null_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  if (!resource) {
-    return;
-  }
-  if (iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
-  }
-}
-
-void iree_clang_tidy_style_refcount_inline_null_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  if (resource && iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
-  }
-}
-
-void iree_clang_tidy_style_refcount_likely_null_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  if (IREE_LIKELY(resource) &&
-      iree_atomic_ref_count_dec(&resource->ref_count) == 1) {
-  }
-}
-
-void iree_clang_tidy_style_refcount_local_counter_release(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  iree_atomic_ref_count_t* ref_count = &resource->ref_count;
-  if (iree_atomic_ref_count_dec(ref_count) == 1) {
-  }
-}
-
-iree_status_t iree_clang_tidy_style_refcount_lookup_retain(
-    iree_clang_tidy_style_refcounted_t* resource) {
-  (void)resource;
-  return iree_ok_status();
-}
-
-iree_status_t iree_clang_tidy_style_virtual_memory_release(void* memory) {
-  (void)memory;
-  return iree_ok_status();
-}
 
 void iree_clang_tidy_style_guarded_release(
     iree_clang_tidy_style_resource_t* resource) {

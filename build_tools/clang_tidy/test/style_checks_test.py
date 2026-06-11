@@ -40,47 +40,6 @@ class StyleChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
-    def test_refcount_lifecycle_requires_void_and_null_safe_release(self):
-        output = clang_tidy_test.run_clang_tidy(
-            clang_tidy=_ARGS.clang_tidy,
-            plugin=_ARGS.plugin,
-            checks="-*,iree-refcount-lifecycle",
-            source=clang_tidy_test.source_path(__file__, "style_checks.c"),
-            compiler_args=["-std=gnu11"],
-        )
-        self.assertContainsAll(
-            output,
-            [
-                "refcounted retain/release function "
-                "iree_clang_tidy_style_refcount_status_retain must return void",
-                "refcounted retain/release function "
-                "iree_clang_tidy_style_refcount_status_release must return void",
-                "refcounted release function "
-                "iree_clang_tidy_style_refcount_unguarded_release "
-                "must be null-safe",
-                "refcounted release function "
-                "iree_clang_tidy_style_refcount_asserting_release "
-                "must be null-safe",
-                "iree_atomic_ref_count_dec return value must be checked",
-                "iree_atomic_ref_count_t field pending_submissions must model "
-                "object lifetime",
-                "[iree-refcount-lifecycle]",
-            ],
-        )
-        self.assertContainsNone(
-            output,
-            [
-                "iree_clang_tidy_style_refcount_void_retain",
-                "iree_clang_tidy_style_refcount_void_release",
-                "iree_clang_tidy_style_refcount_early_null_release",
-                "iree_clang_tidy_style_refcount_inline_null_release",
-                "iree_clang_tidy_style_refcount_likely_null_release",
-                "iree_clang_tidy_style_refcount_local_counter_release",
-                "iree_clang_tidy_style_refcount_lookup_retain",
-                "iree_clang_tidy_style_virtual_memory_release",
-            ],
-        )
-
     def test_guarded_release_is_diagnosed(self):
         output = clang_tidy_test.run_clang_tidy(
             clang_tidy=_ARGS.clang_tidy,

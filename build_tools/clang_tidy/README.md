@@ -31,6 +31,7 @@ file, and writes a per-source report:
 
 ```bash
 iree-bazel-test --repo_env=IREE_CLANG_TIDY_LLVM=auto \
+  //build_tools/clang_tidy:refcount_checks_test \
   //build_tools/clang_tidy:status_checks_test \
   //build_tools/clang_tidy:trace_checks_test
 ```
@@ -197,6 +198,47 @@ The check is local and syntactic by design. It models known status consumers,
 status transfer helpers, C++ status wrapper constructors, and status observer
 functions. Pure observer expressions such as multiple `iree_status_is_*` checks
 do not transfer ownership and are accepted.
+
+### `iree-refcount-lifecycle`
+
+`iree-refcount-lifecycle` treats `iree_atomic_ref_count_t` as an object
+lifetime primitive, not as a generic atomic counter. A refcounted IREE C object
+is anchored by an offset-zero `iree_atomic_ref_count_t ref_count` field. The VM
+type-erased reference base uses an explicit `counter` field in
+`runtime/src/iree/vm/ref.h` because VM descriptors store the counter offset.
+Other structures are not inferred to be refcounted merely because they mention
+the primitive.
+
+Anchored refcounted objects should expose retain/release operations with the
+normal C ownership contract:
+
+```c
+void iree_hal_buffer_retain(iree_hal_buffer_t* buffer);
+void iree_hal_buffer_release(iree_hal_buffer_t* buffer);
+```
+
+Retain and release operations that mutate the reference count return `void`.
+Release functions are null-safe so cleanup code can call them unconditionally
+without adding noisy guards:
+
+```c
+iree_hal_buffer_release(buffer);
+buffer = NULL;
+```
+
+The decrement result carries the last-reference decision and must be checked:
+
+```c
+if (iree_atomic_ref_count_dec(&buffer->ref_count) == 1) {
+  iree_hal_buffer_destroy(buffer);
+}
+```
+
+Additional atomic counters in refcounted objects should use explicit atomic
+integer types such as `iree_atomic_uint32_t`, with names and comments describing
+the synchronization contract. Reusing `iree_atomic_ref_count_t` for queue depth,
+pending work, or latch state hides the difference between object lifetime and
+ordinary atomic coordination.
 
 ### `iree-trace-zone-balance`
 

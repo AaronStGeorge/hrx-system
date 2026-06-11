@@ -17,6 +17,7 @@ find_package(Clang REQUIRED CONFIG)
 
 add_library(IREEClangTidyPlugin MODULE
   iree/IreeTidyModule.cc
+  iree/RefCountChecks.cc
   iree/SmokeCheck.cc
   iree/StatusChecks.cc
   iree/StyleChecks.cc
@@ -75,6 +76,15 @@ add_test(
   COMMAND
     Python3::Interpreter
     "${CMAKE_CURRENT_SOURCE_DIR}/test/status_checks_test.py"
+    "--clang-tidy=${CLANG_TIDY_EXECUTABLE}"
+    "--plugin=$<TARGET_FILE:IREEClangTidyPlugin>"
+)
+
+add_test(
+  NAME iree-clang-tidy-refcount-checks
+  COMMAND
+    Python3::Interpreter
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/refcount_checks_test.py"
     "--clang-tidy=${CLANG_TIDY_EXECUTABLE}"
     "--plugin=$<TARGET_FILE:IREEClangTidyPlugin>"
 )

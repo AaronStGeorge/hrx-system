@@ -27,14 +27,6 @@ class GuardedReleaseCheck final : public ClangTidyCheck {
   void check(const ast_matchers::MatchFinder::MatchResult& Result) override;
 };
 
-class RefCountLifecycleCheck final : public ClangTidyCheck {
- public:
-  RefCountLifecycleCheck(StringRef Name, ClangTidyContext* Context);
-
-  void registerMatchers(ast_matchers::MatchFinder* Finder) override;
-  void check(const ast_matchers::MatchFinder::MatchResult& Result) override;
-};
-
 class TestStatusMacroCheck final : public ClangTidyCheck {
  public:
   TestStatusMacroCheck(StringRef Name, ClangTidyContext* Context);
