@@ -74,6 +74,7 @@ LOOMC_API_EXPORT loomc_status_t loomc_target_profile_create_amdgpu(
 
 /// Returns the processor selected by an AMDGPU target profile.
 ///
+/// @param profile AMDGPU target profile to query.
 /// @return Empty when `profile` is `NULL` or was not created by the AMDGPU
 /// profile API.
 LOOMC_API_EXPORT loomc_string_view_t
