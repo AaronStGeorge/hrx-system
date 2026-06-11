@@ -359,21 +359,63 @@ static iree_status_t iree_benchmark_loom_snapshot_write_measurement_fields(
   if (benchmark_result->has_hal_benchmark) {
     const loom_run_benchmark_result_t* timing =
         &benchmark_result->hal_benchmark.timing;
+    iree_host_size_t physical_dispatches_per_batch = 0;
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_hal_physical_dispatches_per_batch(
+        benchmark_result, &physical_dispatches_per_batch));
+    iree_host_size_t physical_dispatches_per_logical_operation = 0;
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_hal_physical_dispatches_per_logical_operation(
+            benchmark_result, &physical_dispatches_per_logical_operation));
+    iree_host_size_t measured_physical_dispatch_count = 0;
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_hal_measured_physical_dispatch_count(
+            benchmark_result, &measured_physical_dispatch_count));
+    double mean_physical_dispatch_duration_ns = 0.0;
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_hal_mean_physical_dispatch_duration_ns(
+            benchmark_result, &mean_physical_dispatch_duration_ns));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
         stream, first_field, "timing_ns"));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_hal_timing_json(
         &timing->operation_timing, stream));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, first_field, "batch_timing_ns"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_hal_timing_json(
+        &timing->batch_timing, stream));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, first_field, "operation_timing_ns"));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_hal_timing_json(
+        &timing->operation_timing, stream));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, first_field, "batch_size", timing->batch_size));
+        stream, first_field, "logical_operations_per_batch",
+        timing->batch_size));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, first_field, "physical_dispatches_per_batch",
+        physical_dispatches_per_batch));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, first_field, "physical_dispatches_per_logical_operation",
+        physical_dispatches_per_logical_operation));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
         stream, first_field, "measured_batch_count",
         timing->measured_batch_count));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, first_field, "measured_dispatch_count",
+        stream, first_field, "measured_logical_operation_count",
         timing->measured_operation_count));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, first_field, "measured_physical_dispatch_count",
+        measured_physical_dispatch_count));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, first_field, "mean_physical_dispatch_duration_ns"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, "%.3f", mean_physical_dispatch_duration_ns));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
         stream, first_field, "stop_reason",
         loom_run_benchmark_stop_reason_name(timing->stop_reason)));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+        stream, first_field, "timing_interpretation"));
+    IREE_RETURN_IF_ERROR(
+        iree_benchmark_loom_write_hal_timing_interpretation_json(
+            policy, benchmark_result, stream));
     if (benchmark_result->hal_benchmark.profile.requested ||
         benchmark_result->hal_benchmark.profile.executed ||
         benchmark_result->hal_benchmark.profile.has_error) {

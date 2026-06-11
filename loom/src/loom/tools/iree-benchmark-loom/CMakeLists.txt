@@ -171,6 +171,19 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    report_test
+  SRCS
+    "report_test.cc"
+  DEPS
+    ::main
+    iree::base
+    iree::base::internal::json
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     run_test
   SRCS
     "run_test.cc"
@@ -248,8 +261,10 @@ iree_execution_test_suite(
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/amdgpu_hal_actual.loom"
   LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
     "manual"
     "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 endif()
 

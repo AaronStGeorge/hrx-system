@@ -239,9 +239,9 @@ typedef struct iree_benchmark_loom_dispatch_comparison_candidate_t {
   iree_host_size_t correctness_failed_sample_count;
   // True when compile and correctness succeeded and timing windows can run.
   bool runnable;
-  // Per-repetition p50 dispatch timings collected for aggregate rows.
+  // Per-repetition p50 logical-operation timings collected for aggregate rows.
   iree_duration_t* p50_samples;
-  // Per-repetition p90 dispatch timings collected for aggregate rows.
+  // Per-repetition p90 logical-operation timings collected for aggregate rows.
   iree_duration_t* p90_samples;
   // Number of entries populated in |p50_samples| and |p90_samples|.
   iree_host_size_t sample_count;

@@ -28,10 +28,10 @@ static iree_status_t iree_benchmark_loom_comparison_candidate_record_timing(
         IREE_STATUS_OUT_OF_RANGE,
         "interleaved comparison collected more timing rows than planned");
   }
-  const loom_run_benchmark_timing_stats_t* dispatch_timing =
+  const loom_run_benchmark_timing_stats_t* operation_timing =
       &benchmark_result->hal_benchmark.timing.operation_timing;
-  candidate->p50_samples[candidate->sample_count] = dispatch_timing->p50_ns;
-  candidate->p90_samples[candidate->sample_count] = dispatch_timing->p90_ns;
+  candidate->p50_samples[candidate->sample_count] = operation_timing->p50_ns;
+  candidate->p90_samples[candidate->sample_count] = operation_timing->p90_ns;
   ++candidate->sample_count;
   return iree_ok_status();
 }

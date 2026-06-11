@@ -245,6 +245,18 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "report_test",
+    srcs = ["report_test.cc"],
+    deps = [
+        ":main",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "run_test",
     srcs = ["run_test.cc"],
     deps = [
@@ -290,8 +302,10 @@ iree_execution_test_suite(
     ],
     manifests = ["iree-benchmark-loom_amdgpu.test.json"],
     tags = [
+        "iree-run-requirement=runtime.resource.amd_gpu",
         "manual",
         "requires-gpu-amd",
+        "runtime-resource=amd-gpu",
     ],
     target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
     tools = {

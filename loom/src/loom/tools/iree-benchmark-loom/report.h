@@ -86,6 +86,33 @@ iree_status_t iree_benchmark_loom_write_json_size_field(
     loom_output_stream_t* stream, bool* first_field, const char* name,
     iree_host_size_t value);
 
+// Returns the number of physical dispatches recorded in one measured HAL batch.
+iree_status_t iree_benchmark_loom_hal_physical_dispatches_per_batch(
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    iree_host_size_t* out_dispatch_count);
+
+// Returns the number of physical dispatches represented by one logical
+// operation timing sample.
+iree_status_t iree_benchmark_loom_hal_physical_dispatches_per_logical_operation(
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    iree_host_size_t* out_dispatch_count);
+
+// Returns the number of physical dispatches covered by measured HAL batches.
+iree_status_t iree_benchmark_loom_hal_measured_physical_dispatch_count(
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    iree_host_size_t* out_dispatch_count);
+
+// Returns measured HAL duration normalized by measured physical dispatches.
+iree_status_t iree_benchmark_loom_hal_mean_physical_dispatch_duration_ns(
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    double* out_duration_ns);
+
+// Writes timing interpretation metadata for a HAL benchmark result object.
+iree_status_t iree_benchmark_loom_write_hal_timing_interpretation_json(
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    loom_output_stream_t* stream);
+
 // Writes a benchmark result object without the surrounding JSONL row wrapper.
 iree_status_t iree_benchmark_loom_write_benchmark_result_json(
     const loom_testbench_benchmark_plan_t* benchmark_plan,
