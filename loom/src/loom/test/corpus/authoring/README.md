@@ -8,7 +8,7 @@ without a Python script generating the source itself.
 
 The examples are tested through production-facing tools:
 
-- `iree-benchmark-loom --dry_run` proves `check.case` and `check.benchmark`
+- `iree-benchmark-loom --dry-run` proves `check.case` and `check.benchmark`
   planning without requiring a local GPU during host-only CI.
 - `iree-benchmark-loom --device=amdgpu --measure=dispatch_complete` compiles,
   executes correctness samples, and benchmarks the same sources on AMDGPU test

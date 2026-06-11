@@ -143,6 +143,38 @@ need different compositions:
 - Tuning servers can reuse compilers, linkers, pass programs, target profiles,
   and frozen indexes across many worker-local workspaces.
 
+## Try AMDGPU/HSA Emission
+
+The AMDGPU examples show the target-profile and HSACO emission side of the C
+API.
+
+Offline synthetic AMDGPU processor profile:
+
+```bash
+python dev.py bazel run //loom/binding/c/example:emit_amdgpu_offline -- \
+  gfx1100 \
+  /tmp/targetless_store_i32.hsaco
+```
+
+Raw HSA probing, HSACO emission, code-object loading, and one kernel dispatch
+without the IREE HAL:
+
+```bash
+python dev.py bazel run //loom/binding/c/example:emit_amdgpu_hsa
+```
+
+Set `LOOMC_HSA_RUNTIME_PATH` when the HSA runtime is not discoverable through
+the default dynamic loader search path. The value may be the exact
+`libhsa-runtime64.so` path or a directory containing it:
+
+```bash
+LOOMC_HSA_RUNTIME_PATH=/opt/rocm/lib \
+  python dev.py bazel run //loom/binding/c/example:emit_amdgpu_hsa
+```
+
+The raw HSA path is useful when evaluating Loom as an embeddable compiler near
+an application's own HSA/HRX/HIP loading boundary.
+
 ## Try SPIR-V/Vulkan Emission
 
 The SPIR-V examples show the target-profile and emission side of the C API.
@@ -178,7 +210,7 @@ useful when evaluating Loom as a companion to IREE runtime executable caches.
 | Path | Why it matters |
 | --- | --- |
 | [binding/c/include/loomc](binding/c/include/loomc) | Public C ABI contracts, ownership, threading, diagnostics, targets, linking, compile, and emit |
-| [binding/c/example](binding/c/example) | Minimal embedders for source info, compile, link, SPIR-V offline, raw Vulkan, and IREE HAL |
+| [binding/c/example](binding/c/example) | Minimal embedders for source info, compile, link, AMDGPU offline, raw HSA, SPIR-V offline, raw Vulkan, and IREE HAL |
 | [loom/py/loom/dialect](/loom/py/loom/dialect) | Python op/dialect authoring DSL, assembly formats, and source-format migration breadcrumbs |
 | [loom/py/loom/migration](/loom/py/loom/migration) | Source migration driver, rule generation, baselines, compatibility windows, and `loom-migrate` |
 | [src/loom/test/corpus/authoring](src/loom/test/corpus/authoring) | Canonical hand-authored Loom examples for model/kernel-shaped source |
