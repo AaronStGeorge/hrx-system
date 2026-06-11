@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 import clang_tidy_test
 
@@ -147,6 +148,42 @@ class StyleChecksTest(clang_tidy_test.ClangTidyAssertions):
             fixed_source,
         )
         self.assertNotIn("if (resource != NULL) {", fixed_source)
+
+    def test_test_status_macros_are_diagnosed_outside_tests(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-test-status-macro-scope",
+            source=Path(__file__).resolve().parents[1]
+            / "fixtures"
+            / "status_macro_scope.c",
+            compiler_args=["-std=gnu11"],
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "IREE_ASSERT_OK is a test-only status assertion macro",
+                "IREE_EXPECT_OK is a test-only status assertion macro",
+                "IREE_EXPECT_STATUS_IS is a test-only status assertion macro",
+                "[iree-test-status-macro-scope]",
+            ],
+        )
+
+    def test_test_status_macros_are_allowed_in_tests(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-test-status-macro-scope",
+            source=clang_tidy_test.source_path(__file__, "status_macro_scope_test.cc"),
+            compiler_args=["-std=c++17"],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "test-only status assertion macro",
+                "[iree-test-status-macro-scope]",
+            ],
+        )
 
 
 if __name__ == "__main__":

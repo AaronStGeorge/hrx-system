@@ -27,6 +27,8 @@ class IreeTidyModule final : public ClangTidyModule {
     CheckFactories.registerCheck<GuardedReleaseCheck>("iree-guarded-release");
     CheckFactories.registerCheck<RefCountLifecycleCheck>(
         "iree-refcount-lifecycle");
+    CheckFactories.registerCheck<TestStatusMacroCheck>(
+        "iree-test-status-macro-scope");
     CheckFactories.registerCheck<TraceZoneCheck>("iree-trace-zone-balance");
   }
 };

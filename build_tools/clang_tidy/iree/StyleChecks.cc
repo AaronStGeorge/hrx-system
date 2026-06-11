@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -19,6 +20,8 @@
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Lex/Lexer.h"
+#include "clang/Lex/PPCallbacks.h"
+#include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace clang::tidy::iree {
@@ -35,6 +38,22 @@ bool IsExternalMacroBody(SourceLocation Location,
   }
   llvm::StringRef Filename = SourceManager.getFilename(SpellingLocation);
   return Filename.contains("/external/") || Filename.starts_with("external/");
+}
+
+bool IsStatusTestMacroName(StringRef Name) {
+  return Name == "IREE_EXPECT_OK" || Name == "IREE_ASSERT_OK" ||
+         Name == "IREE_EXPECT_NOT_OK" || Name == "IREE_ASSERT_NOT_OK" ||
+         Name == "IREE_EXPECT_STATUS_IS" || Name == "IREE_ASSERT_STATUS_IS" ||
+         Name == "IREE_ASSERT_OK_AND_ASSIGN";
+}
+
+bool IsTestFilename(StringRef Filename) {
+  if (Filename.empty()) {
+    return false;
+  }
+  return Filename.contains("/test/") || Filename.contains("/testing/") ||
+         Filename.contains("/cts/") || Filename.contains("_test.") ||
+         Filename.contains("_test_") || Filename.ends_with("test_base.h");
 }
 
 std::optional<std::string> SourceText(const Expr* Expr,
@@ -238,6 +257,44 @@ bool SourceContainsIdentifier(StringRef Source, StringRef Identifier) {
   }
   return false;
 }
+
+class TestStatusMacroRecorder final : public PPCallbacks {
+ public:
+  TestStatusMacroRecorder(TestStatusMacroCheck& Check, Preprocessor& PP)
+      : Check_(Check), PP_(PP) {}
+
+  void MacroExpands(const Token& MacroNameTok, const MacroDefinition&,
+                    SourceRange Range, const MacroArgs*) override {
+    const IdentifierInfo* Identifier = MacroNameTok.getIdentifierInfo();
+    if (!Identifier) {
+      return;
+    }
+    StringRef Name = Identifier->getName();
+    if (!IsStatusTestMacroName(Name)) {
+      return;
+    }
+    const SourceManager& SourceManager = PP_.getSourceManager();
+    if (SourceManager.isInSystemHeader(MacroNameTok.getLocation())) {
+      return;
+    }
+    if (SourceManager.isMacroBodyExpansion(MacroNameTok.getLocation())) {
+      return;
+    }
+    SourceLocation Location = SourceManager.getExpansionLoc(Range.getBegin());
+    if (Location.isInvalid()) {
+      return;
+    }
+    StringRef Filename = SourceManager.getFilename(Location);
+    if (IsTestFilename(Filename)) {
+      return;
+    }
+    Check_.diag(Location, "%0 is a test-only status assertion macro") << Name;
+  }
+
+ private:
+  TestStatusMacroCheck& Check_;
+  Preprocessor& PP_;
+};
 
 std::string NormalizedCodeSource(StringRef Source) {
   enum class State {
@@ -721,6 +778,19 @@ void RefCountLifecycleCheck::check(
   diag(SourceManager.getExpansionLoc(Function->getLocation()),
        "refcounted retain/release function %0 must return void")
       << FunctionName;
+}
+
+TestStatusMacroCheck::TestStatusMacroCheck(StringRef Name,
+                                           ClangTidyContext* Context)
+    : ClangTidyCheck(Name, Context) {}
+
+void TestStatusMacroCheck::registerPPCallbacks(const SourceManager&,
+                                               Preprocessor* PP,
+                                               Preprocessor*) {
+  if (!PP) {
+    return;
+  }
+  PP->addPPCallbacks(std::make_unique<TestStatusMacroRecorder>(*this, *PP));
 }
 
 }  // namespace clang::tidy::iree

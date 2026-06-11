@@ -36,7 +36,10 @@ filegroup(
 
 filegroup(
     name = "testdata",
-    srcs = glob(["test/*"]),
+    srcs = glob([
+        "fixtures/*",
+        "test/*",
+    ]),
 )
 
 py_binary(
@@ -143,6 +146,8 @@ py_test(
         "--plugin=$(location :IREEClangTidyPlugin.so)",
     ],
     data = [
+        "fixtures/status_macro_scope.c",
+        "test/status_macro_scope_test.cc",
         "test/style_checks.c",
         ":IREEClangTidyPlugin.so",
         "@iree_clang_tidy_llvm//:clang-tidy",
