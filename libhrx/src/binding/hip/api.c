@@ -8286,66 +8286,51 @@ HIPAPI hipError_t hipModuleLaunchKernel(
 }
 
 // hipDrvLaunchKernelEx — driver-style extended kernel launch. The config struct
-// carries grid/block/shared/stream plus launch attributes. The ROCm GPU math
-// libraries (hipBLASLt, hipSPARSELt, MIOpen, rocSOLVER, rocSPARSE) import this
-// as a *versioned* symbol (hipDrvLaunchKernelEx@hip_6.5). When the HRX binding
-// is the sole libamdhip64, those libraries cannot resolve their relocation and
-// `import torch` aborts during rocm_sdk's preload step. Exporting an
-// unversioned hipDrvLaunchKernelEx satisfies the versioned reference via the
-// glibc unversioned-default compatibility rule (the same way the binding's
-// unversioned hipMalloc/hipFree already satisfy the libraries' hip_4.2
-// references).
+// carries grid/block/shared/stream plus launch attributes. Imported as a
+// versioned symbol (hipDrvLaunchKernelEx@hip_6.5); the unversioned export here
+// satisfies that reference via glibc's unversioned-default rule.
 //
-// Not yet implemented. We export it so the libraries resolve and torch loads,
-// but per the single-backend policy we never route to another HIP library: if a
-// workload actually dispatches through this path we fail loudly and return
-// hipErrorNotSupported (no silent or wrong result). To implement: unpack
-// `config` and dispatch via iree_hal_streaming_launch_kernel, mirroring
-// hipModuleLaunchKernel above.
+// Not yet implemented. Per the single-backend policy we never route to another
+// HIP library: returns hipErrorNotSupported rather than a wrong result. To
+// implement: unpack `config` and dispatch via iree_hal_streaming_launch_kernel,
+// mirroring hipModuleLaunchKernel above.
 HIPAPI hipError_t hipDrvLaunchKernelEx(const void* config, hipFunction_t f,
                                        void** kernelParams, void** extra) {
-  // `config` is a const HIP_LAUNCH_CONFIG* in ROCm's headers; the HRX binding
-  // doesn't vendor that type, so we take it as opaque (the stub ignores it).
+  // `config` is a const HIP_LAUNCH_CONFIG* in ROCm's headers; the binding
+  // doesn't vendor that type, so it's taken as opaque here.
   (void)config;
   (void)f;
   (void)kernelParams;
   (void)extra;
   HIP_DEBUG_LOG("[HIP_API] hipDrvLaunchKernelEx(config=%p, f=%p)\n", config,
                 (void*)f);
-  // Warn once: hipBLASLt/hipSPARSELt probe this per GEMM, so a per-call warning
-  // would spam stderr. The hipErrorNotSupported return below is unconditional.
+  // Warn once to avoid per-call spam; the hipErrorNotSupported return below is
+  // unconditional.
   static int warned = 0;
   if (!__atomic_exchange_n(&warned, 1, __ATOMIC_RELAXED)) {
     fprintf(stderr,
             "[HRX] hipDrvLaunchKernelEx is not implemented in the HRX "
             "binding; returning hipErrorNotSupported (no fallback to ROCm). "
-            "Implement it via iree_hal_streaming_launch_kernel to enable "
-            "hipBLASLt/MIOpen GEMM paths.\n");
+            "Implement it via iree_hal_streaming_launch_kernel.\n");
     fflush(stderr);
   }
   HIP_RETURN_ERROR(hipErrorNotSupported);
 }
 
 // ---------------------------------------------------------------------------
-// HRX bring-up stubs: extended/newer HIP entry points that the ROCm GPU
-// libraries import as *versioned* symbols but HRX does not yet implement.
-// Exporting them (unversioned) satisfies those libraries' version-needed
-// relocations via glibc's unversioned-default rule — the same way the binding's
-// unversioned hipMalloc/hipFree already satisfy their hip_4.2 references — so
-// rocm_sdk can preload rccl / rocdecode / rocjpeg and `import torch` completes.
-// Per the single-backend policy we never route to another HIP library: each
-// returns hipErrorNotSupported (a real, propagating error — never a silent or
-// wrong result). Replace with real implementations as workloads need them.
+// Unimplemented HIP entry points imported as versioned symbols. The unversioned
+// exports here satisfy those version-needed relocations via glibc's
+// unversioned-default rule. Per the single-backend policy each returns
+// hipErrorNotSupported rather than a wrong result; replace with real
+// implementations as needed.
 //
-// Signatures are taken as (void): C resolves the export by name, and each stub
-// ignores its arguments and returns immediately, so the real ABI is irrelevant
-// until a real implementation replaces it. The real prototype is noted above
-// each for that future work.
+// Each is declared (void): C resolves the export by name and the stub ignores
+// its arguments, so the real ABI is irrelevant until implemented. The real
+// prototype is noted above each.
 // ---------------------------------------------------------------------------
 
 // hipError_t hipGetFuncBySymbol(hipFunction_t* functionPtr,
 //     const void* symbolPtr);
-// Needed by: librccl (hip_6.2).
 HIPAPI hipError_t hipGetFuncBySymbol(void) {
   HIP_DEBUG_LOG("[HIP_API] hipGetFuncBySymbol() — not implemented in HRX\n");
   HIP_RETURN_ERROR(hipErrorNotSupported);
@@ -8353,7 +8338,6 @@ HIPAPI hipError_t hipGetFuncBySymbol(void) {
 
 // hipError_t hipStreamBatchMemOp(hipStream_t stream, unsigned int count,
 //     hipStreamBatchMemOpParams* paramArray, unsigned int flags);
-// Needed by: librccl (hip_6.4).
 HIPAPI hipError_t hipStreamBatchMemOp(void) {
   HIP_DEBUG_LOG("[HIP_API] hipStreamBatchMemOp() — not implemented in HRX\n");
   HIP_RETURN_ERROR(hipErrorNotSupported);
@@ -8362,7 +8346,6 @@ HIPAPI hipError_t hipStreamBatchMemOp(void) {
 // hipError_t hipMemGetHandleForAddressRange(void* handle, void* dptr,
 //     size_t size, hipMemRangeHandleType handleType,
 //     unsigned long long flags);
-// Needed by: librccl (hip_6.5).
 HIPAPI hipError_t hipMemGetHandleForAddressRange(void) {
   HIP_DEBUG_LOG(
       "[HIP_API] hipMemGetHandleForAddressRange() — not implemented in HRX\n");
@@ -8370,7 +8353,6 @@ HIPAPI hipError_t hipMemGetHandleForAddressRange(void) {
 }
 
 // hipError_t hipMemcpyBatchAsync(...);  // batched async copy
-// Needed by: librccl (hip_7.1).
 HIPAPI hipError_t hipMemcpyBatchAsync(void) {
   HIP_DEBUG_LOG("[HIP_API] hipMemcpyBatchAsync() — not implemented in HRX\n");
   HIP_RETURN_ERROR(hipErrorNotSupported);
@@ -8378,7 +8360,6 @@ HIPAPI hipError_t hipMemcpyBatchAsync(void) {
 
 // hipError_t hipImportExternalMemory(hipExternalMemory_t* extMem_out,
 //     const hipExternalMemoryHandleDesc* memHandleDesc);
-// Needed by: librocdecode, librocjpeg (hip_4.3).
 HIPAPI hipError_t hipImportExternalMemory(void) {
   HIP_DEBUG_LOG(
       "[HIP_API] hipImportExternalMemory() — not implemented in HRX\n");
@@ -8386,7 +8367,6 @@ HIPAPI hipError_t hipImportExternalMemory(void) {
 }
 
 // hipError_t hipDestroyExternalMemory(hipExternalMemory_t extMem);
-// Needed by: librocdecode, librocjpeg (hip_4.3).
 HIPAPI hipError_t hipDestroyExternalMemory(void) {
   HIP_DEBUG_LOG(
       "[HIP_API] hipDestroyExternalMemory() — not implemented in HRX\n");
@@ -8396,7 +8376,6 @@ HIPAPI hipError_t hipDestroyExternalMemory(void) {
 // hipError_t hipExternalMemoryGetMappedBuffer(void** devPtr,
 //     hipExternalMemory_t extMem,
 //     const hipExternalMemoryBufferDesc* bufferDesc);
-// Needed by: librocdecode, librocjpeg (hip_4.3).
 HIPAPI hipError_t hipExternalMemoryGetMappedBuffer(void) {
   HIP_DEBUG_LOG(
       "[HIP_API] hipExternalMemoryGetMappedBuffer() — not implemented in "
