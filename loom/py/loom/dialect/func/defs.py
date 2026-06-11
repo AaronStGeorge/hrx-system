@@ -243,6 +243,15 @@ _CONTRACT_ATTRS = [
     AttrDef("export_attrs", "dict", optional=True),
 ]
 
+_PROVIDER_ATTRS = [
+    AttrDef(
+        "target",
+        "symbol",
+        optional=True,
+        symbol_ref=SymbolReference("target", ["target"]),
+    ),
+]
+
 # func.decl adds import attrs to the shared modifier set.
 _DECL_ATTRS = [
     AttrDef("callee", "symbol"),
@@ -285,6 +294,11 @@ _FUNC_LIKE_DECL_CONTRACT: dict[str, Any] = dict(
     **_FUNC_LIKE_CONTRACT,
     import_module="import_module",
     import_symbol="import_symbol",
+)
+
+_FUNC_LIKE_PROVIDER: dict[str, Any] = dict(
+    **_FUNC_LIKE_COMMON,
+    target="target",
 )
 
 # ============================================================================
@@ -379,6 +393,7 @@ func_template = Op(
     attrs=[
         AttrDef("implements", "string"),
         *_MODIFIER_ATTRS,
+        *_PROVIDER_ATTRS,
         AttrDef("priority", "i64", optional=True),
     ],
     symbol_def=SymbolDefinition(
@@ -392,7 +407,7 @@ func_template = Op(
     regions=[RegionDef("body", doc="Template body.", terminator="func.return")],
     interfaces=[
         FuncLikeInterface(
-            **_FUNC_LIKE_COMMON,
+            **_FUNC_LIKE_PROVIDER,
             body="body",
             implements="implements",
             priority="priority",
@@ -401,6 +416,7 @@ func_template = Op(
     format=[
         OpRef("implements"),
         *_MODIFIER_FORMAT,
+        *_TARGET_FORMAT,
         OptionalGroup(
             [kw("priority"), GLUE, LPAREN, GLUE, Attr("priority"), GLUE, RPAREN],
             anchor="priority",
@@ -410,6 +426,7 @@ func_template = Op(
     ],
     examples=[
         "func.template<tile.contract> device @vnni_q8(%w: tensor<[%M]xi8>, %x: tensor<[%K]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)] {\n  func.return %x : tensor<[%K]xf32>\n}",
+        "func.template<tile.contract> target(@gfx1100) priority(20) @gfx11_q8(%a: tile<4xf32>) -> (tile<4xf32>) {\n  func.return %a : tile<4xf32>\n}",
         "func.template<tile.contract> priority(10) @high_priority(%a: tile<4xf32>) -> (tile<4xf32>) {\n  func.return %a : tile<4xf32>\n}",
     ],
 )
@@ -426,6 +443,7 @@ func_ukernel = Op(
     attrs=[
         AttrDef("implements", "string"),
         *_MODIFIER_ATTRS,
+        *_PROVIDER_ATTRS,
         AttrDef("priority", "i64", optional=True),
     ],
     symbol_def=SymbolDefinition(
@@ -438,7 +456,7 @@ func_ukernel = Op(
     results=[Result("results", ANY, variadic=True)],
     interfaces=[
         FuncLikeInterface(
-            **_FUNC_LIKE_COMMON,
+            **_FUNC_LIKE_PROVIDER,
             implements="implements",
             priority="priority",
             args_as_operands=True,
@@ -447,6 +465,7 @@ func_ukernel = Op(
     format=[
         OpRef("implements"),
         *_MODIFIER_FORMAT,
+        *_TARGET_FORMAT,
         OptionalGroup(
             [kw("priority"), GLUE, LPAREN, GLUE, Attr("priority"), GLUE, RPAREN],
             anchor="priority",
@@ -455,6 +474,7 @@ func_ukernel = Op(
     ],
     examples=[
         "func.ukernel<tile.contract> device @vnni_q8_asm(%w: tensor<[%M]xi8>, %x: tensor<[%K]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)]",
+        "func.ukernel<tile.contract> target(@gfx1100) priority(20) @gfx11_q8_asm(%a: tile<4xf32>) -> (tile<4xf32>)",
     ],
 )
 

@@ -182,6 +182,8 @@ static const char* loom_link_cli_reason_name(
       return "root";
     case LOOM_LINK_PLAN_LIVE_DEPENDENCY:
       return "dependency";
+    case LOOM_LINK_PLAN_LIVE_PROVIDER:
+      return "provider";
   }
   return "unknown";
 }

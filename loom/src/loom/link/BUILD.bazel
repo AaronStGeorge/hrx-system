@@ -104,6 +104,9 @@ loom_cc_library(
     deps = [
         ":module_index",
         "//loom/src/loom/analysis:symbol_dependencies",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

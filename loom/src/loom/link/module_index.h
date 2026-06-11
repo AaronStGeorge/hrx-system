@@ -138,6 +138,8 @@ typedef struct loom_link_module_index_symbol_t {
   loom_link_symbol_identity_t identity;
   // Linker-index symbol flags.
   loom_link_symbol_flags_t flags;
+  // Implementation contract key for func.template/func.ukernel providers.
+  iree_string_view_t provider_contract;
   // Next duplicate global symbol with the same name, or INVALID_ORDINAL.
   iree_host_size_t next_global_duplicate_ordinal;
 } loom_link_module_index_symbol_t;

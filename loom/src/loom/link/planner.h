@@ -55,6 +55,9 @@ typedef enum loom_link_plan_live_reason_e {
   LOOM_LINK_PLAN_LIVE_ROOT = 1,
   // Selected because another live symbol references it.
   LOOM_LINK_PLAN_LIVE_DEPENDENCY = 2,
+  // Selected because another live symbol contains a func.apply for the
+  // provider's implementation contract.
+  LOOM_LINK_PLAN_LIVE_PROVIDER = 3,
 } loom_link_plan_live_reason_t;
 
 // Optional strip filter. Returning true removes |symbol| from archive mode and

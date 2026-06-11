@@ -14,6 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/test/ops.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -32,6 +33,9 @@ class FuncProviderCatalogTest : public ::testing::Test {
         loom_func_dialect_vtables(&vtable_count);
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_FUNC, vtables, (uint16_t)vtable_count));
+    vtables = loom_test_dialect_vtables(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_TEST, vtables, (uint16_t)vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
     loom_symbol_fact_table_initialize(&fact_table_, &analysis_arena_);
@@ -86,7 +90,7 @@ class FuncProviderCatalogTest : public ::testing::Test {
     loom_op_t* op = nullptr;
     IREE_ASSERT_OK(loom_func_ukernel_build(
         &builder, LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_PRIORITY, contract_id, 0, 0,
-        0, 0, 0, priority,
+        0, 0, 0, loom_symbol_ref_null(), priority,
         (loom_symbol_ref_t){.module_id = 0, .symbol_id = symbol_id}, &i32, 1,
         &i32, 1, nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &op));
     ASSERT_NE(op, nullptr);
@@ -204,6 +208,32 @@ func.template<demo.contract> priority(2) @base(%arg0: i32) -> (i32) {
   EXPECT_EQ(rebuilt.providers[0].kind, LOOM_FUNC_PROVIDER_KIND_UKERNEL);
   EXPECT_TRUE(
       iree_string_view_equal(rebuilt.providers[1].name, IREE_SV("base")));
+}
+
+TEST_F(FuncProviderCatalogTest, CapturesProviderTargetApplicability) {
+  ModulePtr module = ParseModule(R"(
+test.target<low_core> @gfx11
+
+func.template<demo.contract> target(@gfx11) priority(3) @gfx11_provider(%arg0: i32) -> (i32) {
+  func.return %arg0 : i32
+}
+
+func.template<demo.contract> priority(1) @fallback(%arg0: i32) -> (i32) {
+  func.return %arg0 : i32
+}
+)");
+
+  loom_func_provider_slice_t providers =
+      RebuildAndLookup(module.get(), IREE_SV("demo.contract"));
+  ASSERT_EQ(providers.count, 2u);
+  EXPECT_TRUE(iree_string_view_equal(providers.providers[0].name,
+                                     IREE_SV("gfx11_provider")));
+
+  loom_symbol_id_t target_id = FindSymbol(module.get(), IREE_SV("gfx11"));
+  EXPECT_TRUE(loom_symbol_ref_is_valid(providers.providers[0].target_symbol));
+  EXPECT_EQ(providers.providers[0].target_symbol.module_id, 0);
+  EXPECT_EQ(providers.providers[0].target_symbol.symbol_id, target_id);
+  EXPECT_FALSE(loom_symbol_ref_is_valid(providers.providers[1].target_symbol));
 }
 
 }  // namespace

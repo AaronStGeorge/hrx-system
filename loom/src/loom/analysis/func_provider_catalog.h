@@ -79,6 +79,10 @@ typedef struct loom_func_provider_summary_t {
   // Local module symbol reference, or null for external providers.
   loom_symbol_ref_t symbol;
 
+  // Module-local target applicability symbol, or null for target-independent
+  // providers.
+  loom_symbol_ref_t target_symbol;
+
   // Local function-like operation, or empty for external providers.
   loom_func_like_t function;
 

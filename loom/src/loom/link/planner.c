@@ -9,12 +9,17 @@
 #include <string.h>
 
 #include "loom/analysis/symbol_dependencies.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/op_defs.h"
+#include "loom/util/walk.h"
 
 typedef struct loom_link_plan_module_state_t {
   // True once dependency_table has been built.
   bool dependencies_built;
   // True once module-root dependency edges have been scanned.
   bool module_edges_scanned;
+  // Materialized provider module used for dependency scans.
+  const loom_module_t* materialized_module;
   // Dependency table for a materialized provider module.
   loom_symbol_dependency_table_t dependency_table;
 } loom_link_plan_module_state_t;
@@ -104,6 +109,12 @@ static bool loom_link_plan_symbol_has_body(
     const loom_link_module_index_symbol_t* symbol) {
   return symbol &&
          iree_any_bit_set(symbol->flags, LOOM_LINK_SYMBOL_FLAG_HAS_BODY);
+}
+
+static bool loom_link_plan_symbol_is_func_provider(
+    const loom_link_module_index_symbol_t* symbol) {
+  return symbol && (symbol->kind == LOOM_SYMBOL_FUNC_TEMPLATE ||
+                    symbol->kind == LOOM_SYMBOL_FUNC_UKERNEL);
 }
 
 // Finds the first concrete body that can fill a selected declaration anchor.
@@ -272,6 +283,7 @@ static iree_status_t loom_link_plan_build_module_dependencies(
   }
   IREE_RETURN_IF_ERROR(loom_symbol_dependency_table_build(
       dependency_module, &plan->arena, &state->dependency_table));
+  state->materialized_module = dependency_module;
   state->dependencies_built = true;
   *out_state = state;
   return iree_ok_status();
@@ -369,6 +381,115 @@ static iree_status_t loom_link_plan_expand_symbol_dependencies(
     edge_id = edge->next_outgoing_edge_id;
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_link_plan_select_provider_contract(
+    loom_link_plan_t* plan, const loom_link_plan_options_t* options,
+    iree_string_view_t contract, iree_host_size_t cause_ordinal) {
+  if (iree_string_view_is_empty(contract)) return iree_ok_status();
+  const iree_host_size_t symbol_count =
+      loom_link_module_index_symbol_count(plan->index);
+  for (iree_host_size_t i = 0; i < symbol_count; ++i) {
+    const loom_link_module_index_symbol_t* provider =
+        loom_link_module_index_symbol_at(plan->index, i);
+    if (!loom_link_plan_symbol_is_func_provider(provider) ||
+        !iree_string_view_equal(provider->provider_contract, contract)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_link_plan_select_symbol(
+        plan, options, provider, LOOM_LINK_PLAN_LIVE_PROVIDER, cause_ordinal,
+        iree_string_view_empty(), /*out_plan_ordinal=*/NULL));
+  }
+  return iree_ok_status();
+}
+
+typedef struct loom_link_plan_apply_dependency_walk_t {
+  // Active plan being expanded.
+  loom_link_plan_t* plan;
+
+  // Planning options controlling selection and strip behavior.
+  const loom_link_plan_options_t* options;
+
+  // Module whose function body is being scanned.
+  const loom_module_t* module;
+
+  // Plan ordinal of the function containing the apply site.
+  iree_host_size_t cause_ordinal;
+} loom_link_plan_apply_dependency_walk_t;
+
+static iree_status_t loom_link_plan_visit_apply_dependency(
+    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
+    loom_walk_result_t* out_result) {
+  (void)context;
+  *out_result = LOOM_WALK_CONTINUE;
+  if (!loom_func_apply_isa(op)) return iree_ok_status();
+
+  loom_link_plan_apply_dependency_walk_t* walk =
+      (loom_link_plan_apply_dependency_walk_t*)user_data;
+  loom_string_id_t contract_id = loom_func_apply_contract(op);
+  if (contract_id == LOOM_STRING_ID_INVALID ||
+      contract_id >= walk->module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "func.apply has an invalid contract string id");
+  }
+  return loom_link_plan_select_provider_contract(
+      walk->plan, walk->options, walk->module->strings.entries[contract_id],
+      walk->cause_ordinal);
+}
+
+static iree_status_t loom_link_plan_expand_apply_dependencies(
+    loom_link_plan_t* plan, const loom_link_plan_options_t* options,
+    iree_host_size_t plan_ordinal) {
+  const loom_link_plan_symbol_t* planned_symbol = &plan->symbols[plan_ordinal];
+  const loom_link_module_index_symbol_t* symbol =
+      loom_link_module_index_symbol_at(plan->index,
+                                       planned_symbol->symbol_ordinal);
+  const loom_link_module_index_module_t* module =
+      loom_link_module_index_symbol_module(plan->index, symbol);
+  if (!symbol || !module) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "planned symbol record is stale");
+  }
+  if (!iree_any_bit_set(symbol->flags, LOOM_LINK_SYMBOL_FLAG_HAS_BODY)) {
+    return iree_ok_status();
+  }
+
+  loom_link_plan_module_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_link_plan_build_module_dependencies(
+      plan, options, module->ordinal, &state));
+  const loom_module_t* dependency_module = state->materialized_module;
+  if (!dependency_module) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "selective apply dependency closure for module %" PRIhsz
+        " requires materialized IR or serialized contract-use metadata",
+        module->ordinal);
+  }
+  if (symbol->module_symbol_ordinal >= dependency_module->symbols.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "planned symbol ordinal %" PRIhsz
+                            " exceeds materialized module symbol count",
+                            symbol->module_symbol_ordinal);
+  }
+  loom_symbol_t* source_symbol =
+      &dependency_module->symbols.entries[symbol->module_symbol_ordinal];
+  loom_func_like_t function =
+      loom_func_like_cast(dependency_module, source_symbol->defining_op);
+  if (!loom_func_like_isa(function)) return iree_ok_status();
+
+  loom_link_plan_apply_dependency_walk_t walk = {
+      .plan = plan,
+      .options = options,
+      .module = dependency_module,
+      .cause_ordinal = plan_ordinal,
+  };
+  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+  return loom_walk_function(dependency_module, function, LOOM_WALK_PRE_ORDER,
+                            (loom_walk_callback_t){
+                                .fn = loom_link_plan_visit_apply_dependency,
+                                .user_data = &walk,
+                            },
+                            &plan->arena, &walk_result);
 }
 
 static iree_status_t loom_link_plan_check_duplicate_globals(
@@ -508,6 +629,8 @@ static iree_status_t loom_link_plan_select_selective(
   for (iree_host_size_t i = 0; i < plan->symbol_count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_link_plan_expand_symbol_dependencies(plan, options, i));
+    IREE_RETURN_IF_ERROR(
+        loom_link_plan_expand_apply_dependencies(plan, options, i));
   }
   return loom_link_plan_check_duplicate_globals(plan);
 }

@@ -117,6 +117,9 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::analysis::symbol_dependencies
+    loom::ops::func
+    loom::ops::op_defs
+    loom::util::walk
   PUBLIC
 )
 

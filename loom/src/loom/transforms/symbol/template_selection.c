@@ -207,10 +207,11 @@ typedef enum loom_template_selection_action_e {
 typedef enum loom_template_selection_blocker_e {
   LOOM_TEMPLATE_SELECTION_BLOCKER_NONE = 0,
   LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER = 1,
-  LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED = 2,
-  LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS = 3,
-  LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS = 4,
-  LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION = 5,
+  LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH = 2,
+  LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED = 3,
+  LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS = 4,
+  LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS = 5,
+  LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION = 6,
 } loom_template_selection_blocker_t;
 
 typedef struct loom_template_selection_entry_t {
@@ -284,6 +285,8 @@ static iree_string_view_t loom_template_selection_blocker_reason(
   switch (blocker) {
     case LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER:
       return IREE_SV("no provider implements the requested contract");
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH:
+      return IREE_SV("no provider is applicable to the enclosing target");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED:
       return IREE_SV(
           "all providers were rejected by signature or predicate constraints");
@@ -306,6 +309,39 @@ static bool loom_template_provider_is_materializable(
   return provider->origin == LOOM_FUNC_PROVIDER_ORIGIN_LOCAL &&
          provider->kind == LOOM_FUNC_PROVIDER_KIND_TEMPLATE &&
          provider->has_body && loom_symbol_ref_is_valid(provider->symbol);
+}
+
+static bool loom_template_selection_symbol_refs_equal(loom_symbol_ref_t lhs,
+                                                      loom_symbol_ref_t rhs) {
+  return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
+}
+
+static loom_symbol_ref_t loom_template_selection_apply_target(
+    const loom_module_t* module,
+    const loom_symbol_liveness_contributor_context_t* context) {
+  if (!context || !context->source_symbol ||
+      !context->source_symbol->defining_op) {
+    return loom_symbol_ref_null();
+  }
+  loom_func_like_t source_function =
+      loom_func_like_cast(module, context->source_symbol->defining_op);
+  if (!loom_func_like_isa(source_function)) {
+    return loom_symbol_ref_null();
+  }
+  return loom_func_like_target(source_function);
+}
+
+static bool loom_template_selection_provider_applies_to_target(
+    loom_symbol_ref_t apply_target,
+    const loom_func_provider_summary_t* provider) {
+  if (!loom_symbol_ref_is_valid(provider->target_symbol)) {
+    return true;
+  }
+  if (!loom_symbol_ref_is_valid(apply_target)) {
+    return false;
+  }
+  return loom_template_selection_symbol_refs_equal(apply_target,
+                                                   provider->target_symbol);
 }
 
 //===----------------------------------------------------------------------===//
@@ -787,8 +823,14 @@ static iree_status_t loom_template_selection_mark_exact_priority(
     loom_symbol_liveness_contributor_context_t* context,
     const loom_op_t* apply_op, loom_func_provider_slice_t providers,
     int64_t priority) {
+  const loom_symbol_ref_t apply_target =
+      loom_template_selection_apply_target(state->module, context);
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
+    if (!loom_template_selection_provider_applies_to_target(apply_target,
+                                                            provider)) {
+      continue;
+    }
     loom_template_provider_feasibility_t feasibility =
         LOOM_TEMPLATE_PROVIDER_REJECT;
     IREE_RETURN_IF_ERROR(loom_template_selection_classify_provider(
@@ -808,8 +850,14 @@ static iree_status_t loom_template_selection_mark_missing_fact_candidates(
     loom_symbol_liveness_contributor_context_t* context,
     const loom_op_t* apply_op, loom_func_provider_slice_t providers,
     bool has_exact, int64_t exact_priority) {
+  const loom_symbol_ref_t apply_target =
+      loom_template_selection_apply_target(state->module, context);
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
+    if (!loom_template_selection_provider_applies_to_target(apply_target,
+                                                            provider)) {
+      continue;
+    }
     loom_template_provider_feasibility_t feasibility =
         LOOM_TEMPLATE_PROVIDER_REJECT;
     IREE_RETURN_IF_ERROR(loom_template_selection_classify_provider(
@@ -865,11 +913,19 @@ static iree_status_t loom_template_selection_analyze_apply(
   int64_t best_exact_priority = INT64_MIN;
   int64_t highest_maybe_priority = INT64_MIN;
   uint32_t best_exact_count = 0;
+  uint32_t target_applicable_count = 0;
   uint32_t possible_count = 0;
   const loom_func_provider_summary_t* best_exact_provider = NULL;
+  const loom_symbol_ref_t apply_target =
+      loom_template_selection_apply_target(state->module, context);
 
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
+    if (!loom_template_selection_provider_applies_to_target(apply_target,
+                                                            provider)) {
+      continue;
+    }
+    ++target_applicable_count;
     loom_template_provider_feasibility_t feasibility =
         LOOM_TEMPLATE_PROVIDER_REJECT;
     IREE_RETURN_IF_ERROR(loom_template_selection_classify_provider(
@@ -894,6 +950,12 @@ static iree_status_t loom_template_selection_analyze_apply(
     } else if (provider->priority == best_exact_priority) {
       ++best_exact_count;
     }
+  }
+
+  if (target_applicable_count == 0) {
+    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH;
+    ++state->statistics->unresolved_sites;
+    return iree_ok_status();
   }
 
   if (possible_count == 0) {
