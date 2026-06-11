@@ -92,6 +92,25 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    executable_metadata_hsaco
+  HDRS
+    "executable_metadata_hsaco.h"
+  SRCS
+    "executable_metadata_hsaco.c"
+  DEPS
+    ::executable_metadata
+    ::kernarg_layout
+    iree::base
+    iree::hal
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::util::hsaco_metadata
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     amdgpu
   HDRS
     "api.h"
@@ -536,6 +555,30 @@ iree_cc_test(
     ::executable_metadata
     ::kernarg_layout
     iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    executable_metadata_hsaco_test
+  SRCS
+    "executable_metadata_hsaco_test.cc"
+  DEPS
+    ::executable_metadata
+    ::executable_metadata_hsaco
+    ::kernarg_layout
+    iree::base
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::util::hsaco_metadata
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

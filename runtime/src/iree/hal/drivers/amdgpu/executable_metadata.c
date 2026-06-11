@@ -6,6 +6,8 @@
 
 #include "iree/hal/drivers/amdgpu/executable_metadata.h"
 
+#include <string.h>
+
 //===----------------------------------------------------------------------===//
 // iree_hal_amdgpu_executable_metadata_t
 //===----------------------------------------------------------------------===//
@@ -64,6 +66,7 @@ iree_status_t iree_hal_amdgpu_executable_metadata_allocate(
   iree_status_t status =
       iree_allocator_malloc(host_allocator, total_size, (void**)&metadata);
   if (iree_status_is_ok(status)) {
+    memset(metadata, 0, total_size);
     uint8_t* storage_base = (uint8_t*)metadata;
     metadata->host_allocator = host_allocator;
     metadata->source = IREE_HAL_AMDGPU_EXECUTABLE_METADATA_SOURCE_UNKNOWN;

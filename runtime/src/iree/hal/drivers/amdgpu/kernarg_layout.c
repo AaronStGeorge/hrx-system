@@ -366,15 +366,15 @@ iree_status_t iree_hal_amdgpu_kernarg_layout_initialize(
   out_layout->flags = flags;
 
   if (params->binding_count > 0) {
-    memcpy(out_layout->binding_slots, params->binding_slots,
-           params->binding_count * sizeof(params->binding_slots[0]));
+    memmove(out_layout->binding_slots, params->binding_slots,
+            params->binding_count * sizeof(params->binding_slots[0]));
   }
   if (params->constant_span_count > 0) {
     iree_hal_amdgpu_kernarg_constant_span_t* constant_spans =
         (iree_hal_amdgpu_kernarg_constant_span_t*)(out_layout->binding_slots +
                                                    out_layout->binding_count);
-    memcpy(constant_spans, params->constant_spans,
-           params->constant_span_count * sizeof(params->constant_spans[0]));
+    memmove(constant_spans, params->constant_spans,
+            params->constant_span_count * sizeof(params->constant_spans[0]));
   }
   return iree_ok_status();
 }

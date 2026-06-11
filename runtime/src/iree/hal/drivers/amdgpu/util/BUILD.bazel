@@ -123,35 +123,12 @@ iree_runtime_cc_library(
     ],
 )
 
-iree_runtime_cc_library(
-    name = "hsaco_kernarg_layout",
-    srcs = ["hsaco_kernarg_layout.c"],
-    hdrs = ["hsaco_kernarg_layout.h"],
-    deps = [
-        ":hsaco_metadata",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
-    ],
-)
-
 iree_runtime_cc_test(
     name = "hsaco_metadata_test",
     srcs = ["hsaco_metadata_test.cc"],
     deps = [
         ":hsaco_metadata",
         "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-iree_runtime_cc_test(
-    name = "hsaco_kernarg_layout_test",
-    srcs = ["hsaco_kernarg_layout_test.cc"],
-    deps = [
-        ":hsaco_kernarg_layout",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

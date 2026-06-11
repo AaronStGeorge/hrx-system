@@ -77,6 +77,20 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "executable_metadata_hsaco",
+    srcs = ["executable_metadata_hsaco.c"],
+    hdrs = ["executable_metadata_hsaco.h"],
+    deps = [
+        ":executable_metadata",
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:hsaco_metadata",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "amdgpu",
     srcs = [
         "allocator.c",
@@ -438,6 +452,21 @@ iree_runtime_cc_test(
         ":executable_metadata",
         ":kernarg_layout",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "executable_metadata_hsaco_test",
+    srcs = ["executable_metadata_hsaco_test.cc"],
+    deps = [
+        ":executable_metadata",
+        ":executable_metadata_hsaco",
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:hsaco_metadata",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

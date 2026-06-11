@@ -143,22 +143,6 @@ iree_cc_library(
 endif()
 
 if(IREE_HAL_DRIVER_AMDGPU)
-iree_cc_library(
-  NAME
-    hsaco_kernarg_layout
-  HDRS
-    "hsaco_kernarg_layout.h"
-  SRCS
-    "hsaco_kernarg_layout.c"
-  DEPS
-    ::hsaco_metadata
-    iree::base
-    iree::hal::drivers::amdgpu::abi
-  PUBLIC
-)
-endif()
-
-if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     hsaco_metadata_test
@@ -167,27 +151,6 @@ iree_cc_test(
   DEPS
     ::hsaco_metadata
     iree::base
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=runtime.hal.amdgpu"
-    "iree-run-requirement=runtime.resource.amd_gpu"
-    "runtime-resource=amd-gpu"
-  RESOURCE_GROUP
-    iree-hal-drivers-amdgpu-tests
-)
-endif()
-
-if(IREE_HAL_DRIVER_AMDGPU)
-iree_cc_test(
-  NAME
-    hsaco_kernarg_layout_test
-  SRCS
-    "hsaco_kernarg_layout_test.cc"
-  DEPS
-    ::hsaco_kernarg_layout
-    iree::base
-    iree::hal::drivers::amdgpu::abi
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
