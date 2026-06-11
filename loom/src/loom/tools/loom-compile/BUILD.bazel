@@ -99,8 +99,8 @@ iree_execution_test_suite(
     manifests = ["loom-compile.test.json"],
     tags = ["hostonly"],
     tools = {
-        "iree-run-module": "//tools:iree-run-module",
         "loom-compile": ":loom-compile",
+        "loom-format": "//loom/src/loom/tools/loom-format",
     },
 )
 

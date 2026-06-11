@@ -94,9 +94,10 @@ loom_run_session_low_descriptor_registry(const loom_run_session_t* session);
 typedef struct loom_run_module_parse_options_t {
   // User-facing source filename for diagnostics.
   iree_string_view_t filename;
-  // Source text to parse. The caller must keep it alive while the module lives.
+  // Input bytes. Text is parsed directly; bytecode is detected by file magic.
+  // The caller must keep the bytes alive while the module lives.
   iree_string_view_t source;
-  // Diagnostic sink used by the text parser.
+  // Diagnostic sink used by the text parser or bytecode reader.
   loom_diagnostic_sink_t diagnostic_sink;
   // Maximum number of parse diagnostics before stopping. Zero means no limit.
   uint32_t max_errors;
@@ -107,19 +108,21 @@ typedef struct loom_run_module_t {
   loom_module_t* module;
   // Source filename used for diagnostics and source resolution.
   iree_string_view_t filename;
-  // Source text borrowed from the caller.
+  // Input bytes borrowed from the caller.
   iree_string_view_t source;
-  // Source table entry for |source|.
+  // Source table entry for text inputs.
   loom_source_entry_t source_entry;
-  // Single-entry source resolver for diagnostics during lowering/execution.
+  // Single-entry source resolver for text-input diagnostics.
   loom_source_table_resolver_t source_table_resolver;
+  // True when source_entry and source_table_resolver are backed by text.
+  bool has_source_entry;
 } loom_run_module_t;
 
 // Initializes parse options with stderr diagnostics and a small error cap.
 void loom_run_module_parse_options_initialize(
     loom_run_module_parse_options_t* out_options);
 
-// Parses source text into a module owned by |out_module|.
+// Parses text or reads bytecode into a module owned by |out_module|.
 iree_status_t loom_run_module_parse(
     loom_run_session_t* session, const loom_run_module_parse_options_t* options,
     loom_run_module_t* out_module);

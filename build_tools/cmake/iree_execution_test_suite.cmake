@@ -19,6 +19,37 @@
 # SANITIZER_SUPPRESSIONS: Sanitizer/name pairs selecting suppression files.
 #     For example: lsan vulkan.
 # TIMEOUT: test timeout in seconds.
+
+function(iree_execution_test_suite_resolve_tools _TEST_TARGET_NAME)
+  set(_TOOL_BUILD_TARGETS)
+  foreach(_TOOL_PAIR IN LISTS ARGN)
+    if(NOT _TOOL_PAIR MATCHES "^([^|]+)[|](.+)$")
+      message(FATAL_ERROR
+        "iree_execution_test_suite internal tool pair is malformed: ${_TOOL_PAIR}")
+    endif()
+    set(_TOOL_TARGET "${CMAKE_MATCH_1}")
+    set(_TOOL_BUILD_TARGET "${CMAKE_MATCH_2}")
+    if(NOT TARGET "${_TOOL_TARGET}")
+      message(FATAL_ERROR
+        "iree_execution_test_suite tool target does not exist: ${_TOOL_TARGET}")
+    endif()
+    set(_TOOL_BUILD_TARGET "${_TOOL_TARGET}")
+    get_target_property(_ALIASED_TARGET "${_TOOL_TARGET}" ALIASED_TARGET)
+    if(_ALIASED_TARGET)
+      set(_TOOL_BUILD_TARGET "${_ALIASED_TARGET}")
+    endif()
+    get_target_property(_TOOL_IMPORTED "${_TOOL_BUILD_TARGET}" IMPORTED)
+    if(NOT _TOOL_IMPORTED)
+      list(APPEND _TOOL_BUILD_TARGETS "${_TOOL_BUILD_TARGET}")
+    endif()
+  endforeach()
+
+  if(_TOOL_BUILD_TARGETS)
+    list(REMOVE_DUPLICATES _TOOL_BUILD_TARGETS)
+    add_dependencies(${_TEST_TARGET_NAME} ${_TOOL_BUILD_TARGETS})
+  endif()
+endfunction()
+
 function(iree_execution_test_suite)
   if(NOT IREE_BUILD_TESTS)
     return()
@@ -66,6 +97,7 @@ function(iree_execution_test_suite)
     list(APPEND _REQUIRED_FILES "${_MANIFEST_PATH}")
   endforeach()
 
+  set(_TOOL_TARGET_PAIRS)
   foreach(_TOOL IN LISTS _RULE_TOOLS)
     if(NOT _TOOL MATCHES "^([^=]+)=(.+)$")
       message(FATAL_ERROR
@@ -74,16 +106,8 @@ function(iree_execution_test_suite)
     set(_TOOL_NAME "${CMAKE_MATCH_1}")
     set(_TOOL_TARGET "${CMAKE_MATCH_2}")
     string(REGEX REPLACE "^::" "${_PACKAGE_NS}::" _TOOL_TARGET "${_TOOL_TARGET}")
-    iree_package_target_name(_TOOL_BUILD_TARGET "${_TOOL_TARGET}")
-    if(NOT TARGET "${_TOOL_BUILD_TARGET}")
-      message(FATAL_ERROR
-        "iree_execution_test_suite tool target does not exist: ${_TOOL_TARGET}")
-    endif()
-    get_target_property(_TOOL_IMPORTED "${_TOOL_BUILD_TARGET}" IMPORTED)
-    if(NOT _TOOL_IMPORTED)
-      list(APPEND _TOOL_BUILD_TARGETS "${_TOOL_BUILD_TARGET}")
-    endif()
-    list(APPEND _TEST_ARGS "--tool=${_TOOL_NAME}=$<TARGET_FILE:${_TOOL_BUILD_TARGET}>")
+    list(APPEND _TOOL_TARGET_PAIRS "${_TOOL_TARGET}|${_TOOL_TARGET}")
+    list(APPEND _TEST_ARGS "--tool=${_TOOL_NAME}=$<TARGET_FILE:${_TOOL_TARGET}>")
   endforeach()
 
   iree_package_name(_PACKAGE_NAME)
@@ -94,9 +118,14 @@ function(iree_execution_test_suite)
   endif()
   # Build declared tools before any CTest selection attempts to run the suite.
   add_custom_target(${_TEST_TARGET_NAME} ALL)
-  if(_TOOL_BUILD_TARGETS)
-    list(REMOVE_DUPLICATES _TOOL_BUILD_TARGETS)
-    add_dependencies(${_TEST_TARGET_NAME} ${_TOOL_BUILD_TARGETS})
+  if(_TOOL_TARGET_PAIRS)
+    cmake_language(
+      DEFER
+      DIRECTORY "${PROJECT_SOURCE_DIR}"
+      CALL iree_execution_test_suite_resolve_tools
+        "${_TEST_TARGET_NAME}"
+        ${_TOOL_TARGET_PAIRS}
+    )
   endif()
   set_property(TARGET ${_TEST_TARGET_NAME} PROPERTY FOLDER ${IREE_IDE_FOLDER}/test)
 

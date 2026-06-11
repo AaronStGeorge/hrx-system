@@ -68,8 +68,8 @@ iree_execution_test_suite(
   MANIFESTS
     "loom-compile.test.json"
   TOOLS
-    "iree-run-module=iree::tools::iree-run-module"
     "loom-compile=::loom-compile"
+    "loom-format=loom::tools::loom-format"
   LABELS
     "hostonly"
 )

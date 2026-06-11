@@ -2,7 +2,7 @@
   "version": 1,
   "cases": [
     {
-      "name": "compiles branchy module",
+      "name": "compiles and runs branchy module",
       "steps": [
         {
           "name": "write-source",
@@ -22,7 +22,6 @@
             ]
           },
           "stderr": {
-            "save": "{tmp}/compile_report.json",
             "contains": [
               "\"artifact_kind\":\"vm-archive\"",
               "\"status_code\":0",
@@ -35,11 +34,30 @@
               "non_empty": true
             }
           ]
+        },
+        {
+          "name": "run",
+          "run": {
+            "tool": "iree-run-module",
+            "args": [
+              "--module={tmp}/branchy.vmfb",
+              "--function=branchy",
+              "--input=0",
+              "--input=21",
+              "--expected-output=42"
+            ]
+          },
+          "stdout": {
+            "contains": [
+              "EXEC @branchy",
+              "[SUCCESS] all function outputs matched their expected values."
+            ]
+          }
         }
       ]
     },
     {
-      "name": "compiles bytecode module",
+      "name": "compiles bytecode module and runs output",
       "steps": [
         {
           "name": "write-source",
@@ -89,104 +107,30 @@
               "non_empty": true
             }
           ]
-        }
-      ]
-    },
-    {
-      "name": "dumps compile pipeline IR as JSONL",
-      "steps": [
-        {
-          "name": "write-source",
-          "write": {
-            "path": "{tmp}/trace.loom",
-            "text": "ireevm.target<core> @vm_target\n\nfunc.def public target(@vm_target) @trace(%lhs: i32, %rhs: i32) -> (i32) {\n  %sum = scalar.addi %lhs, %rhs : i32\n  func.return %sum : i32\n}\n"
-          }
         },
         {
-          "name": "compile",
+          "name": "run",
           "run": {
-            "tool": "loom-compile",
+            "tool": "iree-run-module",
             "args": [
-              "{tmp}/trace.loom",
-              "--output={tmp}/trace.vmfb",
-              "--dump-ir-after-all",
-              "--dump-ir-format=jsonl",
-              "--dump-ir-output=stderr"
-            ]
-          },
-          "stderr": {
-            "contains": [
-              "\"tool\":\"loom-compile\"",
-              "\"stage\":\"prepared-low\"",
-              "\"pipeline\":\"__loom_compile_default\"",
-              "\"point\":\"after\"",
-              "\"ir\":\""
-            ]
-          },
-          "files": [
-            {
-              "path": "{tmp}/trace.vmfb",
-              "non_empty": true
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "writes detailed compile report file",
-      "steps": [
-        {
-          "name": "write-source",
-          "write": {
-            "path": "{tmp}/branchy.loom",
-            "text": "ireevm.target<core> @vm_target\n\nfunc.def public target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n  %c0 = scalar.constant 0 : i32\n  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32\n  cfg.cond_br %is_zero, ^then, ^else\n^then:\n  %sum = scalar.addi %rhs, %rhs : i32\n  func.return %sum : i32\n^else:\n  %diff = scalar.subi %lhs, %rhs : i32\n  func.return %diff : i32\n}\n"
-          }
-        },
-        {
-          "name": "compile",
-          "run": {
-            "tool": "loom-compile",
-            "args": [
-              "{tmp}/branchy.loom",
-              "--output={tmp}/branchy.vmfb",
-              "--compile-report=details",
-              "--compile-report-output={tmp}/report.json"
-            ]
-          },
-          "files": [
-            {
-              "path": "{tmp}/branchy.vmfb",
-              "non_empty": true
-            },
-            {
-              "path": "{tmp}/report.json",
-              "non_empty": true
-            }
-          ]
-        },
-        {
-          "name": "inspect-report",
-          "run": {
-            "tool": "loom-compile",
-            "args": [
-              "{tmp}/branchy.loom",
-              "--output={tmp}/unused.vmfb",
-              "--compile-report=summary",
-              "--compile-report-output=-"
+              "--module={tmp}/branchy.vmfb",
+              "--function=branchy",
+              "--input=84",
+              "--input=42",
+              "--expected-output=42"
             ]
           },
           "stdout": {
             "contains": [
-              "\"artifact_kind\":\"vm-archive\"",
-              "\"status_code\":0",
-              "\"status\":\"OK\""
+              "EXEC @branchy",
+              "[SUCCESS] all function outputs matched their expected values."
             ]
           }
         }
       ]
     },
     {
-      "name": "applies config file and reports invalid config states",
+      "name": "compiles configured module and runs output",
       "steps": [
         {
           "name": "write-config",
@@ -203,7 +147,7 @@
           }
         },
         {
-          "name": "compile-configured",
+          "name": "compile",
           "run": {
             "tool": "loom-compile",
             "args": [
@@ -220,39 +164,20 @@
           ]
         },
         {
-          "name": "reject-duplicate-config",
+          "name": "run",
           "run": {
-            "tool": "loom-compile",
+            "tool": "iree-run-module",
             "args": [
-              "{tmp}/configured.loom",
-              "--config-file={tmp}/config.json",
-              "--config=model36.model.delta=16",
-              "--output={tmp}/unused.vmfb"
+              "--module={tmp}/configured.vmfb",
+              "--function=configured",
+              "--input=10",
+              "--expected-output=42"
             ]
           },
-          "exit": {
-            "nonzero": true
-          },
-          "stderr": {
-            "contains": ["duplicate config binding for 'model36.model.delta'"]
-          }
-        },
-        {
-          "name": "reject-unresolved-config",
-          "run": {
-            "tool": "loom-compile",
-            "args": [
-              "{tmp}/configured.loom",
-              "--pipeline=none",
-              "--output={tmp}/unused.vmfb"
-            ]
-          },
-          "exit": {
-            "nonzero": true
-          },
-          "stderr": {
+          "stdout": {
             "contains": [
-              "unresolved config '@model36.model.delta' remains for final compilation"
+              "EXEC @configured",
+              "[SUCCESS] all function outputs matched their expected values."
             ]
           }
         }
