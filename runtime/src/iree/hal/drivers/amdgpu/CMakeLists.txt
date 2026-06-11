@@ -62,6 +62,55 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    kernarg_layout
+  HDRS
+    "kernarg_layout.h"
+  SRCS
+    "kernarg_layout.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    executable_metadata
+  HDRS
+    "executable_metadata.h"
+  SRCS
+    "executable_metadata.c"
+  DEPS
+    ::kernarg_layout
+    iree::base
+    iree::hal
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    executable_metadata_hsaco
+  HDRS
+    "executable_metadata_hsaco.h"
+  SRCS
+    "executable_metadata_hsaco.c"
+  DEPS
+    ::executable_metadata
+    ::kernarg_layout
+    iree::base
+    iree::hal
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::util::hsaco_metadata
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     amdgpu
   HDRS
     "api.h"
@@ -163,6 +212,9 @@ iree_cc_library(
     "virtual_queue.h"
   DEPS
     ::access_policy
+    ::executable_metadata
+    ::executable_metadata_hsaco
+    ::kernarg_layout
     ::profile_events
     ::queue_affinity
     iree::async
@@ -171,7 +223,6 @@ iree_cc_library(
     iree::base::core_headers
     iree::base::internal
     iree::base::internal::arena
-    iree::base::internal::flatcc::parsing
     iree::base::threading
     iree::base::threading::thread
     iree::hal
@@ -190,6 +241,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::kfd
     iree::hal::drivers::amdgpu::util::libaqlprofile
     iree::hal::drivers::amdgpu::util::libhsa
+    iree::hal::drivers::amdgpu::util::loaded_code_object
     iree::hal::drivers::amdgpu::util::packet
     iree::hal::drivers::amdgpu::util::pm4_dispatch
     iree::hal::drivers::amdgpu::util::pm4_program
@@ -202,12 +254,8 @@ iree_cc_library(
     iree::hal::memory::tlsf_pool
     iree::hal::memory::tracing
     iree::hal::utils::elf_format
-    iree::hal::utils::executable_debug_info
-    iree::hal::utils::executable_header
     iree::hal::utils::files
     iree::hal::utils::resource_set
-    iree::schemas::amdgpu_executable_def_c_fbs
-    iree::schemas::executable_debug_info_c_fbs
   PUBLIC
 )
 endif()
@@ -479,6 +527,71 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
+    kernarg_layout_test
+  SRCS
+    "kernarg_layout_test.cc"
+  DEPS
+    ::kernarg_layout
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    executable_metadata_test
+  SRCS
+    "executable_metadata_test.cc"
+  DEPS
+    ::executable_metadata
+    ::kernarg_layout
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    executable_metadata_hsaco_test
+  SRCS
+    "executable_metadata_hsaco_test.cc"
+  DEPS
+    ::executable_metadata
+    ::executable_metadata_hsaco
+    ::kernarg_layout
+    iree::base
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::util::hsaco_metadata
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
     executable_test
   SRCS
     "executable_test.cc"
@@ -487,10 +600,8 @@ iree_cc_test(
     ::headers
     iree::base
     iree::base::core_headers
-    iree::base::internal::flatcc::building
     iree::hal
     iree::hal::drivers::amdgpu::util::hsaco_metadata
-    iree::schemas::amdgpu_executable_def_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

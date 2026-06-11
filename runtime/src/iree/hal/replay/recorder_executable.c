@@ -677,7 +677,8 @@ static iree_status_t iree_hal_replay_recorder_capture_executable_metadata(
           function_infos[i].workgroup_size[1];
       function_metadata[i].workgroup_size[2] =
           function_infos[i].workgroup_size[2];
-      function_metadata[i].constant_count = function_infos[i].constant_count;
+      function_metadata[i].constant_byte_length =
+          function_infos[i].constant_byte_length;
       function_metadata[i].binding_count = function_infos[i].binding_count;
       function_metadata[i].parameter_count = function_infos[i].parameter_count;
       function_metadata[i].name_length = (uint16_t)function_infos[i].name.size;

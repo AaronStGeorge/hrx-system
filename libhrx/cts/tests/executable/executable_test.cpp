@@ -102,7 +102,7 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch") {
       hrx().executable_export_info(executable, noop_ordinal, &noop_info));
   REQUIRE(noop_info.name != nullptr);
   REQUIRE(std::string(noop_info.name) == "hrx_noop");
-  REQUIRE(noop_info.constant_count == 0);
+  REQUIRE(noop_info.constant_byte_length == 0);
   REQUIRE(noop_info.binding_count == 0);
   REQUIRE(noop_info.workgroup_size[0] >= 1);
   REQUIRE(noop_info.workgroup_size[1] >= 1);
@@ -113,7 +113,7 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch") {
       hrx().executable_export_info(executable, store_ordinal, &store_info));
   REQUIRE(store_info.name != nullptr);
   REQUIRE(std::string(store_info.name) == "hrx_store_output");
-  REQUIRE(store_info.constant_count == 1);
+  REQUIRE(store_info.constant_byte_length == sizeof(uint32_t));
   REQUIRE(store_info.binding_count == 1);
   REQUIRE(store_info.workgroup_size[0] >= 1);
   REQUIRE(store_info.workgroup_size[1] >= 1);

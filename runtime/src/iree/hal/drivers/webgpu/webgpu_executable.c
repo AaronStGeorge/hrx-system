@@ -351,7 +351,7 @@ static iree_status_t iree_hal_webgpu_executable_function_info(
   memset(out_info, 0, sizeof(*out_info));
   out_info->name = entry->name;
   out_info->binding_count = entry->binding_count;
-  out_info->constant_count = entry->constant_count;
+  out_info->constant_byte_length = entry->constant_count * sizeof(uint32_t);
   out_info->workgroup_size[0] = entry->workgroup_size[0];
   out_info->workgroup_size[1] = entry->workgroup_size[1];
   out_info->workgroup_size[2] = entry->workgroup_size[2];

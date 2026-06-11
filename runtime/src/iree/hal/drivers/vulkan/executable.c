@@ -2153,7 +2153,7 @@ static iree_status_t iree_hal_vulkan_executable_export_info(
   IREE_RETURN_IF_ERROR(iree_hal_vulkan_executable_lookup_pipeline(
       base_executable, export_ordinal, &pipeline));
   out_info->name = pipeline->name;
-  out_info->constant_count = pipeline->constant_count;
+  out_info->constant_byte_length = pipeline->constant_count * sizeof(uint32_t);
   out_info->binding_count = pipeline->binding_count;
   memcpy(out_info->workgroup_size, pipeline->workgroup_size,
          sizeof(out_info->workgroup_size));

@@ -57,6 +57,40 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "kernarg_layout",
+    srcs = ["kernarg_layout.c"],
+    hdrs = ["kernarg_layout.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "executable_metadata",
+    srcs = ["executable_metadata.c"],
+    hdrs = ["executable_metadata.h"],
+    deps = [
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "executable_metadata_hsaco",
+    srcs = ["executable_metadata_hsaco.c"],
+    hdrs = ["executable_metadata_hsaco.h"],
+    deps = [
+        ":executable_metadata",
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:hsaco_metadata",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "amdgpu",
     srcs = [
         "allocator.c",
@@ -160,6 +194,9 @@ iree_runtime_cc_library(
     ],
     deps = [
         ":access_policy",
+        ":executable_metadata",
+        ":executable_metadata_hsaco",
+        ":kernarg_layout",
         ":profile_events",
         ":queue_affinity",
         "//runtime/src/iree/async",
@@ -168,7 +205,6 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base:core_headers",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/internal/flatcc:parsing",
         "//runtime/src/iree/base/threading",
         "//runtime/src/iree/base/threading:thread",
         "//runtime/src/iree/hal",
@@ -187,6 +223,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/drivers/amdgpu/util:kfd",
         "//runtime/src/iree/hal/drivers/amdgpu/util:libaqlprofile",
         "//runtime/src/iree/hal/drivers/amdgpu/util:libhsa",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:loaded_code_object",
         "//runtime/src/iree/hal/drivers/amdgpu/util:packet",
         "//runtime/src/iree/hal/drivers/amdgpu/util:pm4_dispatch",
         "//runtime/src/iree/hal/drivers/amdgpu/util:pm4_program",
@@ -199,12 +236,8 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/memory:tlsf_pool",
         "//runtime/src/iree/hal/memory:tracing",
         "//runtime/src/iree/hal/utils:elf_format",
-        "//runtime/src/iree/hal/utils:executable_debug_info",
-        "//runtime/src/iree/hal/utils:executable_header",
         "//runtime/src/iree/hal/utils:files",
         "//runtime/src/iree/hal/utils:resource_set",
-        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
-        "//runtime/src/iree/schemas:executable_debug_info_c_fbs",
     ],
 )
 
@@ -401,6 +434,44 @@ iree_runtime_cc_test(
 )
 
 iree_runtime_cc_test(
+    name = "kernarg_layout_test",
+    srcs = ["kernarg_layout_test.cc"],
+    deps = [
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "executable_metadata_test",
+    srcs = ["executable_metadata_test.cc"],
+    deps = [
+        ":executable_metadata",
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "executable_metadata_hsaco_test",
+    srcs = ["executable_metadata_hsaco_test.cc"],
+    deps = [
+        ":executable_metadata",
+        ":executable_metadata_hsaco",
+        ":kernarg_layout",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:hsaco_metadata",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
     name = "executable_test",
     srcs = ["executable_test.cc"],
     deps = [
@@ -408,10 +479,8 @@ iree_runtime_cc_test(
         ":headers",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base:core_headers",
-        "//runtime/src/iree/base/internal/flatcc:building",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amdgpu/util:hsaco_metadata",
-        "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -8951,6 +8951,12 @@ iree_status_t iree_hal_vulkan_queue_submit_dispatch(
         executable, function_ordinal, &pipeline);
   }
   if (iree_status_is_ok(status) &&
+      (constants.data_length % sizeof(uint32_t)) != 0) {
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "Vulkan queue_dispatch constants must be 4-byte aligned");
+  }
+  if (iree_status_is_ok(status) &&
       constants.data_length >
           (iree_host_size_t)pipeline->constant_count * sizeof(uint32_t)) {
     status = iree_make_status(

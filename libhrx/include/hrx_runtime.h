@@ -265,12 +265,12 @@ typedef struct hrx_buffer_params_t {
 
 // Export metadata for direct executable dispatch. |name| is owned by the
 // executable and remains valid until hrx_executable_release() drops the last
-// reference. |constant_count| is measured in uint32_t elements, matching
-// hrx_queue_dispatch()/hrx_stream_dispatch() constants packing.
+// reference. |constant_byte_length| is the byte length of the constants buffer
+// expected by hrx_queue_dispatch()/hrx_stream_dispatch().
 typedef struct hrx_executable_export_info_t {
   const char* name;
   uint32_t flags;
-  uint32_t constant_count;
+  uint32_t constant_byte_length;
   uint32_t binding_count;
   uint32_t parameter_count;
   uint32_t workgroup_size[3];

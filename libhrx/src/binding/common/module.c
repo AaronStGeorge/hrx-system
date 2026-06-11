@@ -279,8 +279,7 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
     // trailing alignment). The per-parameter extent we tracked above
     // typically matches, but pad up to the export's declared size to
     // satisfy the strict length check in the dispatch code path.
-    size_t export_constant_bytes =
-        (size_t)export_infos[i].constant_count * sizeof(uint32_t);
+    size_t export_constant_bytes = export_infos[i].constant_byte_length;
     if (export_constant_bytes > this_kernel_constants_size) {
       this_kernel_constants_size = export_constant_bytes;
     }

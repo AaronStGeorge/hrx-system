@@ -770,7 +770,7 @@ static iree_status_t iree_hal_local_profile_append_executable_function_records(
     record.record_length = (uint32_t)record_length;
     record.executable_id = executable_id;
     record.function_ordinal = (uint32_t)i;
-    record.constant_count = function_info.constant_count;
+    record.constant_byte_length = function_info.constant_byte_length;
     record.binding_count = function_info.binding_count;
     record.parameter_count = function_info.parameter_count;
     memcpy(record.workgroup_size, function_info.workgroup_size,

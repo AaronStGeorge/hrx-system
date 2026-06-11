@@ -411,11 +411,27 @@ iree_cc_library(
   DEPS
     ::device_library_target
     ::libhsa
+    ::loaded_code_object
     ::topology
     iree::base
     iree::base::internal
     iree::hal::drivers::amdgpu::device::binaries::toc
     iree::hal::drivers::amdgpu::device::headers
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    loaded_code_object
+  HDRS
+    "loaded_code_object.h"
+  SRCS
+    "loaded_code_object.c"
+  DEPS
+    ::libhsa
+    iree::base
   PUBLIC
 )
 endif()
@@ -446,6 +462,7 @@ iree_cc_library(
     ::device_library_target
     ::info
     ::kfd
+    ::loaded_code_object
     ::packet
     ::pm4_dispatch
     ::pm4_program

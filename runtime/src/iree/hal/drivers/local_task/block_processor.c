@@ -764,8 +764,9 @@ static iree_status_t iree_hal_cmd_execute_dispatch_tiles(
   dispatch_state.workgroup_count_x = workgroup_count[0];
   dispatch_state.workgroup_count_y = workgroup_count[1];
   dispatch_state.workgroup_count_z = (uint16_t)workgroup_count[2];
-  dispatch_state.constant_count = (uint16_t)dispatch->constant_count;
-  dispatch_state.constants = dispatch->constants;
+  dispatch_state.constants = (iree_hal_executable_const_byte_span_v0_t){
+      (const uint8_t*)dispatch->constants,
+      dispatch->constant_count * sizeof(uint32_t)};
   dispatch_state.max_concurrency = (uint8_t)worker_count;
   dispatch_state.binding_count = dispatch->binding_count;
   dispatch_state.binding_ptrs =
