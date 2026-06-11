@@ -109,6 +109,67 @@ void iree_clang_tidy_refcount_likely_null_release(
   }
 }
 
+void iree_clang_tidy_refcount_release_then_deref(
+    iree_clang_tidy_refcounted_t* resource) {
+  iree_clang_tidy_refcount_void_release(resource);
+  resource->ref_count = 0;
+}
+
+void iree_clang_tidy_refcount_release_then_indirect_deref(
+    iree_clang_tidy_refcounted_t* resource) {
+  iree_clang_tidy_refcount_void_release(resource);
+  (*resource).ref_count = 0;
+}
+
+void iree_clang_tidy_refcount_release_then_array_use(
+    iree_clang_tidy_refcounted_t* resources) {
+  iree_clang_tidy_refcount_void_release(resources);
+  resources[0].ref_count = 0;
+}
+
+void iree_clang_tidy_refcount_release_then_release(
+    iree_clang_tidy_refcounted_t* resource) {
+  iree_clang_tidy_refcount_void_release(resource);
+  iree_clang_tidy_refcount_void_release(resource);
+}
+
+void iree_clang_tidy_refcount_retain_then_double_release(
+    iree_clang_tidy_refcounted_t* resource) {
+  iree_clang_tidy_refcount_void_retain(resource);
+  iree_clang_tidy_refcount_void_release(resource);
+  iree_clang_tidy_refcount_void_release(resource);
+}
+
+void iree_clang_tidy_refcount_retain_then_double_release_then_deref(
+    iree_clang_tidy_refcounted_t* resource) {
+  iree_clang_tidy_refcount_void_retain(resource);
+  iree_clang_tidy_refcount_void_release(resource);
+  iree_clang_tidy_refcount_void_release(resource);
+  resource->ref_count = 0;
+}
+
+void iree_clang_tidy_refcount_release_then_clear(
+    iree_clang_tidy_refcounted_t* resource) {
+  iree_clang_tidy_refcount_void_release(resource);
+  resource = NULL;
+}
+
+void iree_clang_tidy_refcount_release_then_replace(
+    iree_clang_tidy_refcounted_t* resource,
+    iree_clang_tidy_refcounted_t* replacement) {
+  iree_clang_tidy_refcount_void_release(resource);
+  resource = replacement;
+  resource->ref_count = 0;
+}
+
+void iree_clang_tidy_refcount_release_in_branch_then_use(
+    iree_clang_tidy_refcounted_t* resource, int condition) {
+  if (condition) {
+    iree_clang_tidy_refcount_void_release(resource);
+  }
+  resource->ref_count = 0;
+}
+
 void iree_clang_tidy_refcount_local_counter_release(
     iree_clang_tidy_refcounted_t* resource) {
   iree_atomic_ref_count_t* ref_count = &resource->ref_count;

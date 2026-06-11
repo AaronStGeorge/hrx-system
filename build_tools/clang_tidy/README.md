@@ -226,6 +226,43 @@ iree_hal_buffer_release(buffer);
 buffer = NULL;
 ```
 
+In straight-line code, a direct one-argument release statement consumes that
+handle spelling until it is reassigned. Later dereferences or repeated releases
+of the same handle are diagnosed:
+
+```c
+iree_hal_buffer_release(buffer);
+buffer->data = NULL;  // The handle was already released.
+
+iree_hal_buffer_release(buffer);
+iree_hal_buffer_release(buffer);  // No remaining modeled reference edge.
+```
+
+Explicit direct retains in the same block add modeled reference edges, so code
+that deliberately drops multiple owned references stays valid:
+
+```c
+iree_hal_buffer_retain(buffer);
+iree_hal_buffer_release(buffer);
+iree_hal_buffer_release(buffer);
+```
+
+This rule is intentionally local. It does not yet merge release state across
+branch exits, and assignment resets the handle state:
+
+```c
+iree_hal_buffer_release(buffer);
+buffer = NULL;
+
+iree_hal_buffer_release(buffer);
+buffer = replacement_buffer;
+```
+
+If a release drops one retained edge while another owner keeps the object alive,
+the code should still avoid reading through the released handle spelling. Take
+needed scalar values before the release, release after the last read, or model
+the retained edge explicitly with a direct retain/release pair.
+
 The decrement result carries the last-reference decision and must be checked:
 
 ```c

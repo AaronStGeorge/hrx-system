@@ -528,6 +528,8 @@ iree_status_t iree_hal_streaming_context_disable_peer_access(
   // Find and remove peer.
   for (iree_host_size_t i = 0; i < context->peer_count; ++i) {
     if (context->peer_contexts[i] == peer_context) {
+      const iree_host_size_t dst_ordinal = peer_context->device_ordinal;
+
       // Release peer context.
       iree_hal_streaming_context_release(peer_context);
 
@@ -542,7 +544,6 @@ iree_status_t iree_hal_streaming_context_disable_peer_access(
           iree_hal_streaming_device_registry();
       if (device_registry && device_registry->p2p_topology) {
         const iree_host_size_t src_ordinal = context->device_ordinal;
-        const iree_host_size_t dst_ordinal = peer_context->device_ordinal;
         const iree_host_size_t device_count = device_registry->device_count;
         if (src_ordinal < device_count && dst_ordinal < device_count) {
           // Find the link in topology.

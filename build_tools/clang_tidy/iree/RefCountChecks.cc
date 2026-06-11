@@ -14,11 +14,14 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Stmt.h"
+#include "clang/AST/StmtVisitor.h"
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Lex/Lexer.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace clang::tidy::iree {
@@ -182,6 +185,14 @@ std::string NormalizedCodeSource(StringRef Source) {
 bool IsRefCountLifecycleFunctionName(StringRef FunctionName) {
   return FunctionName.ends_with("_retain") ||
          FunctionName.ends_with("_release");
+}
+
+bool IsReleaseFunctionName(StringRef FunctionName) {
+  return FunctionName.ends_with("_release");
+}
+
+bool IsRetainFunctionName(StringRef FunctionName) {
+  return FunctionName.ends_with("_retain");
 }
 
 bool IsNamedTypedef(QualType QualType, StringRef Name) {
@@ -383,6 +394,232 @@ bool IsRefCountReleaseNullSafe(const FunctionDecl* Function,
          HasGuardedRefCountDecrement(NormalizedBody, ParameterName);
 }
 
+const Expr* IgnoreExprNoise(const Expr* Expression) {
+  return Expression ? Expression->IgnoreParenImpCasts() : nullptr;
+}
+
+const VarDecl* ReferencedVariable(const Expr* Expression) {
+  Expression = IgnoreExprNoise(Expression);
+  const auto* Reference = dyn_cast_or_null<DeclRefExpr>(Expression);
+  if (!Reference) {
+    return nullptr;
+  }
+  return dyn_cast<VarDecl>(Reference->getDecl());
+}
+
+const VarDecl* ReferencedVariableThroughIndirection(const Expr* Expression) {
+  Expression = IgnoreExprNoise(Expression);
+  if (const VarDecl* Variable = ReferencedVariable(Expression)) {
+    return Variable;
+  }
+  const auto* Unary = dyn_cast_or_null<UnaryOperator>(Expression);
+  if (Unary && Unary->getOpcode() == UO_Deref) {
+    return ReferencedVariable(Unary->getSubExpr());
+  }
+  return nullptr;
+}
+
+struct DirectRefCountOperation {
+  const VarDecl* Variable = nullptr;
+  const FunctionDecl* Function = nullptr;
+  SourceLocation Location;
+};
+
+std::optional<DirectRefCountOperation> DirectRefCountOperationStatement(
+    const Stmt* Statement,
+    bool (*FunctionNamePredicate)(llvm::StringRef FunctionName)) {
+  if (!Statement) {
+    return std::nullopt;
+  }
+  const auto* Expression =
+      dyn_cast<Expr>(Statement->IgnoreContainers(/*IgnoreCaptured=*/true));
+  if (!Expression) {
+    return std::nullopt;
+  }
+  Expression = IgnoreExprNoise(Expression);
+  const auto* Call = dyn_cast_or_null<CallExpr>(Expression);
+  if (!Call || Call->getNumArgs() != 1) {
+    return std::nullopt;
+  }
+  const FunctionDecl* Callee = Call->getDirectCallee();
+  if (!Callee || !FunctionNamePredicate(Callee->getName())) {
+    return std::nullopt;
+  }
+  const VarDecl* Variable = ReferencedVariable(Call->getArg(0));
+  if (!Variable || !Variable->getType()->isAnyPointerType()) {
+    return std::nullopt;
+  }
+  return DirectRefCountOperation{
+      .Variable = Variable,
+      .Function = Callee,
+      .Location = Call->getBeginLoc(),
+  };
+}
+
+std::optional<DirectRefCountOperation> DirectReleaseStatement(
+    const Stmt* Statement) {
+  return DirectRefCountOperationStatement(Statement, IsReleaseFunctionName);
+}
+
+std::optional<DirectRefCountOperation> DirectRetainStatement(
+    const Stmt* Statement) {
+  return DirectRefCountOperationStatement(Statement, IsRetainFunctionName);
+}
+
+const VarDecl* DirectVariableAssignment(const Stmt* Statement) {
+  if (!Statement) {
+    return nullptr;
+  }
+  const auto* Expression =
+      dyn_cast<Expr>(Statement->IgnoreContainers(/*IgnoreCaptured=*/true));
+  if (!Expression) {
+    return nullptr;
+  }
+  Expression = IgnoreExprNoise(Expression);
+  const auto* Binary = dyn_cast_or_null<BinaryOperator>(Expression);
+  if (!Binary || !Binary->isAssignmentOp()) {
+    return nullptr;
+  }
+  return ReferencedVariable(Binary->getLHS());
+}
+
+struct ReleaseInfo {
+  const FunctionDecl* Function = nullptr;
+  SourceLocation Location;
+};
+
+using ReleasedVariables = llvm::DenseMap<const VarDecl*, ReleaseInfo>;
+
+class ReleasedUseVisitor final
+    : public ConstStmtVisitor<ReleasedUseVisitor, void> {
+ public:
+  ReleasedUseVisitor(ClangTidyCheck& Check, const SourceManager& SourceManager,
+                     const ReleasedVariables& Released)
+      : Check(Check), SourceManager(SourceManager), Released(Released) {}
+
+  void VisitStmt(const Stmt* Statement) { VisitChildren(Statement); }
+
+  void VisitMemberExpr(const MemberExpr* Expression) {
+    if (const VarDecl* Variable =
+            ReferencedVariableThroughIndirection(Expression->getBase())) {
+      DiagnoseDereference(Variable, Expression->getOperatorLoc());
+    }
+    VisitChildren(Expression);
+  }
+
+  void VisitUnaryOperator(const UnaryOperator* Expression) {
+    if (Expression->getOpcode() == UO_Deref) {
+      if (const VarDecl* Variable =
+              ReferencedVariable(Expression->getSubExpr())) {
+        DiagnoseDereference(Variable, Expression->getOperatorLoc());
+      }
+    }
+    VisitChildren(Expression);
+  }
+
+  void VisitArraySubscriptExpr(const ArraySubscriptExpr* Expression) {
+    if (const VarDecl* Variable = ReferencedVariable(Expression->getBase())) {
+      DiagnoseDereference(Variable, Expression->getBeginLoc());
+    }
+    VisitChildren(Expression);
+  }
+
+ private:
+  void VisitChildren(const Stmt* Statement) {
+    for (const Stmt* Child : Statement->children()) {
+      if (Child) {
+        Visit(Child);
+      }
+    }
+  }
+
+  void DiagnoseDereference(const VarDecl* Variable, SourceLocation Location) {
+    auto It = Released.find(Variable);
+    if (It == Released.end() || Diagnosed.contains(Variable)) {
+      return;
+    }
+    if (IsExternalMacroBody(Location, SourceManager)) {
+      return;
+    }
+    Diagnosed.insert(Variable);
+    Check.diag(SourceManager.getExpansionLoc(Location),
+               "%0 is dereferenced after %1 releases it")
+        << Variable->getName() << It->second.Function->getName();
+  }
+
+  ClangTidyCheck& Check;
+  const SourceManager& SourceManager;
+  const ReleasedVariables& Released;
+  llvm::SmallPtrSet<const VarDecl*, 4> Diagnosed;
+};
+
+class ReleaseFlowAnalyzer final
+    : public ConstStmtVisitor<ReleaseFlowAnalyzer, void> {
+ public:
+  ReleaseFlowAnalyzer(ClangTidyCheck& Check, const SourceManager& SourceManager)
+      : Check(Check), SourceManager(SourceManager) {}
+
+  void VisitStmt(const Stmt* Statement) { VisitChildren(Statement); }
+
+  void VisitCompoundStmt(const CompoundStmt* Compound) {
+    ReleasedVariables Released;
+    llvm::DenseMap<const VarDecl*, unsigned> ReferenceCounts;
+    for (const Stmt* Child : Compound->body()) {
+      if (!Child) {
+        continue;
+      }
+      ReleasedUseVisitor UseVisitor(Check, SourceManager, Released);
+      UseVisitor.Visit(Child);
+      if (std::optional<DirectRefCountOperation> Release =
+              DirectReleaseStatement(Child)) {
+        auto It = Released.find(Release->Variable);
+        if (It != Released.end() &&
+            !IsExternalMacroBody(Release->Location, SourceManager)) {
+          Check.diag(SourceManager.getExpansionLoc(Release->Location),
+                     "%0 is released by %1 after %2 already released it")
+              << Release->Variable->getName() << Release->Function->getName()
+              << It->second.Function->getName();
+        } else {
+          unsigned& ReferenceCount = ReferenceCounts[Release->Variable];
+          if (ReferenceCount == 0) {
+            ReferenceCount = 1;
+          }
+          --ReferenceCount;
+          if (ReferenceCount == 0) {
+            Released[Release->Variable] = ReleaseInfo{
+                .Function = Release->Function, .Location = Release->Location};
+          }
+        }
+      } else if (std::optional<DirectRefCountOperation> Retain =
+                     DirectRetainStatement(Child)) {
+        if (!Released.contains(Retain->Variable)) {
+          unsigned& ReferenceCount = ReferenceCounts[Retain->Variable];
+          if (ReferenceCount == 0) {
+            ReferenceCount = 1;
+          }
+          ++ReferenceCount;
+        }
+      } else if (const VarDecl* Assigned = DirectVariableAssignment(Child)) {
+        Released.erase(Assigned);
+        ReferenceCounts.erase(Assigned);
+      }
+      Visit(Child);
+    }
+  }
+
+ private:
+  void VisitChildren(const Stmt* Statement) {
+    for (const Stmt* Child : Statement->children()) {
+      if (Child) {
+        Visit(Child);
+      }
+    }
+  }
+
+  ClangTidyCheck& Check;
+  const SourceManager& SourceManager;
+};
+
 }  // namespace
 
 RefCountLifecycleCheck::RefCountLifecycleCheck(StringRef Name,
@@ -426,6 +663,13 @@ void RefCountLifecycleCheck::check(
   if (IsExternalMacroBody(Function->getLocation(), SourceManager)) {
     return;
   }
+  const Stmt* Body = Function->getBody();
+  if (!Body) {
+    return;
+  }
+  ReleaseFlowAnalyzer FlowAnalyzer(*this, SourceManager);
+  FlowAnalyzer.Visit(Body);
+
   std::optional<std::string> BodyText = FunctionBodySourceText(
       Function, SourceManager, Result.Context->getLangOpts());
   if (!BodyText || !BodyContainsRefCountMutation(*BodyText)) {
