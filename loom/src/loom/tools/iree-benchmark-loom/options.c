@@ -30,75 +30,80 @@ IREE_FLAG(int32_t, sample, -1,
 IREE_FLAG(string, measure, "case_end_to_end",
           "Measurement mode. Use 'case_end_to_end', 'end_to_end', or "
           "'dispatch_complete'.");
-IREE_FLAG(int32_t, max_samples_per_case,
-          LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
-          "Maximum number of samples planned per check.case.");
+IREE_FLAG_NAMED(int32_t, max_samples_per_case, "max-samples-per-case",
+                LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
+                "Maximum number of samples planned per check.case.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used before HAL candidate emission. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
 IREE_FLAG(string, output, "",
           "Output path for benchmark results. Empty or '-' writes to stdout.");
-IREE_FLAG(string, output_format, "snapshot",
-          "Benchmark result output format. Use 'snapshot' for one compact JSON "
-          "document or 'jsonl' for newline-delimited lifecycle events.");
-IREE_FLAG(string, file_output_dir, "",
-          "Directory receiving check.file.write.* outputs. Empty uses "
-          "$TMPDIR/iree-loom-benchmark/<source>_<hash>/ for this run.");
-IREE_FLAG(string, artifact_bundle_dir, "",
-          "Directory receiving a self-contained run bundle. When set and "
-          "--output is empty, results are written inside the bundle; "
-          "check.file.write outputs and profile artifacts default to "
-          "bundle subdirectories unless their explicit flags are set.");
-IREE_FLAG(string, artifact_bundle_policy, "minimal",
-          "Artifact bundle policy when --artifact_bundle_dir is set. Use "
-          "'minimal', 'debug', or 'full'.");
-IREE_FLAG(bool, dry_run, false,
-          "Reports selected logical benchmarks and deduplicated physical work "
-          "items without running correctness, compilation, or measurement.");
+IREE_FLAG_NAMED(
+    string, output_format, "output-format", "snapshot",
+    "Benchmark result output format. Use 'snapshot' for one compact JSON "
+    "document or 'jsonl' for newline-delimited lifecycle events.");
+IREE_FLAG_NAMED(string, file_output_dir, "file-output-dir", "",
+                "Directory receiving check.file.write.* outputs. Empty uses "
+                "$TMPDIR/iree-loom-benchmark/<source>_<hash>/ for this run.");
+IREE_FLAG_NAMED(
+    string, artifact_bundle_dir, "artifact-bundle-dir", "",
+    "Directory receiving a self-contained run bundle. When set and --output "
+    "is empty, results are written inside the bundle; check.file.write outputs "
+    "and profile artifacts default to bundle subdirectories unless their "
+    "explicit flags are set.");
+IREE_FLAG_NAMED(string, artifact_bundle_policy, "artifact-bundle-policy",
+                "minimal",
+                "Artifact bundle policy when --artifact-bundle-dir is set. "
+                "Use 'minimal', 'debug', or 'full'.");
+IREE_FLAG_NAMED(
+    bool, dry_run, "dry-run", false,
+    "Reports selected logical benchmarks and deduplicated physical work items "
+    "without running correctness, compilation, or measurement.");
 IREE_FLAG(bool, agents_md, false,
           "Prints a compact Markdown snippet suitable for AGENTS.md and "
           "exits.");
-IREE_FLAG(string, compile_report, "summary",
-          "Structured compile report embedded in benchmark rows. Use "
-          "'summary', 'details', or empty/'none'.");
-IREE_FLAG(int32_t, compile_report_row_limit,
-          LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-          "Maximum rows per report row category to capture for "
-          "--compile_report=details.");
-IREE_FLAG(
-    string, profile_data, "",
+IREE_FLAG_NAMED(string, compile_report, "compile-report", "summary",
+                "Structured compile report embedded in benchmark rows. Use "
+                "'summary', 'details', or empty/'none'.");
+IREE_FLAG_NAMED(int32_t, compile_report_row_limit, "compile-report-row-limit",
+                LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
+                "Maximum rows per report row category to capture for "
+                "--compile-report=details.");
+IREE_FLAG_NAMED(
+    string, profile_data, "profile-data", "",
     "HAL profiling data families for the final profiled batch as a "
     "comma-separated list. Empty uses dispatch-events,executable-metadata. "
     "Accepted families match --device_profiling_mode: queue-events, "
     "host-execution, device-queue-events, dispatch-events, memory-events, "
     "device-metrics, command-region-events, counters, counter-ranges, "
     "executable-metadata, executable-traces.");
-IREE_FLAG_LIST(
-    string, profile_counter,
+IREE_FLAG_LIST_NAMED(
+    string, profile_counter, "profile-counter",
     "Implementation-specific hardware counter name to request during the final "
-    "profiled batch. May be repeated and requires --profile_data to include "
+    "profiled batch. May be repeated and requires --profile-data to include "
     "counters or counter-ranges.");
-IREE_FLAG(
-    string, profile_artifacts_dir, "",
+IREE_FLAG_NAMED(
+    string, profile_artifacts_dir, "profile-artifacts-dir", "",
     "Directory receiving raw IREE HAL profile bundles from final profiled "
-    "batches. Setting this implies --profile_final_batch=true unless that flag "
+    "batches. Setting this implies --profile-final-batch=true unless that flag "
     "was explicitly set false.");
-IREE_FLAG(string, sample_compilation, "once",
-          "Sample compilation mode for dispatch_complete benchmarks. Use "
-          "'once' to compile once and pass parameter values at dispatch "
-          "time, 'per_sample' to compile each selected sample with concrete "
-          "parameter facts, or 'both' to emit both result sets.");
-IREE_FLAG(
-    int64_t, input_ring_min_bytes,
+IREE_FLAG_NAMED(string, sample_compilation, "sample-compilation", "once",
+                "Sample compilation mode for dispatch_complete benchmarks. "
+                "Use 'once' to compile once and pass parameter values at "
+                "dispatch time, 'per_sample' to compile each selected sample "
+                "with concrete parameter facts, or 'both' to emit both result "
+                "sets.");
+IREE_FLAG_NAMED(
+    int64_t, input_ring_min_bytes, "input-ring-min-bytes",
     IREE_BENCHMARK_LOOM_DEFAULT_INPUT_RING_MIN_BYTES,
     "Minimum total byte size of the device-buffer binding ring used by "
-    "dispatch_complete benchmarks. The auto ring count is max(batch_size, "
-    "ceil(input_ring_min_bytes / bytes_per_binding_set)); use 0 to record one "
+    "dispatch_complete benchmarks. The auto ring count is max(batch-size, "
+    "ceil(min bytes / bytes per binding set)); use 0 to record one "
     "hot-reuse binding set.");
-IREE_FLAG(
-    int32_t, input_ring_count, 0,
+IREE_FLAG_NAMED(
+    int32_t, input_ring_count, "input-ring-count", 0,
     "Exact number of physical device-buffer binding sets to rotate through "
-    "dispatch_complete command buffers. Zero uses --input_ring_min_bytes. Use "
+    "dispatch_complete command buffers. Zero uses --input-ring-min-bytes. Use "
     "1 to force hot-reuse measurements.");
 IREE_FLAG(string, compare, "",
           "Comma-separated check.benchmark names to compare in one "
@@ -117,47 +122,47 @@ IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_i32_flag,
                    iree_benchmark_loom_print_i32_flag, &FLAG_iterations,
                    iterations, "Measured iterations.");
 static iree_benchmark_loom_i32_flag_t FLAG_warmup_iterations = {.value = 1};
-IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_i32_flag,
-                   iree_benchmark_loom_print_i32_flag, &FLAG_warmup_iterations,
-                   warmup_iterations, "Warmup iterations.");
+IREE_FLAG_CALLBACK_NAMED(iree_benchmark_loom_parse_i32_flag,
+                         iree_benchmark_loom_print_i32_flag,
+                         &FLAG_warmup_iterations, warmup_iterations,
+                         "warmup-iterations", "Warmup iterations.");
 static iree_benchmark_loom_i32_flag_t FLAG_batch_size = {.value = 1};
-IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_i32_flag,
-                   iree_benchmark_loom_print_i32_flag, &FLAG_batch_size,
-                   batch_size,
-                   "Number of repeated dispatches recorded into each measured "
-                   "HAL command buffer batch.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_benchmark_loom_parse_i32_flag, iree_benchmark_loom_print_i32_flag,
+    &FLAG_batch_size, batch_size, "batch-size",
+    "Number of repeated dispatches recorded into each measured HAL command "
+    "buffer batch.");
 static iree_benchmark_loom_i32_flag_t FLAG_min_time_ms = {.value = 100};
-IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_i32_flag,
-                   iree_benchmark_loom_print_i32_flag, &FLAG_min_time_ms,
-                   min_time_ms,
-                   "Minimum measured duration for dispatch_complete "
-                   "benchmarks.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_benchmark_loom_parse_i32_flag, iree_benchmark_loom_print_i32_flag,
+    &FLAG_min_time_ms, min_time_ms, "min-time-ms",
+    "Minimum measured duration for dispatch_complete benchmarks.");
 static iree_benchmark_loom_i32_flag_t FLAG_warmup_time_ms = {.value = 0};
-IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_i32_flag,
-                   iree_benchmark_loom_print_i32_flag, &FLAG_warmup_time_ms,
-                   warmup_time_ms,
-                   "Minimum warmup duration for dispatch_complete benchmarks.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_benchmark_loom_parse_i32_flag, iree_benchmark_loom_print_i32_flag,
+    &FLAG_warmup_time_ms, warmup_time_ms, "warmup-time-ms",
+    "Minimum warmup duration for dispatch_complete benchmarks.");
 static iree_benchmark_loom_i32_flag_t FLAG_max_batches = {.value = 1000};
-IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_i32_flag,
-                   iree_benchmark_loom_print_i32_flag, &FLAG_max_batches,
-                   max_batches,
-                   "Maximum measured command-buffer batches for "
-                   "dispatch_complete benchmarks.");
+IREE_FLAG_CALLBACK_NAMED(iree_benchmark_loom_parse_i32_flag,
+                         iree_benchmark_loom_print_i32_flag, &FLAG_max_batches,
+                         max_batches, "max-batches",
+                         "Maximum measured command-buffer batches for "
+                         "dispatch_complete benchmarks.");
 static iree_benchmark_loom_i32_flag_t FLAG_stable_p90_to_p50_ppm = {
     .value = 100000,
 };
-IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_i32_flag,
-                   iree_benchmark_loom_print_i32_flag,
-                   &FLAG_stable_p90_to_p50_ppm, stable_p90_to_p50_ppm,
-                   "p90-to-p50 spread threshold in parts per million. Zero "
-                   "stops after the minimum count and duration are reached.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_benchmark_loom_parse_i32_flag, iree_benchmark_loom_print_i32_flag,
+    &FLAG_stable_p90_to_p50_ppm, stable_p90_to_p50_ppm, "stable-p90-to-p50-ppm",
+    "p90-to-p50 spread threshold in parts per million. Zero stops after the "
+    "minimum count and duration are reached.");
 static iree_benchmark_loom_bool_flag_t FLAG_profile_final_batch = {.value =
                                                                        false};
-IREE_FLAG_CALLBACK(iree_benchmark_loom_parse_bool_flag,
-                   iree_benchmark_loom_print_bool_flag,
-                   &FLAG_profile_final_batch, profile_final_batch,
-                   "Runs one final profiled HAL command-buffer batch after "
-                   "measured dispatch_complete timing.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_benchmark_loom_parse_bool_flag, iree_benchmark_loom_print_bool_flag,
+    &FLAG_profile_final_batch, profile_final_batch, "profile-final-batch",
+    "Runs one final profiled HAL command-buffer batch after measured "
+    "dispatch_complete timing.");
 
 void iree_benchmark_loom_options_initialize(
     iree_benchmark_loom_options_t* out_options) {
@@ -263,34 +268,34 @@ iree_status_t iree_benchmark_loom_options_from_flags(
       iree_make_cstring_view(FLAG_sample_compilation),
       &out_options->sample_compilation_mode));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_positive_i32_to_host_size(
-      "max_samples_per_case", FLAG_max_samples_per_case,
+      "max-samples-per-case", FLAG_max_samples_per_case,
       &out_options->max_samples_per_case));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_positive_i32_to_host_size(
       "iterations", FLAG_iterations.value, &out_options->iterations));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_non_negative_i32_to_host_size(
-      "warmup_iterations", FLAG_warmup_iterations.value,
+      "warmup-iterations", FLAG_warmup_iterations.value,
       &out_options->warmup_iterations));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_positive_i32_to_host_size(
-      "batch_size", FLAG_batch_size.value, &out_options->batch_size));
+      "batch-size", FLAG_batch_size.value, &out_options->batch_size));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_positive_i32_to_host_size(
-      "max_batches", FLAG_max_batches.value, &out_options->max_batches));
+      "max-batches", FLAG_max_batches.value, &out_options->max_batches));
 
   if (FLAG_min_time_ms.value < 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "--min_time_ms must be non-negative; got %d",
+                            "--min-time-ms must be non-negative; got %d",
                             (int)FLAG_min_time_ms.value);
   }
   out_options->min_time_ms = FLAG_min_time_ms.value;
   if (FLAG_warmup_time_ms.value < 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "--warmup_time_ms must be non-negative; got %d",
+                            "--warmup-time-ms must be non-negative; got %d",
                             (int)FLAG_warmup_time_ms.value);
   }
   out_options->warmup_time_ms = FLAG_warmup_time_ms.value;
   if (FLAG_stable_p90_to_p50_ppm.value < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--stable_p90_to_p50_ppm must be non-negative; got %d",
+        "--stable-p90-to-p50-ppm must be non-negative; got %d",
         (int)FLAG_stable_p90_to_p50_ppm.value);
   }
   out_options->stable_p90_to_p50_ppm =
@@ -298,16 +303,16 @@ iree_status_t iree_benchmark_loom_options_from_flags(
   if (FLAG_input_ring_min_bytes < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--input_ring_min_bytes must be non-negative; got %" PRIi64,
+        "--input-ring-min-bytes must be non-negative; got %" PRIi64,
         FLAG_input_ring_min_bytes);
   }
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_non_negative_i32_to_host_size(
-      "input_ring_count", FLAG_input_ring_count,
+      "input-ring-count", FLAG_input_ring_count,
       &out_options->input_ring_count));
   if (FLAG_compile_report_row_limit < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--compile_report_row_limit must be non-negative; got %d",
+        "--compile-report-row-limit must be non-negative; got %d",
         (int)FLAG_compile_report_row_limit);
   }
   out_options->compile_report_row_limit =
@@ -350,13 +355,13 @@ iree_status_t iree_benchmark_loom_options_from_flags(
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "--compare requires one sample-compilation mode; use "
-        "--sample_compilation=once or --sample_compilation=per_sample");
+        "--sample-compilation=once or --sample-compilation=per_sample");
   }
   if (iree_string_view_equal(
           iree_string_view_trim(out_options->file_output_dir), IREE_SV("-"))) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--file_output_dir must name a directory; '-' is reserved for stdout");
+        "--file-output-dir must name a directory; '-' is reserved for stdout");
   }
   return iree_ok_status();
 }
@@ -404,7 +409,7 @@ iree_status_t iree_benchmark_loom_parse_output_format(
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "--output_format must be one of snapshot or jsonl; got '%.*s'",
+      "--output-format must be one of snapshot or jsonl; got '%.*s'",
       (int)value.size, value.data);
 }
 
@@ -431,7 +436,7 @@ iree_status_t iree_benchmark_loom_parse_artifact_bundle_policy(
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "--artifact_bundle_policy must be one of minimal, debug, full, or none; "
+      "--artifact-bundle-policy must be one of minimal, debug, full, or none; "
       "got '%.*s'",
       (int)value.size, value.data);
 }
@@ -454,7 +459,7 @@ iree_status_t iree_benchmark_loom_parse_sample_compilation_mode(
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "--sample_compilation must be one of once, per_sample, or both; got "
+      "--sample-compilation must be one of once, per_sample, or both; got "
       "'%.*s'",
       (int)value.size, value.data);
 }
@@ -522,7 +527,7 @@ iree_string_view_t iree_benchmark_loom_interleave_mode_name(
 typedef struct iree_benchmark_loom_profile_family_name_t {
   // HAL profiling data-family bit represented by these names.
   iree_hal_device_profiling_data_families_t bit;
-  // Command-line family name accepted by --profile_data.
+  // Command-line family name accepted by --profile-data.
   const char* flag_name;
   // Stable JSON string used for this family.
   const char* json_name;
@@ -587,13 +592,13 @@ iree_status_t iree_benchmark_loom_parse_profile_data_families(
     family_part = iree_string_view_trim(family_part);
     if (iree_string_view_is_empty(family_part)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "--profile_data contains an empty data family");
+                              "--profile-data contains an empty data family");
     }
     if (iree_string_view_equal(family_part, IREE_SV("none"))) {
       if (*out_profile_data_families != IREE_HAL_DEVICE_PROFILING_DATA_NONE ||
           !iree_string_view_is_empty(iree_string_view_trim(remaining))) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "--profile_data=none cannot be combined with "
+                                "--profile-data=none cannot be combined with "
                                 "other data families");
       }
       return iree_ok_status();
@@ -620,7 +625,7 @@ iree_status_t iree_benchmark_loom_parse_profile_data_families(
     }
     if (!matched) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unsupported --profile_data family '%.*s'",
+                              "unsupported --profile-data family '%.*s'",
                               (int)family_part.size, family_part.data);
     }
     remaining = iree_string_view_trim(remaining);

@@ -28,9 +28,9 @@ IREE_FLAG(string, case, "",
 IREE_FLAG(int32_t, sample, -1,
           "Optional concrete sample ordinal to execute for the selected case "
           "or cases. Negative executes all planned samples.");
-IREE_FLAG(int32_t, max_samples_per_case,
-          LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
-          "Maximum number of samples planned per check.case.");
+IREE_FLAG_NAMED(int32_t, max_samples_per_case, "max-samples-per-case",
+                LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
+                "Maximum number of samples planned per check.case.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used for HAL actual invocations. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
@@ -364,7 +364,7 @@ int iree_test_loom_main(int argc, char** argv,
   }
   if (iree_status_is_ok(status) && FLAG_max_samples_per_case <= 0) {
     status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "--max_samples_per_case must be positive; got "
+                              "--max-samples-per-case must be positive; got "
                               "%d",
                               (int)FLAG_max_samples_per_case);
   }

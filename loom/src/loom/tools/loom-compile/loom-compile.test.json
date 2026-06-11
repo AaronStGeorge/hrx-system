@@ -18,7 +18,7 @@
             "args": [
               "{tmp}/branchy.loom",
               "--output={tmp}/branchy.vmfb",
-              "--compile_report=summary"
+              "--compile-report=summary"
             ]
           },
           "stderr": {
@@ -45,7 +45,7 @@
               "--function=branchy",
               "--input=0",
               "--input=21",
-              "--expected_output=42"
+              "--expected-output=42"
             ]
           },
           "stdout": {
@@ -114,8 +114,8 @@
             "args": [
               "{tmp}/branchy.loom",
               "--output={tmp}/branchy.vmfb",
-              "--compile_report=details",
-              "--compile_report_output={tmp}/report.json"
+              "--compile-report=details",
+              "--compile-report-output={tmp}/report.json"
             ]
           },
           "files": [
@@ -136,8 +136,8 @@
             "args": [
               "{tmp}/branchy.loom",
               "--output={tmp}/unused.vmfb",
-              "--compile_report=summary",
-              "--compile_report_output=-"
+              "--compile-report=summary",
+              "--compile-report-output=-"
             ]
           },
           "stdout": {
@@ -192,7 +192,7 @@
               "--module={tmp}/configured.vmfb",
               "--function=configured",
               "--input=10",
-              "--expected_output=42"
+              "--expected-output=42"
             ]
           },
           "stdout": {

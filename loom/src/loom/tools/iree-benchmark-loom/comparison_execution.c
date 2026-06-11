@@ -218,7 +218,7 @@ iree_benchmark_loom_initialize_dispatch_comparison_candidates(
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "interleaved comparisons require one sample-compilation mode; use "
-        "--sample_compilation=once or --sample_compilation=per_sample");
+        "--sample-compilation=once or --sample-compilation=per_sample");
   }
   if (benchmark_options->interleave_mode ==
           IREE_BENCHMARK_LOOM_INTERLEAVE_ABABA &&

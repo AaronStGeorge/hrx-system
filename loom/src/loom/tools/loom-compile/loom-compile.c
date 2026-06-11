@@ -55,16 +55,16 @@
 #include "loom/tooling/target/spirv/artifact_provider.h"
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
 
-IREE_FLAG(string, compile_root, "",
-          "Optional compile-root function symbol, such as '@main'. Native "
-          "backends use this to scope root-sensitive pass pipeline behavior; "
-          "artifact emission otherwise keeps every compatible exported "
-          "function.");
+IREE_FLAG_NAMED(
+    string, compile_root, "compile-root", "",
+    "Optional compile-root function symbol, such as '@main'. Native backends "
+    "use this to scope root-sensitive pass pipeline behavior; artifact "
+    "emission otherwise keeps every compatible exported function.");
 IREE_FLAG(string, backend, "vm",
           "Compilation backend to emit, such as 'vm' or a linked native "
           "backend.");
-IREE_FLAG(string, module_name, "loom",
-          "Module name to store in VM bytecode archives.");
+IREE_FLAG_NAMED(string, module_name, "module-name", "loom",
+                "Module name to store in VM bytecode archives.");
 IREE_FLAG(string, target, "",
           "Optional HAL backend target key, such as 'gfx1100'. When present, "
           "targetless kernels are assigned to the selected target before the "
@@ -80,27 +80,31 @@ IREE_FLAG_LIST(
     string, config,
     "Compile-time config binding. Repeat as --config=key=value. Bindings not "
     "referenced by the loaded module are ignored.");
-IREE_FLAG_LIST(string, config_file,
-               "JSON/JSONC config object file. Repeat for multiple files. "
-               "Nested object keys are flattened with '.' separators.");
+IREE_FLAG_LIST_NAMED(
+    string, config_file, "config-file",
+    "JSON/JSONC config object file. Repeat for multiple files. Nested object "
+    "keys are flattened with '.' separators.");
 IREE_FLAG(string, output, "-",
           "Output path for the primary runtime artifact. For VM this is the VM "
           "bytecode archive; for HAL this is the executable artifact passed to "
           "the selected HAL loader.");
-IREE_FLAG(string, emit_target_artifact, "",
-          "Optional output path for a target-native artifact produced beside "
-          "the primary runtime artifact, such as AMDGPU HSACO.");
-IREE_FLAG(string, compile_report, "",
-          "Optional compile report output. Use 'summary'/'details' for "
-          "structured JSON, 'text-summary'/'text-details' for human-readable "
-          "text, or empty/'none'.");
-IREE_FLAG(string, compile_report_output, "stderr",
-          "Output path for --compile_report. Use 'stderr', '-', or a file "
-          "path.");
-IREE_FLAG(int32_t, compile_report_row_limit,
-          LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-          "Maximum rows per report row category to capture for "
-          "--compile_report=details.");
+IREE_FLAG_NAMED(
+    string, emit_target_artifact, "emit-target-artifact", "",
+    "Optional output path for a target-native artifact produced beside the "
+    "primary runtime artifact, such as AMDGPU HSACO.");
+IREE_FLAG_NAMED(
+    string, compile_report, "compile-report", "",
+    "Optional compile report output. Use 'summary'/'details' for structured "
+    "JSON, 'text-summary'/'text-details' for human-readable text, or "
+    "empty/'none'.");
+IREE_FLAG_NAMED(string, compile_report_output, "compile-report-output",
+                "stderr",
+                "Output path for --compile-report. Use 'stderr', '-', or a "
+                "file path.");
+IREE_FLAG_NAMED(int32_t, compile_report_row_limit, "compile-report-row-limit",
+                LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
+                "Maximum rows per report row category to capture for "
+                "--compile-report=details.");
 
 #if LOOM_COMPILE_HAVE_AMDGPU
 static const loom_run_execution_provider_t kLoomCompileAmdgpuProvider = {
@@ -261,7 +265,7 @@ static iree_status_t loom_compile_report_options_initialize(
   if (FLAG_compile_report_row_limit < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--compile_report_row_limit must be non-negative; got %d",
+        "--compile-report-row-limit must be non-negative; got %d",
         (int)FLAG_compile_report_row_limit);
   }
   out_options->row_limit = (iree_host_size_t)FLAG_compile_report_row_limit;
@@ -362,8 +366,8 @@ static iree_status_t loom_compile_write_report(
          loom_tooling_file_path_is_stdio(target_artifact_path))) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "--compile_report_output=- cannot share stdout with --output=- or "
-          "--emit_target_artifact=-");
+          "--compile-report-output=- cannot share stdout with --output=- or "
+          "--emit-target-artifact=-");
     }
     loom_output_stream_t stream;
     loom_output_stream_for_file(stdout, &stream);
@@ -413,7 +417,7 @@ static iree_status_t loom_compile_emit_hal(
       loom_tooling_file_path_is_stdio(target_artifact_path)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--output and --emit_target_artifact cannot both write to stdout");
+        "--output and --emit-target-artifact cannot both write to stdout");
   }
 
   loom_run_hal_candidate_t candidate = {0};
@@ -454,7 +458,7 @@ static iree_status_t loom_compile_emit_vm(
           iree_make_cstring_view(FLAG_emit_target_artifact))) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--emit_target_artifact is only valid for HAL artifact providers");
+        "--emit-target-artifact is only valid for HAL artifact providers");
   }
 #if LOOM_COMPILE_HAVE_IREE_VM
   loom_ireevm_run_candidate_t candidate = {0};

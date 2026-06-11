@@ -51,21 +51,24 @@ IREE_FLAG_LIST(string, config,
                "Compile/link-time config binding. Repeat as "
                "--config=key=value. Bindings specialize each materialized "
                "input module before linking; unused bindings are ignored.");
-IREE_FLAG_LIST(string, config_file,
-               "JSON/JSONC config object file. Repeat for multiple files. "
-               "Nested object keys are flattened with '.' separators.");
-IREE_FLAG(bool, include_exported_roots, false,
-          "In link/selective mode, add exported symbols as roots.");
-IREE_FLAG(bool, strip_check, false,
-          "Strip check.case and check.benchmark symbols before output.");
-IREE_FLAG(bool, require_resolved_config, false,
-          "Require all config.decl symbols to be materialized before output.");
-IREE_FLAG(bool, print_config_schema, false,
-          "Print config schema JSON instead of linked Loom IR.");
-IREE_FLAG(bool, print_plan, false,
-          "Print the planner's selected symbols instead of linked output.");
-IREE_FLAG(bool, list_symbols, false,
-          "Print indexed input symbols instead of linked output.");
+IREE_FLAG_LIST_NAMED(
+    string, config_file, "config-file",
+    "JSON/JSONC config object file. Repeat for multiple files. Nested object "
+    "keys are flattened with '.' separators.");
+IREE_FLAG_NAMED(bool, include_exported_roots, "include-exported-roots", false,
+                "In link/selective mode, add exported symbols as roots.");
+IREE_FLAG_NAMED(bool, strip_check, "strip-check", false,
+                "Strip check.case and check.benchmark symbols before output.");
+IREE_FLAG_NAMED(
+    bool, require_resolved_config, "require-resolved-config", false,
+    "Require all config.decl symbols to be materialized before output.");
+IREE_FLAG_NAMED(bool, print_config_schema, "print-config-schema", false,
+                "Print config schema JSON instead of linked Loom IR.");
+IREE_FLAG_NAMED(bool, print_plan, "print-plan", false,
+                "Print the planner's selected symbols instead of linked "
+                "output.");
+IREE_FLAG_NAMED(bool, list_symbols, "list-symbols", false,
+                "Print indexed input symbols instead of linked output.");
 IREE_FLAG(bool, verify, true,
           "Verify the linked output module before printing.");
 
@@ -217,7 +220,7 @@ static iree_status_t loom_link_cli_resolve_plan_mode(
     if (roots.count > 0 || include_exported_roots) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "archive mode does not accept --root or --include_exported_roots");
+          "archive mode does not accept --root or --include-exported-roots");
     }
     *out_mode = LOOM_LINK_PLAN_ARCHIVE;
     return iree_ok_status();
@@ -1195,7 +1198,7 @@ int main(int argc, char** argv) {
       "Link "
       "mode keeps explicit roots or exported roots and their reachable "
       "dependencies.\n"
-      "Use --strip_check to remove check.case and check.benchmark symbols from "
+      "Use --strip-check to remove check.case and check.benchmark symbols from "
       "runtime artifacts.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
@@ -1239,13 +1242,13 @@ int main(int argc, char** argv) {
       (FLAG_print_plan || FLAG_list_symbols)) {
     status = iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--print_config_schema cannot be combined with --print_plan or "
-        "--list_symbols");
+        "--print-config-schema cannot be combined with --print-plan or "
+        "--list-symbols");
   }
   if (iree_status_is_ok(status) && FLAG_print_plan && FLAG_list_symbols) {
     status =
         iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                         "--print_plan cannot be combined with --list_symbols");
+                         "--print-plan cannot be combined with --list-symbols");
   }
   if (iree_status_is_ok(status)) {
     loom_context_initialize(allocator, &context);

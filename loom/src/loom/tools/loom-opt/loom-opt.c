@@ -45,25 +45,30 @@ IREE_FLAG_LIST(
     string, config,
     "Compile/link-time config binding. Repeat as --config=key=value. Bindings "
     "not referenced by the loaded module are ignored.");
-IREE_FLAG_LIST(string, config_file,
-               "JSON/JSONC config object file. Repeat for multiple files. "
-               "Nested object keys are flattened with '.' separators.");
-IREE_FLAG(bool, require_resolved_config, false,
-          "Require all config.decl symbols to be materialized before output.");
-IREE_FLAG(bool, print_config_schema, false,
-          "Print config schema JSON instead of Loom IR.");
+IREE_FLAG_LIST_NAMED(
+    string, config_file, "config-file",
+    "JSON/JSONC config object file. Repeat for multiple files. Nested object "
+    "keys are flattened with '.' separators.");
+IREE_FLAG_NAMED(
+    bool, require_resolved_config, "require-resolved-config", false,
+    "Require all config.decl symbols to be materialized before output.");
+IREE_FLAG_NAMED(bool, print_config_schema, "print-config-schema", false,
+                "Print config schema JSON instead of Loom IR.");
 IREE_FLAG(bool, verify, true,
           "Verify the module before and after executing passes.");
-IREE_FLAG(bool, list_passes, false, "Print registered passes and exit.");
-IREE_FLAG(string, pass_help, "", "Print detailed help for one pass and exit.");
-IREE_FLAG(string, pass_report, "",
-          "Pass execution report format. Use 'json' or empty/'none'.");
-IREE_FLAG(string, pass_reproducer, "",
-          "Path to a one-file pass failure reproducer to write on failure.");
-IREE_FLAG(string, diagnostic_format, "text",
-          "Diagnostic output format. Use 'text' or 'json'.");
-IREE_FLAG(string, low_asm_descriptor_set, "",
-          "Descriptor-set key used when printing low asm regions.");
+IREE_FLAG_NAMED(bool, list_passes, "list-passes", false,
+                "Print registered passes and exit.");
+IREE_FLAG_NAMED(string, pass_help, "pass-help", "",
+                "Print detailed help for one pass and exit.");
+IREE_FLAG_NAMED(string, pass_report, "pass-report", "",
+                "Pass execution report format. Use 'json' or empty/'none'.");
+IREE_FLAG_NAMED(string, pass_reproducer, "pass-reproducer", "",
+                "Path to a one-file pass failure reproducer to write on "
+                "failure.");
+IREE_FLAG_NAMED(string, diagnostic_format, "diagnostic-format", "text",
+                "Diagnostic output format. Use 'text' or 'json'.");
+IREE_FLAG_NAMED(string, low_asm_descriptor_set, "low-asm-descriptor-set", "",
+                "Descriptor-set key used when printing low asm regions.");
 
 typedef enum loom_opt_pass_report_mode_e {
   LOOM_OPT_PASS_REPORT_NONE = 0,

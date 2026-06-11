@@ -56,7 +56,7 @@ static iree_status_t iree_benchmark_loom_validate_file_output_path(
   if (iree_benchmark_loom_path_is_absolute(path)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "check.file.write path '%.*s' must be relative to --file_output_dir",
+        "check.file.write path '%.*s' must be relative to --file-output-dir",
         (int)path.size, path.data);
   }
 
@@ -77,7 +77,7 @@ static iree_status_t iree_benchmark_loom_validate_file_output_path(
     if (iree_string_view_equal(component, IREE_SV(".."))) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "check.file.write path '%.*s' must stay within --file_output_dir",
+          "check.file.write path '%.*s' must stay within --file-output-dir",
           (int)path.size, path.data);
     }
     for (iree_host_size_t i = 0; i < component.size; ++i) {
@@ -520,12 +520,12 @@ iree_status_t iree_benchmark_loom_artifact_bundle_initialize(
   }
   if (loom_tooling_file_path_is_stdio(bundle_dir)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "--artifact_bundle_dir must name a directory");
+                            "--artifact-bundle-dir must name a directory");
   }
   if (out_bundle->policy == IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "--artifact_bundle_policy=none conflicts with "
-                            "--artifact_bundle_dir");
+                            "--artifact-bundle-policy=none conflicts with "
+                            "--artifact-bundle-dir");
   }
 
   iree_status_t status = iree_benchmark_loom_dup_string_view(

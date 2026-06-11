@@ -7,7 +7,7 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/testdata/scalar_benchmarks.loom",
-          "--output_format=jsonl",
+          "--output-format=jsonl",
           "--benchmark=@scalar_equal_latency"
         ]
       },
@@ -34,11 +34,11 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/testdata/scalar_benchmarks.loom",
-          "--output_format=jsonl",
+          "--output-format=jsonl",
           "--benchmark=@sampled_choice_latency",
           "--sample=1",
           "--iterations=2",
-          "--warmup_iterations=0"
+          "--warmup-iterations=0"
         ]
       },
       "stdout": {
@@ -59,9 +59,9 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/testdata/scalar_benchmarks.loom",
-          "--output_format=jsonl",
+          "--output-format=jsonl",
           "--benchmark=@scalar_equal_latency",
-          "--dry_run",
+          "--dry-run",
           "--output={tmp}/dry_run.jsonl"
         ]
       },
@@ -78,10 +78,10 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/testdata/scalar_benchmarks.loom",
-          "--output_format=jsonl",
+          "--output-format=jsonl",
           "--benchmark=@scalar_equal_latency",
-          "--dry_run",
-          "--artifact_bundle_dir={tmp}/bundle"
+          "--dry-run",
+          "--artifact-bundle-dir={tmp}/bundle"
         ]
       },
       "files": [
@@ -101,7 +101,7 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/testdata/scalar_benchmarks.loom",
-          "--output_format=jsonl",
+          "--output-format=jsonl",
           "--benchmark=@scalar_equal_dispatch_latency",
           "--measure=dispatch_complete"
         ]
@@ -121,7 +121,7 @@
         "tool": "iree-benchmark-loom",
         "args": [
           "{srcdir}/testdata/duplicate_symbol.loom",
-          "--output_format=jsonl",
+          "--output-format=jsonl",
           "--benchmark=@duplicate_symbol_latency"
         ]
       },
@@ -150,7 +150,7 @@
           "## iree-benchmark-loom",
           "default output is a compact JSON snapshot",
           "work_items",
-          "--output_format=jsonl",
+          "--output-format=jsonl",
           "compile_report_path",
           "target_artifact_path"
         ]
@@ -166,7 +166,7 @@
         "contains": [
           "Runs correctness-gated check.benchmark records from a Loom module.",
           "Snapshot output (default)",
-          "JSONL event stream (--output_format=jsonl)",
+          "JSONL event stream (--output-format=jsonl)",
           "results.json in snapshot mode",
           "compile_report_path",
           "target_artifact_path"

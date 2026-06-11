@@ -82,7 +82,7 @@ static iree_status_t iree_benchmark_loom_policy_from_benchmark(
       if (options->profile_final_batch_specified &&
           !options->profile_final_batch) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "--profile_final_batch=false conflicts with "
+                                "--profile-final-batch=false conflicts with "
                                 "requested final-batch profile data");
       }
       profile_final_batch = true;
@@ -114,7 +114,7 @@ static iree_status_t iree_benchmark_loom_policy_from_benchmark(
                             counter_data)) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
-            "--profile_counter requires --profile_data to include counters or "
+            "--profile-counter requires --profile-data to include counters or "
             "counter-ranges");
       }
       out_policy->profile_counter_set =

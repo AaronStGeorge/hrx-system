@@ -81,7 +81,7 @@ You can also run the benchmark planner directly:
 ```bash
 python dev.py bazel run //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom -- \
   loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom \
-  --dry_run
+  --dry-run
 ```
 
 The Bazel HAL driver registry defaults to host-only drivers. On an
@@ -96,13 +96,13 @@ python dev.py bazel run \
   loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom \
   --device=amdgpu \
   --measure=dispatch_complete \
-  --sample_compilation=per_sample \
+  --sample-compilation=per_sample \
   --iterations=1 \
-  --warmup_iterations=0 \
-  --batch_size=1 \
-  --min_time_ms=0 \
-  --max_batches=1 \
-  --input_ring_count=1
+  --warmup-iterations=0 \
+  --batch-size=1 \
+  --min-time-ms=0 \
+  --max-batches=1 \
+  --input-ring-count=1
 ```
 
 The authoring pattern to notice is that correctness policy and benchmark rows

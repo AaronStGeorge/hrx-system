@@ -20,8 +20,8 @@
               "--backend=amdgpu-hal",
               "--target=gfx11-generic",
               "--output={tmp}/targetless_amdgpu.vmfb",
-              "--emit_target_artifact={tmp}/targetless_amdgpu.hsaco",
-              "--compile_report=summary"
+              "--emit-target-artifact={tmp}/targetless_amdgpu.hsaco",
+              "--compile-report=summary"
             ]
           },
           "stderr": {
@@ -96,7 +96,7 @@
               "--backend=amdgpu-hal",
               "--target=gfx11-generic",
               "--output={tmp}/amdgpu_i64_to_i8.hsaco",
-              "--compile_report=summary"
+              "--compile-report=summary"
             ]
           },
           "stderr": {

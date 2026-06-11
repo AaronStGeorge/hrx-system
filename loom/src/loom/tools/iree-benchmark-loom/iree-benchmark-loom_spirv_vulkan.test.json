@@ -12,14 +12,14 @@
           "--vulkan_validation_layers=false",
           "--measure=dispatch_complete",
           "--iterations=1",
-          "--warmup_iterations=0",
-          "--batch_size=1",
-          "--min_time_ms=0",
-          "--max_batches=1",
-          "--input_ring_count=1",
-          "--output_format=jsonl",
-          "--artifact_bundle_dir={tmp}/spirv.bundle",
-          "--artifact_bundle_policy=debug"
+          "--warmup-iterations=0",
+          "--batch-size=1",
+          "--min-time-ms=0",
+          "--max-batches=1",
+          "--input-ring-count=1",
+          "--output-format=jsonl",
+          "--artifact-bundle-dir={tmp}/spirv.bundle",
+          "--artifact-bundle-policy=debug"
         ]
       },
       "files": [
@@ -44,12 +44,12 @@
           "--vulkan_validation_layers=false",
           "--measure=dispatch_complete",
           "--iterations=1",
-          "--warmup_iterations=0",
-          "--batch_size=1",
-          "--min_time_ms=0",
-          "--max_batches=1",
-          "--input_ring_count=1",
-          "--output_format=jsonl"
+          "--warmup-iterations=0",
+          "--batch-size=1",
+          "--min-time-ms=0",
+          "--max-batches=1",
+          "--input-ring-count=1",
+          "--output-format=jsonl"
         ]
       },
       "stdout": {
@@ -75,13 +75,13 @@
           "--vulkan_validation_layers=false",
           "--measure=dispatch_complete",
           "--iterations=1",
-          "--warmup_iterations=0",
-          "--batch_size=1",
-          "--min_time_ms=0",
-          "--max_batches=1",
-          "--input_ring_count=1",
+          "--warmup-iterations=0",
+          "--batch-size=1",
+          "--min-time-ms=0",
+          "--max-batches=1",
+          "--input-ring-count=1",
           "--repetitions=1",
-          "--output_format=jsonl"
+          "--output-format=jsonl"
         ]
       },
       "stdout": {

@@ -67,7 +67,7 @@ typedef struct iree_benchmark_loom_bundle_file_entry_t {
 typedef struct iree_benchmark_loom_artifact_bundle_t {
   // Host allocator used for owned path strings.
   iree_allocator_t host_allocator;
-  // True when --artifact_bundle_dir requested a bundle.
+  // True when --artifact-bundle-dir requested a bundle.
   bool enabled;
   // Parsed bundle policy controlling which artifact classes are expected.
   iree_benchmark_loom_artifact_bundle_policy_t policy;

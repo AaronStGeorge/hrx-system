@@ -38,7 +38,7 @@ static iree_status_t iree_benchmark_loom_compile_report_options_initialize(
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "iree-benchmark-loom emits structured JSON reports; use "
-        "--compile_report=summary, details, json-summary, or json-details");
+        "--compile-report=summary, details, json-summary, or json-details");
   }
   out_options->row_limit = options->compile_report_row_limit;
   return iree_ok_status();

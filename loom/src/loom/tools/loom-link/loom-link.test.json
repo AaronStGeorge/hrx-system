@@ -151,7 +151,7 @@
             "tool": "loom-link",
             "args": [
               "{tmp}/checks.loom",
-              "--strip_check"
+              "--strip-check"
             ]
           },
           "stdout": {
