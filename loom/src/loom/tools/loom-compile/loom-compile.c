@@ -304,12 +304,75 @@ static iree_status_t loom_compile_write_optional_target_artifact(
                                   allocator);
 }
 
+static iree_status_t loom_compile_write_report(
+    const loom_run_compile_report_capture_t* compile_report_capture,
+    iree_allocator_t allocator) {
+  if (!loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
+    return iree_ok_status();
+  }
+  const iree_string_view_t path =
+      iree_make_cstring_view(FLAG_compile_report_output);
+  if (iree_string_view_is_empty(path) ||
+      iree_string_view_equal(path, IREE_SV("stderr"))) {
+    loom_output_stream_t stream;
+    loom_output_stream_for_file(stderr, &stream);
+    IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_write_output(
+        compile_report_capture, &stream, allocator));
+    return fflush(stderr) == 0
+               ? iree_ok_status()
+               : iree_make_status(IREE_STATUS_DATA_LOSS,
+                                  "failed to flush compile report stderr");
+  }
+  if (loom_tooling_file_path_is_stdio(path)) {
+    const iree_string_view_t target_artifact_path =
+        iree_make_cstring_view(FLAG_emit_target_artifact);
+    if (loom_tooling_file_path_is_stdio(iree_make_cstring_view(FLAG_output)) ||
+        (!iree_string_view_is_empty(target_artifact_path) &&
+         loom_tooling_file_path_is_stdio(target_artifact_path))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "--compile_report_output=- cannot share stdout with --output=- or "
+          "--emit_target_artifact=-");
+    }
+    loom_output_stream_t stream;
+    loom_output_stream_for_file(stdout, &stream);
+    IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_write_output(
+        compile_report_capture, &stream, allocator));
+    return fflush(stdout) == 0
+               ? iree_ok_status()
+               : iree_make_status(IREE_STATUS_DATA_LOSS,
+                                  "failed to flush compile report stdout");
+  }
+
+  FILE* file = fopen(FLAG_compile_report_output, "wb");
+  if (file == NULL) {
+    const int open_error = errno;
+    return iree_make_status(iree_status_code_from_errno(open_error),
+                            "failed to open compile report output '%.*s' (%d)",
+                            (int)path.size, path.data, open_error);
+  }
+  loom_output_stream_t stream;
+  loom_output_stream_for_file(file, &stream);
+  iree_status_t status = loom_run_compile_report_capture_write_output(
+      compile_report_capture, &stream, allocator);
+  if (fclose(file) != 0 && iree_status_is_ok(status)) {
+    const int close_error = errno;
+    status = iree_make_status(iree_status_code_from_errno(close_error),
+                              "failed to close compile report output '%.*s' "
+                              "(%d)",
+                              (int)path.size, path.data, close_error);
+  }
+  return status;
+}
+
 static iree_status_t loom_compile_emit_hal(
     const loom_run_hal_artifact_provider_t* artifact_provider,
     loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* compile_options,
-    iree_allocator_t allocator, bool* out_emitted) {
+    const loom_run_compile_report_capture_t* compile_report_capture,
+    iree_allocator_t allocator, bool* out_emitted, bool* out_report_written) {
   *out_emitted = false;
+  *out_report_written = false;
   const iree_string_view_t output_path = iree_make_cstring_view(FLAG_output);
   const iree_string_view_t target_artifact_path =
       iree_make_cstring_view(FLAG_emit_target_artifact);
@@ -334,6 +397,12 @@ static iree_status_t loom_compile_emit_hal(
   }
   if (iree_status_is_ok(status)) {
     *out_emitted = candidate.compiled;
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_write_report(compile_report_capture, allocator);
+    if (iree_status_is_ok(status)) {
+      *out_report_written = true;
+    }
   }
   loom_run_hal_candidate_deinitialize(&candidate);
   return status;
@@ -405,67 +474,6 @@ static iree_status_t loom_compile_make_unknown_backend_status(
   return status;
 }
 
-static iree_status_t loom_compile_write_report(
-    const loom_run_compile_report_capture_t* compile_report_capture,
-    iree_allocator_t allocator) {
-  if (!loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
-    return iree_ok_status();
-  }
-  const iree_string_view_t path =
-      iree_make_cstring_view(FLAG_compile_report_output);
-  if (iree_string_view_is_empty(path) ||
-      iree_string_view_equal(path, IREE_SV("stderr"))) {
-    loom_output_stream_t stream;
-    loom_output_stream_for_file(stderr, &stream);
-    IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_write_output(
-        compile_report_capture, &stream, allocator));
-    return fflush(stderr) == 0
-               ? iree_ok_status()
-               : iree_make_status(IREE_STATUS_DATA_LOSS,
-                                  "failed to flush compile report stderr");
-  }
-  if (loom_tooling_file_path_is_stdio(path)) {
-    const iree_string_view_t target_artifact_path =
-        iree_make_cstring_view(FLAG_emit_target_artifact);
-    if (loom_tooling_file_path_is_stdio(iree_make_cstring_view(FLAG_output)) ||
-        (!iree_string_view_is_empty(target_artifact_path) &&
-         loom_tooling_file_path_is_stdio(target_artifact_path))) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "--compile_report_output=- cannot share stdout with --output=- or "
-          "--emit_target_artifact=-");
-    }
-    loom_output_stream_t stream;
-    loom_output_stream_for_file(stdout, &stream);
-    IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_write_output(
-        compile_report_capture, &stream, allocator));
-    return fflush(stdout) == 0
-               ? iree_ok_status()
-               : iree_make_status(IREE_STATUS_DATA_LOSS,
-                                  "failed to flush compile report stdout");
-  }
-
-  FILE* file = fopen(FLAG_compile_report_output, "wb");
-  if (file == NULL) {
-    const int open_error = errno;
-    return iree_make_status(iree_status_code_from_errno(open_error),
-                            "failed to open compile report output '%.*s' (%d)",
-                            (int)path.size, path.data, open_error);
-  }
-  loom_output_stream_t stream;
-  loom_output_stream_for_file(file, &stream);
-  iree_status_t status = loom_run_compile_report_capture_write_output(
-      compile_report_capture, &stream, allocator);
-  if (fclose(file) != 0 && iree_status_is_ok(status)) {
-    const int close_error = errno;
-    status = iree_make_status(iree_status_code_from_errno(close_error),
-                              "failed to close compile report output '%.*s' "
-                              "(%d)",
-                              (int)path.size, path.data, close_error);
-  }
-  return status;
-}
-
 int main(int argc, char** argv) {
   IREE_TRACE_APP_ENTER();
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -496,6 +504,7 @@ int main(int argc, char** argv) {
   loom_run_module_t run_module = {0};
   loom_run_compile_report_capture_t compile_report_capture = {0};
   bool emitted = false;
+  bool report_written = false;
   int exit_code = 0;
 
   if (iree_status_is_ok(status)) {
@@ -557,7 +566,8 @@ int main(int argc, char** argv) {
             &kLoomCompileHalArtifactProviderRegistry, backend_name);
     if (artifact_provider != NULL) {
       status = loom_compile_emit_hal(artifact_provider, &run_module,
-                                     &compile_options, allocator, &emitted);
+                                     &compile_options, &compile_report_capture,
+                                     allocator, &emitted, &report_written);
     } else if (iree_string_view_equal(backend_name, IREE_SV("vm"))) {
       status = loom_compile_emit_vm(&run_module, &compile_options, allocator,
                                     &emitted);
@@ -566,7 +576,7 @@ int main(int argc, char** argv) {
           backend_name, &kLoomCompileHalArtifactProviderRegistry, allocator);
     }
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && !report_written) {
     status = loom_compile_write_report(&compile_report_capture, allocator);
   }
   if (iree_status_is_ok(status) && exit_code == 0 && !emitted) {
