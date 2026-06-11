@@ -82,6 +82,7 @@ loom_cc_library(
     loom::ir
     loom::ir::facts
     loom::ops::special_values
+    loom::tooling::cli::help
     loom::tooling::compile::pipeline
     loom::tooling::context
     loom::tooling::execution::benchmark

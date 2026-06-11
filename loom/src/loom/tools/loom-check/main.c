@@ -14,6 +14,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tools/loom-check/file.h"
 #include "loom/tools/loom-check/json_output.h"
 #include "loom/tools/loom-check/output.h"
@@ -267,6 +268,7 @@ int loom_check_main(int argc, char** argv,
       return 0;
     }
   }
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t host_allocator = iree_allocator_system();

@@ -14,6 +14,7 @@
 #include "iree/io/file_contents.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/config/config.h"
 #include "loom/tooling/context/context.h"
@@ -606,6 +607,7 @@ int main(int argc, char** argv) {
       "object such as {\"model36\":{\"model\":{\"hidden_size\":4096}}}. "
       "Files and direct bindings share one config set and duplicate keys are "
       "rejected.\n" LOOM_TOOLING_PASS_TRACE_USAGE);
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();

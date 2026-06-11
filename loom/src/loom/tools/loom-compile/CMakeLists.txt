@@ -46,6 +46,7 @@ loom_cc_binary(
     loom::codegen::low::text_asm
     loom::error::diagnostic
     loom::target::low_descriptor_registry
+    loom::tooling::cli::help
     loom::tooling::compile::pipeline
     loom::tooling::config
     loom::tooling::context

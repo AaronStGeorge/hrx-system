@@ -34,6 +34,7 @@ loom_cc_binary(
     loom::target::math_policy
     loom::target::predicate
     loom::target::provider
+    loom::tooling::cli::help
     loom::tooling::config
     loom::tooling::context
     loom::tooling::execution::session

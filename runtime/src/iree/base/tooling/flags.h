@@ -101,6 +101,14 @@ enum iree_flag_dump_mode_bits_t {
 };
 typedef uint32_t iree_flag_dump_mode_t;
 
+// Callback used to decide whether a registered flag appears in default
+// `--help` output. Returning true includes the flag. This only affects the
+// built-in help printer; `--help=all` and iree_flags_dump print the full
+// registry.
+typedef bool(IREE_API_PTR* iree_flag_help_filter_fn_t)(
+    iree_string_view_t flag_file, iree_string_view_t flag_name,
+    void* user_data);
+
 #define IREE_FLAG_CTYPE_bool bool
 #define IREE_FLAG_CTYPE_int32_t int32_t
 #define IREE_FLAG_CTYPE_int64_t int64_t
@@ -346,6 +354,11 @@ typedef uint32_t iree_flags_parse_mode_t;
 // Sets the usage information printed when --help is passed on the command line.
 // Both strings must remain live for the lifetime of the program.
 void iree_flags_set_usage(const char* program_name, const char* usage);
+
+// Sets an optional filter for the default `--help` output. The filter is not
+// applied to `--help=all` or iree_flags_dump.
+void iree_flags_set_help_filter(iree_flag_help_filter_fn_t filter,
+                                void* user_data);
 
 // Parses flags from the given command line arguments.
 // All flag-style arguments ('--foo', '-f', etc) will be consumed and argc/argv

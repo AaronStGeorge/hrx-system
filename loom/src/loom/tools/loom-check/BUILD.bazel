@@ -425,6 +425,7 @@ loom_cc_library(
         ":file",
         ":json_output",
         ":output",
+        "//loom/src/loom/tooling/cli:help",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/tooling:flags",

@@ -21,6 +21,7 @@ loom_cc_library(
     iree::base::tooling::flags
     iree::io::file_handle
     loom::target::provider
+    loom::tooling::cli::help
     loom::tooling::context
     loom::tooling::execution::hal::artifact
     loom::tooling::execution::hal::testbench_actual

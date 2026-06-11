@@ -12,6 +12,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tools/iree-benchmark-loom/help.h"
 #include "loom/tools/iree-benchmark-loom/manifest.h"
 #include "loom/tools/iree-benchmark-loom/options.h"
@@ -37,6 +38,7 @@ int iree_benchmark_loom_main(
   }
 
   iree_benchmark_loom_set_usage(configuration->tool_name);
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
   if (iree_benchmark_loom_cli_flags_request_agents_md()) {
     iree_benchmark_loom_print_agents_md(stdout);

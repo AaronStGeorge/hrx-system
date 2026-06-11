@@ -15,6 +15,7 @@
 #include "iree/base/tooling/flags.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/compile_report_capture.h"
@@ -425,6 +426,7 @@ int iree_run_loom_main(int argc, char** argv,
       "--input, --output, and --expected-output. Native execution backends "
       "compile target-low kernels into runtime artifacts and dispatch them "
       "through their production runtime path.\n");
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();

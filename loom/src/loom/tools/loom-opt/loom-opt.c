@@ -26,6 +26,7 @@
 #include "loom/target/configured/provider.h"
 #include "loom/target/predicate.h"
 #include "loom/target/provider.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/config/config.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/session.h"
@@ -987,6 +988,7 @@ int main(int argc, char** argv) {
       "Use --diagnostic-format=json to print structured diagnostic JSONL to "
       "stderr.\n" LOOM_TOOLING_PASS_TRACE_USAGE
       "Use --pass-reproducer=file to capture a rerunnable failure file.\n");
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();

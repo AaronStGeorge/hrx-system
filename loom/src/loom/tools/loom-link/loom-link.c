@@ -26,6 +26,7 @@
 #include "loom/link/module_index.h"
 #include "loom/link/planner.h"
 #include "loom/target/configured/provider.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/config/config.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/io/file.h"
@@ -1200,6 +1201,7 @@ int main(int argc, char** argv) {
       "dependencies.\n"
       "Use --strip-check to remove check.case and check.benchmark symbols from "
       "runtime artifacts.\n");
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();

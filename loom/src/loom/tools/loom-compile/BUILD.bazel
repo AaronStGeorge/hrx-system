@@ -75,6 +75,7 @@ loom_cc_binary(
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/tooling/cli:help",
         "//loom/src/loom/tooling/compile:pipeline",
         "//loom/src/loom/tooling/config",
         "//loom/src/loom/tooling/context",
