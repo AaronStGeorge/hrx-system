@@ -108,9 +108,9 @@ typedef struct iree_hal_amdgpu_executable_metadata_t {
   iree_allocator_t host_allocator;
   // Metadata source used for diagnostics and optional cross-checking.
   iree_hal_amdgpu_executable_metadata_source_t source;
-  // Target ID or ISA string borrowed from durable executable bytes.
+  // Target ID or ISA string borrowed from loaded executable bytes.
   iree_string_view_t target;
-  // Code-object bytes retained by the executable.
+  // Loaded code-object bytes borrowed from HSA loader storage.
   iree_const_byte_span_t code_object_data;
   // Number of executable exports.
   iree_host_size_t export_count;

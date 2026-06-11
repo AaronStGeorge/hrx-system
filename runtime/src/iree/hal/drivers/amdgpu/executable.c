@@ -8,10 +8,12 @@
 
 #include "iree/base/internal/debugging.h"
 #include "iree/hal/drivers/amdgpu/buffer.h"
+#include "iree/hal/drivers/amdgpu/executable_metadata_hsaco.h"
 #include "iree/hal/drivers/amdgpu/queue_affinity.h"
 #include "iree/hal/drivers/amdgpu/util/code_object_target.h"
 #include "iree/hal/drivers/amdgpu/util/hsaco_metadata.h"
 #include "iree/hal/drivers/amdgpu/util/kernarg_ring.h"
+#include "iree/hal/drivers/amdgpu/util/loaded_code_object.h"
 #include "iree/hal/drivers/amdgpu/util/target_id.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/hal/drivers/amdgpu/util/vmem.h"
@@ -772,62 +774,6 @@ static iree_status_t iree_hal_amdgpu_executable_load_module(
   return status;
 }
 
-typedef struct iree_hal_amdgpu_executable_find_loaded_code_object_state_t {
-  // Borrowed HSA API table used for loader extension queries.
-  const iree_hal_amdgpu_libhsa_t* libhsa;
-  // HSA agent whose loaded code object is being searched.
-  hsa_agent_t agent;
-  // Loaded code object matching |agent| when found.
-  hsa_loaded_code_object_t loaded_code_object;
-} iree_hal_amdgpu_executable_find_loaded_code_object_state_t;
-
-static hsa_status_t iree_hal_amdgpu_executable_iterate_loaded_code_object(
-    hsa_executable_t executable, hsa_loaded_code_object_t loaded_code_object,
-    void* user_data) {
-  iree_hal_amdgpu_executable_find_loaded_code_object_state_t* find_state =
-      (iree_hal_amdgpu_executable_find_loaded_code_object_state_t*)user_data;
-  hsa_agent_t agent = {0};
-  hsa_status_t hsa_status =
-      find_state->libhsa->amd_loader
-          .hsa_ven_amd_loader_loaded_code_object_get_info(
-              loaded_code_object,
-              HSA_VEN_AMD_LOADER_LOADED_CODE_OBJECT_INFO_AGENT, &agent);
-  if (hsa_status != HSA_STATUS_SUCCESS) return hsa_status;
-  if (agent.handle == find_state->agent.handle) {
-    find_state->loaded_code_object = loaded_code_object;
-    return HSA_STATUS_INFO_BREAK;
-  }
-  return HSA_STATUS_SUCCESS;
-}
-
-static iree_status_t iree_hal_amdgpu_executable_find_loaded_code_object(
-    const iree_hal_amdgpu_libhsa_t* libhsa, hsa_executable_t executable,
-    hsa_agent_t agent, hsa_loaded_code_object_t* out_loaded_code_object) {
-  *out_loaded_code_object = (hsa_loaded_code_object_t){0};
-  iree_hal_amdgpu_executable_find_loaded_code_object_state_t find_state = {
-      .libhsa = libhsa,
-      .agent = agent,
-      .loaded_code_object = {0},
-  };
-  hsa_status_t hsa_status =
-      libhsa->amd_loader
-          .hsa_ven_amd_loader_executable_iterate_loaded_code_objects(
-              executable, iree_hal_amdgpu_executable_iterate_loaded_code_object,
-              &find_state);
-  if (hsa_status == HSA_STATUS_SUCCESS) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "no loaded code object found for agent");
-  }
-  if (hsa_status != HSA_STATUS_INFO_BREAK) {
-    return iree_status_from_hsa_status(
-        __FILE__, __LINE__, hsa_status,
-        "hsa_ven_amd_loader_executable_iterate_loaded_code_objects",
-        "iterating loaded executable code objects");
-  }
-  *out_loaded_code_object = find_state.loaded_code_object;
-  return iree_ok_status();
-}
-
 static iree_status_t
 iree_hal_amdgpu_executable_populate_profile_code_object_load_info(
     const iree_hal_amdgpu_libhsa_t* libhsa, hsa_executable_t executable,
@@ -837,7 +783,7 @@ iree_hal_amdgpu_executable_populate_profile_code_object_load_info(
   out_load_info->physical_device_ordinal = physical_device_ordinal;
 
   hsa_loaded_code_object_t loaded_code_object = {0};
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_executable_find_loaded_code_object(
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_loaded_code_object_find(
       libhsa, executable, device_agent, &loaded_code_object));
 
   hsa_status_t hsa_status =
@@ -1257,6 +1203,8 @@ typedef struct iree_hal_amdgpu_executable_t {
   uint64_t profile_id;
   // Stable content hash for the exact loaded HSACO/code-object bytes.
   uint64_t profile_code_object_hash[2];
+  // Provider-neutral metadata borrowing from |handle|'s loaded code object.
+  iree_hal_amdgpu_executable_metadata_t* metadata;
 
   // Total number of exports in the executable.
   iree_host_size_t kernel_count;
@@ -1578,6 +1526,48 @@ static iree_status_t iree_hal_amdgpu_executable_register_profile_metadata(
       libhsa, topology, profile_metadata, code_object_data, executable);
 }
 
+static iree_status_t iree_hal_amdgpu_executable_create_metadata_from_hsaco(
+    const iree_hal_amdgpu_libhsa_t* libhsa, hsa_executable_t executable,
+    hsa_agent_t any_device_agent,
+    const iree_hal_amdgpu_hsaco_metadata_t* hsaco_metadata,
+    iree_allocator_t host_allocator,
+    iree_hal_amdgpu_executable_metadata_t** out_metadata) {
+  IREE_ASSERT_ARGUMENT(out_metadata);
+  *out_metadata = NULL;
+
+  iree_hal_amdgpu_loaded_code_object_range_t loaded_code_object_range = {0};
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_loaded_code_object_query_agent_range(
+      libhsa, executable, any_device_agent, &loaded_code_object_range));
+  if (IREE_UNLIKELY(loaded_code_object_range.byte_length >
+                    IREE_HOST_SIZE_MAX)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "loaded code object byte length exceeds host size");
+  }
+  const iree_const_byte_span_t loaded_code_object_data =
+      iree_make_const_byte_span(
+          loaded_code_object_range.host_pointer,
+          (iree_host_size_t)loaded_code_object_range.byte_length);
+
+  iree_hal_amdgpu_executable_metadata_counts_t counts;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_executable_metadata_calculate_hsaco_counts(hsaco_metadata,
+                                                                 &counts));
+
+  iree_hal_amdgpu_executable_metadata_t* metadata = NULL;
+  iree_status_t status = iree_hal_amdgpu_executable_metadata_allocate(
+      &counts, host_allocator, &metadata);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
+        hsaco_metadata, loaded_code_object_data, metadata);
+  }
+  if (iree_status_is_ok(status)) {
+    *out_metadata = metadata;
+  } else {
+    iree_hal_amdgpu_executable_metadata_free(metadata);
+  }
+  return status;
+}
+
 static iree_status_t
 iree_hal_amdgpu_executable_validate_export_parameter_requirements(
     iree_hal_amdgpu_ExportDef_table_t export_def,
@@ -1714,9 +1704,8 @@ static void iree_hal_amdgpu_executable_raw_hsaco_workgroup_size(
     out_workgroup_size[1] = kernel->required_workgroup_size[1];
     out_workgroup_size[2] = kernel->required_workgroup_size[2];
   } else {
-    // Standard C `amdgpu_kernel` functions do not carry a required workgroup
-    // size. Synthesize a 1x1x1 default so HAL-shaped raw HSACO can dispatch
-    // without an IREE compiler metadata wrapper.
+    // Some raw HSACO kernels do not carry a fixed workgroup size. Synthesize a
+    // 1x1x1 default so HAL-shaped kernels can dispatch through the normal path.
     out_workgroup_size[0] = 1;
     out_workgroup_size[1] = 1;
     out_workgroup_size[2] = 1;
@@ -2235,6 +2224,11 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_flatbuffer(
         libhsa, topology, physical_devices, executable_params, code_object_data,
         &executable->handle);
   }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_executable_create_metadata_from_hsaco(
+        libhsa, executable->handle, any_device_agent, &hsaco_metadata,
+        host_allocator, &executable->metadata);
+  }
 
   // Resolve kernel args for each export.
   // These parameters should be the same for all devices as we require all
@@ -2351,6 +2345,11 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
     status = iree_hal_amdgpu_executable_load_module(
         libhsa, topology, physical_devices, executable_params, code_object_data,
         &executable->handle);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_executable_create_metadata_from_hsaco(
+        libhsa, executable->handle, any_device_agent, &hsaco_metadata,
+        host_allocator, &executable->metadata);
   }
 
   // Resolve kernel args for each export.
@@ -2553,6 +2552,7 @@ static void iree_hal_amdgpu_executable_destroy(
     }
   }
 
+  iree_hal_amdgpu_executable_metadata_free(executable->metadata);
   if (executable->handle.handle) {
     iree_hal_amdgpu_hsa_cleanup_assert_success(iree_hsa_executable_destroy_raw(
         executable->libhsa, executable->handle));

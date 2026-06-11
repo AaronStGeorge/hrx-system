@@ -6,6 +6,7 @@
 
 #include "iree/hal/drivers/amdgpu/executable_metadata_hsaco.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "iree/hal/drivers/amdgpu/abi/kernel_args.h"
@@ -31,6 +32,78 @@ typedef struct iree_hal_amdgpu_hsaco_kernel_projection_t {
   // Byte length required for the immutable native kernarg layout record.
   iree_host_size_t layout_byte_length;
 } iree_hal_amdgpu_hsaco_kernel_projection_t;
+
+typedef struct iree_hal_amdgpu_hsaco_projection_rebase_t {
+  // Source ELF bytes used by the HSACO metadata parser.
+  iree_const_byte_span_t source_code_object_data;
+  // HSA-loader-owned loaded code-object bytes retained by the executable.
+  iree_const_byte_span_t loaded_code_object_data;
+} iree_hal_amdgpu_hsaco_projection_rebase_t;
+
+static iree_status_t iree_hal_amdgpu_hsaco_projection_rebase_string_view(
+    const iree_hal_amdgpu_hsaco_projection_rebase_t* rebase,
+    const char* field_name, iree_string_view_t source_view,
+    iree_string_view_t* out_view) {
+  IREE_ASSERT_ARGUMENT(rebase);
+  IREE_ASSERT_ARGUMENT(field_name);
+  IREE_ASSERT_ARGUMENT(out_view);
+
+  *out_view = iree_string_view_empty();
+  if (source_view.size == 0) return iree_ok_status();
+  if (IREE_UNLIKELY(!source_view.data)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU metadata %s string has null storage with non-zero length",
+        field_name);
+  }
+
+  const uintptr_t source_begin =
+      (uintptr_t)rebase->source_code_object_data.data;
+  const uintptr_t source_pointer = (uintptr_t)source_view.data;
+  if (IREE_UNLIKELY(source_pointer < source_begin)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU metadata %s string is outside source ELF",
+                            field_name);
+  }
+  const uintptr_t source_offset_pointer = source_pointer - source_begin;
+  if (IREE_UNLIKELY(source_offset_pointer >
+                    rebase->source_code_object_data.data_length)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU metadata %s string is outside source ELF",
+                            field_name);
+  }
+
+  const iree_host_size_t source_offset =
+      (iree_host_size_t)source_offset_pointer;
+  if (IREE_UNLIKELY(source_view.size >
+                    rebase->source_code_object_data.data_length -
+                        source_offset)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU metadata %s string extends past source ELF",
+                            field_name);
+  }
+  if (IREE_UNLIKELY(
+          source_offset > rebase->loaded_code_object_data.data_length ||
+          source_view.size >
+              rebase->loaded_code_object_data.data_length - source_offset)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU metadata %s string source offset is outside loaded code object",
+        field_name);
+  }
+  if (IREE_UNLIKELY(memcmp(rebase->loaded_code_object_data.data + source_offset,
+                           source_view.data, source_view.size) != 0)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU metadata %s string does not match loaded code object bytes",
+        field_name);
+  }
+
+  *out_view = iree_make_string_view(
+      (const char*)rebase->loaded_code_object_data.data + source_offset,
+      source_view.size);
+  return iree_ok_status();
+}
 
 static bool iree_hal_amdgpu_hsaco_metadata_arg_kind_is_hidden(
     iree_hal_amdgpu_hsaco_metadata_arg_kind_t kind) {
@@ -319,6 +392,7 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_layout_tables(
 
 static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_parameters(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
+    const iree_hal_amdgpu_hsaco_projection_rebase_t* rebase,
     iree_host_size_t parameter_capacity,
     iree_hal_executable_function_parameter_t* out_parameters) {
   IREE_ASSERT_ARGUMENT(out_parameters || parameter_capacity == 0);
@@ -341,7 +415,8 @@ static iree_status_t iree_hal_amdgpu_hsaco_projection_populate_parameters(
     memset(parameter, 0, sizeof(*parameter));
     parameter->flags = IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_FLAG_NONE;
     parameter->size = (uint16_t)arg->size;
-    parameter->name = arg->name;
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
+        rebase, "parameter name", arg->name, &parameter->name));
     switch (arg->kind) {
       case IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER:
         parameter->type = IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING;
@@ -379,7 +454,7 @@ static void iree_hal_amdgpu_hsaco_projection_populate_workgroup_size(
 
 iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
     const iree_hal_amdgpu_hsaco_metadata_t* hsaco_metadata,
-    iree_const_byte_span_t code_object_data,
+    iree_const_byte_span_t loaded_code_object_data,
     iree_hal_amdgpu_executable_metadata_t* metadata) {
   IREE_ASSERT_ARGUMENT(hsaco_metadata);
   IREE_ASSERT_ARGUMENT(metadata);
@@ -402,12 +477,18 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
         "AMDGPU executable metadata layout blob is already populated");
   }
 
+  const iree_hal_amdgpu_hsaco_projection_rebase_t rebase = {
+      .source_code_object_data = hsaco_metadata->elf_data,
+      .loaded_code_object_data = loaded_code_object_data,
+  };
+
   metadata->source =
       hsaco_metadata->kernel_count
           ? IREE_HAL_AMDGPU_EXECUTABLE_METADATA_SOURCE_HSACO_MESSAGEPACK
           : IREE_HAL_AMDGPU_EXECUTABLE_METADATA_SOURCE_ELF_SYMBOLS;
-  metadata->target = hsaco_metadata->target;
-  metadata->code_object_data = code_object_data;
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
+      &rebase, "target", hsaco_metadata->target, &metadata->target));
+  metadata->code_object_data = loaded_code_object_data;
 
   iree_host_size_t parameter_offset = 0;
   for (iree_host_size_t i = 0; i < hsaco_metadata->kernel_count; ++i) {
@@ -421,8 +502,11 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
 
     iree_hal_amdgpu_executable_reflection_t* reflection =
         &metadata->reflection[i];
-    reflection->name = kernel->reflection_name;
-    reflection->symbol_name = kernel->symbol_name;
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
+        &rebase, "reflection name", kernel->reflection_name,
+        &reflection->name));
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
+        &rebase, "symbol name", kernel->symbol_name, &reflection->symbol_name));
     reflection->parameter_offset = (uint32_t)parameter_offset;
     reflection->parameter_count = (uint32_t)projection.parameter_count;
 
@@ -450,7 +534,7 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
 
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_hsaco_projection_populate_parameters(
-            kernel, projection.parameter_count,
+            kernel, &rebase, projection.parameter_count,
             projection.parameter_count ? &metadata->parameters[parameter_offset]
                                        : NULL),
         "populating reflected parameters for kernel `%.*s`",
@@ -463,11 +547,12 @@ iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
     const iree_host_size_t export_ordinal = hsaco_metadata->kernel_count + i;
     const iree_hal_amdgpu_hsaco_metadata_elf_kernel_symbol_t* symbol =
         &hsaco_metadata->elf_kernel_symbols[i];
-    metadata->reflection[export_ordinal] =
-        (iree_hal_amdgpu_executable_reflection_t){
-            .name = symbol->name,
-            .symbol_name = symbol->symbol_name,
-        };
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
+        &rebase, "ELF-only reflection name", symbol->name,
+        &metadata->reflection[export_ordinal].name));
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_projection_rebase_string_view(
+        &rebase, "ELF-only symbol name", symbol->symbol_name,
+        &metadata->reflection[export_ordinal].symbol_name));
     metadata->exports[export_ordinal].flags =
         IREE_HAL_AMDGPU_EXECUTABLE_EXPORT_FLAG_CUSTOM_DIRECT_ONLY |
         IREE_HAL_AMDGPU_EXECUTABLE_EXPORT_FLAG_REQUIRES_DISPATCH_WORKGROUP_SIZE;

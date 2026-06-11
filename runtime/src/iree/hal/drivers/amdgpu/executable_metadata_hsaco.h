@@ -23,12 +23,17 @@ iree_status_t iree_hal_amdgpu_executable_metadata_calculate_hsaco_counts(
 // Populates |metadata| from decoded HSACO metadata.
 //
 // |metadata| must have been allocated with counts returned from
-// iree_hal_amdgpu_executable_metadata_calculate_hsaco_counts. String views
-// populated into |metadata| borrow from |hsaco_metadata| and are valid for as
-// long as |code_object_data| remains alive.
+// iree_hal_amdgpu_executable_metadata_calculate_hsaco_counts.
+//
+// |hsaco_metadata| must have been parsed from the original source ELF and all
+// decoded string views must point within hsaco_metadata->elf_data. Retained
+// views populated into |metadata| are rebased to borrow from
+// |loaded_code_object_data| at the same absolute byte offsets. The loaded bytes
+// are owned by the HSA executable and must remain alive for the lifetime of
+// |metadata|.
 iree_status_t iree_hal_amdgpu_executable_metadata_populate_from_hsaco(
     const iree_hal_amdgpu_hsaco_metadata_t* hsaco_metadata,
-    iree_const_byte_span_t code_object_data,
+    iree_const_byte_span_t loaded_code_object_data,
     iree_hal_amdgpu_executable_metadata_t* metadata);
 
 #ifdef __cplusplus

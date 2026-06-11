@@ -314,11 +314,22 @@ iree_runtime_cc_library(
     deps = [
         ":device_library_target",
         ":libhsa",
+        ":loaded_code_object",
         ":topology",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/hal/drivers/amdgpu/device:headers",
         "//runtime/src/iree/hal/drivers/amdgpu/device/binaries:toc",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "loaded_code_object",
+    srcs = ["loaded_code_object.c"],
+    hdrs = ["loaded_code_object.h"],
+    deps = [
+        ":libhsa",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -341,6 +352,7 @@ iree_runtime_cc_library(
         ":device_library_target",
         ":info",
         ":kfd",
+        ":loaded_code_object",
         ":packet",
         ":pm4_dispatch",
         ":pm4_program",

@@ -212,6 +212,8 @@ iree_cc_library(
     "virtual_queue.h"
   DEPS
     ::access_policy
+    ::executable_metadata
+    ::executable_metadata_hsaco
     ::profile_events
     ::queue_affinity
     iree::async
@@ -239,6 +241,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::kfd
     iree::hal::drivers::amdgpu::util::libaqlprofile
     iree::hal::drivers::amdgpu::util::libhsa
+    iree::hal::drivers::amdgpu::util::loaded_code_object
     iree::hal::drivers::amdgpu::util::packet
     iree::hal::drivers::amdgpu::util::pm4_dispatch
     iree::hal::drivers::amdgpu::util::pm4_program
