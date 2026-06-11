@@ -6,6 +6,10 @@
 
 #include "iree/hal/drivers/amdgpu/buffer.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "iree/hal/drivers/amdgpu/logical_device.h"
 #include "iree/hal/drivers/amdgpu/transient_buffer.h"
 
@@ -374,6 +378,95 @@ static void iree_hal_amdgpu_buffer_destroy(iree_hal_buffer_t* base_buffer) {
   IREE_TRACE_ZONE_END(z0);
 }
 
+//===----------------------------------------------------------------------===//
+// Host-visibility instrumentation (opt-in via HRX_DEBUG_HOST_VISIBILITY)
+//===----------------------------------------------------------------------===//
+//
+// The AMDGPU HAL assumes every host-visible allocation is fully CPU-coherent:
+// map_range hands back the raw HSA pointer and invalidate_range/flush_range are
+// no-ops (see below). On some gfx1151 (Strix Halo) parts a device-local pool
+// can be host-*mappable* without being fine-grained CPU-cache-coherent, so a
+// host readback after a device write — e.g. the ggml-hrx staging memcpy in
+// ggml_backend_hrx_copy_tensor_to_staging, which does no invalidate before
+// reading arena->mapped — can observe stale cache lines and yield garbage/NaN.
+//
+// This probe reports the ground-truth HSA properties of a buffer's backing
+// allocation at each host map/readback so the coherence assumption can be
+// verified on the failing runner (the Radeon 8050S gfx1151, which reproduces;
+// the 8060S does not). Enable with HRX_DEBUG_HOST_VISIBILITY=1. It is a no-op
+// (one cached getenv) when disabled.
+static void iree_hal_amdgpu_buffer_debug_log_visibility(
+    iree_hal_amdgpu_buffer_t* buffer, const char* where,
+    iree_device_size_t offset, iree_device_size_t length) {
+  static int enabled = -1;
+  if (enabled < 0) {
+    const char* env = getenv("HRX_DEBUG_HOST_VISIBILITY");
+    enabled = (env && env[0] && env[0] != '0') ? 1 : 0;
+  }
+  if (!enabled || !buffer->host_ptr) return;
+
+  const iree_hal_memory_type_t memory_type =
+      iree_hal_buffer_memory_type(&buffer->base);
+  const bool hal_host_visible =
+      iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_VISIBLE);
+  const bool hal_host_coherent =
+      iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_COHERENT);
+
+  // Ask ROCr what actually backs this pointer: host-accessibility, the owning
+  // agent, and the effective fine-/coarse-grained global flags of its pool.
+  hsa_amd_pointer_info_t info;
+  memset(&info, 0, sizeof(info));
+  info.size = sizeof(info);
+  iree_status_t status = iree_hsa_amd_pointer_info(
+      IREE_LIBHSA(buffer->libhsa), buffer->host_ptr, &info, /*alloc=*/NULL,
+      /*num_agents_accessible=*/NULL, /*accessible=*/NULL);
+  if (!iree_status_is_ok(status)) {
+    iree_status_ignore(status);
+    fprintf(stderr,
+            "[hrx-visibility] %-12s ptr=%p off=%llu len=%llu "
+            "hsa_amd_pointer_info FAILED\n",
+            where, buffer->host_ptr, (unsigned long long)offset,
+            (unsigned long long)length);
+    return;
+  }
+
+  char agent_name[64];
+  memset(agent_name, 0, sizeof(agent_name));
+  if (info.type != HSA_EXT_POINTER_TYPE_UNKNOWN) {
+    iree_status_ignore(iree_hsa_agent_get_info(IREE_LIBHSA(buffer->libhsa),
+                                               info.agentOwner,
+                                               HSA_AGENT_INFO_NAME, agent_name));
+  }
+
+  const bool fine =
+      (info.global_flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_FINE_GRAINED) != 0;
+  const bool coarse =
+      (info.global_flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED) != 0;
+  const bool host_accessible = info.hostBaseAddress != NULL;
+
+  fprintf(stderr,
+          "[hrx-visibility] %-12s agent=%-10s ptr=%p off=%llu len=%llu "
+          "hal{visible=%d coherent=%d} hsa{type=%u host_accessible=%d fine=%d "
+          "coarse=%d hostBase=%p agentBase=%p size=%llu flags=0x%x}\n",
+          where, agent_name[0] ? agent_name : "?", buffer->host_ptr,
+          (unsigned long long)offset, (unsigned long long)length,
+          hal_host_visible, hal_host_coherent, (unsigned)info.type,
+          host_accessible, fine, coarse, info.hostBaseAddress,
+          info.agentBaseAddress, (unsigned long long)info.sizeInBytes,
+          info.global_flags);
+
+  // The failure signature: the HAL treats the buffer as host-coherent and so
+  // skips invalidate/flush, but the backing pool is NOT fine-grained, so a
+  // device->host readback may return stale (cached) data.
+  if (hal_host_coherent && !fine) {
+    fprintf(stderr,
+            "[hrx-visibility] WARNING %s: HAL assumes host-coherent but backing "
+            "pool is NOT fine-grained (fine=%d coarse=%d) on %s -- device->host "
+            "readback may return stale data\n",
+            where, fine, coarse, agent_name[0] ? agent_name : "?");
+  }
+}
+
 static iree_status_t iree_hal_amdgpu_buffer_map_range(
     iree_hal_buffer_t* base_buffer, iree_hal_mapping_mode_t mapping_mode,
     iree_hal_memory_access_t memory_access,
@@ -389,6 +482,12 @@ static iree_status_t iree_hal_amdgpu_buffer_map_range(
       mapping_mode == IREE_HAL_MAPPING_MODE_PERSISTENT
           ? IREE_HAL_BUFFER_USAGE_MAPPING_PERSISTENT
           : IREE_HAL_BUFFER_USAGE_MAPPING_SCOPED));
+
+  iree_hal_amdgpu_buffer_debug_log_visibility(
+      buffer,
+      iree_any_bit_set(memory_access, IREE_HAL_MEMORY_ACCESS_READ) ? "map(read)"
+                                                                   : "map(write)",
+      local_byte_offset, local_byte_length);
 
   // Host-visible AMDGPU HSA allocations are directly host-accessible.
   mapping->contents = iree_make_byte_span(
@@ -407,6 +506,9 @@ static iree_status_t iree_hal_amdgpu_buffer_unmap_range(
 static iree_status_t iree_hal_amdgpu_buffer_invalidate_range(
     iree_hal_buffer_t* base_buffer, iree_device_size_t local_byte_offset,
     iree_device_size_t local_byte_length) {
+  iree_hal_amdgpu_buffer_debug_log_visibility(
+      iree_hal_amdgpu_buffer_cast(base_buffer), "invalidate", local_byte_offset,
+      local_byte_length);
   // Nothing to do — all host-visible AMDGPU allocations are currently coherent.
   return iree_ok_status();
 }
@@ -414,6 +516,9 @@ static iree_status_t iree_hal_amdgpu_buffer_invalidate_range(
 static iree_status_t iree_hal_amdgpu_buffer_flush_range(
     iree_hal_buffer_t* base_buffer, iree_device_size_t local_byte_offset,
     iree_device_size_t local_byte_length) {
+  iree_hal_amdgpu_buffer_debug_log_visibility(
+      iree_hal_amdgpu_buffer_cast(base_buffer), "flush", local_byte_offset,
+      local_byte_length);
   // Nothing to do — all host-visible AMDGPU allocations are currently coherent.
   return iree_ok_status();
 }
