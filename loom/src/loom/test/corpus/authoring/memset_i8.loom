@@ -1,11 +1,9 @@
-amdgpu.target<gfx1100> @target {subgroup_size = 32}
-
 // Memset-style byte fill with dynamic extent and an ABI-sized pattern argument.
 // Runtime integrations often carry fill patterns in wider scalar slots than the
 // stored element type; the kernel keeps that as ordinary Loom IR by narrowing
 // the 64-bit pattern at the use site instead of baking the ABI detail into a
 // target-specific source generator.
-kernel.def target(@target) @memset_i8(%element_length: index) {
+kernel.def @memset_i8(%element_length: index) {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 256 : index
   %rounding = index.constant 255 : index
