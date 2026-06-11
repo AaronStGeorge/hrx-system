@@ -64,6 +64,10 @@ static const char kSourceText[] =
     "  kernel.return\n"
     "}\n";
 
+static const char kDefaultModuleName[] = "targetless_store_i32";
+static const char kDefaultCompileRootSymbol[] = "@targetless_store_i32";
+static const char kDefaultKernelSymbolName[] = "targetless_store_i32";
+
 #if defined(_WIN32)
 typedef HMODULE hsa_library_t;
 #else
@@ -261,6 +265,18 @@ typedef struct emit_amdgpu_hsa_state_t {
   // Human-readable skip reason.
   char skip_message[2048];
 
+  // Optional `.loom` or `.loombc` path used instead of the embedded source.
+  const char* source_path;
+
+  // Module name assigned during compilation.
+  const char* module_name;
+
+  // Compile-root symbol for root-sensitive target lowering.
+  const char* compile_root_symbol;
+
+  // HSA kernel symbol expected in the emitted HSACO.
+  const char* kernel_symbol_name;
+
   // Dynamically loaded raw HSA API table.
   emit_amdgpu_hsa_api_t api;
 
@@ -373,6 +389,29 @@ static loomc_status_t emit_amdgpu_hsa_make_status_format(
 #define EMIT_AMDGPU_HSA_MAKE_STATUS_FORMAT(code, format, ...)              \
   emit_amdgpu_hsa_make_status_format((code), __FILE__, __LINE__, (format), \
                                      __VA_ARGS__)
+
+static bool string_ends_with(const char* value, const char* suffix) {
+  const size_t value_length = strlen(value);
+  const size_t suffix_length = strlen(suffix);
+  return value_length >= suffix_length &&
+         memcmp(value + value_length - suffix_length, suffix, suffix_length) ==
+             0;
+}
+
+static loomc_status_t source_format_from_path(
+    const char* path, loomc_source_format_t* out_format) {
+  if (string_ends_with(path, ".loombc")) {
+    *out_format = LOOMC_SOURCE_FORMAT_BYTECODE;
+    return loomc_ok_status();
+  }
+  if (string_ends_with(path, ".loom")) {
+    *out_format = LOOMC_SOURCE_FORMAT_TEXT;
+    return loomc_ok_status();
+  }
+  return EMIT_AMDGPU_HSA_MAKE_STATUS_FORMAT(
+      LOOMC_STATUS_INVALID_ARGUMENT,
+      "source path must end in .loom or .loombc: %s", path);
+}
 
 static void emit_amdgpu_hsa_state_skip(emit_amdgpu_hsa_state_t* state,
                                        const char* message) {
@@ -726,8 +765,16 @@ static loomc_status_t load_hsa_api(emit_amdgpu_hsa_state_t* state) {
   return loomc_ok_status();
 }
 
-static void emit_amdgpu_hsa_state_initialize(emit_amdgpu_hsa_state_t* state) {
+static void emit_amdgpu_hsa_state_initialize(emit_amdgpu_hsa_state_t* state,
+                                             const char* source_path,
+                                             const char* compile_root_symbol,
+                                             const char* kernel_symbol_name,
+                                             const char* module_name) {
   memset(state, 0, sizeof(*state));
+  state->source_path = source_path;
+  state->compile_root_symbol = compile_root_symbol;
+  state->kernel_symbol_name = kernel_symbol_name;
+  state->module_name = module_name;
 }
 
 static void emit_amdgpu_hsa_state_deinitialize(emit_amdgpu_hsa_state_t* state) {
@@ -997,6 +1044,23 @@ static loomc_status_t create_workspace_and_source(
     emit_amdgpu_hsa_state_t* state) {
   loomc_status_t status =
       loomc_workspace_create(NULL, loomc_allocator_system(), &state->workspace);
+  if (!loomc_status_is_ok(status)) {
+    return status;
+  }
+
+  if (state->source_path != NULL) {
+    loomc_source_format_t format = LOOMC_SOURCE_FORMAT_UNKNOWN;
+    LOOMC_RETURN_IF_ERROR(source_format_from_path(state->source_path, &format));
+    loomc_source_load_options_t source_options = {
+        .type = LOOMC_STRUCTURE_TYPE_SOURCE_LOAD_OPTIONS,
+        .structure_size = sizeof(source_options),
+        .format = format,
+    };
+    return loomc_source_create_from_path(
+        loomc_make_cstring_view(state->source_path), &source_options,
+        loomc_allocator_system(), &state->source);
+  }
+
   loomc_source_options_t source_options = {
       .type = LOOMC_STRUCTURE_TYPE_SOURCE_OPTIONS,
       .structure_size = sizeof(source_options),
@@ -1005,11 +1069,8 @@ static loomc_status_t create_workspace_and_source(
       .contents = loomc_make_byte_span(kSourceText, sizeof(kSourceText) - 1),
       .storage = LOOMC_SOURCE_STORAGE_BORROWED,
   };
-  if (loomc_status_is_ok(status)) {
-    status = loomc_source_create(&source_options, loomc_allocator_system(),
-                                 &state->source);
-  }
-  return status;
+  return loomc_source_create(&source_options, loomc_allocator_system(),
+                             &state->source);
 }
 
 static loomc_status_t create_target_profile_and_selection(
@@ -1124,8 +1185,9 @@ static loomc_status_t compile_module_to_prepared_low(
       .type = LOOMC_STRUCTURE_TYPE_COMPILE_OPTIONS,
       .structure_size = sizeof(compile_options),
       .next = &target_options,
-      .module_name = loomc_make_cstring_view("targetless_store_i32"),
-      .compile_root_symbol = loomc_make_cstring_view("@targetless_store_i32"),
+      .module_name = loomc_make_cstring_view(state->module_name),
+      .compile_root_symbol =
+          loomc_make_cstring_view(state->compile_root_symbol),
   };
   loomc_status_t status = loomc_compile_module(
       state->compiler, state->workspace, state->pass_program, state->module,
@@ -1240,13 +1302,22 @@ static loomc_status_t query_kernel_symbol(emit_amdgpu_hsa_state_t* state) {
   emit_amdgpu_hsa_api_t* api = &state->api;
   hsa_executable_symbol_t symbol = {0};
   hsa_status_t hsa_status = HSA_STATUS_SUCCESS;
+  char code_descriptor_symbol_name[1024] = {0};
+  int print_result =
+      snprintf(code_descriptor_symbol_name, sizeof(code_descriptor_symbol_name),
+               "%s.kd", state->kernel_symbol_name);
+  if (print_result < 0 ||
+      (size_t)print_result >= sizeof(code_descriptor_symbol_name)) {
+    return loomc_make_status(LOOMC_STATUS_OUT_OF_RANGE,
+                             "kernel symbol name is too long");
+  }
   EMIT_AMDGPU_HSA_CALL_STATUS(
       hsa_status, api, hsa_executable_get_symbol_by_name, state->executable,
-      "targetless_store_i32.kd", &state->gpu_agent, &symbol);
+      code_descriptor_symbol_name, &state->gpu_agent, &symbol);
   if (hsa_status != HSA_STATUS_SUCCESS) {
     EMIT_AMDGPU_HSA_CALL_STATUS(
         hsa_status, api, hsa_executable_get_symbol_by_name, state->executable,
-        "targetless_store_i32", &state->gpu_agent, &symbol);
+        state->kernel_symbol_name, &state->gpu_agent, &symbol);
     LOOMC_RETURN_IF_ERROR(hsa_status_to_loomc_status(
         api, hsa_status, "hsa_executable_get_symbol_by_name"));
   }
@@ -1532,8 +1603,8 @@ static loomc_status_t submit_and_wait(emit_amdgpu_hsa_state_t* state) {
         LOOMC_STATUS_FAILED_PRECONDITION,
         "HSA dispatch wrote %" PRIu32 ", expected 42", observed);
   }
-  printf("launched targetless_store_i32 via raw HSA: output=%" PRIu32 "\n",
-         observed);
+  printf("launched %s via raw HSA: output=%" PRIu32 "\n",
+         state->kernel_symbol_name, observed);
   return loomc_ok_status();
 }
 
@@ -1562,9 +1633,12 @@ static loomc_status_t run_hsa_launch(emit_amdgpu_hsa_state_t* state) {
   return status;
 }
 
-static loomc_status_t run_emit_amdgpu_hsa_example(void) {
+static loomc_status_t run_emit_amdgpu_hsa_example(
+    const char* source_path, const char* compile_root_symbol,
+    const char* kernel_symbol_name, const char* module_name) {
   emit_amdgpu_hsa_state_t state;
-  emit_amdgpu_hsa_state_initialize(&state);
+  emit_amdgpu_hsa_state_initialize(&state, source_path, compile_root_symbol,
+                                   kernel_symbol_name, module_name);
 
   loomc_status_t status = discover_hsa_target(&state);
   if (loomc_status_is_ok(status) && !state.skipped) {
@@ -1582,9 +1656,30 @@ static loomc_status_t run_emit_amdgpu_hsa_example(void) {
 }
 
 int main(int argc, char** argv) {
-  (void)argc;
-  (void)argv;
-  loomc_status_t status = run_emit_amdgpu_hsa_example();
+  if (argc > 1 &&
+      (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
+    printf(
+        "Usage: emit_amdgpu_hsa [source.loom|source.loombc "
+        "[compile-root [kernel-symbol [module-name]]]]\n");
+    printf("No source path uses the embedded targetless_store_i32 kernel.\n");
+    return 0;
+  }
+  if (argc > 5) {
+    fprintf(stderr,
+            "Usage: emit_amdgpu_hsa [source.loom|source.loombc "
+            "[compile-root [kernel-symbol [module-name]]]]\n");
+    return 1;
+  }
+
+  const char* source_path = argc > 1 ? argv[1] : NULL;
+  const char* compile_root_symbol =
+      argc > 2 ? argv[2] : kDefaultCompileRootSymbol;
+  const char* kernel_symbol_name =
+      argc > 3 ? argv[3] : kDefaultKernelSymbolName;
+  const char* module_name = argc > 4 ? argv[4] : kDefaultModuleName;
+
+  loomc_status_t status = run_emit_amdgpu_hsa_example(
+      source_path, compile_root_symbol, kernel_symbol_name, module_name);
   if (loomc_status_is_ok(status)) {
     return 0;
   }

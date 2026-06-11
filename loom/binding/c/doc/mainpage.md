@@ -122,7 +122,8 @@ embedding programs:
   source handles.
 - `emit_amdgpu_offline.c` emits AMDGPU artifacts without a runtime loader.
 - `emit_amdgpu_hsa.c` queries HSA directly and launches a Loom-produced HSACO
-  without IREE HAL.
+  without IREE HAL. It can start from its embedded source or from a `.loom` or
+  `.loombc` path supplied on the command line.
 - `emit_spirv_offline.c` emits SPIR-V artifacts without a runtime loader.
 - `emit_spirv_vulkan.c` queries Vulkan directly and launches a
   Loom-produced SPIR-V module without IREE HAL.

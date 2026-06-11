@@ -163,6 +163,21 @@ without the IREE HAL:
 python dev.py bazel run //loom/binding/c/example:emit_amdgpu_hsa
 ```
 
+Successful launch ends with `launched targetless_store_i32 via raw HSA:
+output=42`.
+
+The same raw-HSA example can start from a checked `.loom` or prelinked
+`.loombc` file when the source defines the one-buffer `targetless_store_i32`
+sample ABI:
+
+```bash
+python dev.py bazel run //loom/binding/c/example:emit_amdgpu_hsa -- \
+  /tmp/targetless_store_i32.loombc \
+  @targetless_store_i32 \
+  targetless_store_i32 \
+  targetless_store_i32
+```
+
 Set `LOOMC_HSA_RUNTIME_PATH` when the HSA runtime is not discoverable through
 the default dynamic loader search path. The value may be the exact
 `libhsa-runtime64.so` path or a directory containing it:
