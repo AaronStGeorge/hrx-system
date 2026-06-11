@@ -76,6 +76,46 @@
           }
         }
       ]
+    },
+    {
+      "name": "compiles 64-bit direct arg narrowing for AMDGPU HAL kernel",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/amdgpu_i64_to_i8.loom",
+            "text": "kernel.def export(\"narrow_i64_to_i8\") @narrow_i64_to_i8() {\n  %unit = index.constant 1 : index\n  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index\n} launch(%output: buffer, %pattern: i64) {\n  %zero_offset = index.constant 0 : offset\n  %zero_index = index.constant 0 : index\n  %value = scalar.trunci %pattern : i64 to i8\n  %global = buffer.assume.memory_space<global> %output : buffer\n  %view = buffer.view %global[%zero_offset] : buffer -> view<1xi8, #dense>\n  view.store %value, %view[%zero_index] : i8, view<1xi8, #dense>\n  kernel.return\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/amdgpu_i64_to_i8.loom",
+              "--loom_backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--output={tmp}/amdgpu_i64_to_i8.hsaco",
+              "--compile_report=summary"
+            ]
+          },
+          "stderr": {
+            "contains": {
+              "unordered": [
+                "\"target_key\":\"gfx11-generic\"",
+                "\"executable_format\":\"amdgcn-amd-amdhsa--gfx11-generic\"",
+                "\"status\":\"OK\""
+              ]
+            }
+          },
+          "files": [
+            {
+              "path": "{tmp}/amdgpu_i64_to_i8.hsaco",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }

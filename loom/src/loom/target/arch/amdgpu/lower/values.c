@@ -151,6 +151,7 @@ typedef enum loom_amdgpu_scalar_trunci_kind_e {
   LOOM_AMDGPU_SCALAR_TRUNCI_KIND_NONE = 0,
   LOOM_AMDGPU_SCALAR_TRUNCI_KIND_LOW_32_BITS,
   LOOM_AMDGPU_SCALAR_TRUNCI_KIND_SIGN_EXTEND_NARROW,
+  LOOM_AMDGPU_SCALAR_TRUNCI_KIND_LOW_32_BITS_SIGN_EXTEND_NARROW,
 } loom_amdgpu_scalar_trunci_kind_t;
 
 typedef struct loom_amdgpu_scalar_trunci_plan_t {
@@ -1426,9 +1427,11 @@ static iree_status_t loom_amdgpu_select_scalar_trunci_plan(
     return iree_ok_status();
   }
 
-  if (!loom_amdgpu_type_is_i32(source_type) ||
-      (!loom_amdgpu_type_is_i8(result_type) &&
-       !loom_amdgpu_type_is_i16(result_type))) {
+  const bool source_is_i32 = loom_amdgpu_type_is_i32(source_type);
+  const bool source_is_i64 = loom_amdgpu_type_is_i64(source_type);
+  const bool result_is_narrow = loom_amdgpu_type_is_i8(result_type) ||
+                                loom_amdgpu_type_is_i16(result_type);
+  if ((!source_is_i32 && !source_is_i64) || !result_is_narrow) {
     return iree_ok_status();
   }
 
@@ -1446,7 +1449,10 @@ static iree_status_t loom_amdgpu_select_scalar_trunci_plan(
   *out_plan = (loom_amdgpu_scalar_trunci_plan_t){
       .source = source,
       .result = result,
-      .kind = LOOM_AMDGPU_SCALAR_TRUNCI_KIND_SIGN_EXTEND_NARROW,
+      .kind =
+          source_is_i64
+              ? LOOM_AMDGPU_SCALAR_TRUNCI_KIND_LOW_32_BITS_SIGN_EXTEND_NARROW
+              : LOOM_AMDGPU_SCALAR_TRUNCI_KIND_SIGN_EXTEND_NARROW,
       .result_bit_count = result_bit_count,
   };
   *out_selected = true;
@@ -2810,6 +2816,31 @@ static iree_status_t loom_amdgpu_lower_offset_compare(
   return loom_low_lower_bind_value(context, plan->result, result_mask);
 }
 
+static iree_status_t loom_amdgpu_emit_scalar_trunci_sign_extend_narrow(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_scalar_trunci_plan_t* plan, loom_value_id_t low_source) {
+  IREE_ASSERT(plan->result_bit_count == 8 || plan->result_bit_count == 16);
+  loom_type_t lane_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  bool selected_sdwa = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_vgpr_b32_sdwa_extract(
+      context, source_op, low_source, /*bit_offset=*/0, plan->result_bit_count,
+      LOOM_AMDGPU_VGPR_SDWA_EXTRACT_FLAG_SIGN_EXTEND, lane_type, &low_result,
+      &selected_sdwa));
+  if (!selected_sdwa) {
+    const uint32_t shift = 32u - plan->result_bit_count;
+    loom_value_id_t shifted_left = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, shift,
+        low_source, lane_type, &shifted_left));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT, shift,
+        shifted_left, lane_type, &low_result));
+  }
+  return loom_low_lower_bind_value(context, plan->result, low_result);
+}
+
 static iree_status_t loom_amdgpu_lower_scalar_trunci(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_scalar_trunci_plan_t* plan) {
@@ -2828,31 +2859,33 @@ static iree_status_t loom_amdgpu_lower_scalar_trunci(
       return loom_low_lower_bind_value(context, plan->result, low_result);
     }
     case LOOM_AMDGPU_SCALAR_TRUNCI_KIND_SIGN_EXTEND_NARROW: {
-      IREE_ASSERT(plan->result_bit_count == 8 || plan->result_bit_count == 16);
       loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
           context, source_op, plan->source, &low_source));
-
-      loom_type_t lane_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
-      loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
-      bool selected_sdwa = false;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_vgpr_b32_sdwa_extract(
-          context, source_op, low_source, /*bit_offset=*/0,
-          plan->result_bit_count,
-          LOOM_AMDGPU_VGPR_SDWA_EXTRACT_FLAG_SIGN_EXTEND, lane_type,
-          &low_result, &selected_sdwa));
-      if (!selected_sdwa) {
-        const uint32_t shift = 32u - plan->result_bit_count;
-        loom_value_id_t shifted_left = LOOM_VALUE_ID_INVALID;
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-            shift, low_source, lane_type, &shifted_left));
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ASHRREV_I32_LIT,
-            shift, shifted_left, lane_type, &low_result));
+      return loom_amdgpu_emit_scalar_trunci_sign_extend_narrow(
+          context, source_op, plan, low_source);
+    }
+    case LOOM_AMDGPU_SCALAR_TRUNCI_KIND_LOW_32_BITS_SIGN_EXTEND_NARROW: {
+      loom_value_id_t low_source_pair = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(
+          loom_low_lower_lookup_value(context, plan->source, &low_source_pair));
+      const loom_module_t* module = loom_low_lower_context_module(context);
+      const loom_type_t source_lane_type =
+          loom_amdgpu_low_register_lane_type(module, low_source_pair);
+      if (loom_type_kind(source_lane_type) == LOOM_TYPE_NONE) {
+        return iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "AMDGPU scalar.trunci i64 source lowered to a non-register type");
       }
-      return loom_low_lower_bind_value(context, plan->result, low_result);
+      loom_value_id_t low_source_lane = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
+          context, source_op, low_source_pair, /*lane_offset=*/0,
+          source_lane_type, &low_source_lane));
+      loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32_registers(
+          context, source_op, low_source_lane, &low_source));
+      return loom_amdgpu_emit_scalar_trunci_sign_extend_narrow(
+          context, source_op, plan, low_source);
     }
     case LOOM_AMDGPU_SCALAR_TRUNCI_KIND_NONE:
       break;
