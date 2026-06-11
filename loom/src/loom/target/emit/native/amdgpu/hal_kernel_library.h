@@ -6,9 +6,9 @@
 
 // AMDGPU HAL kernel-library emission for prepared target-low Loom modules.
 //
-// This packages prepared low.kernel.def entries into native HSACO bytes and HAL
-// export metadata. Source-to-low lowering, HAL ABI/resource materialization,
-// and target-low preparation are owned by the caller's compile pipeline.
+// This emits prepared low.kernel.def entries into native HSACO bytes.
+// Source-to-low lowering, HAL ABI/resource materialization, and target-low
+// preparation are owned by the caller's compile pipeline.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_HAL_KERNEL_LIBRARY_H_
 #define LOOM_TARGET_EMIT_NATIVE_AMDGPU_HAL_KERNEL_LIBRARY_H_
@@ -17,7 +17,6 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
 #include "loom/target/compile_report.h"
-#include "loom/target/emit/native/amdgpu/hal_kernel_metadata.h"
 #include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
@@ -55,7 +54,7 @@ typedef struct loom_amdgpu_hal_kernel_library_options_t {
   bool capture_target_listing;
 } loom_amdgpu_hal_kernel_library_options_t;
 
-// Allocator-owned AMDGPU HAL kernel-library artifact.
+// Allocator-owned AMDGPU HSACO kernel-library artifact.
 typedef struct loom_amdgpu_hal_kernel_library_t {
   // Allocator-owned target id used by the AMDGPU loader.
   iree_string_view_t executable_format;
@@ -69,10 +68,6 @@ typedef struct loom_amdgpu_hal_kernel_library_t {
   char* target_listing_data;
   // Number of bytes in |target_listing_data|, excluding the trailing NUL.
   iree_host_size_t target_listing_data_length;
-  // Allocator-owned export metadata in executable entry-point order.
-  loom_amdgpu_hal_kernel_export_t* exports;
-  // Number of entries in |exports|.
-  iree_host_size_t export_count;
 } loom_amdgpu_hal_kernel_library_t;
 
 // Releases storage owned by |library|. Safe to call on a zero-initialized

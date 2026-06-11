@@ -351,16 +351,9 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsEveryLinkedSupportedProcessor) {
                                     processor->processor, 0),
               IREE_STRING_VIEW_NPOS)
         << StringViewToString(processor->processor);
-    ASSERT_EQ(library.export_count, 1u)
-        << StringViewToString(processor->processor);
-    EXPECT_TRUE(iree_string_view_equal(library.exports[0].symbol_name,
-                                       IREE_SV("loom_kernel.kd")))
-        << StringViewToString(processor->processor);
-    EXPECT_EQ(library.exports[0].workgroup_size.x, 64u)
-        << StringViewToString(processor->processor);
-    EXPECT_EQ(library.exports[0].workgroup_size.y, 1u)
-        << StringViewToString(processor->processor);
-    EXPECT_EQ(library.exports[0].workgroup_size.z, 1u)
+    std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
+                      library.hsaco_data_length);
+    EXPECT_NE(hsaco.find("loom_kernel.kd"), std::string::npos)
         << StringViewToString(processor->processor);
 
     loom_amdgpu_hal_kernel_library_deinitialize(&library,
@@ -386,9 +379,6 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsArgumentMetadataFromLowKernelAbi) {
 
   EXPECT_TRUE(emitted);
   EXPECT_TRUE(capture.diagnostics.empty());
-  ASSERT_EQ(library.export_count, 1u);
-  EXPECT_EQ(library.exports[0].binding_count, 1u);
-  EXPECT_EQ(library.exports[0].constant_count, 1u);
   ASSERT_NE(library.hsaco_data, nullptr);
   std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
                     library.hsaco_data_length);
@@ -418,7 +408,11 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
 
   EXPECT_TRUE(emitted);
   EXPECT_TRUE(capture.diagnostics.empty());
-  EXPECT_EQ(library.export_count, 2u);
+  ASSERT_NE(library.hsaco_data, nullptr);
+  std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
+                    library.hsaco_data_length);
+  EXPECT_NE(hsaco.find("first_kernel.kd"), std::string::npos);
+  EXPECT_NE(hsaco.find("second_kernel.kd"), std::string::npos);
 
   loom_amdgpu_hal_kernel_library_deinitialize(&library,
                                               iree_allocator_system());
