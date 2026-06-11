@@ -22,6 +22,20 @@ func.def @scalar_sitofp_i32(%input: i32) -> (f32) {
 
 // ====
 
+func.def @scalar_trunci_i32_to_i8(%input: i32) -> (i8) {
+  %converted = scalar.trunci %input : i32 to i8
+  func.return %converted : i8
+}
+
+// ====
+
+func.def @scalar_trunci_i32_to_i16(%input: i32) -> (i16) {
+  %converted = scalar.trunci %input : i32 to i16
+  func.return %converted : i16
+}
+
+// ====
+
 kernel.def @scalar_sitofp_i8_load_store() {
   %count = index.constant 1 : index
   kernel.launch.config workgroups(%count, %count, %count) workgroup_size(%count, %count, %count) : index

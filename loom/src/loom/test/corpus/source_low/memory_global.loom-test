@@ -20,6 +20,16 @@ func.def @global_saddr_dynamic_offset_argument(%input: buffer, %byte_offset: off
 
 // ====
 
+func.def @global_store_i8_saddr(%output: buffer, %value: i8) {
+  %base = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%base] : buffer -> view<1xi8, #dense>
+  view.store %value, %output_view[0] : i8, view<1xi8, #dense>
+  func.return
+}
+
+// ====
+
 func.def @descriptor_b128_off_zero(%input: buffer) -> (vector<4xi32>) {
   %zero = index.constant 0 : offset
   %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
