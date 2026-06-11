@@ -36,7 +36,7 @@
 #define IREE_HAL_VULKAN_QUEUE_DISPATCH_INLINE_BINDING_CAPACITY 16
 
 typedef void(IREE_API_PTR* iree_hal_vulkan_queue_completion_action_fn_t)(
-    void* user_data, iree_status_t completion_status);
+    void* user_data, const iree_status_t completion_status);
 
 typedef struct iree_hal_vulkan_queue_completion_action_t {
   // Completion callback invoked after the queue epoch retires.
@@ -3613,7 +3613,7 @@ static void iree_hal_vulkan_queue_release_completion_action(
 
 static void iree_hal_vulkan_queue_consume_completion_action(
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_vulkan_queue_completion_action_t action =
       submission->completion_action;
   submission->completion_action =
@@ -3853,7 +3853,7 @@ static void iree_hal_vulkan_queue_signal_list_or_fail(
 static void iree_hal_vulkan_queue_execute_host_call(
     iree_hal_vulkan_queue_t* queue,
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_semaphore_list_t signal_semaphore_list =
       submission->signal_semaphore_list;
   const iree_async_frontier_t* frontier =
@@ -4058,7 +4058,7 @@ static iree_status_t iree_hal_vulkan_queue_record_fill_native(
 
 static void iree_hal_vulkan_queue_execute_fill(
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_semaphore_list_t signal_semaphore_list =
       submission->signal_semaphore_list;
   const iree_async_frontier_t* frontier =
@@ -4215,7 +4215,7 @@ static iree_status_t iree_hal_vulkan_queue_can_record_update_native(
 
 static void iree_hal_vulkan_queue_execute_update(
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_semaphore_list_t signal_semaphore_list =
       submission->signal_semaphore_list;
   const iree_async_frontier_t* frontier =
@@ -4301,7 +4301,7 @@ static iree_status_t iree_hal_vulkan_queue_record_copy_native(
 
 static void iree_hal_vulkan_queue_execute_copy(
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_semaphore_list_t signal_semaphore_list =
       submission->signal_semaphore_list;
   const iree_async_frontier_t* frontier =
@@ -4316,7 +4316,7 @@ static void iree_hal_vulkan_queue_execute_copy(
 
 static void iree_hal_vulkan_queue_execute_command_buffer(
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_semaphore_list_t signal_semaphore_list =
       submission->signal_semaphore_list;
   const iree_async_frontier_t* frontier =
@@ -4331,7 +4331,7 @@ static void iree_hal_vulkan_queue_execute_command_buffer(
 
 static void iree_hal_vulkan_queue_complete_alloca(
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_semaphore_list_t signal_semaphore_list =
       submission->signal_semaphore_list;
   const iree_async_frontier_t* frontier =
@@ -4387,7 +4387,7 @@ static void iree_hal_vulkan_queue_complete_alloca(
 
 static void iree_hal_vulkan_queue_complete_dealloca(
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_hal_semaphore_list_t signal_semaphore_list =
       submission->signal_semaphore_list;
   const iree_async_frontier_t* frontier =
@@ -4442,7 +4442,7 @@ static void iree_hal_vulkan_queue_complete_dealloca(
 static void iree_hal_vulkan_queue_complete_submission(
     iree_hal_vulkan_queue_t* queue,
     iree_hal_vulkan_queue_pending_submission_t* submission,
-    iree_status_t completion_status) {
+    const iree_status_t completion_status) {
   iree_status_t terminal_status = iree_status_clone(completion_status);
   if (iree_status_is_ok(terminal_status)) {
     terminal_status =
@@ -5764,7 +5764,7 @@ static void iree_hal_vulkan_queue_cancel_deferred_submission(
 static bool iree_hal_vulkan_queue_cancel_deferred_submission_list(
     iree_hal_vulkan_queue_t* queue,
     iree_hal_vulkan_queue_pending_submission_t* deferred_head,
-    iree_status_t status) {
+    const iree_status_t status) {
   bool cancelled_submission = false;
   while (deferred_head) {
     cancelled_submission = true;
@@ -7442,7 +7442,7 @@ static iree_status_t iree_hal_vulkan_staged_transfer_submit_next_write(
 }
 
 static void iree_hal_vulkan_staged_transfer_copy_complete(
-    void* user_data, iree_status_t completion_status) {
+    void* user_data, const iree_status_t completion_status) {
   iree_hal_vulkan_staged_transfer_chunk_t* chunk =
       (iree_hal_vulkan_staged_transfer_chunk_t*)user_data;
   iree_hal_vulkan_staged_transfer_t* transfer = chunk->transfer;
@@ -7574,7 +7574,7 @@ static void iree_hal_vulkan_staged_transfer_pump(
 }
 
 static void iree_hal_vulkan_staged_transfer_start(
-    void* user_data, iree_status_t completion_status) {
+    void* user_data, const iree_status_t completion_status) {
   iree_hal_vulkan_staged_transfer_t* transfer =
       (iree_hal_vulkan_staged_transfer_t*)user_data;
   if (!iree_status_is_ok(completion_status)) {
