@@ -58,10 +58,10 @@ IREE_FLAG(string, compile_root, "",
           "backends use this to scope root-sensitive pass pipeline behavior; "
           "artifact emission otherwise keeps every compatible exported "
           "function.");
-IREE_FLAG(string, loom_backend, "vm",
+IREE_FLAG(string, backend, "vm",
           "Compilation backend to emit, such as 'vm' or a linked native "
           "backend.");
-IREE_FLAG(string, loom_module_name, "loom",
+IREE_FLAG(string, module_name, "loom",
           "Module name to store in VM bytecode archives.");
 IREE_FLAG(string, target, "",
           "Optional HAL backend target key, such as 'gfx1100'. When present, "
@@ -491,7 +491,7 @@ static iree_status_t loom_compile_make_unknown_backend_status(
   }
   status = iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "unknown --loom_backend='%.*s'; expected registered backend in [%.*s]",
+      "unknown --backend='%.*s'; expected registered backend in [%.*s]",
       (int)backend_name.size, backend_name.data,
       (int)iree_string_builder_size(&backend_names),
       iree_string_builder_buffer(&backend_names));
@@ -583,7 +583,7 @@ int main(int argc, char** argv) {
       "Compiles a Loom module to a runtime artifact.\n"
       "\n"
       "Usage:\n"
-      "  loom-compile [file.loom] --loom_backend=vm --output=module.vmfb\n"
+      "  loom-compile [file.loom] --backend=vm --output=module.vmfb\n"
       "\n"
       "Repeat --config=key=value to materialize compile-time config symbols "
       "before the pass pipeline. Use --config-file=path for a JSON/JSONC "
@@ -637,8 +637,7 @@ int main(int argc, char** argv) {
     status = loom_run_compile_report_capture_initialize(
         &compile_report_options, allocator, &compile_report_capture);
   }
-  const iree_string_view_t backend_name =
-      iree_make_cstring_view(FLAG_loom_backend);
+  const iree_string_view_t backend_name = iree_make_cstring_view(FLAG_backend);
   if (iree_status_is_ok(status)) {
     status = loom_compile_select_backend(
         backend_name, &kLoomCompileHalArtifactProviderRegistry, allocator,
@@ -662,7 +661,7 @@ int main(int argc, char** argv) {
 
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
-  compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
+  compile_options.module_name = iree_make_cstring_view(FLAG_module_name);
   compile_options.compile_root_symbol =
       iree_make_cstring_view(FLAG_compile_root);
   if (iree_status_is_ok(status)) {

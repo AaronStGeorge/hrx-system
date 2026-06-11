@@ -40,9 +40,6 @@ def main(
         ),
     )
     parser.add_argument(
-        "--agent-md",
-        "--agent_md",
-        "--agents-md",
         "--agents_md",
         action="store_true",
         help="print agent-oriented Markdown usage and exit",
@@ -61,7 +58,7 @@ def main(
         candidate.backend.add_arguments(subparser)
         _add_common_check_arguments(subparser)
     args = parser.parse_args(argv)
-    if args.agent_md:
+    if args.agents_md:
         sys.stdout.write(f"{agent_markdown(registry)}\n")
         return 0
     if args.list_importers:

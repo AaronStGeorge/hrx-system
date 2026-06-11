@@ -31,7 +31,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         return output.getvalue()
 
-    def parse_agent_md(self, arguments: list[str]) -> str:
+    def parse_agents_md(self, arguments: list[str]) -> str:
         output = io.StringIO()
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as cm:
             cli.parse_arguments(arguments)
@@ -683,7 +683,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(args.alias_dir, Path("aliases"))
 
     def test_agents_md_survives_hoisted_wrapper_flags(self):
-        output = self.parse_agent_md(["bazel", "build", "-n", "--agents_md"])
+        output = self.parse_agents_md(["bazel", "build", "-n", "--agents_md"])
 
         self.assertIn("## iree-bazel-build", output)
 
@@ -695,19 +695,19 @@ class CliTest(unittest.TestCase):
         self.assertTrue(command.keep)
 
     def test_root_agents_md_includes_bazel_and_cmake_sections(self):
-        output = self.parse_agent_md(["--agents_md"])
+        output = self.parse_agents_md(["--agents_md"])
 
         self.assertIn("### Bazel", output)
         self.assertIn("### CMake", output)
 
     def test_bazel_agents_md_includes_only_bazel_section(self):
-        output = self.parse_agent_md(["bazel", "--agents_md"])
+        output = self.parse_agents_md(["bazel", "--agents_md"])
 
         self.assertIn("### Bazel", output)
         self.assertNotIn("### CMake", output)
 
     def test_cmake_agents_md_includes_only_cmake_section(self):
-        output = self.parse_agent_md(["cmake", "--agent_md"])
+        output = self.parse_agents_md(["cmake", "--agents_md"])
 
         self.assertIn("### CMake", output)
         self.assertIn("iree-cmake-build", output)
@@ -715,19 +715,18 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("### Bazel", output)
 
     def test_bazel_build_agents_md_uses_public_wrapper_names(self):
-        output = self.parse_agent_md(["bazel", "build", "--agents_md"])
+        output = self.parse_agents_md(["bazel", "build", "--agents_md"])
 
         self.assertIn("## iree-bazel-build", output)
         self.assertIn("iree-bazel-build //runtime/src/iree/base/...", output)
         self.assertIn("iree-bazel-run", output)
         self.assertIn("iree-bazel-fuzz", output)
         self.assertIn("Wrapper flags", output)
-        self.assertNotIn("Pass `--agents-md`", output)
         self.assertNotIn("python dev.py", output)
         self.assertNotIn("### CMake", output)
 
     def test_bazel_run_agents_md_explains_process_contract(self):
-        output = self.parse_agent_md(["bazel", "run", "--agents-md"])
+        output = self.parse_agents_md(["bazel", "run", "--agents_md"])
 
         self.assertIn("## iree-bazel-run", output)
         self.assertIn(
@@ -738,8 +737,8 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("python dev.py", output)
 
     def test_bazel_try_and_fuzz_agents_md_are_focused(self):
-        try_output = self.parse_agent_md(["bazel", "try", "--agents-md"])
-        fuzz_output = self.parse_agent_md(["bazel", "fuzz", "--agents_md"])
+        try_output = self.parse_agents_md(["bazel", "try", "--agents_md"])
+        fuzz_output = self.parse_agents_md(["bazel", "fuzz", "--agents_md"])
 
         self.assertIn("## iree-bazel-try", try_output)
         self.assertIn("one-shot C/C++ probes", try_output)
@@ -752,7 +751,7 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("## iree-bazel-try", fuzz_output)
 
     def test_cmake_try_agents_md_is_focused(self):
-        output = self.parse_agent_md(["cmake", "try", "--agents-md"])
+        output = self.parse_agents_md(["cmake", "try", "--agents_md"])
 
         self.assertIn("## iree-cmake-try", output)
         self.assertIn("one-shot C/C++ probes", output)
@@ -760,7 +759,7 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("## iree-cmake-run", output)
 
     def test_cmake_fuzz_agents_md_is_focused(self):
-        output = self.parse_agent_md(["cmake", "fuzz", "--agents-md"])
+        output = self.parse_agents_md(["cmake", "fuzz", "--agents_md"])
 
         self.assertIn("## iree-cmake-fuzz", output)
         self.assertIn("IREE_ENABLE_FUZZING=ON", output)
@@ -833,7 +832,7 @@ class CliTest(unittest.TestCase):
         self.assertIn("exec '<built executable>' --help", description)
 
     def test_cmake_run_agents_md_explains_no_implicit_build(self):
-        output = self.parse_agent_md(["cmake", "run", "--agents-md"])
+        output = self.parse_agents_md(["cmake", "run", "--agents_md"])
 
         self.assertIn("## iree-cmake-run", output)
         self.assertIn("iree-cmake-build iree-run-module", output)

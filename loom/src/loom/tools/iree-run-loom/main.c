@@ -28,10 +28,10 @@ IREE_FLAG(string, compile_root, "",
           "backends use this to scope root-sensitive pass pipeline behavior; "
           "artifact emission otherwise keeps every compatible exported "
           "function.");
-IREE_FLAG(string, loom_backend, "vm",
+IREE_FLAG(string, backend, "vm",
           "Compilation backend to run, such as 'vm' or a linked native "
           "backend.");
-IREE_FLAG(string, loom_module_name, "loom",
+IREE_FLAG(string, module_name, "loom",
           "Module name to store in the compiled VM bytecode archive.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before execution. Use 'default' or empty for "
@@ -394,7 +394,7 @@ static iree_status_t iree_run_loom_make_unknown_backend_status(
   }
   status = iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "unknown --loom_backend='%.*s'; expected registered backend in [%.*s]",
+      "unknown --backend='%.*s'; expected registered backend in [%.*s]",
       (int)backend_name.size, backend_name.data,
       (int)iree_string_builder_size(&backend_names),
       iree_string_builder_buffer(&backend_names));
@@ -427,8 +427,7 @@ int iree_run_loom_main(int argc, char** argv,
   iree_allocator_t allocator = iree_allocator_system();
   const loom_run_execution_backend_registry_t* backend_registry =
       &configuration->execution_backend_registry;
-  const iree_string_view_t backend_name =
-      iree_make_cstring_view(FLAG_loom_backend);
+  const iree_string_view_t backend_name = iree_make_cstring_view(FLAG_backend);
   const loom_run_execution_backend_t* backend =
       loom_run_execution_backend_registry_lookup(backend_registry,
                                                  backend_name);
@@ -442,7 +441,7 @@ int iree_run_loom_main(int argc, char** argv,
     } else if (backend->probe == NULL) {
       probe_status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "--probe_hal requires --loom_backend to name a probeable backend");
+          "--probe_hal requires --backend to name a probeable backend");
     } else {
       const loom_run_one_shot_probe_request_t probe_request = {
           .host_allocator = allocator,
@@ -515,7 +514,7 @@ int iree_run_loom_main(int argc, char** argv,
   }
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
-  compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
+  compile_options.module_name = iree_make_cstring_view(FLAG_module_name);
   compile_options.compile_root_symbol =
       iree_make_cstring_view(FLAG_compile_root);
   loom_run_compile_report_capture_options_t compile_report_options = {0};

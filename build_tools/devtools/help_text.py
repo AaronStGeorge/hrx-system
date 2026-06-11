@@ -499,8 +499,8 @@ def agent_markdown_header() -> str:
 Run from the repository root. Prefer generated wrapper aliases such as
 `iree-bazel-build` and `iree-cmake-build`; checked-in
 `build_tools/bin/iree-*-*` launchers are available for root-relative scripts and
-unconfigured shells. Long flags accept hyphen or underscore spellings, such as
-`--dry-run` and `--dry_run`. Common wrapper flags work after the wrapper name:
+unconfigured shells. Common wrapper flags accept hyphen or underscore spellings,
+such as `--dry-run` and `--dry_run`, and work after the wrapper name:
 `-n/--dry-run`, `-v/--verbose`, `--system`, `--venv`, `--tool-root DIR`, and
 `--cmake-build-dir DIR`. Command-specific debugging flags include
 `iree-bazel-run -p/--print-path` and `iree-bazel-try -k/--keep`. Use `--`
