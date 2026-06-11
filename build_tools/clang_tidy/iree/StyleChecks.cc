@@ -20,6 +20,7 @@
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Lex/Lexer.h"
+#include "clang/Lex/MacroArgs.h"
 #include "clang/Lex/PPCallbacks.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/StringRef.h"
@@ -47,6 +48,11 @@ bool IsStatusTestMacroName(StringRef Name) {
          Name == "IREE_ASSERT_OK_AND_ASSIGN";
 }
 
+bool IsGTestBooleanMacroName(StringRef Name) {
+  return Name == "EXPECT_TRUE" || Name == "ASSERT_TRUE" ||
+         Name == "EXPECT_FALSE" || Name == "ASSERT_FALSE";
+}
+
 bool IsTestFilename(StringRef Filename) {
   if (Filename.empty()) {
     return false;
@@ -54,6 +60,25 @@ bool IsTestFilename(StringRef Filename) {
   return Filename.contains("/test/") || Filename.contains("/testing/") ||
          Filename.contains("/cts/") || Filename.contains("_test.") ||
          Filename.contains("_test_") || Filename.ends_with("test_base.h");
+}
+
+bool FirstMacroArgumentContainsIdentifier(const MacroArgs* Args,
+                                          StringRef Identifier) {
+  if (!Args || Args->getNumMacroArguments() == 0) {
+    return false;
+  }
+  const Token* Argument = Args->getUnexpArgument(0);
+  if (!Argument) {
+    return false;
+  }
+  unsigned ArgumentLength = MacroArgs::getArgLength(Argument);
+  for (unsigned I = 0; I < ArgumentLength; ++I) {
+    const IdentifierInfo* ArgumentIdentifier = Argument[I].getIdentifierInfo();
+    if (ArgumentIdentifier && ArgumentIdentifier->getName() == Identifier) {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::optional<std::string> SourceText(const Expr* Expr,
@@ -293,6 +318,44 @@ class TestStatusMacroRecorder final : public PPCallbacks {
 
  private:
   TestStatusMacroCheck& Check_;
+  Preprocessor& PP_;
+};
+
+class TestStatusPredicateRecorder final : public PPCallbacks {
+ public:
+  TestStatusPredicateRecorder(TestStatusPredicateCheck& Check, Preprocessor& PP)
+      : Check_(Check), PP_(PP) {}
+
+  void MacroExpands(const Token& MacroNameTok, const MacroDefinition&,
+                    SourceRange Range, const MacroArgs* Args) override {
+    const IdentifierInfo* Identifier = MacroNameTok.getIdentifierInfo();
+    if (!Identifier) {
+      return;
+    }
+    StringRef Name = Identifier->getName();
+    if (!IsGTestBooleanMacroName(Name) ||
+        !FirstMacroArgumentContainsIdentifier(Args, "iree_status_is_ok")) {
+      return;
+    }
+    const SourceManager& SourceManager = PP_.getSourceManager();
+    if (SourceManager.isInSystemHeader(MacroNameTok.getLocation())) {
+      return;
+    }
+    if (SourceManager.isMacroBodyExpansion(MacroNameTok.getLocation())) {
+      return;
+    }
+    SourceLocation Location = SourceManager.getExpansionLoc(Range.getBegin());
+    if (Location.isInvalid()) {
+      return;
+    }
+    Check_.diag(Location,
+                "use IREE status test macros instead of %0 with "
+                "iree_status_is_ok")
+        << Name;
+  }
+
+ private:
+  TestStatusPredicateCheck& Check_;
   Preprocessor& PP_;
 };
 
@@ -791,6 +854,19 @@ void TestStatusMacroCheck::registerPPCallbacks(const SourceManager&,
     return;
   }
   PP->addPPCallbacks(std::make_unique<TestStatusMacroRecorder>(*this, *PP));
+}
+
+TestStatusPredicateCheck::TestStatusPredicateCheck(StringRef Name,
+                                                   ClangTidyContext* Context)
+    : ClangTidyCheck(Name, Context) {}
+
+void TestStatusPredicateCheck::registerPPCallbacks(const SourceManager&,
+                                                   Preprocessor* PP,
+                                                   Preprocessor*) {
+  if (!PP) {
+    return;
+  }
+  PP->addPPCallbacks(std::make_unique<TestStatusPredicateRecorder>(*this, *PP));
 }
 
 }  // namespace clang::tidy::iree

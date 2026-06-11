@@ -29,6 +29,8 @@ class IreeTidyModule final : public ClangTidyModule {
         "iree-refcount-lifecycle");
     CheckFactories.registerCheck<TestStatusMacroCheck>(
         "iree-test-status-macro-scope");
+    CheckFactories.registerCheck<TestStatusPredicateCheck>(
+        "iree-test-status-predicate");
     CheckFactories.registerCheck<TraceZoneCheck>("iree-trace-zone-balance");
   }
 };

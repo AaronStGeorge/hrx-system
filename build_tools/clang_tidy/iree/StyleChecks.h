@@ -43,6 +43,14 @@ class TestStatusMacroCheck final : public ClangTidyCheck {
                            Preprocessor* ModuleExpanderPP) override;
 };
 
+class TestStatusPredicateCheck final : public ClangTidyCheck {
+ public:
+  TestStatusPredicateCheck(StringRef Name, ClangTidyContext* Context);
+
+  void registerPPCallbacks(const SourceManager& SM, Preprocessor* PP,
+                           Preprocessor* ModuleExpanderPP) override;
+};
+
 }  // namespace clang::tidy::iree
 
 #endif  // IREE_BUILD_TOOLS_CLANG_TIDY_IREE_STYLE_CHECKS_H_

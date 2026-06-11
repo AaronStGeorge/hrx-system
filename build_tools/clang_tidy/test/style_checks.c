@@ -234,3 +234,24 @@ void iree_clang_tidy_style_indirect_release_ignored(
     release_fn(resource);
   }
 }
+
+#define EXPECT_TRUE(expr) ((void)(expr))
+#define ASSERT_TRUE(expr) ((void)(expr))
+#define EXPECT_FALSE(expr) ((void)(expr))
+#define ASSERT_FALSE(expr) ((void)(expr))
+
+int iree_status_is_ok(iree_status_t status);
+int iree_clang_tidy_style_some_predicate(void);
+
+void iree_clang_tidy_style_raw_status_test_predicates_are_invalid(
+    iree_status_t status) {
+  EXPECT_TRUE(iree_status_is_ok(status));
+  ASSERT_TRUE(iree_status_is_ok(status));
+  EXPECT_FALSE(iree_status_is_ok(status));
+  ASSERT_FALSE(iree_status_is_ok(status));
+}
+
+void iree_clang_tidy_style_boolean_test_predicates_are_allowed(void) {
+  EXPECT_TRUE(iree_clang_tidy_style_some_predicate());
+  ASSERT_FALSE(iree_clang_tidy_style_some_predicate());
+}

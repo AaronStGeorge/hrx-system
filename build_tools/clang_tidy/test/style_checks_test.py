@@ -185,6 +185,35 @@ class StyleChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
+    def test_raw_status_predicates_are_diagnosed(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-test-status-predicate",
+            source=clang_tidy_test.source_path(__file__, "style_checks.c"),
+            compiler_args=["-std=gnu11"],
+        )
+        self.assertContainsAll(
+            output,
+            [
+                "use IREE status test macros instead of EXPECT_TRUE with "
+                "iree_status_is_ok",
+                "use IREE status test macros instead of ASSERT_TRUE with "
+                "iree_status_is_ok",
+                "use IREE status test macros instead of EXPECT_FALSE with "
+                "iree_status_is_ok",
+                "use IREE status test macros instead of ASSERT_FALSE with "
+                "iree_status_is_ok",
+                "[iree-test-status-predicate]",
+            ],
+        )
+        self.assertContainsNone(
+            output,
+            [
+                "iree_clang_tidy_style_boolean_test_predicates_are_allowed",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
