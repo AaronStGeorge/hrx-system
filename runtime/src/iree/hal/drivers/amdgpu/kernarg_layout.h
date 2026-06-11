@@ -137,6 +137,17 @@ iree_status_t iree_hal_amdgpu_kernarg_layout_initialize(
     iree_host_size_t storage_capacity,
     iree_hal_amdgpu_kernarg_layout_t* out_layout);
 
+// Populates explicit dispatch kernargs in already-reserved storage.
+//
+// |binding_ptrs| must provide |layout->binding_count| raw 64-bit device
+// pointers. |constants| must provide |layout->constant_byte_length| bytes.
+// |kernarg_ptr| must point to at least |layout->kernarg_byte_length| writable
+// bytes. HIP/OpenCL implicit args are not populated by this function.
+void iree_hal_amdgpu_kernarg_layout_emplace_explicit_args(
+    const iree_hal_amdgpu_kernarg_layout_t* layout,
+    const uint64_t* binding_ptrs, iree_const_byte_span_t constants,
+    void* kernarg_ptr);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

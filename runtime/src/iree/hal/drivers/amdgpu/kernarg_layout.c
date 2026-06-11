@@ -378,3 +378,36 @@ iree_status_t iree_hal_amdgpu_kernarg_layout_initialize(
   }
   return iree_ok_status();
 }
+
+void iree_hal_amdgpu_kernarg_layout_emplace_explicit_args(
+    const iree_hal_amdgpu_kernarg_layout_t* layout,
+    const uint64_t* binding_ptrs, iree_const_byte_span_t constants,
+    void* kernarg_ptr) {
+  uint8_t* target = (uint8_t*)kernarg_ptr;
+  if (iree_any_bit_set(
+          layout->flags,
+          IREE_HAL_AMDGPU_KERNARG_LAYOUT_FLAG_REQUIRES_ZERO_FILL)) {
+    memset(target, 0, layout->kernarg_byte_length);
+  }
+
+  const iree_hal_amdgpu_kernarg_binding_slot_t* binding_slots =
+      iree_hal_amdgpu_kernarg_layout_binding_slots(layout);
+  if (iree_any_bit_set(
+          layout->flags,
+          IREE_HAL_AMDGPU_KERNARG_LAYOUT_FLAG_PACKED_BINDING_PREFIX)) {
+    memcpy(target, binding_ptrs, layout->binding_count * sizeof(uint64_t));
+  } else {
+    for (iree_host_size_t i = 0; i < layout->binding_count; ++i) {
+      memcpy(target + binding_slots[i].target_qword_index * sizeof(uint64_t),
+             &binding_ptrs[i], sizeof(uint64_t));
+    }
+  }
+
+  const iree_hal_amdgpu_kernarg_constant_span_t* constant_spans =
+      iree_hal_amdgpu_kernarg_layout_constant_spans(layout);
+  for (iree_host_size_t i = 0; i < layout->constant_span_count; ++i) {
+    const iree_hal_amdgpu_kernarg_constant_span_t span = constant_spans[i];
+    memcpy(target + span.target_byte_offset,
+           constants.data + span.source_byte_offset, span.byte_length);
+  }
+}

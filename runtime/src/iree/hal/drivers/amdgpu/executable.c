@@ -1053,11 +1053,11 @@ static iree_status_t iree_hal_amdgpu_executable_upload_raw_hsaco_kernel_table(
       out_device_kernel_args);
 }
 
-static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
-    const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* layout,
-    uint32_t* out_kernarg_block_count) {
+static iree_status_t
+iree_hal_amdgpu_executable_calculate_kernarg_block_count_from_byte_length(
+    iree_host_size_t total_kernarg_size, uint32_t* out_kernarg_block_count) {
   iree_host_size_t kernarg_block_count = iree_host_size_ceil_div(
-      layout->total_kernarg_size, sizeof(iree_hal_amdgpu_kernarg_block_t));
+      total_kernarg_size, sizeof(iree_hal_amdgpu_kernarg_block_t));
   if (kernarg_block_count == 0) {
     kernarg_block_count = 1;
   }
@@ -1071,9 +1071,17 @@ static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
   return iree_ok_status();
 }
 
+static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
+    const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* layout,
+    uint32_t* out_kernarg_block_count) {
+  return iree_hal_amdgpu_executable_calculate_kernarg_block_count_from_byte_length(
+      layout->total_kernarg_size, out_kernarg_block_count);
+}
+
 static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
     iree_hal_amdgpu_gfxip_version_t gfxip_version,
     const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
+    const iree_hal_amdgpu_kernarg_layout_t* kernarg_layout,
     iree_host_size_t custom_explicit_kernarg_size,
     uint16_t custom_implicit_args_offset,
     iree_hal_amdgpu_executable_dispatch_descriptor_t* out_descriptor) {
@@ -1097,15 +1105,24 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
   }
 
   out_descriptor->kernel_args = *kernel_args;
+  out_descriptor->kernarg_layout = kernarg_layout;
   // Kernel metadata reports the bytes actually consumed by the compiled
   // kernel. That may be smaller than the HAL ABI explicit argument footprint
   // when optimization removes unused bindings/constants; we still reserve and
   // populate the public HAL ABI bytes for dispatch.
   out_descriptor->hal_kernarg_layout =
       iree_hal_amdgpu_device_dispatch_make_hal_kernarg_layout(kernel_args);
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_executable_calculate_kernarg_block_count(
-      &out_descriptor->hal_kernarg_layout,
-      &out_descriptor->hal_kernarg_block_count));
+  if (kernarg_layout) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amdgpu_executable_calculate_kernarg_block_count_from_byte_length(
+            kernarg_layout->kernarg_byte_length,
+            &out_descriptor->hal_kernarg_block_count));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_amdgpu_executable_calculate_kernarg_block_count(
+            &out_descriptor->hal_kernarg_layout,
+            &out_descriptor->hal_kernarg_block_count));
+  }
 
   // Dynamic custom-direct layout: callers provide a prepacked ABI blob and its
   // length at dispatch time. Fixed fields are only needed when the metadata
@@ -1422,6 +1439,7 @@ iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
     iree_hal_amdgpu_executable_t* executable,
     iree_hal_amdgpu_gfxip_version_t gfxip_version,
     iree_host_size_t device_ordinal,
+    const iree_hal_amdgpu_executable_metadata_t* dispatch_metadata,
     const iree_host_size_t* custom_explicit_kernarg_sizes,
     const uint16_t* custom_implicit_args_offsets) {
   for (iree_host_size_t kernel_ordinal = 0;
@@ -1436,10 +1454,22 @@ iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
         custom_implicit_args_offsets
             ? custom_implicit_args_offsets[kernel_ordinal]
             : UINT16_MAX;
+    const iree_hal_amdgpu_kernarg_layout_t* kernarg_layout = NULL;
+    if (dispatch_metadata &&
+        !executable->custom_direct_only_exports[kernel_ordinal]) {
+      IREE_RETURN_IF_ERROR(
+          iree_hal_amdgpu_executable_metadata_resolve_layout(
+              dispatch_metadata,
+              dispatch_metadata->exports[kernel_ordinal].kernarg_layout,
+              &kernarg_layout),
+          "resolving dispatch kernarg layout for export %" PRIhsz,
+          kernel_ordinal);
+    }
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
             gfxip_version, &executable->host_kernel_args[kernel_ordinal],
-            custom_explicit_kernarg_size, custom_implicit_args_offset,
+            kernarg_layout, custom_explicit_kernarg_size,
+            custom_implicit_args_offset,
             &executable->host_dispatch_descriptors[descriptor_ordinal]),
         "initializing dispatch descriptor for device %" PRIhsz
         " export %" PRIhsz,
@@ -2258,6 +2288,7 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_flatbuffer(
       status =
           iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
               executable, gfxip_version, device_ordinal,
+              /*dispatch_metadata=*/NULL,
               /*custom_explicit_kernarg_sizes=*/NULL,
               /*custom_implicit_args_offsets=*/NULL);
     }
@@ -2423,7 +2454,7 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
       if (iree_status_is_ok(status)) {
         status =
             iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
-                executable, gfxip_version, device_ordinal,
+                executable, gfxip_version, device_ordinal, executable->metadata,
                 custom_explicit_kernarg_sizes, custom_implicit_args_offsets);
       }
     }

@@ -214,6 +214,7 @@ iree_cc_library(
     ::access_policy
     ::executable_metadata
     ::executable_metadata_hsaco
+    ::kernarg_layout
     ::profile_events
     ::queue_affinity
     iree::async

@@ -11,6 +11,7 @@
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amdgpu/abi/kernel_args.h"
 #include "iree/hal/drivers/amdgpu/device/dispatch.h"
+#include "iree/hal/drivers/amdgpu/kernarg_layout.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_dispatch.h"
@@ -72,6 +73,8 @@ iree_status_t iree_hal_amdgpu_executable_format_supported(
 typedef struct iree_hal_amdgpu_executable_dispatch_descriptor_t {
   // Device-specific kernel arguments with a valid kernel_object for dispatch.
   iree_hal_amdgpu_device_kernel_args_t kernel_args;
+  // Native kernarg layout from executable metadata, if available.
+  const iree_hal_amdgpu_kernarg_layout_t* kernarg_layout;
   // HAL ABI kernarg layout derived from |kernel_args|.
   iree_hal_amdgpu_device_dispatch_kernarg_layout_t hal_kernarg_layout;
   // Custom direct-argument kernarg layout derived from |kernel_args|.
