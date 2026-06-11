@@ -847,17 +847,11 @@ iree_status_t loom_amdgpu_hal_binding_materialize(
     if (iree_status_is_ok(status)) {
       loom_amdgpu_hal_binding_set_entry_insertion_point(&rewriter, function_op);
     }
-    if (iree_status_is_ok(status)) {
-      status = loom_amdgpu_hal_binding_materialize_direct_args(
-          &rewriter, function_op, &layout, kernarg_ptr, descriptor_set,
-          sgpr_type, sgpr_x2_type, &out_result->materialized_direct_arg_count);
-    }
   }
-  if (iree_status_is_ok(status) && layout.direct_arg_count != 0 &&
-      !layout.uses_kernarg_segment_ptr) {
+  if (iree_status_is_ok(status)) {
     status = loom_amdgpu_hal_binding_materialize_direct_args(
-        &rewriter, function_op, &layout, LOOM_VALUE_ID_INVALID, descriptor_set,
-        sgpr_type, sgpr_x2_type, &out_result->materialized_direct_arg_count);
+        &rewriter, function_op, &layout, kernarg_ptr, descriptor_set, sgpr_type,
+        sgpr_x2_type, &out_result->materialized_direct_arg_count);
   }
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_hal_binding_materialize_resources(

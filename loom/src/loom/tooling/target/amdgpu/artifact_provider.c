@@ -17,7 +17,7 @@
 #include "loom/tooling/execution/hal/runtime.h"
 
 typedef struct loom_amdgpu_hal_artifact_storage_t {
-  // Target-native HSACO artifact and export metadata.
+  // Target-native HSACO artifact storage.
   loom_amdgpu_hal_kernel_library_t kernel_library;
 } loom_amdgpu_hal_artifact_storage_t;
 
