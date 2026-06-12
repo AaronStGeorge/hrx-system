@@ -245,9 +245,9 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
       builder, loom_target_pipeline_build_source_normalization_before_legalize,
       user_data, &for_op));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_authoring_expansion(builder));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_authoring_expansion(builder));
   loom_pass_ir_body_build_fn_t source_finish_body =
       control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW
           ? loom_target_pipeline_build_source_safe_normalization_after_legalize

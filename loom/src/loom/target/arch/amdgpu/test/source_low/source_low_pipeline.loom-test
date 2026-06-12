@@ -15,9 +15,9 @@ pass.pipeline<module> @__loom_check_source_low pipeline {
       promote-private-fragments
     }
   }
-  target-legalize(mode = "eager")
   select-templates(mode = "final")
   inline-callables
+  target-legalize(mode = "eager")
   for func {
     where target {
       vector-gather-to-scalar
@@ -112,9 +112,9 @@ pass.pipeline<module> @__loom_check_prepared_low pipeline {
       promote-private-fragments
     }
   }
-  target-legalize(mode = "eager")
   select-templates(mode = "final")
   inline-callables
+  target-legalize(mode = "eager")
   for func {
     where target {
       vector-gather-to-scalar
