@@ -48,6 +48,16 @@ class LifecycleChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
+    def test_lifecycle_naming_ignores_cxx_non_identifier_functions(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-lifecycle-naming",
+            source=clang_tidy_test.source_path(__file__, "non_identifier_functions.cc"),
+            compiler_args=["-std=c++17"],
+        )
+        self.assertContainsNone(output, ["[iree-lifecycle-naming]"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -130,6 +130,7 @@ py_test(
     ],
     data = [
         "test/lifecycle_checks.c",
+        "test/non_identifier_functions.cc",
         ":IREEClangTidyPlugin.so",
         "@iree_clang_tidy_llvm//:clang-tidy",
     ],
@@ -150,6 +151,7 @@ py_test(
         "--plugin=$(location :IREEClangTidyPlugin.so)",
     ],
     data = [
+        "test/non_identifier_functions.cc",
         "test/refcount_checks.c",
         ":IREEClangTidyPlugin.so",
         "@iree_clang_tidy_llvm//:clang-tidy",
