@@ -113,12 +113,47 @@ static uint32_t loom_amdgpu_bitfield_low_mask(uint32_t width) {
   return width == 32 ? UINT32_MAX : (UINT32_C(1) << width) - 1u;
 }
 
+static bool loom_amdgpu_bitfield_extract_prefers_bfe(
+    const loom_amdgpu_bitfield_extract_plan_t* plan) {
+  if (plan->is_signed) {
+    return plan->offset + plan->width < 32;
+  }
+  return plan->offset != 0;
+}
+
+static iree_status_t loom_amdgpu_try_emit_bitfield_extract_bfe(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_bitfield_extract_plan_t* plan,
+    loom_value_id_t source_lane, loom_type_t lane_type,
+    loom_value_id_t* out_lane, bool* out_selected) {
+  const loom_amdgpu_vgpr_bfe_extract_flags_t flags =
+      plan->is_signed ? LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_SIGN_EXTEND
+                      : LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_NONE;
+  return loom_amdgpu_try_emit_vgpr_b32_bfe_extract(
+      context, source_op, source_lane, plan->offset, plan->width, flags,
+      lane_type, out_lane, out_selected);
+}
+
 static iree_status_t loom_amdgpu_emit_extractu_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitfield_extract_plan_t* plan,
     loom_value_id_t source_lane, loom_type_t lane_type,
     loom_value_id_t* out_lane) {
   *out_lane = LOOM_VALUE_ID_INVALID;
+  if (plan->offset == 0 && plan->width == 32) {
+    *out_lane = source_lane;
+    return iree_ok_status();
+  }
+
+  if (loom_amdgpu_bitfield_extract_prefers_bfe(plan)) {
+    bool selected_bfe = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_bitfield_extract_bfe(
+        context, source_op, plan, source_lane, lane_type, out_lane,
+        &selected_bfe));
+    if (selected_bfe) {
+      return iree_ok_status();
+    }
+  }
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
@@ -144,6 +179,16 @@ static iree_status_t loom_amdgpu_emit_extracts_lane(
   if (plan->offset == 0 && plan->width == 32) {
     *out_lane = source_lane;
     return iree_ok_status();
+  }
+
+  if (loom_amdgpu_bitfield_extract_prefers_bfe(plan)) {
+    bool selected_bfe = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_bitfield_extract_bfe(
+        context, source_op, plan, source_lane, lane_type, out_lane,
+        &selected_bfe));
+    if (selected_bfe) {
+      return iree_ok_status();
+    }
   }
 
   loom_value_id_t shifted_left = LOOM_VALUE_ID_INVALID;

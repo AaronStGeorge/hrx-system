@@ -311,6 +311,12 @@ static uint32_t loom_amdgpu_low_mask(uint32_t width) {
   return width == 32 ? UINT32_MAX : (UINT32_C(1) << width) - 1u;
 }
 
+static bool loom_amdgpu_signed_bitunpack_lane_prefers_bfe(
+    const loom_amdgpu_bitunpack_plan_t* plan, uint32_t source_bit_offset) {
+  // The high byte of a 32-bit word already sign-extends with one ASHR.
+  return plan->width == 8 && source_bit_offset < 24;
+}
+
 static iree_status_t loom_amdgpu_emit_bitunpacku_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitunpack_plan_t* plan, loom_value_id_t low_source,
@@ -359,6 +365,17 @@ static iree_status_t loom_amdgpu_emit_bitunpacks_lane(
       &selected_sdwa));
   if (selected_sdwa) {
     return iree_ok_status();
+  }
+
+  if (loom_amdgpu_signed_bitunpack_lane_prefers_bfe(plan, source_bit_offset)) {
+    bool selected_bfe = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_vgpr_b32_bfe_extract(
+        context, source_op, low_source, source_bit_offset, plan->width,
+        LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_SIGN_EXTEND, lane_type, out_lane,
+        &selected_bfe));
+    if (selected_bfe) {
+      return iree_ok_status();
+    }
   }
 
   loom_value_id_t shifted_left = LOOM_VALUE_ID_INVALID;

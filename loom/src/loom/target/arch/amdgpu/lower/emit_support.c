@@ -1055,6 +1055,56 @@ iree_status_t loom_amdgpu_try_emit_vgpr_b32_sdwa_extract(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_try_emit_vgpr_b32_bfe_extract(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t value, uint32_t bit_offset, uint32_t bit_count,
+    loom_amdgpu_vgpr_bfe_extract_flags_t flags, loom_type_t lane_type,
+    loom_value_id_t* out_value, bool* out_selected) {
+  *out_value = LOOM_VALUE_ID_INVALID;
+  *out_selected = false;
+  if (iree_any_bit_set(flags, ~LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_SIGN_EXTEND)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported AMDGPU BFE extract flags");
+  }
+  if (bit_offset > 31 || bit_count < 1 || bit_count > 32 ||
+      bit_offset + bit_count > 32) {
+    return iree_ok_status();
+  }
+
+  const bool sign_extend =
+      iree_any_bit_set(flags, LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_SIGN_EXTEND);
+  const loom_amdgpu_descriptor_ref_t descriptor_ref =
+      sign_extend ? LOOM_AMDGPU_DESCRIPTOR_REF_V_BFE_I32_OFFSET_WIDTH_INLINE
+                  : LOOM_AMDGPU_DESCRIPTOR_REF_V_BFE_U32_OFFSET_WIDTH_INLINE;
+  loom_low_lower_resolved_descriptor_t descriptor = {0};
+  bool present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, descriptor_ref, &descriptor, &present));
+  if (!present) {
+    return iree_ok_status();
+  }
+
+  loom_named_attr_t attrs[2] = {0};
+  iree_host_size_t attr_count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_i64_attr(context, IREE_SV("offset"), bit_offset, attrs,
+                                  IREE_ARRAYSIZE(attrs), &attr_count));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_i64_attr(context, IREE_SV("width"), bit_count, attrs,
+                                  IREE_ARRAYSIZE(attrs), &attr_count));
+
+  loom_value_id_t operands[] = {value};
+  loom_op_t* low_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &descriptor, operands, IREE_ARRAYSIZE(operands),
+      loom_make_named_attr_slice(attrs, attr_count), &lane_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &low_op));
+  *out_value = loom_value_slice_get(loom_low_op_results(low_op), 0);
+  *out_selected = true;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_emit_vgpr_scale_u32(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t value, uint32_t scale,

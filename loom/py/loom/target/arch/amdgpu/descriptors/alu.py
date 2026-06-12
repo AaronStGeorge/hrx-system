@@ -1287,6 +1287,43 @@ def _v_lshl_add_u32_shift_immediate_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_bfe_offset_immediate() -> Immediate:
+    return replace(_source_inline_u32_immediate("offset"), unsigned_max=31)
+
+
+def _v_bfe_width_immediate() -> Immediate:
+    return replace(_source_inline_u32_immediate("width"), unsigned_max=32)
+
+
+def _v_bfe_offset_width_inline_overlay(*, is_signed: bool) -> AmdgpuDescriptorOverlay:
+    type_suffix = "i32" if is_signed else "u32"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_bfe_{type_suffix}.offset_width_inline",
+        instruction_name=f"V_BFE_{type_suffix.upper()}",
+        mnemonic=f"v_bfe_{type_suffix}",
+        encoding_name="ENC_VOP3",
+        semantic_tag=f"integer.bitfield.extract.{type_suffix}",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("value")),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"v_bfe_{type_suffix}_offset_width_inline",
+            results=("dst",),
+            operands=("value",),
+            immediates=("offset", "width"),
+            named_immediates=True,
+        ),
+        immediate_fields=("SRC1", "SRC2"),
+        immediates=(
+            _v_bfe_offset_immediate(),
+            _v_bfe_width_immediate(),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_lshrrev_b32_overlay() -> AmdgpuDescriptorOverlay:
     return _v_binary_u32_overlay(
         descriptor_key="amdgpu.v_lshrrev_b32",
@@ -1383,6 +1420,8 @@ def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_lshlrev_b32_literal_overlay(),
         _v_lshlrev_b32_vop3_immediate_overlay(),
         _v_lshl_add_u32_shift_immediate_overlay(),
+        _v_bfe_offset_width_inline_overlay(is_signed=False),
+        _v_bfe_offset_width_inline_overlay(is_signed=True),
         _v_lshrrev_b32_overlay(),
         _v_lshrrev_b32_src0_inline_overlay(),
         _v_lshrrev_b32_literal_overlay(),
@@ -2506,6 +2545,9 @@ __all__ = (
     "_v_ashrrev_i32_literal_overlay",
     "_v_ashrrev_i32_overlay",
     "_v_ashrrev_i32_src0_inline_overlay",
+    "_v_bfe_offset_immediate",
+    "_v_bfe_offset_width_inline_overlay",
+    "_v_bfe_width_immediate",
     "_v_binary_f32_operand_forms",
     "_v_binary_literal_overlay",
     "_v_binary_src0_inline_f32_overlay",

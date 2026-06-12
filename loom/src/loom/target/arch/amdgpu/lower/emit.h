@@ -231,6 +231,24 @@ iree_status_t loom_amdgpu_try_emit_vgpr_b32_sdwa_extract(
     loom_amdgpu_vgpr_sdwa_extract_flags_t flags, loom_type_t lane_type,
     loom_value_id_t* out_value, bool* out_selected);
 
+typedef enum loom_amdgpu_vgpr_bfe_extract_flag_bits_e {
+  // Selects the unsigned bitfield extraction form.
+  LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_NONE = 0u,
+  // Selects the signed bitfield extraction form.
+  LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_SIGN_EXTEND = 1u << 0,
+} loom_amdgpu_vgpr_bfe_extract_flag_bits_t;
+typedef uint32_t loom_amdgpu_vgpr_bfe_extract_flags_t;
+
+// Tries to emit a V_BFE offset/width-inline bitfield extract. If the active
+// descriptor set has no BFE form, or the selected bit range is not
+// representable by the descriptor, returns with |out_selected| false and emits
+// nothing.
+iree_status_t loom_amdgpu_try_emit_vgpr_b32_bfe_extract(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t value, uint32_t bit_offset, uint32_t bit_count,
+    loom_amdgpu_vgpr_bfe_extract_flags_t flags, loom_type_t lane_type,
+    loom_value_id_t* out_value, bool* out_selected);
+
 typedef enum loom_amdgpu_vgpr_scale_u32_flag_bits_e {
   // No additional facts about the input value are known.
   LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_NONE = 0u,
