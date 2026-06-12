@@ -21,6 +21,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
+#include "loom/target/arch/amdgpu/feedback_abi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,6 +56,23 @@ typedef struct loom_amdgpu_feedback_channel_header_values_t {
   loom_value_id_t ring_capacity;
 } loom_amdgpu_feedback_channel_header_values_t;
 
+typedef struct loom_amdgpu_feedback_packet_header_t {
+  // Total packet byte length including the fixed header and padded payload.
+  uint32_t record_length;
+  // Packet schema kind owned by the producer facility.
+  loom_amdgpu_feedback_packet_kind_t kind;
+  // Packet-level behavior flags.
+  loom_amdgpu_feedback_packet_flags_t flags;
+  // Absolute ring byte position assigned by reservation.
+  loom_value_id_t sequence;
+  // Device-visible dispatch packet pointer captured by the producer.
+  loom_value_id_t source_dispatch_ptr;
+  // X dimension workgroup id captured by the producer.
+  loom_value_id_t source_workgroup_id_x;
+  // X dimension workitem id captured by the producer.
+  loom_value_id_t source_workitem_id_x;
+} loom_amdgpu_feedback_packet_header_t;
+
 // Emits target-low IR that materializes and scalar-loads common feedback config
 // fields.
 //
@@ -77,6 +95,17 @@ iree_status_t loom_amdgpu_build_feedback_channel_header_values(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t channel_base, loom_location_id_t location,
     loom_amdgpu_feedback_channel_header_values_t* out_values);
+
+// Emits target-low IR that initializes a reserved feedback packet header.
+//
+// |packet_base| must be the SGPRx2 device-visible packet address returned by
+// reservation. Dynamic header values may be SGPR or VGPR low registers and are
+// copied into VGPRs as required by global-store packet operands.
+iree_status_t loom_amdgpu_build_feedback_packet_header(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t packet_base,
+    const loom_amdgpu_feedback_packet_header_t* header,
+    loom_location_id_t location);
 
 // Emits an AMDGPU message-send packet with the given target-defined message
 // immediate.

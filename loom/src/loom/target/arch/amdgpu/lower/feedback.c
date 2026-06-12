@@ -15,6 +15,7 @@
 #include "loom/target/arch/amdgpu/lower/data_symbol.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/target/registers.h"
 
 static loom_amdgpu_feedback_config_values_t
 loom_amdgpu_feedback_config_values_empty(void) {
@@ -55,6 +56,226 @@ static iree_status_t loom_amdgpu_feedback_build_offset_attr(
     loom_named_attr_t* out_attr) {
   return loom_amdgpu_feedback_build_u32_attr(builder, IREE_SV("offset"),
                                              byte_offset, out_attr);
+}
+
+static bool loom_amdgpu_feedback_type_is_register_class(
+    const loom_low_descriptor_set_t* descriptor_set, loom_type_t type,
+    uint16_t reg_class_id) {
+  return loom_low_type_is_register(type) &&
+         loom_low_register_type_descriptor_set_stable_id(type) ==
+             descriptor_set->stable_id &&
+         loom_low_register_type_class_id(type) == reg_class_id;
+}
+
+static iree_status_t loom_amdgpu_feedback_require_register_class(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t value, uint16_t reg_class_id, uint32_t unit_count) {
+  if (value >= builder->module->values.count) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU feedback builder received an invalid low value");
+  }
+  const loom_type_t type = loom_module_value_type(builder->module, value);
+  if (!loom_amdgpu_feedback_type_is_register_class(descriptor_set, type,
+                                                   reg_class_id) ||
+      loom_low_register_type_unit_count(type) != unit_count) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU feedback builder received a low value with an unsupported "
+        "register shape");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_feedback_build_const_u32(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t value,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  *out_value = LOOM_VALUE_ID_INVALID;
+  const loom_low_descriptor_t* descriptor = NULL;
+  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
+      builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
+
+  loom_named_attr_t imm32_attr = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+      builder, IREE_SV("imm32"), value, &imm32_attr));
+  loom_op_t* const_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_build_resolved_descriptor_const(
+      builder, descriptor_set, descriptor, opcode_id,
+      loom_make_named_attr_slice(&imm32_attr, 1), result_type, location,
+      &const_op));
+  *out_value = loom_low_const_result(const_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_feedback_build_vgpr_u32_const(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t value, loom_location_id_t location, loom_value_id_t* out_value) {
+  loom_type_t vgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, &vgpr_type));
+  return loom_amdgpu_feedback_build_const_u32(
+      builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, value,
+      vgpr_type, location, out_value);
+}
+
+static iree_status_t loom_amdgpu_feedback_build_vgpr_u64_const(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    uint64_t value, loom_location_id_t location, loom_value_id_t* out_value) {
+  *out_value = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t low_value_lo = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, (uint32_t)value, location, &low_value_lo));
+  loom_value_id_t low_value_hi = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, (uint32_t)(value >> 32), location,
+      &low_value_hi));
+
+  loom_type_t vgpr_x2_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2, &vgpr_x2_type));
+  const loom_value_id_t parts[] = {low_value_lo, low_value_hi};
+  loom_op_t* concat_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_concat_build(builder, parts, IREE_ARRAYSIZE(parts), vgpr_x2_type,
+                            location, &concat_op));
+  *out_value = loom_low_concat_result(concat_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_feedback_build_vgpr_b32_copy(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t source, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  *out_value = LOOM_VALUE_ID_INVALID;
+  loom_type_t vgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, &vgpr_type));
+  const loom_low_descriptor_t* descriptor = NULL;
+  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
+      builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_COPY,
+      &descriptor, &opcode_id));
+  loom_value_id_t operands[] = {source};
+  loom_op_t* copy_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_build_resolved_descriptor_op(
+      builder, descriptor_set, descriptor, opcode_id, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0), &vgpr_type,
+      /*result_count=*/1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, location, &copy_op));
+  *out_value = loom_value_slice_get(loom_low_op_results(copy_op), 0);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_feedback_materialize_vgpr_registers(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t source, uint32_t expected_unit_count,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  *out_value = source;
+  if (source >= builder->module->values.count) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU feedback builder received an invalid low value");
+  }
+  const loom_type_t source_type =
+      loom_module_value_type(builder->module, source);
+  if (!loom_low_type_is_register(source_type) ||
+      loom_low_register_type_unit_count(source_type) != expected_unit_count) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU feedback builder cannot materialize value with unsupported "
+        "register shape");
+  }
+  if (loom_amdgpu_feedback_type_is_register_class(
+          descriptor_set, source_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR)) {
+    return iree_ok_status();
+  }
+  if (!loom_amdgpu_feedback_type_is_register_class(
+          descriptor_set, source_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR)) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU feedback builder cannot materialize non-SGPR value into VGPR");
+  }
+  if (expected_unit_count > 2) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU feedback builder cannot materialize wide VGPR value");
+  }
+  if (expected_unit_count == 1) {
+    return loom_amdgpu_feedback_build_vgpr_b32_copy(
+        builder, descriptor_set, source, location, out_value);
+  }
+
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, &sgpr_type));
+  loom_value_id_t lanes[2];
+  for (uint32_t i = 0; i < expected_unit_count; ++i) {
+    loom_op_t* slice_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_slice_build(builder, source, i, sgpr_type,
+                                              location, &slice_op));
+    const loom_value_id_t sgpr_lane = loom_low_slice_result(slice_op);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_b32_copy(
+        builder, descriptor_set, sgpr_lane, location, &lanes[i]));
+  }
+
+  loom_type_t vgpr_range_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, expected_unit_count,
+      &vgpr_range_type));
+  loom_op_t* concat_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_concat_build(builder, lanes, expected_unit_count,
+                            vgpr_range_type, location, &concat_op));
+  *out_value = loom_low_concat_result(concat_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_feedback_build_global_store(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t zero_vaddr,
+    loom_value_id_t packet_base, uint32_t byte_offset, loom_value_id_t value,
+    uint32_t value_unit_count, loom_location_id_t location) {
+  loom_value_id_t vgpr_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_materialize_vgpr_registers(
+      builder, descriptor_set, value, value_unit_count, location, &vgpr_value));
+
+  const loom_low_descriptor_t* descriptor = NULL;
+  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
+      builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
+  loom_named_attr_t offset_attr = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_offset_attr(
+      builder, byte_offset, &offset_attr));
+  loom_value_id_t operands[] = {zero_vaddr, vgpr_value, packet_base};
+  loom_op_t* store_op = NULL;
+  return loom_low_build_resolved_descriptor_op(
+      builder, descriptor_set, descriptor, opcode_id, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&offset_attr, 1),
+      /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, location, &store_op);
+}
+
+static iree_status_t loom_amdgpu_feedback_build_global_store_b32(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t zero_vaddr, loom_value_id_t packet_base,
+    uint32_t byte_offset, loom_value_id_t value, loom_location_id_t location) {
+  return loom_amdgpu_feedback_build_global_store(
+      builder, descriptor_set,
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR, zero_vaddr,
+      packet_base, byte_offset, value, /*value_unit_count=*/1, location);
+}
+
+static iree_status_t loom_amdgpu_feedback_build_global_store_b64(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t zero_vaddr, loom_value_id_t packet_base,
+    uint32_t byte_offset, loom_value_id_t value, loom_location_id_t location) {
+  return loom_amdgpu_feedback_build_global_store(
+      builder, descriptor_set,
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR, zero_vaddr,
+      packet_base, byte_offset, value, /*value_unit_count=*/2, location);
 }
 
 static iree_status_t loom_amdgpu_feedback_build_scalar_load(
@@ -144,6 +365,87 @@ iree_status_t loom_amdgpu_build_feedback_config_values(
 
   *out_values = values;
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_feedback_packet_header(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t packet_base,
+    const loom_amdgpu_feedback_packet_header_t* header,
+    loom_location_id_t location) {
+  if (header->record_length < LOOM_AMDGPU_FEEDBACK_PACKET_BYTE_LENGTH ||
+      (header->record_length & (LOOM_AMDGPU_FEEDBACK_PACKET_ALIGNMENT - 1u)) !=
+          0 ||
+      header->record_length >
+          loom_amdgpu_feedback_packet_length(
+              LOOM_AMDGPU_FEEDBACK_PACKET_MAX_PAYLOAD_LENGTH)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU feedback packet header record length "
+                            "violates the feedback ABI");
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_require_register_class(
+      builder, descriptor_set, packet_base, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2));
+
+  loom_value_id_t zero_vaddr = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, 0, location, &zero_vaddr));
+  loom_value_id_t zero64 = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u64_const(
+      builder, descriptor_set, 0, location, &zero64));
+
+  loom_value_id_t record_length = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, header->record_length, location,
+      &record_length));
+  const uint32_t packed_header_kind =
+      LOOM_AMDGPU_FEEDBACK_PACKET_BYTE_LENGTH | ((uint32_t)header->kind << 16);
+  loom_value_id_t header_kind = LOOM_VALUE_ID_INVALID;
+  // The 16-bit header length and 16-bit kind occupy one little-endian dword.
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, packed_header_kind, location, &header_kind));
+  loom_value_id_t packet_flags = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, header->flags, location, &packet_flags));
+
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_RECORD_LENGTH_OFFSET, record_length,
+      location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_HEADER_LENGTH_OFFSET, header_kind, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_FLAGS_OFFSET, packet_flags, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_STATE_OFFSET, zero_vaddr, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b64(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_SEQUENCE_OFFSET, header->sequence, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b64(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_DISPATCH_PTR_OFFSET,
+      header->source_dispatch_ptr, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_WORKGROUP_ID_X_OFFSET,
+      header->source_workgroup_id_x, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_WORKITEM_ID_X_OFFSET,
+      header->source_workitem_id_x, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED0_OFFSET, zero_vaddr, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b32(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED1_OFFSET, zero_vaddr, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b64(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_0_OFFSET, zero64, location));
+  return loom_amdgpu_feedback_build_global_store_b64(
+      builder, descriptor_set, zero_vaddr, packet_base,
+      LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_1_OFFSET, zero64, location);
 }
 
 iree_status_t loom_amdgpu_build_feedback_send_message(
