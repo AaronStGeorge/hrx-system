@@ -29,6 +29,8 @@
 #include "loom/target/provider.h"
 #include "loom/target/types.h"
 #include "loom/verify/verify.h"
+#include "loomc/compile.h"
+#include "loomc/pass.h"
 #include "module.h"
 #include "target.h"
 #include "test/util.h"
@@ -46,6 +48,9 @@ using LinkerPtr = HandlePtr<loomc_linker_t, loomc_linker_release>;
 using WorkspacePtr = HandlePtr<loomc_workspace_t, loomc_workspace_release>;
 using ModulePtr = HandlePtr<loomc_module_t, loomc_module_release>;
 using ResultPtr = HandlePtr<loomc_result_t, loomc_result_release>;
+using CompilerPtr = HandlePtr<loomc_compiler_t, loomc_compiler_release>;
+using PassProgramPtr =
+    HandlePtr<loomc_pass_program_t, loomc_pass_program_release>;
 using TargetEnvironmentPtr =
     HandlePtr<loomc_target_environment_t, loomc_target_environment_release>;
 using TargetProfilePtr =
@@ -366,6 +371,32 @@ LinkerPtr CreateLinker(loomc_context_t* context) {
       loomc_linker_create(context, nullptr, loomc_allocator_system(), &linker);
   LOOMC_EXPECT_OK(status);
   return LinkerPtr(linker);
+}
+
+CompilerPtr CreateCompiler(loomc_context_t* context) {
+  loomc_compiler_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_COMPILER_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+  };
+  loomc_compiler_t* compiler = nullptr;
+  loomc_status_t status = loomc_compiler_create(
+      context, &options, loomc_allocator_system(), &compiler);
+  LOOMC_EXPECT_OK(status);
+  return CompilerPtr(compiler);
+}
+
+PassProgramPtr CreatePassProgramFromPipelineText(loomc_context_t* context,
+                                                 const char* pipeline_text) {
+  loomc_pass_program_t* pass_program = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_pass_program_create_from_pipeline_text(
+      context, loomc_make_cstring_view(pipeline_text), nullptr,
+      loomc_allocator_system(), &pass_program, &result);
+  LOOMC_EXPECT_OK(status);
+  ResultPtr result_ptr(result);
+  EXPECT_TRUE(loomc_result_succeeded(result_ptr.get()));
+  return PassProgramPtr(pass_program);
 }
 
 WorkspacePtr CreateWorkspace() {
@@ -895,6 +926,114 @@ func.def public @second() {
   std::string linked_text = SerializeModuleToText(module.get());
   EXPECT_NE(linked_text.find("test.target<low_core> @selected_link_target"),
             std::string::npos);
+}
+
+TEST(LinkTest, LinkAndCompileSelectsTargetApplicableProviderThroughCOptions) {
+  TargetEnvironmentPtr target_environment = CreateFakeTargetEnvironment();
+  TargetProfilePtr profile = CreateFakeTargetProfile(target_environment.get());
+  TargetSelectionPtr target_selection = CreateTargetSelection(profile.get());
+  ContextPtr context = CreateContext(target_environment.get());
+  BuilderPtr builder = CreateBuilder(context.get());
+  SourcePtr root_source = CreateTextSource("root.loom", R"(
+func.def public @entry(%arg: i32) -> (i32) {
+  %result = func.apply<demo.capi_selected>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+)");
+  SourcePtr provider_source = CreateTextSource("providers.loom", R"(
+test.target<low_core> @selected_link_target
+test.target<low_core> @other_target
+
+func.template<demo.capi_selected> target(@selected_link_target) priority(20) @selected_provider(%value: i32) -> (i32) {
+  %selected = test.addi %value, %value : i32
+  func.return %selected : i32
+}
+
+func.template<demo.capi_selected> target(@other_target) priority(30) @other_provider(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.template<demo.capi_selected> priority(1) @fallback_provider(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+)");
+  AddSource(builder.get(), root_source.get(), "root",
+            LOOMC_LINK_PROVIDER_ROLE_INPUT);
+  AddSource(builder.get(), provider_source.get(), "providers",
+            LOOMC_LINK_PROVIDER_ROLE_LIBRARY);
+
+  LinkIndexPtr link_index;
+  FinishIndex(builder.get(), &link_index);
+  LinkerPtr linker = CreateLinker(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  loomc_target_selection_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_selection=*/target_selection.get(),
+  };
+  loomc_string_view_t roots[] = {
+      loomc_make_cstring_view("@entry"),
+  };
+  loomc_link_options_t link_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_NONE,
+      /*.structure_size=*/0,
+      /*.next=*/&target_options,
+      /*.link_index=*/nullptr,
+      /*.module_name=*/loomc_string_view_empty(),
+      /*.root_symbols=*/roots,
+      /*.root_symbol_count=*/1,
+  };
+  ResultPtr link_result;
+  ModulePtr module = LinkIndex(linker.get(), workspace.get(), link_index.get(),
+                               &link_options, &link_result);
+
+  ASSERT_TRUE(loomc_result_succeeded(link_result.get()));
+  ASSERT_NE(module.get(), nullptr);
+  const loom_module_t* linked_module =
+      loomc_module_const_loom_module(module.get());
+  ASSERT_NE(linked_module, nullptr);
+  VerifyModule(linked_module);
+  EXPECT_TRUE(ModuleHasSymbol(linked_module, "selected_provider"));
+  EXPECT_TRUE(ModuleHasSymbol(linked_module, "other_provider"));
+  EXPECT_TRUE(ModuleHasSymbol(linked_module, "fallback_provider"));
+
+  CompilerPtr compiler = CreateCompiler(context.get());
+  PassProgramPtr pass_program = CreatePassProgramFromPipelineText(
+      context.get(), "select-templates,inline-callables,symbol-dce");
+  loomc_compile_options_t compile_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_COMPILE_OPTIONS,
+      /*.structure_size=*/sizeof(compile_options),
+      /*.next=*/&target_options,
+      /*.module_name=*/loomc_make_cstring_view("selected_provider_module"),
+      /*.artifact_flags=*/0,
+      /*.config=*/{},
+  };
+  loomc_result_t* raw_compile_result = nullptr;
+  loomc_status_t status = loomc_compile_module(
+      compiler.get(), workspace.get(), pass_program.get(), module.get(),
+      &compile_options, loomc_allocator_system(), &raw_compile_result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr compile_result(raw_compile_result);
+  ASSERT_TRUE(loomc_result_succeeded(compile_result.get()));
+
+  const loom_module_t* compiled_module =
+      loomc_module_const_loom_module(module.get());
+  ASSERT_NE(compiled_module, nullptr);
+  VerifyModule(compiled_module);
+  EXPECT_TRUE(ModuleHasSymbol(compiled_module, "entry"));
+  EXPECT_TRUE(ModuleHasSymbol(compiled_module, "selected_link_target"));
+
+  const std::string compiled_text = SerializeModuleToText(module.get());
+  EXPECT_NE(compiled_text.find("test.target<low_core> @selected_link_target"),
+            std::string::npos);
+  EXPECT_NE(compiled_text.find("test.addi %arg, %arg : i32"),
+            std::string::npos);
+  EXPECT_EQ(compiled_text.find("func.apply<demo.capi_selected>"),
+            std::string::npos);
+  EXPECT_EQ(compiled_text.find("@selected_provider"), std::string::npos);
+  EXPECT_EQ(compiled_text.find("@other_provider"), std::string::npos);
+  EXPECT_EQ(compiled_text.find("@fallback_provider"), std::string::npos);
 }
 
 TEST(LinkTest, DeserializeParseErrorsProduceFailedResult) {
