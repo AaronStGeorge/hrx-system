@@ -646,6 +646,160 @@ def test_fmamk_f32_descriptor_pins_literal_multiply_slot() -> None:
         )
 
 
+def test_scalar_f16_fma_descriptor_families_are_arch_specific() -> None:
+    cdna_keys = {
+        "amdgpu.v_mad_f16",
+        "amdgpu.v_mac_f16",
+        "amdgpu.v_madak_f16",
+        "amdgpu.v_madmk_f16",
+        "amdgpu.v_fma_f16",
+        "amdgpu.v_fma_f64",
+        "amdgpu.v_fmac_f64",
+    }
+    rdna_keys = {
+        "amdgpu.v_fma_f16",
+        "amdgpu.v_fmac_f16",
+        "amdgpu.v_fmaak_f16",
+        "amdgpu.v_fmamk_f16",
+        "amdgpu.v_fma_f64",
+    }
+    for descriptor_set in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        assert cdna_keys <= descriptors.keys()
+        assert (
+            not {
+                "amdgpu.v_fmac_f16",
+                "amdgpu.v_fmaak_f16",
+                "amdgpu.v_fmamk_f16",
+            }
+            & descriptors.keys()
+        )
+
+    for descriptor_set in (
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        assert rdna_keys <= descriptors.keys()
+        assert (
+            not {
+                "amdgpu.v_mad_f16",
+                "amdgpu.v_mac_f16",
+                "amdgpu.v_madak_f16",
+                "amdgpu.v_madmk_f16",
+                "amdgpu.v_fmac_f64",
+            }
+            & descriptors.keys()
+        )
+
+
+def test_scalar_f16_fma_descriptors_pin_low16_and_literal_width() -> None:
+    descriptors = {
+        descriptor.descriptor_key: descriptor
+        for descriptor in (
+            *_gfx940_core_overlays(),
+            *_gfx11_core_overlays(),
+        )
+    }
+    for descriptor_key in (
+        "amdgpu.v_fma_f16",
+        "amdgpu.v_mad_f16",
+    ):
+        descriptor = descriptors[descriptor_key]
+        assert tuple(
+            operand.descriptor_operand.register_part for operand in descriptor.operands
+        ) == (
+            _REG_PART_VGPR_LOW16,
+            _REG_PART_VGPR_LOW16,
+            _REG_PART_VGPR_LOW16,
+            _REG_PART_VGPR_LOW16,
+        )
+
+    for descriptor_key in (
+        "amdgpu.v_fmac_f16",
+        "amdgpu.v_mac_f16",
+    ):
+        descriptor = descriptors[descriptor_key]
+        assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+            "VDST",
+            "VDST",
+            "SRC0",
+            "VSRC1",
+        )
+        assert tuple(
+            operand.descriptor_operand.register_part for operand in descriptor.operands
+        ) == (
+            _REG_PART_VGPR_LOW16,
+            _REG_PART_VGPR_LOW16,
+            _REG_PART_VGPR_LOW16,
+            _REG_PART_VGPR_LOW16,
+        )
+        assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+            ConstraintKind.TIED,
+            ConstraintKind.DESTRUCTIVE,
+        )
+
+    for descriptor_key in (
+        "amdgpu.v_fmaak_f16",
+        "amdgpu.v_fmamk_f16",
+        "amdgpu.v_madak_f16",
+        "amdgpu.v_madmk_f16",
+    ):
+        descriptor = descriptors[descriptor_key]
+        assert descriptor.encoding_name == "VOP2_INST_LITERAL"
+        assert descriptor.immediate_fields == ("LITERAL",)
+        assert tuple(immediate.field_name for immediate in descriptor.immediates) == (
+            "imm16",
+        )
+        assert tuple(immediate.bit_width for immediate in descriptor.immediates) == (
+            16,
+        )
+        assert tuple(immediate.unsigned_max for immediate in descriptor.immediates) == (
+            0xFFFF,
+        )
+
+
+def test_scalar_f64_fma_descriptors_pin_register_pair_widths() -> None:
+    for descriptor_set in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        descriptor = descriptors["amdgpu.v_fma_f64"]
+        assert tuple(
+            operand.descriptor_operand.unit_count for operand in descriptor.operands
+        ) == (2, 2, 2, 2)
+
+    for descriptor_set in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        descriptor = descriptors["amdgpu.v_fmac_f64"]
+        assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+            "VDST",
+            "VDST",
+            "SRC0",
+            "VSRC1",
+        )
+        assert tuple(
+            operand.descriptor_operand.unit_count for operand in descriptor.operands
+        ) == (2, 2, 2, 2)
+        assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+            ConstraintKind.TIED,
+            ConstraintKind.DESTRUCTIVE,
+        )
+
+
 def test_packed_fma_mad_descriptors_pin_lane_container_widths() -> None:
     descriptor_sets = (
         _gfx940_core_overlays(),

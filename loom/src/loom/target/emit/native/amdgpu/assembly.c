@@ -367,9 +367,9 @@ static iree_status_t loom_amdgpu_read_packet_immediate_i64(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_append_packet_immediate_u32_hex(
+static iree_status_t loom_amdgpu_read_packet_immediate_by_index_i64(
     const loom_native_assembly_packet_context_t* context,
-    uint16_t descriptor_immediate_index) {
+    uint16_t descriptor_immediate_index, int64_t* out_value) {
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
@@ -388,43 +388,34 @@ static iree_status_t loom_amdgpu_append_packet_immediate_u32_hex(
   }
   const loom_low_immediate_t* immediate =
       &descriptor_set->immediates[immediate_row];
+  return loom_amdgpu_read_packet_immediate_i64(context, immediate, out_value);
+}
+
+static iree_status_t loom_amdgpu_append_packet_immediate_unsigned_hex(
+    const loom_native_assembly_packet_context_t* context,
+    uint16_t descriptor_immediate_index, uint8_t bit_width) {
+  IREE_ASSERT(bit_width > 0 && bit_width <= 32);
   int64_t value = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_read_packet_immediate_i64(context, immediate, &value));
-  if (value < 0 || value > UINT32_MAX) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_read_packet_immediate_by_index_i64(
+      context, descriptor_immediate_index, &value));
+  const uint64_t max_value = (UINT64_C(1) << bit_width) - 1;
+  if (value < 0 || (uint64_t)value > max_value) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU assembly descriptor immediate value %" PRId64 " is not a u32",
-        value);
+        "AMDGPU assembly descriptor immediate value %" PRId64 " is not a u%u",
+        value, (unsigned)bit_width);
   }
-  return iree_string_builder_append_format(context->builder, "0x%08" PRIx32,
-                                           (uint32_t)value);
+  const int hex_digit_count = (int)((bit_width + 3) / 4);
+  return iree_string_builder_append_format(context->builder, "0x%0*" PRIx64,
+                                           hex_digit_count, (uint64_t)value);
 }
 
 static iree_status_t loom_amdgpu_append_packet_immediate_i64(
     const loom_native_assembly_packet_context_t* context,
     uint16_t descriptor_immediate_index) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
-  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
-  if (descriptor_immediate_index >= descriptor->immediate_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU assembly descriptor immediate index is out of range");
-  }
-  const uint32_t immediate_row =
-      descriptor->immediate_start + descriptor_immediate_index;
-  if (immediate_row >= descriptor_set->immediate_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU assembly descriptor immediate row is outside the descriptor "
-        "set");
-  }
-  const loom_low_immediate_t* immediate =
-      &descriptor_set->immediates[immediate_row];
   int64_t value = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_read_packet_immediate_i64(context, immediate, &value));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_read_packet_immediate_by_index_i64(
+      context, descriptor_immediate_index, &value));
   return iree_string_builder_append_format(context->builder, "%" PRId64, value);
 }
 
@@ -709,7 +700,7 @@ typedef enum loom_amdgpu_assembly_value_kind_e {
   LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_RESULT,
   LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_OPERAND,
   LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_I64,
-  LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_U32_HEX,
+  LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_UNSIGNED_HEX,
 } loom_amdgpu_assembly_value_kind_t;
 
 typedef enum loom_amdgpu_assembly_mnemonic_kind_e {
@@ -722,6 +713,8 @@ typedef struct loom_amdgpu_assembly_value_spec_t {
   loom_amdgpu_assembly_value_kind_t kind;
   // Result, operand, or immediate index for indexed value kinds.
   uint16_t index;
+  // Bit width for width-sensitive immediate renderings.
+  uint8_t bit_width;
   // Literal assembly spelling for literal values.
   const char* literal;
 } loom_amdgpu_assembly_value_spec_t;
@@ -744,31 +737,36 @@ typedef struct loom_amdgpu_assembly_packet_form_t {
   {                                                    \
       .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_LITERAL, \
       .index = 0,                                      \
+      .bit_width = 0,                                  \
       .literal = value,                                \
   }
 #define LOOM_AMDGPU_ASM_VALUE_RESULT(value_index)     \
   {                                                   \
       .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_RESULT, \
       .index = value_index,                           \
+      .bit_width = 0,                                 \
       .literal = NULL,                                \
   }
 #define LOOM_AMDGPU_ASM_VALUE_OPERAND(value_index)     \
   {                                                    \
       .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_OPERAND, \
       .index = value_index,                            \
+      .bit_width = 0,                                  \
       .literal = NULL,                                 \
   }
 #define LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_I64(value_index)            \
   {                                                                 \
       .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_I64, \
       .index = value_index,                                         \
+      .bit_width = 0,                                               \
       .literal = NULL,                                              \
   }
-#define LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_U32_HEX(value_index)            \
-  {                                                                     \
-      .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_U32_HEX, \
-      .index = value_index,                                             \
-      .literal = NULL,                                                  \
+#define LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(value_index, bits)      \
+  {                                                                          \
+      .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_UNSIGNED_HEX, \
+      .index = value_index,                                                  \
+      .bit_width = bits,                                                     \
+      .literal = NULL,                                                       \
   }
 
 static iree_status_t loom_amdgpu_append_assembly_value(
@@ -789,8 +787,9 @@ static iree_status_t loom_amdgpu_append_assembly_value(
       return loom_amdgpu_append_operand(context, value->index);
     case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_I64:
       return loom_amdgpu_append_packet_immediate_i64(context, value->index);
-    case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_U32_HEX:
-      return loom_amdgpu_append_packet_immediate_u32_hex(context, value->index);
+    case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_UNSIGNED_HEX:
+      return loom_amdgpu_append_packet_immediate_unsigned_hex(
+          context, value->index, value->bit_width);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "AMDGPU assembly value kind %u is unsupported",
@@ -2377,7 +2376,7 @@ static const loom_amdgpu_assembly_packet_form_t kFmaakPacketForm = {
             LOOM_AMDGPU_ASM_VALUE_RESULT(0),
             LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
             LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_U32_HEX(0),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
         },
 };
 
@@ -2389,7 +2388,59 @@ static const loom_amdgpu_assembly_packet_form_t kFmamkPacketForm = {
         {
             LOOM_AMDGPU_ASM_VALUE_RESULT(0),
             LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_U32_HEX(0),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
+        },
+};
+
+static const loom_amdgpu_assembly_packet_form_t kFmaakF16PacketForm = {
+    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
+    .fixed_mnemonic = "v_fmaak_f16",
+    .value_count = 4,
+    .values =
+        {
+            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
+        },
+};
+
+static const loom_amdgpu_assembly_packet_form_t kFmamkF16PacketForm = {
+    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
+    .fixed_mnemonic = "v_fmamk_f16",
+    .value_count = 4,
+    .values =
+        {
+            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
+        },
+};
+
+static const loom_amdgpu_assembly_packet_form_t kMadakF16PacketForm = {
+    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
+    .fixed_mnemonic = "v_madak_f16",
+    .value_count = 4,
+    .values =
+        {
+            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
+        },
+};
+
+static const loom_amdgpu_assembly_packet_form_t kMadmkF16PacketForm = {
+    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
+    .fixed_mnemonic = "v_madmk_f16",
+    .value_count = 4,
+    .values =
+        {
+            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
             LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
         },
 };
@@ -2419,6 +2470,22 @@ static iree_status_t loom_amdgpu_try_append_descriptor_ref_packet(
       {
           .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32,
           .form = &kFmamkPacketForm,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F16,
+          .form = &kFmaakF16PacketForm,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F16,
+          .form = &kFmamkF16PacketForm,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MADAK_F16,
+          .form = &kMadakF16PacketForm,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MADMK_F16,
+          .form = &kMadmkF16PacketForm,
       },
   };
   *out_matched = false;

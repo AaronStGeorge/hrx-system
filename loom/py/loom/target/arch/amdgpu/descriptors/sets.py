@@ -222,6 +222,28 @@ def _cdna_s_buffer_load_width_overlays(
     )
 
 
+def _cdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_mad_f16_overlay(),
+        _v_mac_f16_overlay(),
+        _v_madak_f16_overlay(),
+        _v_madmk_f16_overlay(),
+        _v_fma_f16_overlay(),
+        _v_fma_f64_overlay(),
+        _v_fmac_f64_overlay(),
+    )
+
+
+def _rdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_fma_f16_overlay(),
+        _v_fmac_f16_overlay(),
+        _v_fmaak_f16_overlay(),
+        _v_fmamk_f16_overlay(),
+        _v_fma_f64_overlay(),
+    )
+
+
 def _cdna_core_overlays(
     *,
     global_load_lds_variants: tuple[tuple[str, str, str, int, int], ...],
@@ -293,6 +315,7 @@ def _cdna_core_overlays(
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
         _v_fmamk_f32_overlay(),
+        *_cdna_scalar_fma_overlays(),
         _v_pk_fmac_f16_overlay(),
         _v_pk_fma_f16_overlay(),
         _v_pk_mad_i16_overlay(),
@@ -773,6 +796,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
         _v_fmamk_f32_overlay(),
+        *_rdna_scalar_fma_overlays(),
         _v_pk_fmac_f16_overlay(),
         _v_pk_fma_f16_overlay(include_literal_forms=True),
         *_v_pk_fma_f16_literal_overlays(),
@@ -1134,6 +1158,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
         _v_fmamk_f32_overlay(),
+        *_rdna_scalar_fma_overlays(),
         _v_pk_fmac_f16_overlay(),
         _v_pk_fma_f16_overlay(include_literal_forms=True),
         *_v_pk_fma_f16_literal_overlays(),
@@ -1527,6 +1552,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
         _v_fmamk_f32_overlay(),
+        *_rdna_scalar_fma_overlays(),
         _v_pk_fmac_f16_overlay(),
         _v_pk_fma_f16_overlay(include_literal_forms=True),
         *_v_pk_fma_f16_literal_overlays(),

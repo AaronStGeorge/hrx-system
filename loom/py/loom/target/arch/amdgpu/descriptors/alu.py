@@ -2222,6 +2222,286 @@ def _v_fmamk_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _f16_literal_immediate(field_name: str = "imm16") -> Immediate:
+    return Immediate(
+        field_name,
+        ImmediateKind.UNSIGNED,
+        bit_width=16,
+        unsigned_max=0xFFFF,
+        encoding_field_id=amdgpu_encoding_field_id("LITERAL"),
+    )
+
+
+def _f16_vgpr_result(field_name: str = "dst") -> Operand:
+    return _vgpr_result(field_name, register_part=_REG_PART_VGPR_LOW16)
+
+
+def _f16_vgpr_operand(field_name: str) -> Operand:
+    return _vgpr_operand(field_name, register_part=_REG_PART_VGPR_LOW16)
+
+
+def _v_fma_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fma_f16",
+        instruction_name="V_FMA_F16",
+        mnemonic="v_fma_f16",
+        encoding_name="ENC_VOP3",
+        semantic_tag="float.fma.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("SRC1", _f16_vgpr_operand("b")),
+            AmdgpuOperandOverlay("SRC2", _f16_vgpr_operand("c")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_fmac_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fmac_f16",
+        instruction_name="V_FMAC_F16",
+        mnemonic="v_fmac_f16",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.fmac.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay(
+                "VDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _VGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                    register_part=_REG_PART_VGPR_LOW16,
+                ),
+                role_exception_reason=(
+                    "the encoded destination half-register is also the tied "
+                    "accumulator input"
+                ),
+            ),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _f16_vgpr_operand("b")),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_fmaak_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fmaak_f16",
+        instruction_name="V_FMAAK_F16",
+        mnemonic="v_fmaak_f16",
+        encoding_name="VOP2_INST_LITERAL",
+        encoding_condition="default",
+        semantic_tag="float.fmaak.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _f16_vgpr_operand("b")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "b"),
+            immediates=("imm16",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_f16_literal_immediate(),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_fmamk_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fmamk_f16",
+        instruction_name="V_FMAMK_F16",
+        mnemonic="v_fmamk_f16",
+        encoding_name="VOP2_INST_LITERAL",
+        encoding_condition="default",
+        semantic_tag="float.fmamk.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _f16_vgpr_operand("c")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "c"),
+            immediates=("imm16",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_f16_literal_immediate(),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_mad_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mad_f16",
+        instruction_name="V_MAD_F16",
+        mnemonic="v_mad_f16",
+        encoding_name="ENC_VOP3",
+        semantic_tag="float.mad.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("SRC1", _f16_vgpr_operand("b")),
+            AmdgpuOperandOverlay("SRC2", _f16_vgpr_operand("c")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_mac_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mac_f16",
+        instruction_name="V_MAC_F16",
+        mnemonic="v_mac_f16",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.mac.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay(
+                "VDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _VGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                    register_part=_REG_PART_VGPR_LOW16,
+                ),
+                role_exception_reason=(
+                    "the encoded destination half-register is also the tied "
+                    "accumulator input"
+                ),
+            ),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _f16_vgpr_operand("b")),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_madak_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_madak_f16",
+        instruction_name="V_MADAK_F16",
+        mnemonic="v_madak_f16",
+        encoding_name="VOP2_INST_LITERAL",
+        encoding_condition="default",
+        semantic_tag="float.madak.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _f16_vgpr_operand("b")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "b"),
+            immediates=("imm16",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_f16_literal_immediate(),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_madmk_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_madmk_f16",
+        instruction_name="V_MADMK_F16",
+        mnemonic="v_madmk_f16",
+        encoding_name="VOP2_INST_LITERAL",
+        encoding_condition="default",
+        semantic_tag="float.madmk.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _f16_vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _f16_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _f16_vgpr_operand("c")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "c"),
+            immediates=("imm16",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_f16_literal_immediate(),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_fma_f64_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fma_f64",
+        instruction_name="V_FMA_F64",
+        mnemonic="v_fma_f64",
+        encoding_name="ENC_VOP3",
+        semantic_tag="float.fma.f64",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=2)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a", units=2)),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b", units=2)),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c", units=2)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_fmac_f64_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fmac_f64",
+        instruction_name="V_FMAC_F64",
+        mnemonic="v_fmac_f64",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.fmac.f64",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=2)),
+            AmdgpuOperandOverlay(
+                "VDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _VGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                    unit_count=2,
+                ),
+                role_exception_reason=(
+                    "the encoded destination register pair is also the tied "
+                    "accumulator input"
+                ),
+            ),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a", units=2)),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("b", units=2)),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_pk_ternary_overlay(
     *,
     descriptor_key: str,
@@ -3334,14 +3614,20 @@ __all__ = (
     "_v_cvt_pk_u16_u32_overlay",
     "_v_cos_f32_overlay",
     "_v_exp_f32_overlay",
+    "_v_fma_f16_overlay",
     "_v_fmaak_f32_overlay",
+    "_v_fmaak_f16_overlay",
     "_v_fma_f32_overlay",
+    "_v_fma_f64_overlay",
     "_v_fma_mix_f32_overlay",
     "_v_fma_mix_f32_overlays",
     "_v_fma_mix_f32_src2_literal_overlay",
     "_v_fma_mixhi_f16_overlays",
     "_v_fma_mixlo_f16_overlays",
+    "_v_fmac_f16_overlay",
     "_v_fmac_f32_overlay",
+    "_v_fmac_f64_overlay",
+    "_v_fmamk_f16_overlay",
     "_v_fmamk_f32_overlay",
     "_v_pk_fma_f16_overlay",
     "_v_pk_fma_f16_literal_overlays",
@@ -3361,10 +3647,14 @@ __all__ = (
     "_v_lshrrev_b32_literal_overlay",
     "_v_lshrrev_b32_overlay",
     "_v_lshrrev_b32_src0_inline_overlay",
+    "_v_mac_f16_overlay",
+    "_v_mad_f16_overlay",
+    "_v_madak_f16_overlay",
     "_v_mad_mix_f32_overlay",
     "_v_mad_mix_f32_overlays",
     "_v_mad_mixhi_f16_overlays",
     "_v_mad_mixlo_f16_overlays",
+    "_v_madmk_f16_overlay",
     "_v_mad_u32_u24_literal_overlay",
     "_v_mad_u32_u24_overlay",
     "_v_log_f32_overlay",
