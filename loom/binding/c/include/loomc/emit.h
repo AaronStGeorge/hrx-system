@@ -8,6 +8,7 @@
 #define LOOMC_EMIT_H_
 
 #include "loomc/artifact.h"
+#include "loomc/artifact_manifest.h"
 #include "loomc/module.h"
 #include "loomc/result.h"
 #include "loomc/target.h"
@@ -80,6 +81,14 @@ extern "C" {
 
 /// Loose option key overriding `loomc_emit_options_t::identifier`.
 #define LOOMC_EMIT_OPTION_KEY_IDENTIFIER "emit.identifier"
+
+/// Loose option key overriding artifact manifest mode.
+#define LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_MODE \
+  "emit.artifact_manifest.mode"
+
+/// Loose option key overriding artifact manifest result identifier.
+#define LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_IDENTIFIER \
+  "emit.artifact_manifest.identifier"
 
 /// Emit artifact request flags.
 typedef uint32_t loomc_emit_artifact_flags_t;

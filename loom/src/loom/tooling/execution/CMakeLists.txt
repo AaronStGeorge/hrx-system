@@ -31,6 +31,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::error::diagnostic
+    loom::target::artifact_manifest
     loom::target::compile_report
     loom::verify
   PUBLIC

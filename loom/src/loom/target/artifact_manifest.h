@@ -239,6 +239,11 @@ typedef struct loom_target_artifact_manifest_t {
   iree_host_size_t global_count;
 } loom_target_artifact_manifest_t;
 
+typedef struct loom_target_artifact_manifest_json_t {
+  // Allocator-owned JSON bytes.
+  iree_const_byte_span_t contents;
+} loom_target_artifact_manifest_json_t;
+
 // Formats |manifest| as one structured JSON object into |stream|.
 //
 // NONE mode writes nothing. SUMMARY mode writes target-neutral artifact,
@@ -250,6 +255,21 @@ iree_status_t loom_target_artifact_manifest_format_json(
     const loom_target_artifact_manifest_t* manifest,
     const loom_target_artifact_manifest_format_options_t* options,
     loom_output_stream_t* stream);
+
+// Formats |manifest| as allocator-owned JSON bytes.
+//
+// The returned contents are empty in NONE mode. Non-empty contents must be
+// released with loom_target_artifact_manifest_json_release unless ownership is
+// transferred into a larger artifact storage object.
+iree_status_t loom_target_artifact_manifest_format_json_bytes(
+    const loom_target_artifact_manifest_t* manifest,
+    const loom_target_artifact_manifest_format_options_t* options,
+    iree_allocator_t allocator, loom_target_artifact_manifest_json_t* out_json);
+
+// Releases contents allocated by
+// loom_target_artifact_manifest_format_json_bytes.
+void loom_target_artifact_manifest_json_release(
+    loom_target_artifact_manifest_json_t* json, iree_allocator_t allocator);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -22,6 +22,7 @@ loom_cc_library(
     iree::base
     loom::target::arch::spirv::descriptors::low_registry
     loom::target::arch::spirv::low_verify
+    loom::target::artifact_manifest_collect
     loom::target::compile_report
     loom::target::emit::spirv::module_builder
     loom::target::emit::spirv::module_emitter

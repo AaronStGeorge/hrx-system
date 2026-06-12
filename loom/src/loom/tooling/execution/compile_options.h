@@ -10,6 +10,7 @@
 #define LOOM_TOOLING_EXECUTION_COMPILE_OPTIONS_H_
 
 #include "iree/base/api.h"
+#include "loom/target/artifact_manifest.h"
 #include "loom/target/compile_report.h"
 #include "loom/verify/verify.h"
 
@@ -25,6 +26,17 @@ typedef enum loom_run_candidate_artifact_flag_bits_e {
 } loom_run_candidate_artifact_flag_bits_t;
 
 typedef uint32_t loom_run_candidate_artifact_flags_t;
+
+typedef struct loom_run_candidate_artifact_manifest_options_t {
+  // Selected manifest detail mode.
+  loom_target_artifact_manifest_mode_t mode;
+
+  // Manifest sidecar output identifier.
+  iree_string_view_t identifier;
+
+  // Emitted artifact name recorded inside the manifest.
+  iree_string_view_t artifact_name;
+} loom_run_candidate_artifact_manifest_options_t;
 
 typedef struct loom_run_candidate_compile_options_t {
   // VM module name stored in VM bytecode archives. Empty uses "loom".
@@ -46,6 +58,8 @@ typedef struct loom_run_candidate_compile_options_t {
   loom_target_compile_report_row_storage_t report_row_storage;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
+  // Optional artifact manifest requested from the selected backend.
+  loom_run_candidate_artifact_manifest_options_t artifact_manifest;
 } loom_run_candidate_compile_options_t;
 
 // Initializes compile options with stderr diagnostics and a small error cap.

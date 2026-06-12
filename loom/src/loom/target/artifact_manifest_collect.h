@@ -71,6 +71,17 @@ iree_status_t loom_target_artifact_manifest_collect_from_entries(
     iree_arena_allocator_t* arena,
     loom_target_artifact_manifest_t* out_manifest);
 
+// Collects and formats a manifest for selected emitted entries.
+//
+// NONE mode returns empty JSON contents. Other modes build the symbol
+// dependency table needed by global-use reporting, collect target-neutral
+// manifest facts, and format JSON into allocator-owned contents.
+iree_status_t loom_target_artifact_manifest_collect_json_from_entries(
+    const loom_module_t* module, loom_target_entry_list_t entries,
+    const loom_target_artifact_manifest_collect_options_t* options,
+    iree_arena_allocator_t* arena, iree_allocator_t allocator,
+    loom_target_artifact_manifest_json_t* out_json);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

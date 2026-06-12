@@ -16,7 +16,9 @@
 #include "iree/base/api.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
+#include "loom/target/artifact_manifest_collect.h"
 #include "loom/target/compile_report.h"
+#include "loom/target/provider.h"
 #include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
@@ -48,6 +50,12 @@ typedef struct loom_amdgpu_hal_kernel_library_options_t {
   loom_target_compile_report_row_storage_t report_row_storage;
   // True to retain target-owned textual assembly listings for debug artifacts.
   bool capture_target_listing;
+  // Emitted artifact name recorded inside an artifact manifest.
+  iree_string_view_t artifact_name;
+  // Artifact manifest sidecar identifier.
+  iree_string_view_t artifact_manifest_identifier;
+  // Optional artifact manifest collection request.
+  loom_target_artifact_manifest_collect_options_t artifact_manifest;
 } loom_amdgpu_hal_kernel_library_options_t;
 
 // Allocator-owned AMDGPU HSACO kernel-library artifact.
@@ -64,6 +72,8 @@ typedef struct loom_amdgpu_hal_kernel_library_t {
   char* target_listing_data;
   // Number of bytes in |target_listing_data|, excluding the trailing NUL.
   iree_host_size_t target_listing_data_length;
+  // Artifact manifest sidecar produced beside |hsaco_data|.
+  loom_target_emit_sidecar_artifact_t artifact_manifest;
 } loom_amdgpu_hal_kernel_library_t;
 
 // Releases storage owned by |library|. Safe to call on a zero-initialized

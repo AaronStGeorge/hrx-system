@@ -26,6 +26,7 @@ set(IREE_PACKAGE_ROOT_PREFIX "loom/binding/c")
 
 LOOMC_PUBLIC_HDRS = [
     "include/loomc/artifact.h",
+    "include/loomc/artifact_manifest.h",
     "include/loomc/base.h",
     "include/loomc/compile.h",
     "include/loomc/config.h",
@@ -97,6 +98,7 @@ loom_cc_library(
     name = "loomc",
     srcs = [
         "src/artifact.c",
+        "src/artifact_manifest.c",
         "src/base.c",
         "src/base_system.c",
         "src/compile.c",
@@ -163,6 +165,7 @@ loom_cc_library(
         "//loom/src/loom/pass:program",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/target:artifact_manifest",
         "//loom/src/loom/target:pipeline",
         "//loom/src/loom/target:predicate",
         "//loom/src/loom/target:provider",

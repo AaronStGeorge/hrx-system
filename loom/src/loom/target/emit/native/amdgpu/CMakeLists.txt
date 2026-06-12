@@ -415,6 +415,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::planning::storage_lease
     loom::target::arch::amdgpu::provider
     loom::target::arch::amdgpu::target_info
+    loom::target::artifact_manifest_collect
     loom::target::compile_report
     loom::target::compile_report_low
     loom::target::entry_selection

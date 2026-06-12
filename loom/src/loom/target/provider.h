@@ -23,6 +23,7 @@
 #include "loom/ir/ir.h"
 #include "loom/pass/environment.h"
 #include "loom/pass/registry.h"
+#include "loom/target/artifact_manifest.h"
 #include "loom/target/legalization.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
@@ -53,8 +54,25 @@ typedef struct loom_builder_t loom_builder_t;
 typedef struct loom_target_environment_t loom_target_environment_t;
 
 // Target emission artifact storage release callback.
-typedef void (*loom_target_emit_artifact_deinitialize_fn_t)(
+typedef void (*loom_target_emit_artifact_release_fn_t)(
     void* storage, iree_allocator_t allocator);
+
+typedef enum loom_target_emit_sidecar_artifact_kind_e {
+  // Machine-readable artifact manifest for the primary artifact.
+  LOOM_TARGET_EMIT_SIDECAR_ARTIFACT_KIND_ARTIFACT_MANIFEST = 0,
+} loom_target_emit_sidecar_artifact_kind_t;
+
+// One sidecar artifact produced beside a primary target artifact.
+typedef struct loom_target_emit_sidecar_artifact_t {
+  // Sidecar artifact kind.
+  loom_target_emit_sidecar_artifact_kind_t kind;
+
+  // Sidecar artifact identifier.
+  iree_string_view_t identifier;
+
+  // Borrowed view over sidecar artifact bytes.
+  iree_const_byte_span_t contents;
+} loom_target_emit_sidecar_artifact_t;
 
 // One target artifact produced by an emitter.
 typedef struct loom_target_emit_artifact_t {
@@ -64,12 +82,28 @@ typedef struct loom_target_emit_artifact_t {
   // Borrowed view over emitted artifact bytes.
   iree_const_byte_span_t contents;
 
-  // Emitter-owned storage that keeps |contents| alive until deinitialized.
+  // Optional emitter-owned sidecar artifacts.
+  const loom_target_emit_sidecar_artifact_t* sidecars;
+
+  // Number of entries in |sidecars|.
+  iree_host_size_t sidecar_count;
+
+  // Emitter-owned storage that keeps artifact bytes, sidecar descriptors, and
+  // sidecar bytes alive until released.
   void* storage;
 
   // Optional callback that releases |storage|.
-  loom_target_emit_artifact_deinitialize_fn_t deinitialize;
+  loom_target_emit_artifact_release_fn_t release;
 } loom_target_emit_artifact_t;
+
+// Artifact manifest request passed to target-owned emitters.
+typedef struct loom_target_emit_artifact_manifest_request_t {
+  // Selected manifest detail mode.
+  loom_target_artifact_manifest_mode_t mode;
+
+  // Manifest sidecar artifact identifier.
+  iree_string_view_t identifier;
+} loom_target_emit_artifact_manifest_request_t;
 
 // Emission request passed to a target-owned emitter.
 typedef struct loom_target_emit_request_t {
@@ -90,6 +124,9 @@ typedef struct loom_target_emit_request_t {
 
   // Stable artifact identifier requested by the caller.
   iree_string_view_t identifier;
+
+  // Optional artifact manifest request.
+  loom_target_emit_artifact_manifest_request_t artifact_manifest;
 
   // Diagnostic emitter that reports target diagnostics into the operation
   // result.

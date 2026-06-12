@@ -42,6 +42,12 @@ typedef struct loomc_emit_resolved_options_t {
   // Target selection requested by the caller.
   loomc_target_selection_t* target_selection;
 
+  // Artifact manifest mode requested by the caller.
+  loomc_artifact_manifest_mode_t artifact_manifest_mode;
+
+  // Artifact manifest identifier requested by the caller.
+  loomc_string_view_t artifact_manifest_identifier;
+
   // Full extension chain passed to target-specific emitters.
   const void* option_chain;
 } loomc_emit_resolved_options_t;
@@ -161,6 +167,46 @@ static loomc_status_t loomc_emit_validate_option_dict(
   return loomc_ok_status();
 }
 
+static bool loomc_emit_artifact_manifest_mode_is_valid(
+    loomc_artifact_manifest_mode_t mode) {
+  switch (mode) {
+    case LOOMC_ARTIFACT_MANIFEST_MODE_NONE:
+    case LOOMC_ARTIFACT_MANIFEST_MODE_SUMMARY:
+    case LOOMC_ARTIFACT_MANIFEST_MODE_DETAILS:
+    case LOOMC_ARTIFACT_MANIFEST_MODE_ANALYSIS:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static loomc_status_t loomc_emit_validate_artifact_manifest_options(
+    const loomc_artifact_manifest_options_t* options) {
+  if (options->type != LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "artifact manifest options have an unknown structure type");
+  }
+  if (options->structure_size != 0 &&
+      options->structure_size < sizeof(*options)) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "artifact manifest options structure_size is too small");
+  }
+  if (!loomc_emit_artifact_manifest_mode_is_valid(options->mode)) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "artifact manifest mode is invalid");
+  }
+  LOOMC_RETURN_IF_ERROR(loomc_emit_validate_string_view(options->identifier));
+  if (options->mode == LOOMC_ARTIFACT_MANIFEST_MODE_NONE &&
+      !loomc_string_view_is_empty(options->identifier)) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "artifact manifest identifier requires a non-NONE manifest mode");
+  }
+  return loomc_ok_status();
+}
+
 static loomc_status_t loomc_emit_validate_unknown_descriptor(
     const loomc_descriptor_prefix_t* prefix) {
   if (prefix->structure_size != 0 && prefix->structure_size < sizeof(*prefix)) {
@@ -177,6 +223,19 @@ static loomc_status_t loomc_emit_apply_option_entry(
           entry->key,
           loomc_make_cstring_view(LOOMC_EMIT_OPTION_KEY_IDENTIFIER))) {
     options->identifier = entry->value;
+    return loomc_ok_status();
+  }
+  if (loomc_string_view_equal(
+          entry->key, loomc_make_cstring_view(
+                          LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_MODE))) {
+    return loomc_artifact_manifest_mode_parse(entry->value,
+                                              &options->artifact_manifest_mode);
+  }
+  if (loomc_string_view_equal(
+          entry->key,
+          loomc_make_cstring_view(
+              LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_IDENTIFIER))) {
+    options->artifact_manifest_identifier = entry->value;
     return loomc_ok_status();
   }
   return loomc_emit_result_fail_unknown_option(result, entry->key, allocator);
@@ -227,6 +286,17 @@ static loomc_status_t loomc_emit_resolve_options(
         next = target_options->next;
         break;
       }
+      case LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS: {
+        const loomc_artifact_manifest_options_t* manifest_options =
+            (const loomc_artifact_manifest_options_t*)next;
+        LOOMC_RETURN_IF_ERROR(
+            loomc_emit_validate_artifact_manifest_options(manifest_options));
+        out_options->artifact_manifest_mode = manifest_options->mode;
+        out_options->artifact_manifest_identifier =
+            manifest_options->identifier;
+        next = manifest_options->next;
+        break;
+      }
       case LOOMC_STRUCTURE_TYPE_OPTION_DICT: {
         const loomc_option_dict_t* dict = (const loomc_option_dict_t*)next;
         LOOMC_RETURN_IF_ERROR(
@@ -245,7 +315,29 @@ static loomc_status_t loomc_emit_resolve_options(
     }
   }
 
+  if (out_options->artifact_manifest_mode ==
+          LOOMC_ARTIFACT_MANIFEST_MODE_NONE &&
+      !loomc_string_view_is_empty(out_options->artifact_manifest_identifier)) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "artifact manifest identifier requires a non-NONE manifest mode");
+  }
   return loomc_ok_status();
+}
+
+static loom_target_artifact_manifest_mode_t loomc_emit_target_manifest_mode(
+    loomc_artifact_manifest_mode_t mode) {
+  switch (mode) {
+    case LOOMC_ARTIFACT_MANIFEST_MODE_SUMMARY:
+      return LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY;
+    case LOOMC_ARTIFACT_MANIFEST_MODE_DETAILS:
+      return LOOM_TARGET_ARTIFACT_MANIFEST_MODE_DETAILS;
+    case LOOMC_ARTIFACT_MANIFEST_MODE_ANALYSIS:
+      return LOOM_TARGET_ARTIFACT_MANIFEST_MODE_ANALYSIS;
+    case LOOMC_ARTIFACT_MANIFEST_MODE_NONE:
+    default:
+      return LOOM_TARGET_ARTIFACT_MANIFEST_MODE_NONE;
+  }
 }
 
 static loomc_status_t loomc_emit_result_fail_format_message(
@@ -329,15 +421,32 @@ static iree_status_t loomc_emit_capture_diagnostic(
       capture->result, /*source=*/NULL, LOOM_EMITTER_PASS, emission));
 }
 
-static void loomc_emit_artifact_deinitialize(
-    loom_target_emit_artifact_t* artifact, iree_allocator_t allocator) {
+static void loomc_emit_artifact_release(loom_target_emit_artifact_t* artifact,
+                                        iree_allocator_t allocator) {
   if (artifact == NULL) {
     return;
   }
-  if (artifact->storage != NULL && artifact->deinitialize != NULL) {
-    artifact->deinitialize(artifact->storage, allocator);
+  if (artifact->storage != NULL && artifact->release != NULL) {
+    artifact->release(artifact->storage, allocator);
   }
   *artifact = (loom_target_emit_artifact_t){0};
+}
+
+static loomc_status_t loomc_emit_sidecar_artifact_metadata(
+    loom_target_emit_sidecar_artifact_kind_t kind,
+    loomc_artifact_kind_t* out_kind, loomc_string_view_t* out_format) {
+  *out_kind = LOOMC_ARTIFACT_KIND_REPORT;
+  *out_format = loomc_string_view_empty();
+  switch (kind) {
+    case LOOM_TARGET_EMIT_SIDECAR_ARTIFACT_KIND_ARTIFACT_MANIFEST:
+      *out_kind = LOOMC_ARTIFACT_KIND_REPORT;
+      *out_format =
+          loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_ARTIFACT_MANIFEST_JSON);
+      return loomc_ok_status();
+    default:
+      return loomc_make_status(LOOMC_STATUS_INTERNAL,
+                               "emitter returned an unknown sidecar kind");
+  }
 }
 
 static loomc_string_view_t loomc_emit_identifier(
@@ -349,6 +458,29 @@ static loomc_string_view_t loomc_emit_identifier(
   return loomc_string_view_from_iree(emitter->default_identifier);
 }
 
+static loomc_status_t loomc_emit_make_manifest_identifier(
+    const loomc_emit_resolved_options_t* options,
+    const loom_target_emitter_t* emitter, loomc_allocator_t allocator,
+    loomc_string_view_t* out_identifier) {
+  *out_identifier = loomc_string_view_empty();
+  if (!loomc_string_view_is_empty(options->artifact_manifest_identifier)) {
+    return loomc_string_view_clone(options->artifact_manifest_identifier,
+                                   allocator, out_identifier);
+  }
+  const loomc_string_view_t primary_identifier =
+      loomc_emit_identifier(options, emitter);
+  const loomc_string_view_t suffix = loomc_make_cstring_view(".manifest.json");
+  const loomc_host_size_t identifier_length =
+      primary_identifier.size + suffix.size;
+  char* identifier = NULL;
+  LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc_uninitialized(
+      allocator, identifier_length, (void**)&identifier));
+  memcpy(identifier, primary_identifier.data, primary_identifier.size);
+  memcpy(identifier + primary_identifier.size, suffix.data, suffix.size);
+  *out_identifier = loomc_make_string_view(identifier, identifier_length);
+  return loomc_ok_status();
+}
+
 static loomc_status_t loomc_emit_add_artifact(
     loomc_result_t* result, const loomc_emit_resolved_options_t* options,
     const loom_target_emitter_t* emitter,
@@ -357,6 +489,17 @@ static loomc_status_t loomc_emit_add_artifact(
       target_artifact->contents.data_length != 0) {
     return loomc_make_status(LOOMC_STATUS_INTERNAL,
                              "emitter returned artifact length with no data");
+  }
+  if (target_artifact->sidecar_count != 0 &&
+      target_artifact->sidecars == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INTERNAL,
+                             "emitter returned sidecar count with no data");
+  }
+  if (options->artifact_manifest_mode != LOOMC_ARTIFACT_MANIFEST_MODE_NONE &&
+      target_artifact->sidecar_count == 0) {
+    return loomc_emit_result_fail_cstring(
+        result, "EMIT/TARGET",
+        "selected emitter did not produce an artifact manifest");
   }
   if (target_artifact->target_artifact_format !=
       LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN) {
@@ -368,15 +511,47 @@ static loomc_status_t loomc_emit_add_artifact(
     }
   }
 
-  loomc_status_t status = loomc_result_add_artifact_take_contents(
-      result, LOOMC_ARTIFACT_KIND_EXECUTABLE,
-      loomc_string_view_from_iree(emitter->public_artifact_format),
-      loomc_emit_identifier(options, emitter),
-      loomc_byte_span_from_iree(target_artifact->contents));
-  if (loomc_status_is_ok(status)) {
+  loomc_status_t status = loomc_ok_status();
+  if (target_artifact->sidecar_count == 0) {
+    status = loomc_result_add_artifact_take_contents(
+        result, LOOMC_ARTIFACT_KIND_EXECUTABLE,
+        loomc_string_view_from_iree(emitter->public_artifact_format),
+        loomc_emit_identifier(options, emitter),
+        loomc_byte_span_from_iree(target_artifact->contents));
+  } else {
+    const loomc_artifact_t artifact = {
+        .kind = LOOMC_ARTIFACT_KIND_EXECUTABLE,
+        .format = loomc_string_view_from_iree(emitter->public_artifact_format),
+        .identifier = loomc_emit_identifier(options, emitter),
+        .contents = loomc_byte_span_from_iree(target_artifact->contents),
+    };
+    status = loomc_result_add_artifact(result, &artifact);
+  }
+  if (loomc_status_is_ok(status) && target_artifact->sidecar_count == 0) {
     target_artifact->contents = iree_const_byte_span_empty();
     target_artifact->storage = NULL;
-    target_artifact->deinitialize = NULL;
+    target_artifact->release = NULL;
+  }
+  for (iree_host_size_t i = 0;
+       i < target_artifact->sidecar_count && loomc_status_is_ok(status); ++i) {
+    const loom_target_emit_sidecar_artifact_t* sidecar =
+        &target_artifact->sidecars[i];
+    if (sidecar->contents.data == NULL && sidecar->contents.data_length != 0) {
+      return loomc_make_status(
+          LOOMC_STATUS_INTERNAL,
+          "emitter returned sidecar artifact length with no data");
+    }
+    loomc_artifact_kind_t kind = LOOMC_ARTIFACT_KIND_REPORT;
+    loomc_string_view_t format = loomc_string_view_empty();
+    LOOMC_RETURN_IF_ERROR(
+        loomc_emit_sidecar_artifact_metadata(sidecar->kind, &kind, &format));
+    const loomc_artifact_t artifact = {
+        .kind = kind,
+        .format = format,
+        .identifier = loomc_string_view_from_iree(sidecar->identifier),
+        .contents = loomc_byte_span_from_iree(sidecar->contents),
+    };
+    status = loomc_result_add_artifact(result, &artifact);
   }
   return status;
 }
@@ -431,6 +606,7 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
   }
 
   loom_target_emit_artifact_t target_artifact = {0};
+  loomc_string_view_t manifest_identifier = loomc_string_view_empty();
   iree_arena_allocator_t scratch_arena;
   bool scratch_arena_initialized = false;
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
@@ -447,6 +623,11 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
       loomc_emit_diagnostic_capture_t capture = {
           .result = result,
       };
+      if (resolved_options.artifact_manifest_mode !=
+          LOOMC_ARTIFACT_MANIFEST_MODE_NONE) {
+        status = loomc_emit_make_manifest_identifier(
+            &resolved_options, emitter, allocator, &manifest_identifier);
+      }
       const loom_target_emit_request_t request = {
           .target_environment = internal_target_environment,
           .low_descriptor_registry =
@@ -457,6 +638,13 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
           .option_chain = resolved_options.option_chain,
           .identifier = iree_string_view_from_loomc(
               loomc_emit_identifier(&resolved_options, emitter)),
+          .artifact_manifest =
+              {
+                  .mode = loomc_emit_target_manifest_mode(
+                      resolved_options.artifact_manifest_mode),
+                  .identifier =
+                      iree_string_view_from_loomc(manifest_identifier),
+              },
           .diagnostic_emitter =
               {
                   .fn = loomc_emit_capture_diagnostic,
@@ -465,8 +653,10 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
           .scratch_arena = &scratch_arena,
           .allocator = host_allocator,
       };
-      status =
-          loomc_status_from_iree(emitter->emit(&request, &target_artifact));
+      if (loomc_status_is_ok(status)) {
+        status =
+            loomc_status_from_iree(emitter->emit(&request, &target_artifact));
+      }
       if (!loomc_status_is_ok(status) &&
           loomc_status_is_result_diagnostic(status)) {
         status = loomc_result_fail_status_diagnostic_consume(
@@ -481,7 +671,8 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
                                      &target_artifact);
   }
 
-  loomc_emit_artifact_deinitialize(&target_artifact, host_allocator);
+  loomc_allocator_free(allocator, (void*)manifest_identifier.data);
+  loomc_emit_artifact_release(&target_artifact, host_allocator);
   if (scratch_arena_initialized) {
     iree_arena_deinitialize(&scratch_arena);
   }

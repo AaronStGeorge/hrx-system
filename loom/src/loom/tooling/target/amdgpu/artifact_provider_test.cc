@@ -248,7 +248,8 @@ TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING,
-      &report, iree_allocator_system(), &emitted, &artifact));
+      /*artifact_manifest=*/nullptr, &report, iree_allocator_system(), &emitted,
+      &artifact));
   EXPECT_TRUE(emitted);
   EXPECT_EQ(artifact.target_artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
   EXPECT_EQ(artifact.target_artifact_data.data, artifact.executable_data.data);
@@ -298,7 +299,8 @@ TEST_F(AmdgpuHalArtifactProviderTest,
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
-      /*report=*/nullptr, iree_allocator_system(), &emitted, &artifact));
+      /*artifact_manifest=*/nullptr, /*report=*/nullptr,
+      iree_allocator_system(), &emitted, &artifact));
   EXPECT_TRUE(emitted);
   EXPECT_NE(
       iree_string_view_find(artifact.executable_format, IREE_SV("gfx942"), 0),

@@ -9,8 +9,8 @@
 #include "loomc/target/spirv/base.h"
 #include "target.h"
 
-static void loomc_spirv_emit_artifact_deinitialize(void* storage,
-                                                   iree_allocator_t allocator) {
+static void loomc_spirv_emit_artifact_release(void* storage,
+                                              iree_allocator_t allocator) {
   iree_allocator_free(allocator, storage);
 }
 
@@ -30,7 +30,7 @@ static iree_status_t loomc_spirv_emit_module_artifact(
     out_artifact->contents = iree_make_const_byte_span(
         binary.words, binary.word_count * sizeof(uint32_t));
     out_artifact->storage = binary.words;
-    out_artifact->deinitialize = loomc_spirv_emit_artifact_deinitialize;
+    out_artifact->release = loomc_spirv_emit_artifact_release;
     binary.words = NULL;
     binary.word_count = 0;
   }

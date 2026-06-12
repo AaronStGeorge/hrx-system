@@ -330,6 +330,7 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
+    ::artifact_manifest
     ::legalization
     ::low_descriptor_registry
     ::low_legality

@@ -611,3 +611,40 @@ iree_status_t loom_target_artifact_manifest_format_json(
       manifest, stream, &first_field));
   return loom_output_stream_write_cstring(stream, "}");
 }
+
+iree_status_t loom_target_artifact_manifest_format_json_bytes(
+    const loom_target_artifact_manifest_t* manifest,
+    const loom_target_artifact_manifest_format_options_t* options,
+    iree_allocator_t allocator,
+    loom_target_artifact_manifest_json_t* out_json) {
+  if (out_json == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "artifact manifest JSON output is NULL");
+  }
+  *out_json = (loom_target_artifact_manifest_json_t){0};
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(allocator, &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+
+  iree_status_t status =
+      loom_target_artifact_manifest_format_json(manifest, options, &stream);
+  if (iree_status_is_ok(status)) {
+    const iree_host_size_t storage_length = iree_string_builder_size(&builder);
+    char* storage = iree_string_builder_take_storage(&builder);
+    out_json->contents =
+        iree_make_const_byte_span((const uint8_t*)storage, storage_length);
+  }
+  iree_string_builder_deinitialize(&builder);
+  return status;
+}
+
+void loom_target_artifact_manifest_json_release(
+    loom_target_artifact_manifest_json_t* json, iree_allocator_t allocator) {
+  if (json == NULL) {
+    return;
+  }
+  iree_allocator_free(allocator, (void*)json->contents.data);
+  *json = (loom_target_artifact_manifest_json_t){0};
+}

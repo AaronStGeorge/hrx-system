@@ -481,3 +481,46 @@ iree_status_t loom_target_artifact_manifest_collect_from_entries(
   out_manifest->global_count = global_count;
   return iree_ok_status();
 }
+
+iree_status_t loom_target_artifact_manifest_collect_json_from_entries(
+    const loom_module_t* module, loom_target_entry_list_t entries,
+    const loom_target_artifact_manifest_collect_options_t* options,
+    iree_arena_allocator_t* arena, iree_allocator_t allocator,
+    loom_target_artifact_manifest_json_t* out_json) {
+  if (out_json == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "artifact manifest JSON output is NULL");
+  }
+  *out_json = (loom_target_artifact_manifest_json_t){0};
+  if (options == NULL ||
+      options->mode == LOOM_TARGET_ARTIFACT_MANIFEST_MODE_NONE) {
+    return iree_ok_status();
+  }
+  if (!loom_target_artifact_manifest_collect_mode_is_valid(options->mode)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported artifact manifest mode %d",
+                            (int)options->mode);
+  }
+  if (module == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "artifact manifest module is NULL");
+  }
+  if (arena == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "artifact manifest arena is NULL");
+  }
+
+  loom_symbol_dependency_table_t dependency_table = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_symbol_dependency_table_build(module, arena, &dependency_table));
+
+  loom_target_artifact_manifest_t manifest = {0};
+  IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_collect_from_entries(
+      module, entries, &dependency_table, options, arena, &manifest));
+
+  loom_target_artifact_manifest_format_options_t format_options;
+  loom_target_artifact_manifest_format_options_initialize(&format_options);
+  format_options.mode = options->mode;
+  return loom_target_artifact_manifest_format_json_bytes(
+      &manifest, &format_options, allocator, out_json);
+}

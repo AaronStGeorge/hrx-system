@@ -21,6 +21,7 @@
               "--target=gfx11-generic",
               "--output={tmp}/targetless_amdgpu.vmfb",
               "--emit-target-artifact={tmp}/targetless_amdgpu.hsaco",
+              "--artifact-manifest=summary",
               "--compile-report=summary"
             ]
           },
@@ -40,6 +41,10 @@
             },
             {
               "path": "{tmp}/targetless_amdgpu.hsaco",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/targetless_amdgpu.hsaco.manifest.json",
               "non_empty": true
             }
           ]

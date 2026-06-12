@@ -45,6 +45,7 @@ loom_cc_binary(
     iree::io::file_handle
     loom::codegen::low::text_asm
     loom::error::diagnostic
+    loom::target::artifact_manifest
     loom::target::low_descriptor_registry
     loom::tooling::cli::help
     loom::tooling::compile::pipeline

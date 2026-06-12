@@ -11,6 +11,8 @@
 #include <string>
 
 #include "iree/testing/gtest.h"
+#include "loomc/artifact.h"
+#include "loomc/artifact_manifest.h"
 #include "loomc/compile.h"
 #include "loomc/context.h"
 #include "loomc/emit.h"
@@ -48,24 +50,62 @@ using TargetSelectionPtr =
     HandlePtr<loomc_target_selection_t, loomc_target_selection_release>;
 using WorkspacePtr = HandlePtr<loomc_workspace_t, loomc_workspace_release>;
 
-void FakeArtifactDeinitialize(void* storage, iree_allocator_t allocator) {
+void FakeArtifactRelease(void* storage, iree_allocator_t allocator) {
+  iree_allocator_free(allocator, storage);
+}
+
+typedef struct FakeArtifactSidecarStorage {
+  // Primary fake executable bytes.
+  uint8_t contents[4];
+  // Fake manifest sidecar descriptor.
+  loom_target_emit_sidecar_artifact_t sidecar;
+} FakeArtifactSidecarStorage;
+
+void FakeArtifactSidecarRelease(void* storage, iree_allocator_t allocator) {
   iree_allocator_free(allocator, storage);
 }
 
 iree_status_t EmitFakeArtifact(const loom_target_emit_request_t* request,
                                loom_target_emit_artifact_t* out_artifact) {
   *out_artifact = {};
-  uint8_t* contents = nullptr;
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(request->allocator, 4, (void**)&contents));
-  contents[0] = 0x7F;
-  contents[1] = 'L';
-  contents[2] = 'O';
-  contents[3] = 'M';
+  static const char kManifestJson[] =
+      "{\"kind\":\"loom.artifact_manifest\",\"mode\":\"summary\"}";
   out_artifact->target_artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF;
-  out_artifact->contents = iree_make_const_byte_span(contents, 4);
-  out_artifact->storage = contents;
-  out_artifact->deinitialize = FakeArtifactDeinitialize;
+  if (request->artifact_manifest.mode ==
+      LOOM_TARGET_ARTIFACT_MANIFEST_MODE_NONE) {
+    uint8_t* contents = nullptr;
+    IREE_RETURN_IF_ERROR(
+        iree_allocator_malloc(request->allocator, 4, (void**)&contents));
+    contents[0] = 0x7F;
+    contents[1] = 'L';
+    contents[2] = 'O';
+    contents[3] = 'M';
+    out_artifact->contents = iree_make_const_byte_span(contents, 4);
+    out_artifact->storage = contents;
+    out_artifact->release = FakeArtifactRelease;
+    return iree_ok_status();
+  }
+
+  FakeArtifactSidecarStorage* storage = nullptr;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      request->allocator, sizeof(*storage), (void**)&storage));
+  *storage = {};
+  storage->contents[0] = 0x7F;
+  storage->contents[1] = 'L';
+  storage->contents[2] = 'O';
+  storage->contents[3] = 'M';
+  storage->sidecar = {
+      /*.kind=*/LOOM_TARGET_EMIT_SIDECAR_ARTIFACT_KIND_ARTIFACT_MANIFEST,
+      /*.identifier=*/request->artifact_manifest.identifier,
+      /*.contents=*/
+      iree_make_const_byte_span((const uint8_t*)kManifestJson,
+                                sizeof(kManifestJson) - 1),
+  };
+  out_artifact->contents = iree_make_const_byte_span(storage->contents, 4);
+  out_artifact->sidecars = &storage->sidecar;
+  out_artifact->sidecar_count = 1;
+  out_artifact->storage = storage;
+  out_artifact->release = FakeArtifactSidecarRelease;
   return iree_ok_status();
 }
 
@@ -133,6 +173,12 @@ static const loom_target_provider_t kFakeWasmProvider = {
 
 std::string ToString(loomc_string_view_t value) {
   return value.data ? std::string(value.data, value.size) : std::string();
+}
+
+std::string ToString(loomc_byte_span_t value) {
+  return value.data ? std::string(reinterpret_cast<const char*>(value.data),
+                                  value.data_length)
+                    : std::string();
 }
 
 ContextPtr CreateContext() {
@@ -376,6 +422,152 @@ TEST(TargetTest, EmitSelectsOnlyLinkedEmitterWhenFormatOmitted) {
   EXPECT_EQ(ToString(artifact->identifier), "fake.bin");
   ASSERT_EQ(artifact->contents.data_length, 4u);
   EXPECT_EQ(artifact->contents.data[0], 0x7Fu);
+}
+
+TEST(TargetTest, EmitReturnsArtifactManifestSidecar) {
+  const loom_target_provider_t* providers[] = {
+      &kFakeElfProvider,
+  };
+  loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  TargetEnvironmentPtr target_environment =
+      CreateTargetEnvironmentFromProviderSet(&provider_set);
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module =
+      CreateIdentityModule(context.get(), workspace.get(), "entry");
+
+  loomc_artifact_manifest_options_t manifest_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS,
+      /*.structure_size=*/sizeof(manifest_options),
+      /*.next=*/nullptr,
+      /*.mode=*/LOOMC_ARTIFACT_MANIFEST_MODE_SUMMARY,
+      /*.identifier=*/loomc_string_view_empty(),
+  };
+  loomc_emit_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/&manifest_options,
+      /*.artifact_format=*/loomc_string_view_empty(),
+      /*.identifier=*/loomc_string_view_empty(),
+      /*.artifact_flags=*/0,
+  };
+  ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
+                                module.get(), &options);
+  ExpectSucceededResult(result.get());
+  ASSERT_EQ(loomc_result_artifact_count(result.get()), 2u);
+
+  const loomc_artifact_t* primary = loomc_result_artifact_at(result.get(), 0);
+  ASSERT_NE(primary, nullptr);
+  EXPECT_EQ(primary->kind, LOOMC_ARTIFACT_KIND_EXECUTABLE);
+  EXPECT_EQ(ToString(primary->format), "fake-elf");
+  EXPECT_EQ(ToString(primary->identifier), "fake.bin");
+  ASSERT_EQ(primary->contents.data_length, 4u);
+  EXPECT_EQ(primary->contents.data[0], 0x7Fu);
+
+  const loomc_artifact_t* manifest = loomc_result_artifact_at(result.get(), 1);
+  ASSERT_NE(manifest, nullptr);
+  EXPECT_EQ(manifest->kind, LOOMC_ARTIFACT_KIND_REPORT);
+  EXPECT_EQ(ToString(manifest->format),
+            LOOMC_ARTIFACT_FORMAT_ARTIFACT_MANIFEST_JSON);
+  EXPECT_EQ(ToString(manifest->identifier), "fake.bin.manifest.json");
+  EXPECT_EQ(ToString(manifest->contents),
+            "{\"kind\":\"loom.artifact_manifest\",\"mode\":\"summary\"}");
+}
+
+TEST(TargetTest, EmitArtifactManifestLooseOptionsOverrideTypedDefaults) {
+  const loom_target_provider_t* providers[] = {
+      &kFakeElfProvider,
+  };
+  loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  TargetEnvironmentPtr target_environment =
+      CreateTargetEnvironmentFromProviderSet(&provider_set);
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module =
+      CreateIdentityModule(context.get(), workspace.get(), "entry");
+
+  const loomc_option_entry_t entries[] = {
+      {
+          /*.key=*/loomc_make_cstring_view(
+              LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_MODE),
+          /*.value=*/loomc_make_cstring_view("summary"),
+      },
+      {
+          /*.key=*/loomc_make_cstring_view(
+              LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_IDENTIFIER),
+          /*.value=*/loomc_make_cstring_view("sidecar.json"),
+      },
+  };
+  loomc_option_dict_t dict = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_OPTION_DICT,
+      /*.structure_size=*/sizeof(dict),
+      /*.next=*/nullptr,
+      /*.entries=*/entries,
+      /*.entry_count=*/IREE_ARRAYSIZE(entries),
+  };
+  loomc_artifact_manifest_options_t manifest_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS,
+      /*.structure_size=*/sizeof(manifest_options),
+      /*.next=*/&dict,
+      /*.mode=*/LOOMC_ARTIFACT_MANIFEST_MODE_SUMMARY,
+      /*.identifier=*/loomc_make_cstring_view("default.json"),
+  };
+  loomc_emit_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/&manifest_options,
+      /*.artifact_format=*/loomc_string_view_empty(),
+      /*.identifier=*/loomc_make_cstring_view("primary.bin"),
+      /*.artifact_flags=*/0,
+  };
+  ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
+                                module.get(), &options);
+  ExpectSucceededResult(result.get());
+  ASSERT_EQ(loomc_result_artifact_count(result.get()), 2u);
+  const loomc_artifact_t* primary = loomc_result_artifact_at(result.get(), 0);
+  ASSERT_NE(primary, nullptr);
+  EXPECT_EQ(ToString(primary->identifier), "primary.bin");
+  const loomc_artifact_t* manifest = loomc_result_artifact_at(result.get(), 1);
+  ASSERT_NE(manifest, nullptr);
+  EXPECT_EQ(ToString(manifest->identifier), "sidecar.json");
+}
+
+TEST(TargetTest, EmitRejectsArtifactManifestIdentifierWithoutMode) {
+  const loom_target_provider_t* providers[] = {
+      &kFakeElfProvider,
+  };
+  loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  TargetEnvironmentPtr target_environment =
+      CreateTargetEnvironmentFromProviderSet(&provider_set);
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module =
+      CreateIdentityModule(context.get(), workspace.get(), "entry");
+
+  loomc_artifact_manifest_options_t manifest_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS,
+      /*.structure_size=*/sizeof(manifest_options),
+      /*.next=*/nullptr,
+      /*.mode=*/LOOMC_ARTIFACT_MANIFEST_MODE_NONE,
+      /*.identifier=*/loomc_make_cstring_view("sidecar.json"),
+  };
+  loomc_emit_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/&manifest_options,
+      /*.artifact_format=*/loomc_string_view_empty(),
+      /*.identifier=*/loomc_string_view_empty(),
+      /*.artifact_flags=*/0,
+  };
+  loomc_result_t* result = nullptr;
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_INVALID_ARGUMENT,
+      loomc_emit_module(target_environment.get(), workspace.get(), module.get(),
+                        &options, loomc_allocator_system(), &result));
+  EXPECT_EQ(result, nullptr);
 }
 
 TEST(TargetTest, EmitReportsZeroLinkedEmittersThroughResult) {

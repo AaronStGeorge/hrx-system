@@ -17,6 +17,7 @@ loom_cc_library(
     loomc
   HDRS
     "include/loomc/artifact.h"
+    "include/loomc/artifact_manifest.h"
     "include/loomc/base.h"
     "include/loomc/compile.h"
     "include/loomc/config.h"
@@ -47,6 +48,7 @@ loom_cc_library(
     "src/workspace.h"
   SRCS
     "src/artifact.c"
+    "src/artifact_manifest.c"
     "src/base.c"
     "src/base_system.c"
     "src/compile.c"
@@ -99,6 +101,7 @@ loom_cc_library(
     loom::pass::program
     loom::pass::registry
     loom::pass::tooling
+    loom::target::artifact_manifest
     loom::target::pipeline
     loom::target::predicate
     loom::target::provider
@@ -123,6 +126,7 @@ loom_cc_library(
     loomc_full
   HDRS
     "include/loomc/artifact.h"
+    "include/loomc/artifact_manifest.h"
     "include/loomc/base.h"
     "include/loomc/compile.h"
     "include/loomc/config.h"
