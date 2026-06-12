@@ -2393,6 +2393,32 @@ static const loom_amdgpu_assembly_packet_form_t kFmamkPacketForm = {
         },
 };
 
+static const loom_amdgpu_assembly_packet_form_t kSaluFmaakF32PacketForm = {
+    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
+    .fixed_mnemonic = "s_fmaak_f32",
+    .value_count = 4,
+    .values =
+        {
+            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
+        },
+};
+
+static const loom_amdgpu_assembly_packet_form_t kSaluFmamkF32PacketForm = {
+    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
+    .fixed_mnemonic = "s_fmamk_f32",
+    .value_count = 4,
+    .values =
+        {
+            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
+            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
+            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
+        },
+};
+
 static const loom_amdgpu_assembly_packet_form_t kFmaakF16PacketForm = {
     .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
     .fixed_mnemonic = "v_fmaak_f16",
@@ -2470,6 +2496,14 @@ static iree_status_t loom_amdgpu_try_append_descriptor_ref_packet(
       {
           .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32,
           .form = &kFmamkPacketForm,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_FMAAK_F32,
+          .form = &kSaluFmaakF32PacketForm,
+      },
+      {
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_FMAMK_F32,
+          .form = &kSaluFmamkF32PacketForm,
       },
       {
           .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F16,

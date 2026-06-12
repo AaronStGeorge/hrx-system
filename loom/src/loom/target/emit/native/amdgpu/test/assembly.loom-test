@@ -278,6 +278,39 @@ low.func.def target(@gfx11_target) @gfx11_scalar_f16_fma_forms_native(%acc: reg<
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx1250_scalar_domain_fma_forms waits=none strategy=source fixed=%fmaak:physical_register:0:1 fixed=%fmamk:physical_register:1:1 fixed=%acc32:physical_register:6:1 fixed=%a32:physical_register:7:1 fixed=%b32:physical_register:8:1 fixed=%fmac32:physical_register:6:1 fixed=%acc16:physical_register:9:1 fixed=%a16:physical_register:10:1 fixed=%b16:physical_register:11:1 fixed=%fmac16:physical_register:9:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_scalar_domain_fma_forms(%acc32: reg<amdgpu.sgpr>, %a32: reg<amdgpu.sgpr>, %b32: reg<amdgpu.sgpr>, %acc16: reg<amdgpu.sgpr>, %a16: reg<amdgpu.sgpr>, %b16: reg<amdgpu.sgpr>) asm<amdgpu.rdna4.gfx125x.core> {
+  %fmaak = s_fmaak_f32 %a32, %b32, 1065353216
+  %fmamk = s_fmamk_f32 %a32, %b32, 1065353216
+  %fmac32 = s_fmac_f32 %acc32, %a32, %b32
+  %fmac16 = s_fmac_f16 %acc16, %a16, %b16
+  return
+}
+
+// ----
+  s_fmaak_f32 s0, s7, s8, 0x3f800000
+  s_fmamk_f32 s1, s7, 0x3f800000, s8
+  s_fmac_f32 s6, s7, s8
+  s_fmac_f16 s9, s10, s11
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx1250_scalar_domain_fma_forms_native waits=none strategy=source fixed=%fmaak:physical_register:0:1 fixed=%fmamk:physical_register:1:1 fixed=%acc32:physical_register:6:1 fixed=%a32:physical_register:7:1 fixed=%b32:physical_register:8:1 fixed=%fmac32:physical_register:6:1 fixed=%acc16:physical_register:9:1 fixed=%a16:physical_register:10:1 fixed=%b16:physical_register:11:1 fixed=%fmac16:physical_register:9:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_scalar_domain_fma_forms_native(%acc32: reg<amdgpu.sgpr>, %a32: reg<amdgpu.sgpr>, %b32: reg<amdgpu.sgpr>, %acc16: reg<amdgpu.sgpr>, %a16: reg<amdgpu.sgpr>, %b16: reg<amdgpu.sgpr>) asm<amdgpu.rdna4.gfx125x.core> {
+  %fmaak = s_fmaak_f32 %a32, %b32, 1065353216
+  %fmamk = s_fmamk_f32 %a32, %b32, 1065353216
+  %fmac32 = s_fmac_f32 %acc32, %a32, %b32
+  %fmac16 = s_fmac_f16 %acc16, %a16, %b16
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx942_scalar_f16_mad_forms waits=none
 amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @gfx942_scalar_f16_mad_forms(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {

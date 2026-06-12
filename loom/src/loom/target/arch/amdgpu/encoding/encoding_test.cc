@@ -220,6 +220,25 @@ TEST(AmdgpuEncodingTest, NamesDppFormats) {
       IREE_SV("vop1_sdwa")));
 }
 
+TEST(AmdgpuEncodingTest, NamesScalarLiteralFormats) {
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOP1_LITERAL),
+                             IREE_SV("sop1_literal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOP2_LITERAL),
+                             IREE_SV("sop2_literal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOPC_LITERAL),
+                             IREE_SV("sopc_literal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOPK_LITERAL),
+                             IREE_SV("sopk_literal")));
+}
+
 TEST(AmdgpuEncodingTest, NamesGfx1250SupplementalFormats) {
   EXPECT_TRUE(
       iree_string_view_equal(loom_amdgpu_encoding_format_name(

@@ -244,6 +244,15 @@ def _rdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     )
 
 
+def _rdna_scalar_domain_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_fmaak_f32_overlay(),
+        _s_fmamk_f32_overlay(),
+        _s_fmac_f32_overlay(),
+        _s_fmac_f16_overlay(),
+    )
+
+
 def _cdna_core_overlays(
     *,
     global_load_lds_variants: tuple[tuple[str, str, str, int, int], ...],
@@ -1097,6 +1106,18 @@ def _gfx11_core_overlay_descriptors(
     )
 
 
+def _gfx117x_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (*_gfx11_core_overlays(), *_rdna_scalar_domain_fma_overlays())
+
+
+def _gfx117x_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx117x_core_overlays())
+    )
+
+
 def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
@@ -1158,6 +1179,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
         _v_fmamk_f32_overlay(),
+        *_rdna_scalar_domain_fma_overlays(),
         *_rdna_scalar_fma_overlays(),
         _v_pk_fmac_f16_overlay(),
         _v_pk_fma_f16_overlay(include_literal_forms=True),
@@ -1552,6 +1574,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
         _v_fmamk_f32_overlay(),
+        *_rdna_scalar_domain_fma_overlays(),
         *_rdna_scalar_fma_overlays(),
         _v_pk_fmac_f16_overlay(),
         _v_pk_fma_f16_overlay(include_literal_forms=True),
@@ -1894,6 +1917,7 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -1932,7 +1956,7 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_MFMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -1991,6 +2015,7 @@ _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=102,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -2044,6 +2069,7 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -2075,7 +2101,7 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -2156,6 +2182,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -2187,7 +2214,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -2649,6 +2676,7 @@ def _amdgpu_descriptor_ref_key_set() -> set[str]:
         _gfx940_core_overlays(),
         _gfx950_core_overlays(),
         _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
         _gfx12_core_overlays(),
         _gfx1250_core_overlays(),
     ):
@@ -2669,6 +2697,8 @@ __all__ = (
     "_gfx125x_reg_classes",
     "_gfx11_core_overlay_descriptors",
     "_gfx11_core_overlays",
+    "_gfx117x_core_overlay_descriptors",
+    "_gfx117x_core_overlays",
     "_gfx1250_core_overlay_descriptors",
     "_gfx1250_core_overlays",
     "_gfx12_core_overlay_descriptors",

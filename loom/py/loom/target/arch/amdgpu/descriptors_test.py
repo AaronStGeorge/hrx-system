@@ -23,6 +23,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _GFX12_TH_ATOMIC_RETURN_VALUE,
     _REG_EXEC,
     _REG_MODE,
+    _REG_PART_SGPR_LOW16,
     _REG_PART_VGPR_HIGH16,
     _REG_PART_VGPR_LOW16,
     _SCHEDULE_MODE_CONTROL,
@@ -52,6 +53,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _categorize_amdgpu_descriptors,
     _gfx11_core_overlays,
     _gfx12_core_overlays,
+    _gfx117x_core_overlays,
     _gfx125x_reg_classes,
     _gfx940_core_overlays,
     _gfx950_core_overlays,
@@ -679,6 +681,7 @@ def test_scalar_f16_fma_descriptor_families_are_arch_specific() -> None:
 
     for descriptor_set in (
         _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
         _gfx12_core_overlays(),
         _gfx1250_core_overlays(),
     ):
@@ -798,6 +801,147 @@ def test_scalar_f64_fma_descriptors_pin_register_pair_widths() -> None:
             ConstraintKind.TIED,
             ConstraintKind.DESTRUCTIVE,
         )
+
+
+def test_scalar_domain_fma_descriptors_are_arch_specific() -> None:
+    scalar_domain_keys = {
+        "amdgpu.s_fmaak_f32",
+        "amdgpu.s_fmamk_f32",
+        "amdgpu.s_fmac_f32",
+        "amdgpu.s_fmac_f16",
+    }
+    legacy_dx9_zero_keys = {
+        "amdgpu.v_fma_dx9_zero_f32",
+        "amdgpu.v_fmac_dx9_zero_f32",
+    }
+
+    for descriptor_set in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        assert not scalar_domain_keys & descriptors.keys()
+
+    for descriptor_set in (
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        assert scalar_domain_keys <= descriptors.keys()
+
+    for descriptor_set in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        assert not legacy_dx9_zero_keys & descriptors.keys()
+
+
+def test_scalar_domain_fma_descriptors_pin_sgpr_contracts() -> None:
+    for descriptor_set in (
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+
+        for descriptor_key, expected_operands in (
+            ("amdgpu.s_fmaak_f32", ("dst", "a", "b")),
+            ("amdgpu.s_fmamk_f32", ("dst", "a", "c")),
+        ):
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.schedule_class == _SCHEDULE_SALU
+            assert descriptor.encoding_name == "SOP2_INST_LITERAL"
+            assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+                "SDST",
+                "SSRC0",
+                "SSRC1",
+            )
+            assert (
+                tuple(
+                    operand.descriptor_operand.field_name
+                    for operand in descriptor.operands
+                )
+                == expected_operands
+            )
+            assert descriptor.immediate_fields == ("LITERAL",)
+            assert len(descriptor.immediates) == 1
+            immediate = descriptor.immediates[0]
+            assert immediate.kind == ImmediateKind.UNSIGNED
+            assert immediate.field_name == "imm32"
+            assert immediate.bit_width == 32
+            assert immediate.unsigned_max == 0xFFFFFFFF
+
+        descriptor = descriptors["amdgpu.s_fmac_f32"]
+        assert descriptor.schedule_class == _SCHEDULE_SALU
+        assert descriptor.encoding_name == "ENC_SOP2"
+        assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+            "SDST",
+            "SDST",
+            "SSRC0",
+            "SSRC1",
+        )
+        assert tuple(
+            operand.descriptor_operand.field_name for operand in descriptor.operands
+        ) == ("dst", "acc", "a", "b")
+        assert tuple(
+            operand.descriptor_operand.register_part for operand in descriptor.operands
+        ) == (None, None, None, None)
+        assert descriptor.operands[1].descriptor_operand.role is OperandRole.OPERAND
+        assert OperandFlag.IMPLICIT in descriptor.operands[1].descriptor_operand.flags
+        assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+            ConstraintKind.TIED,
+            ConstraintKind.DESTRUCTIVE,
+        )
+        assert tuple(
+            (constraint.lhs_operand_index, constraint.rhs_operand_index)
+            for constraint in descriptor.constraints
+        ) == ((0, 1), (0, 1))
+
+        descriptor = descriptors["amdgpu.s_fmac_f16"]
+        assert descriptor.schedule_class == _SCHEDULE_SALU
+        assert descriptor.encoding_name == "ENC_SOP2"
+        assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+            "SDST",
+            "SDST",
+            "SSRC0",
+            "SSRC1",
+        )
+        assert tuple(
+            operand.descriptor_operand.field_name for operand in descriptor.operands
+        ) == ("dst", "acc", "a", "b")
+        assert tuple(
+            operand.descriptor_operand.register_part for operand in descriptor.operands
+        ) == (
+            _REG_PART_SGPR_LOW16,
+            _REG_PART_SGPR_LOW16,
+            _REG_PART_SGPR_LOW16,
+            _REG_PART_SGPR_LOW16,
+        )
+        assert descriptor.operands[1].descriptor_operand.role is OperandRole.OPERAND
+        assert OperandFlag.IMPLICIT in descriptor.operands[1].descriptor_operand.flags
+        assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+            ConstraintKind.TIED,
+            ConstraintKind.DESTRUCTIVE,
+        )
+        assert tuple(
+            (constraint.lhs_operand_index, constraint.rhs_operand_index)
+            for constraint in descriptor.constraints
+        ) == ((0, 1), (0, 1))
 
 
 def test_packed_fma_mad_descriptors_pin_lane_container_widths() -> None:

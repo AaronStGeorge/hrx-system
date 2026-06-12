@@ -2222,6 +2222,91 @@ def _v_fmamk_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_fmaak_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_fmaak_f32",
+        instruction_name="S_FMAAK_F32",
+        mnemonic="s_fmaak_f32",
+        encoding_name="SOP2_INST_LITERAL",
+        encoding_condition="default",
+        semantic_tag="float.fmaak.f32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("a")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("b")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "b"),
+            immediates=("imm32",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_LITERAL_U32_IMMEDIATE,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_fmamk_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_fmamk_f32",
+        instruction_name="S_FMAMK_F32",
+        mnemonic="s_fmamk_f32",
+        encoding_name="SOP2_INST_LITERAL",
+        encoding_condition="default",
+        semantic_tag="float.fmamk.f32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("a")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("c")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "c"),
+            immediates=("imm32",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_LITERAL_U32_IMMEDIATE,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_fmac_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_fmac_f32",
+        instruction_name="S_FMAC_F32",
+        mnemonic="s_fmac_f32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="float.fmac.f32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay(
+                "SDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _SGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                ),
+                role_exception_reason=(
+                    "the encoded scalar destination register is also the tied "
+                    "accumulator input"
+                ),
+            ),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("a")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("b")),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _f16_literal_immediate(field_name: str = "imm16") -> Immediate:
     return Immediate(
         field_name,
@@ -2238,6 +2323,50 @@ def _f16_vgpr_result(field_name: str = "dst") -> Operand:
 
 def _f16_vgpr_operand(field_name: str) -> Operand:
     return _vgpr_operand(field_name, register_part=_REG_PART_VGPR_LOW16)
+
+
+def _f16_sgpr_result(field_name: str = "dst") -> Operand:
+    return _sgpr_result(field_name, register_part=_REG_PART_SGPR_LOW16)
+
+
+def _f16_sgpr_operand(field_name: str) -> Operand:
+    return _sgpr_operand(field_name, register_part=_REG_PART_SGPR_LOW16)
+
+
+def _s_fmac_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_fmac_f16",
+        instruction_name="S_FMAC_F16",
+        mnemonic="s_fmac_f16",
+        encoding_name="ENC_SOP2",
+        semantic_tag="float.fmac.f16",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _f16_sgpr_result()),
+            AmdgpuOperandOverlay(
+                "SDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _SGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                    register_part=_REG_PART_SGPR_LOW16,
+                ),
+                role_exception_reason=(
+                    "the encoded low half of the scalar destination register "
+                    "is also the tied accumulator input"
+                ),
+            ),
+            AmdgpuOperandOverlay("SSRC0", _f16_sgpr_operand("a")),
+            AmdgpuOperandOverlay("SSRC1", _f16_sgpr_operand("b")),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
 
 
 def _v_fma_f16_overlay() -> AmdgpuDescriptorOverlay:
@@ -3614,6 +3743,10 @@ __all__ = (
     "_v_cvt_pk_u16_u32_overlay",
     "_v_cos_f32_overlay",
     "_v_exp_f32_overlay",
+    "_s_fmaak_f32_overlay",
+    "_s_fmac_f16_overlay",
+    "_s_fmac_f32_overlay",
+    "_s_fmamk_f32_overlay",
     "_v_fma_f16_overlay",
     "_v_fmaak_f32_overlay",
     "_v_fmaak_f16_overlay",

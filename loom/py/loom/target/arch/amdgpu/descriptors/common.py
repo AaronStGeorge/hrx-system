@@ -120,6 +120,9 @@ _REG_SCC = "amdgpu.scc"
 _REG_EXEC = "amdgpu.exec"
 _REG_MODE = "amdgpu.mode"
 
+_REG_PART_SGPR_LOW16 = "amdgpu.sgpr.low16"
+_REG_PART_SGPR_HIGH16 = "amdgpu.sgpr.high16"
+_REG_PART_SGPR_FULL32_MASK = 0x3
 _REG_PART_VGPR_LOW16 = "amdgpu.vgpr.low16"
 _REG_PART_VGPR_HIGH16 = "amdgpu.vgpr.high16"
 _REG_PART_VGPR_FULL32_MASK = 0x3
@@ -503,6 +506,11 @@ _VGPR_REGISTER_PARTS = (
     RegisterPart(_REG_PART_VGPR_LOW16, _REG_VGPR, 0x1),
     RegisterPart(_REG_PART_VGPR_HIGH16, _REG_VGPR, 0x2),
 )
+_SGPR_REGISTER_PARTS = (
+    RegisterPart(_REG_PART_SGPR_LOW16, _REG_SGPR, 0x1),
+    RegisterPart(_REG_PART_SGPR_HIGH16, _REG_SGPR, 0x2),
+)
+_AMDGPU_REGISTER_PARTS = (*_VGPR_REGISTER_PARTS, *_SGPR_REGISTER_PARTS)
 
 
 class AmdgpuAtomicMemorySpace(CEnum):
@@ -880,12 +888,28 @@ def _buffer_off_zero_operand_form(*, replacement_descriptor: str) -> OperandForm
     )
 
 
-def _sgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
-    return Operand(field_name, OperandRole.RESULT, _SGPR_ALT, unit_count=units)
+def _sgpr_result(
+    field_name: str = "dst", *, units: int = 1, register_part: str | None = None
+) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.RESULT,
+        _SGPR_ALT,
+        unit_count=units,
+        register_part=register_part,
+    )
 
 
-def _sgpr_operand(field_name: str, *, units: int = 1) -> Operand:
-    return Operand(field_name, OperandRole.OPERAND, _SGPR_ALT, unit_count=units)
+def _sgpr_operand(
+    field_name: str, *, units: int = 1, register_part: str | None = None
+) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.OPERAND,
+        _SGPR_ALT,
+        unit_count=units,
+        register_part=register_part,
+    )
 
 
 def _sgpr_predicate(field_name: str, *, units: int = 1) -> Operand:
@@ -2437,6 +2461,7 @@ __all__ = (
     "_AMDGPU_DESCRIPTOR_PUBLIC_HEADER_DIR",
     "_AMDGPU_DESCRIPTOR_SOURCE_DIR",
     "_AMDGPU_INLINE_F32_ENUM_DOMAIN_NAME",
+    "_AMDGPU_REGISTER_PARTS",
     "_AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN",
     "_AMDGPU_TRANS_DESCRIPTOR_KEYS",
     "_AMDGPU_TRANS_DESCRIPTOR_LATENCY_CYCLES",
@@ -2535,6 +2560,9 @@ __all__ = (
     "_REG_EXEC",
     "_REG_M0",
     "_REG_MODE",
+    "_REG_PART_SGPR_FULL32_MASK",
+    "_REG_PART_SGPR_HIGH16",
+    "_REG_PART_SGPR_LOW16",
     "_REG_PART_VGPR_FULL32_MASK",
     "_REG_PART_VGPR_HIGH16",
     "_REG_PART_VGPR_LOW16",
@@ -2585,6 +2613,7 @@ __all__ = (
     "_SCHEDULE_WMMA",
     "_SCHEDULE_WMMA_SCALE",
     "_SGPR_ALT",
+    "_SGPR_REGISTER_PARTS",
     "_SGPR_VGPR_ALT",
     "_SMEM_COUNTER_HAZARD",
     "_SMEM_WAIT_EFFECT",

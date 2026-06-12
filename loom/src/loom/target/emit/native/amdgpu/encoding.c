@@ -1701,10 +1701,15 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
         return loom_amdgpu_encode_sop1_s_mov_b32(state, packet);
       }
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOP1_LITERAL:
+      return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPP:
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP2:
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOP2_LITERAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPC:
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOPC_LITERAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOPK_LITERAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2_LITERAL: {
