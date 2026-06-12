@@ -291,13 +291,31 @@ static iree_status_t loom_amdgpu_loom_check_build_schedule_pair_affinities(
     iree_string_view_t function_symbol_name,
     loom_low_schedule_pair_affinity_list_t* out_affinities) {
   *out_affinities = loom_low_schedule_pair_affinity_list_empty();
+  loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
+      .diagnostic_collector = request->diagnostic_collector,
+      .module = request->module,
+      .source_resolver = request->source_resolver,
+      .emitter = LOOM_EMITTER_PASS,
+  };
+  iree_diagnostic_emitter_t emitter = {0};
+  if (request->diagnostic_collector != NULL) {
+    emitter = (iree_diagnostic_emitter_t){
+        .fn = loom_check_diagnostic_emitter_capture_emit,
+        .user_data = &diagnostic_capture,
+    };
+  }
   loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
-      request->module, function_symbol_name, &low_function));
+      request->module, function_symbol_name, request->test_case,
+      request->filename, request->diagnostic_collector, emitter,
+      &low_function));
+  if (!low_function) {
+    return iree_ok_status();
+  }
   loom_low_resolved_target_t target = {0};
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
       request->module, low_function, &request->low_registry->registry,
-      loom_target_selection_empty(), (iree_diagnostic_emitter_t){0}, &target));
+      loom_target_selection_empty(), emitter, &target));
   if (target.descriptor_set == NULL) {
     return iree_ok_status();
   }

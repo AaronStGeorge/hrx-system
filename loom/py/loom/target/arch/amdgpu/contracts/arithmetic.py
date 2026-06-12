@@ -162,22 +162,22 @@ _VEC_F32_DIAGNOSTIC = GuardDiagnostic(
     constraint_key="amdgpu.arithmetic.vector_f32",
 )
 _VEC_F16_PACKED_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="vector<f16>",
     constraint_key="amdgpu.arithmetic.vector_f16_packed",
 )
 _VEC_I16_PACKED_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="vector<i16>",
     constraint_key="amdgpu.arithmetic.vector_i16_packed",
 )
 _VEC_I16_PACKED_EVEN_LANES_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="lane-count",
+    subject_role="lane-count",
     subject_name="vector<i16>",
     constraint_key="amdgpu.arithmetic.vector_i16_packed_even_lanes",
 )
 _VEC_F32_PACKED_EVEN_LANES_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="lane-count",
+    subject_role="lane-count",
     subject_name="vector<f32>",
     constraint_key="amdgpu.arithmetic.vector_f32_packed_even_lanes",
 )

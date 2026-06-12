@@ -264,6 +264,7 @@ amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @f16_fma_mixlo_insert_f32(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32) -> (vector<2xf16>) {
   %fma = scalar.fmaf %a, %b, %c : f32
   %half = scalar.fptrunc %fma : f32 to f16
+  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_fma_mixlo_f16.f32_f32_f32", destination_lane_index="0", result_half="low", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision="selected", reason="static_destination_lane"}
   %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -282,6 +283,7 @@ func.def target(@gfx11_target) @f16_fma_mixhi_insert_extract_source(%dest: vecto
   %a = scalar.extf %a_half : f16 to f32
   %fma = scalar.fmaf %a, %b, %c : f32
   %half = scalar.fptrunc %fma : f32 to f16
+  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_fma_mixhi_f16.f16hi_f32_f32", destination_lane_index="1", result_half="high", source0_kind="f16hi", source1_kind="f32", source2_kind="f32", decision="selected", reason="static_destination_lane"}
   %result = vector.insert %half into %dest[1] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -298,6 +300,7 @@ amdgpu.target<gfx942> @gfx942_target
 func.def target(@gfx942_target) @f16_mad_mixlo_insert_f32(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32) -> (vector<2xf16>) {
   %fma = scalar.fmaf %a, %b, %c : f32
   %half = scalar.fptrunc %fma : f32 to f16
+  // REMARK@+1: AMDGPU/029 {descriptor_name="amdgpu.v_mad_mixlo_f16.f32_f32_f32", destination_lane_index="0", result_half="low", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision="selected", reason="static_destination_lane"}
   %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
   func.return %result : vector<2xf16>
 }
@@ -305,6 +308,58 @@ func.def target(@gfx942_target) @f16_mad_mixlo_insert_f32(%dest: vector<2xf16>, 
 // ----
 low.func.def target(@gfx942_target) abi(hal_kernel) @f16_mad_mixlo_insert_f32(%dest: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
   %result = v_mad_mixlo_f16_f32_f32_f32 %dest, %a, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f16_fma_mix_dynamic_insert_rejected(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32, %lane: index) -> (vector<2xf16>) {
+  %fma = scalar.fmaf %a, %b, %c : f32
+  %half = scalar.fptrunc %fma : f32 to f16
+  // REMARK@+1: AMDGPU/029 {descriptor_name="<none>", destination_lane_index="4294967295", result_half="dynamic", source0_kind="f32", source1_kind="f32", source2_kind="f32", decision="rejected", reason="dynamic_destination_lane"}
+  %result = vector.insert %half into %dest[%lane] : f16, vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f16_fma_mix_dynamic_insert_rejected(%dest: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>, %lane: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %fma = v_fma_f32 %a, %b, %c
+  %half = v_cvt_f16_f32 %fma
+  %17 = v_bfe_u32_offset_0_width_16_low16 %half
+  %18 = v_mov_b32_copy %lane
+  %19 = v_and_b32_lit %dest, 4294901760
+  %20 = v_or_b32 %19, %17
+  %21 = v_mov_b32 0
+  %22 = v_cmp_eq_i32 %18, %21
+  %23 = v_cndmask_b32 %dest, %20, %22
+  %24 = v_and_b32_lit %dest, 65535
+  %25 = v_lshlrev_b32_src0_inline %17, 16
+  %26 = v_or_b32 %24, %25
+  %27 = v_mov_b32 1
+  %28 = v_cmp_eq_i32 %18, %27
+  %result = v_cndmask_b32 %23, %26, %28
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f16_fma_mix_source_not_fmaf_rejected(%dest: vector<2xf16>, %a: f32, %b: f32) -> (vector<2xf16>) {
+  %product = scalar.mulf %a, %b : f32
+  %half = scalar.fptrunc %product : f32 to f16
+  // REMARK@+1: AMDGPU/029 {descriptor_name="<none>", destination_lane_index="0", result_half="low", source0_kind="unknown", source1_kind="unknown", source2_kind="unknown", decision="rejected", reason="rounding_source_not_fmaf"}
+  %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f16_fma_mix_source_not_fmaf_rejected(%dest: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %product = v_mul_f32 %a, %b
+  %half = v_cvt_f16_f32 %product
+  %13 = v_bfe_u32_offset_0_width_16_low16 %half
+  %14 = v_and_b32_lit %dest, 4294901760
+  %result = v_or_b32 %14, %13
   return %result
 }
 
@@ -353,12 +408,12 @@ func.def target(@gfx942_target) @vector_f32_mulf_splat_extf_cdna(%q: vector<2xf3
 
 // ----
 low.func.def target(@gfx942_target) abi(hal_kernel) @vector_f32_mulf_splat_extf_cdna(%q: reg<amdgpu.vgpr x2>, %scale_half: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
-  %10 = v_mov_b32 0
-  %11 = slice %q[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %12 = v_mad_mix_f32_f16lo_f32_f32 %scale_half, %11, %10
-  %13 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %14 = v_mad_mix_f32_f16lo_f32_f32 %scale_half, %13, %10
-  %result = concat(%12, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %9 = v_mov_b32 0
+  %10 = slice %q[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %11 = v_mad_mix_f32_f16lo_f32_f32 %scale_half, %10, %9
+  %12 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %13 = v_mad_mix_f32_f16lo_f32_f32 %scale_half, %12, %9
+  %result = concat(%11, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %result
 }
 

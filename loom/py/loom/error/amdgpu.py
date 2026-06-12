@@ -550,6 +550,41 @@ ERR_AMDGPU_028 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_029: AMDGPU half-result mixed FMA lane decision was recorded.
+ERR_AMDGPU_029 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=29,
+    severity=Severity.REMARK,
+    summary="AMDGPU half-result mixed FMA lane decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' {decision} half-result mixed FMA descriptor "
+        "'{descriptor_name}' for '{op_name}' in '@{function_name}' at "
+        "destination lane {destination_lane_index} ({result_half}) in "
+        "descriptor set '{descriptor_set_name}': sources [{source0_kind}, "
+        "{source1_kind}, {source2_kind}], rounding '{rounding_contract}', "
+        "reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("destination_lane_index", ParamKind.U32),
+        ErrorParam("result_half", ParamKind.STRING),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("source0_kind", ParamKind.STRING),
+        ErrorParam("source1_kind", ParamKind.STRING),
+        ErrorParam("source2_kind", ParamKind.STRING),
+        ErrorParam("rounding_contract", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded lane, source-kind, and rounding-contract fields to "
+        "explain why source-to-low selected or rejected v_fma_mixlo/hi_f16 or "
+        "v_mad_mixlo/hi_f16"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -578,4 +613,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_026,
     ERR_AMDGPU_027,
     ERR_AMDGPU_028,
+    ERR_AMDGPU_029,
 )

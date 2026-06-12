@@ -862,6 +862,16 @@ static iree_status_t loom_check_emit_symbol_kind_mismatch(
   return iree_diagnostic_emit(emitter, &emission);
 }
 
+static bool loom_check_diagnostic_collector_has_error(
+    const loom_check_diagnostic_collector_t* collector) {
+  for (iree_host_size_t i = 0; i < collector->count; ++i) {
+    if (collector->diagnostics[i].severity == LOOM_DIAGNOSTIC_ERROR) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static iree_status_t loom_check_emit_find_func_like(
     const loom_module_t* module, iree_string_view_t symbol_name,
     const loom_check_case_t* test_case, iree_string_view_t filename,
@@ -1429,7 +1439,8 @@ iree_status_t loom_check_prepare_source_low_module(
   loom_pass_run_result_t run_result = {0};
   IREE_RETURN_IF_ERROR(loom_compile_run_pipeline(module, &compile_options,
                                                  block_pool, &run_result));
-  if (run_result.error_count != 0 || diagnostic_collector->count != 0) {
+  if (run_result.error_count != 0 ||
+      loom_check_diagnostic_collector_has_error(diagnostic_collector)) {
     return iree_ok_status();
   }
 
@@ -1527,7 +1538,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
   IREE_RETURN_IF_ERROR(loom_check_prepare_source_low_module(
       module, &prepare_options, low_registry, environment, source_resolver,
       diagnostic_collector, block_pool));
-  if (diagnostic_collector->count != 0) {
+  if (loom_check_diagnostic_collector_has_error(diagnostic_collector)) {
     return iree_ok_status();
   }
 
@@ -1546,7 +1557,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
       module, &low_registry->registry, loom_target_entry_emitter(&pass_emitter),
       &selected_descriptor_set_key, &has_low_artifacts);
   IREE_RETURN_IF_ERROR(status);
-  if (diagnostic_collector->count != 0) {
+  if (loom_check_diagnostic_collector_has_error(diagnostic_collector)) {
     return iree_ok_status();
   }
   if (!has_low_artifacts) {
