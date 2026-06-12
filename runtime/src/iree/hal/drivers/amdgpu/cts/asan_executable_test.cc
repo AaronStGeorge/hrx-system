@@ -10,89 +10,12 @@
 #include <string_view>
 #include <vector>
 
-#include "iree/base/threading/thread.h"
-#include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/amdgpu/abi/asan.h"
 #include "iree/hal/drivers/amdgpu/abi/feedback.h"
 #include "iree/hal/drivers/amdgpu/api.h"
+#include "iree/hal/drivers/amdgpu/cts/asan_executable_test_util.h"
 
 namespace iree::hal::cts {
-
-namespace {
-
-class IsolatedBackendDevice {
- public:
-  IsolatedBackendDevice() = default;
-  ~IsolatedBackendDevice() { Reset(); }
-
-  IsolatedBackendDevice(const IsolatedBackendDevice&) = delete;
-  IsolatedBackendDevice& operator=(const IsolatedBackendDevice&) = delete;
-
-  iree_status_t Initialize(const BackendInfo& backend) {
-    IREE_RETURN_IF_ERROR(create_context_.Initialize(iree_allocator_system()));
-    iree_status_t status =
-        backend.factory(create_context_.params(), &driver_, &device_);
-    if (iree_status_is_ok(status)) {
-      status = iree_hal_device_group_create_from_device(
-          device_, create_context_.frontier_tracker(), iree_allocator_system(),
-          &device_group_);
-    }
-    if (iree_status_is_ok(status)) {
-      allocator_ = iree_hal_device_allocator(device_);
-      iree_hal_allocator_retain(allocator_);
-    } else {
-      Reset();
-    }
-    return status;
-  }
-
-  iree_hal_device_t* device() const { return device_; }
-  iree_hal_allocator_t* allocator() const { return allocator_; }
-
- private:
-  void Reset() {
-    iree_hal_allocator_release(allocator_);
-    allocator_ = nullptr;
-    iree_hal_device_release(device_);
-    device_ = nullptr;
-    iree_hal_device_group_release(device_group_);
-    device_group_ = nullptr;
-    iree_hal_driver_release(driver_);
-    driver_ = nullptr;
-    create_context_.Deinitialize();
-  }
-
-  DeviceCreateContext create_context_;
-  iree_hal_driver_t* driver_ = nullptr;
-  iree_hal_device_group_t* device_group_ = nullptr;
-  iree_hal_device_t* device_ = nullptr;
-  iree_hal_allocator_t* allocator_ = nullptr;
-};
-
-static iree_status_t CreateDeviceBuffer(iree_hal_allocator_t* allocator,
-                                        iree_device_size_t buffer_size,
-                                        iree_hal_buffer_t** out_buffer) {
-  *out_buffer = nullptr;
-  iree_hal_buffer_params_t params = {0};
-  params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
-  params.usage =
-      IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER;
-  return iree_hal_allocator_allocate_buffer(allocator, params, buffer_size,
-                                            out_buffer);
-}
-
-static iree_status_t WaitForQueueFailure(iree_hal_device_t* device) {
-  iree_status_t status = iree_ok_status();
-  while (iree_status_is_ok(status)) {
-    status = iree_hal_device_queue_flush(device, IREE_HAL_QUEUE_AFFINITY_ANY);
-    if (iree_status_is_ok(status)) {
-      iree_thread_yield();
-    }
-  }
-  return status;
-}
-
-}  // namespace
 
 class AsanExecutableTest : public CtsTestBase<> {
  protected:
@@ -263,7 +186,7 @@ TEST_P(AsanExecutableTest, PublishesFeedbackConfigGlobal) {
 }
 
 TEST_P(AsanExecutableTest, ReportsAsanPacketThroughFeedback) {
-  IsolatedBackendDevice isolated_device;
+  AsanIsolatedBackendDevice isolated_device;
   iree_status_t status = isolated_device.Initialize(GetParam());
   if (iree_status_is_unavailable(status)) {
     iree_status_free(status);
@@ -297,11 +220,11 @@ TEST_P(AsanExecutableTest, ReportsAsanPacketThroughFeedback) {
   IREE_ASSERT_OK(status);
 
   Ref<iree_hal_buffer_t> output_buffer;
-  IREE_ASSERT_OK(CreateDeviceBuffer(isolated_device.allocator(),
-                                    sizeof(uint64_t), output_buffer.out()));
+  IREE_ASSERT_OK(AsanCreateDeviceBuffer(isolated_device.allocator(),
+                                        sizeof(uint64_t), output_buffer.out()));
   Ref<iree_hal_buffer_t> fallback_buffer;
-  IREE_ASSERT_OK(CreateDeviceBuffer(isolated_device.allocator(),
-                                    sizeof(uint64_t), fallback_buffer.out()));
+  IREE_ASSERT_OK(AsanCreateDeviceBuffer(
+      isolated_device.allocator(), sizeof(uint64_t), fallback_buffer.out()));
 
   iree_hal_buffer_ref_t binding_refs[2];
   binding_refs[0] = iree_hal_make_buffer_ref(
@@ -329,7 +252,7 @@ TEST_P(AsanExecutableTest, ReportsAsanPacketThroughFeedback) {
       dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
-                        WaitForQueueFailure(isolated_device.device()));
+                        AsanWaitForQueueFailure(isolated_device.device()));
 }
 
 CTS_REGISTER_EXECUTABLE_TEST_SUITE(AsanExecutableTest);

@@ -67,15 +67,73 @@ iree_amdgpu_hal_cts_testdata(
 endif()
 
 if(IREE_HAL_DRIVER_AMDGPU)
+iree_amdgpu_library_variants(
+  NAME
+    asanrtl_test_runtime
+  TARGET
+    amdgcn-amd-amdhsa
+  TARGETS
+    ${IREE_HAL_AMDGPU_TARGETS}
+  INTERNAL_HDRS
+    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+  SRCS
+    "testdata/asanrtl_test_runtime.c"
+  TESTONLY
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_amdgpu_hal_cts_testdata(
+  NAME
+    asan_testdata_amdgpu
+  TARGET
+    amdgcn-amd-amdhsa
+  TARGETS
+    ${IREE_HAL_AMDGPU_TARGETS}
+  FORMAT_NAME
+    amdgpu_asan
+  FORMAT_STRING
+    [=["amdgcn-amd-amdhsa--{AMDGPU_TARGET}"]=]
+  IDENTIFIER
+    "iree_cts_asan_testdata_amdgpu"
+  BACKEND_NAME
+    "amdgpu"
+  INTERNAL_HDRS
+    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+  SRCS
+    "testdata/manual_asan_noop_test.c"
+    "testdata/manual_asan_test.c"
+  DEPS
+    ::asanrtl_test_runtime_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
+  TESTONLY
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    asan_executable_test_util
+  HDRS
+    "asan_executable_test_util.h"
+  DEPS
+    iree::base::threading::thread
+    iree::hal
+    iree::hal::cts::util::test_base
+  TESTONLY
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     asan_executable_test
   SRCS
     "asan_executable_test.cc"
   DEPS
-    iree::base::threading::thread
-    iree::hal
-    iree::hal::cts::util::test_base
+    ::asan_executable_test_util
     iree::hal::drivers::amdgpu::abi
     iree::hal::drivers::amdgpu::headers
   TESTONLY
@@ -94,6 +152,48 @@ iree_cc_test(
     ::asan_executable_test
     ::backends
     ::testdata_amdgpu
+    iree::base::tooling::flags
+    iree::hal::cts::util::registry
+    iree::hal::cts::util::test_base
+    iree::testing::gtest
+  ARGS
+    "--amdgpu_asan=true"
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    manual_asan_executable_test
+  SRCS
+    "manual_asan_executable_test.cc"
+  DEPS
+    ::asan_executable_test_util
+    iree::hal
+    iree::hal::cts::util::registry
+    iree::hal::cts::util::test_base
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    manual_asan_executable_tests
+  SRCS
+    "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/cts/util/test_main.cc"
+  DEPS
+    ::asan_testdata_amdgpu
+    ::backends
+    ::manual_asan_executable_test
     iree::base::tooling::flags
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base

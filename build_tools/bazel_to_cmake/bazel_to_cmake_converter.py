@@ -920,6 +920,28 @@ class BuildFileFunctions(object):
             list_name, targets, sort=True, quote=False
         )
 
+    def _convert_amdgpu_bitcode_deps_block(self, deps):
+        if deps is None:
+            return ""
+
+        converted_deps = []
+        for dep in deps:
+            if "{AMDGPU_" not in dep:
+                converted_deps.extend(self._convert_target(dep))
+                continue
+            if dep.startswith(":"):
+                converted_deps.append("::" + dep[1:])
+            elif dep.startswith("//"):
+                package, name = self._split_location_label(dep)
+                converted_deps.append(package.replace("/", "::") + "::" + name)
+            else:
+                converted_deps.append(dep)
+
+        converted_deps = list(filter(None, converted_deps))
+        return self._convert_string_list_block(
+            "DEPS", converted_deps, sort=False, quote=False
+        )
+
     def _local_cts_testdata_lib_deps(self, deps):
         if isinstance(deps, MixedDeps):
             deps = deps.unconditional
@@ -1858,6 +1880,7 @@ class BuildFileFunctions(object):
         target,
         arch,
         srcs,
+        deps=None,
         internal_hdrs=[],
         copts=[],
         linkopts=[],
@@ -1874,6 +1897,7 @@ class BuildFileFunctions(object):
         arch_block = self._convert_string_arg_block("ARCH", arch, quote=False)
         hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
         srcs_block = self._convert_srcs_block(srcs)
+        deps_block = self._convert_amdgpu_bitcode_deps_block(deps)
         copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
         linkopts_block = self._convert_string_list_block(
             "LINKOPTS", linkopts, sort=False
@@ -1888,8 +1912,93 @@ class BuildFileFunctions(object):
             f"{arch_block}"
             f"{hdrs_block}"
             f"{srcs_block}"
+            f"{deps_block}"
             f"{copts_block}"
             f"{linkopts_block}"
+            f")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
+
+    def _iree_amdgpu_library(
+        self,
+        name,
+        target,
+        arch,
+        srcs,
+        internal_hdrs=[],
+        copts=[],
+        out=None,
+        testonly=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
+    ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        out_block = self._convert_string_arg_block("OUT", out)
+        target_block = self._convert_string_arg_block("TARGET", target, quote=False)
+        arch_block = self._convert_string_arg_block("ARCH", arch, quote=False)
+        hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
+        srcs_block = self._convert_srcs_block(srcs)
+        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
+        testonly_block = self._convert_option_block("TESTONLY", testonly)
+
+        self._emit_platform_guard_begin(target_compatible_with)
+        self._converter.body += (
+            f"iree_amdgpu_library(\n"
+            f"{name_block}"
+            f"{out_block}"
+            f"{target_block}"
+            f"{arch_block}"
+            f"{hdrs_block}"
+            f"{srcs_block}"
+            f"{copts_block}"
+            f"{testonly_block}"
+            f")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
+
+    def _iree_amdgpu_library_variants(
+        self,
+        name,
+        target,
+        srcs,
+        target_selectors_flag,
+        library_name_prefix=None,
+        internal_hdrs=None,
+        copts=None,
+        testonly=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
+    ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        target_block = self._convert_string_arg_block("TARGET", target, quote=False)
+        targets_block = self._convert_amdgpu_target_selectors_block(
+            target_selectors_flag
+        )
+        library_name_prefix_block = self._convert_string_arg_block(
+            "LIBRARY_NAME_PREFIX", library_name_prefix, quote=False
+        )
+        hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
+        srcs_block = self._convert_srcs_block(srcs)
+        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
+        testonly_block = self._convert_option_block("TESTONLY", testonly)
+
+        self._emit_platform_guard_begin(target_compatible_with)
+        self._converter.body += (
+            f"iree_amdgpu_library_variants(\n"
+            f"{name_block}"
+            f"{target_block}"
+            f"{targets_block}"
+            f"{library_name_prefix_block}"
+            f"{hdrs_block}"
+            f"{srcs_block}"
+            f"{copts_block}"
+            f"{testonly_block}"
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
@@ -1904,6 +2013,7 @@ class BuildFileFunctions(object):
         identifier,
         backend_name="amdgpu",
         target="amdgcn-amd-amdhsa",
+        deps=None,
         internal_hdrs=None,
         testonly=True,
         tags=None,
@@ -1933,6 +2043,7 @@ class BuildFileFunctions(object):
         )
         hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
         srcs_block = self._convert_srcs_block(srcs)
+        deps_block = self._convert_amdgpu_bitcode_deps_block(deps)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._emit_platform_guard_begin(target_compatible_with)
@@ -1947,6 +2058,7 @@ class BuildFileFunctions(object):
             f"{backend_name_block}"
             f"{hdrs_block}"
             f"{srcs_block}"
+            f"{deps_block}"
             f"{testonly_block}"
             f")\n\n"
         )
@@ -1971,6 +2083,7 @@ class BuildFileFunctions(object):
         internal_hdrs=None,
         copts=None,
         linkopts=None,
+        deps=None,
         testonly=None,
         tags=None,
         target_compatible_with=None,
@@ -1988,6 +2101,7 @@ class BuildFileFunctions(object):
         )
         hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
         srcs_block = self._convert_srcs_block(srcs)
+        deps_block = self._convert_amdgpu_bitcode_deps_block(deps)
         copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
         linkopts_block = self._convert_string_list_block(
             "LINKOPTS", linkopts, sort=False
@@ -2003,6 +2117,7 @@ class BuildFileFunctions(object):
             f"{binary_name_prefix_block}"
             f"{hdrs_block}"
             f"{srcs_block}"
+            f"{deps_block}"
             f"{copts_block}"
             f"{linkopts_block}"
             f"{testonly_block}"
