@@ -17,6 +17,7 @@
 #include "iree/hal/channel.h"
 #include "iree/hal/channel_provider.h"
 #include "iree/hal/command_buffer.h"
+#include "iree/hal/device_event.h"
 #include "iree/hal/device_spec.h"
 #include "iree/hal/event.h"
 #include "iree/hal/executable_cache.h"
@@ -112,15 +113,26 @@ typedef struct iree_hal_device_create_params_t {
   // Callers must always provide a valid pool.
   iree_async_proactor_pool_t* proactor_pool;
 
+  // Programmatic sink receiving device-originated events. Defaults to discard.
+  // The sink is copied into the device and |event_sink.user_data| must outlive
+  // the device.
+  iree_hal_device_event_sink_t event_sink;
+
 } iree_hal_device_create_params_t;
 
-// Returns default device creation parameters (all zeros).
+// Returns default device creation parameters with a discard event sink.
 static inline iree_hal_device_create_params_t
 iree_hal_device_create_params_default(void) {
   iree_hal_device_create_params_t params;
   memset(&params, 0, sizeof(params));
+  params.event_sink = iree_hal_device_event_sink_discard();
   return params;
 }
+
+// Verifies that |params| contains all device-creation inputs required by every
+// HAL backend.
+IREE_API_EXPORT iree_status_t iree_hal_device_create_params_verify(
+    const iree_hal_device_create_params_t* params);
 
 // Bitfield selecting external capture behavior.
 typedef uint64_t iree_hal_device_external_capture_flags_t;

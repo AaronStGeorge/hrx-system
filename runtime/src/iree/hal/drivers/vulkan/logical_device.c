@@ -70,6 +70,9 @@ struct iree_hal_vulkan_logical_device_t {
   // Proactor pool retained from create_params for async host waits.
   iree_async_proactor_pool_t* proactor_pool;
 
+  // Programmatic sink receiving device-originated events.
+  iree_hal_device_event_sink_t event_sink;
+
   // Proactor borrowed from the pool for device-local async operations.
   iree_async_proactor_t* proactor;
 
@@ -1669,6 +1672,7 @@ static iree_status_t iree_hal_vulkan_logical_device_initialize_proactor(
   IREE_ASSERT_ARGUMENT(create_params);
 
   device->proactor_pool = create_params->proactor_pool;
+  device->event_sink = create_params->event_sink;
   iree_async_proactor_pool_retain(device->proactor_pool);
   return iree_async_proactor_pool_get(device->proactor_pool, 0,
                                       &device->proactor);
@@ -2049,12 +2053,8 @@ static iree_status_t iree_hal_vulkan_logical_device_create_with_selector(
   *out_device = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  if (!create_params->proactor_pool) {
-    IREE_TRACE_ZONE_END(z0);
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "Vulkan logical device creation requires a proactor pool");
-  }
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_device_create_params_verify(create_params));
 
   iree_hal_vulkan_device_options_t device_options =
       driver_options->device_options;
@@ -2138,6 +2138,8 @@ IREE_API_EXPORT iree_status_t iree_hal_vulkan_wrap_device(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_device_create_params_verify(create_params));
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_hal_vulkan_device_options_verify(options));
   if (!instance || !physical_device || !logical_device) {
     IREE_TRACE_ZONE_END(z0);
@@ -2145,12 +2147,6 @@ IREE_API_EXPORT iree_status_t iree_hal_vulkan_wrap_device(
         IREE_STATUS_INVALID_ARGUMENT,
         "external Vulkan wrapping requires non-null instance, physical_device, "
         "and logical_device handles");
-  }
-  if (!create_params->proactor_pool) {
-    IREE_TRACE_ZONE_END(z0);
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "Vulkan logical device creation requires a proactor pool");
   }
 
   iree_hal_vulkan_instance_t wrapped_instance = {

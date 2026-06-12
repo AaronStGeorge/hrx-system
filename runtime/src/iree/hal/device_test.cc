@@ -143,6 +143,18 @@ TEST(DeviceObservationTest, MinimalSpecLeavesMemoryUnprovided) {
   iree_hal_device_release(device);
 }
 
+TEST(DeviceCreateParamsTest, DefaultParamsIncludeDiscardEventSink) {
+  iree_hal_device_create_params_t params =
+      iree_hal_device_create_params_default();
+  EXPECT_TRUE(iree_hal_device_event_sink_is_valid(params.event_sink));
+}
+
+TEST(DeviceCreateParamsTest, VerifyRejectsZeroedParams) {
+  iree_hal_device_create_params_t params = {0};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        iree_hal_device_create_params_verify(&params));
+}
+
 class DeviceProfilingTest : public ::testing::Test {
  protected:
   void SetUp() override {

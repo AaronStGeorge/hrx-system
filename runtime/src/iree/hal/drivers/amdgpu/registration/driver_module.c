@@ -83,6 +83,10 @@ IREE_FLAG(bool, amdgpu_experimental_pm4_command_buffers, false,
 
 IREE_FLAG(bool, amdgpu_asan, false,
           "Enables AMDGPU ASAN runtime state and config global publication.");
+IREE_FLAG(string, amdgpu_asan_report_policy, "report-only",
+          "AMDGPU ASAN report policy: 'report-only' emits device events and "
+          "keeps the logical device usable; 'fail-device' emits device events "
+          "and then fails the logical device.");
 
 IREE_FLAG(bool, amdgpu_suppress_device_fine_memory, false,
           "Suppresses fine-grained GPU-local memory pools even when reported "
@@ -271,6 +275,17 @@ static iree_status_t iree_hal_amdgpu_driver_factory_try_create(
       FLAG_amdgpu_experimental_pm4_command_buffers;
 
   device_options->asan.enabled = FLAG_amdgpu_asan;
+  if (strcmp(FLAG_amdgpu_asan_report_policy, "report-only") == 0) {
+    device_options->asan.report_policy =
+        IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY;
+  } else if (strcmp(FLAG_amdgpu_asan_report_policy, "fail-device") == 0) {
+    device_options->asan.report_policy =
+        IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unrecognized ASAN report policy: '%s'",
+                            FLAG_amdgpu_asan_report_policy);
+  }
 
   device_options->suppress_device_fine_memory =
       FLAG_amdgpu_suppress_device_fine_memory;

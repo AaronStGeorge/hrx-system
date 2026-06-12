@@ -75,6 +75,16 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 #define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE \
   ((iree_device_size_t)128 * 1024 * 1024)
 
+// Selects how AMDGPU ASAN reports affect the owning logical device.
+typedef enum iree_hal_amdgpu_asan_report_policy_e {
+  // Emit ASAN reports through the device event sink and keep the logical device
+  // usable for subsequent work.
+  IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY = 0,
+  // Emit ASAN reports through the device event sink and then fail the logical
+  // device so queue users observe the violation as device loss.
+  IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE = 1,
+} iree_hal_amdgpu_asan_report_policy_t;
+
 // Parameters configuring an iree_hal_amdgpu_logical_device_t.
 // Must be initialized with iree_hal_amdgpu_logical_device_options_initialize
 // prior to use.
@@ -165,6 +175,9 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
   struct {
     // True to reserve ASAN shadow state for the logical device.
     uint64_t enabled : 1;
+
+    // Policy applied after a valid ASAN report is emitted.
+    iree_hal_amdgpu_asan_report_policy_t report_policy;
 
     // Log2 application bytes represented by one shadow byte.
     uint32_t shadow_scale_shift;

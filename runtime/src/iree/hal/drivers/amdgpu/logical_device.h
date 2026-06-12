@@ -89,6 +89,10 @@ typedef struct iree_hal_amdgpu_logical_device_t {
 
   // Proactor pool retained from create_params; provides async I/O proactors.
   iree_async_proactor_pool_t* proactor_pool;
+
+  // Programmatic sink receiving device-originated events.
+  iree_hal_device_event_sink_t event_sink;
+
   // Proactor borrowed from the pool for this device's async operations.
   iree_async_proactor_t* proactor;
 

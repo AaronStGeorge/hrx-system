@@ -48,6 +48,9 @@ typedef struct iree_hal_sync_device_t {
   // Borrowed from the pool -- valid as long as the pool is retained.
   iree_async_proactor_t* proactor;
 
+  // Sink copied from device creation parameters for device-originated events.
+  iree_hal_device_event_sink_t event_sink;
+
   // Shared frontier tracker for cross-device causal ordering. Retained after
   // topology assignment and released during device destruction.
   iree_async_frontier_tracker_t* frontier_tracker;
@@ -168,12 +171,14 @@ iree_status_t iree_hal_sync_device_create(
     iree_hal_device_t** out_device) {
   IREE_ASSERT_ARGUMENT(params);
   IREE_ASSERT_ARGUMENT(create_params);
-  IREE_ASSERT_ARGUMENT(create_params->proactor_pool);
   IREE_ASSERT_ARGUMENT(!loader_count || loaders);
   IREE_ASSERT_ARGUMENT(device_allocator);
   IREE_ASSERT_ARGUMENT(out_device);
   *out_device = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
+
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_device_create_params_verify(create_params));
 
   IREE_RETURN_AND_END_ZONE_IF_ERROR(z0,
                                     iree_hal_sync_device_check_params(params));
@@ -202,6 +207,7 @@ iree_status_t iree_hal_sync_device_create(
 
   // Retain the proactor pool and acquire a proactor for this device.
   device->proactor_pool = create_params->proactor_pool;
+  device->event_sink = create_params->event_sink;
   iree_async_proactor_pool_retain(device->proactor_pool);
   iree_atomic_store(&device->epoch, 0, iree_memory_order_relaxed);
   iree_atomic_store(&device->next_profile_submission_id, 0,

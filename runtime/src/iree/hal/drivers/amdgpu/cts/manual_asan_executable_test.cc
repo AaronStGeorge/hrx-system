@@ -16,8 +16,8 @@ class ManualAsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
 };
 
 TEST_P(ManualAsanExecutableTest, ReportsStore4HookThroughFeedback) {
-  AsanIsolatedBackendDevice isolated_device;
-  iree_status_t status = isolated_device.Initialize(GetParam());
+  AsanCachedBackendDevice asan_device;
+  iree_status_t status = asan_device.Initialize(GetParam());
   if (iree_status_is_unavailable(status)) {
     iree_status_free(status);
     GTEST_SKIP() << "Backend '" << GetParam().name
@@ -27,7 +27,7 @@ TEST_P(ManualAsanExecutableTest, ReportsStore4HookThroughFeedback) {
 
   Ref<iree_hal_executable_cache_t> executable_cache;
   IREE_ASSERT_OK(iree_hal_executable_cache_create(
-      isolated_device.device(), iree_make_cstring_view("default"),
+      asan_device.device(), iree_make_cstring_view("default"),
       executable_cache.out()));
 
   iree_const_byte_span_t executable_data = GetParam().executable_data(
@@ -53,7 +53,7 @@ TEST_P(ManualAsanExecutableTest, ReportsStore4HookThroughFeedback) {
   IREE_ASSERT_OK(status);
 
   Ref<iree_hal_buffer_t> output_buffer;
-  IREE_ASSERT_OK(AsanCreateDeviceBuffer(isolated_device.allocator(),
+  IREE_ASSERT_OK(AsanCreateDeviceBuffer(asan_device.allocator(),
                                         sizeof(uint64_t), output_buffer.out()));
 
   iree_hal_buffer_ref_t binding_refs[1];
@@ -65,17 +65,28 @@ TEST_P(ManualAsanExecutableTest, ReportsStore4HookThroughFeedback) {
   };
 
   SemaphoreList empty_wait;
-  SemaphoreList dispatch_signal(isolated_device.device(), {0}, {1});
+  SemaphoreList dispatch_signal(asan_device.device(), {0}, {1});
   IREE_ASSERT_OK(iree_hal_device_queue_dispatch(
-      isolated_device.device(), IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait,
+      asan_device.device(), IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait,
       dispatch_signal, executable, iree_hal_executable_function_from_index(0),
       iree_hal_make_static_dispatch_config(1, 1, 1),
       iree_const_byte_span_empty(), bindings, IREE_HAL_DISPATCH_FLAG_NONE));
   IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
       dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
 
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_ABORTED,
-                        AsanWaitForQueueFailure(isolated_device.device()));
+  asan_device.recorder()->WaitForAsanReportCount(1);
+  EXPECT_EQ(asan_device.recorder()->asan_report_count(), 1u);
+  iree_hal_device_asan_report_t report = asan_device.recorder()->last_report();
+  EXPECT_EQ(report.record_length, sizeof(report));
+  EXPECT_EQ(report.abi_version, IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0);
+  EXPECT_EQ(report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE);
+  EXPECT_EQ(report.access_length, 4u);
+  EXPECT_EQ(report.site_id, 0x4153414E53544F34ull);
+  iree_hal_device_event_source_t source = asan_device.recorder()->last_source();
+  EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
+  EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
+  IREE_EXPECT_OK(iree_hal_device_queue_flush(asan_device.device(),
+                                             IREE_HAL_QUEUE_AFFINITY_ANY));
 }
 
 CTS_REGISTER_EXECUTABLE_TEST_SUITE(ManualAsanExecutableTest);

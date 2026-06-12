@@ -236,6 +236,7 @@ static hrx_status_t hrx_create_local_task_device(
   iree_hal_device_create_params_t device_params =
       iree_hal_device_create_params_default();
   device_params.proactor_pool = g_shared.proactor_pool;
+  device_params.event_sink = iree_hal_device_event_sink_stderr();
 
   iree_hal_device_t* hal_device = NULL;
   status = iree_hal_driver_create_default_device(driver, &device_params, alloc,
@@ -614,6 +615,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   iree_hal_device_create_params_t create_params =
       iree_hal_device_create_params_default();
   create_params.proactor_pool = g_shared.proactor_pool;
+  create_params.event_sink = iree_hal_device_event_sink_stderr();
 
   iree_hal_profile_sink_t* profile_sink = NULL;
   const char* profile_file_path = hrx_get_profile_file_path();

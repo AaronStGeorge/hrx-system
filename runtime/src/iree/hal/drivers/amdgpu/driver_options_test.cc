@@ -53,6 +53,8 @@ TEST(AmdgpuDriverOptionsTest, LogicalDeviceDefaultsDisableAsan) {
   iree_hal_amdgpu_logical_device_options_initialize(&options);
 
   EXPECT_FALSE(options.asan.enabled);
+  EXPECT_EQ(options.asan.report_policy,
+            IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY);
   EXPECT_EQ(options.asan.shadow_scale_shift,
             IREE_HAL_AMDGPU_SHADOW_MAP_DEFAULT_SCALE_SHIFT);
   EXPECT_EQ(options.asan.shadow_size, IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE);
@@ -189,6 +191,16 @@ TEST(AmdgpuDriverOptionsTest, RejectsActiveWaitBeforeLoadingHsa) {
   options.wait_active_for_ns = 1;
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        CreateDriverWithDefaultDeviceOptions(&options));
+}
+
+TEST(AmdgpuDriverOptionsTest, RejectsInvalidAsanReportPolicyBeforeLoadingHsa) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.report_policy = (iree_hal_amdgpu_asan_report_policy_t)99;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         CreateDriverWithDefaultDeviceOptions(&options));
 }
 

@@ -366,6 +366,7 @@ static iree_status_t iree_benchmark_executable_from_flags(
   iree_hal_device_create_params_t create_params =
       iree_hal_device_create_params_default();
   create_params.proactor_pool = proactor_pool;
+  create_params.event_sink = iree_hal_device_event_sink_stderr();
   iree_hal_device_t* device = NULL;
   iree_status_t device_status = iree_hal_create_device_from_flags(
       iree_hal_available_driver_registry(), iree_hal_default_device_uri(),

@@ -51,6 +51,9 @@ typedef struct iree_hal_webgpu_device_t {
   // ensure proactor threads outlive all device resources (semaphores, etc.).
   iree_async_proactor_pool_t* proactor_pool;
 
+  // Sink copied from device creation parameters for device-originated events.
+  iree_hal_device_event_sink_t event_sink;
+
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
 
@@ -82,10 +85,12 @@ iree_status_t iree_hal_webgpu_device_create(
     const iree_hal_device_create_params_t* create_params,
     iree_allocator_t host_allocator, iree_hal_device_t** out_device) {
   IREE_ASSERT_ARGUMENT(create_params);
-  IREE_ASSERT_ARGUMENT(create_params->proactor_pool);
   IREE_ASSERT_ARGUMENT(out_device);
   IREE_TRACE_ZONE_BEGIN(z0);
   *out_device = NULL;
+
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_device_create_params_verify(create_params));
 
   iree_hal_webgpu_device_t* device = NULL;
   iree_host_size_t total_size = sizeof(*device) + identifier.size;
@@ -106,6 +111,7 @@ iree_status_t iree_hal_webgpu_device_create(
 
   // Retain the proactor pool and acquire a proactor for queue initialization.
   device->proactor_pool = create_params->proactor_pool;
+  device->event_sink = create_params->event_sink;
   iree_async_proactor_pool_retain(device->proactor_pool);
 
   iree_async_proactor_t* proactor = NULL;

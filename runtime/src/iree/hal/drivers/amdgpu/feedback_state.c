@@ -30,7 +30,68 @@ static const char* iree_hal_amdgpu_feedback_state_asan_access_kind_string(
   }
 }
 
+static iree_hal_device_asan_access_kind_t
+iree_hal_amdgpu_feedback_state_map_asan_access_kind(
+    iree_hal_amdgpu_asan_access_kind_t access_kind) {
+  switch (access_kind) {
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_READ:
+      return IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ;
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_WRITE:
+      return IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE;
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_ATOMIC:
+      return IREE_HAL_DEVICE_ASAN_ACCESS_KIND_ATOMIC;
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_UNKNOWN:
+    default:
+      return IREE_HAL_DEVICE_ASAN_ACCESS_KIND_UNKNOWN;
+  }
+}
+
+static uint32_t iree_hal_amdgpu_feedback_state_physical_device_ordinal(
+    iree_host_size_t physical_device_ordinal) {
+  return physical_device_ordinal <= UINT32_MAX
+             ? (uint32_t)physical_device_ordinal
+             : UINT32_MAX;
+}
+
+static void iree_hal_amdgpu_feedback_state_publish_asan_event(
+    iree_hal_amdgpu_feedback_state_t* state,
+    iree_host_size_t physical_device_ordinal,
+    const iree_hal_amdgpu_feedback_packet_t* packet,
+    const iree_hal_amdgpu_asan_report_t* report) {
+  iree_hal_device_asan_report_t asan_event;
+  memset(&asan_event, 0, sizeof(asan_event));
+  asan_event.record_length = sizeof(asan_event);
+  asan_event.abi_version = IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0;
+  asan_event.access_kind =
+      iree_hal_amdgpu_feedback_state_map_asan_access_kind(report->access_kind);
+  asan_event.flags = report->flags;
+  asan_event.fault_address = report->fault_address;
+  asan_event.access_length = report->access_size;
+  asan_event.site_id = report->site_id;
+  asan_event.shadow_address = report->shadow_address;
+  asan_event.shadow_value = report->shadow_value;
+  asan_event.workgroup_id[0] = packet->source_workgroup_id_x;
+  asan_event.workitem_id[0] = packet->source_workitem_id_x;
+  asan_event.source_dispatch_ptr = packet->source_dispatch_ptr;
+
+  iree_hal_device_event_t event = iree_hal_device_event_default();
+  event.type = IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT;
+  event.severity = IREE_HAL_DEVICE_EVENT_SEVERITY_ERROR;
+  event.sequence = packet->sequence;
+  event.source.device = state->device;
+  event.source.device_id = state->device_id;
+  event.source.driver_id = IREE_SV("amdgpu");
+  event.source.physical_device_ordinal =
+      iree_hal_amdgpu_feedback_state_physical_device_ordinal(
+          physical_device_ordinal);
+  event.payload = iree_make_const_byte_span(&asan_event, sizeof(asan_event));
+  event.implementation_payload =
+      iree_make_const_byte_span(packet, packet->record_length);
+  iree_hal_device_event_sink_publish(state->event_sink, &event);
+}
+
 static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
+    iree_hal_amdgpu_feedback_state_t* state,
     iree_host_size_t physical_device_ordinal,
     const iree_hal_amdgpu_feedback_packet_t* packet) {
   if (IREE_UNLIKELY(packet->record_length < packet->header_length)) {
@@ -69,6 +130,13 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
         report->abi_version);
   }
 
+  iree_hal_amdgpu_feedback_state_publish_asan_event(
+      state, physical_device_ordinal, packet, report);
+  if (state->asan_report_policy ==
+      IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY) {
+    return iree_ok_status();
+  }
+
   return iree_make_status(
       IREE_STATUS_ABORTED,
       "AMDGPU ASAN %s access violation on physical device %" PRIhsz
@@ -85,12 +153,13 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
 }
 
 static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
+    iree_hal_amdgpu_feedback_state_t* state,
     iree_host_size_t physical_device_ordinal,
     const iree_hal_amdgpu_feedback_packet_t* packet) {
   switch (packet->kind) {
     case IREE_HAL_AMDGPU_FEEDBACK_PACKET_KIND_ASAN:
       return iree_hal_amdgpu_feedback_state_handle_asan_packet(
-          physical_device_ordinal, packet);
+          state, physical_device_ordinal, packet);
     default:
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
@@ -117,7 +186,7 @@ static iree_status_t iree_hal_amdgpu_feedback_state_drain_packet(
   iree_hal_amdgpu_feedback_device_state_t* device_state =
       (iree_hal_amdgpu_feedback_device_state_t*)user_data;
   iree_status_t status = iree_hal_amdgpu_feedback_state_handle_packet(
-      device_state->physical_device_ordinal, packet);
+      device_state->parent, device_state->physical_device_ordinal, packet);
   iree_hal_amdgpu_feedback_state_report_error(device_state->parent, status);
   return iree_ok_status();
 }
@@ -296,6 +365,8 @@ iree_status_t iree_hal_amdgpu_feedback_state_initialize(
     const iree_hal_amdgpu_logical_device_options_t* options,
     iree_hal_amdgpu_system_t* system, iree_host_size_t physical_device_count,
     iree_hal_amdgpu_physical_device_t* const* physical_devices,
+    iree_hal_device_t* device, iree_string_view_t device_id,
+    iree_hal_device_event_sink_t event_sink,
     iree_hal_amdgpu_feedback_error_handler_fn_t error_handler,
     void* error_handler_user_data, iree_allocator_t host_allocator,
     iree_hal_amdgpu_feedback_state_t* out_state) {
@@ -315,9 +386,17 @@ iree_status_t iree_hal_amdgpu_feedback_state_initialize(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU feedback requires a service-thread error handler");
   }
+  if (IREE_UNLIKELY(!iree_hal_device_event_sink_is_valid(event_sink))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU feedback requires a device event sink");
+  }
 
   out_state->libhsa = &system->libhsa;
   out_state->host_allocator = host_allocator;
+  out_state->device = device;
+  out_state->device_id = device_id;
+  out_state->event_sink = event_sink;
+  out_state->asan_report_policy = options->asan.report_policy;
   out_state->error_handler = error_handler;
   out_state->error_handler_user_data = error_handler_user_data;
 

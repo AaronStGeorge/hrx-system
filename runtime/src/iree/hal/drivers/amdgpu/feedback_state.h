@@ -8,7 +8,9 @@
 #define IREE_HAL_DRIVERS_AMDGPU_FEEDBACK_STATE_H_
 
 #include "iree/base/api.h"
+#include "iree/hal/device_event.h"
 #include "iree/hal/drivers/amdgpu/abi/feedback.h"
+#include "iree/hal/drivers/amdgpu/api.h"
 #include "iree/hal/drivers/amdgpu/util/feedback_channel.h"
 
 typedef struct iree_thread_t iree_thread_t;
@@ -59,6 +61,18 @@ typedef struct iree_hal_amdgpu_feedback_state_t {
   // Host allocator used for state-owned allocations.
   iree_allocator_t host_allocator;
 
+  // Borrowed HAL device used for event source attribution.
+  iree_hal_device_t* device;
+
+  // Borrowed stable device identifier used for event source attribution.
+  iree_string_view_t device_id;
+
+  // Programmatic sink receiving decoded feedback events.
+  iree_hal_device_event_sink_t event_sink;
+
+  // Policy applied after a valid ASAN report is emitted.
+  iree_hal_amdgpu_asan_report_policy_t asan_report_policy;
+
   // Number of entries in |device_states|.
   iree_host_size_t device_state_count;
 
@@ -82,6 +96,8 @@ iree_status_t iree_hal_amdgpu_feedback_state_initialize(
     const iree_hal_amdgpu_logical_device_options_t* options,
     iree_hal_amdgpu_system_t* system, iree_host_size_t physical_device_count,
     iree_hal_amdgpu_physical_device_t* const* physical_devices,
+    iree_hal_device_t* device, iree_string_view_t device_id,
+    iree_hal_device_event_sink_t event_sink,
     iree_hal_amdgpu_feedback_error_handler_fn_t error_handler,
     void* error_handler_user_data, iree_allocator_t host_allocator,
     iree_hal_amdgpu_feedback_state_t* out_state);

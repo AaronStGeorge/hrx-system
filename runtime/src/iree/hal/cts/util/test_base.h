@@ -210,6 +210,8 @@ class DeviceCreateContext {
   DeviceCreateContext& operator=(const DeviceCreateContext&) = delete;
 
   iree_status_t Initialize(iree_allocator_t host_allocator);
+  iree_status_t Initialize(iree_allocator_t host_allocator,
+                           iree_hal_device_event_sink_t event_sink);
   void Deinitialize();
 
   const iree_hal_device_create_params_t* params() const;

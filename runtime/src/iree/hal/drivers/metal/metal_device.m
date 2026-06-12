@@ -53,6 +53,9 @@ typedef struct iree_hal_metal_device_t {
   // Proactor borrowed from the pool for this device's async operations.
   iree_async_proactor_t* proactor;
 
+  // Sink copied from device creation parameters for device-originated events.
+  iree_hal_device_event_sink_t event_sink;
+
   // Shared frontier tracker for cross-device causal ordering. Retained after
   // topology assignment and released during device destruction.
   iree_async_frontier_tracker_t* frontier_tracker;
@@ -152,6 +155,7 @@ static iree_status_t iree_hal_metal_device_create_internal(
 
   // Retain the proactor pool and acquire a proactor for this device.
   device->proactor_pool = create_params->proactor_pool;
+  device->event_sink = create_params->event_sink;
   iree_async_proactor_pool_retain(device->proactor_pool);
   iree_atomic_store(&device->epoch, 0, iree_memory_order_relaxed);
   status = iree_async_proactor_pool_get(device->proactor_pool, 0, &device->proactor);
@@ -210,12 +214,14 @@ iree_status_t iree_hal_metal_device_create(iree_string_view_t identifier,
                                            iree_allocator_t host_allocator,
                                            iree_hal_device_t** out_device) {
   IREE_ASSERT_ARGUMENT(create_params);
-  IREE_ASSERT_ARGUMENT(create_params->proactor_pool);
   IREE_ASSERT_ARGUMENT(out_device);
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  iree_status_t status = iree_hal_metal_device_create_internal(
-      identifier, params, device, create_params, host_allocator, out_device);
+  iree_status_t status = iree_hal_device_create_params_verify(create_params);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_metal_device_create_internal(identifier, params, device, create_params,
+                                                   host_allocator, out_device);
+  }
 
   IREE_TRACE_ZONE_END(z0);
   return status;

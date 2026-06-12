@@ -176,6 +176,8 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
 
   out_options->asan.shadow_scale_shift =
       IREE_HAL_AMDGPU_SHADOW_MAP_DEFAULT_SCALE_SHIFT;
+  out_options->asan.report_policy =
+      IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY;
   out_options->asan.shadow_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE;
   out_options->asan.shadow_slab_size =
       IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE;
@@ -259,6 +261,15 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
                             "use 0");
   }
   if (options->asan.enabled) {
+    switch (options->asan.report_policy) {
+      case IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY:
+      case IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE:
+        break;
+      default:
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "invalid AMDGPU ASAN report policy value %u",
+                                (uint32_t)options->asan.report_policy);
+    }
     if (options->asan.shadow_scale_shift >= 63) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "AMDGPU ASAN shadow scale shift %u is too large",
@@ -1502,9 +1513,10 @@ static iree_status_t iree_hal_amdgpu_logical_device_allocate_storage(
 static iree_status_t iree_hal_amdgpu_logical_device_initialize_host_resources(
     iree_hal_amdgpu_logical_device_t* logical_device,
     const iree_hal_amdgpu_logical_device_options_t* options,
-    iree_async_proactor_pool_t* proactor_pool,
+    const iree_hal_device_create_params_t* create_params,
     iree_allocator_t host_allocator) {
-  logical_device->proactor_pool = proactor_pool;
+  logical_device->proactor_pool = create_params->proactor_pool;
+  logical_device->event_sink = create_params->event_sink;
   iree_async_proactor_pool_retain(logical_device->proactor_pool);
 
   iree_arena_block_pool_initialize(options->host_block_pools.small.block_size,
@@ -1657,10 +1669,13 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
     iree_allocator_t host_allocator, iree_hal_device_t** out_device) {
   IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(create_params);
-  IREE_ASSERT_ARGUMENT(create_params->proactor_pool);
   IREE_ASSERT_ARGUMENT(out_device);
   IREE_TRACE_ZONE_BEGIN(z0);
   *out_device = NULL;
+
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_device_create_params_verify(create_params),
+      "verifying device creation parameters");
 
   // Verify the topology is valid for a logical device.
   // This may have already been performed by the caller but doing it here
@@ -1696,11 +1711,9 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
       z0, iree_hal_amdgpu_logical_device_allocate_storage(
               identifier, topology, physical_device_size, host_allocator,
               &logical_device));
-  iree_status_t status = iree_ok_status();
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_logical_device_initialize_host_resources(
-        logical_device, options, create_params->proactor_pool, host_allocator);
-  }
+  iree_status_t status =
+      iree_hal_amdgpu_logical_device_initialize_host_resources(
+          logical_device, options, create_params, host_allocator);
   logical_device->command_buffer_mode = options->command_buffer_mode;
   logical_device->pm4_command_buffer_publication_mode =
       options->pm4_command_buffer_publication_mode;
@@ -1721,7 +1734,8 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_feedback_state_initialize(
         options, logical_device->system, logical_device->physical_device_count,
-        logical_device->physical_devices,
+        logical_device->physical_devices, (iree_hal_device_t*)logical_device,
+        logical_device->identifier, logical_device->event_sink,
         iree_hal_amdgpu_logical_device_error_handler, logical_device,
         host_allocator, &logical_device->feedback);
   }
