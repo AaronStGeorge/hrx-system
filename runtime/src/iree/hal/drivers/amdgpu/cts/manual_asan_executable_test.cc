@@ -271,6 +271,41 @@ TEST_P(ManualAsanExecutableTest, ReportsCompatibleHooksThroughFeedback) {
       /*.values=*/binding_refs,
   };
 
+  asan_device.recorder()->Reset();
+  IREE_ASSERT_OK(DispatchManualAsanSelector(asan_device.device(), executable,
+                                            bindings, kManualAsanHookLoad2,
+                                            /*access_length=*/2));
+  IREE_ASSERT_OK(DispatchManualAsanSelector(
+      asan_device.device(), executable, bindings, kManualAsanHookReportLoadN,
+      static_cast<uint32_t>(kManualAsanSentinelAccessLength)));
+  asan_device.recorder()->WaitForAsanReportCount(1);
+  EXPECT_EQ(asan_device.recorder()->asan_report_count(), 1u);
+  iree_hal_device_asan_report_t allocation_body_report =
+      asan_device.recorder()->last_report();
+  EXPECT_EQ(allocation_body_report.access_kind,
+            IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ);
+  EXPECT_EQ(allocation_body_report.access_length,
+            kManualAsanSentinelAccessLength);
+
+  iree_hal_buffer_ref_t tail_binding_refs[1];
+  tail_binding_refs[0] = iree_hal_make_buffer_ref(
+      output_buffer, kManualAsanBufferLength - 1, /*length=*/1);
+  iree_hal_buffer_ref_list_t tail_bindings = {
+      /*.count=*/IREE_ARRAYSIZE(tail_binding_refs),
+      /*.values=*/tail_binding_refs,
+  };
+  asan_device.recorder()->Reset();
+  IREE_ASSERT_OK(DispatchManualAsanSelector(asan_device.device(), executable,
+                                            tail_bindings, kManualAsanHookLoad2,
+                                            /*access_length=*/2));
+  asan_device.recorder()->WaitForAsanReportCount(1);
+  EXPECT_EQ(asan_device.recorder()->asan_report_count(), 1u);
+  iree_hal_device_asan_report_t tail_report =
+      asan_device.recorder()->last_report();
+  EXPECT_EQ(tail_report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ);
+  EXPECT_EQ(tail_report.access_length, 2u);
+  EXPECT_NE(tail_report.shadow_value, 0u);
+
   for (const ManualAsanHookCase& hook_case : kManualAsanHookCases) {
     const bool is_report_selector =
         ManualAsanHookIsReportSelector(hook_case.selector);

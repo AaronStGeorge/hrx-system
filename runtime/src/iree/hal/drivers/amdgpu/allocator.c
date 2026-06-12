@@ -168,8 +168,11 @@ typedef struct iree_hal_amdgpu_vmem_buffer_release_data_t {
   // True when |ptr| has an active HSA VMM mapping.
   bool is_mapped;
 
+  // True when ASAN shadow bytes have been published for |mapped_size|.
+  bool is_shadow_published;
+
   // Size of the VMM physical handle mapped at |ptr|.
-  iree_device_size_t allocation_size;
+  iree_device_size_t mapped_size;
 
   // Physical VMM allocation handle backing |ptr|.
   hsa_amd_vmem_alloc_handle_t allocation_handle;
@@ -998,9 +1001,13 @@ static void iree_hal_amdgpu_allocator_release_vmem_buffer(
       (iree_hal_amdgpu_vmem_buffer_release_data_t*)user_data;
   IREE_TRACE_ZONE_BEGIN(z0);
 
+  if (data->is_shadow_published) {
+    iree_hal_amdgpu_asan_state_publish_released_range(
+        data->asan_state, (uint64_t)(uintptr_t)data->ptr, data->mapped_size);
+  }
   if (data->is_mapped) {
     iree_hal_amdgpu_hsa_cleanup_assert_success(iree_hsa_amd_vmem_unmap_raw(
-        data->libhsa, data->ptr, data->allocation_size));
+        data->libhsa, data->ptr, data->mapped_size));
   }
   if (data->allocation_handle.handle) {
     iree_hal_amdgpu_hsa_cleanup_assert_success(
@@ -1016,7 +1023,8 @@ static void iree_hal_amdgpu_allocator_release_vmem_buffer(
 static iree_status_t iree_hal_amdgpu_allocator_allocate_asan_vmem_buffer(
     iree_hal_amdgpu_allocator_t* allocator,
     const iree_hal_amdgpu_allocator_placement_t* memory_placement,
-    iree_device_size_t allocation_size, void** out_ptr,
+    iree_device_size_t byte_length, iree_device_size_t allocation_size,
+    void** out_ptr,
     iree_hal_amdgpu_vmem_buffer_release_data_t** out_release_data) {
   IREE_ASSERT_ARGUMENT(out_ptr);
   IREE_ASSERT_ARGUMENT(out_release_data);
@@ -1034,11 +1042,22 @@ static iree_status_t iree_hal_amdgpu_allocator_allocate_asan_vmem_buffer(
                             " overflows HSA VMM allocation granule %" PRIu64,
                             (uint64_t)allocation_size, (uint64_t)vmem_granule);
   }
+  iree_device_size_t mapped_size = allocation_size;
+  if (byte_length >= mapped_size) {
+    if (!iree_device_size_checked_add(mapped_size, vmem_granule,
+                                      &mapped_size)) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU ASAN VMM mapped size overflows while adding redzone: "
+          "allocation_size=%" PRIu64 ", redzone_size=%" PRIu64,
+          (uint64_t)allocation_size, (uint64_t)vmem_granule);
+    }
+  }
 
   uint64_t application_address = 0;
   iree_hal_amdgpu_asan_application_range_t* application_range = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_asan_state_reserve_application_range(
-      &allocator->logical_device->asan, allocation_size, vmem_granule,
+      &allocator->logical_device->asan, mapped_size, vmem_granule,
       &application_address, &application_range));
   void* requested_ptr = (void*)(uintptr_t)application_address;
 
@@ -1078,28 +1097,31 @@ static iree_status_t iree_hal_amdgpu_allocator_allocate_asan_vmem_buffer(
   release_data->libhsa = allocator->libhsa;
   release_data->asan_state = &allocator->logical_device->asan;
   release_data->ptr = requested_ptr;
-  release_data->allocation_size = allocation_size;
+  release_data->mapped_size = mapped_size;
   release_data->application_range = application_range;
   release_data->host_allocator = allocator->host_allocator;
 
   status = iree_hsa_amd_vmem_handle_create(
       IREE_LIBHSA(allocator->libhsa),
-      memory_placement->memory_pool->memory_pool, allocation_size,
-      hsa_memory_type, /*flags=*/0, &release_data->allocation_handle);
+      memory_placement->memory_pool->memory_pool, mapped_size, hsa_memory_type,
+      /*flags=*/0, &release_data->allocation_handle);
   if (iree_status_is_ok(status)) {
-    status = iree_hsa_amd_vmem_map(
-        IREE_LIBHSA(allocator->libhsa), requested_ptr, allocation_size,
-        /*offset=*/0, release_data->allocation_handle, /*flags=*/0);
+    status = iree_hsa_amd_vmem_map(IREE_LIBHSA(allocator->libhsa),
+                                   requested_ptr, mapped_size, /*offset=*/0,
+                                   release_data->allocation_handle,
+                                   /*flags=*/0);
     release_data->is_mapped = iree_status_is_ok(status);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hsa_amd_vmem_set_access(IREE_LIBHSA(allocator->libhsa),
-                                          requested_ptr, allocation_size,
+                                          requested_ptr, mapped_size,
                                           access_descs, access_desc_count);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_asan_state_map_range(
-        &allocator->logical_device->asan, application_address, allocation_size);
+    status = iree_hal_amdgpu_asan_state_publish_allocated_range(
+        &allocator->logical_device->asan, application_address, byte_length,
+        mapped_size);
+    release_data->is_shadow_published = iree_status_is_ok(status);
   }
 
   if (iree_status_is_ok(status)) {
@@ -1205,7 +1227,7 @@ static iree_status_t iree_hal_amdgpu_allocator_allocate_buffer(
   iree_hal_amdgpu_access_agent_list_t access_agents;
   if (use_asan_vmem) {
     status = iree_hal_amdgpu_allocator_allocate_asan_vmem_buffer(
-        allocator, &memory_placement, allocation_size, &host_ptr,
+        allocator, &memory_placement, byte_length, allocation_size, &host_ptr,
         &vmem_release_data);
   } else {
     status = iree_hsa_amd_memory_pool_allocate(

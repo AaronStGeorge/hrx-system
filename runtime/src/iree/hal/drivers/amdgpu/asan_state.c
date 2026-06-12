@@ -11,6 +11,9 @@
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/hal/drivers/amdgpu/util/vmem.h"
 
+#define IREE_HAL_AMDGPU_ASAN_SHADOW_ADDRESSABLE 0x00u
+#define IREE_HAL_AMDGPU_ASAN_SHADOW_HEAP_REDZONE 0xFAu
+
 static bool iree_hal_amdgpu_asan_align_address(uint64_t address,
                                                uint64_t alignment,
                                                uint64_t* out_address) {
@@ -19,6 +22,87 @@ static bool iree_hal_amdgpu_asan_align_address(uint64_t address,
   if (address > UINT64_MAX - (alignment - 1)) return false;
   *out_address = (address + (alignment - 1)) & ~(alignment - 1);
   return true;
+}
+
+static uint32_t iree_hal_amdgpu_asan_shadow_fill_pattern(uint8_t value) {
+  return ((uint32_t)value << 24) | ((uint32_t)value << 16) |
+         ((uint32_t)value << 8) | (uint32_t)value;
+}
+
+static iree_status_t iree_hal_amdgpu_asan_write_shadow_bytes(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t shadow_address,
+    iree_device_size_t length, uint8_t value) {
+  if (length == 0) return iree_ok_status();
+  if (IREE_UNLIKELY(length > SIZE_MAX)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU ASAN shadow write length %" PRIu64
+                            " exceeds HSA capacity",
+                            (uint64_t)length);
+  }
+
+  const uint8_t fill_bytes[4] = {value, value, value, value};
+  iree_device_size_t prefix_length = 0;
+  const uint64_t aligned_shadow_address = iree_device_align(shadow_address, 4);
+  if (aligned_shadow_address != shadow_address) {
+    prefix_length = iree_min(length, aligned_shadow_address - shadow_address);
+    IREE_RETURN_IF_ERROR(iree_hsa_memory_copy(
+        IREE_LIBHSA(state->libhsa), (void*)(uintptr_t)shadow_address,
+        fill_bytes, (size_t)prefix_length));
+    shadow_address += prefix_length;
+    length -= prefix_length;
+  }
+
+  const iree_device_size_t fill_length = length & ~(iree_device_size_t)3;
+  if (fill_length > 0) {
+    IREE_RETURN_IF_ERROR(iree_hsa_amd_memory_fill(
+        IREE_LIBHSA(state->libhsa), (void*)(uintptr_t)shadow_address,
+        iree_hal_amdgpu_asan_shadow_fill_pattern(value),
+        (size_t)(fill_length / sizeof(uint32_t))));
+    shadow_address += fill_length;
+    length -= fill_length;
+  }
+
+  if (length > 0) {
+    IREE_RETURN_IF_ERROR(iree_hsa_memory_copy(IREE_LIBHSA(state->libhsa),
+                                              (void*)(uintptr_t)shadow_address,
+                                              fill_bytes, (size_t)length));
+  }
+  return iree_ok_status();
+}
+
+static void iree_hal_amdgpu_asan_write_shadow_bytes_raw(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t shadow_address,
+    iree_device_size_t length, uint8_t value) {
+  if (length == 0) return;
+  IREE_ASSERT(length <= SIZE_MAX);
+
+  const uint8_t fill_bytes[4] = {value, value, value, value};
+  iree_device_size_t prefix_length = 0;
+  const uint64_t aligned_shadow_address = iree_device_align(shadow_address, 4);
+  if (aligned_shadow_address != shadow_address) {
+    prefix_length = iree_min(length, aligned_shadow_address - shadow_address);
+    iree_hal_amdgpu_hsa_cleanup_assert_success(iree_hsa_memory_copy_raw(
+        state->libhsa, (void*)(uintptr_t)shadow_address, fill_bytes,
+        (size_t)prefix_length));
+    shadow_address += prefix_length;
+    length -= prefix_length;
+  }
+
+  const iree_device_size_t fill_length = length & ~(iree_device_size_t)3;
+  if (fill_length > 0) {
+    iree_hal_amdgpu_hsa_cleanup_assert_success(iree_hsa_amd_memory_fill_raw(
+        state->libhsa, (void*)(uintptr_t)shadow_address,
+        iree_hal_amdgpu_asan_shadow_fill_pattern(value),
+        (size_t)(fill_length / sizeof(uint32_t))));
+    shadow_address += fill_length;
+    length -= fill_length;
+  }
+
+  if (length > 0) {
+    iree_hal_amdgpu_hsa_cleanup_assert_success(iree_hsa_memory_copy_raw(
+        state->libhsa, (void*)(uintptr_t)shadow_address, fill_bytes,
+        (size_t)length));
+  }
 }
 
 static iree_status_t iree_hal_amdgpu_asan_application_range_allocate(
@@ -119,10 +203,13 @@ static iree_status_t iree_hal_amdgpu_asan_state_calculate_application_size(
                             " must be a non-zero power of two",
                             (uint64_t)options->asan.shadow_slab_size);
   }
-  if (IREE_UNLIKELY(options->asan.shadow_scale_shift >= 63)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU ASAN shadow scale shift %u is too large",
-                            options->asan.shadow_scale_shift);
+  if (IREE_UNLIKELY(options->asan.shadow_scale_shift >
+                    IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT)) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU ASAN shadow scale shift %u exceeds max representable shift %u",
+        options->asan.shadow_scale_shift,
+        IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT);
   }
   if (IREE_UNLIKELY(
           options->asan.shadow_size >
@@ -240,6 +327,86 @@ iree_status_t iree_hal_amdgpu_asan_state_map_range(
   return iree_hal_amdgpu_shadow_map_map_range(
       &state->shadow_map, application_address, application_length,
       /*out_range=*/NULL);
+}
+
+iree_status_t iree_hal_amdgpu_asan_state_publish_allocated_range(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
+    iree_device_size_t accessible_length, iree_device_size_t mapped_length) {
+  if (!iree_hal_amdgpu_asan_state_is_enabled(state)) return iree_ok_status();
+  if (IREE_UNLIKELY(accessible_length > mapped_length)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU ASAN accessible length %" PRIu64
+                            " exceeds mapped length %" PRIu64,
+                            (uint64_t)accessible_length,
+                            (uint64_t)mapped_length);
+  }
+
+  iree_hal_amdgpu_shadow_map_range_t range;
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_shadow_map_map_range(
+      &state->shadow_map, application_address, mapped_length, &range));
+  if (mapped_length == 0) return iree_ok_status();
+
+  const iree_device_size_t shadow_granule =
+      (iree_device_size_t)1ull << state->shadow_map.shadow_scale_shift;
+  if (IREE_UNLIKELY((application_address & (shadow_granule - 1)) != 0 ||
+                    (mapped_length & (shadow_granule - 1)) != 0)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU ASAN mapped allocation range [0x%016" PRIx64
+                            ", +%" PRIu64 ") must be shadow-granule aligned",
+                            application_address, (uint64_t)mapped_length);
+  }
+
+  const iree_device_size_t full_accessible_shadow_length =
+      accessible_length >> state->shadow_map.shadow_scale_shift;
+  const uint8_t partial_accessible_length =
+      (uint8_t)(accessible_length & (shadow_granule - 1));
+  const iree_device_size_t redzone_shadow_offset =
+      full_accessible_shadow_length + (partial_accessible_length ? 1 : 0);
+  if (full_accessible_shadow_length > 0) {
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_asan_write_shadow_bytes(
+        state, range.shadow_address, full_accessible_shadow_length,
+        IREE_HAL_AMDGPU_ASAN_SHADOW_ADDRESSABLE));
+  }
+  if (partial_accessible_length != 0) {
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_asan_write_shadow_bytes(
+        state, range.shadow_address + full_accessible_shadow_length,
+        /*length=*/1, partial_accessible_length));
+  }
+  if (redzone_shadow_offset < range.shadow_length) {
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_asan_write_shadow_bytes(
+        state, range.shadow_address + redzone_shadow_offset,
+        range.shadow_length - redzone_shadow_offset,
+        IREE_HAL_AMDGPU_ASAN_SHADOW_HEAP_REDZONE));
+  }
+  return iree_ok_status();
+}
+
+void iree_hal_amdgpu_asan_state_publish_released_range(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
+    iree_device_size_t mapped_length) {
+  if (!mapped_length) return;
+  IREE_ASSERT(iree_hal_amdgpu_asan_state_is_enabled(state));
+  const iree_device_size_t shadow_granule =
+      (iree_device_size_t)1ull << state->shadow_map.shadow_scale_shift;
+  IREE_ASSERT((application_address & (shadow_granule - 1)) == 0);
+  IREE_ASSERT((mapped_length & (shadow_granule - 1)) == 0);
+  IREE_ASSERT(application_address >= state->shadow_map.application_window_base);
+
+  const iree_device_size_t application_offset =
+      application_address - state->shadow_map.application_window_base;
+  IREE_ASSERT(application_offset <= state->shadow_map.application_window_size);
+  IREE_ASSERT(mapped_length <=
+              state->shadow_map.application_window_size - application_offset);
+  const iree_device_size_t shadow_offset =
+      application_offset >> state->shadow_map.shadow_scale_shift;
+  const iree_device_size_t shadow_length =
+      mapped_length >> state->shadow_map.shadow_scale_shift;
+  const uint64_t shadow_address =
+      (uint64_t)(uintptr_t)state->shadow_map.reservation_base_ptr +
+      shadow_offset;
+  iree_hal_amdgpu_asan_write_shadow_bytes_raw(
+      state, shadow_address, shadow_length,
+      IREE_HAL_AMDGPU_ASAN_SHADOW_HEAP_REDZONE);
 }
 
 iree_status_t iree_hal_amdgpu_asan_state_reserve_application_range(

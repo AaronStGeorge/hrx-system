@@ -97,6 +97,25 @@ iree_status_t iree_hal_amdgpu_asan_state_map_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
     iree_device_size_t application_length);
 
+// Marks an ASAN-owned mapped allocation as addressable followed by redzone.
+//
+// |accessible_length| bytes beginning at |application_address| become
+// addressable. The remaining bytes up to |mapped_length| become poisoned
+// redzone. The range must have been assigned by
+// iree_hal_amdgpu_asan_state_reserve_application_range.
+iree_status_t iree_hal_amdgpu_asan_state_publish_allocated_range(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
+    iree_device_size_t accessible_length, iree_device_size_t mapped_length);
+
+// Re-poisons a previously published mapped allocation before teardown.
+//
+// This performs no host allocations and asserts HSA shadow writes succeed.
+// |application_address| and |mapped_length| must match a range successfully
+// published by iree_hal_amdgpu_asan_state_publish_allocated_range.
+void iree_hal_amdgpu_asan_state_publish_released_range(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
+    iree_device_size_t mapped_length);
+
 // Assigns an application virtual address range from the ASAN-covered window.
 //
 // The state owns the overall HSA VMM reservation. Callers must map physical HSA

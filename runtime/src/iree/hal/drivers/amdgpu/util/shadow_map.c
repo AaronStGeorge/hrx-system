@@ -159,6 +159,11 @@ static iree_status_t iree_hal_amdgpu_shadow_map_hsa_map_slab(
                                           target_ptr, slab_size, access_descs,
                                           access_desc_count);
   }
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_hsa_amd_memory_fill(IREE_LIBHSA(map->hsa.libhsa), target_ptr,
+                                 /*value=*/0, slab_size / sizeof(uint32_t));
+  }
 
   if (iree_status_is_ok(status)) {
     *out_allocation_handle = allocation_handle;

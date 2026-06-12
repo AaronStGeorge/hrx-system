@@ -270,10 +270,13 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
                                 "invalid AMDGPU ASAN report policy value %u",
                                 (uint32_t)options->asan.report_policy);
     }
-    if (options->asan.shadow_scale_shift >= 63) {
+    if (options->asan.shadow_scale_shift >
+        IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "AMDGPU ASAN shadow scale shift %u is too large",
-                              options->asan.shadow_scale_shift);
+                              "AMDGPU ASAN shadow scale shift %u exceeds max "
+                              "representable shift %u",
+                              options->asan.shadow_scale_shift,
+                              IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT);
     }
     if (options->asan.shadow_size == 0 ||
         !iree_device_size_is_power_of_two(options->asan.shadow_size)) {
