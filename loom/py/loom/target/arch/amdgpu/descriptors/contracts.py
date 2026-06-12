@@ -84,6 +84,7 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_fma_f32": _v_fma_f32_overlay,
     "amdgpu.v_fmaak_f32": _v_fmaak_f32_overlay,
     "amdgpu.v_fmac_f32": _v_fmac_f32_overlay,
+    **_contract_overlay_builders_from_overlays(_v_fma_mix_f32_overlays()),
     "amdgpu.v_exp_f32": _v_exp_f32_overlay,
     "amdgpu.v_log_f32": _v_log_f32_overlay,
     "amdgpu.v_sin_f32": _v_sin_f32_overlay,

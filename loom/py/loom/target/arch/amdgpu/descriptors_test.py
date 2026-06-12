@@ -20,6 +20,8 @@ from loom.target.arch.amdgpu.descriptors import (
     _GFX12_TH_ATOMIC_RETURN_VALUE,
     _REG_EXEC,
     _REG_MODE,
+    _REG_PART_VGPR_HIGH16,
+    _REG_PART_VGPR_LOW16,
     _SCHEDULE_MODE_CONTROL,
     _SCHEDULE_SALU,
     _SCHEDULE_SMEM_STORE,
@@ -610,6 +612,68 @@ def test_vop2_f32_uses_inline_then_literal_operand_forms() -> None:
             f"{descriptor_key}.src0_inline",
             f"{descriptor_key}.lit",
         )
+
+
+def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
+    rdna3_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
+    }
+    rdna4_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx12_core_overlays()
+    }
+    gfx1250_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx1250_core_overlays()
+    }
+    cdna3_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx940_core_overlays()
+    }
+    cdna4_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx950_core_overlays()
+    }
+
+    expected_keys = {
+        f"amdgpu.v_fma_mix_f32.{source0}_{source1}_{source2}"
+        for source0 in ("f32", "f16lo", "f16hi")
+        for source1 in ("f32", "f16lo", "f16hi")
+        for source2 in ("f32", "f16lo", "f16hi")
+        if (source0, source1, source2) != ("f32", "f32", "f32")
+    }
+
+    for descriptors, op_sel_field, op_sel_hi_field in (
+        (rdna3_descriptors, "OP_SEL", "OP_SEL_HI"),
+        (rdna4_descriptors, "OPSEL", "OPSEL_HI"),
+        (gfx1250_descriptors, "OPSEL", "OPSEL_HI"),
+    ):
+        actual_keys = {
+            key for key in descriptors if key.startswith("amdgpu.v_fma_mix_f32.")
+        }
+        assert actual_keys == expected_keys
+        for descriptor_key in expected_keys:
+            descriptor = descriptors[descriptor_key]
+            source_parts = descriptor_key.removeprefix("amdgpu.v_fma_mix_f32.").split(
+                "_"
+            )
+            expected_op_sel = 0
+            expected_op_sel_hi = 0
+            for source_index, source_part in enumerate(source_parts):
+                operand = descriptor.operands[source_index + 1].descriptor_operand
+                if source_part == "f16lo":
+                    expected_op_sel_hi |= 1 << source_index
+                    assert operand.register_part == _REG_PART_VGPR_LOW16
+                elif source_part == "f16hi":
+                    expected_op_sel |= 1 << source_index
+                    expected_op_sel_hi |= 1 << source_index
+                    assert operand.register_part == _REG_PART_VGPR_HIGH16
+                else:
+                    assert source_part == "f32"
+                    assert operand.register_part is None
+            assert descriptor.fixed_encoding_fields == (
+                (op_sel_field, expected_op_sel),
+                (op_sel_hi_field, expected_op_sel_hi),
+            )
+
+    assert not any(key.startswith("amdgpu.v_fma_mix_f32.") for key in cdna3_descriptors)
+    assert not any(key.startswith("amdgpu.v_fma_mix_f32.") for key in cdna4_descriptors)
 
 
 def test_scalar_memory_loads_early_clobber_results() -> None:

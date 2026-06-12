@@ -18,6 +18,19 @@ low.func.def target(@gfx11_target) @vop3_bfe_offset_width_inline(%value: reg<amd
 // ====
 
 amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @vop3p_fma_mix_f16_lanes(%addr: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %low = ds_load_u16_d16 %addr
+  %low_result = v_fma_mix_f32_f16lo_f32_f32 %low, %b, %c
+  %high = ds_load_u16_d16_hi %low, %addr {offset = 2}
+  %high_result = v_fma_mix_f32_f16hi_f32_f32 %high, %low_result, %c
+  %src1_result = v_fma_mix_f32_f32_f16hi_f32 %b, %high, %high_result
+  %src2_result = v_fma_mix_f32_f32_f32_f16lo %src1_result, %c, %high
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @sop2_inline_source_shift(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   %shifted = s_lshl_b32_rhs_inline %value, 64
   return

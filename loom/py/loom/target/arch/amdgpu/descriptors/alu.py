@@ -1629,6 +1629,96 @@ def _v_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+_V_FMA_MIX_F32_SOURCE_PARTS = ("f32", "f16lo", "f16hi")
+
+
+def _v_fma_mix_f32_source_operand(field_name: str, source_part: str) -> Operand:
+    if source_part == "f32":
+        return _sgpr_vgpr_operand(field_name)
+    register_part = {
+        "lo": _REG_PART_VGPR_LOW16,
+        "hi": _REG_PART_VGPR_HIGH16,
+    }[source_part.removeprefix("f16")]
+    return _vgpr_operand(field_name, register_part=register_part)
+
+
+def _v_fma_mix_f32_source_size_reason(source_part: str) -> str | None:
+    return _D16_PARTIAL_REGISTER_SIZE_REASON if source_part != "f32" else None
+
+
+def _v_fma_mix_f32_overlay(
+    source_parts: tuple[str, str, str],
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> AmdgpuDescriptorOverlay:
+    op_sel = 0
+    op_sel_hi = 0
+    for source_index, source_part in enumerate(source_parts):
+        if source_part == "f16hi":
+            op_sel |= 1 << source_index
+        if source_part != "f32":
+            op_sel_hi |= 1 << source_index
+    if op_sel_hi == 0:
+        raise ValueError("V_FMA_MIX_F32 descriptors require at least one f16 source")
+    suffix = "_".join(source_parts)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_fma_mix_f32.{suffix}",
+        instruction_name="V_FMA_MIX_F32",
+        mnemonic=f"v_fma_mix_f32_{suffix}",
+        encoding_name="ENC_VOP3P",
+        semantic_tag=f"float.fma.mix.{'.'.join(source_parts)}",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "SRC0",
+                _v_fma_mix_f32_source_operand("a", source_parts[0]),
+                size_exception_reason=_v_fma_mix_f32_source_size_reason(
+                    source_parts[0]
+                ),
+            ),
+            AmdgpuOperandOverlay(
+                "SRC1",
+                _v_fma_mix_f32_source_operand("b", source_parts[1]),
+                size_exception_reason=_v_fma_mix_f32_source_size_reason(
+                    source_parts[1]
+                ),
+            ),
+            AmdgpuOperandOverlay(
+                "SRC2",
+                _v_fma_mix_f32_source_operand("c", source_parts[2]),
+                size_exception_reason=_v_fma_mix_f32_source_size_reason(
+                    source_parts[2]
+                ),
+            ),
+        ),
+        fixed_encoding_fields=(
+            (op_sel_field, op_sel),
+            (op_sel_hi_field, op_sel_hi),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_fma_mix_f32_overlays(
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_fma_mix_f32_overlay(
+            (source0_part, source1_part, source2_part),
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+        )
+        for source0_part in _V_FMA_MIX_F32_SOURCE_PARTS
+        for source1_part in _V_FMA_MIX_F32_SOURCE_PARTS
+        for source2_part in _V_FMA_MIX_F32_SOURCE_PARTS
+        if (source0_part, source1_part, source2_part) != ("f32", "f32", "f32")
+    )
+
+
 def _v_fmac_f32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_fmac_f32",
@@ -2576,6 +2666,8 @@ __all__ = (
     "_v_exp_f32_overlay",
     "_v_fmaak_f32_overlay",
     "_v_fma_f32_overlay",
+    "_v_fma_mix_f32_overlay",
+    "_v_fma_mix_f32_overlays",
     "_v_fmac_f32_overlay",
     "_v_lshl_add_u32_shift_immediate_overlay",
     "_v_lshlrev_b32_literal_overlay",
