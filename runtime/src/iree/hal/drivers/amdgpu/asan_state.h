@@ -8,6 +8,7 @@
 #define IREE_HAL_DRIVERS_AMDGPU_ASAN_STATE_H_
 
 #include "iree/base/api.h"
+#include "iree/hal/drivers/amdgpu/abi/asan.h"
 #include "iree/hal/drivers/amdgpu/api.h"
 #include "iree/hal/drivers/amdgpu/util/shadow_map.h"
 
@@ -55,6 +56,14 @@ bool iree_hal_amdgpu_asan_state_is_enabled(
 // Returns the mutable ASAN shadow map, or NULL when ASAN is disabled.
 iree_hal_amdgpu_shadow_map_t* iree_hal_amdgpu_asan_state_shadow_map(
     iree_hal_amdgpu_asan_state_t* state);
+
+// Populates |out_config| with the device-visible ASAN configuration.
+//
+// Callers must only call this when ASAN is enabled. Report fields remain zero
+// until the report transport is attached to the logical-device ASAN state.
+void iree_hal_amdgpu_asan_state_populate_config(
+    const iree_hal_amdgpu_asan_state_t* state,
+    iree_hal_amdgpu_asan_config_t* out_config);
 
 #ifdef __cplusplus
 }  // extern "C"

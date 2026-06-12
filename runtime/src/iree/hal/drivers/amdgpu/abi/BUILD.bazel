@@ -13,6 +13,7 @@ package(
 )
 
 ABI_HDRS = [
+    "asan.h",
     "command_buffer.h",
     "common.h",
     "kernel_args.h",

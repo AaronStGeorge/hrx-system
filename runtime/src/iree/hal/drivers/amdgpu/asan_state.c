@@ -93,3 +93,27 @@ iree_hal_amdgpu_shadow_map_t* iree_hal_amdgpu_asan_state_shadow_map(
   return iree_hal_amdgpu_asan_state_is_enabled(state) ? &state->shadow_map
                                                       : NULL;
 }
+
+void iree_hal_amdgpu_asan_state_populate_config(
+    const iree_hal_amdgpu_asan_state_t* state,
+    iree_hal_amdgpu_asan_config_t* out_config) {
+  IREE_ASSERT_ARGUMENT(state);
+  IREE_ASSERT_ARGUMENT(out_config);
+  IREE_ASSERT(iree_hal_amdgpu_asan_state_is_enabled(state));
+
+  const iree_hal_amdgpu_shadow_map_t* shadow_map = &state->shadow_map;
+  *out_config = (iree_hal_amdgpu_asan_config_t){
+      .record_length = sizeof(*out_config),
+      .abi_version = IREE_HAL_AMDGPU_ASAN_CONFIG_ABI_VERSION_0,
+      .flags = IREE_HAL_AMDGPU_ASAN_CONFIG_FLAG_ENABLED,
+      .shadow_scale_shift = shadow_map->shadow_scale_shift,
+      .shadow_base = shadow_map->shadow_base,
+      .application_window_base = shadow_map->application_window_base,
+      .application_window_size = shadow_map->application_window_size,
+      .shadow_size = shadow_map->reservation_size,
+      .shadow_slab_size = shadow_map->slab_size,
+      .report_ring_base = 0,
+      .report_ring_size = 0,
+      .reserved = {0},
+  };
+}

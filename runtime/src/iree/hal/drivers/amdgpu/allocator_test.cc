@@ -176,6 +176,22 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   EXPECT_GE(shadow_map->slab_size, options.asan.shadow_slab_size);
   EXPECT_TRUE(iree_device_size_is_power_of_two(shadow_map->slab_size));
   EXPECT_EQ(shadow_map->slab_count, 0u);
+
+  iree_hal_amdgpu_asan_config_t config;
+  iree_hal_amdgpu_asan_state_populate_config(asan_state, &config);
+  EXPECT_EQ(config.record_length, sizeof(config));
+  EXPECT_EQ(config.abi_version, IREE_HAL_AMDGPU_ASAN_CONFIG_ABI_VERSION_0);
+  EXPECT_EQ(config.flags, IREE_HAL_AMDGPU_ASAN_CONFIG_FLAG_ENABLED);
+  EXPECT_EQ(config.shadow_scale_shift, shadow_map->shadow_scale_shift);
+  EXPECT_EQ(config.shadow_base, shadow_map->shadow_base);
+  EXPECT_EQ(config.application_window_base,
+            shadow_map->application_window_base);
+  EXPECT_EQ(config.application_window_size,
+            shadow_map->application_window_size);
+  EXPECT_EQ(config.shadow_size, shadow_map->reservation_size);
+  EXPECT_EQ(config.shadow_slab_size, shadow_map->slab_size);
+  EXPECT_EQ(config.report_ring_base, 0u);
+  EXPECT_EQ(config.report_ring_size, 0u);
 }
 
 TEST_F(AllocatorTest, QueryMemoryHeapsReportsHsaLimits) {
