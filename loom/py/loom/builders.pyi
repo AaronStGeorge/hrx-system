@@ -1,7 +1,6 @@
 # GENERATED FILE: DO NOT EDIT.
 # Generator: loom.gen.python.builders_pyi.
 # Regenerate: python3 loom/py/loom/gen/run.py builders_pyi --in-place
-# ruff: noqa
 
 from __future__ import annotations
 

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 from collections.abc import Mapping, Sequence
@@ -140,14 +141,18 @@ def _generate_dialect_init_pyi(dialect: _DialectStub) -> str:
     lines.extend(_header())
     lines.extend(["", "from __future__ import annotations", ""])
     if len(dialect.shards) == 1:
-        lines.extend(_common_method_imports())
-        lines.append("from loom.builders import DialectBuilder")
+        lines.extend(
+            _method_imports(
+                dialect.shards[0].signatures,
+                extra_loom_imports=("from loom.builders import DialectBuilder",),
+            )
+        )
         lines.extend(["", f"class {dialect.class_name}(DialectBuilder):"])
         lines.extend(_class_body(dialect.shards[0].signatures))
         return "\n".join(lines) + "\n"
 
     lines.append("from loom.builders import DialectBuilder")
-    lines.extend(f"from loom.dialect.{dialect.package_name}.builders.{shard.module_name} import {shard.class_name}" for shard in dialect.shards)
+    lines.extend(sorted(f"from loom.dialect.{dialect.package_name}.builders.{shard.module_name} import {shard.class_name}" for shard in dialect.shards))
     bases = [shard.class_name for shard in dialect.shards] + ["DialectBuilder"]
     lines.extend(["", f"class {dialect.class_name}("])
     lines.extend(f"    {base}," for base in bases)
@@ -159,7 +164,7 @@ def _generate_shard_pyi(shard: _ShardStub) -> str:
     lines: list[str] = []
     lines.extend(_header())
     lines.extend(["", "from __future__ import annotations", ""])
-    lines.extend(_common_method_imports())
+    lines.extend(_method_imports(shard.signatures))
     lines.extend(["", f"class {shard.class_name}:"])
     lines.extend(_class_body(shard.signatures))
     return "\n".join(lines) + "\n"
@@ -287,24 +292,65 @@ def _package_name(dialect_name: str) -> str:
     return python_name(dialect_name)
 
 
-def _common_method_imports() -> list[str]:
-    return [
-        "from collections.abc import Mapping, Sequence",
-        "from typing import Any",
-        "",
-        "from loom.builder import TiedResultSpec, ValueRef",
-        "from loom.ir import Block, Predicate, Region, Type",
-    ]
+def _method_imports(
+    signatures: Sequence[BuilderSignature],
+    *,
+    extra_loom_imports: Sequence[str] = (),
+) -> list[str]:
+    required_names = _method_import_names(signatures)
+    lines: list[str] = []
+    stdlib_lines: list[str] = []
+    collection_names = sorted(required_names & {"Mapping", "Sequence"})
+    if collection_names:
+        stdlib_lines.append(f"from collections.abc import {', '.join(collection_names)}")
+    if "Any" in required_names:
+        stdlib_lines.append("from typing import Any")
+    if stdlib_lines:
+        lines.extend(stdlib_lines)
+        lines.append("")
+
+    loom_lines: list[str] = []
+    builder_names = sorted(required_names & {"TiedResultSpec", "ValueRef"})
+    if builder_names:
+        loom_lines.append(f"from loom.builder import {', '.join(builder_names)}")
+    ir_names = sorted(required_names & {"Block", "Predicate", "Region", "Type"})
+    if ir_names:
+        loom_lines.append(f"from loom.ir import {', '.join(ir_names)}")
+    loom_lines.extend(extra_loom_imports)
+    lines.extend(sorted(loom_lines))
+    return lines
+
+
+def _method_import_names(signatures: Sequence[BuilderSignature]) -> set[str]:
+    hints: list[str] = []
+    for signature in signatures:
+        hints.append(signature.return_hint)
+        hints.extend(_public_type_hint(param) for param in signature.params)
+        if signature.op.results:
+            hints.append("Sequence")
+    return {
+        name
+        for name in (
+            "Any",
+            "Block",
+            "Mapping",
+            "Predicate",
+            "Region",
+            "Sequence",
+            "TiedResultSpec",
+            "Type",
+            "ValueRef",
+        )
+        if any(re.search(rf"\b{re.escape(name)}\b", hint) for hint in hints)
+    }
 
 
 def _header() -> list[str]:
-    lines = line_comment_header(
+    return line_comment_header(
         "#",
         generator="loom.gen.python.builders_pyi",
         regenerate="python3 loom/py/loom/gen/run.py builders_pyi --in-place",
     )
-    lines.append("# ruff: noqa")
-    return lines
 
 
 def _default_category_groups() -> CategoryGroups:
