@@ -42,6 +42,11 @@ extern "C" {
 #define LOOM_AMDGPU_MAX_PACKED_I8_LANES \
   (LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS * 4u)
 
+// Maximum number of packed i16 lanes accepted by opaque packed-register
+// helpers.
+#define LOOM_AMDGPU_MAX_PACKED_I16_LANES \
+  (LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS * 2u)
+
 typedef enum loom_amdgpu_memory_address_form_e {
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT = 0,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO = 1,

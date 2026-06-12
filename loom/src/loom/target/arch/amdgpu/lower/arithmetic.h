@@ -24,9 +24,14 @@ iree_status_t loom_amdgpu_select_scalar_fmaf_mix_plan(
     loom_amdgpu_fma_mix_plan_t* out_plan, bool* out_selected);
 
 // Selects a packed f16 FMA plan for vector.fmaf over even lane-pair vectors.
-iree_status_t loom_amdgpu_select_vector_packed_fma_plan(
+iree_status_t loom_amdgpu_select_vector_packed_fmaf_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_packed_fma_plan_t* out_plan, bool* out_selected);
+    loom_amdgpu_packed_ternary_plan_t* out_plan, bool* out_selected);
+
+// Selects a packed i16 MAD plan for vector.fmai over even lane-pair vectors.
+iree_status_t loom_amdgpu_select_vector_packed_fmai_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_packed_ternary_plan_t* out_plan, bool* out_selected);
 
 // Selects a mixed-source f32-result multiply plan for scalar.mulf operands
 // widened from f16 sources.
@@ -45,10 +50,10 @@ iree_status_t loom_amdgpu_lower_scalar_fmaf_mix(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_fma_mix_plan_t* plan);
 
-// Lowers vector.fmaf to one packed AMDGPU FMA packet per f16 lane pair.
-iree_status_t loom_amdgpu_lower_vector_packed_fma(
+// Lowers a packed vector ternary op to one AMDGPU packet per lane pair.
+iree_status_t loom_amdgpu_lower_vector_packed_ternary(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_packed_fma_plan_t* plan);
+    const loom_amdgpu_packed_ternary_plan_t* plan);
 
 // Lowers scalar or vector mulf to mixed-source AMDGPU FMA/MAD packets with a
 // zero addend.
@@ -61,10 +66,10 @@ void loom_amdgpu_mark_fma_mix_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_fma_mix_plan_t* plan);
 
-// Marks the exact source values consumed by a selected packed FMA plan.
-void loom_amdgpu_mark_packed_fma_plan_storage_demands(
+// Marks the exact source values consumed by a selected packed ternary plan.
+void loom_amdgpu_mark_packed_ternary_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_packed_fma_plan_t* plan);
+    const loom_amdgpu_packed_ternary_plan_t* plan);
 
 // Marks the exact source values consumed by a selected mixed multiply plan.
 void loom_amdgpu_mark_mulf_mix_plan_storage_demands(

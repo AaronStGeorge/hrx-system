@@ -156,9 +156,13 @@ static const loom_amdgpu_lower_dispatch_row_t
             loom_amdgpu_select_vector_mulf_mix_dispatch,
             loom_amdgpu_emit_vector_mulf_mix_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAF)] = LOOM_AMDGPU_DATA_ROW(
-            LOOM_OP_VECTOR_FMAF, loom_amdgpu_packed_fma_plan_t,
-            loom_amdgpu_select_vector_packed_fma_dispatch,
-            loom_amdgpu_emit_vector_packed_fma_dispatch, NULL),
+            LOOM_OP_VECTOR_FMAF, loom_amdgpu_packed_ternary_plan_t,
+            loom_amdgpu_select_vector_packed_fmaf_dispatch,
+            loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAI)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_VECTOR_FMAI, loom_amdgpu_packed_ternary_plan_t,
+            loom_amdgpu_select_vector_packed_fmai_dispatch,
+            loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CMPI)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_CMPI, loom_amdgpu_vector_compare_plan_t,
             loom_amdgpu_select_vector_cmpi_dispatch,

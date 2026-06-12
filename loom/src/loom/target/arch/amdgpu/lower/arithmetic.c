@@ -223,6 +223,25 @@ static bool loom_amdgpu_type_is_even_packed_f16_vector(
   return true;
 }
 
+static bool loom_amdgpu_type_is_even_packed_i16_vector(
+    loom_type_t type, uint32_t* out_register_count) {
+  *out_register_count = 0;
+  uint32_t payload_bit_count = 0;
+  uint32_t register_count = 0;
+  if (loom_type_element_type(type) != LOOM_SCALAR_TYPE_I16 ||
+      !loom_amdgpu_type_packed_integer_storage(type, &payload_bit_count,
+                                               &register_count)) {
+    return false;
+  }
+  if (payload_bit_count == 0 || (payload_bit_count % 32u) != 0 ||
+      register_count == 0 ||
+      register_count > LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS) {
+    return false;
+  }
+  *out_register_count = register_count;
+  return true;
+}
+
 static bool loom_amdgpu_fma_mix_source_is_f16(
     loom_amdgpu_fma_mix_source_kind_t source_kind) {
   return source_kind == LOOM_AMDGPU_FMA_MIX_SOURCE_F16LO ||
@@ -511,16 +530,21 @@ static iree_status_t loom_amdgpu_emit_mulf_mix_operand_form_diagnostic(
                                        IREE_ARRAYSIZE(params));
 }
 
-iree_status_t loom_amdgpu_select_vector_packed_fma_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_packed_fma_plan_t* out_plan, bool* out_selected) {
-  *out_plan = (loom_amdgpu_packed_fma_plan_t){
+static void loom_amdgpu_reset_packed_ternary_plan(
+    loom_amdgpu_packed_ternary_plan_t* out_plan) {
+  *out_plan = (loom_amdgpu_packed_ternary_plan_t){
       .sources = {LOOM_VALUE_ID_INVALID, LOOM_VALUE_ID_INVALID,
                   LOOM_VALUE_ID_INVALID},
       .result = LOOM_VALUE_ID_INVALID,
       .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
       .register_count = 0,
   };
+}
+
+iree_status_t loom_amdgpu_select_vector_packed_fmaf_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_packed_ternary_plan_t* out_plan, bool* out_selected) {
+  loom_amdgpu_reset_packed_ternary_plan(out_plan);
   *out_selected = false;
   if (!loom_vector_fmaf_isa(source_op)) {
     return iree_ok_status();
@@ -567,9 +591,85 @@ iree_status_t loom_amdgpu_select_vector_packed_fma_plan(
     descriptor_sources[2] = sources[1];
   }
 
-  *out_plan = (loom_amdgpu_packed_fma_plan_t){
+  *out_plan = (loom_amdgpu_packed_ternary_plan_t){
       .sources = {descriptor_sources[0], descriptor_sources[1],
                   descriptor_sources[2]},
+      .result = result,
+      .descriptor_ref = descriptor_ref,
+      .register_count = register_count,
+  };
+  *out_selected = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_select_packed_fmai_descriptor(
+    loom_low_lower_context_t* context, uint8_t overflow_flags,
+    loom_amdgpu_descriptor_ref_t* out_descriptor_ref, bool* out_selected) {
+  *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  *out_selected = false;
+
+  loom_amdgpu_descriptor_ref_t descriptor_refs[2] = {
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_PK_MAD_I16,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_PK_MAD_U16,
+  };
+  if (iree_any_bit_set(overflow_flags, LOOM_VECTOR_INTOVERFLOWFLAGS_NUW)) {
+    descriptor_refs[0] = LOOM_AMDGPU_DESCRIPTOR_REF_V_PK_MAD_U16;
+    descriptor_refs[1] = LOOM_AMDGPU_DESCRIPTOR_REF_V_PK_MAD_I16;
+  }
+
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(descriptor_refs); ++i) {
+    bool descriptor_present = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_fma_mix_descriptor_present(
+        context, descriptor_refs[i], &descriptor_present));
+    if (descriptor_present) {
+      *out_descriptor_ref = descriptor_refs[i];
+      *out_selected = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_select_vector_packed_fmai_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_packed_ternary_plan_t* out_plan, bool* out_selected) {
+  loom_amdgpu_reset_packed_ternary_plan(out_plan);
+  *out_selected = false;
+  if (!loom_vector_fmai_isa(source_op)) {
+    return iree_ok_status();
+  }
+
+  loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t sources[3] = {
+      loom_vector_fmai_a(source_op),
+      loom_vector_fmai_b(source_op),
+      loom_vector_fmai_c(source_op),
+  };
+  const loom_value_id_t result = loom_vector_fmai_result(source_op);
+  const loom_type_t result_type = loom_module_value_type(module, result);
+  uint32_t register_count = 0;
+  if (!loom_amdgpu_type_is_even_packed_i16_vector(result_type,
+                                                  &register_count)) {
+    return iree_ok_status();
+  }
+  for (uint32_t i = 0; i < 3; ++i) {
+    const loom_type_t source_type = loom_module_value_type(module, sources[i]);
+    if (!loom_type_equal(source_type, result_type)) {
+      return iree_ok_status();
+    }
+  }
+
+  loom_amdgpu_descriptor_ref_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
+  bool selected = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_packed_fmai_descriptor(
+      context, loom_vector_fmai_overflow(source_op), &descriptor_ref,
+      &selected));
+  if (!selected) {
+    return iree_ok_status();
+  }
+
+  *out_plan = (loom_amdgpu_packed_ternary_plan_t){
+      .sources = {sources[0], sources[1], sources[2]},
       .result = result,
       .descriptor_ref = descriptor_ref,
       .register_count = register_count,
@@ -884,7 +984,7 @@ iree_status_t loom_amdgpu_lower_scalar_fmaf_mix(
       loom_value_slice_get(loom_low_op_results(low_op), 0));
 }
 
-static iree_status_t loom_amdgpu_packed_fma_packet_source(
+static iree_status_t loom_amdgpu_packed_ternary_packet_source(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_source, uint32_t register_offset,
     loom_type_t packet_type, loom_value_id_t* out_source) {
@@ -897,14 +997,14 @@ static iree_status_t loom_amdgpu_packed_fma_packet_source(
   }
   if (unit_count == 0 || register_offset >= unit_count) {
     return iree_make_status(IREE_STATUS_INTERNAL,
-                            "AMDGPU packed FMA selected an invalid packed "
+                            "AMDGPU packed ternary selected an invalid packed "
                             "register unit");
   }
   return loom_amdgpu_emit_low_slice(context, source_op, low_source,
                                     register_offset, packet_type, out_source);
 }
 
-static iree_status_t loom_amdgpu_emit_packed_fma_packet(
+static iree_status_t loom_amdgpu_emit_packed_ternary_packet(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_descriptor_ref_t descriptor_ref,
     const loom_value_id_t* operands, iree_host_size_t operand_count,
@@ -936,9 +1036,9 @@ static iree_status_t loom_amdgpu_emit_packed_fma_packet(
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_lower_vector_packed_fma(
+iree_status_t loom_amdgpu_lower_vector_packed_ternary(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_packed_fma_plan_t* plan) {
+    const loom_amdgpu_packed_ternary_plan_t* plan) {
   loom_value_id_t low_sources[3] = {
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
@@ -964,11 +1064,11 @@ iree_status_t loom_amdgpu_lower_vector_packed_fma(
         LOOM_VALUE_ID_INVALID,
     };
     for (uint32_t i = 0; i < 3; ++i) {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_packed_fma_packet_source(
+      IREE_RETURN_IF_ERROR(loom_amdgpu_packed_ternary_packet_source(
           context, source_op, low_sources[i], register_index, packet_type,
           &operands[i]));
     }
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_packed_fma_packet(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_packed_ternary_packet(
         context, source_op, plan->descriptor_ref, operands,
         IREE_ARRAYSIZE(operands), packet_type,
         &packet_results[register_index]));
@@ -1094,9 +1194,9 @@ void loom_amdgpu_mark_fma_mix_plan_storage_demands(
   }
 }
 
-void loom_amdgpu_mark_packed_fma_plan_storage_demands(
+void loom_amdgpu_mark_packed_ternary_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_packed_fma_plan_t* plan) {
+    const loom_amdgpu_packed_ternary_plan_t* plan) {
   (void)source_op;
   for (uint32_t i = 0; i < 3; ++i) {
     loom_low_lower_require_source_value_storage(context, plan->sources[i]);

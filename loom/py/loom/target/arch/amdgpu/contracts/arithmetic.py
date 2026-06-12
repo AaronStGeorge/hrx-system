@@ -69,6 +69,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_cvt_f16_f32",
     "amdgpu.v_pk_fmac_f16",
     "amdgpu.v_pk_fma_f16",
+    "amdgpu.v_pk_mad_i16",
+    "amdgpu.v_pk_mad_u16",
     "amdgpu.v_cvt_f32_i32",
     "amdgpu.v_cvt_f32_u32",
     "amdgpu.v_add_u32",
@@ -122,6 +124,11 @@ _VEC_F16_PACKED = Vector(
     minimum_lanes=2,
     maximum_lanes="LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES",
 )
+_VEC_I16_PACKED = Vector(
+    "i16",
+    minimum_lanes=2,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I16_LANES",
+)
 _I8 = Scalar("i8")
 _I32 = Scalar("i32")
 _F16 = Scalar("f16")
@@ -157,6 +164,16 @@ _VEC_F16_PACKED_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="vector<f16>",
     constraint_key="amdgpu.arithmetic.vector_f16_packed",
+)
+_VEC_I16_PACKED_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="vector<i16>",
+    constraint_key="amdgpu.arithmetic.vector_i16_packed",
+)
+_VEC_I16_PACKED_EVEN_LANES_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="lane-count",
+    subject_name="vector<i16>",
+    constraint_key="amdgpu.arithmetic.vector_i16_packed_even_lanes",
 )
 _I32_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
@@ -256,6 +273,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _VEC_F32_DIAGNOSTIC
     if type_pattern == _VEC_F16_PACKED:
         return _VEC_F16_PACKED_DIAGNOSTIC
+    if type_pattern == _VEC_I16_PACKED:
+        return _VEC_I16_PACKED_DIAGNOSTIC
     if type_pattern == _I32:
         return _I32_DIAGNOSTIC
     if type_pattern == _I8:
@@ -1430,6 +1449,42 @@ def _packed_f16_vector_fma_rules() -> tuple[DescriptorRule, ...]:
     )
 
 
+def _packed_i16_vector_fmai_rule(descriptor_key: str) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=vector.vector_fmai,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), _VEC_I16_PACKED),
+            Guard.value_static_dim0_multiple(
+                "result",
+                2,
+                diagnostic=_VEC_I16_PACKED_EVEN_LANES_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "a": ValueRef.operand("a"),
+                    "b": ValueRef.operand("b"),
+                    "c": ValueRef.operand("c"),
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
+def _packed_i16_vector_fmai_rules() -> tuple[DescriptorRule, ...]:
+    return (
+        _packed_i16_vector_fmai_rule("amdgpu.v_pk_mad_i16"),
+        _packed_i16_vector_fmai_rule("amdgpu.v_pk_mad_u16"),
+    )
+
+
 def _commutative_f32_vector_literal_rules(
     source_op: Op,
     descriptor_key: str,
@@ -1550,6 +1605,7 @@ def _rules() -> tuple[ContractCase, ...]:
                 "amdgpu.v_max_f32",
             ),
             *_packed_f16_vector_fma_rules(),
+            *_packed_i16_vector_fmai_rules(),
             *_f32_fma_rules(vector.vector_fmaf, _VEC_F32),
             _unary_rule(vector.vector_exp2f, _VEC_F32, "amdgpu.v_exp_f32"),
             _unary_rule(vector.vector_log2f, _VEC_F32, "amdgpu.v_log_f32"),
