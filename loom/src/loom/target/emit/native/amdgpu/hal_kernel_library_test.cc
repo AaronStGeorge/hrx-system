@@ -96,6 +96,8 @@ struct Section {
   uint32_t type;
   // ELF section flags.
   uint64_t flags;
+  // Runtime virtual address assigned to the section.
+  uint64_t address;
   // File offset of section contents.
   uint64_t offset;
   // Byte length of section contents.
@@ -132,6 +134,7 @@ std::vector<Section> ReadSections(const std::string& bytes) {
             ReadNullTerminatedString(bytes, section_name_offset + name_offset),
         .type = LoadLeU32(bytes, header_offset + 4),
         .flags = LoadLeU64(bytes, header_offset + 8),
+        .address = LoadLeU64(bytes, header_offset + 16),
         .offset = LoadLeU64(bytes, header_offset + 24),
         .size = LoadLeU64(bytes, header_offset + 32),
         .link = LoadLeU32(bytes, header_offset + 40),
@@ -150,6 +153,49 @@ const Section& FindSection(const std::vector<Section>& sections,
   }
   ADD_FAILURE() << "section not found: " << name;
   return sections[0];
+}
+
+struct DynamicSymbol {
+  // Symbol table ordinal.
+  size_t index;
+  // Dynamic symbol name.
+  std::string name;
+  // ELF symbol info byte.
+  uint8_t info;
+  // Section index containing the symbol.
+  uint16_t section_index;
+  // Runtime virtual address assigned to the symbol.
+  uint64_t value;
+  // Byte length of the symbol.
+  uint64_t size;
+};
+
+DynamicSymbol FindDynamicSymbol(const std::string& bytes,
+                                const Section& dynamic_symbol_table,
+                                const Section& dynamic_string_table,
+                                const char* name) {
+  const std::string dynamic_strings = bytes.substr(
+      (size_t)dynamic_string_table.offset, (size_t)dynamic_string_table.size);
+  const size_t symbol_count =
+      (size_t)(dynamic_symbol_table.size / dynamic_symbol_table.entry_size);
+  for (size_t i = 0; i < symbol_count; ++i) {
+    const size_t offset = (size_t)dynamic_symbol_table.offset +
+                          i * dynamic_symbol_table.entry_size;
+    DynamicSymbol symbol = {
+        .index = i,
+        .name =
+            ReadNullTerminatedString(dynamic_strings, LoadLeU32(bytes, offset)),
+        .info = (uint8_t)bytes[offset + 4],
+        .section_index = LoadLeU16(bytes, offset + 6),
+        .value = LoadLeU64(bytes, offset + 8),
+        .size = LoadLeU64(bytes, offset + 16),
+    };
+    if (symbol.name == name) {
+      return symbol;
+    }
+  }
+  ADD_FAILURE() << "dynamic symbol not found: " << name;
+  return {};
 }
 
 std::string DiagnosticSummary(const DiagnosticCapture& capture) {
@@ -666,6 +712,101 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsRequestedRuntimeGlobals) {
   EXPECT_EQ(LoadLeU16(hsaco, feedback_symbol + 6), data.index);
   EXPECT_EQ(LoadLeU64(hsaco, feedback_symbol + 16),
             LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
+
+  loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                              iree_allocator_system());
+  loom_module_free(module);
+}
+
+TEST_F(AmdgpuHalKernelLibraryTest,
+       EmitsCallerDataSymbolsAndRel32AddressMaterialization) {
+  static constexpr char kSiteSymbolName[] = "loom_sanitizer_sites";
+  static const uint8_t kSiteRecords[] = {
+      0x00, 0x02, 0x03, 0x02, 0x01, 0x01, 0x00, 0x00,
+      0x00, 0x01, 0x01, 0x06, 0x01, 0x01, 0x00, 0x00,
+  };
+  static const char kSource[] =
+      "amdgpu.target<gfx1100> @gfx_target\n"
+      "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
+      "@loom_kernel() {\n"
+      "  %pc = low.op<amdgpu.s_getpc_b64>() : () -> "
+      "reg<amdgpu.sgpr x2>\n"
+      "  %pc_lo = low.slice %pc[0] : reg<amdgpu.sgpr x2> -> "
+      "reg<amdgpu.sgpr>\n"
+      "  %pc_hi = low.slice %pc[1] : reg<amdgpu.sgpr x2> -> "
+      "reg<amdgpu.sgpr>\n"
+      "  %site_lo = low.op<amdgpu.s_add_u32.rhs_symbol_rel32_lo>(%pc_lo) "
+      "{symbol = @loom_sanitizer_sites, byte_offset = 8} : "
+      "(reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %site_hi = low.op<amdgpu.s_addc_u32.rhs_symbol_rel32_hi>(%pc_hi) "
+      "{symbol = @loom_sanitizer_sites, byte_offset = 8} : "
+      "(reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  low.return\n"
+      "}\n";
+  loom_module_t* module = nullptr;
+  ASSERT_NO_FATAL_FAILURE(
+      ParseSource(iree_make_cstring_view(kSource), &module));
+
+  const loom_amdgpu_hsaco_data_symbol_t site_symbol = {
+      .name = IREE_SV(kSiteSymbolName),
+      .initial_contents =
+          iree_make_const_byte_span(kSiteRecords, sizeof(kSiteRecords)),
+      .byte_length = sizeof(kSiteRecords),
+      .alignment = 16,
+  };
+  DiagnosticCapture capture;
+  loom_amdgpu_hal_kernel_library_t library = {};
+  loom_amdgpu_hal_kernel_library_options_t options = {
+      .runtime_globals = LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
+      .data_symbols = &site_symbol,
+      .data_symbol_count = 1,
+      .diagnostic_sink = capture.sink(),
+      .max_errors = 20,
+  };
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+      module, &options, iree_allocator_system(), &emitted, &library));
+
+  EXPECT_TRUE(emitted);
+  EXPECT_TRUE(capture.diagnostics.empty());
+  ASSERT_NE(library.hsaco_data, nullptr);
+  const std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
+                          library.hsaco_data_length);
+
+  const std::vector<Section> sections = ReadSections(hsaco);
+  const Section& dynsym = FindSection(sections, ".dynsym");
+  const Section& dynstr = FindSection(sections, ".dynstr");
+  const Section& rodata = FindSection(sections, ".rodata");
+  const Section& text = FindSection(sections, ".text");
+  const std::string feedback_name =
+      StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME);
+  const DynamicSymbol site =
+      FindDynamicSymbol(hsaco, dynsym, dynstr, kSiteSymbolName);
+  const DynamicSymbol feedback =
+      FindDynamicSymbol(hsaco, dynsym, dynstr, feedback_name.c_str());
+
+  EXPECT_EQ(site.info, 0x11u);
+  EXPECT_EQ(site.section_index, rodata.index);
+  EXPECT_EQ(site.size, sizeof(kSiteRecords));
+  ASSERT_GE(site.value, rodata.address);
+  ASSERT_LE(site.value - rodata.address, rodata.size);
+  const size_t site_file_offset =
+      (size_t)(rodata.offset + (site.value - rodata.address));
+  ASSERT_LE(site_file_offset + sizeof(kSiteRecords), hsaco.size());
+  EXPECT_EQ(hsaco.substr(site_file_offset, sizeof(kSiteRecords)),
+            std::string((const char*)kSiteRecords, sizeof(kSiteRecords)));
+
+  EXPECT_EQ(feedback.info, 0x11u);
+  EXPECT_NE(feedback.section_index, site.section_index);
+  EXPECT_EQ(feedback.size,
+            LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
+
+  const uint64_t base_pc_address = text.address + 4u;
+  const uint64_t site_delta = site.value + 8u - base_pc_address;
+  ASSERT_LE(text.offset + 20u, hsaco.size());
+  EXPECT_EQ(LoadLeU32(hsaco, (size_t)text.offset + 8u), (uint32_t)site_delta);
+  EXPECT_EQ(LoadLeU32(hsaco, (size_t)text.offset + 16u),
+            (uint32_t)(site_delta >> 32));
 
   loom_amdgpu_hal_kernel_library_deinitialize(&library,
                                               iree_allocator_system());
