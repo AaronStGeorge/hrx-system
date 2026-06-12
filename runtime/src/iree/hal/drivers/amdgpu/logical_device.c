@@ -17,6 +17,7 @@
 #include "iree/hal/drivers/amdgpu/device_spec_builder.h"
 #include "iree/hal/drivers/amdgpu/executable.h"
 #include "iree/hal/drivers/amdgpu/executable_cache.h"
+#include "iree/hal/drivers/amdgpu/feedback_state.h"
 #include "iree/hal/drivers/amdgpu/host_queue_profile.h"
 #include "iree/hal/drivers/amdgpu/host_queue_profile_events.h"
 #include "iree/hal/drivers/amdgpu/physical_device.h"
@@ -1710,6 +1711,13 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
                                                                host_allocator);
   }
   if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_feedback_state_initialize(
+        options, logical_device->system, logical_device->physical_device_count,
+        logical_device->physical_devices,
+        iree_hal_amdgpu_logical_device_error_handler, logical_device,
+        host_allocator, &logical_device->feedback);
+  }
+  if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_asan_state_initialize(
         options, logical_device->system, logical_device->physical_device_count,
         logical_device->physical_devices, host_allocator,
@@ -1775,6 +1783,7 @@ static void iree_hal_amdgpu_logical_device_destroy(
       &logical_device->profiling.event_streams, logical_device->host_allocator);
 
   iree_hal_amdgpu_logical_device_deassign_frontier(logical_device);
+  iree_hal_amdgpu_feedback_state_deinitialize(&logical_device->feedback);
   iree_hal_amdgpu_asan_state_deinitialize(&logical_device->asan);
 
   // Devices may hold allocations and need to be cleaned up first.
@@ -1789,6 +1798,10 @@ static void iree_hal_amdgpu_logical_device_destroy(
 
   // This may unload HSA; must come after all resources are released.
   iree_hal_amdgpu_system_free(logical_device->system);
+
+  iree_status_t failure_status = (iree_status_t)iree_atomic_exchange(
+      &logical_device->failure_status, 0, iree_memory_order_acq_rel);
+  iree_status_free(failure_status);
 
   iree_hal_amdgpu_profile_metadata_deinitialize(
       &logical_device->profile_metadata);
@@ -2396,8 +2409,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_executable_cache(
       iree_hal_amdgpu_logical_device_cast(base_device);
   return iree_hal_amdgpu_executable_cache_create(
       base_device, &logical_device->system->libhsa,
-      &logical_device->system->topology, &logical_device->asan,
-      &logical_device->profile_metadata, identifier,
+      &logical_device->system->topology, &logical_device->feedback,
+      &logical_device->asan, &logical_device->profile_metadata, identifier,
       iree_hal_device_host_allocator(base_device), out_executable_cache);
 }
 

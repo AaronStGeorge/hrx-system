@@ -13,6 +13,8 @@
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 
 typedef struct iree_hal_amdgpu_asan_state_t iree_hal_amdgpu_asan_state_t;
+typedef struct iree_hal_amdgpu_feedback_state_t
+    iree_hal_amdgpu_feedback_state_t;
 typedef struct iree_hal_amdgpu_topology_t iree_hal_amdgpu_topology_t;
 
 //===----------------------------------------------------------------------===//
@@ -30,11 +32,15 @@ typedef struct iree_hal_amdgpu_topology_t iree_hal_amdgpu_topology_t;
 // |asan_state| is captured by-reference and used to publish ASAN executable
 // globals during executable preparation.
 //
+// |feedback_state| is captured by-reference and used to publish feedback
+// executable globals during executable preparation.
+//
 // Exact code-object image bytes and loader load ranges are retained in profile
 // metadata for every prepared executable.
 iree_status_t iree_hal_amdgpu_executable_cache_create(
     iree_hal_device_t* device, const iree_hal_amdgpu_libhsa_t* libhsa,
     const iree_hal_amdgpu_topology_t* topology,
+    iree_hal_amdgpu_feedback_state_t* feedback_state,
     iree_hal_amdgpu_asan_state_t* asan_state,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_string_view_t identifier, iree_allocator_t host_allocator,

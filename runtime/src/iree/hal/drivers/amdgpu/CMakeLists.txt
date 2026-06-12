@@ -177,6 +177,8 @@ iree_cc_library(
     "executable.h"
     "executable_cache.c"
     "executable_cache.h"
+    "feedback_state.c"
+    "feedback_state.h"
     "host_queue.c"
     "host_queue.h"
     "host_queue_blit.c"
@@ -275,6 +277,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::code_object_target
     iree::hal::drivers::amdgpu::util::device_clock
     iree::hal::drivers::amdgpu::util::device_library
+    iree::hal::drivers::amdgpu::util::feedback_channel
     iree::hal::drivers::amdgpu::util::global_table
     iree::hal::drivers::amdgpu::util::hsaco_metadata
     iree::hal::drivers::amdgpu::util::info
@@ -319,6 +322,7 @@ iree_cc_library(
     "driver.h"
     "executable.h"
     "executable_cache.h"
+    "feedback_state.h"
     "host_queue.h"
     "host_queue_blit.h"
     "host_queue_command_buffer.h"
@@ -366,6 +370,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::device::headers
     iree::hal::drivers::amdgpu::util::block_pool
     iree::hal::drivers::amdgpu::util::device_library
+    iree::hal::drivers::amdgpu::util::feedback_channel
     iree::hal::drivers::amdgpu::util::info
     iree::hal::drivers::amdgpu::util::libhsa
     iree::hal::drivers::amdgpu::util::packet

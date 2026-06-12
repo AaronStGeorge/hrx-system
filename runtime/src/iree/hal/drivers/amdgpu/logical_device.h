@@ -13,6 +13,7 @@
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amdgpu/api.h"
 #include "iree/hal/drivers/amdgpu/asan_state.h"
+#include "iree/hal/drivers/amdgpu/feedback_state.h"
 #include "iree/hal/drivers/amdgpu/profile_events.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
@@ -121,6 +122,9 @@ typedef struct iree_hal_amdgpu_logical_device_t {
 
   // Optional ASAN state shared by allocator, executable, and queue paths.
   iree_hal_amdgpu_asan_state_t asan;
+
+  // Optional feedback channels shared by instrumented executable code.
+  iree_hal_amdgpu_feedback_state_t feedback;
 
   // Shared epoch-signal table used by all host queues on this logical device
   // for local cross-queue barrier emission. Owned by the logical device and
