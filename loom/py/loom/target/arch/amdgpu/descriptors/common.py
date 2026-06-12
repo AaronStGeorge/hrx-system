@@ -821,6 +821,14 @@ def _common_scalar_vector_memory_schedule_classes(
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
+        ScheduleClass(
+            _SCHEDULE_MODE_CONTROL,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
     )
 
 
@@ -2392,12 +2400,12 @@ def _global_write_effect(width_bits: int) -> Effect:
 
 
 def _ignore_global_atomic_memory(
-    *, data_format_name: str, is_input: bool
+    *, data_format_name: str, width_bits: int = 32, is_input: bool
 ) -> AmdgpuImplicitOperandOverlay:
     return AmdgpuImplicitOperandOverlay(
         operand_type="OPR_GPUMEM",
         data_format_name=data_format_name,
-        size_bits=32,
+        size_bits=width_bits,
         is_input=is_input,
         is_output=not is_input,
         ignore_reason=(
@@ -2409,12 +2417,12 @@ def _ignore_global_atomic_memory(
 
 
 def _ignore_generic_atomic_memory(
-    *, data_format_name: str, is_input: bool
+    *, data_format_name: str, width_bits: int = 32, is_input: bool
 ) -> AmdgpuImplicitOperandOverlay:
     return AmdgpuImplicitOperandOverlay(
         operand_type="OPR_GPUMEM",
         data_format_name=data_format_name,
-        size_bits=32,
+        size_bits=width_bits,
         is_input=is_input,
         is_output=not is_input,
         ignore_reason=(

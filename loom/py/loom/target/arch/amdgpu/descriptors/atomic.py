@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .common import *
 
 
@@ -50,6 +52,41 @@ def _buffer_atomic_asm(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _AtomicRow:
+    descriptor_suffix: str
+    mnemonic_suffix: str
+    instruction_name: str
+    semantic_suffix: str
+    data_format_name: str
+    has_no_return_form: bool
+    value_units: int
+    width_bits: int
+
+
+def _atomic_row(
+    descriptor_suffix: str,
+    instruction_name: str,
+    semantic_suffix: str,
+    data_format_name: str,
+    *,
+    mnemonic_suffix: str | None = None,
+    has_no_return_form: bool = True,
+    value_units: int = 1,
+    width_bits: int = 32,
+) -> _AtomicRow:
+    return _AtomicRow(
+        descriptor_suffix=descriptor_suffix,
+        mnemonic_suffix=mnemonic_suffix or descriptor_suffix,
+        instruction_name=instruction_name,
+        semantic_suffix=semantic_suffix,
+        data_format_name=data_format_name,
+        has_no_return_form=has_no_return_form,
+        value_units=value_units,
+        width_bits=width_bits,
+    )
+
+
 def _global_atomic_overlay(
     *,
     descriptor_key: str,
@@ -69,6 +106,8 @@ def _global_atomic_overlay(
     cache_immediate_field_names: tuple[str, ...],
     saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
+    value_units: int,
+    width_bits: int,
     implicit_m0: bool,
 ) -> AmdgpuDescriptorOverlay:
     schedule_class = (
@@ -80,18 +119,22 @@ def _global_atomic_overlay(
     ignored_operands: tuple[AmdgpuIgnoredOperandOverlay, ...] = ()
     if returns_old_value:
         operands: tuple[AmdgpuOperandOverlay, ...] = (
-            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=value_units)),
             _global_addr_operand(
                 address_field_name, units=address_units, has_saddr=saddr_off is None
             ),
-            AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value")),
+            AmdgpuOperandOverlay(
+                data_field_name, _vgpr_operand("value", units=value_units)
+            ),
         )
     else:
         operands = (
             _global_addr_operand(
                 address_field_name, units=address_units, has_saddr=saddr_off is None
             ),
-            AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value")),
+            AmdgpuOperandOverlay(
+                data_field_name, _vgpr_operand("value", units=value_units)
+            ),
         )
         ignored_operands = (
             AmdgpuIgnoredOperandOverlay(
@@ -124,8 +167,12 @@ def _global_atomic_overlay(
     else:
         fixed_encoding_fields += (("SADDR", saddr_off),)
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
-        _ignore_global_atomic_memory(data_format_name=data_format_name, is_input=False),
-        _ignore_global_atomic_memory(data_format_name=data_format_name, is_input=True),
+        _ignore_global_atomic_memory(
+            data_format_name=data_format_name, width_bits=width_bits, is_input=False
+        ),
+        _ignore_global_atomic_memory(
+            data_format_name=data_format_name, width_bits=width_bits, is_input=True
+        ),
     )
     if implicit_m0:
         implicit_operands += (_implicit_m0_input(),)
@@ -150,7 +197,7 @@ def _global_atomic_overlay(
             ),
         ),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=_global_atomic_effects(32, counter_id=counter_id),
+        effects=_global_atomic_effects(width_bits, counter_id=counter_id),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_global_saddr_asm(
             mnemonic=f"{mnemonic}_rtn" if returns_old_value else mnemonic,
@@ -171,9 +218,14 @@ def _global_atomic_overlay(
 
 def _global_atomic_cmpswap_overlay(
     *,
+    descriptor_suffix: str,
     encoding_name: str,
     address_field_name: str,
     data_field_name: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    data_format_name: str,
     offset_field_name: str,
     offset_bit_width: int,
     return_field_name: str,
@@ -182,6 +234,8 @@ def _global_atomic_cmpswap_overlay(
     cache_immediate_field_names: tuple[str, ...],
     saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
+    value_units: int,
+    width_bits: int,
     descriptor_key_suffix: str,
     implicit_m0: bool,
 ) -> AmdgpuDescriptorOverlay:
@@ -200,28 +254,37 @@ def _global_atomic_cmpswap_overlay(
         if field_name not in cache_immediate_field_names
     )
     operands: tuple[AmdgpuOperandOverlay, ...] = (
-        AmdgpuOperandOverlay("VDST", _vgpr_result()),
+        AmdgpuOperandOverlay("VDST", _vgpr_result(units=value_units)),
         _global_addr_operand(
             address_field_name, units=address_units, has_saddr=saddr_off is None
         ),
-        AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=2)),
+        AmdgpuOperandOverlay(
+            data_field_name, _vgpr_operand("value", units=value_units * 2)
+        ),
     )
     if saddr_off is None:
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
     else:
         fixed_encoding_fields += (("SADDR", saddr_off),)
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
-        _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=False),
-        _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
+        _ignore_global_atomic_memory(
+            data_format_name=data_format_name, width_bits=width_bits, is_input=False
+        ),
+        _ignore_global_atomic_memory(
+            data_format_name=data_format_name, width_bits=width_bits, is_input=True
+        ),
     )
     if implicit_m0:
         implicit_operands += (_implicit_m0_input(),)
     return AmdgpuDescriptorOverlay(
-        descriptor_key=(f"amdgpu.global_atomic_cmpswap_b32_rtn{descriptor_key_suffix}"),
-        instruction_name="GLOBAL_ATOMIC_CMPSWAP",
-        mnemonic="global_atomic_cmpswap_b32",
+        descriptor_key=(
+            f"amdgpu.global_atomic_cmpswap_{descriptor_suffix}_rtn"
+            f"{descriptor_key_suffix}"
+        ),
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
         encoding_name=encoding_name,
-        semantic_tag="memory.global.atomic.compare_exchange.b32.return",
+        semantic_tag=semantic_tag,
         schedule_class=_SCHEDULE_VMEM_ATOMIC_RETURN,
         operands=operands,
         implicit_operands=implicit_operands,
@@ -236,10 +299,10 @@ def _global_atomic_cmpswap_overlay(
             ),
         ),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
+        effects=_global_atomic_effects(width_bits, counter_id=_COUNTER_VMEM_LOAD),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_global_saddr_asm(
-            mnemonic="global_atomic_cmpswap_b32_rtn",
+            mnemonic=f"{mnemonic}_rtn",
             results=("dst",),
             operands=("addr", "value", "saddr"),
             implicit_m0=implicit_m0,
@@ -247,7 +310,7 @@ def _global_atomic_cmpswap_overlay(
         )
         if saddr_off is None
         else _global_vaddr_asm(
-            mnemonic="global_atomic_cmpswap_b32_rtn",
+            mnemonic=f"{mnemonic}_rtn",
             results=("dst",),
             operands=("addr", "value"),
             immediates=_memory_asm_immediate_names(cache_immediate_fields),
@@ -256,29 +319,46 @@ def _global_atomic_cmpswap_overlay(
 
 
 _GLOBAL_ATOMIC_DEFAULT_ROWS = (
-    ("add_u32", "GLOBAL_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
-    ("sub_u32", "GLOBAL_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
-    ("min_i32", "GLOBAL_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
-    ("max_i32", "GLOBAL_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32", True),
-    ("min_u32", "GLOBAL_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32", True),
-    ("max_u32", "GLOBAL_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32", True),
-    ("and_b32", "GLOBAL_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32", True),
-    ("or_b32", "GLOBAL_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32", True),
-    ("xor_b32", "GLOBAL_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32", True),
-    (
+    _atomic_row("add_u32", "GLOBAL_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32"),
+    _atomic_row("sub_u32", "GLOBAL_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32"),
+    _atomic_row("min_i32", "GLOBAL_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32"),
+    _atomic_row("max_i32", "GLOBAL_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32"),
+    _atomic_row("min_u32", "GLOBAL_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32"),
+    _atomic_row("max_u32", "GLOBAL_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32"),
+    _atomic_row("and_b32", "GLOBAL_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32"),
+    _atomic_row("or_b32", "GLOBAL_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32"),
+    _atomic_row("xor_b32", "GLOBAL_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32"),
+    _atomic_row(
         "swap_b32",
         "GLOBAL_ATOMIC_SWAP_B32",
         "exchange.b32",
         "FMT_NUM_B32",
-        False,
+        has_no_return_form=False,
     ),
-    ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
-    ("min_f32", "GLOBAL_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32", True),
-    ("max_f32", "GLOBAL_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32", True),
+    _atomic_row("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32"),
+    _atomic_row(
+        "add_u64",
+        "GLOBAL_ATOMIC_ADD_X2",
+        "add.u64",
+        "FMT_NUM_U64",
+        value_units=2,
+        width_bits=64,
+    ),
+    _atomic_row("min_f32", "GLOBAL_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32"),
+    _atomic_row("max_f32", "GLOBAL_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32"),
 )
 
 _GLOBAL_ATOMIC_GFX940_ROWS = (
-    ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+    _atomic_row("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32"),
+    _atomic_row(
+        "add_u64",
+        "GLOBAL_ATOMIC_ADD_X2",
+        "add.u64",
+        "FMT_NUM_U64",
+        mnemonic_suffix="add_x2",
+        value_units=2,
+        width_bits=64,
+    ),
 )
 
 
@@ -298,46 +378,40 @@ def _global_atomic_overlays(
     descriptor_key_suffix: str = "",
     include_packed_half_add: bool = False,
     implicit_m0: bool = False,
-    rows: tuple[tuple[str, str, str, str, bool], ...] = _GLOBAL_ATOMIC_DEFAULT_ROWS,
+    rows: tuple[_AtomicRow, ...] = _GLOBAL_ATOMIC_DEFAULT_ROWS,
+    cmpswap_mnemonic_suffix: str = "b64",
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     effective_rows = list(rows)
     if include_packed_half_add:
         effective_rows.extend(
             (
-                (
+                _atomic_row(
                     "pk_add_f16",
                     "GLOBAL_ATOMIC_PK_ADD_F16",
                     "add.pk2.f16",
                     "FMT_NUM_PK2_F16",
-                    True,
                 ),
-                (
+                _atomic_row(
                     "pk_add_bf16",
                     "GLOBAL_ATOMIC_PK_ADD_BF16",
                     "add.pk2.bf16",
                     "FMT_NUM_PK2_BF16",
-                    True,
                 ),
             )
         )
     overlays: list[AmdgpuDescriptorOverlay] = []
-    for (
-        mnemonic_suffix,
-        instruction_name,
-        semantic_suffix,
-        data_format_name,
-        has_no_return_form,
-    ) in effective_rows:
-        if has_no_return_form:
+    for row in effective_rows:
+        if row.has_no_return_form:
             overlays.append(
                 _global_atomic_overlay(
                     descriptor_key=(
-                        f"amdgpu.global_atomic_{mnemonic_suffix}{descriptor_key_suffix}"
+                        f"amdgpu.global_atomic_{row.descriptor_suffix}"
+                        f"{descriptor_key_suffix}"
                     ),
-                    instruction_name=instruction_name,
-                    mnemonic=f"global_atomic_{mnemonic_suffix}",
-                    semantic_tag=f"memory.global.atomic.{semantic_suffix}",
-                    data_format_name=data_format_name,
+                    instruction_name=row.instruction_name,
+                    mnemonic=f"global_atomic_{row.mnemonic_suffix}",
+                    semantic_tag=f"memory.global.atomic.{row.semantic_suffix}",
+                    data_format_name=row.data_format_name,
                     returns_old_value=False,
                     encoding_name=encoding_name,
                     address_field_name=address_field_name,
@@ -350,18 +424,21 @@ def _global_atomic_overlays(
                     cache_immediate_field_names=cache_immediate_field_names,
                     saddr_off=saddr_off,
                     address_units=address_units,
+                    value_units=row.value_units,
+                    width_bits=row.width_bits,
                     implicit_m0=implicit_m0,
                 )
             )
         overlays.append(
             _global_atomic_overlay(
                 descriptor_key=(
-                    f"amdgpu.global_atomic_{mnemonic_suffix}_rtn{descriptor_key_suffix}"
+                    f"amdgpu.global_atomic_{row.descriptor_suffix}_rtn"
+                    f"{descriptor_key_suffix}"
                 ),
-                instruction_name=instruction_name,
-                mnemonic=f"global_atomic_{mnemonic_suffix}",
-                semantic_tag=f"memory.global.atomic.{semantic_suffix}.return",
-                data_format_name=data_format_name,
+                instruction_name=row.instruction_name,
+                mnemonic=f"global_atomic_{row.mnemonic_suffix}",
+                semantic_tag=f"memory.global.atomic.{row.semantic_suffix}.return",
+                data_format_name=row.data_format_name,
                 returns_old_value=True,
                 encoding_name=encoding_name,
                 address_field_name=address_field_name,
@@ -374,14 +451,21 @@ def _global_atomic_overlays(
                 cache_immediate_field_names=cache_immediate_field_names,
                 saddr_off=saddr_off,
                 address_units=address_units,
+                value_units=row.value_units,
+                width_bits=row.width_bits,
                 implicit_m0=implicit_m0,
             )
         )
     overlays.append(
         _global_atomic_cmpswap_overlay(
+            descriptor_suffix="b32",
             encoding_name=encoding_name,
             address_field_name=address_field_name,
             data_field_name=data_field_name,
+            instruction_name="GLOBAL_ATOMIC_CMPSWAP",
+            mnemonic="global_atomic_cmpswap_b32",
+            semantic_tag="memory.global.atomic.compare_exchange.b32.return",
+            data_format_name="FMT_NUM_U32",
             offset_field_name=offset_field_name,
             offset_bit_width=offset_bit_width,
             return_field_name=return_field_name,
@@ -390,6 +474,32 @@ def _global_atomic_overlays(
             cache_immediate_field_names=cache_immediate_field_names,
             saddr_off=saddr_off,
             address_units=address_units,
+            value_units=1,
+            width_bits=32,
+            descriptor_key_suffix=descriptor_key_suffix,
+            implicit_m0=implicit_m0,
+        )
+    )
+    overlays.append(
+        _global_atomic_cmpswap_overlay(
+            descriptor_suffix="b64",
+            encoding_name=encoding_name,
+            address_field_name=address_field_name,
+            data_field_name=data_field_name,
+            instruction_name="GLOBAL_ATOMIC_CMPSWAP_X2",
+            mnemonic=f"global_atomic_cmpswap_{cmpswap_mnemonic_suffix}",
+            semantic_tag="memory.global.atomic.compare_exchange.b64.return",
+            data_format_name="FMT_NUM_U64",
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            return_field_name=return_field_name,
+            return_field_value=return_field_value,
+            cache_fields=cache_fields,
+            cache_immediate_field_names=cache_immediate_field_names,
+            saddr_off=saddr_off,
+            address_units=address_units,
+            value_units=2,
+            width_bits=64,
             descriptor_key_suffix=descriptor_key_suffix,
             implicit_m0=implicit_m0,
         )
@@ -398,105 +508,146 @@ def _global_atomic_overlays(
 
 
 _FLAT_ATOMIC_GFX11_ROWS = (
-    ("add_u32", "add_u32", "FLAT_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
-    ("sub_u32", "sub_u32", "FLAT_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
-    ("min_i32", "min_i32", "FLAT_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
-    ("max_i32", "max_i32", "FLAT_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32", True),
-    ("min_u32", "min_u32", "FLAT_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32", True),
-    ("max_u32", "max_u32", "FLAT_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32", True),
-    ("and_b32", "and_b32", "FLAT_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32", True),
-    ("or_b32", "or_b32", "FLAT_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32", True),
-    ("xor_b32", "xor_b32", "FLAT_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32", True),
-    (
-        "swap_b32",
+    _atomic_row("add_u32", "FLAT_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32"),
+    _atomic_row("sub_u32", "FLAT_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32"),
+    _atomic_row("min_i32", "FLAT_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32"),
+    _atomic_row("max_i32", "FLAT_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32"),
+    _atomic_row("min_u32", "FLAT_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32"),
+    _atomic_row("max_u32", "FLAT_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32"),
+    _atomic_row("and_b32", "FLAT_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32"),
+    _atomic_row("or_b32", "FLAT_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32"),
+    _atomic_row("xor_b32", "FLAT_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32"),
+    _atomic_row(
         "swap_b32",
         "FLAT_ATOMIC_SWAP_B32",
         "exchange.b32",
         "FMT_NUM_B32",
-        False,
+        has_no_return_form=False,
     ),
-    ("add_f32", "add_f32", "FLAT_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
-    (
-        "min_f32",
-        "min_f32",
-        "FLAT_ATOMIC_MIN_F32",
-        "minnum.f32",
-        "FMT_NUM_F32",
-        True,
+    _atomic_row("add_f32", "FLAT_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32"),
+    _atomic_row(
+        "add_u64",
+        "FLAT_ATOMIC_ADD_X2",
+        "add.u64",
+        "FMT_NUM_U64",
+        value_units=2,
+        width_bits=64,
     ),
-    (
-        "max_f32",
-        "max_f32",
-        "FLAT_ATOMIC_MAX_F32",
-        "maxnum.f32",
-        "FMT_NUM_F32",
-        True,
-    ),
+    _atomic_row("min_f32", "FLAT_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32"),
+    _atomic_row("max_f32", "FLAT_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32"),
 )
 
 _FLAT_ATOMIC_GFX12_ROWS = (
     *_FLAT_ATOMIC_GFX11_ROWS[:-2],
-    (
-        "pk_add_f16",
+    _atomic_row(
         "pk_add_f16",
         "FLAT_ATOMIC_PK_ADD_F16",
         "add.pk2.f16",
         "FMT_NUM_PK2_F16",
-        True,
     ),
-    (
-        "pk_add_bf16",
+    _atomic_row(
         "pk_add_bf16",
         "FLAT_ATOMIC_PK_ADD_BF16",
         "add.pk2.bf16",
         "FMT_NUM_PK2_BF16",
-        True,
     ),
-    (
-        "min_f32",
-        "min_f32",
-        "FLAT_ATOMIC_MIN_NUM_F32",
-        "minnum.f32",
-        "FMT_NUM_F32",
-        True,
-    ),
-    (
-        "max_f32",
-        "max_f32",
-        "FLAT_ATOMIC_MAX_NUM_F32",
-        "maxnum.f32",
-        "FMT_NUM_F32",
-        True,
-    ),
+    _atomic_row("min_f32", "FLAT_ATOMIC_MIN_NUM_F32", "minnum.f32", "FMT_NUM_F32"),
+    _atomic_row("max_f32", "FLAT_ATOMIC_MAX_NUM_F32", "maxnum.f32", "FMT_NUM_F32"),
 )
 
 _FLAT_ATOMIC_GFX950_ROWS = (
-    ("add_u32", "add", "FLAT_ATOMIC_ADD", "add.u32", "FMT_NUM_U32", True),
-    ("sub_u32", "sub", "FLAT_ATOMIC_SUB", "sub.u32", "FMT_NUM_U32", True),
-    ("min_i32", "smin", "FLAT_ATOMIC_SMIN", "min.i32", "FMT_NUM_I32", True),
-    ("max_i32", "smax", "FLAT_ATOMIC_SMAX", "max.i32", "FMT_NUM_I32", True),
-    ("min_u32", "umin", "FLAT_ATOMIC_UMIN", "min.u32", "FMT_NUM_U32", True),
-    ("max_u32", "umax", "FLAT_ATOMIC_UMAX", "max.u32", "FMT_NUM_U32", True),
-    ("and_b32", "and", "FLAT_ATOMIC_AND", "and.b32", "FMT_NUM_B32", True),
-    ("or_b32", "or", "FLAT_ATOMIC_OR", "or.b32", "FMT_NUM_B32", True),
-    ("xor_b32", "xor", "FLAT_ATOMIC_XOR", "xor.b32", "FMT_NUM_B32", True),
-    ("swap_b32", "swap", "FLAT_ATOMIC_SWAP", "exchange.b32", "FMT_NUM_B32", False),
-    ("add_f32", "add_f32", "FLAT_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
-    (
-        "pk_add_f16",
+    _atomic_row(
+        "add_u32",
+        "FLAT_ATOMIC_ADD",
+        "add.u32",
+        "FMT_NUM_U32",
+        mnemonic_suffix="add",
+    ),
+    _atomic_row(
+        "sub_u32",
+        "FLAT_ATOMIC_SUB",
+        "sub.u32",
+        "FMT_NUM_U32",
+        mnemonic_suffix="sub",
+    ),
+    _atomic_row(
+        "min_i32",
+        "FLAT_ATOMIC_SMIN",
+        "min.i32",
+        "FMT_NUM_I32",
+        mnemonic_suffix="smin",
+    ),
+    _atomic_row(
+        "max_i32",
+        "FLAT_ATOMIC_SMAX",
+        "max.i32",
+        "FMT_NUM_I32",
+        mnemonic_suffix="smax",
+    ),
+    _atomic_row(
+        "min_u32",
+        "FLAT_ATOMIC_UMIN",
+        "min.u32",
+        "FMT_NUM_U32",
+        mnemonic_suffix="umin",
+    ),
+    _atomic_row(
+        "max_u32",
+        "FLAT_ATOMIC_UMAX",
+        "max.u32",
+        "FMT_NUM_U32",
+        mnemonic_suffix="umax",
+    ),
+    _atomic_row(
+        "and_b32",
+        "FLAT_ATOMIC_AND",
+        "and.b32",
+        "FMT_NUM_B32",
+        mnemonic_suffix="and",
+    ),
+    _atomic_row(
+        "or_b32",
+        "FLAT_ATOMIC_OR",
+        "or.b32",
+        "FMT_NUM_B32",
+        mnemonic_suffix="or",
+    ),
+    _atomic_row(
+        "xor_b32",
+        "FLAT_ATOMIC_XOR",
+        "xor.b32",
+        "FMT_NUM_B32",
+        mnemonic_suffix="xor",
+    ),
+    _atomic_row(
+        "swap_b32",
+        "FLAT_ATOMIC_SWAP",
+        "exchange.b32",
+        "FMT_NUM_B32",
+        mnemonic_suffix="swap",
+        has_no_return_form=False,
+    ),
+    _atomic_row("add_f32", "FLAT_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32"),
+    _atomic_row(
+        "add_u64",
+        "FLAT_ATOMIC_ADD_X2",
+        "add.u64",
+        "FMT_NUM_U64",
+        mnemonic_suffix="add_x2",
+        value_units=2,
+        width_bits=64,
+    ),
+    _atomic_row(
         "pk_add_f16",
         "FLAT_ATOMIC_PK_ADD_F16",
         "add.pk2.f16",
         "FMT_NUM_PK2_F16",
-        True,
     ),
-    (
-        "pk_add_bf16",
+    _atomic_row(
         "pk_add_bf16",
         "FLAT_ATOMIC_PK_ADD_BF16",
         "add.pk2.bf16",
         "FMT_NUM_PK2_BF16",
-        True,
     ),
 )
 
@@ -522,6 +673,8 @@ def _flat_atomic_overlay(
     implicit_flat_scratch: bool,
     implicit_m0: bool,
     allow_accumulator_operands: bool,
+    value_units: int,
+    width_bits: int,
 ) -> AmdgpuDescriptorOverlay:
     schedule_class = (
         _SCHEDULE_VMEM_ATOMIC_RETURN
@@ -530,12 +683,14 @@ def _flat_atomic_overlay(
     )
     counter_id = _COUNTER_VMEM_LOAD if returns_old_value else _COUNTER_VMEM_STORE
     result_operand = (
-        _vgpr_agpr_result() if allow_accumulator_operands else _vgpr_result()
+        _vgpr_agpr_result(units=value_units)
+        if allow_accumulator_operands
+        else _vgpr_result(units=value_units)
     )
     data_operand = (
-        _vgpr_agpr_operand("value")
+        _vgpr_agpr_operand("value", units=value_units)
         if allow_accumulator_operands
-        else _vgpr_operand("value")
+        else _vgpr_operand("value", units=value_units)
     )
     ignored_operands: tuple[AmdgpuIgnoredOperandOverlay, ...] = ()
     if returns_old_value:
@@ -577,13 +732,15 @@ def _flat_atomic_overlay(
     )
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
         _ignore_generic_atomic_memory(
-            data_format_name=data_format_name, is_input=False
+            data_format_name=data_format_name, width_bits=width_bits, is_input=False
         ),
     )
     if implicit_flat_scratch:
         implicit_operands += (_IGNORE_FLAT_SCRATCH_INPUT,)
     implicit_operands += (
-        _ignore_generic_atomic_memory(data_format_name=data_format_name, is_input=True),
+        _ignore_generic_atomic_memory(
+            data_format_name=data_format_name, width_bits=width_bits, is_input=True
+        ),
     )
     if implicit_m0:
         implicit_operands += (_implicit_m0_input(),)
@@ -613,7 +770,7 @@ def _flat_atomic_overlay(
             ),
         ),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=_generic_atomic_effects(32, counter_id=counter_id),
+        effects=_generic_atomic_effects(width_bits, counter_id=counter_id),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_flat_atomic_asm(
             mnemonic=mnemonic,
@@ -626,7 +783,11 @@ def _flat_atomic_overlay(
 
 def _flat_atomic_cmpswap_overlay(
     *,
+    descriptor_suffix: str,
     instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    data_format_name: str,
     encoding_name: str,
     address_field_name: str,
     data_field_name: str,
@@ -640,6 +801,8 @@ def _flat_atomic_cmpswap_overlay(
     implicit_flat_scratch: bool,
     implicit_m0: bool,
     allow_accumulator_operands: bool,
+    value_units: int,
+    width_bits: int,
 ) -> AmdgpuDescriptorOverlay:
     cache_immediate_fields = tuple(
         (field_name, bit_width)
@@ -656,20 +819,26 @@ def _flat_atomic_cmpswap_overlay(
         if field_name not in cache_immediate_field_names
     )
     result_operand = (
-        _vgpr_agpr_result() if allow_accumulator_operands else _vgpr_result()
+        _vgpr_agpr_result(units=value_units)
+        if allow_accumulator_operands
+        else _vgpr_result(units=value_units)
     )
     data_operand = (
-        _vgpr_agpr_operand("value", units=2)
+        _vgpr_agpr_operand("value", units=value_units * 2)
         if allow_accumulator_operands
-        else _vgpr_operand("value", units=2)
+        else _vgpr_operand("value", units=value_units * 2)
     )
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
-        _ignore_generic_atomic_memory(data_format_name="FMT_NUM_U32", is_input=False),
+        _ignore_generic_atomic_memory(
+            data_format_name=data_format_name, width_bits=width_bits, is_input=False
+        ),
     )
     if implicit_flat_scratch:
         implicit_operands += (_IGNORE_FLAT_SCRATCH_INPUT,)
     implicit_operands += (
-        _ignore_generic_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
+        _ignore_generic_atomic_memory(
+            data_format_name=data_format_name, width_bits=width_bits, is_input=True
+        ),
     )
     if implicit_m0:
         implicit_operands += (_implicit_m0_input(),)
@@ -679,11 +848,11 @@ def _flat_atomic_cmpswap_overlay(
         else _offset_immediate(offset_bit_width)
     )
     return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.flat_atomic_cmpswap_b32_rtn",
+        descriptor_key=f"amdgpu.flat_atomic_cmpswap_{descriptor_suffix}_rtn",
         instruction_name=instruction_name,
-        mnemonic="flat_atomic_cmpswap_b32",
+        mnemonic=mnemonic,
         encoding_name=encoding_name,
-        semantic_tag="memory.generic.atomic.compare_exchange.b32.return",
+        semantic_tag=semantic_tag,
         schedule_class=_SCHEDULE_VMEM_ATOMIC_RETURN,
         operands=(
             AmdgpuOperandOverlay("VDST", result_operand),
@@ -702,7 +871,7 @@ def _flat_atomic_cmpswap_overlay(
             ),
         ),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=_generic_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
+        effects=_generic_atomic_effects(width_bits, counter_id=_COUNTER_VMEM_LOAD),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_flat_atomic_asm(
             mnemonic="flat_atomic_cmpswap_b32",
@@ -715,7 +884,7 @@ def _flat_atomic_cmpswap_overlay(
 
 def _flat_atomic_overlays(
     *,
-    rows: tuple[tuple[str, str, str, str, str, bool], ...],
+    rows: tuple[_AtomicRow, ...],
     cmpswap_instruction_name: str,
     encoding_name: str,
     address_field_name: str,
@@ -730,24 +899,18 @@ def _flat_atomic_overlays(
     implicit_flat_scratch: bool,
     implicit_m0: bool = False,
     allow_accumulator_operands: bool = False,
+    cmpswap_mnemonic_suffix: str = "b64",
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     overlays: list[AmdgpuDescriptorOverlay] = []
-    for (
-        descriptor_suffix,
-        mnemonic_suffix,
-        instruction_name,
-        semantic_suffix,
-        data_format_name,
-        has_no_return_form,
-    ) in rows:
-        if has_no_return_form:
+    for row in rows:
+        if row.has_no_return_form:
             overlays.append(
                 _flat_atomic_overlay(
-                    descriptor_key=f"amdgpu.flat_atomic_{descriptor_suffix}",
-                    instruction_name=instruction_name,
-                    mnemonic=f"flat_atomic_{mnemonic_suffix}",
-                    semantic_tag=f"memory.generic.atomic.{semantic_suffix}",
-                    data_format_name=data_format_name,
+                    descriptor_key=f"amdgpu.flat_atomic_{row.descriptor_suffix}",
+                    instruction_name=row.instruction_name,
+                    mnemonic=f"flat_atomic_{row.mnemonic_suffix}",
+                    semantic_tag=f"memory.generic.atomic.{row.semantic_suffix}",
+                    data_format_name=row.data_format_name,
                     returns_old_value=False,
                     encoding_name=encoding_name,
                     address_field_name=address_field_name,
@@ -762,15 +925,17 @@ def _flat_atomic_overlays(
                     implicit_flat_scratch=implicit_flat_scratch,
                     implicit_m0=implicit_m0,
                     allow_accumulator_operands=allow_accumulator_operands,
+                    value_units=row.value_units,
+                    width_bits=row.width_bits,
                 )
             )
         overlays.append(
             _flat_atomic_overlay(
-                descriptor_key=f"amdgpu.flat_atomic_{descriptor_suffix}_rtn",
-                instruction_name=instruction_name,
-                mnemonic=f"flat_atomic_{mnemonic_suffix}",
-                semantic_tag=f"memory.generic.atomic.{semantic_suffix}.return",
-                data_format_name=data_format_name,
+                descriptor_key=f"amdgpu.flat_atomic_{row.descriptor_suffix}_rtn",
+                instruction_name=row.instruction_name,
+                mnemonic=f"flat_atomic_{row.mnemonic_suffix}",
+                semantic_tag=f"memory.generic.atomic.{row.semantic_suffix}.return",
+                data_format_name=row.data_format_name,
                 returns_old_value=True,
                 encoding_name=encoding_name,
                 address_field_name=address_field_name,
@@ -785,11 +950,17 @@ def _flat_atomic_overlays(
                 implicit_flat_scratch=implicit_flat_scratch,
                 implicit_m0=implicit_m0,
                 allow_accumulator_operands=allow_accumulator_operands,
+                value_units=row.value_units,
+                width_bits=row.width_bits,
             )
         )
     overlays.append(
         _flat_atomic_cmpswap_overlay(
+            descriptor_suffix="b32",
             instruction_name=cmpswap_instruction_name,
+            mnemonic="flat_atomic_cmpswap_b32",
+            semantic_tag="memory.generic.atomic.compare_exchange.b32.return",
+            data_format_name="FMT_NUM_U32",
             encoding_name=encoding_name,
             address_field_name=address_field_name,
             data_field_name=data_field_name,
@@ -803,6 +974,32 @@ def _flat_atomic_overlays(
             implicit_flat_scratch=implicit_flat_scratch,
             implicit_m0=implicit_m0,
             allow_accumulator_operands=allow_accumulator_operands,
+            value_units=1,
+            width_bits=32,
+        )
+    )
+    overlays.append(
+        _flat_atomic_cmpswap_overlay(
+            descriptor_suffix="b64",
+            instruction_name="FLAT_ATOMIC_CMPSWAP_X2",
+            mnemonic=f"flat_atomic_cmpswap_{cmpswap_mnemonic_suffix}",
+            semantic_tag="memory.generic.atomic.compare_exchange.b64.return",
+            data_format_name="FMT_NUM_U64",
+            encoding_name=encoding_name,
+            address_field_name=address_field_name,
+            data_field_name=data_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            offset_signed=offset_signed,
+            return_field_name=return_field_name,
+            return_field_value=return_field_value,
+            cache_fields=cache_fields,
+            cache_immediate_field_names=cache_immediate_field_names,
+            implicit_flat_scratch=implicit_flat_scratch,
+            implicit_m0=implicit_m0,
+            allow_accumulator_operands=allow_accumulator_operands,
+            value_units=2,
+            width_bits=64,
         )
     )
     return tuple(overlays)
