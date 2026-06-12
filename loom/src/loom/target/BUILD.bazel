@@ -142,27 +142,6 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "artifact_manifest",
-    srcs = ["artifact_manifest.c"],
-    hdrs = ["artifact_manifest.h"],
-    deps = [
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "artifact_manifest_test",
-    srcs = ["artifact_manifest_test.cc"],
-    deps = [
-        ":artifact_manifest",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
     name = "function_contract",
     srcs = ["function_contract.c"],
     hdrs = ["function_contract.h"],
