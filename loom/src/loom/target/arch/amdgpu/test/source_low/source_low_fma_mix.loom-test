@@ -43,3 +43,40 @@ low.func.def target(@gfx942_target) abi(hal_kernel) @f32_mad_mix_extf_a(%a_half:
   %result = v_mad_mix_f32_f16lo_f32_f32 %a_half, %b, %c
   return %result
 }
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f32_mulf_extf_requires_relaxed_zero_add(%a: f32, %scale_half: f16) -> (f32) {
+  %scale = scalar.extf %scale_half : f16 to f32
+  %result = scalar.mulf %a, %scale : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f32_mulf_extf_requires_relaxed_zero_add(%a: reg<amdgpu.vgpr>, %scale_half: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %scale = v_cvt_f32_f16 %scale_half
+  %result = v_mul_f32 %a, %scale
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx942> @gfx942_target
+func.def target(@gfx942_target) @vector_f32_mulf_splat_extf_cdna(%q: vector<2xf32>, %scale_half: f16) -> (vector<2xf32>) {
+  %scale = scalar.extf %scale_half : f16 to f32
+  %scale_vector = vector.splat %scale : vector<2xf32>
+  %result = vector.mulf<nnan|nsz|contract> %q, %scale_vector : vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target(@gfx942_target) abi(hal_kernel) @vector_f32_mulf_splat_extf_cdna(%q: reg<amdgpu.vgpr x2>, %scale_half: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
+  %10 = v_mov_b32 0
+  %11 = slice %q[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %12 = v_mad_mix_f32_f32_f16lo_f32 %11, %scale_half, %10
+  %13 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = v_mad_mix_f32_f32_f16lo_f32 %13, %scale_half, %10
+  %result = concat(%12, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}

@@ -119,6 +119,19 @@ typedef struct loom_amdgpu_fma_mix_plan_t {
   loom_amdgpu_fma_mix_source_kind_t source_kinds[3];
 } loom_amdgpu_fma_mix_plan_t;
 
+typedef struct loom_amdgpu_mulf_mix_plan_t {
+  // Source values consumed by the selected descriptor in a, b order.
+  loom_value_id_t sources[2];
+  // Scalar or vector mulf result value.
+  loom_value_id_t result;
+  // Descriptor row selected for the mixed-source fma/mad packet.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Descriptor source interpretation for each multiplicand source value.
+  loom_amdgpu_fma_mix_source_kind_t source_kinds[2];
+  // Static f32 lane count produced by the multiply.
+  uint32_t lane_count;
+} loom_amdgpu_mulf_mix_plan_t;
+
 typedef struct loom_amdgpu_vector_bitcast_plan_t {
   // Source vector value being reinterpreted.
   loom_value_id_t source;

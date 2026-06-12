@@ -23,15 +23,38 @@ iree_status_t loom_amdgpu_select_scalar_fmaf_mix_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_fma_mix_plan_t* out_plan, bool* out_selected);
 
+// Selects a mixed-source f32-result multiply plan for scalar.mulf operands
+// widened from f16 sources.
+iree_status_t loom_amdgpu_select_scalar_mulf_mix_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_mulf_mix_plan_t* out_plan, bool* out_selected);
+
+// Selects a mixed-source f32-result multiply plan for vector.mulf by a splatted
+// scalar widened from an f16 source.
+iree_status_t loom_amdgpu_select_vector_mulf_mix_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_mulf_mix_plan_t* out_plan, bool* out_selected);
+
 // Lowers scalar.fmaf to one mixed-source AMDGPU FMA/MAD descriptor packet.
 iree_status_t loom_amdgpu_lower_scalar_fmaf_mix(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_fma_mix_plan_t* plan);
 
+// Lowers scalar or vector mulf to mixed-source AMDGPU FMA/MAD packets with a
+// zero addend.
+iree_status_t loom_amdgpu_lower_mulf_mix(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_mulf_mix_plan_t* plan);
+
 // Marks the exact source values consumed by a selected mixed FMA plan.
 void loom_amdgpu_mark_fma_mix_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_fma_mix_plan_t* plan);
+
+// Marks the exact source values consumed by a selected mixed multiply plan.
+void loom_amdgpu_mark_mulf_mix_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_mulf_mix_plan_t* plan);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -73,6 +73,10 @@ static const loom_amdgpu_lower_dispatch_row_t
             LOOM_OP_SCALAR_CLAMPF, loom_amdgpu_clampf_plan_t,
             loom_amdgpu_select_scalar_clampf_dispatch,
             loom_amdgpu_emit_scalar_clampf_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_MULF)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_SCALAR_MULF, loom_amdgpu_mulf_mix_plan_t,
+            loom_amdgpu_select_scalar_mulf_mix_dispatch,
+            loom_amdgpu_emit_scalar_mulf_mix_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_FMAF)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_SCALAR_FMAF, loom_amdgpu_fma_mix_plan_t,
             loom_amdgpu_select_scalar_fmaf_mix_dispatch,
@@ -147,6 +151,12 @@ static const loom_amdgpu_lower_dispatch_row_t
             LOOM_AMDGPU_DATA_ROW(LOOM_OP_VECTOR_DOTF, loom_amdgpu_dotf_plan_t,
                                  loom_amdgpu_select_vector_dotf_dispatch,
                                  loom_amdgpu_emit_vector_dotf_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_MULF)] =
+            LOOM_AMDGPU_DATA_ROW(LOOM_OP_VECTOR_MULF,
+                                 loom_amdgpu_mulf_mix_plan_t,
+                                 loom_amdgpu_select_vector_mulf_mix_dispatch,
+                                 loom_amdgpu_emit_vector_mulf_mix_dispatch,
+                                 NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CMPI)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_CMPI, loom_amdgpu_vector_compare_plan_t,
             loom_amdgpu_select_vector_cmpi_dispatch,
