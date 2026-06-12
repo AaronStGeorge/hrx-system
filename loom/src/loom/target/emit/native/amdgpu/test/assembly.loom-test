@@ -82,7 +82,20 @@ low.func.def target(@gfx11_target) @gfx11_fma_mix_source2_literal(%a: reg<amdgpu
 }
 
 // ----
-  v_fma_mix_f32_f32_f16lo_f32_src2_lit v0, v0, v1, 0
+  v_fma_mix_f32 v0, v0, v1, 0 op_sel_hi:[0,1,0]
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_fma_mix_source0_half_literal waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_fma_mix_source0_half_literal(%a_half: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mix_f32_f16lo_f32_f32_src2_lit %a_half, %b, 0
+  return
+}
+
+// ----
+  v_fma_mix_f32 v0, v0, v1, 0 op_sel_hi:[1,0,0]
   s_endpgm
 
 // ====

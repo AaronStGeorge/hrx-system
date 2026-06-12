@@ -1950,6 +1950,101 @@ static iree_status_t loom_amdgpu_append_fmamk_packet(
   return loom_amdgpu_append_operand(context, 1);
 }
 
+static bool loom_amdgpu_fma_mix_source_part_selectors(
+    iree_string_view_t source_part, uint8_t bit, uint8_t* op_sel,
+    uint8_t* op_sel_hi) {
+  if (iree_string_view_equal(source_part, IREE_SV("f32"))) {
+    return true;
+  }
+  if (iree_string_view_equal(source_part, IREE_SV("f16lo"))) {
+    *op_sel_hi |= bit;
+    return true;
+  }
+  if (iree_string_view_equal(source_part, IREE_SV("f16hi"))) {
+    *op_sel |= bit;
+    *op_sel_hi |= bit;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_amdgpu_fma_mix_src2_literal_selectors(
+    iree_string_view_t mnemonic, uint8_t* out_op_sel, uint8_t* out_op_sel_hi) {
+  *out_op_sel = 0;
+  *out_op_sel_hi = 0;
+  if (!iree_string_view_consume_prefix(&mnemonic, IREE_SV("v_fma_mix_f32_")) ||
+      !iree_string_view_consume_suffix(&mnemonic, IREE_SV("_src2_lit"))) {
+    return false;
+  }
+
+  iree_string_view_t source_parts[3] = {0};
+  iree_string_view_t remaining = mnemonic;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(source_parts); ++i) {
+    iree_string_view_t part = iree_string_view_empty();
+    if (i + 1 == IREE_ARRAYSIZE(source_parts)) {
+      part = remaining;
+      remaining = iree_string_view_empty();
+    } else if (iree_string_view_split(remaining, '_', &part, &remaining) < 0) {
+      return false;
+    }
+    source_parts[i] = part;
+  }
+  if (!iree_string_view_is_empty(remaining) ||
+      !iree_string_view_equal(source_parts[2], IREE_SV("f32"))) {
+    return false;
+  }
+
+  uint8_t op_sel = 0;
+  uint8_t op_sel_hi = 0;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(source_parts); ++i) {
+    if (!loom_amdgpu_fma_mix_source_part_selectors(
+            source_parts[i], (uint8_t)(1u << i), &op_sel, &op_sel_hi)) {
+      return false;
+    }
+  }
+  *out_op_sel = op_sel;
+  *out_op_sel_hi = op_sel_hi;
+  return true;
+}
+
+static iree_status_t loom_amdgpu_append_fma_mix_selector_modifier(
+    const loom_native_assembly_packet_context_t* context,
+    iree_string_view_t name, uint8_t selectors) {
+  if (selectors == 0) {
+    return iree_ok_status();
+  }
+  return iree_string_builder_append_format(
+      context->builder, " %.*s:[%u,%u,%u]", (int)name.size, name.data,
+      selectors & 1u ? 1u : 0u, selectors & 2u ? 1u : 0u,
+      selectors & 4u ? 1u : 0u);
+}
+
+static iree_status_t loom_amdgpu_append_fma_mix_src2_literal_packet(
+    const loom_native_assembly_packet_context_t* context, uint8_t op_sel,
+    uint8_t op_sel_hi) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "v_fma_mix_f32 "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+
+  const loom_low_immediate_t* imm32 = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_find_packet_immediate(context, IREE_SV("imm32"), &imm32));
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_read_packet_immediate_i64(context, imm32, &value));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_format(context->builder, "%" PRId64, value));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_fma_mix_selector_modifier(
+      context, IREE_SV("op_sel"), op_sel));
+  return loom_amdgpu_append_fma_mix_selector_modifier(
+      context, IREE_SV("op_sel_hi"), op_sel_hi);
+}
+
 static iree_status_t loom_amdgpu_append_exec_restore_packet(
     const loom_native_assembly_packet_context_t* context) {
   IREE_RETURN_IF_ERROR(
@@ -2077,6 +2172,16 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32)) {
     return loom_amdgpu_append_fmamk_packet(context);
+  }
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+      descriptor_set, descriptor->mnemonic_string_offset, &mnemonic));
+  uint8_t op_sel = 0;
+  uint8_t op_sel_hi = 0;
+  if (loom_amdgpu_fma_mix_src2_literal_selectors(mnemonic, &op_sel,
+                                                 &op_sel_hi)) {
+    return loom_amdgpu_append_fma_mix_src2_literal_packet(context, op_sel,
+                                                          op_sel_hi);
   }
   bool has_read_effect = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
