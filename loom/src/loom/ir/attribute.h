@@ -56,32 +56,56 @@ static inline loom_symbol_ref_t loom_symbol_ref_null(void) {
 // Predicates
 //===----------------------------------------------------------------------===//
 
-// Predicate kind. Evaluated at runtime for dynamic dimensions. Stored in the
-// kind field of loom_predicate_t.
-typedef enum loom_predicate_kind_e {
-  LOOM_PREDICATE_EQ = 0,        // eq(a, b)
-  LOOM_PREDICATE_NE = 1,        // ne(a, b)
-  LOOM_PREDICATE_LT = 2,        // lt(a, b)
-  LOOM_PREDICATE_LE = 3,        // le(a, b)
-  LOOM_PREDICATE_GT = 4,        // gt(a, b)
-  LOOM_PREDICATE_GE = 5,        // ge(a, b)
-  LOOM_PREDICATE_MUL = 6,       // mul(a, n): a is multiple of n.
-  LOOM_PREDICATE_MIN = 7,       // min(a, n): a >= n.
-  LOOM_PREDICATE_MAX = 8,       // max(a, n): a <= n.
-  LOOM_PREDICATE_POW2 = 9,      // pow2(a): a is power of 2.
-  LOOM_PREDICATE_RANGE = 10,    // range(a, lo, hi): lo <= a <= hi.
-  LOOM_PREDICATE_NOT_NAN = 11,  // not_nan(a): a is not NaN.
-  LOOM_PREDICATE_FINITE = 12,   // finite(a): a is not NaN or infinity.
-  LOOM_PREDICATE_COUNT_,
-} loom_predicate_kind_t;
+// Predicate kind byte. Evaluated at runtime for dynamic dimensions and stored
+// in loom_predicate_t::kind.
+typedef uint8_t loom_predicate_kind_t;
 
-// Predicate argument tag: immediate constant or SSA value reference.
-typedef enum loom_predicate_arg_tag_e {
-  LOOM_PRED_ARG_NONE = 0,   // Unused slot.
-  LOOM_PRED_ARG_VALUE = 1,  // SSA value ID.
-  LOOM_PRED_ARG_CONST = 2,  // Integer constant.
+enum loom_predicate_kind_e {
+  // eq(a, b)
+  LOOM_PREDICATE_EQ = 0,
+  // ne(a, b)
+  LOOM_PREDICATE_NE = 1,
+  // lt(a, b)
+  LOOM_PREDICATE_LT = 2,
+  // le(a, b)
+  LOOM_PREDICATE_LE = 3,
+  // gt(a, b)
+  LOOM_PREDICATE_GT = 4,
+  // ge(a, b)
+  LOOM_PREDICATE_GE = 5,
+  // mul(a, n): a is multiple of n.
+  LOOM_PREDICATE_MUL = 6,
+  // min(a, n): a >= n.
+  LOOM_PREDICATE_MIN = 7,
+  // max(a, n): a <= n.
+  LOOM_PREDICATE_MAX = 8,
+  // pow2(a): a is power of 2.
+  LOOM_PREDICATE_POW2 = 9,
+  // range(a, lo, hi): lo <= a <= hi.
+  LOOM_PREDICATE_RANGE = 10,
+  // not_nan(a): a is not NaN.
+  LOOM_PREDICATE_NOT_NAN = 11,
+  // not_inf(a): a is not positive or negative infinity.
+  LOOM_PREDICATE_NOT_INF = 12,
+  // finite(a): a is not NaN or infinity.
+  LOOM_PREDICATE_FINITE = 13,
+  // Number of predicate kinds.
+  LOOM_PREDICATE_COUNT_,
+};
+
+// Predicate argument tag byte: immediate constant or SSA value reference.
+typedef uint8_t loom_predicate_arg_tag_t;
+
+enum loom_predicate_arg_tag_e {
+  // Unused slot.
+  LOOM_PRED_ARG_NONE = 0,
+  // SSA value ID.
+  LOOM_PRED_ARG_VALUE = 1,
+  // Integer constant.
+  LOOM_PRED_ARG_CONST = 2,
+  // Number of predicate argument tags.
   LOOM_PRED_ARG_COUNT_,
-} loom_predicate_arg_tag_t;
+};
 
 // A single predicate constraint. 32 bytes, arena-allocated.
 //
@@ -90,12 +114,17 @@ typedef enum loom_predicate_arg_tag_e {
 // and 1-3 arguments. Arguments are tagged: SSA value references or
 // integer constants.
 typedef struct loom_predicate_t {
-  uint8_t kind;         // loom_predicate_kind_t
-  uint8_t arg_count;    // 1-3
-  uint8_t arg_tags[3];  // loom_predicate_arg_tag_t per arg slot.
-  uint8_t reserved[3];  // Pad to 8-byte boundary.
-  int64_t args[3];      // value_id or constant per slot.
-} loom_predicate_t;     // 32 bytes
+  // Predicate kind.
+  loom_predicate_kind_t kind;
+  // Number of active argument slots.
+  uint8_t arg_count;
+  // Argument tag per active argument slot.
+  loom_predicate_arg_tag_t arg_tags[3];
+  // Pad to an 8-byte boundary.
+  uint8_t reserved[3];
+  // SSA value ID or constant payload per active argument slot.
+  int64_t args[3];
+} loom_predicate_t;
 
 static_assert(sizeof(loom_predicate_t) == 32,
               "loom_predicate_t must be 32 bytes");

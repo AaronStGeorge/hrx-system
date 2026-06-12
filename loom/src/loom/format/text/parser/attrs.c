@@ -292,6 +292,9 @@ static const struct {
     {(const uint8_t*)"\x07"
                      "not_nan",
      LOOM_PREDICATE_NOT_NAN},
+    {(const uint8_t*)"\x07"
+                     "not_inf",
+     LOOM_PREDICATE_NOT_INF},
     {(const uint8_t*)"\x06"
                      "finite",
      LOOM_PREDICATE_FINITE},

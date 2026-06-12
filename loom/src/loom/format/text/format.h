@@ -802,7 +802,7 @@
 // predicate ::= two-arg-pred '(' pred-arg ',' pred-arg ')'
 //             | unary-pred '(' pred-arg ')'
 //             | 'range' '(' pred-arg ',' pred-arg ',' pred-arg ')'
-// unary-pred ::= 'pow2' | 'not_nan' | 'finite'
+// unary-pred ::= 'pow2' | 'not_nan' | 'not_inf' | 'finite'
 // two-arg-pred ::= 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge'
 //                | 'min' | 'max' | 'mul'
 // pred-arg  ::= SSA-VALUE | INTEGER
@@ -815,6 +815,7 @@
 //   range(%K, 32, 512)   32 <= %K <= 512.
 //   pow2(%N)             %N is a power of 2.
 //   not_nan(%X)          %X is not NaN.
+//   not_inf(%X)          %X is not positive or negative infinity.
 //   finite(%X)           %X is not NaN or infinity.
 //   eq(%M, %K)           %M == %K.
 //   ne(%M, 0)            %M != 0.

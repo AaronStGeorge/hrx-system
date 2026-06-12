@@ -164,8 +164,12 @@ static bool loom_sanitizer_predicate_is_proven(
       return target_facts.range_lo >= lower && target_facts.range_hi <= upper;
     case LOOM_PREDICATE_NOT_NAN:
       return loom_value_facts_is_not_nan(target_facts);
+    case LOOM_PREDICATE_NOT_INF:
+      return loom_value_facts_is_not_inf(target_facts);
     case LOOM_PREDICATE_FINITE:
-      return loom_value_facts_is_finite(target_facts);
+      return loom_value_facts_is_finite(target_facts) ||
+             (loom_value_facts_is_not_nan(target_facts) &&
+              loom_value_facts_is_not_inf(target_facts));
     case LOOM_PREDICATE_COUNT_:
       return false;
   }

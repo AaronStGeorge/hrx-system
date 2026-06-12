@@ -649,6 +649,10 @@ iree_status_t loom_scalar_isinff_facts(loom_fact_context_t* context,
     result_facts[0] = loom_value_facts_exact_i64(0);
     return iree_ok_status();
   }
+  if (loom_value_facts_is_not_inf(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_exact_i64(0);
+    return iree_ok_status();
+  }
   if (!loom_value_facts_is_exact(operand_facts[0]) ||
       !loom_value_facts_is_float(operand_facts[0])) {
     result_facts[0] = loom_value_facts_make(0, 1, 1);
@@ -664,6 +668,11 @@ iree_status_t loom_scalar_isfinitef_facts(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
   if (loom_value_facts_is_finite(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_exact_i64(1);
+    return iree_ok_status();
+  }
+  if (loom_value_facts_is_not_nan(operand_facts[0]) &&
+      loom_value_facts_is_not_inf(operand_facts[0])) {
     result_facts[0] = loom_value_facts_exact_i64(1);
     return iree_ok_status();
   }

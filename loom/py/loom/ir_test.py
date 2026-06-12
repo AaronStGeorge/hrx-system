@@ -1234,6 +1234,16 @@ class TestPredicateEvaluation:
             self._vals(X=math.nan),
         )
 
+    def test_not_inf(self) -> None:
+        assert evaluate_predicate(
+            self._pred("not_inf", ("value", "X")),
+            self._vals(X=math.nan),
+        )
+        assert not evaluate_predicate(
+            self._pred("not_inf", ("value", "X")),
+            self._vals(X=math.inf),
+        )
+
     def test_finite(self) -> None:
         assert evaluate_predicate(
             self._pred("finite", ("value", "X")),

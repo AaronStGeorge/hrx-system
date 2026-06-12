@@ -1611,6 +1611,7 @@ class BytecodeReader:
         "pow2",
         "range",
         "not_nan",
+        "not_inf",
         "finite",
     ]
 

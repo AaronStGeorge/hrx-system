@@ -25,6 +25,8 @@ using ModulePtr = ::loom::testing::ModulePtr;
 typedef struct PipelineRunCounts {
   // Number of source assertion-insertion pass runs.
   int sanitizer_insert_assertions = 0;
+  // Checks option on the source assertion-insertion pass.
+  iree_string_view_t sanitizer_insert_checks = iree_string_view_empty();
   // Number of target-low assertion-materialization pass runs.
   int sanitizer_materialize_assertions = 0;
   // Number of other sanitizer pass runs.
@@ -37,6 +39,19 @@ typedef struct PipelineRunCountContext {
   // Counts updated while walking pass.run operations.
   PipelineRunCounts counts;
 } PipelineRunCountContext;
+
+iree_string_view_t FindStringOption(loom_module_t* module,
+                                    loom_named_attr_slice_t options,
+                                    iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < options.count; ++i) {
+    const loom_named_attr_t* option = &options.entries[i];
+    iree_string_view_t option_name = module->strings.entries[option->name_id];
+    if (!iree_string_view_equal(option_name, name)) continue;
+    if (option->value.kind != LOOM_ATTR_STRING) return iree_string_view_empty();
+    return module->strings.entries[loom_attr_as_string_id(option->value)];
+  }
+  return iree_string_view_empty();
+}
 
 iree_status_t CountSanitizerRun(void* user_data, loom_op_t* op,
                                 const loom_walk_context_t* context,
@@ -54,6 +69,8 @@ iree_status_t CountSanitizerRun(void* user_data, loom_op_t* op,
       count_context->module->strings.entries[loom_pass_run_key(op)];
   if (iree_string_view_equal(key, IREE_SV("sanitizer-insert-assertions"))) {
     ++counts->sanitizer_insert_assertions;
+    counts->sanitizer_insert_checks = FindStringOption(
+        count_context->module, loom_pass_run_options(op), IREE_SV("checks"));
   } else if (iree_string_view_equal(
                  key, IREE_SV("sanitizer-materialize-assertions"))) {
     ++counts->sanitizer_materialize_assertions;
@@ -152,6 +169,8 @@ TEST_F(TargetPipelineTest, EnabledChecksBuildSanitizerPassSlots) {
 
   const PipelineRunCounts counts = CountPipelineRuns(module.get(), pipeline_op);
   EXPECT_EQ(counts.sanitizer_insert_assertions, 1);
+  EXPECT_TRUE(iree_string_view_equal(counts.sanitizer_insert_checks,
+                                     IREE_SV("access|value|operation")));
   EXPECT_EQ(counts.sanitizer_materialize_assertions, 1);
   EXPECT_EQ(counts.other_sanitizer_runs, 0);
 }

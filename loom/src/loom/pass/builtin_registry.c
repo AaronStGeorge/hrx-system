@@ -244,6 +244,14 @@ static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
     },
 };
 
+static const loom_pass_option_schema_t
+    kSanitizerInsertAssertionsOptionSchema[] = {
+        {
+            .name = IREE_SVL("checks"),
+            .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
+        },
+};
+
 static const loom_pass_option_enum_value_t kTemplateSelectionModeValues[] = {
     {.value = IREE_SVL("early")},
     {.value = IREE_SVL("final")},
@@ -382,6 +390,10 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("sanitizer-insert-assertions"),
         .info = loom_sanitizer_insert_assertions_pass_info,
         .function_run = loom_sanitizer_insert_assertions_run,
+        .create = loom_sanitizer_insert_assertions_create,
+        .option_schema = kSanitizerInsertAssertionsOptionSchema,
+        .option_schema_count =
+            IREE_ARRAYSIZE(kSanitizerInsertAssertionsOptionSchema),
     },
     {
         .key = IREE_SVL("sanitizer-materialize-assertions"),

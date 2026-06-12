@@ -99,7 +99,11 @@ loom_value_facts_t loom_value_facts_exact_f64(double value) {
   facts.known_divisor = 1;
   facts.flags = LOOM_VALUE_FACT_EXACT | LOOM_VALUE_FACT_FLOAT;
   if (!isnan(value)) facts.flags |= LOOM_VALUE_FACT_NOT_NAN;
-  if (isfinite(value)) facts.flags |= LOOM_VALUE_FACT_FINITE;
+  if (!isinf(value)) facts.flags |= LOOM_VALUE_FACT_NOT_INF;
+  if (isfinite(value)) {
+    facts.flags |= LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_NOT_INF |
+                   LOOM_VALUE_FACT_FINITE;
+  }
   loom_value_facts_mark_uniform(&facts);
   return facts;
 }
@@ -273,9 +277,10 @@ void loom_value_facts_recompute_flags(loom_value_facts_t* facts) {
   uint32_t preserved =
       facts->flags &
       (LOOM_VALUE_FACT_POWER_OF_TWO | LOOM_VALUE_FACT_FLOAT |
-       LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_FINITE |
-       LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
-       LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
+       LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_NOT_INF |
+       LOOM_VALUE_FACT_FINITE | LOOM_VALUE_FACT_UNIFORM |
+       LOOM_VALUE_FACT_LANE_VARYING | LOOM_VALUE_FACT_LANE_PREDICATE |
+       LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
   facts->flags =
       loom_value_facts_compute_flags(facts->range_lo, facts->range_hi) |
       preserved;
@@ -292,6 +297,7 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
   // value ID as an integer literal here would corrupt range facts.
   if (predicate->kind == LOOM_PREDICATE_POW2 ||
       predicate->kind == LOOM_PREDICATE_NOT_NAN ||
+      predicate->kind == LOOM_PREDICATE_NOT_INF ||
       predicate->kind == LOOM_PREDICATE_FINITE) {
     if (predicate->arg_count < 1 ||
         predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE) {
@@ -377,10 +383,21 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
 
     case LOOM_PREDICATE_NOT_NAN:
       facts->flags |= LOOM_VALUE_FACT_NOT_NAN;
+      if (loom_value_facts_is_not_inf(*facts)) {
+        facts->flags |= LOOM_VALUE_FACT_FINITE;
+      }
+      return;
+
+    case LOOM_PREDICATE_NOT_INF:
+      facts->flags |= LOOM_VALUE_FACT_NOT_INF;
+      if (loom_value_facts_is_not_nan(*facts)) {
+        facts->flags |= LOOM_VALUE_FACT_FINITE;
+      }
       return;
 
     case LOOM_PREDICATE_FINITE:
-      facts->flags |= LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_FINITE;
+      facts->flags |= LOOM_VALUE_FACT_NOT_NAN | LOOM_VALUE_FACT_NOT_INF |
+                      LOOM_VALUE_FACT_FINITE;
       return;
 
     case LOOM_PREDICATE_RANGE: {

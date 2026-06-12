@@ -64,7 +64,7 @@ func.def @assert_does_not_rewrite_original_facts(%n: index) -> (i64, i64) {
 // Float predicate assertions refine the checked alias. Normal scalar predicate
 // ops can consume those facts without knowing they came from sanitizer IR.
 func.def @assert_refines_float_predicate_facts(%x: f32) -> (i1, i1, i1) {
-  %checked = sanitizer.assert.value %x [not_nan(%x), finite(%x)] : f32
+  %checked = sanitizer.assert.value %x [not_nan(%x), not_inf(%x), finite(%x)] : f32
   %is_nan = scalar.isnanf %checked : f32
   %is_inf = scalar.isinff %checked : f32
   %is_finite = scalar.isfinitef %checked : f32
@@ -73,7 +73,7 @@ func.def @assert_refines_float_predicate_facts(%x: f32) -> (i1, i1, i1) {
 
 // ----
 func.def @assert_refines_float_predicate_facts(%x: f32) -> (i1, i1, i1) {
-  %checked = sanitizer.assert.value %x [not_nan(%x), finite(%x)] : f32
+  %checked = sanitizer.assert.value %x [not_nan(%x), not_inf(%x), finite(%x)] : f32
   %is_nan = scalar.constant false : i1
   %is_inf = scalar.constant false : i1
   %is_finite = scalar.constant true : i1
@@ -107,18 +107,18 @@ func.def @assert_refines_vector_float_predicate_facts(%x: f32) -> (i1, i1) {
 // Float assertion facts attach to the checked alias. The original value stays
 // unknown, while the continuing checked path is known non-NaN.
 func.def @assert_float_facts_attach_to_alias(%x: f32) -> (i1, i1) {
-  %checked = sanitizer.assert.value %x [not_nan(%x)] : f32
-  %original_is_nan = scalar.isnanf %x : f32
-  %checked_is_nan = scalar.isnanf %checked : f32
-  func.return %original_is_nan, %checked_is_nan : i1, i1
+  %checked = sanitizer.assert.value %x [not_inf(%x)] : f32
+  %original_is_inf = scalar.isinff %x : f32
+  %checked_is_inf = scalar.isinff %checked : f32
+  func.return %original_is_inf, %checked_is_inf : i1, i1
 }
 
 // ----
 func.def @assert_float_facts_attach_to_alias(%x: f32) -> (i1, i1) {
-  %checked = sanitizer.assert.value %x [not_nan(%x)] : f32
-  %original_is_nan = scalar.isnanf %x : f32
-  %checked_is_nan = scalar.constant false : i1
-  func.return %original_is_nan, %checked_is_nan : i1, i1
+  %checked = sanitizer.assert.value %x [not_inf(%x)] : f32
+  %original_is_inf = scalar.isinff %x : f32
+  %checked_is_inf = scalar.constant false : i1
+  func.return %original_is_inf, %checked_is_inf : i1, i1
 }
 
 // ====

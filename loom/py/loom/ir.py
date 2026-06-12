@@ -925,6 +925,7 @@ PREDICATE_KINDS: dict[str, int] = {
     "pow2": 1,  # pow2(a) — a is a power of 2.
     "range": 3,  # range(a, lo, hi) — lo <= a <= hi.
     "not_nan": 1,  # not_nan(a) — a is not NaN.
+    "not_inf": 1,  # not_inf(a) — a is not positive or negative infinity.
     "finite": 1,  # finite(a) — a is not NaN or infinity.
 }
 
@@ -1011,6 +1012,8 @@ def evaluate_predicate(predicate: Predicate, values: dict[str, int | float]) -> 
             return args[1] <= args[0] <= args[2]
         case "not_nan":
             return not math.isnan(args[0])
+        case "not_inf":
+            return not math.isinf(args[0])
         case "finite":
             return math.isfinite(args[0])
         case _:

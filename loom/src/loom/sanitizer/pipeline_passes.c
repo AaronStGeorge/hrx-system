@@ -6,25 +6,931 @@
 
 #include "loom/sanitizer/pipeline_passes.h"
 
+#include <string.h>
+
+#include "loom/ir/module.h"
+#include "loom/ops/index/ops.h"
+#include "loom/ops/sanitizer/ops.h"
+#include "loom/ops/scalar/ops.h"
+#include "loom/pass/pipeline.h"
+#include "loom/pass/registry.h"
+#include "loom/pass/value_facts.h"
+#include "loom/rewrite/rewriter.h"
+#include "loom/sanitizer/options.h"
+
+typedef struct loom_sanitizer_insert_assertions_state_t {
+  // Check classes enabled for this pass invocation.
+  loom_sanitizer_checks_t checks;
+  // True when checks were supplied explicitly.
+  bool has_checks_option;
+} loom_sanitizer_insert_assertions_state_t;
+
+#define LOOM_SANITIZER_INSERT_ASSERTIONS_STATISTICS(V, statistics_type)      \
+  V(statistics_type, assume_ops_converted, "assume-ops-converted",           \
+    "Number of assume ops replaced with sanitizer assertions or aliases.")   \
+  V(statistics_type, value_assertions_inserted, "value-assertions-inserted", \
+    "Number of sanitizer.assert.value ops inserted.")                        \
+  V(statistics_type, predicates_elided, "predicates-elided",                 \
+    "Number of candidate predicates already proven before insertion.")       \
+  V(statistics_type, fastmath_ops_instrumented, "fastmath-ops-instrumented", \
+    "Number of fast-math ops with input or result assertions inserted.")
+
+LOOM_PASS_STATISTICS_DEFINE(loom_sanitizer_insert_assertions_statistics,
+                            loom_sanitizer_insert_assertions_statistics_t,
+                            LOOM_SANITIZER_INSERT_ASSERTIONS_STATISTICS)
+
+static const loom_pass_option_def_t kSanitizerInsertAssertionsOptions[] = {
+    {IREE_SVL("checks"),
+     IREE_SVL("Sanitizer checks to insert: none, all, or a '|'-separated set "
+              "of access, value, and operation.")},
+};
+
 static const loom_pass_info_t
     loom_sanitizer_insert_assertions_pass_info_storage = {
         .name = IREE_SVL("sanitizer-insert-assertions"),
         .description = IREE_SVL(
             "Insert semantic sanitizer assertions for enabled checks."),
         .kind = LOOM_PASS_FUNCTION,
+        .option_defs = kSanitizerInsertAssertionsOptions,
+        .option_count = IREE_ARRAYSIZE(kSanitizerInsertAssertionsOptions),
+        .statistic_layout = &loom_sanitizer_insert_assertions_statistics_layout,
 };
 
 const loom_pass_info_t* loom_sanitizer_insert_assertions_pass_info(void) {
   return &loom_sanitizer_insert_assertions_pass_info_storage;
 }
 
+static iree_status_t loom_sanitizer_parse_check_token(
+    iree_string_view_t token, loom_sanitizer_checks_t* inout_checks) {
+  token = iree_string_view_trim(token);
+  if (iree_string_view_is_empty(token)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "empty sanitizer check token");
+  }
+  if (iree_string_view_equal(token, IREE_SV("none"))) {
+    *inout_checks = 0;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("all"))) {
+    *inout_checks = LOOM_SANITIZER_CHECKS_KNOWN;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("access"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_ACCESS;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("value"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_VALUE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("operation"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_OPERATION;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "sanitizer-insert-assertions option 'checks' has unknown token '%.*s'",
+      (int)token.size, token.data);
+}
+
+static iree_status_t loom_sanitizer_parse_checks(
+    iree_string_view_t value, loom_sanitizer_checks_t* out_checks) {
+  value = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(value)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "sanitizer-insert-assertions option 'checks' must be non-empty");
+  }
+  loom_sanitizer_checks_t checks = 0;
+  iree_string_view_t remaining = value;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t token = iree_string_view_empty();
+    intptr_t separator_position =
+        iree_string_view_split(remaining, '|', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if ((iree_string_view_equal(token, IREE_SV("none")) ||
+         iree_string_view_equal(token, IREE_SV("all"))) &&
+        (checks != 0 || separator_position >= 0)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "sanitizer-insert-assertions option 'checks' token '%.*s' cannot "
+          "be combined",
+          (int)token.size, token.data);
+    }
+    IREE_RETURN_IF_ERROR(loom_sanitizer_parse_check_token(token, &checks));
+    if (separator_position >= 0 &&
+        iree_string_view_is_empty(iree_string_view_trim(remaining))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "sanitizer-insert-assertions option 'checks' has a trailing "
+          "separator");
+    }
+    if (separator_position < 0) break;
+  }
+  const loom_sanitizer_options_t options = {
+      .checks = checks,
+  };
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_validate(&options));
+  *out_checks = checks;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_insert_assertions_parse_option(
+    void* user_data, iree_string_view_t name, iree_string_view_t value) {
+  loom_sanitizer_insert_assertions_state_t* state =
+      (loom_sanitizer_insert_assertions_state_t*)user_data;
+  if (iree_string_view_equal(name, IREE_SV("checks"))) {
+    if (state->has_checks_option) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "duplicate option 'checks' for pass 'sanitizer-insert-assertions'");
+    }
+    IREE_RETURN_IF_ERROR(loom_sanitizer_parse_checks(value, &state->checks));
+    state->has_checks_option = true;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "unknown option '%.*s' for pass 'sanitizer-insert-assertions'",
+      (int)name.size, name.data);
+}
+
+iree_status_t loom_sanitizer_insert_assertions_create(
+    loom_pass_t* pass, iree_string_view_t options) {
+  loom_sanitizer_insert_assertions_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena, sizeof(*state),
+                                           (void**)&state));
+  memset(state, 0, sizeof(*state));
+  state->checks = LOOM_SANITIZER_CHECKS_KNOWN;
+  if (pass->decoded_options) {
+    for (uint16_t i = 0; i < pass->decoded_options->option_count; ++i) {
+      const loom_pass_decoded_option_t* option =
+          &pass->decoded_options->options[i];
+      if (!option->present) continue;
+      if (iree_string_view_equal(option->schema->name, IREE_SV("checks"))) {
+        IREE_RETURN_IF_ERROR(
+            loom_sanitizer_parse_checks(option->string_value, &state->checks));
+        state->has_checks_option = true;
+        continue;
+      }
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown decoded option '%.*s' for pass "
+                              "'sanitizer-insert-assertions'",
+                              (int)option->schema->name.size,
+                              option->schema->name.data);
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_pass_options_parse(
+        pass->info->name, options,
+        (loom_pass_option_parse_callback_t){
+            .fn = loom_sanitizer_insert_assertions_parse_option,
+            .user_data = state,
+        }));
+  }
+  pass->state = state;
+  return iree_ok_status();
+}
+
+static bool loom_sanitizer_checks_enabled(const loom_pass_t* pass,
+                                          loom_sanitizer_checks_t checks) {
+  const loom_sanitizer_insert_assertions_state_t* state =
+      (const loom_sanitizer_insert_assertions_state_t*)pass->state;
+  const loom_sanitizer_checks_t enabled =
+      state ? state->checks : LOOM_SANITIZER_CHECKS_KNOWN;
+  return iree_any_bit_set(enabled, checks);
+}
+
+static bool loom_sanitizer_find_value(loom_value_slice_t values,
+                                      loom_value_id_t value_id,
+                                      uint16_t* out_ordinal) {
+  for (uint16_t i = 0; i < values.count; ++i) {
+    if (values.values[i] != value_id) continue;
+    if (out_ordinal) *out_ordinal = i;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_sanitizer_value_list_contains(const loom_value_id_t* values,
+                                               uint16_t value_count,
+                                               loom_value_id_t value_id,
+                                               uint16_t* out_ordinal) {
+  for (uint16_t i = 0; i < value_count; ++i) {
+    if (values[i] != value_id) continue;
+    if (out_ordinal) *out_ordinal = i;
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_sanitizer_append_unique_value(
+    loom_value_id_t* values, uint16_t capacity, loom_value_id_t value_id,
+    uint16_t* inout_count, uint16_t* out_ordinal) {
+  if (loom_sanitizer_value_list_contains(values, *inout_count, value_id,
+                                         out_ordinal)) {
+    return iree_ok_status();
+  }
+  if (*inout_count >= capacity) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "sanitizer assertion value list capacity exceeded");
+  }
+  uint16_t ordinal = *inout_count;
+  values[ordinal] = value_id;
+  *inout_count = ordinal + 1;
+  if (out_ordinal) *out_ordinal = ordinal;
+  return iree_ok_status();
+}
+
+static bool loom_sanitizer_type_accepts_integer_predicates(loom_type_t type) {
+  if (!loom_type_is_scalar(type)) return false;
+  loom_scalar_type_t scalar_type = loom_type_element_type(type);
+  return loom_scalar_type_is_integer(scalar_type) ||
+         scalar_type == LOOM_SCALAR_TYPE_INDEX ||
+         scalar_type == LOOM_SCALAR_TYPE_OFFSET;
+}
+
+static bool loom_sanitizer_type_accepts_float_predicates(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_scalar_type_is_float(loom_type_element_type(type));
+}
+
+static bool loom_sanitizer_type_accepts_predicate(loom_type_t type,
+                                                  uint8_t predicate_kind) {
+  switch ((loom_predicate_kind_t)predicate_kind) {
+    case LOOM_PREDICATE_EQ:
+    case LOOM_PREDICATE_NE:
+    case LOOM_PREDICATE_LT:
+    case LOOM_PREDICATE_LE:
+    case LOOM_PREDICATE_GT:
+    case LOOM_PREDICATE_GE:
+    case LOOM_PREDICATE_MUL:
+    case LOOM_PREDICATE_MIN:
+    case LOOM_PREDICATE_MAX:
+    case LOOM_PREDICATE_POW2:
+    case LOOM_PREDICATE_RANGE:
+      return loom_sanitizer_type_accepts_integer_predicates(type);
+    case LOOM_PREDICATE_NOT_NAN:
+    case LOOM_PREDICATE_NOT_INF:
+    case LOOM_PREDICATE_FINITE:
+      return loom_sanitizer_type_accepts_float_predicates(type);
+    case LOOM_PREDICATE_COUNT_:
+      return false;
+  }
+  return false;
+}
+
+static bool loom_sanitizer_predicate_supported_for_values(
+    const loom_module_t* module, loom_value_slice_t values,
+    const loom_predicate_t* predicate) {
+  for (uint8_t i = 0; i < predicate->arg_count; ++i) {
+    if (predicate->arg_tags[i] != LOOM_PRED_ARG_VALUE) continue;
+    if (predicate->args[i] < 0) return false;
+    loom_value_id_t value_id = (loom_value_id_t)predicate->args[i];
+    if (!loom_sanitizer_find_value(values, value_id, NULL)) return false;
+    loom_type_t type = loom_module_value_type(module, value_id);
+    if (!loom_sanitizer_type_accepts_predicate(type, predicate->kind)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_sanitizer_predicate_arg_facts(
+    const loom_predicate_t* predicate, uint8_t argument_index,
+    loom_rewriter_t* rewriter, loom_value_slice_t values,
+    loom_value_facts_t* out_facts) {
+  if (argument_index >= predicate->arg_count) return false;
+  switch ((loom_predicate_arg_tag_t)predicate->arg_tags[argument_index]) {
+    case LOOM_PRED_ARG_CONST:
+      *out_facts = loom_value_facts_exact_i64(predicate->args[argument_index]);
+      return true;
+    case LOOM_PRED_ARG_VALUE: {
+      if (predicate->args[argument_index] < 0) return false;
+      const loom_value_id_t value_id =
+          (loom_value_id_t)predicate->args[argument_index];
+      if (!loom_sanitizer_find_value(values, value_id, NULL)) {
+        return false;
+      }
+      *out_facts = loom_rewriter_value_facts(rewriter, value_id);
+      return true;
+    }
+    case LOOM_PRED_ARG_NONE:
+    case LOOM_PRED_ARG_COUNT_:
+      return false;
+  }
+  return false;
+}
+
+static bool loom_sanitizer_ranges_are_disjoint(loom_value_facts_t lhs,
+                                               loom_value_facts_t rhs) {
+  return lhs.range_hi < rhs.range_lo || rhs.range_hi < lhs.range_lo;
+}
+
+static bool loom_sanitizer_predicate_is_proven(
+    const loom_predicate_t* predicate, loom_rewriter_t* rewriter,
+    loom_value_slice_t values) {
+  if (predicate->arg_count == 0 ||
+      predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE || predicate->args[0] < 0) {
+    return false;
+  }
+  const loom_value_id_t target_value = (loom_value_id_t)predicate->args[0];
+  if (!loom_sanitizer_find_value(values, target_value, NULL)) {
+    return false;
+  }
+  loom_value_facts_t target_facts =
+      loom_rewriter_value_facts(rewriter, target_value);
+
+  loom_value_facts_t rhs_facts = {0};
+  int64_t rhs_exact = 0;
+  int64_t lower = 0;
+  int64_t upper = 0;
+  switch ((loom_predicate_kind_t)predicate->kind) {
+    case LOOM_PREDICATE_EQ:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      return loom_value_facts_is_exact(target_facts) &&
+             loom_value_facts_is_exact(rhs_facts) &&
+             target_facts.range_lo == rhs_facts.range_lo;
+    case LOOM_PREDICATE_NE:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      if (loom_value_facts_as_exact_i64(rhs_facts, &rhs_exact) &&
+          rhs_exact == 0 && loom_value_facts_is_non_zero(target_facts)) {
+        return true;
+      }
+      return loom_sanitizer_ranges_are_disjoint(target_facts, rhs_facts);
+    case LOOM_PREDICATE_LT:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      return target_facts.range_hi < rhs_facts.range_lo;
+    case LOOM_PREDICATE_LE:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      return target_facts.range_hi <= rhs_facts.range_lo;
+    case LOOM_PREDICATE_GT:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      return target_facts.range_lo > rhs_facts.range_hi;
+    case LOOM_PREDICATE_GE:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      return target_facts.range_lo >= rhs_facts.range_hi;
+    case LOOM_PREDICATE_MUL:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          !loom_value_facts_as_exact_i64(rhs_facts, &rhs_exact) ||
+          rhs_exact == 0) {
+        return false;
+      }
+      return loom_value_facts_divisible_by(target_facts, rhs_exact);
+    case LOOM_PREDICATE_MIN:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      return target_facts.range_lo >= rhs_facts.range_hi;
+    case LOOM_PREDICATE_MAX:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          loom_value_facts_is_float(rhs_facts)) {
+        return false;
+      }
+      return target_facts.range_hi <= rhs_facts.range_lo;
+    case LOOM_PREDICATE_POW2:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      return loom_value_facts_is_power_of_two(target_facts);
+    case LOOM_PREDICATE_RANGE:
+      if (loom_value_facts_is_float(target_facts)) return false;
+      if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
+                                              &rhs_facts) ||
+          !loom_value_facts_as_exact_i64(rhs_facts, &lower) ||
+          !loom_sanitizer_predicate_arg_facts(predicate, 2, rewriter, values,
+                                              &rhs_facts) ||
+          !loom_value_facts_as_exact_i64(rhs_facts, &upper)) {
+        return false;
+      }
+      return target_facts.range_lo >= lower && target_facts.range_hi <= upper;
+    case LOOM_PREDICATE_NOT_NAN:
+      return loom_value_facts_is_not_nan(target_facts);
+    case LOOM_PREDICATE_NOT_INF:
+      return loom_value_facts_is_not_inf(target_facts);
+    case LOOM_PREDICATE_FINITE:
+      return loom_value_facts_is_finite(target_facts) ||
+             (loom_value_facts_is_not_nan(target_facts) &&
+              loom_value_facts_is_not_inf(target_facts));
+    case LOOM_PREDICATE_COUNT_:
+      return false;
+  }
+  return false;
+}
+
+static iree_status_t loom_sanitizer_result_types_for_values(
+    loom_module_t* module, loom_rewriter_t* rewriter, loom_value_slice_t values,
+    loom_type_t** out_types) {
+  loom_type_t* types = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, values.count, sizeof(*types), (void**)&types));
+  for (uint16_t i = 0; i < values.count; ++i) {
+    types[i] = loom_module_value_type(module, values.values[i]);
+  }
+  *out_types = types;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_build_value_assertion(
+    loom_module_t* module, loom_rewriter_t* rewriter, loom_value_slice_t values,
+    const loom_predicate_t* predicates, uint16_t predicate_count,
+    loom_location_id_t location, loom_op_t** out_op) {
+  loom_type_t* result_types = NULL;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_result_types_for_values(
+      module, rewriter, values, &result_types));
+  return loom_sanitizer_assert_value_build(
+      &rewriter->builder, values.values, values.count, predicates,
+      predicate_count, result_types, values.count, location, out_op);
+}
+
+static iree_status_t loom_sanitizer_filter_predicates(
+    loom_module_t* module, loom_rewriter_t* rewriter, loom_value_slice_t values,
+    loom_attribute_t predicates, loom_predicate_t** out_predicates,
+    uint16_t* out_predicate_count, uint16_t* out_elided_count,
+    bool* out_all_supported) {
+  *out_predicates = NULL;
+  *out_predicate_count = 0;
+  *out_elided_count = 0;
+  *out_all_supported = true;
+  if (predicates.kind != LOOM_ATTR_PREDICATE_LIST || predicates.count == 0) {
+    return iree_ok_status();
+  }
+  loom_predicate_t* filtered_predicates = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, predicates.count, sizeof(*filtered_predicates),
+      (void**)&filtered_predicates));
+  uint16_t filtered_count = 0;
+  for (uint16_t i = 0; i < predicates.count; ++i) {
+    const loom_predicate_t* predicate = &predicates.predicate_list[i];
+    if (!loom_sanitizer_predicate_supported_for_values(module, values,
+                                                       predicate)) {
+      *out_all_supported = false;
+      continue;
+    }
+    if (loom_sanitizer_predicate_is_proven(predicate, rewriter, values)) {
+      ++*out_elided_count;
+      continue;
+    }
+    filtered_predicates[filtered_count++] = *predicate;
+  }
+  *out_predicates = filtered_predicates;
+  *out_predicate_count = filtered_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_collect_assume_assert_values(
+    loom_rewriter_t* rewriter, loom_value_slice_t assume_values,
+    loom_attribute_t predicates, loom_value_slice_t* out_values) {
+  uint32_t maximum_value_count = assume_values.count;
+  if (predicates.kind == LOOM_ATTR_PREDICATE_LIST) {
+    maximum_value_count += predicates.count * 3u;
+  }
+  if (maximum_value_count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "sanitizer assertion value list is too large");
+  }
+  loom_value_id_t* values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, maximum_value_count, sizeof(*values), (void**)&values));
+  uint16_t value_count = 0;
+  for (uint16_t i = 0; i < assume_values.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_sanitizer_append_unique_value(
+        values, (uint16_t)maximum_value_count, assume_values.values[i],
+        &value_count, NULL));
+  }
+  if (predicates.kind == LOOM_ATTR_PREDICATE_LIST) {
+    for (uint16_t predicate_index = 0; predicate_index < predicates.count;
+         ++predicate_index) {
+      const loom_predicate_t* predicate =
+          &predicates.predicate_list[predicate_index];
+      for (uint8_t argument_index = 0; argument_index < predicate->arg_count;
+           ++argument_index) {
+        if (predicate->arg_tags[argument_index] != LOOM_PRED_ARG_VALUE ||
+            predicate->args[argument_index] < 0) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(loom_sanitizer_append_unique_value(
+            values, (uint16_t)maximum_value_count,
+            (loom_value_id_t)predicate->args[argument_index], &value_count,
+            NULL));
+      }
+    }
+  }
+  *out_values = (loom_value_slice_t){
+      .values = values,
+      .count = value_count,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_replace_assume(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_op_t* op, loom_value_slice_t assume_values,
+    loom_value_slice_t assume_results, loom_attribute_t predicates) {
+  if (assume_values.count != assume_results.count) {
+    return iree_ok_status();
+  }
+  loom_value_slice_t assert_values = {0};
+  IREE_RETURN_IF_ERROR(loom_sanitizer_collect_assume_assert_values(
+      rewriter, assume_values, predicates, &assert_values));
+
+  loom_predicate_t* filtered_predicates = NULL;
+  uint16_t filtered_count = 0;
+  uint16_t elided_count = 0;
+  bool all_predicates_supported = true;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_filter_predicates(
+      module, rewriter, assert_values, predicates, &filtered_predicates,
+      &filtered_count, &elided_count, &all_predicates_supported));
+  if (!all_predicates_supported) return iree_ok_status();
+  loom_sanitizer_insert_assertions_statistics_t* statistics =
+      loom_sanitizer_insert_assertions_statistics(pass);
+  statistics->predicates_elided += elided_count;
+  if (filtered_count == 0) {
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+        rewriter, op, assume_values.values, assume_values.count));
+    ++statistics->assume_ops_converted;
+    return iree_ok_status();
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* assert_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_build_value_assertion(
+      module, rewriter, assert_values, filtered_predicates, filtered_count,
+      op->location, &assert_op));
+  loom_value_slice_t assert_results =
+      loom_sanitizer_assert_value_results(assert_op);
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, assert_results.values, assume_results.count,
+      value_checkpoint));
+  IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+      rewriter, op, assert_results.values, assume_results.count));
+  ++statistics->assume_ops_converted;
+  ++statistics->value_assertions_inserted;
+  return iree_ok_status();
+}
+
+static uint8_t loom_sanitizer_scalar_fastmath_flags(const loom_op_t* op) {
+  switch (op->kind) {
+    case LOOM_OP_SCALAR_ADDF:
+    case LOOM_OP_SCALAR_SUBF:
+    case LOOM_OP_SCALAR_MULF:
+    case LOOM_OP_SCALAR_DIVF:
+    case LOOM_OP_SCALAR_REMF:
+    case LOOM_OP_SCALAR_NEGF:
+    case LOOM_OP_SCALAR_ABSF:
+    case LOOM_OP_SCALAR_MINIMUMF:
+    case LOOM_OP_SCALAR_MAXIMUMF:
+    case LOOM_OP_SCALAR_MINNUMF:
+    case LOOM_OP_SCALAR_MAXNUMF:
+    case LOOM_OP_SCALAR_CLAMPF:
+    case LOOM_OP_SCALAR_COPYSIGNF:
+    case LOOM_OP_SCALAR_EXPF:
+    case LOOM_OP_SCALAR_EXP2F:
+    case LOOM_OP_SCALAR_EXPM1F:
+    case LOOM_OP_SCALAR_LOGF:
+    case LOOM_OP_SCALAR_LOG2F:
+    case LOOM_OP_SCALAR_LOG10F:
+    case LOOM_OP_SCALAR_LOG1PF:
+    case LOOM_OP_SCALAR_POWF:
+    case LOOM_OP_SCALAR_SQRTF:
+    case LOOM_OP_SCALAR_RSQRTF:
+    case LOOM_OP_SCALAR_CBRTF:
+    case LOOM_OP_SCALAR_SINF:
+    case LOOM_OP_SCALAR_COSF:
+    case LOOM_OP_SCALAR_SINTURNSF:
+    case LOOM_OP_SCALAR_COSTURNSF:
+    case LOOM_OP_SCALAR_TANF:
+    case LOOM_OP_SCALAR_ASINF:
+    case LOOM_OP_SCALAR_ACOSF:
+    case LOOM_OP_SCALAR_ATANF:
+    case LOOM_OP_SCALAR_ATAN2F:
+    case LOOM_OP_SCALAR_SINHF:
+    case LOOM_OP_SCALAR_COSHF:
+    case LOOM_OP_SCALAR_TANHF:
+    case LOOM_OP_SCALAR_ASINHF:
+    case LOOM_OP_SCALAR_ACOSHF:
+    case LOOM_OP_SCALAR_ATANHF:
+    case LOOM_OP_SCALAR_ERFF:
+    case LOOM_OP_SCALAR_ERFCF:
+    case LOOM_OP_SCALAR_LOGISTICF:
+    case LOOM_OP_SCALAR_SILUF:
+    case LOOM_OP_SCALAR_SOFTPLUSF:
+    case LOOM_OP_SCALAR_GELUF:
+    case LOOM_OP_SCALAR_FMAF:
+    case LOOM_OP_SCALAR_CEILF:
+    case LOOM_OP_SCALAR_FLOORF:
+    case LOOM_OP_SCALAR_ROUNDF:
+    case LOOM_OP_SCALAR_ROUNDEVENF:
+    case LOOM_OP_SCALAR_TRUNCF:
+    case LOOM_OP_SCALAR_CMPF:
+      return op->instance_flags;
+    default:
+      return 0;
+  }
+}
+
+static bool loom_sanitizer_fastmath_predicate_kind(uint8_t fastmath_flags,
+                                                   uint8_t* out_kind) {
+  const bool no_nans =
+      iree_any_bit_set(fastmath_flags, LOOM_SCALAR_FASTMATHFLAGS_NNAN);
+  const bool no_infinities =
+      iree_any_bit_set(fastmath_flags, LOOM_SCALAR_FASTMATHFLAGS_NINF);
+  if (no_nans && no_infinities) {
+    *out_kind = LOOM_PREDICATE_FINITE;
+    return true;
+  }
+  if (no_nans) {
+    *out_kind = LOOM_PREDICATE_NOT_NAN;
+    return true;
+  }
+  if (no_infinities) {
+    *out_kind = LOOM_PREDICATE_NOT_INF;
+    return true;
+  }
+  return false;
+}
+
+static loom_predicate_t loom_sanitizer_make_unary_predicate(
+    uint8_t kind, loom_value_id_t value) {
+  return (loom_predicate_t){
+      .kind = kind,
+      .arg_count = 1,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_NONE, LOOM_PRED_ARG_NONE},
+      .args = {value, 0, 0},
+  };
+}
+
+static bool loom_sanitizer_value_is_scalar_float(loom_module_t* module,
+                                                 loom_value_id_t value_id) {
+  loom_type_t type = loom_module_value_type(module, value_id);
+  return loom_type_is_scalar(type) &&
+         loom_scalar_type_is_float(loom_type_element_type(type));
+}
+
+static bool loom_sanitizer_assertion_has_predicate_for_value(
+    loom_op_t* assert_op, loom_value_id_t value_id, uint8_t predicate_kind) {
+  if (!loom_sanitizer_assert_value_isa(assert_op)) return false;
+  loom_attribute_t predicates =
+      loom_sanitizer_assert_value_predicates(assert_op);
+  if (predicates.kind != LOOM_ATTR_PREDICATE_LIST) return false;
+  for (uint16_t i = 0; i < predicates.count; ++i) {
+    const loom_predicate_t* predicate = &predicates.predicate_list[i];
+    if (predicate->kind != predicate_kind || predicate->arg_count == 0 ||
+        predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE ||
+        predicate->args[0] < 0) {
+      continue;
+    }
+    if ((loom_value_id_t)predicate->args[0] == value_id) return true;
+  }
+  return false;
+}
+
+static bool loom_sanitizer_result_already_asserted(loom_module_t* module,
+                                                   loom_value_id_t value_id,
+                                                   uint8_t predicate_kind) {
+  loom_value_t* value = loom_module_value(module, value_id);
+  const loom_use_t* uses = loom_value_uses(value);
+  for (uint32_t i = 0; i < value->use_count; ++i) {
+    loom_op_t* user_op = loom_use_user_op(uses[i]);
+    if (loom_sanitizer_assertion_has_predicate_for_value(user_op, value_id,
+                                                         predicate_kind)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_sanitizer_build_fastmath_value_assertion(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_value_slice_t values, uint8_t predicate_kind,
+    loom_location_id_t location, loom_op_t** out_op) {
+  loom_predicate_t* predicates = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, values.count, sizeof(*predicates), (void**)&predicates));
+  uint16_t predicate_count = 0;
+  uint16_t elided_count = 0;
+  for (uint16_t i = 0; i < values.count; ++i) {
+    loom_predicate_t predicate =
+        loom_sanitizer_make_unary_predicate(predicate_kind, values.values[i]);
+    if (loom_sanitizer_predicate_is_proven(&predicate, rewriter, values)) {
+      ++elided_count;
+      continue;
+    }
+    predicates[predicate_count++] = predicate;
+  }
+  loom_sanitizer_insert_assertions_statistics_t* statistics =
+      loom_sanitizer_insert_assertions_statistics(pass);
+  statistics->predicates_elided += elided_count;
+  if (predicate_count == 0) {
+    *out_op = NULL;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_sanitizer_build_value_assertion(
+      module, rewriter, values, predicates, predicate_count, location, out_op));
+  ++statistics->value_assertions_inserted;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_instrument_fastmath_inputs(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_op_t* op, uint8_t predicate_kind, bool* out_changed) {
+  *out_changed = false;
+  if (op->operand_count == 0) return iree_ok_status();
+  loom_value_id_t* values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, op->operand_count, sizeof(*values), (void**)&values));
+  uint16_t value_count = 0;
+  loom_value_id_t* operands = loom_op_operands(op);
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    if (!loom_sanitizer_value_is_scalar_float(module, operands[i])) continue;
+    IREE_RETURN_IF_ERROR(loom_sanitizer_append_unique_value(
+        values, op->operand_count, operands[i], &value_count, NULL));
+  }
+  if (value_count == 0) return iree_ok_status();
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_op_t* assert_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_build_fastmath_value_assertion(
+      pass, module, rewriter,
+      (loom_value_slice_t){
+          .values = values,
+          .count = value_count,
+      },
+      predicate_kind, op->location, &assert_op));
+  if (!assert_op) return iree_ok_status();
+
+  loom_value_slice_t checked_values =
+      loom_sanitizer_assert_value_results(assert_op);
+  for (uint16_t operand_index = 0; operand_index < op->operand_count;
+       ++operand_index) {
+    uint16_t value_ordinal = 0;
+    if (!loom_sanitizer_value_list_contains(
+            values, value_count, operands[operand_index], &value_ordinal)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_rewriter_set_operand(
+        rewriter, op, operand_index, checked_values.values[value_ordinal]));
+  }
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_instrument_fastmath_results(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_op_t* op, uint8_t predicate_kind, bool* out_changed) {
+  *out_changed = false;
+  if (op->result_count == 0) return iree_ok_status();
+  loom_value_id_t* values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, op->result_count, sizeof(*values), (void**)&values));
+  uint16_t value_count = 0;
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (!loom_sanitizer_value_is_scalar_float(module, results[i])) continue;
+    if (loom_sanitizer_result_already_asserted(module, results[i],
+                                               predicate_kind)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_sanitizer_append_unique_value(
+        values, op->result_count, results[i], &value_count, NULL));
+  }
+  if (value_count == 0) return iree_ok_status();
+
+  loom_builder_set_after(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* assert_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_build_fastmath_value_assertion(
+      pass, module, rewriter,
+      (loom_value_slice_t){
+          .values = values,
+          .count = value_count,
+      },
+      predicate_kind, op->location, &assert_op));
+  if (!assert_op) return iree_ok_status();
+
+  loom_value_slice_t checked_values =
+      loom_sanitizer_assert_value_results(assert_op);
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, checked_values.values, checked_values.count,
+      value_checkpoint));
+  for (uint16_t i = 0; i < value_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_except(
+        rewriter, values[i], checked_values.values[i], assert_op));
+  }
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_sanitizer_try_instrument_fastmath_op(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_op_t* op) {
+  uint8_t fastmath_flags = loom_sanitizer_scalar_fastmath_flags(op);
+  uint8_t predicate_kind = 0;
+  if (!loom_sanitizer_fastmath_predicate_kind(fastmath_flags,
+                                              &predicate_kind)) {
+    return iree_ok_status();
+  }
+  bool inputs_changed = false;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_instrument_fastmath_inputs(
+      pass, module, rewriter, op, predicate_kind, &inputs_changed));
+  bool results_changed = false;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_instrument_fastmath_results(
+      pass, module, rewriter, op, predicate_kind, &results_changed));
+  if (inputs_changed || results_changed) {
+    loom_sanitizer_insert_assertions_statistics_t* statistics =
+        loom_sanitizer_insert_assertions_statistics(pass);
+    ++statistics->fastmath_ops_instrumented;
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_sanitizer_insert_assertions_run(loom_pass_t* pass,
                                                    loom_module_t* module,
                                                    loom_func_like_t function) {
-  (void)pass;
-  (void)module;
-  (void)function;
-  return iree_ok_status();
+  if (!loom_sanitizer_checks_enabled(pass, LOOM_SANITIZER_CHECK_VALUE)) {
+    return iree_ok_status();
+  }
+  loom_region_t* body = loom_func_like_body(function);
+  if (!body) return iree_ok_status();
+
+  loom_rewriter_t rewriter;
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_initialize(&rewriter, module, pass->arena));
+  loom_value_fact_table_t* value_facts = NULL;
+  iree_status_t status = loom_pass_value_facts_prepare(
+      pass, module, loom_pass_value_fact_scope_function(function),
+      &value_facts);
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_enable_analysis(&rewriter, function, value_facts);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_seed_function(&rewriter, function);
+  }
+  while (iree_status_is_ok(status)) {
+    loom_op_t* op = loom_rewriter_pop(&rewriter);
+    if (!op) break;
+    if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) continue;
+    if (loom_scalar_assume_isa(op)) {
+      status = loom_sanitizer_replace_assume(
+          pass, module, &rewriter, op, loom_scalar_assume_values(op),
+          loom_scalar_assume_results(op), loom_scalar_assume_predicates(op));
+      continue;
+    }
+    if (loom_index_assume_isa(op)) {
+      status = loom_sanitizer_replace_assume(
+          pass, module, &rewriter, op, loom_index_assume_values(op),
+          loom_index_assume_results(op), loom_index_assume_predicates(op));
+      continue;
+    }
+    status =
+        loom_sanitizer_try_instrument_fastmath_op(pass, module, &rewriter, op);
+  }
+
+  if (iree_status_is_ok(status) &&
+      (rewriter.created_op_count != 0 || rewriter.erased_op_count != 0 ||
+       iree_any_bit_set(rewriter.flags, LOOM_REWRITER_FLAG_CHANGED))) {
+    loom_pass_mark_changed(pass);
+  }
+  loom_rewriter_deinitialize(&rewriter);
+  if (!iree_status_is_ok(status) && pass->value_facts) {
+    loom_pass_value_fact_owner_invalidate(pass->value_facts);
+  }
+  return status;
 }
 
 static const loom_pass_info_t

@@ -279,6 +279,14 @@ iree_status_t loom_rewriter_replace_all_uses_with(loom_rewriter_t* rewriter,
                                                   loom_value_id_t old_value,
                                                   loom_value_id_t new_value);
 
+// Replaces operand uses of one value with another value except uses by
+// |except_op|, and adds affected users to the worklist. Does not erase the
+// defining op and intentionally does not rewrite type or attribute references.
+iree_status_t loom_rewriter_replace_all_uses_except(loom_rewriter_t* rewriter,
+                                                    loom_value_id_t old_value,
+                                                    loom_value_id_t new_value,
+                                                    const loom_op_t* except_op);
+
 // Materializes one replacement value per result using |materialize_value|,
 // preserves existing result names, replaces all uses, and erases |op|.
 iree_status_t loom_rewriter_replace_results_with_materialized_values_and_erase(

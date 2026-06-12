@@ -25,8 +25,16 @@ loom_cc_library(
     srcs = ["pipeline_passes.c"],
     hdrs = ["pipeline_passes.h"],
     deps = [
+        ":options",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/sanitizer",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/pass:pipeline",
+        "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
+        "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base",
     ],
 )

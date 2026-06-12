@@ -62,6 +62,7 @@ static bool loom_sanitizer_type_accepts_predicate(loom_type_t type,
     case LOOM_PREDICATE_RANGE:
       return loom_sanitizer_type_accepts_integer_predicates(type);
     case LOOM_PREDICATE_NOT_NAN:
+    case LOOM_PREDICATE_NOT_INF:
     case LOOM_PREDICATE_FINITE:
       return loom_sanitizer_type_accepts_float_predicates(type);
     case LOOM_PREDICATE_COUNT_:
@@ -74,6 +75,7 @@ static iree_string_view_t loom_sanitizer_predicate_expected_type(
     uint8_t predicate_kind) {
   switch ((loom_predicate_kind_t)predicate_kind) {
     case LOOM_PREDICATE_NOT_NAN:
+    case LOOM_PREDICATE_NOT_INF:
     case LOOM_PREDICATE_FINITE:
       return IREE_SV("floating-point value");
     default:

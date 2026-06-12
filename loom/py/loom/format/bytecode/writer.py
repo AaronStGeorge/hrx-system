@@ -1249,7 +1249,8 @@ class BytecodeWriter:
         "pow2": 9,
         "range": 10,
         "not_nan": 11,
-        "finite": 12,
+        "not_inf": 12,
+        "finite": 13,
     }
 
     def _write_predicate_list(

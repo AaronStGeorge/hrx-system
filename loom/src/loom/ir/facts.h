@@ -78,9 +78,13 @@ enum loom_value_fact_flag_bits_e {
   // The value cannot be NaN. This may come from an exact float value or a
   // checked predicate; it is meaningful only for floating-point typed values.
   LOOM_VALUE_FACT_NOT_NAN = 1u << 11,
+  // The value cannot be positive or negative infinity. This may come from an
+  // exact float value or a checked predicate; it is meaningful only for
+  // floating-point typed values.
+  LOOM_VALUE_FACT_NOT_INF = 1u << 12,
   // The value cannot be NaN or infinity. This may come from an exact float
-  // value or a checked predicate and implies NOT_NAN.
-  LOOM_VALUE_FACT_FINITE = 1u << 12,
+  // value or a checked predicate and implies NOT_NAN and NOT_INF.
+  LOOM_VALUE_FACT_FINITE = 1u << 13,
   // The value is known to be identical for every active lane observing it.
   LOOM_VALUE_FACT_UNIFORM = 1u << 7,
   // The value may differ between active lanes observing it.
@@ -279,6 +283,10 @@ static inline bool loom_value_facts_is_float(loom_value_facts_t facts) {
 
 static inline bool loom_value_facts_is_not_nan(loom_value_facts_t facts) {
   return (facts.flags & LOOM_VALUE_FACT_NOT_NAN) != 0;
+}
+
+static inline bool loom_value_facts_is_not_inf(loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_NOT_INF) != 0;
 }
 
 static inline bool loom_value_facts_is_finite(loom_value_facts_t facts) {

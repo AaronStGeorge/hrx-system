@@ -68,7 +68,8 @@ func.def @proven_exact_float_assertion_folds() -> (f32) {
 // finite implies not_nan, so a later weaker dominated assertion folds.
 func.def @weaker_dominated_float_assertion_folds(%x: f32) -> (f32) {
   %finite = sanitizer.assert.value %x [finite(%x)] : f32
-  %not_nan = sanitizer.assert.value %finite [not_nan(%finite)] : f32
+  %not_inf = sanitizer.assert.value %finite [not_inf(%finite)] : f32
+  %not_nan = sanitizer.assert.value %not_inf [not_nan(%not_inf)] : f32
   func.return %not_nan : f32
 }
 
@@ -92,6 +93,23 @@ func.def @stronger_dominated_float_assertion_survives(%x: f32) -> (f32) {
   %not_nan = sanitizer.assert.value %x [not_nan(%x)] : f32
   %finite = sanitizer.assert.value %not_nan [finite(%not_nan)] : f32
   func.return %finite : f32
+}
+
+// ====
+
+// Separate not_nan and not_inf facts together prove finite.
+func.def @finite_assertion_folds_from_weaker_float_facts(%x: f32) -> (f32) {
+  %not_nan = sanitizer.assert.value %x [not_nan(%x)] : f32
+  %not_inf = sanitizer.assert.value %not_nan [not_inf(%not_nan)] : f32
+  %finite = sanitizer.assert.value %not_inf [finite(%not_inf)] : f32
+  func.return %finite : f32
+}
+
+// ----
+func.def @finite_assertion_folds_from_weaker_float_facts(%x: f32) -> (f32) {
+  %not_nan = sanitizer.assert.value %x [not_nan(%x)] : f32
+  %not_inf = sanitizer.assert.value %not_nan [not_inf(%not_nan)] : f32
+  func.return %not_inf : f32
 }
 
 // ====

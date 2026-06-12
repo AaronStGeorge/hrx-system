@@ -100,11 +100,37 @@ static iree_status_t loom_target_pipeline_build_authoring_expansion(
   return loom_target_pipeline_build_run(builder, IREE_SV("inline-callables"));
 }
 
+static iree_string_view_t loom_target_pipeline_sanitizer_checks_string(
+    loom_sanitizer_checks_t checks) {
+  switch (checks) {
+    case LOOM_SANITIZER_CHECK_ACCESS:
+      return IREE_SV("access");
+    case LOOM_SANITIZER_CHECK_VALUE:
+      return IREE_SV("value");
+    case LOOM_SANITIZER_CHECK_OPERATION:
+      return IREE_SV("operation");
+    case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE:
+      return IREE_SV("access|value");
+    case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_OPERATION:
+      return IREE_SV("access|operation");
+    case LOOM_SANITIZER_CHECK_VALUE | LOOM_SANITIZER_CHECK_OPERATION:
+      return IREE_SV("value|operation");
+    case LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
+        LOOM_SANITIZER_CHECK_OPERATION:
+      return IREE_SV("access|value|operation");
+    default:
+      return IREE_SV("none");
+  }
+}
+
 static iree_status_t loom_target_pipeline_build_sanitizer_assertion_selection(
     loom_builder_t* builder, void* user_data) {
-  (void)user_data;
-  return loom_target_pipeline_build_run(builder,
-                                        IREE_SV("sanitizer-insert-assertions"));
+  const loom_target_pipeline_build_context_t* context =
+      (const loom_target_pipeline_build_context_t*)user_data;
+  return loom_target_pipeline_build_run_with_string_option(
+      builder, IREE_SV("sanitizer-insert-assertions"), IREE_SV("checks"),
+      loom_target_pipeline_sanitizer_checks_string(
+          context->sanitizer_options.checks));
 }
 
 static iree_status_t loom_target_pipeline_build_target_function_body(

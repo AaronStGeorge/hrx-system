@@ -13,7 +13,7 @@ func.def @assert_value_roundtrip(%n: index, %m: index) -> (index, index) {
 // ====
 
 func.def @assert_float_value_roundtrip(%x: f32) -> (f32) {
-  %checked = sanitizer.assert.value %x [not_nan(%x), finite(%x)] : f32
+  %checked = sanitizer.assert.value %x [not_nan(%x), not_inf(%x), finite(%x)] : f32
   func.return %checked : f32
 }
 
