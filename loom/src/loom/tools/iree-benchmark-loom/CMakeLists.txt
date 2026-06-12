@@ -82,6 +82,7 @@ loom_cc_library(
     loom::ir
     loom::ir::facts
     loom::ops::special_values
+    loom::target::artifact_manifest
     loom::tooling::cli::help
     loom::tooling::compile::pipeline
     loom::tooling::context
@@ -180,6 +181,7 @@ loom_cc_test(
     iree::base::internal::json
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::testing::temp_file
 )
 
 loom_cc_test(

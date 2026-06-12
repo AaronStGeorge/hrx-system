@@ -55,6 +55,7 @@ typedef enum iree_benchmark_loom_bundle_file_kind_e {
   IREE_BENCHMARK_LOOM_BUNDLE_FILE_TARGET_ARTIFACT = 4,
   IREE_BENCHMARK_LOOM_BUNDLE_FILE_HAL_EXECUTABLE = 5,
   IREE_BENCHMARK_LOOM_BUNDLE_FILE_TARGET_LISTING = 6,
+  IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST = 7,
 } iree_benchmark_loom_bundle_file_kind_t;
 
 typedef struct iree_benchmark_loom_bundle_file_entry_t {
@@ -95,6 +96,10 @@ typedef struct iree_benchmark_loom_artifact_bundle_t {
   iree_string_view_t compile_report_dir;
   // Owned debug compile-report directory inside |dir|.
   char* compile_report_dir_storage;
+  // Borrowed view into |artifact_manifest_dir_storage|.
+  iree_string_view_t artifact_manifest_dir;
+  // Owned debug artifact-manifest directory inside |dir|.
+  char* artifact_manifest_dir_storage;
   // Borrowed view into |target_artifact_dir_storage|.
   iree_string_view_t target_artifact_dir;
   // Owned debug target-native artifact directory inside |dir|.
@@ -186,6 +191,10 @@ bool iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(
 
 // Returns true when |bundle| should receive compile-report artifacts.
 bool iree_benchmark_loom_artifact_bundle_wants_compile_reports(
+    const iree_benchmark_loom_artifact_bundle_t* bundle);
+
+// Returns true when |bundle| should receive artifact-manifest artifacts.
+bool iree_benchmark_loom_artifact_bundle_wants_artifact_manifests(
     const iree_benchmark_loom_artifact_bundle_t* bundle);
 
 // Resolves the result output path after applying bundle defaults.

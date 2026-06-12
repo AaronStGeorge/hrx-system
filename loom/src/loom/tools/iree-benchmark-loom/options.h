@@ -101,6 +101,8 @@ typedef struct iree_benchmark_loom_options_t {
   iree_string_view_t measure;
   // Structured compile-report request.
   iree_string_view_t compile_report;
+  // Structured artifact-manifest request.
+  iree_string_view_t artifact_manifest;
   // Requested HAL profiling data-family list.
   iree_string_view_t profile_data;
   // Requested HAL profiling counter names.

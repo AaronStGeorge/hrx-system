@@ -31,6 +31,8 @@ iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(
     const loom_testbench_case_plan_t* sample_constant_case_plan,
     iree_host_size_t sample_constant_ordinal, bool has_sample_constant_ordinal,
     const loom_run_compile_report_capture_options_t* compile_report_options,
+    const loom_run_candidate_artifact_manifest_options_t*
+        artifact_manifest_options,
     iree_benchmark_loom_hal_actual_provider_t* out_provider);
 
 // Releases provider-owned compile, diagnostic, and artifact path state.

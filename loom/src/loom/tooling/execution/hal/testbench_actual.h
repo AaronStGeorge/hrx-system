@@ -117,6 +117,8 @@ typedef struct loom_run_hal_testbench_actual_provider_options_t {
   loom_target_compile_report_t* report;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
+  // Optional artifact manifest requested from the selected backend.
+  loom_run_candidate_artifact_manifest_options_t artifact_manifest;
 } loom_run_hal_testbench_actual_provider_options_t;
 
 typedef struct loom_run_hal_testbench_actual_provider_t {
@@ -150,6 +152,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   loom_target_compile_report_t* report;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
+  // Optional artifact manifest requested from the selected backend.
+  loom_run_candidate_artifact_manifest_options_t artifact_manifest;
   // Parsed compile module owned by this provider.
   loom_run_module_t compile_module;
   // Backend-produced HAL executable candidate.
@@ -221,6 +225,8 @@ typedef struct loom_run_hal_testbench_actual_sequence_options_t {
   uint32_t max_errors;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
+  // Optional artifact manifest requested from the selected backend.
+  loom_run_candidate_artifact_manifest_options_t artifact_manifest;
 } loom_run_hal_testbench_actual_sequence_options_t;
 
 typedef struct loom_run_hal_testbench_actual_sequence_t {

@@ -20,6 +20,8 @@ iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(
     const loom_testbench_case_plan_t* sample_constant_case_plan,
     iree_host_size_t sample_constant_ordinal, bool has_sample_constant_ordinal,
     const loom_run_compile_report_capture_options_t* compile_report_options,
+    const loom_run_candidate_artifact_manifest_options_t*
+        artifact_manifest_options,
     iree_benchmark_loom_hal_actual_provider_t* out_provider) {
   *out_provider = (iree_benchmark_loom_hal_actual_provider_t){
       .context = context,
@@ -28,6 +30,10 @@ iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(
   iree_allocator_t host_allocator = context->execution.host_allocator;
   iree_benchmark_loom_diagnostic_capture_initialize(host_allocator,
                                                     &out_provider->diagnostics);
+  loom_run_candidate_artifact_manifest_options_t artifact_manifest = {0};
+  if (artifact_manifest_options != NULL) {
+    artifact_manifest = *artifact_manifest_options;
+  }
   iree_status_t status = loom_run_compile_report_capture_initialize(
       compile_report_options, host_allocator,
       &out_provider->compile_report_capture);
@@ -62,6 +68,7 @@ iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(
             },
         .report = report_options.report,
         .artifact_flags = artifact_flags,
+        .artifact_manifest = artifact_manifest,
     };
     loom_run_hal_testbench_actual_provider_initialize(&provider_options,
                                                       &out_provider->execution);
@@ -89,6 +96,7 @@ void iree_benchmark_loom_hal_actual_provider_deinitialize(
   iree_allocator_free(host_allocator, provider->target_listing_path_storage);
   iree_allocator_free(host_allocator,
                       provider->compile_report_artifact_path_storage);
+  iree_allocator_free(host_allocator, provider->artifact_manifest_path_storage);
   iree_benchmark_loom_diagnostic_capture_deinitialize(&provider->diagnostics);
   *provider = (iree_benchmark_loom_hal_actual_provider_t){0};
 }
@@ -123,6 +131,7 @@ void iree_benchmark_loom_benchmark_result_set_compile_rejection(
   }
   out_result->compile_report_artifact_path =
       provider->compile_report_artifact_path;
+  out_result->artifact_manifest_path = provider->artifact_manifest_path;
   out_result->target_artifact_path = provider->target_artifact_path;
   out_result->target_listing_path = provider->target_listing_path;
   out_result->hal_executable_path = provider->hal_executable_path;

@@ -516,6 +516,7 @@ iree_status_t iree_benchmark_loom_run_dispatch_comparison(
       .filename = options->filename,
       .source = options->source,
       .compile_report_options = options->compile_report_options,
+      .artifact_manifest_options = options->artifact_manifest_options,
       .case_execution_options = options->case_execution_options,
       .execution_arena = options->execution_arena,
       .host_allocator = options->host_allocator,

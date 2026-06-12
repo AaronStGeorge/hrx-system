@@ -264,6 +264,7 @@ void loom_run_hal_testbench_actual_provider_initialize(
       .max_errors = options->max_errors,
       .report = options->report,
       .artifact_flags = options->artifact_flags,
+      .artifact_manifest = options->artifact_manifest,
   };
   loom_run_hal_invocation_options_initialize(&out_provider->invocation_options);
 }
@@ -750,6 +751,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   compile_options.max_errors = max_errors;
   compile_options.report = provider->report;
   compile_options.artifact_flags = provider->artifact_flags;
+  compile_options.artifact_manifest = provider->artifact_manifest;
 
   provider->candidate_initialized = true;
   const iree_host_size_t emit_error_count = provider->diagnostic_error_count;
@@ -1098,6 +1100,7 @@ iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
         .diagnostic_sink = options->diagnostic_sink,
         .max_errors = options->max_errors,
         .artifact_flags = options->artifact_flags,
+        .artifact_manifest = options->artifact_manifest,
     };
     loom_run_hal_testbench_actual_provider_initialize(
         &provider_options, &out_sequence->providers[provider_index++]);

@@ -152,6 +152,7 @@
           "work_items",
           "--output-format=jsonl",
           "compile_report_path",
+          "artifact_manifest_path",
           "target_artifact_path"
         ]
       }
@@ -169,6 +170,7 @@
           "JSONL event stream (--output-format=jsonl)",
           "results.json in snapshot mode",
           "compile_report_path",
+          "artifact_manifest_path",
           "target_artifact_path"
         ]
       }

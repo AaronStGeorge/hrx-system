@@ -1516,6 +1516,16 @@ static iree_status_t iree_benchmark_loom_append_compile_report_artifact_leaf(
   return iree_string_builder_append_cstring(leaf, "_compile_report.json");
 }
 
+static iree_status_t iree_benchmark_loom_append_artifact_manifest_leaf(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_candidate_identity_t* candidate,
+    const iree_benchmark_loom_hal_actual_provider_t* provider,
+    iree_string_builder_t* leaf) {
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_append_candidate_artifact_stem(
+      run, candidate, provider, leaf));
+  return iree_string_builder_append_cstring(leaf, "_artifact_manifest.json");
+}
+
 static iree_status_t iree_benchmark_loom_append_artifact_extension(
     iree_string_view_t format, iree_string_view_t fallback_extension,
     iree_string_builder_t* leaf) {
@@ -1577,6 +1587,26 @@ static iree_status_t iree_benchmark_loom_write_candidate_byte_artifact(
   }
   iree_allocator_free(allocator, path_storage);
   return status;
+}
+
+static iree_status_t iree_benchmark_loom_find_artifact_manifest_sidecar(
+    const loom_run_hal_artifact_t* artifact,
+    const loom_target_emit_sidecar_artifact_t** out_sidecar) {
+  *out_sidecar = NULL;
+  for (iree_host_size_t i = 0; i < artifact->sidecar_count; ++i) {
+    const loom_target_emit_sidecar_artifact_t* sidecar = &artifact->sidecars[i];
+    if (sidecar->kind !=
+        LOOM_TARGET_EMIT_SIDECAR_ARTIFACT_KIND_ARTIFACT_MANIFEST) {
+      continue;
+    }
+    if (*out_sidecar != NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "candidate emitted multiple artifact manifest sidecars");
+    }
+    *out_sidecar = sidecar;
+  }
+  return iree_ok_status();
 }
 
 iree_status_t iree_benchmark_loom_write_compiled_artifacts(
@@ -1649,6 +1679,25 @@ iree_status_t iree_benchmark_loom_write_compiled_artifacts(
         artifact->executable_data, allocator,
         &provider->hal_executable_path_storage, &provider->hal_executable_path);
   }
+
+  const loom_target_emit_sidecar_artifact_t* artifact_manifest = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_find_artifact_manifest_sidecar(
+        artifact, &artifact_manifest);
+  }
+  iree_string_builder_reset(&leaf);
+  if (iree_status_is_ok(status) && artifact_manifest != NULL) {
+    status = iree_benchmark_loom_append_artifact_manifest_leaf(run, candidate,
+                                                               provider, &leaf);
+  }
+  if (iree_status_is_ok(status) && artifact_manifest != NULL) {
+    status = iree_benchmark_loom_write_candidate_byte_artifact(
+        bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST,
+        bundle->artifact_manifest_dir, iree_string_builder_view(&leaf),
+        artifact_manifest->contents, allocator,
+        &provider->artifact_manifest_path_storage,
+        &provider->artifact_manifest_path);
+  }
   iree_string_builder_deinitialize(&leaf);
   return status;
 }
@@ -1695,6 +1744,12 @@ static iree_status_t iree_benchmark_loom_append_compile_report_artifact_json(
         &stream, ",\"target_artifact_path\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         &stream, provider->target_artifact_path));
+  }
+  if (!iree_string_view_is_empty(provider->artifact_manifest_path)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"artifact_manifest_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, provider->artifact_manifest_path));
   }
   if (!iree_string_view_is_empty(provider->target_listing_path)) {
     IREE_RETURN_IF_ERROR(
@@ -1884,6 +1939,12 @@ iree_status_t iree_benchmark_loom_write_benchmark_result_json(
         loom_output_stream_write_cstring(stream, ",\"compile_report_path\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         stream, benchmark_result->compile_report_artifact_path));
+  }
+  if (!iree_string_view_is_empty(benchmark_result->artifact_manifest_path)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        stream, ",\"artifact_manifest_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, benchmark_result->artifact_manifest_path));
   }
   if (!iree_string_view_is_empty(benchmark_result->target_artifact_path)) {
     IREE_RETURN_IF_ERROR(
@@ -2089,6 +2150,12 @@ iree_status_t iree_benchmark_loom_append_compile_row(
         loom_output_stream_write_cstring(&stream, ",\"compile_report_path\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         &stream, provider->compile_report_artifact_path));
+  }
+  if (!iree_string_view_is_empty(provider->artifact_manifest_path)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"artifact_manifest_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, provider->artifact_manifest_path));
   }
   if (!iree_string_view_is_empty(provider->target_artifact_path)) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
@@ -2415,9 +2482,10 @@ iree_status_t iree_benchmark_loom_append_summary_row(
       output,
       ",\"artifacts\":{\"bundle_enabled\":%s,\"fixture_read_count\":%" PRIhsz
       ",\"file_output_count\":%" PRIhsz ",\"profile_count\":%" PRIhsz
-      ",\"compile_report_count\":%" PRIhsz ",\"target_artifact_count\":%" PRIhsz
-      ",\"target_listing_count\":%" PRIhsz ",\"hal_executable_count\":%" PRIhsz
-      "}}",
+      ",\"compile_report_count\":%" PRIhsz
+      ",\"artifact_manifest_count\":%" PRIhsz
+      ",\"target_artifact_count\":%" PRIhsz ",\"target_listing_count\":%" PRIhsz
+      ",\"hal_executable_count\":%" PRIhsz "}}",
       bundle != NULL && bundle->enabled ? "true" : "false",
       iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_FIXTURE_READ),
@@ -2427,6 +2495,8 @@ iree_status_t iree_benchmark_loom_append_summary_row(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_PROFILE),
       iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REPORT),
+      iree_benchmark_loom_artifact_bundle_file_count(
+          bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST),
       iree_benchmark_loom_artifact_bundle_file_count(
           bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_TARGET_ARTIFACT),
       iree_benchmark_loom_artifact_bundle_file_count(

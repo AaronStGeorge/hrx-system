@@ -6,9 +6,13 @@
 
 #include "loom/tools/iree-benchmark-loom/report.h"
 
+#include <fstream>
+#include <string>
+
 #include "iree/base/internal/json.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/testing/temp_file.h"
 
 namespace loom {
 namespace {
@@ -88,6 +92,8 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
   result.data_cache.requested_min_ring_bytes = 4096;
   result.data_cache.binding_set_bytes = 64;
   result.data_cache.binding_ring_bytes = 384;
+  result.artifact_manifest_path =
+      IREE_SV("bundle/artifact_manifests/run_candidate_artifact_manifest.json");
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -124,6 +130,9 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
       TryLookupObject(root, IREE_SV("measured_dispatch_count"))));
   EXPECT_TRUE(iree_string_view_is_empty(
       TryLookupObject(root, IREE_SV("measured_operation_count"))));
+  EXPECT_TRUE(iree_string_view_equal(
+      LookupObject(root, IREE_SV("artifact_manifest_path")),
+      result.artifact_manifest_path));
 
   iree_string_view_t timing_interpretation =
       LookupObject(root, IREE_SV("timing_interpretation"));
@@ -147,6 +156,60 @@ TEST(BenchmarkReportTest, WritesHalTimingCountsAndWarnings) {
       JsonArrayContainsString(warnings, IREE_SV("unstable_p90_to_p50")));
 
   iree_string_builder_deinitialize(&builder);
+}
+
+TEST(BenchmarkReportTest, WritesArtifactManifestSidecarPath) {
+  iree::testing::TempFilePath bundle_dir("loom_benchmark_bundle");
+  iree_benchmark_loom_artifact_bundle_options_t bundle_options = {};
+  bundle_options.dir = bundle_dir.path_view();
+  bundle_options.policy = IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
+  bundle_options.output_format = IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT;
+  iree_benchmark_loom_artifact_bundle_t bundle = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_artifact_bundle_initialize(
+      &bundle_options, iree_allocator_system(), &bundle));
+
+  iree_benchmark_loom_hal_context_t context = {};
+  context.artifact_bundle = &bundle;
+  const char kManifestJson[] = "{\"kind\":\"loom.artifact_manifest\"}";
+  loom_target_emit_sidecar_artifact_t sidecar = {};
+  sidecar.kind = LOOM_TARGET_EMIT_SIDECAR_ARTIFACT_KIND_ARTIFACT_MANIFEST;
+  sidecar.identifier = IREE_SV("artifact_manifest");
+  sidecar.contents =
+      iree_make_const_byte_span(kManifestJson, sizeof(kManifestJson) - 1);
+
+  iree_benchmark_loom_hal_actual_provider_t provider = {};
+  provider.context = &context;
+  provider.sample_compilation = IREE_SV("once");
+  provider.execution.candidate_initialized = true;
+  provider.execution.candidate.compiled = true;
+  provider.execution.candidate.artifact.sidecars = &sidecar;
+  provider.execution.candidate.artifact.sidecar_count = 1;
+
+  iree_benchmark_loom_run_identity_t run = {};
+  run.run_id = IREE_SV("run");
+  iree_benchmark_loom_candidate_identity_t candidate = {};
+  candidate.candidate_id = IREE_SV("candidate");
+  IREE_ASSERT_OK(iree_benchmark_loom_write_compiled_artifacts(
+      &run, &candidate, &provider, iree_allocator_system()));
+
+  EXPECT_FALSE(iree_string_view_is_empty(provider.artifact_manifest_path));
+  EXPECT_EQ(iree_benchmark_loom_artifact_bundle_file_count(
+                &bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST),
+            1u);
+
+  std::string manifest_path(provider.artifact_manifest_path.data,
+                            provider.artifact_manifest_path.size);
+  EXPECT_NE(manifest_path.find("artifact_manifests"), std::string::npos);
+  EXPECT_NE(manifest_path.find("_artifact_manifest.json"), std::string::npos);
+  std::ifstream manifest_file(manifest_path);
+  ASSERT_TRUE(manifest_file.is_open());
+  std::string manifest_contents((std::istreambuf_iterator<char>(manifest_file)),
+                                std::istreambuf_iterator<char>());
+  EXPECT_EQ(manifest_contents, kManifestJson);
+
+  iree_allocator_free(iree_allocator_system(),
+                      provider.artifact_manifest_path_storage);
+  iree_benchmark_loom_artifact_bundle_deinitialize(&bundle);
 }
 
 }  // namespace

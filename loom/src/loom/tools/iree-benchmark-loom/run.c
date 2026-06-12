@@ -12,6 +12,8 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/ir/module.h"
+#include "loom/target/artifact_manifest.h"
+#include "loom/tooling/execution/compile_options.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/executor.h"
@@ -40,6 +42,31 @@ static iree_status_t iree_benchmark_loom_compile_report_options_initialize(
         "iree-benchmark-loom emits structured JSON reports; use "
         "--compile-report=summary, details, json-summary, or json-details");
   }
+  return iree_ok_status();
+}
+
+static iree_status_t iree_benchmark_loom_artifact_manifest_options_initialize(
+    const iree_benchmark_loom_options_t* options,
+    loom_run_candidate_artifact_manifest_options_t* out_options) {
+  *out_options = (loom_run_candidate_artifact_manifest_options_t){0};
+  IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_mode_parse(
+      options->artifact_manifest, &out_options->mode));
+  if (out_options->mode != LOOM_TARGET_ARTIFACT_MANIFEST_MODE_NONE &&
+      iree_string_view_is_empty(options->artifact_bundle_dir)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--artifact-manifest requires --artifact-bundle-dir so the manifest "
+        "sidecars have a stable output location");
+  }
+  if (out_options->mode != LOOM_TARGET_ARTIFACT_MANIFEST_MODE_NONE &&
+      options->artifact_bundle_policy <
+          IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--artifact-manifest requires --artifact-bundle-policy=debug or full "
+        "so requested manifest sidecars are retained");
+  }
+  out_options->identifier = IREE_SV("artifact_manifest");
   return iree_ok_status();
 }
 
@@ -98,6 +125,12 @@ iree_status_t iree_benchmark_loom_run_file(
   loom_run_compile_report_capture_options_t compile_report_options = {0};
   status = iree_benchmark_loom_compile_report_options_initialize(
       benchmark_options, &compile_report_options);
+  loom_run_candidate_artifact_manifest_options_t artifact_manifest_options = {
+      0};
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_artifact_manifest_options_initialize(
+        benchmark_options, &artifact_manifest_options);
+  }
   if (iree_status_is_ok(status)) {
     iree_benchmark_loom_artifact_bundle_options_t artifact_bundle_options = {
         .dir = benchmark_options->artifact_bundle_dir,
@@ -295,6 +328,7 @@ iree_status_t iree_benchmark_loom_run_file(
                 .filename = filename,
                 .source = source,
                 .compile_report_options = &compile_report_options,
+                .artifact_manifest_options = &artifact_manifest_options,
                 .case_execution_options = &execution_options,
                 .execution_arena = &execution_arena,
                 .host_allocator = allocator,
@@ -339,6 +373,7 @@ iree_status_t iree_benchmark_loom_run_file(
               .filename = filename,
               .source = source,
               .compile_report_options = &compile_report_options,
+              .artifact_manifest_options = &artifact_manifest_options,
               .case_execution_options = &execution_options,
               .execution_arena = &execution_arena,
               .host_allocator = allocator,

@@ -567,6 +567,11 @@ iree_status_t iree_benchmark_loom_artifact_bundle_initialize(
   }
   if (iree_status_is_ok(status)) {
     status = iree_benchmark_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("artifact_manifests"), allocator,
+        &out_bundle->artifact_manifest_dir_storage);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("target_artifacts"), allocator,
         &out_bundle->target_artifact_dir_storage);
   }
@@ -591,6 +596,8 @@ iree_status_t iree_benchmark_loom_artifact_bundle_initialize(
         iree_make_cstring_view(out_bundle->profile_artifacts_dir_storage);
     out_bundle->compile_report_dir =
         iree_make_cstring_view(out_bundle->compile_report_dir_storage);
+    out_bundle->artifact_manifest_dir =
+        iree_make_cstring_view(out_bundle->artifact_manifest_dir_storage);
     out_bundle->target_artifact_dir =
         iree_make_cstring_view(out_bundle->target_artifact_dir_storage);
     out_bundle->target_listing_dir =
@@ -620,6 +627,8 @@ void iree_benchmark_loom_artifact_bundle_deinitialize(
   iree_allocator_free(bundle->host_allocator,
                       bundle->target_listing_dir_storage);
   iree_allocator_free(bundle->host_allocator,
+                      bundle->artifact_manifest_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
                       bundle->compile_report_dir_storage);
   iree_allocator_free(bundle->host_allocator,
                       bundle->profile_artifacts_dir_storage);
@@ -637,6 +646,11 @@ bool iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(
 }
 
 bool iree_benchmark_loom_artifact_bundle_wants_compile_reports(
+    const iree_benchmark_loom_artifact_bundle_t* bundle) {
+  return iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(bundle);
+}
+
+bool iree_benchmark_loom_artifact_bundle_wants_artifact_manifests(
     const iree_benchmark_loom_artifact_bundle_t* bundle) {
   return iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(bundle);
 }

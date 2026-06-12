@@ -66,6 +66,10 @@ IREE_FLAG_NAMED(string, compile_report, "compile-report", "summary",
                 "Structured compile report embedded in benchmark rows. Use "
                 "'summary', 'details', or empty/'none'.");
 IREE_FLAG_NAMED(
+    string, artifact_manifest, "artifact-manifest", "none",
+    "Target-neutral artifact manifest sidecar mode for debug/full artifact "
+    "bundles. Use 'summary', 'details', 'analysis', or empty/'none'.");
+IREE_FLAG_NAMED(
     string, profile_data, "profile-data", "",
     "HAL profiling data families for the final profiled batch as a "
     "comma-separated list. Empty uses dispatch-events,executable-metadata. "
@@ -172,6 +176,7 @@ void iree_benchmark_loom_options_initialize(
       IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL;
   out_options->measure = IREE_SV("case_end_to_end");
   out_options->compile_report = IREE_SV("summary");
+  out_options->artifact_manifest = IREE_SV("none");
   out_options->sample_compilation_mode =
       IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE;
   out_options->input_ring_min_bytes =
@@ -232,6 +237,8 @@ iree_status_t iree_benchmark_loom_options_from_flags(
   out_options->measure =
       iree_string_view_trim(iree_make_cstring_view(FLAG_measure));
   out_options->compile_report = iree_make_cstring_view(FLAG_compile_report);
+  out_options->artifact_manifest =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_artifact_manifest));
   out_options->profile_data =
       iree_string_view_trim(iree_make_cstring_view(FLAG_profile_data));
   out_options->profile_artifacts_dir =
