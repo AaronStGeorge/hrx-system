@@ -10,13 +10,10 @@ func.def target(@target) @i32_to_u8x4_bitunpack(%packed: vector<1xi32>) -> (vect
 // ----
 low.func.def target(@target) abi(hal_kernel) @i32_to_u8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
   %5 = v_and_b32_lit %packed, 255
-  %6 = v_lshrrev_b32_src0_inline %packed, 8
-  %7 = v_and_b32_lit %6, 255
-  %8 = v_lshrrev_b32_src0_inline %packed, 16
-  %9 = v_and_b32_lit %8, 255
-  %10 = v_lshrrev_b32_src0_inline %packed, 24
-  %11 = v_and_b32_lit %10, 255
-  %unpacked = concat(%5, %7, %9, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %6 = v_bfe_u32_offset_width_inline %packed {offset = 8, width = 8}
+  %7 = v_bfe_u32_offset_width_inline %packed {offset = 16, width = 8}
+  %8 = v_bfe_u32_offset_width_inline %packed {offset = 24, width = 8}
+  %unpacked = concat(%5, %6, %7, %8) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   return %unpacked
 }
 
@@ -49,21 +46,14 @@ func.def target(@target) @i32_to_u4x8_bitunpack(%packed: vector<1xi32>) -> (vect
 // ----
 low.func.def target(@target) abi(hal_kernel) @i32_to_u4x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.rdna3.core> {
   %5 = v_and_b32_src0_inline %packed, 15
-  %6 = v_lshrrev_b32_src0_inline %packed, 4
-  %7 = v_and_b32_src0_inline %6, 15
-  %8 = v_lshrrev_b32_src0_inline %packed, 8
-  %9 = v_and_b32_src0_inline %8, 15
-  %10 = v_lshrrev_b32_src0_inline %packed, 12
-  %11 = v_and_b32_src0_inline %10, 15
-  %12 = v_lshrrev_b32_src0_inline %packed, 16
-  %13 = v_and_b32_src0_inline %12, 15
-  %14 = v_lshrrev_b32_src0_inline %packed, 20
-  %15 = v_and_b32_src0_inline %14, 15
-  %16 = v_lshrrev_b32_src0_inline %packed, 24
-  %17 = v_and_b32_src0_inline %16, 15
-  %18 = v_lshrrev_b32_src0_inline %packed, 28
-  %19 = v_and_b32_src0_inline %18, 15
-  %unpacked = concat(%5, %7, %9, %11, %13, %15, %17, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
+  %6 = v_bfe_u32_offset_width_inline %packed {offset = 4, width = 4}
+  %7 = v_bfe_u32_offset_width_inline %packed {offset = 8, width = 4}
+  %8 = v_bfe_u32_offset_width_inline %packed {offset = 12, width = 4}
+  %9 = v_bfe_u32_offset_width_inline %packed {offset = 16, width = 4}
+  %10 = v_bfe_u32_offset_width_inline %packed {offset = 20, width = 4}
+  %11 = v_bfe_u32_offset_width_inline %packed {offset = 24, width = 4}
+  %12 = v_bfe_u32_offset_width_inline %packed {offset = 28, width = 4}
+  %unpacked = concat(%5, %6, %7, %8, %9, %10, %11, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
   return %unpacked
 }
 
@@ -78,20 +68,13 @@ func.def target(@target) @i8x2_to_u2x8_bitunpack(%packed: vector<2xi8>) -> (vect
 // ----
 low.func.def target(@target) abi(hal_kernel) @i8x2_to_u2x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.rdna3.core> {
   %5 = v_and_b32_src0_inline %packed, 3
-  %6 = v_lshrrev_b32_src0_inline %packed, 2
-  %7 = v_and_b32_src0_inline %6, 3
-  %8 = v_lshrrev_b32_src0_inline %packed, 4
-  %9 = v_and_b32_src0_inline %8, 3
-  %10 = v_lshrrev_b32_src0_inline %packed, 6
-  %11 = v_and_b32_src0_inline %10, 3
-  %12 = v_lshrrev_b32_src0_inline %packed, 8
-  %13 = v_and_b32_src0_inline %12, 3
-  %14 = v_lshrrev_b32_src0_inline %packed, 10
-  %15 = v_and_b32_src0_inline %14, 3
-  %16 = v_lshrrev_b32_src0_inline %packed, 12
-  %17 = v_and_b32_src0_inline %16, 3
-  %18 = v_lshrrev_b32_src0_inline %packed, 14
-  %19 = v_and_b32_src0_inline %18, 3
-  %unpacked = concat(%5, %7, %9, %11, %13, %15, %17, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
+  %6 = v_bfe_u32_offset_width_inline %packed {offset = 2, width = 2}
+  %7 = v_bfe_u32_offset_width_inline %packed {offset = 4, width = 2}
+  %8 = v_bfe_u32_offset_width_inline %packed {offset = 6, width = 2}
+  %9 = v_bfe_u32_offset_width_inline %packed {offset = 8, width = 2}
+  %10 = v_bfe_u32_offset_width_inline %packed {offset = 10, width = 2}
+  %11 = v_bfe_u32_offset_width_inline %packed {offset = 12, width = 2}
+  %12 = v_bfe_u32_offset_width_inline %packed {offset = 14, width = 2}
+  %unpacked = concat(%5, %6, %7, %8, %9, %10, %11, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
   return %unpacked
 }
