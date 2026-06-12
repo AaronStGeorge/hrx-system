@@ -14,10 +14,200 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "iree/hal/cts/util/test_base.h"
+#include "iree/hal/drivers/amdgpu/util/libhsa.h"
+#include "iree/hal/drivers/amdgpu/util/target_id.h"
+#include "iree/hal/drivers/amdgpu/util/topology.h"
 
 namespace iree::hal::cts {
+
+namespace detail {
+
+struct AsanLocalTargetInfo {
+  // True once the local target query has run.
+  bool queried = false;
+  // Plain terminal status code from the local target query.
+  iree_status_code_t status_code = IREE_STATUS_OK;
+  // First visible GPU agent's exact target processor.
+  std::string exact_target;
+};
+
+struct AsanIsaQuery {
+  // Borrowed HSA API table used to query ISA names.
+  const iree_hal_amdgpu_libhsa_t* libhsa = nullptr;
+  // True once a parseable GPU ISA name has been found.
+  bool found = false;
+  // First parseable exact target processor.
+  std::string exact_target;
+};
+
+inline AsanLocalTargetInfo& AsanLocalTargetInfoCache() {
+  static AsanLocalTargetInfo info;
+  return info;
+}
+
+inline std::mutex& AsanLocalTargetInfoMutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+inline hsa_status_t AsanFindAgentTargetId(hsa_isa_t isa, void* user_data) {
+  auto* query = reinterpret_cast<AsanIsaQuery*>(user_data);
+  uint32_t name_length = 0;
+  iree_status_t status = iree_hsa_isa_get_info_alt(
+      IREE_LIBHSA(query->libhsa), isa, HSA_ISA_INFO_NAME_LENGTH, &name_length);
+  if (!iree_status_is_ok(status)) {
+    iree_status_free(status);
+    return HSA_STATUS_ERROR;
+  }
+
+  std::vector<char> name(name_length + 1);
+  status = iree_hsa_isa_get_info_alt(IREE_LIBHSA(query->libhsa), isa,
+                                     HSA_ISA_INFO_NAME, name.data());
+  if (!iree_status_is_ok(status)) {
+    iree_status_free(status);
+    return HSA_STATUS_ERROR;
+  }
+
+  iree_hal_amdgpu_target_id_t exact_target_id;
+  status = iree_hal_amdgpu_target_id_parse_hsa_isa_name(
+      iree_make_cstring_view(name.data()), &exact_target_id);
+  if (!iree_status_is_ok(status)) {
+    iree_status_free(status);
+    return HSA_STATUS_SUCCESS;
+  }
+
+  query->exact_target = std::string(exact_target_id.processor.data,
+                                    exact_target_id.processor.size);
+  query->found = true;
+  return HSA_STATUS_INFO_BREAK;
+}
+
+inline iree_status_t AsanQueryLocalTargetInfo(
+    AsanLocalTargetInfo* out_target_info) {
+  iree_hal_amdgpu_libhsa_t libhsa = {0};
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_libhsa_initialize(
+      IREE_HAL_AMDGPU_LIBHSA_FLAG_NONE, iree_string_view_list_empty(),
+      iree_allocator_system(), &libhsa));
+
+  iree_hal_amdgpu_topology_t topology;
+  iree_hal_amdgpu_topology_initialize(&topology);
+  iree_status_t status =
+      iree_hal_amdgpu_topology_initialize_with_defaults(&libhsa, &topology);
+  if (iree_status_is_ok(status) && topology.gpu_agent_count == 0) {
+    status = iree_make_status(IREE_STATUS_UNAVAILABLE,
+                              "AMDGPU ASAN CTS requires a visible GPU agent");
+  }
+
+  AsanIsaQuery query;
+  query.libhsa = &libhsa;
+  if (iree_status_is_ok(status)) {
+    status = iree_hsa_agent_iterate_isas(IREE_LIBHSA(&libhsa),
+                                         topology.gpu_agents[0],
+                                         AsanFindAgentTargetId, &query);
+  }
+  if (iree_status_is_ok(status) && !query.found) {
+    status = iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "AMDGPU ASAN CTS could not find a parseable GPU ISA name");
+  }
+  if (iree_status_is_ok(status)) {
+    out_target_info->exact_target = query.exact_target;
+  }
+
+  iree_hal_amdgpu_topology_deinitialize(&topology);
+  iree_hal_amdgpu_libhsa_deinitialize(&libhsa);
+  return status;
+}
+
+}  // namespace detail
+
+enum class AsanExecutableFormatSupportKind {
+  kSupported,
+  kSkip,
+  kFailure,
+};
+
+struct AsanExecutableFormatSupport {
+  // Support classification for the current backend executable format.
+  AsanExecutableFormatSupportKind kind =
+      AsanExecutableFormatSupportKind::kFailure;
+  // Human-readable reason used in skip/failure diagnostics.
+  std::string message;
+};
+
+inline AsanExecutableFormatSupport AsanCheckExecutableFormatSupport(
+    const BackendInfo& backend) {
+  detail::AsanLocalTargetInfo& target_info = detail::AsanLocalTargetInfoCache();
+  {
+    std::lock_guard<std::mutex> lock(detail::AsanLocalTargetInfoMutex());
+    if (!target_info.queried) {
+      iree_status_t status = detail::AsanQueryLocalTargetInfo(&target_info);
+      if (iree_status_is_ok(status)) {
+        target_info.status_code = IREE_STATUS_OK;
+      } else {
+        target_info.status_code = iree_status_code(status);
+        iree_status_free(status);
+      }
+      target_info.queried = true;
+    }
+  }
+
+  if (target_info.status_code == IREE_STATUS_UNAVAILABLE) {
+    return {AsanExecutableFormatSupportKind::kSkip,
+            "AMDGPU backend unavailable on this system"};
+  }
+  if (target_info.status_code != IREE_STATUS_OK) {
+    return {AsanExecutableFormatSupportKind::kFailure,
+            "AMDGPU ASAN CTS target preflight failed with status code " +
+                std::to_string(target_info.status_code)};
+  }
+
+  iree_hal_amdgpu_target_id_t code_object_target_id;
+  iree_status_t status = iree_hal_amdgpu_target_id_parse(
+      iree_make_cstring_view(backend.executable_format),
+      IREE_HAL_AMDGPU_TARGET_ID_PARSE_FLAG_ALLOW_HSA_PREFIX |
+          IREE_HAL_AMDGPU_TARGET_ID_PARSE_FLAG_ALLOW_ARCH_ONLY |
+          IREE_HAL_AMDGPU_TARGET_ID_PARSE_FLAG_ALLOW_FEATURE_SUFFIXES,
+      &code_object_target_id);
+  if (!iree_status_is_ok(status)) {
+    const iree_status_code_t status_code = iree_status_code(status);
+    iree_status_free(status);
+    return {AsanExecutableFormatSupportKind::kFailure,
+            "AMDGPU ASAN CTS could not parse executable format with status "
+            "code " +
+                std::to_string(status_code)};
+  }
+
+  iree_hal_amdgpu_target_id_t agent_target_id;
+  status = iree_hal_amdgpu_target_id_parse(
+      iree_make_cstring_view(target_info.exact_target.c_str()),
+      IREE_HAL_AMDGPU_TARGET_ID_PARSE_FLAG_ALLOW_ARCH_ONLY |
+          IREE_HAL_AMDGPU_TARGET_ID_PARSE_FLAG_ALLOW_FEATURE_SUFFIXES,
+      &agent_target_id);
+  if (!iree_status_is_ok(status)) {
+    const iree_status_code_t status_code = iree_status_code(status);
+    iree_status_free(status);
+    return {AsanExecutableFormatSupportKind::kFailure,
+            "AMDGPU ASAN CTS could not parse visible GPU target with status "
+            "code " +
+                std::to_string(status_code)};
+  }
+
+  const iree_hal_amdgpu_target_compatibility_t compatibility =
+      iree_hal_amdgpu_target_id_check_compatible(&code_object_target_id,
+                                                 &agent_target_id);
+  if (compatibility != IREE_HAL_AMDGPU_TARGET_COMPATIBILITY_COMPATIBLE) {
+    return {AsanExecutableFormatSupportKind::kSkip,
+            "Executable format '" + std::string(backend.executable_format) +
+                "' is incompatible with visible AMDGPU target '" +
+                target_info.exact_target + "'"};
+  }
+
+  return {AsanExecutableFormatSupportKind::kSupported, ""};
+}
 
 // Captures ASAN device events produced by the ASAN CTS backend device.
 class AsanDeviceEventRecorder {
@@ -239,6 +429,92 @@ inline iree_status_t AsanCreateDeviceBuffer(iree_hal_allocator_t* allocator,
       IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER;
   return iree_hal_allocator_allocate_buffer(allocator, params, buffer_size,
                                             out_buffer);
+}
+
+// Reads device-local data through a queue copy into host-visible memory.
+inline iree_status_t AsanReadBufferBytes(iree_hal_device_t* device,
+                                         iree_hal_allocator_t* allocator,
+                                         iree_hal_buffer_t* source_buffer,
+                                         iree_device_size_t source_offset,
+                                         iree_device_size_t length,
+                                         std::vector<uint8_t>* out_data) {
+  IREE_ASSERT_ARGUMENT(out_data);
+  out_data->clear();
+  if (length > IREE_HOST_SIZE_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU ASAN CTS readback length %" PRIu64
+                            " exceeds host vector capacity",
+                            (uint64_t)length);
+  }
+
+  std::vector<uint8_t> data((iree_host_size_t)length);
+  iree_hal_buffer_params_t staging_params = {0};
+  staging_params.type =
+      IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
+  staging_params.usage =
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_MAPPING_SCOPED;
+
+  Ref<iree_hal_buffer_t> staging_buffer;
+  IREE_RETURN_IF_ERROR(iree_hal_allocator_allocate_buffer(
+      allocator, staging_params, length, staging_buffer.out()));
+
+  SemaphoreList empty_wait;
+  SemaphoreList copy_signal(device, {0}, {1});
+  IREE_RETURN_IF_ERROR(iree_hal_device_queue_copy(
+      device, IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait, copy_signal,
+      source_buffer, source_offset, staging_buffer, /*target_offset=*/0, length,
+      IREE_HAL_COPY_FLAG_NONE));
+  IREE_RETURN_IF_ERROR(iree_hal_semaphore_list_wait(
+      copy_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+  IREE_RETURN_IF_ERROR(iree_hal_buffer_map_read(
+      staging_buffer, /*offset=*/0, data.data(), (iree_host_size_t)length));
+
+  *out_data = std::move(data);
+  return iree_ok_status();
+}
+
+// Reads buffer contents back to host as a vector of T.
+template <typename T>
+inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
+                                        iree_hal_allocator_t* allocator,
+                                        iree_hal_buffer_t* source_buffer,
+                                        iree_device_size_t source_offset,
+                                        std::vector<T>* out_data) {
+  IREE_ASSERT_ARGUMENT(out_data);
+  out_data->clear();
+  if (source_offset > iree_hal_buffer_byte_length(source_buffer)) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU ASAN CTS readback offset %" PRIu64
+        " exceeds buffer length %" PRIu64,
+        (uint64_t)source_offset,
+        (uint64_t)iree_hal_buffer_byte_length(source_buffer));
+  }
+  const iree_device_size_t byte_length =
+      iree_hal_buffer_byte_length(source_buffer) - source_offset;
+  if (byte_length % sizeof(T) != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU ASAN CTS readback length %" PRIu64
+                            " is not divisible by element size %" PRIhsz,
+                            (uint64_t)byte_length, sizeof(T));
+  }
+
+  std::vector<uint8_t> bytes;
+  IREE_RETURN_IF_ERROR(AsanReadBufferBytes(device, allocator, source_buffer,
+                                           source_offset, byte_length, &bytes));
+  std::vector<T> data((iree_host_size_t)(byte_length / sizeof(T)));
+  std::memcpy(data.data(), bytes.data(), (iree_host_size_t)byte_length);
+  *out_data = std::move(data);
+  return iree_ok_status();
+}
+
+template <typename T>
+inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
+                                        iree_hal_allocator_t* allocator,
+                                        iree_hal_buffer_t* source_buffer,
+                                        std::vector<T>* out_data) {
+  return AsanReadBufferData(device, allocator, source_buffer,
+                            /*source_offset=*/0, out_data);
 }
 
 }  // namespace iree::hal::cts

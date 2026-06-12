@@ -62,13 +62,13 @@ static iree_status_t iree_hal_amdgpu_shadow_map_validate_params(
         ", size=%" PRIu64,
         params->application_window_base, (uint64_t)application_window_size);
   }
-  if (IREE_UNLIKELY(params->application_window_base &
-                    (application_window_size - 1))) {
+  const uint64_t shadow_granule = (uint64_t)1ull << params->shadow_scale_shift;
+  if (IREE_UNLIKELY(params->application_window_base & (shadow_granule - 1))) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU shadow map application window base 0x%016" PRIx64
-        " must be aligned to application window size %" PRIu64,
-        params->application_window_base, (uint64_t)application_window_size);
+        " must be aligned to shadow granule %" PRIu64,
+        params->application_window_base, shadow_granule);
   }
 
   if (IREE_UNLIKELY(params->access_desc_count > 0 && !params->access_descs)) {

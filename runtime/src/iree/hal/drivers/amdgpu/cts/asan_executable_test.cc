@@ -20,6 +20,14 @@ namespace iree::hal::cts {
 class AsanExecutableTest : public CtsTestBase<> {
  protected:
   void SetUp() override {
+    AsanExecutableFormatSupport format_support =
+        AsanCheckExecutableFormatSupport(GetParam());
+    if (format_support.kind == AsanExecutableFormatSupportKind::kSkip) {
+      GTEST_SKIP() << format_support.message;
+    }
+    ASSERT_EQ(format_support.kind, AsanExecutableFormatSupportKind::kSupported)
+        << format_support.message;
+
     CtsTestBase::SetUp();
     if (HasFatalFailure() || IsSkipped()) return;
 
@@ -61,8 +69,9 @@ TEST_P(AsanExecutableTest, PublishesConfigGlobal) {
       executable_, global, IREE_HAL_QUEUE_AFFINITY_ANY, &global_buffer));
   ASSERT_NE(global_buffer, nullptr);
 
-  std::vector<iree_hal_amdgpu_asan_config_t> configs =
-      ReadBufferData<iree_hal_amdgpu_asan_config_t>(global_buffer);
+  std::vector<iree_hal_amdgpu_asan_config_t> configs;
+  IREE_ASSERT_OK(
+      AsanReadBufferData(device_, device_allocator_, global_buffer, &configs));
   ASSERT_EQ(configs.size(), 1u);
   const iree_hal_amdgpu_asan_config_t& config = configs[0];
   EXPECT_EQ(config.record_length, sizeof(config));
@@ -106,7 +115,9 @@ TEST_P(AsanExecutableTest, PublishesConfigGlobal) {
   IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
       dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
 
-  std::vector<uint64_t> output_data = ReadBufferData<uint64_t>(output_buffer);
+  std::vector<uint64_t> output_data;
+  IREE_ASSERT_OK(AsanReadBufferData(device_, device_allocator_, output_buffer,
+                                    &output_data));
   ASSERT_EQ(output_data.size(), 5u);
   EXPECT_EQ(output_data[0], config.record_length);
   EXPECT_EQ(output_data[1], config.flags);
@@ -134,8 +145,9 @@ TEST_P(AsanExecutableTest, PublishesFeedbackConfigGlobal) {
       executable_, global, IREE_HAL_QUEUE_AFFINITY_ANY, &global_buffer));
   ASSERT_NE(global_buffer, nullptr);
 
-  std::vector<iree_hal_amdgpu_feedback_config_t> configs =
-      ReadBufferData<iree_hal_amdgpu_feedback_config_t>(global_buffer);
+  std::vector<iree_hal_amdgpu_feedback_config_t> configs;
+  IREE_ASSERT_OK(
+      AsanReadBufferData(device_, device_allocator_, global_buffer, &configs));
   ASSERT_EQ(configs.size(), 1u);
   const iree_hal_amdgpu_feedback_config_t& config = configs[0];
   EXPECT_EQ(config.record_length, sizeof(config));
@@ -177,7 +189,9 @@ TEST_P(AsanExecutableTest, PublishesFeedbackConfigGlobal) {
   IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
       dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
 
-  std::vector<uint64_t> output_data = ReadBufferData<uint64_t>(output_buffer);
+  std::vector<uint64_t> output_data;
+  IREE_ASSERT_OK(AsanReadBufferData(device_, device_allocator_, output_buffer,
+                                    &output_data));
   ASSERT_EQ(output_data.size(), 4u);
   EXPECT_EQ(output_data[0], config.record_length);
   EXPECT_EQ(output_data[1], config.flags);

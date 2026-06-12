@@ -170,7 +170,10 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   ASSERT_NE(shadow_map, nullptr);
   EXPECT_EQ(shadow_map->shadow_scale_shift, options.asan.shadow_scale_shift);
   EXPECT_EQ(shadow_map->reservation_size, options.asan.shadow_size);
-  EXPECT_EQ(shadow_map->application_window_base, 0u);
+  EXPECT_NE(shadow_map->application_window_base, 0u);
+  EXPECT_EQ(shadow_map->application_window_base &
+                ((1ull << shadow_map->shadow_scale_shift) - 1),
+            0u);
   EXPECT_EQ(shadow_map->application_window_size,
             options.asan.shadow_size << options.asan.shadow_scale_shift);
   EXPECT_GE(shadow_map->slab_size, options.asan.shadow_slab_size);
@@ -193,6 +196,46 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(config.reserved); ++i) {
     EXPECT_EQ(config.reserved[i], 0u);
   }
+}
+
+TEST_F(AllocatorTest, AsanDeviceLocalAllocationReusesReleasedApplicationRange) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  iree_hal_buffer_params_t params = {0};
+  params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
+  params.usage =
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_DISPATCH;
+  params.queue_affinity = 1ull;
+
+  iree_hal_buffer_t* first_buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_allocate_buffer(
+      test_device.allocator(), params, /*allocation_size=*/4096,
+      &first_buffer));
+  iree_hal_external_buffer_t first_external_buffer = {};
+  IREE_ASSERT_OK(iree_hal_allocator_export_buffer(
+      test_device.allocator(), first_buffer,
+      IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
+      IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &first_external_buffer));
+  const uint64_t first_ptr = first_external_buffer.handle.device_allocation.ptr;
+  iree_hal_buffer_release(first_buffer);
+
+  iree_hal_buffer_t* second_buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_allocate_buffer(
+      test_device.allocator(), params, /*allocation_size=*/4096,
+      &second_buffer));
+  iree_hal_external_buffer_t second_external_buffer = {};
+  IREE_ASSERT_OK(iree_hal_allocator_export_buffer(
+      test_device.allocator(), second_buffer,
+      IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
+      IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &second_external_buffer));
+  EXPECT_EQ(second_external_buffer.handle.device_allocation.ptr, first_ptr);
+  iree_hal_buffer_release(second_buffer);
 }
 
 TEST_F(AllocatorTest, QueryMemoryHeapsReportsHsaLimits) {

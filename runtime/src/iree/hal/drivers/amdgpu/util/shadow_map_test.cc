@@ -298,7 +298,7 @@ TEST(ShadowMapTest, RejectsInvalidGeometry) {
                         iree_hal_amdgpu_shadow_map_initialize(&params, &map));
 
   params = DefaultParams(&mapper, &access_desc);
-  params.application_window_base += 8;
+  params.application_window_base += 1;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         iree_hal_amdgpu_shadow_map_initialize(&params, &map));
 }

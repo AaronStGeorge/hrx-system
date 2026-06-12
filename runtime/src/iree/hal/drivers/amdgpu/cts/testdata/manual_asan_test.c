@@ -55,6 +55,8 @@ enum manual_asan_hook_selector_e {
   MANUAL_ASAN_HOOK_REPORT_STORE8_NOABORT = 46,
   MANUAL_ASAN_HOOK_REPORT_STORE16_NOABORT = 47,
   MANUAL_ASAN_HOOK_REPORT_STORE_N_NOABORT = 48,
+  MANUAL_ASAN_HOOK_POISON_REGION = 49,
+  MANUAL_ASAN_HOOK_UNPOISON_REGION = 50,
 };
 
 extern void __asan_load1(uint64_t address);
@@ -105,6 +107,8 @@ extern void __asan_report_store4_noabort(uint64_t address);
 extern void __asan_report_store8_noabort(uint64_t address);
 extern void __asan_report_store16_noabort(uint64_t address);
 extern void __asan_report_store_n_noabort(uint64_t address, uint64_t size);
+extern void __asan_poison_region(uint64_t address, uint64_t size);
+extern void __asan_unpoison_memory_region(const void* address, uint64_t size);
 
 IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* output, uint32_t selector,
                                           uint32_t dynamic_size) {
@@ -253,6 +257,12 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* output, uint32_t selector,
       break;
     case MANUAL_ASAN_HOOK_REPORT_STORE_N_NOABORT:
       __asan_report_store_n_noabort(address, dynamic_size);
+      break;
+    case MANUAL_ASAN_HOOK_POISON_REGION:
+      __asan_poison_region(address, dynamic_size);
+      break;
+    case MANUAL_ASAN_HOOK_UNPOISON_REGION:
+      __asan_unpoison_memory_region((void*)address, dynamic_size);
       break;
     default:
       break;

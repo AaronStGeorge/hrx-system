@@ -122,6 +122,9 @@ iree_cc_library(
     iree::base::threading::thread
     iree::hal
     iree::hal::cts::util::test_base
+    iree::hal::drivers::amdgpu::util::libhsa
+    iree::hal::drivers::amdgpu::util::target_id
+    iree::hal::drivers::amdgpu::util::topology
   TESTONLY
   PUBLIC
 )

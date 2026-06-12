@@ -71,6 +71,10 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 #define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE \
   ((iree_device_size_t)1ull << 40)
 
+// Preferred application address covered by the default ASAN shadow window.
+#define IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE \
+  ((uint64_t)0x0000600000000000ull)
+
 // Physical shadow slab size used by ASAN by default.
 #define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE \
   ((iree_device_size_t)128 * 1024 * 1024)
