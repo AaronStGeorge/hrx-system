@@ -151,7 +151,7 @@ static int print_devices(void) {
 // fresh-process / cold-memory state under which CI reproduces.
 static int run_device_stress_test(hrx_device_t device, const char* label,
                                   int iterations) {
-  printf("Stress %s: %d iterations (device-fill -> d2h copy -> host verify)\n",
+  printf("Stress %s: %d iterations (h2d upload -> d2h readback -> host verify)\n",
          label, iterations);
   hrx_stream_t stream = NULL;
   if (report_status_error(hrx_stream_create(device, 0, &stream))) return 1;
@@ -161,37 +161,62 @@ static int run_device_stress_test(hrx_device_t device, const char* label,
   int failures = 0;
   int errors = 0;
   for (int iter = 0; iter < iterations && errors == 0; iter++) {
-    hrx_buffer_t src = NULL;  // device-local storage (like a ggml tensor buffer)
-    hrx_buffer_t dst = NULL;  // host-visible staging (host reads this back)
+    hrx_buffer_t dev = NULL;  // device-local tensor storage (== ggml tensor buf)
+    hrx_buffer_t up = NULL;   // host-visible upload staging (host writes pattern)
+    hrx_buffer_t dn = NULL;   // host-visible download staging (host reads back)
     void* mapped = NULL;
     // Per-iteration pattern: a stale read of recycled/prior memory won't match.
     const uint32_t pattern = 0xA5A50000u ^ (uint32_t)(iter * 2654435761u);
 
     if (report_status_error(hrx_buffer_allocate(
             stream, size, HRX_MEMORY_TYPE_DEVICE_LOCAL,
-            HRX_BUFFER_USAGE_DEFAULT, &src))) {
+            HRX_BUFFER_USAGE_DEFAULT, &dev))) {
       errors++;
       goto cleanup;
     }
-    if (report_status_error(hrx_stream_fill_buffer(stream, src, 0, size,
-                                                   &pattern, sizeof(pattern)))) {
-      errors++;
-      goto cleanup;
-    }
-    if (report_status_error(hrx_stream_flush(stream)) ||
-        report_status_error(hrx_stream_synchronize(stream))) {
-      errors++;
-      goto cleanup;
-    }
+    // Host writes the pattern into upload staging.
     if (report_status_error(hrx_buffer_allocate(
             stream, size,
             HRX_MEMORY_TYPE_HOST_LOCAL | HRX_MEMORY_TYPE_DEVICE_VISIBLE,
-            HRX_BUFFER_USAGE_DEFAULT | HRX_BUFFER_USAGE_MAPPING_SCOPED, &dst))) {
+            HRX_BUFFER_USAGE_DEFAULT | HRX_BUFFER_USAGE_MAPPING_SCOPED, &up))) {
       errors++;
       goto cleanup;
     }
     if (report_status_error(
-            hrx_stream_copy_buffer(stream, src, 0, dst, 0, size))) {
+            hrx_buffer_map(up, HRX_MAP_WRITE, 0, size, &mapped))) {
+      errors++;
+      goto cleanup;
+    }
+    {
+      uint32_t* w = (uint32_t*)mapped;
+      for (size_t i = 0; i < words; i++) w[i] = pattern;
+    }
+    if (report_status_error(hrx_buffer_unmap(up))) {
+      errors++;
+      goto cleanup;
+    }
+    mapped = NULL;
+    // h2d: upload staging -> device buffer (the suspect direction).
+    if (report_status_error(
+            hrx_stream_copy_buffer(stream, up, 0, dev, 0, size))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(hrx_stream_flush(stream)) ||
+        report_status_error(hrx_stream_synchronize(stream))) {
+      errors++;
+      goto cleanup;
+    }
+    // d2h: device buffer -> a FRESH download staging, then host verify.
+    if (report_status_error(hrx_buffer_allocate(
+            stream, size,
+            HRX_MEMORY_TYPE_HOST_LOCAL | HRX_MEMORY_TYPE_DEVICE_VISIBLE,
+            HRX_BUFFER_USAGE_DEFAULT | HRX_BUFFER_USAGE_MAPPING_SCOPED, &dn))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(
+            hrx_stream_copy_buffer(stream, dev, 0, dn, 0, size))) {
       errors++;
       goto cleanup;
     }
@@ -201,7 +226,7 @@ static int run_device_stress_test(hrx_device_t device, const char* label,
       goto cleanup;
     }
     if (report_status_error(
-            hrx_buffer_map(dst, HRX_MAP_READ, 0, size, &mapped))) {
+            hrx_buffer_map(dn, HRX_MAP_READ, 0, size, &mapped))) {
       errors++;
       goto cleanup;
     }
@@ -216,7 +241,8 @@ static int run_device_stress_test(hrx_device_t device, const char* label,
           break;
         }
       }
-      hrx_status_ignore(hrx_buffer_unmap(dst));
+      hrx_status_ignore(hrx_buffer_unmap(dn));
+      mapped = NULL;
       if (firstbad != (size_t)-1) {
         failures++;
         fprintf(stderr,
@@ -225,8 +251,9 @@ static int run_device_stress_test(hrx_device_t device, const char* label,
       }
     }
   cleanup:
-    if (dst) hrx_buffer_release(dst);
-    if (src) hrx_buffer_release(src);
+    if (dn) hrx_buffer_release(dn);
+    if (up) hrx_buffer_release(up);
+    if (dev) hrx_buffer_release(dev);
   }
   hrx_stream_release(stream);
   printf("STRESS RESULT: %d/%d iterations corrupted (alloc/copy errors=%d)\n",
