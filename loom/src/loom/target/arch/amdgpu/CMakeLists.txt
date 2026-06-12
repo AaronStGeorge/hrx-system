@@ -135,6 +135,33 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
+    feedback_abi
+  HDRS
+    "feedback_abi.h"
+  DEPS
+
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    feedback_abi_test
+  SRCS
+    "feedback_abi_test.cc"
+  DEPS
+    ::feedback_abi
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
     math_policy
   HDRS
     "math_policy.h"

@@ -172,6 +172,26 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "feedback_abi",
+    hdrs = ["feedback_abi.h"],
+    visibility = (
+        _AMDGPU_LOWER_VISIBILITY +
+        _AMDGPU_NATIVE_VISIBILITY +
+        _AMDGPU_TOOLING_VISIBILITY
+    ),
+)
+
+loom_cc_test(
+    name = "feedback_abi_test",
+    srcs = ["feedback_abi_test.cc"],
+    deps = [
+        ":feedback_abi",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "math_policy",
     srcs = ["math_policy.c"],
     hdrs = ["math_policy.h"],
