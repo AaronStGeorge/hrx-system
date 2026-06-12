@@ -24,6 +24,7 @@
 #include "loom/pass/report.h"
 #include "loom/pass/tooling.h"
 #include "loom/target/configured/provider.h"
+#include "loom/target/pipeline.h"
 #include "loom/target/predicate.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/cli/help.h"
@@ -39,7 +40,9 @@
 IREE_FLAG(string, output, "-",
           "Output path. Use '-' or the empty string for stdout.");
 IREE_FLAG(string, pipeline, "",
-          "Named pass.pipeline symbol to execute from the input module.");
+          "Pass pipeline to execute. Use 'source-low', 'prepared-low', or "
+          "'default' for shared compile pipeline stages, '@symbol' for a "
+          "module-local pass.pipeline, or empty to run no pipeline.");
 IREE_FLAG_LIST(string, pass,
                "Pass pipeline entry to append. Repeat for multiple passes.");
 IREE_FLAG_LIST(
@@ -80,6 +83,14 @@ typedef enum loom_opt_diagnostic_format_e {
   LOOM_OPT_DIAGNOSTIC_FORMAT_TEXT = 0,
   LOOM_OPT_DIAGNOSTIC_FORMAT_JSON = 1,
 } loom_opt_diagnostic_format_t;
+
+typedef enum loom_opt_pipeline_kind_e {
+  LOOM_OPT_PIPELINE_NONE = 0,
+  LOOM_OPT_PIPELINE_MODULE_SYMBOL = 1,
+  LOOM_OPT_PIPELINE_COMMAND_LINE = 2,
+  LOOM_OPT_PIPELINE_SOURCE_LOW = 3,
+  LOOM_OPT_PIPELINE_PREPARED_LOW = 4,
+} loom_opt_pipeline_kind_t;
 
 typedef struct loom_opt_diagnostic_emitter_t {
   // Module containing the op referenced by emitted diagnostics.
@@ -188,6 +199,59 @@ static iree_status_t loom_opt_parse_diagnostic_format(
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "unsupported --diagnostic-format mode '%.*s'",
                           (int)value.size, value.data);
+}
+
+static iree_status_t loom_opt_parse_pipeline_kind(
+    iree_string_view_t pipeline, bool has_pass_list,
+    loom_opt_pipeline_kind_t* out_kind) {
+  pipeline = iree_string_view_trim(pipeline);
+  const bool has_pipeline = !iree_string_view_is_empty(pipeline);
+  if (has_pipeline && has_pass_list) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "--pipeline and --pass cannot be combined");
+  }
+  if (!has_pipeline && !has_pass_list) {
+    *out_kind = LOOM_OPT_PIPELINE_NONE;
+    return iree_ok_status();
+  }
+  if (has_pass_list) {
+    *out_kind = LOOM_OPT_PIPELINE_COMMAND_LINE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_starts_with_char(pipeline, '@')) {
+    *out_kind = LOOM_OPT_PIPELINE_MODULE_SYMBOL;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(pipeline, IREE_SV("source-low"))) {
+    *out_kind = LOOM_OPT_PIPELINE_SOURCE_LOW;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(pipeline, IREE_SV("prepared-low")) ||
+      iree_string_view_equal(pipeline, IREE_SV("default"))) {
+    *out_kind = LOOM_OPT_PIPELINE_PREPARED_LOW;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "unsupported --pipeline '%.*s'; use '@symbol', 'source-low', "
+      "'prepared-low', or 'default'",
+      (int)pipeline.size, pipeline.data);
+}
+
+static iree_string_view_t loom_opt_pipeline_kind_stage_name(
+    loom_opt_pipeline_kind_t pipeline_kind) {
+  switch (pipeline_kind) {
+    case LOOM_OPT_PIPELINE_MODULE_SYMBOL:
+      return IREE_SV("module-pipeline");
+    case LOOM_OPT_PIPELINE_COMMAND_LINE:
+      return IREE_SV("command-line");
+    case LOOM_OPT_PIPELINE_SOURCE_LOW:
+      return IREE_SV("source-low");
+    case LOOM_OPT_PIPELINE_PREPARED_LOW:
+      return IREE_SV("prepared-low");
+    default:
+      return IREE_SV("none");
+  }
 }
 
 static iree_status_t loom_opt_register_context(void* user_data,
@@ -732,6 +796,53 @@ static iree_status_t loom_opt_write_pass_reproducer(
                                 "failed to flush pass reproducer path");
 }
 
+static iree_status_t loom_opt_run_shared_compile_pipeline(
+    loom_module_t* module, loom_opt_pipeline_kind_t pipeline_kind,
+    const loom_target_environment_t* target_environment,
+    const loom_pass_tool_run_options_t* run_options,
+    loom_pass_run_result_t* out_result) {
+  *out_result = (loom_pass_run_result_t){0};
+
+  loom_module_t* pipeline_module = NULL;
+  iree_status_t status = loom_module_allocate(
+      module->context, IREE_SV("__loom_opt_compile_pipeline"),
+      run_options->block_pool, NULL, module->allocator, &pipeline_module);
+  loom_op_t* pipeline_op = NULL;
+  const loom_target_pipeline_options_t target_pipeline_options = {0};
+  if (iree_status_is_ok(status)) {
+    switch (pipeline_kind) {
+      case LOOM_OPT_PIPELINE_SOURCE_LOW:
+        status = loom_target_pipeline_build_to_source_low(
+            pipeline_module, IREE_SV("__loom_opt_source_low"),
+            &target_pipeline_options, target_environment,
+            run_options->environment, &pipeline_op);
+        break;
+      case LOOM_OPT_PIPELINE_PREPARED_LOW:
+        status = loom_target_pipeline_build_to_prepared_low(
+            pipeline_module, IREE_SV("__loom_opt_prepared_low"),
+            &target_pipeline_options, target_environment,
+            run_options->environment, &pipeline_op);
+        break;
+      default:
+        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "pipeline kind is not a compile stage");
+        break;
+    }
+  }
+  if (iree_status_is_ok(status) && pipeline_op == NULL) {
+    status = iree_make_status(IREE_STATUS_INTERNAL,
+                              "compile pipeline builder produced no op");
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_pass_tool_run_pipeline_module_op(
+        module, pipeline_module, pipeline_op, run_options, out_result);
+  }
+  if (pipeline_module != NULL) {
+    loom_module_free(pipeline_module);
+  }
+  return status;
+}
+
 static iree_status_t loom_opt_run_passes(
     const loom_target_low_descriptor_registry_t* low_registry,
     const loom_target_environment_t* target_environment,
@@ -746,13 +857,10 @@ static iree_status_t loom_opt_run_passes(
   iree_flag_string_list_t passes = FLAG_pass_list();
   iree_string_view_t pipeline_symbol =
       iree_string_view_trim(iree_make_cstring_view(FLAG_pipeline));
-  bool has_pipeline_symbol = !iree_string_view_is_empty(pipeline_symbol);
-  bool has_pass_list = passes.count > 0;
-  if (has_pipeline_symbol && has_pass_list) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "--pipeline and --pass cannot be combined");
-  }
-  if (!has_pipeline_symbol && !has_pass_list) {
+  loom_opt_pipeline_kind_t pipeline_kind = LOOM_OPT_PIPELINE_NONE;
+  IREE_RETURN_IF_ERROR(loom_opt_parse_pipeline_kind(
+      pipeline_symbol, passes.count > 0, &pipeline_kind));
+  if (pipeline_kind == LOOM_OPT_PIPELINE_NONE) {
     return iree_ok_status();
   }
 
@@ -785,8 +893,7 @@ static iree_status_t loom_opt_run_passes(
   loom_pass_trace_t* trace_ptr = NULL;
   if (loom_pass_trace_options_is_enabled(trace_options)) {
     run_trace_options = *trace_options;
-    run_trace_options.stage = has_pipeline_symbol ? IREE_SV("module-pipeline")
-                                                  : IREE_SV("command-line");
+    run_trace_options.stage = loom_opt_pipeline_kind_stage_name(pipeline_kind);
     loom_pass_trace_initialize(&run_trace_options, &trace);
     trace_ptr = &trace;
   }
@@ -807,10 +914,16 @@ static iree_status_t loom_opt_run_passes(
       .trace = trace_ptr,
   };
 
-  if (has_pipeline_symbol) {
+  if (pipeline_kind == LOOM_OPT_PIPELINE_MODULE_SYMBOL) {
     *out_execution_started = true;
     return loom_pass_tool_run_pipeline_symbol(module, pipeline_symbol,
                                               &run_options, out_result);
+  }
+  if (pipeline_kind == LOOM_OPT_PIPELINE_SOURCE_LOW ||
+      pipeline_kind == LOOM_OPT_PIPELINE_PREPARED_LOW) {
+    *out_execution_started = true;
+    return loom_opt_run_shared_compile_pipeline(
+        module, pipeline_kind, target_environment, &run_options, out_result);
   }
 
   iree_string_builder_t pipeline_builder;
@@ -1018,6 +1131,7 @@ int main(int argc, char** argv) {
       "\n"
       "Usage:\n"
       "  loom-opt [--pipeline=@name] [--output=file] [file]\n"
+      "  loom-opt --pipeline=source-low [file]\n"
       "  loom-opt --pass=canonicalize --pass=cse --pass=dce [file]\n"
       "  cat module.loom | loom-opt --pass=symbol-dce\n"
       "  loom-opt --list-passes\n"
@@ -1025,10 +1139,10 @@ int main(int argc, char** argv) {
       "\n"
       "Input defaults to stdin when no file is provided. Output defaults to "
       "stdout.\n"
-      "Use --pipeline to execute a named pass.pipeline symbol from the input "
-      "module, or\n"
-      "repeat --pass for a shallow command-line pipeline backed by the C pass "
-      "registry.\n"
+      "Use --pipeline=source-low or --pipeline=prepared-low/default to run "
+      "shared compile pipeline stages, --pipeline=@name to execute a named "
+      "pass.pipeline symbol from the input module, or repeat --pass for a "
+      "shallow command-line pipeline backed by the C pass registry.\n"
       "Repeat --config=key=value to materialize compile/link-time config "
       "symbols before passes run. Unused config bindings are ignored.\n"
       "Use --config-file=path to load a JSON/JSONC config object. Files and "
