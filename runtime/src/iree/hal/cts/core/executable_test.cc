@@ -6,6 +6,10 @@
 
 // Tests for HAL executable creation, export metadata, and reflection.
 
+#include <cstdint>
+#include <string_view>
+#include <vector>
+
 #include "iree/hal/cts/util/test_base.h"
 
 namespace iree::hal::cts {
@@ -175,6 +179,63 @@ TEST_P(ExecutableTest, LookupGlobalByName) {
       update_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
 
   std::vector<uint64_t> data = ReadBufferData<uint64_t>(global_buffer);
+  ASSERT_EQ(data.size(), 1u);
+  EXPECT_EQ(data[0], expected_value);
+}
+
+TEST_P(ExecutableTest, GlobalBufferVisibleToDispatch) {
+  bool found = false;
+  iree_hal_executable_global_t global = iree_hal_executable_global_invalid();
+  IREE_ASSERT_OK(iree_hal_executable_try_lookup_global_by_name(
+      executable_, IREE_SV("executable_test_global"), &found, &global));
+  if (!found) GTEST_SKIP() << "executable testdata has no globals";
+
+  iree_hal_buffer_t* global_buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_executable_global_buffer(
+      executable_, global, IREE_HAL_QUEUE_AFFINITY_ANY, &global_buffer));
+  ASSERT_NE(global_buffer, nullptr);
+
+  const uint64_t expected_value = 0xBADDEC0DEFEED123ull;
+  SemaphoreList empty_wait;
+  SemaphoreList update_signal(device_, {0}, {1});
+  IREE_ASSERT_OK(iree_hal_device_queue_update(
+      device_, IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait, update_signal,
+      &expected_value, /*source_offset=*/0, global_buffer, /*target_offset=*/0,
+      sizeof(expected_value), IREE_HAL_UPDATE_FLAG_NONE));
+
+  Ref<iree_hal_buffer_t> output_buffer;
+  IREE_ASSERT_OK(
+      CreateZeroedDeviceBuffer(sizeof(uint64_t), output_buffer.out()));
+  Ref<iree_hal_buffer_t> fallback_buffer;
+  const uint64_t fallback_value = 0xAAAAAAAA55555555ull;
+  IREE_ASSERT_OK(CreateDeviceBufferWithData(
+      &fallback_value, sizeof(fallback_value), fallback_buffer.out()));
+
+  iree_hal_buffer_ref_t binding_refs[2];
+  binding_refs[0] = iree_hal_make_buffer_ref(
+      output_buffer, /*offset=*/0, iree_hal_buffer_byte_length(output_buffer));
+  binding_refs[1] =
+      iree_hal_make_buffer_ref(fallback_buffer, /*offset=*/0,
+                               iree_hal_buffer_byte_length(fallback_buffer));
+  iree_hal_buffer_ref_list_t bindings = {
+      /*.count=*/IREE_ARRAYSIZE(binding_refs),
+      /*.values=*/binding_refs,
+  };
+
+  const uint32_t constant_data[] = {1, 1};
+  iree_const_byte_span_t constants =
+      iree_make_const_byte_span(constant_data, sizeof(constant_data));
+
+  SemaphoreList dispatch_signal(device_, {0}, {1});
+  IREE_ASSERT_OK(iree_hal_device_queue_dispatch(
+      device_, IREE_HAL_QUEUE_AFFINITY_ANY, update_signal, dispatch_signal,
+      executable_, iree_hal_executable_function_from_index(0),
+      iree_hal_make_static_dispatch_config(1, 1, 1), constants, bindings,
+      IREE_HAL_DISPATCH_FLAG_NONE));
+  IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
+      dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+
+  std::vector<uint64_t> data = ReadBufferData<uint64_t>(output_buffer);
   ASSERT_EQ(data.size(), 1u);
   EXPECT_EQ(data[0], expected_value);
 }
