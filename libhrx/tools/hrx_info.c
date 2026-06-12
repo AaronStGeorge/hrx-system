@@ -142,6 +142,98 @@ static int print_devices(void) {
   return result;
 }
 
+// P068: minimal reproducer for the gfx1151 host<->device coherence NaN.
+// Mirrors the ggml-hrx readback path with no llama/test-backend-ops: the device
+// fills a DEVICE_LOCAL buffer with a known per-iteration pattern, copies it to a
+// host-visible staging buffer, then the host maps and verifies. If the d2h
+// readback is not host-coherent the host reads stale/uninitialized data and the
+// per-word verify fails. Fresh allocations each iteration approximate the
+// fresh-process / cold-memory state under which CI reproduces.
+static int run_device_stress_test(hrx_device_t device, const char* label,
+                                  int iterations) {
+  printf("Stress %s: %d iterations (device-fill -> d2h copy -> host verify)\n",
+         label, iterations);
+  hrx_stream_t stream = NULL;
+  if (report_status_error(hrx_stream_create(device, 0, &stream))) return 1;
+
+  const size_t size = 256 * 1024;  // 256 KiB
+  const size_t words = size / sizeof(uint32_t);
+  int failures = 0;
+  int errors = 0;
+  for (int iter = 0; iter < iterations && errors == 0; iter++) {
+    hrx_buffer_t src = NULL;  // device-local storage (like a ggml tensor buffer)
+    hrx_buffer_t dst = NULL;  // host-visible staging (host reads this back)
+    void* mapped = NULL;
+    // Per-iteration pattern: a stale read of recycled/prior memory won't match.
+    const uint32_t pattern = 0xA5A50000u ^ (uint32_t)(iter * 2654435761u);
+
+    if (report_status_error(hrx_buffer_allocate(
+            stream, size, HRX_MEMORY_TYPE_DEVICE_LOCAL,
+            HRX_BUFFER_USAGE_DEFAULT, &src))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(hrx_stream_fill_buffer(stream, src, 0, size,
+                                                   &pattern, sizeof(pattern)))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(hrx_stream_flush(stream)) ||
+        report_status_error(hrx_stream_synchronize(stream))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(hrx_buffer_allocate(
+            stream, size,
+            HRX_MEMORY_TYPE_HOST_LOCAL | HRX_MEMORY_TYPE_DEVICE_VISIBLE,
+            HRX_BUFFER_USAGE_DEFAULT | HRX_BUFFER_USAGE_MAPPING_SCOPED, &dst))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(
+            hrx_stream_copy_buffer(stream, src, 0, dst, 0, size))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(hrx_stream_flush(stream)) ||
+        report_status_error(hrx_stream_synchronize(stream))) {
+      errors++;
+      goto cleanup;
+    }
+    if (report_status_error(
+            hrx_buffer_map(dst, HRX_MAP_READ, 0, size, &mapped))) {
+      errors++;
+      goto cleanup;
+    }
+    {
+      const uint32_t* d = (const uint32_t*)mapped;
+      size_t firstbad = (size_t)-1;
+      uint32_t got = 0;
+      for (size_t i = 0; i < words; i++) {
+        if (d[i] != pattern) {
+          firstbad = i;
+          got = d[i];
+          break;
+        }
+      }
+      hrx_status_ignore(hrx_buffer_unmap(dst));
+      if (firstbad != (size_t)-1) {
+        failures++;
+        fprintf(stderr,
+                "  STRESS MISMATCH iter %d word %zu: got 0x%08X want 0x%08X\n",
+                iter, firstbad, got, pattern);
+      }
+    }
+  cleanup:
+    if (dst) hrx_buffer_release(dst);
+    if (src) hrx_buffer_release(src);
+  }
+  hrx_stream_release(stream);
+  printf("STRESS RESULT: %d/%d iterations corrupted (alloc/copy errors=%d)\n",
+         failures, iterations, errors);
+  return (failures > 0 || errors > 0) ? 2 : 0;
+}
+
 static int run_device_smoke_test(hrx_device_t device, const char* label) {
   printf("Opening %s...\n", label);
 
@@ -245,11 +337,14 @@ int main(int argc, char** argv) {
   bool test_all = false;
   hrx_accelerator_type_t requested_type = HRX_ACCELERATOR_CPU;
   int requested_index = 0;
+  int stress_iters = 0;  // P068: >0 runs the coherence stress loop
 
   // Parse our args first, then let IREE have the rest.
   for (int i = 1; i < argc; i++) {
     if (strncmp(argv[i], "--device=", 9) == 0) {
       device_spec = argv[i] + 9;
+    } else if (strncmp(argv[i], "--stress=", 9) == 0) {
+      stress_iters = atoi(argv[i] + 9);
     } else if (strcmp(argv[i], "--test=all") == 0) {
       test_all = true;
     } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -297,7 +392,9 @@ int main(int argc, char** argv) {
                      hrx_gpu_device_get(requested_index, &dev))) {
         result = 1;
       } else {
-        result = run_device_smoke_test(dev, device_spec);
+        result = stress_iters > 0
+                     ? run_device_stress_test(dev, device_spec, stress_iters)
+                     : run_device_smoke_test(dev, device_spec);
       }
     } else {
       if (!hrx_status_is_ok(cpu_status)) {
@@ -309,7 +406,9 @@ int main(int argc, char** argv) {
                      hrx_cpu_device_get(requested_index, &dev))) {
         result = 1;
       } else {
-        result = run_device_smoke_test(dev, device_spec);
+        result = stress_iters > 0
+                     ? run_device_stress_test(dev, device_spec, stress_iters)
+                     : run_device_smoke_test(dev, device_spec);
       }
     }
   } else if (test_all) {
