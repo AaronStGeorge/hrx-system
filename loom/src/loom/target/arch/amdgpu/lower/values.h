@@ -22,10 +22,21 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
                                             loom_low_lower_plan_t* out_plan);
 
+// Preselects target-owned value-construction combines that must claim their
+// producer before generated source-lowering contracts see it.
+iree_status_t loom_amdgpu_preselect_value_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t* out_plan);
+
 // Lowers a value-construction source op using its selected plan.
 iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
                                          loom_low_lower_plan_t plan);
+
+// Marks the exact source values consumed by a selected value plan.
+void loom_amdgpu_mark_value_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t plan);
 
 // Verifies AMDGPU low legality for vector coordinate construction source ops.
 iree_status_t loom_amdgpu_low_legality_verify_vector_iota(

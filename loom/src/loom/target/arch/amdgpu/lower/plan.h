@@ -120,7 +120,7 @@ typedef struct loom_amdgpu_fma_mix_plan_t {
   loom_value_id_t sources[3];
   // Source register-unit offsets consumed by the selected descriptor.
   uint32_t source_register_offsets[3];
-  // Scalar fmaf result value.
+  // Source result value produced by the selected mixed-FMA packet.
   loom_value_id_t result;
   // Descriptor row selected for the mixed-source fma/mad packet.
   loom_amdgpu_descriptor_ref_t descriptor_ref;

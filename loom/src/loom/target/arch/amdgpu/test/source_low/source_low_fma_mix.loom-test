@@ -261,6 +261,56 @@ low.func.def target(@gfx942_target) abi(hal_kernel) @f32_mad_mix_extf_a(%a_half:
 // ====
 
 amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f16_fma_mixlo_insert_f32(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32) -> (vector<2xf16>) {
+  %fma = scalar.fmaf %a, %b, %c : f32
+  %half = scalar.fptrunc %fma : f32 to f16
+  %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f16_fma_mixlo_insert_f32(%dest: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mixlo_f16_f32_f32_f32 %dest, %a, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f16_fma_mixhi_insert_extract_source(%dest: vector<2xf16>, %packed: vector<2xf16>, %b: f32, %c: f32) -> (vector<2xf16>) {
+  %a_half = vector.extract %packed[1] : vector<2xf16> -> f16
+  %a = scalar.extf %a_half : f16 to f32
+  %fma = scalar.fmaf %a, %b, %c : f32
+  %half = scalar.fptrunc %fma : f32 to f16
+  %result = vector.insert %half into %dest[1] : f16, vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f16_fma_mixhi_insert_extract_source(%dest: reg<amdgpu.vgpr>, %packed: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mixhi_f16_f16hi_f32_f32 %dest, %packed, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx942> @gfx942_target
+func.def target(@gfx942_target) @f16_mad_mixlo_insert_f32(%dest: vector<2xf16>, %a: f32, %b: f32, %c: f32) -> (vector<2xf16>) {
+  %fma = scalar.fmaf %a, %b, %c : f32
+  %half = scalar.fptrunc %fma : f32 to f16
+  %result = vector.insert %half into %dest[0] : f16, vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+
+// ----
+low.func.def target(@gfx942_target) abi(hal_kernel) @f16_mad_mixlo_insert_f32(%dest: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
+  %result = v_mad_mixlo_f16_f32_f32_f32 %dest, %a, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @f32_mulf_extf_requires_relaxed_zero_add(%a: f32, %scale_half: f16) -> (f32) {
   %scale = scalar.extf %scale_half : f16 to f32
   %result = scalar.mulf %a, %scale : f32

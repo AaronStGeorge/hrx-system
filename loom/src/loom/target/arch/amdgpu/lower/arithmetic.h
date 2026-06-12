@@ -23,6 +23,20 @@ iree_status_t loom_amdgpu_select_scalar_fmaf_mix_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_fma_mix_plan_t* out_plan, bool* out_selected);
 
+// Classifies a scalar f32 value as a legal mixed-FMA packet source.
+bool loom_amdgpu_select_fma_mix_source(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_value_id_t* out_source,
+    loom_amdgpu_fma_mix_source_kind_t* out_source_kind,
+    uint32_t* out_source_register_offset);
+
+// Selects a mixed-source FMA/MAD descriptor that rounds into one f16 result
+// lane.
+bool loom_amdgpu_select_fma_mix_half_result_descriptor(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_fma_mix_source_kind_t* source_kinds, bool high_result,
+    loom_amdgpu_descriptor_ref_t* out_descriptor_ref);
+
 // Selects a packed f16 FMA plan for vector.fmaf over even lane-pair vectors.
 iree_status_t loom_amdgpu_select_vector_packed_fmaf_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -49,6 +63,19 @@ iree_status_t loom_amdgpu_select_vector_mulf_mix_plan(
 iree_status_t loom_amdgpu_lower_scalar_fmaf_mix(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_fma_mix_plan_t* plan);
+
+// Emits one mixed-source AMDGPU FMA/MAD descriptor packet.
+iree_status_t loom_amdgpu_emit_fma_mix_packet(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_fma_mix_plan_t* plan, loom_type_t result_type,
+    loom_value_id_t* out_result);
+
+// Emits one mixed-source AMDGPU FMA/MAD descriptor packet whose partial result
+// is tied to an existing accumulator register.
+iree_status_t loom_amdgpu_emit_tied_fma_mix_packet(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_fma_mix_plan_t* plan, loom_value_id_t accumulator,
+    loom_type_t result_type, loom_value_id_t* out_result);
 
 // Lowers a packed vector ternary op to one AMDGPU packet per lane pair.
 iree_status_t loom_amdgpu_lower_vector_packed_ternary(

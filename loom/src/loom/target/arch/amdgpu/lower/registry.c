@@ -619,6 +619,9 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
                                               loom_low_lower_plan_t* out_plan) {
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
+  if (loom_vector_insert_isa(source_op)) {
+    return loom_amdgpu_preselect_value_plan(context, source_op, out_plan);
+  }
   if (!loom_vector_dotf_isa(source_op) && !loom_index_add_isa(source_op) &&
       !loom_index_cmp_isa(source_op) && !loom_scalar_fmaf_isa(source_op) &&
       !loom_vector_fmaf_isa(source_op) && !loom_vector_fmai_isa(source_op) &&
@@ -648,6 +651,10 @@ static void loom_amdgpu_mark_plan_storage_demands(
     loom_amdgpu_mark_mulf_mix_plan_storage_demands(
         context, source_op,
         (const loom_amdgpu_mulf_mix_plan_t*)plan.target_data);
+    return;
+  }
+  if (plan.id == LOOM_OP_VECTOR_INSERT) {
+    loom_amdgpu_mark_value_plan_storage_demands(context, source_op, plan);
     return;
   }
   loom_low_lower_require_source_operands_storage(context, source_op);

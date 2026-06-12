@@ -819,11 +819,14 @@ def _assert_mix_descriptor_sources(
     *,
     op_sel_field: str,
     op_sel_hi_field: str,
+    source_operand_start: int = 1,
 ) -> None:
     expected_op_sel = 0
     expected_op_sel_hi = 0
     for source_index, source_part in enumerate(source_parts):
-        operand = descriptor.operands[source_index + 1].descriptor_operand
+        operand = descriptor.operands[
+            source_operand_start + source_index
+        ].descriptor_operand
         if source_part == "f16lo":
             expected_op_sel_hi |= 1 << source_index
             assert operand.register_part == _REG_PART_VGPR_LOW16
@@ -848,6 +851,7 @@ def _assert_mix_descriptor_family(
     op_sel_field: str,
     op_sel_hi_field: str,
     result_register_part: str | None,
+    tied_half_result: bool = False,
 ) -> None:
     expected_keys = _expected_mix_descriptor_keys(
         descriptor_key_prefix, include_all_f32=include_all_f32
@@ -866,11 +870,39 @@ def _assert_mix_descriptor_family(
         assert descriptor.operands[0].descriptor_operand.register_part == (
             result_register_part
         )
+        source_operand_start = 1
+        if tied_half_result:
+            assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+                "VDST",
+                "VDST",
+                "SRC0",
+                "SRC1",
+                "SRC2",
+            )
+            acc = descriptor.operands[1].descriptor_operand
+            assert acc.field_name == "acc"
+            assert acc.role is OperandRole.OPERAND
+            assert OperandFlag.IMPLICIT in acc.flags
+            assert descriptor.operands[1].size_exception_reason is not None
+            assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+                ConstraintKind.TIED,
+                ConstraintKind.DESTRUCTIVE,
+            )
+            assert tuple(
+                (constraint.lhs_operand_index, constraint.rhs_operand_index)
+                for constraint in descriptor.constraints
+            ) == ((0, 1), (0, 1))
+            assert descriptor.asm_forms is not None
+            assert descriptor.asm_forms[0].operands == ("acc", "a", "b", "c")
+            source_operand_start = 2
+        else:
+            assert tuple(constraint.kind for constraint in descriptor.constraints) == ()
         _assert_mix_descriptor_sources(
             descriptor,
             source_parts,
             op_sel_field=op_sel_field,
             op_sel_hi_field=op_sel_hi_field,
+            source_operand_start=source_operand_start,
         )
 
 
@@ -911,6 +943,7 @@ def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
             op_sel_field=op_sel_field,
             op_sel_hi_field=op_sel_hi_field,
             result_register_part=_REG_PART_VGPR_LOW16,
+            tied_half_result=True,
         )
         _assert_mix_descriptor_family(
             descriptors,
@@ -919,6 +952,7 @@ def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
             op_sel_field=op_sel_field,
             op_sel_hi_field=op_sel_hi_field,
             result_register_part=_REG_PART_VGPR_HIGH16,
+            tied_half_result=True,
         )
 
     for descriptor_key_prefix in (
@@ -1016,6 +1050,7 @@ def test_mad_mix_descriptors_cover_cdna_half_lane_forms() -> None:
             op_sel_field="OP_SEL",
             op_sel_hi_field="OP_SEL_HI",
             result_register_part=_REG_PART_VGPR_LOW16,
+            tied_half_result=True,
         )
         _assert_mix_descriptor_family(
             descriptors,
@@ -1024,6 +1059,7 @@ def test_mad_mix_descriptors_cover_cdna_half_lane_forms() -> None:
             op_sel_field="OP_SEL",
             op_sel_hi_field="OP_SEL_HI",
             result_register_part=_REG_PART_VGPR_HIGH16,
+            tied_half_result=True,
         )
 
     for descriptors in (rdna3_descriptors, rdna4_descriptors, gfx1250_descriptors):

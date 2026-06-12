@@ -1758,6 +1758,8 @@ def _v_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
 
 _V_MIX_SOURCE_PARTS = ("f32", "f16lo", "f16hi")
 
+_V_MIX_HALF_RESULT_ACC_SIZE_REASON = "half-result-mix-ties-full-vgpr-accumulator"
+
 
 def _v_mix_source_operand(field_name: str, source_part: str) -> Operand:
     if source_part == "f32":
@@ -1965,15 +1967,59 @@ def _v_mix_half_result_overlay(
         "lo": _REG_PART_VGPR_LOW16,
         "hi": _REG_PART_VGPR_HIGH16,
     }[result_part]
-    return _v_mix_ternary_overlay(
-        source_parts,
-        descriptor_key_prefix=descriptor_key_prefix,
+    op_sel, op_sel_hi = _v_mix_source_selectors(source_parts)
+    suffix = "_".join(source_parts)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"{descriptor_key_prefix}.{suffix}",
         instruction_name=instruction_name,
-        mnemonic_prefix=mnemonic_prefix,
-        result_operand=_vgpr_result(register_part=result_register_part),
-        semantic_tag_prefix=semantic_tag_prefix,
-        op_sel_field=op_sel_field,
-        op_sel_hi_field=op_sel_hi_field,
+        mnemonic=f"{mnemonic_prefix}_{suffix}",
+        encoding_name="ENC_VOP3P",
+        semantic_tag=f"{semantic_tag_prefix}.{'.'.join(source_parts)}",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay(
+                "VDST", _vgpr_result(register_part=result_register_part)
+            ),
+            AmdgpuOperandOverlay(
+                "VDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _VGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                ),
+                role_exception_reason=(
+                    "the encoded destination register carries the untouched "
+                    "half for the tied partial result"
+                ),
+                size_exception_reason=_V_MIX_HALF_RESULT_ACC_SIZE_REASON,
+            ),
+            AmdgpuOperandOverlay(
+                "SRC0",
+                _v_mix_source_operand("a", source_parts[0]),
+                size_exception_reason=_v_mix_source_size_reason(source_parts[0]),
+            ),
+            AmdgpuOperandOverlay(
+                "SRC1",
+                _v_mix_source_operand("b", source_parts[1]),
+                size_exception_reason=_v_mix_source_size_reason(source_parts[1]),
+            ),
+            AmdgpuOperandOverlay(
+                "SRC2",
+                _v_mix_source_operand("c", source_parts[2]),
+                size_exception_reason=_v_mix_source_size_reason(source_parts[2]),
+            ),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b", "c")),
+        fixed_encoding_fields=(
+            (op_sel_field, op_sel),
+            (op_sel_hi_field, op_sel_hi),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 
