@@ -104,8 +104,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @q8_packed_word_global_d
   %73 = v_fma_mix_f32_f32_f16lo_f32 %62, %scale, %69
   %75 = v_fma_mix_f32_f32_f16lo_f32 %64, %scale, %69
   %77 = v_fma_mix_f32_f32_f16lo_f32 %66, %scale, %69
+  %acc = v_mov_b32 0
   %81 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %82 = v_fma_f32 %71, %81, %69
+  %82 = v_fmac_f32 %acc, %71, %81
   %84 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %85 = v_fmac_f32 %82, %73, %84
   %87 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>

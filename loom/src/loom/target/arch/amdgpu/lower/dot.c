@@ -10,6 +10,7 @@
 
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
@@ -123,12 +124,21 @@ iree_status_t loom_amdgpu_select_vector_dotf_plan(
     }
   }
 
+  uint32_t init_bit_pattern = 0;
+  const loom_amdgpu_dotf_init_kind_t init_kind =
+      loom_amdgpu_module_value_as_f32_constant(module, init,
+                                               &init_bit_pattern) &&
+              init_bit_pattern == 0
+          ? LOOM_AMDGPU_DOTF_INIT_ZERO
+          : LOOM_AMDGPU_DOTF_INIT_GENERIC;
+
   out_plan->lhs = lhs;
   out_plan->rhs = rhs;
   out_plan->init = init;
   out_plan->result = result;
   out_plan->lane_count = lane_count;
   out_plan->accumulation_kind = accumulation_kind;
+  out_plan->init_kind = init_kind;
   out_plan->tied_accumulate_descriptor_ref = tied_accumulate_descriptor_ref;
   *out_selected = true;
   return iree_ok_status();
@@ -262,7 +272,7 @@ static iree_status_t loom_amdgpu_dotf_emit_strict_chain(
     loom_value_id_t low_rhs, loom_value_id_t low_init, loom_type_t lane_type,
     loom_value_id_t* out_result) {
   loom_value_id_t accumulator = low_init;
-  bool accumulator_is_dot_local = false;
+  bool accumulator_is_dot_local = plan->init_kind == LOOM_AMDGPU_DOTF_INIT_ZERO;
   for (uint32_t lane = 0; lane < plan->lane_count; ++lane) {
     loom_value_id_t lhs_lane = LOOM_VALUE_ID_INVALID;
     loom_value_id_t rhs_lane = LOOM_VALUE_ID_INVALID;
@@ -318,7 +328,9 @@ static iree_status_t loom_amdgpu_dotf_emit_relaxed_forest(
       context, source_op, plan, low_lhs, low_rhs, lane, &lhs_lane, &rhs_lane));
   IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_accumulate(
       context, source_op, plan, lhs_lane, rhs_lane, low_init,
-      /*accumulator_is_dot_local=*/false, lane_type, &accumulators[0]));
+      /*accumulator_is_dot_local=*/plan->init_kind ==
+          LOOM_AMDGPU_DOTF_INIT_ZERO,
+      lane_type, &accumulators[0]));
   ++lane;
 
   for (; lane < accumulator_count; ++lane) {

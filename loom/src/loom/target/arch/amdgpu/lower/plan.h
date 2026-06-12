@@ -82,6 +82,11 @@ typedef enum loom_amdgpu_dotf_accumulation_kind_e {
   LOOM_AMDGPU_DOTF_ACCUMULATION_RELAXED_FOREST = 1,
 } loom_amdgpu_dotf_accumulation_kind_t;
 
+typedef enum loom_amdgpu_dotf_init_kind_e {
+  LOOM_AMDGPU_DOTF_INIT_GENERIC = 0,
+  LOOM_AMDGPU_DOTF_INIT_ZERO = 1,
+} loom_amdgpu_dotf_init_kind_t;
+
 typedef struct loom_amdgpu_dotf_plan_t {
   // Left-hand source vector value.
   loom_value_id_t lhs;
@@ -95,6 +100,8 @@ typedef struct loom_amdgpu_dotf_plan_t {
   uint32_t lane_count;
   // Selected accumulation topology.
   loom_amdgpu_dotf_accumulation_kind_t accumulation_kind;
+  // Accumulator seed identity proven by the planner.
+  loom_amdgpu_dotf_init_kind_t init_kind;
   // Optional tied-accumulator packet used after the accumulator is dot-local.
   loom_amdgpu_descriptor_ref_t tied_accumulate_descriptor_ref;
 } loom_amdgpu_dotf_plan_t;
