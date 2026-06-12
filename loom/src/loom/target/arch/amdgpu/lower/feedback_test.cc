@@ -359,6 +359,40 @@ class AmdgpuFeedbackTest : public ::testing::Test {
                   expected_byte_offset);
   }
 
+  void ExpectGlobalLoadB64(const loom_op_t* op, loom_value_id_t expected_base,
+                           uint32_t expected_byte_offset,
+                           loom_value_id_t expected_result) const {
+    ExpectLowOpDescriptorRef(op,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR);
+    loom_value_slice_t operands = loom_low_op_operands(op);
+    ASSERT_EQ(operands.count,
+              PacketOperandCountForRef(
+                  LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR));
+    EXPECT_EQ(operands.values[1], expected_base);
+    if (operands.count == 3) {
+      const loom_value_t* m0_value =
+          loom_module_value(module_, operands.values[2]);
+      ASSERT_FALSE(loom_value_is_block_arg(m0_value));
+      ExpectLowConstDescriptorRef(loom_value_def_op(m0_value),
+                                  LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM);
+    }
+    loom_type_t expected_vaddr_type = loom_low_register_type(
+        descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
+    EXPECT_TRUE(
+        loom_type_equal(expected_vaddr_type,
+                        loom_module_value_type(module_, operands.values[0])));
+    ASSERT_EQ(loom_low_op_results(op).count, 1u);
+    EXPECT_EQ(loom_value_slice_get(loom_low_op_results(op), 0),
+              expected_result);
+    loom_type_t expected_result_type = loom_low_register_type(
+        descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
+    EXPECT_TRUE(
+        loom_type_equal(expected_result_type,
+                        loom_module_value_type(module_, expected_result)));
+    ExpectAttrI64(loom_low_op_attrs(op), IREE_SV("offset"),
+                  expected_byte_offset);
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
@@ -561,6 +595,84 @@ TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCountWithGfx12SystemScope) {
       atomic_ops[0], channel_values.address,
       LOOM_AMDGPU_FEEDBACK_CHANNEL_DROPPED_PACKET_COUNT_OFFSET);
   ExpectAttrI64(loom_low_op_attrs(atomic_ops[0]), IREE_SV("scope"),
+                kSystemCacheScope);
+}
+
+TEST_F(AmdgpuFeedbackTest, LoadsReservationHead) {
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  loom_value_id_t reservation_head = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation_head_load(
+      &builder_, descriptor_set_, channel_values.address, LOOM_LOCATION_UNKNOWN,
+      &reservation_head));
+
+  std::vector<loom_op_t*> load_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR);
+  ASSERT_EQ(load_ops.size(), 1u);
+  ExpectGlobalLoadB64(load_ops[0], channel_values.address,
+                      LOOM_AMDGPU_FEEDBACK_CHANNEL_RESERVATION_HEAD_OFFSET,
+                      reservation_head);
+  ASSERT_EQ(loom_low_op_attrs(load_ops[0]).count, 1u);
+}
+
+TEST_F(AmdgpuFeedbackTest, LoadsReservationHeadWithCdnaM0) {
+  UseDescriptorSet(IREE_SV("amdgpu.cdna3.core"));
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  loom_value_id_t reservation_head = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation_head_load(
+      &builder_, descriptor_set_, channel_values.address, LOOM_LOCATION_UNKNOWN,
+      &reservation_head));
+
+  std::vector<loom_op_t*> load_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR);
+  ASSERT_EQ(load_ops.size(), 1u);
+  ExpectGlobalLoadB64(load_ops[0], channel_values.address,
+                      LOOM_AMDGPU_FEEDBACK_CHANNEL_RESERVATION_HEAD_OFFSET,
+                      reservation_head);
+  ASSERT_EQ(loom_low_op_operands(load_ops[0]).count, 3u);
+}
+
+TEST_F(AmdgpuFeedbackTest, LoadsReservationHeadWithGfx12SystemScope) {
+  UseDescriptorSet(IREE_SV("amdgpu.rdna4.core"));
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  loom_value_id_t reservation_head = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation_head_load(
+      &builder_, descriptor_set_, channel_values.address, LOOM_LOCATION_UNKNOWN,
+      &reservation_head));
+
+  std::vector<loom_op_t*> load_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR);
+  ASSERT_EQ(load_ops.size(), 1u);
+  ExpectGlobalLoadB64(load_ops[0], channel_values.address,
+                      LOOM_AMDGPU_FEEDBACK_CHANNEL_RESERVATION_HEAD_OFFSET,
+                      reservation_head);
+  ExpectAttrI64(loom_low_op_attrs(load_ops[0]), IREE_SV("scope"),
                 kSystemCacheScope);
 }
 

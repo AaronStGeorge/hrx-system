@@ -125,6 +125,17 @@ iree_status_t loom_amdgpu_build_feedback_dropped_packet_count_increment(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t channel_base, loom_location_id_t location);
 
+// Emits target-low IR that loads channel->reservation_head.
+//
+// |channel_base| must be an SGPRx2 pointer to the device-visible feedback
+// channel header. The load is a relaxed system-scope cursor read and returns a
+// VGPRx2 value because GLOBAL_LOAD_*_SADDR is a vector-memory packet even when
+// every active lane reads the same address.
+iree_status_t loom_amdgpu_build_feedback_reservation_head_load(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_location_id_t location,
+    loom_value_id_t* out_value);
+
 // Emits target-low IR that initializes a reserved feedback packet header.
 //
 // |packet_address| must reference packet storage returned by reservation.
