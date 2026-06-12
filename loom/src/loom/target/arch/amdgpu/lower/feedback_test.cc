@@ -27,6 +27,8 @@
 
 namespace {
 
+using iree::StatusCode;
+
 constexpr int64_t kSystemCacheScope = LOOM_CACHE_SCOPE_SYSTEM;
 
 std::string ToString(iree_string_view_t value) {
@@ -253,6 +255,22 @@ class AmdgpuFeedbackTest : public ::testing::Test {
     EXPECT_EQ(ToString(String(loom_low_const_opcode(op))),
               ToString(loom_low_descriptor_set_string(
                   descriptor_set_, descriptor->key_string_offset)));
+  }
+
+  const loom_op_t* DefiningOp(loom_value_id_t value) const {
+    const loom_value_t* ir_value = loom_module_value(module_, value);
+    if (ir_value == nullptr || loom_value_is_block_arg(ir_value)) {
+      return nullptr;
+    }
+    return loom_value_def_op(ir_value);
+  }
+
+  void ExpectRegisterType(loom_value_id_t value, uint16_t register_class,
+                          uint32_t unit_count) const {
+    const loom_type_t expected_type = loom_low_register_type(
+        descriptor_set_->stable_id, register_class, unit_count);
+    EXPECT_TRUE(
+        loom_type_equal(expected_type, loom_module_value_type(module_, value)));
   }
 
   void ExpectRel32Attrs(const loom_op_t* op, loom_symbol_ref_t expected_symbol,
@@ -940,6 +958,116 @@ TEST_F(AmdgpuFeedbackTest, CompareExchangesReservationHeadWithGfx12Ordering) {
   ASSERT_EQ(invalidate_ops.size(), 1u);
   ExpectAttrI64(loom_low_op_attrs(invalidate_ops[0]), IREE_SV("scope"),
                 kSystemCacheScope);
+}
+
+TEST_F(AmdgpuFeedbackTest, BuildsSingleReservationAttempt) {
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(BuildFeedbackChannelValues(&config_values, &channel_values));
+
+  loom_value_id_t reservation_head = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation_head_load(
+      &builder_, descriptor_set_, channel_values.address, LOOM_LOCATION_UNKNOWN,
+      &reservation_head));
+
+  const uint32_t packet_length =
+      (uint32_t)loom_amdgpu_feedback_packet_length(/*payload_length=*/96);
+  loom_amdgpu_feedback_reservation_attempt_t attempt = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation_attempt(
+      &builder_, descriptor_set_, channel_values.address, reservation_head,
+      packet_length, LOOM_LOCATION_UNKNOWN, &attempt));
+
+  EXPECT_EQ(attempt.expected_head, reservation_head);
+  ExpectRegisterType(attempt.next_head, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
+  ExpectRegisterType(attempt.observed_head, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
+  ExpectRegisterType(attempt.cas_succeeded, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+
+  std::vector<loom_op_t*> add_lo_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_CO_U32);
+  ASSERT_EQ(add_lo_ops.size(), 1u);
+  ASSERT_EQ(loom_low_op_results(add_lo_ops[0]).count, 2u);
+  std::vector<loom_op_t*> add_hi_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_CO_CI_U32);
+  ASSERT_EQ(add_hi_ops.size(), 1u);
+  ASSERT_EQ(loom_low_op_results(add_hi_ops[0]).count, 2u);
+  ASSERT_EQ(loom_low_op_operands(add_hi_ops[0]).count, 3u);
+  EXPECT_EQ(loom_low_op_operands(add_hi_ops[0]).values[2],
+            loom_value_slice_get(loom_low_op_results(add_lo_ops[0]), 1));
+
+  const loom_op_t* next_head_concat = DefiningOp(attempt.next_head);
+  ASSERT_NE(next_head_concat, nullptr);
+  ASSERT_TRUE(loom_low_concat_isa(next_head_concat));
+  loom_value_slice_t next_head_parts =
+      loom_low_concat_sources(next_head_concat);
+  ASSERT_EQ(next_head_parts.count, 2u);
+  EXPECT_EQ(next_head_parts.values[0],
+            loom_value_slice_get(loom_low_op_results(add_lo_ops[0]), 0));
+  EXPECT_EQ(next_head_parts.values[1],
+            loom_value_slice_get(loom_low_op_results(add_hi_ops[0]), 0));
+
+  std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_CMPSWAP_B64_RTN_SADDR);
+  ASSERT_EQ(atomic_ops.size(), 1u);
+  ExpectGlobalAtomicCompareExchangeU64(
+      atomic_ops[0], channel_values.address,
+      LOOM_AMDGPU_FEEDBACK_CHANNEL_RESERVATION_HEAD_OFFSET,
+      attempt.observed_head);
+  const loom_value_id_t compare_exchange_pair =
+      loom_low_op_operands(atomic_ops[0]).values[1];
+  const loom_op_t* pair_concat = DefiningOp(compare_exchange_pair);
+  ASSERT_NE(pair_concat, nullptr);
+  ASSERT_TRUE(loom_low_concat_isa(pair_concat));
+  loom_value_slice_t pair_sources = loom_low_concat_sources(pair_concat);
+  ASSERT_EQ(pair_sources.count, 2u);
+  EXPECT_EQ(pair_sources.values[0], attempt.expected_head);
+  EXPECT_EQ(pair_sources.values[1], attempt.next_head);
+
+  std::vector<loom_op_t*> compare_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32);
+  ASSERT_EQ(compare_ops.size(), 2u);
+  std::vector<loom_op_t*> and_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64);
+  ASSERT_EQ(and_ops.size(), 1u);
+  loom_value_slice_t and_operands = loom_low_op_operands(and_ops[0]);
+  ASSERT_EQ(and_operands.count, 2u);
+  EXPECT_EQ(and_operands.values[0],
+            loom_value_slice_get(loom_low_op_results(compare_ops[0]), 0));
+  EXPECT_EQ(and_operands.values[1],
+            loom_value_slice_get(loom_low_op_results(compare_ops[1]), 0));
+  EXPECT_EQ(attempt.cas_succeeded,
+            loom_value_slice_get(loom_low_op_results(and_ops[0]), 0));
+}
+
+TEST_F(AmdgpuFeedbackTest, RejectsInvalidReservationAttemptPacketLengths) {
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(BuildFeedbackChannelValues(&config_values, &channel_values));
+
+  loom_value_id_t reservation_head = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation_head_load(
+      &builder_, descriptor_set_, channel_values.address, LOOM_LOCATION_UNKNOWN,
+      &reservation_head));
+
+  loom_amdgpu_feedback_reservation_attempt_t attempt = {};
+  IREE_EXPECT_STATUS_IS(
+      StatusCode::kInvalidArgument,
+      loom_amdgpu_build_feedback_reservation_attempt(
+          &builder_, descriptor_set_, channel_values.address, reservation_head,
+          LOOM_AMDGPU_FEEDBACK_PACKET_BYTE_LENGTH - 1u, LOOM_LOCATION_UNKNOWN,
+          &attempt));
+  IREE_EXPECT_STATUS_IS(
+      StatusCode::kInvalidArgument,
+      loom_amdgpu_build_feedback_reservation_attempt(
+          &builder_, descriptor_set_, channel_values.address, reservation_head,
+          LOOM_AMDGPU_FEEDBACK_PACKET_BYTE_LENGTH + 1u, LOOM_LOCATION_UNKNOWN,
+          &attempt));
+  IREE_EXPECT_STATUS_IS(
+      StatusCode::kInvalidArgument,
+      loom_amdgpu_build_feedback_reservation_attempt(
+          &builder_, descriptor_set_, channel_values.address, reservation_head,
+          (uint32_t)loom_amdgpu_feedback_packet_length(
+              LOOM_AMDGPU_FEEDBACK_PACKET_MAX_PAYLOAD_LENGTH + 1u),
+          LOOM_LOCATION_UNKNOWN, &attempt));
 }
 
 TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {

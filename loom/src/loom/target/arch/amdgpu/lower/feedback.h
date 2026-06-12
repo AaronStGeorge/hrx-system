@@ -80,6 +80,17 @@ typedef struct loom_amdgpu_feedback_packet_header_t {
   loom_value_id_t source_workitem_id_x;
 } loom_amdgpu_feedback_packet_header_t;
 
+typedef struct loom_amdgpu_feedback_reservation_attempt_t {
+  // Monotonic reservation head value this attempt tried to claim.
+  loom_value_id_t expected_head;
+  // Monotonic reservation head value published when the CAS succeeds.
+  loom_value_id_t next_head;
+  // Monotonic reservation head value observed by the CAS.
+  loom_value_id_t observed_head;
+  // Native execution mask identifying lanes whose CAS succeeded.
+  loom_value_id_t cas_succeeded;
+} loom_amdgpu_feedback_reservation_attempt_t;
+
 // Emits target-low IR that materializes and scalar-loads common feedback config
 // fields.
 //
@@ -159,6 +170,24 @@ loom_amdgpu_build_feedback_reservation_head_compare_exchange_acq_rel(
     loom_value_id_t channel_base, loom_value_id_t expected_head,
     loom_value_id_t desired_head, loom_location_id_t location,
     loom_value_id_t* out_old_head);
+
+// Emits one target-low reservation CAS attempt.
+//
+// |channel_base| must be an SGPRx2 pointer to the device-visible feedback
+// channel header. |reservation_head| must be a VGPRx2 value loaded from
+// channel->reservation_head. |packet_length| is the statically known total
+// packet byte length including header and padded payload.
+//
+// This helper does not check ring capacity, retry failed CAS operations,
+// compute a packet ring offset, initialize packet storage, publish packet
+// state, notify the host, or decide producer failure policy. Those steps are
+// shared by higher-level feedback producers and are intentionally kept outside
+// of this single-attempt primitive.
+iree_status_t loom_amdgpu_build_feedback_reservation_attempt(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_value_id_t reservation_head,
+    uint32_t packet_length, loom_location_id_t location,
+    loom_amdgpu_feedback_reservation_attempt_t* out_attempt);
 
 // Emits target-low IR that initializes a reserved feedback packet header.
 //
