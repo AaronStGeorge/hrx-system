@@ -205,6 +205,7 @@ static iree_status_t loom_pass_interpreter_make_pass(
       .arena = instance_arena,
       .decoded_options = invoke->decoded_options,
       .diagnostic_emitter = diagnostic_emitter,
+      .report = state->options->report,
       .environment = &state->options->environment,
       .value_facts = &state->value_facts,
   };
@@ -427,10 +428,18 @@ static iree_status_t loom_pass_interpreter_invoke(
             .changed = invocation_changed,
             .status_code = status_code,
             .statistic_storage = pass.statistic_storage,
+            .detail_head = pass.report_detail_head,
+            .detail_count = pass.report_detail_count,
         });
+    if (iree_status_is_ok(report_status)) {
+      pass.report_detail_head = NULL;
+      pass.report_detail_tail = NULL;
+      pass.report_detail_count = 0;
+    }
   }
 
   const bool pass_failed = !iree_status_is_ok(status);
+  loom_pass_report_discard_pass_details(&pass);
   iree_arena_deinitialize(&instance_arena);
   iree_status_t terminal_status = iree_status_join(status, trace_status);
   terminal_status = iree_status_join(terminal_status, report_status);
@@ -767,6 +776,7 @@ static iree_status_t loom_pass_interpreter_evaluate_provider_predicate(
           .where_op = instruction->source.op,
           .anchor_kind = frame->kind,
           .predicate = instruction->where.predicate,
+          .environment = &state->options->environment,
           .target_module = state->module,
           .symbol = frame->symbol,
           .function = frame->function,

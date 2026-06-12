@@ -21,8 +21,10 @@
 #include "loom/ops/op_defs.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
+#include "loom/pass/report.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/target/selection.h"
 #include "loom/transforms/symbol/symbol_pruning.h"
 
 //===----------------------------------------------------------------------===//
@@ -48,16 +50,37 @@ static const loom_pass_option_def_t kTemplateSelectionOptions[] = {
               "emits diagnostics for every unresolved live apply.")},
 };
 
-#define LOOM_TEMPLATE_SELECTION_STATISTICS(V, statistics_type) \
-  V(statistics_type, apply_sites, "apply-sites",               \
-    "Number of live func.apply sites analyzed.")               \
-  V(statistics_type, selected_sites, "selected-sites",         \
-    "Number of func.apply sites resolved to inline calls.")    \
-  V(statistics_type, unresolved_sites, "unresolved-sites",     \
-    "Number of live func.apply sites left unresolved.")        \
-  V(statistics_type, provider_edges, "provider-edges",         \
-    "Number of apply-generated provider liveness edges.")      \
-  V(statistics_type, symbols_pruned, "symbols-pruned",         \
+#define LOOM_TEMPLATE_SELECTION_STATISTICS(V, statistics_type)           \
+  V(statistics_type, apply_sites, "apply-sites",                         \
+    "Number of live func.apply sites analyzed.")                         \
+  V(statistics_type, selected_sites, "selected-sites",                   \
+    "Number of func.apply sites resolved to inline calls.")              \
+  V(statistics_type, fallback_selected_sites, "fallback-selected-sites", \
+    "Number of selected sites that used a lower-priority "               \
+    "provider while a higher-priority candidate existed.")               \
+  V(statistics_type, unresolved_sites, "unresolved-sites",               \
+    "Number of live func.apply sites left unresolved.")                  \
+  V(statistics_type, no_provider_sites, "no-provider-sites",             \
+    "Number of unresolved sites with no provider for the "               \
+    "requested contract.")                                               \
+  V(statistics_type, target_mismatch_sites, "target-mismatch-sites",     \
+    "Number of unresolved sites with no target-applicable "              \
+    "provider.")                                                         \
+  V(statistics_type, rejected_sites, "rejected-sites",                   \
+    "Number of unresolved sites whose providers were rejected "          \
+    "by signature or predicates.")                                       \
+  V(statistics_type, missing_fact_sites, "missing-fact-sites",           \
+    "Number of unresolved sites blocked by unknown predicate "           \
+    "facts.")                                                            \
+  V(statistics_type, ambiguous_sites, "ambiguous-sites",                 \
+    "Number of unresolved sites with multiple best providers.")          \
+  V(statistics_type, materialization_blocked_sites,                      \
+    "materialization-blocked-sites",                                     \
+    "Number of unresolved sites with a selected provider that "          \
+    "could not be materialized.")                                        \
+  V(statistics_type, provider_edges, "provider-edges",                   \
+    "Number of apply-generated provider liveness edges.")                \
+  V(statistics_type, symbols_pruned, "symbols-pruned",                   \
     "Number of unreachable private symbols pruned after selection.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_template_selection_statistics,
@@ -262,6 +285,9 @@ typedef struct loom_template_selection_state_t {
   // Liveness result after apply-generated provider edges.
   loom_symbol_liveness_t liveness;
 
+  // True when the caller requested pass report detail rows.
+  bool reports_enabled;
+
   // Reachable apply-site selection entries.
   loom_template_selection_entry_t* entries;
 
@@ -278,6 +304,32 @@ static iree_string_view_t loom_template_selection_contract_name(
     return module->strings.entries[contract_id];
   }
   return IREE_SV("<invalid>");
+}
+
+static iree_string_view_t loom_template_selection_symbol_name(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref,
+    iree_string_view_t fallback) {
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return fallback;
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id >= module->strings.count) {
+    return fallback;
+  }
+  return module->strings.entries[symbol->name_id];
+}
+
+static iree_string_view_t loom_template_selection_context_symbol_name(
+    const loom_template_selection_state_t* state,
+    const loom_symbol_liveness_contributor_context_t* context) {
+  if (!context || !context->source_symbol) {
+    return IREE_SV("<none>");
+  }
+  if (context->source_symbol->name_id >= state->module->strings.count) {
+    return IREE_SV("<none>");
+  }
+  return state->module->strings.entries[context->source_symbol->name_id];
 }
 
 static iree_string_view_t loom_template_selection_blocker_reason(
@@ -304,6 +356,35 @@ static iree_string_view_t loom_template_selection_blocker_reason(
   }
 }
 
+static iree_string_view_t loom_template_selection_outcome(
+    const loom_template_selection_entry_t* entry,
+    int64_t highest_provider_priority) {
+  if (entry->action == LOOM_TEMPLATE_SELECTION_ACTION_SELECT) {
+    if (entry->selected_provider &&
+        entry->selected_provider->priority < highest_provider_priority) {
+      return IREE_SV("fallback_selected");
+    }
+    return IREE_SV("selected");
+  }
+  switch (entry->blocker) {
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER:
+      return IREE_SV("no_provider");
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH:
+      return IREE_SV("target_mismatch");
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED:
+      return IREE_SV("rejected");
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS:
+      return IREE_SV("missing_facts");
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS:
+      return IREE_SV("ambiguous");
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION:
+      return IREE_SV("materialization_blocked");
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_NONE:
+    default:
+      return IREE_SV("unresolved");
+  }
+}
+
 static bool loom_template_provider_is_materializable(
     const loom_func_provider_summary_t* provider) {
   return provider->origin == LOOM_FUNC_PROVIDER_ORIGIN_LOCAL &&
@@ -317,18 +398,21 @@ static bool loom_template_selection_symbol_refs_equal(loom_symbol_ref_t lhs,
 }
 
 static loom_symbol_ref_t loom_template_selection_apply_target(
-    const loom_module_t* module,
+    const loom_template_selection_state_t* state,
     const loom_symbol_liveness_contributor_context_t* context) {
   if (!context || !context->source_symbol ||
       !context->source_symbol->defining_op) {
     return loom_symbol_ref_null();
   }
   loom_func_like_t source_function =
-      loom_func_like_cast(module, context->source_symbol->defining_op);
+      loom_func_like_cast(state->module, context->source_symbol->defining_op);
   if (!loom_func_like_isa(source_function)) {
     return loom_symbol_ref_null();
   }
-  return loom_func_like_target(source_function);
+  const loom_target_pass_capability_t* target_capability =
+      loom_target_pass_capability_from_pass(state->pass);
+  return loom_target_effective_target_ref(
+      loom_func_like_target(source_function), target_capability);
 }
 
 static bool loom_template_selection_provider_applies_to_target(
@@ -342,6 +426,57 @@ static bool loom_template_selection_provider_applies_to_target(
   }
   return loom_template_selection_symbol_refs_equal(apply_target,
                                                    provider->target_symbol);
+}
+
+static iree_status_t loom_template_selection_append_report_detail(
+    loom_template_selection_state_t* state,
+    const loom_symbol_liveness_contributor_context_t* context,
+    const loom_template_selection_entry_t* entry,
+    loom_symbol_ref_t apply_target, iree_host_size_t provider_count,
+    uint32_t target_applicable_count, uint32_t possible_count,
+    uint32_t best_exact_count, int64_t highest_provider_priority) {
+  if (!state->reports_enabled) {
+    return iree_ok_status();
+  }
+
+  loom_pass_report_detail_field_t fields[12];
+  uint16_t field_count = 0;
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("outcome"),
+      loom_template_selection_outcome(entry, highest_provider_priority));
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("function"),
+      loom_template_selection_context_symbol_name(state, context));
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("apply_op"), loom_op_name(state->module, entry->apply_op));
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("contract"), entry->contract);
+  if (loom_symbol_ref_is_valid(apply_target)) {
+    fields[field_count++] = loom_pass_report_detail_string_field(
+        IREE_SV("target"),
+        loom_template_selection_symbol_name(state->module, apply_target,
+                                            IREE_SV("<invalid>")));
+  }
+  if (entry->selected_provider) {
+    fields[field_count++] = loom_pass_report_detail_string_field(
+        IREE_SV("selected_provider"), entry->selected_provider->name);
+    fields[field_count++] = loom_pass_report_detail_int64_field(
+        IREE_SV("selected_priority"), entry->selected_provider->priority);
+  }
+  if (provider_count > 0) {
+    fields[field_count++] = loom_pass_report_detail_int64_field(
+        IREE_SV("highest_provider_priority"), highest_provider_priority);
+  }
+  fields[field_count++] = loom_pass_report_detail_uint64_field(
+      IREE_SV("provider_count"), (uint64_t)provider_count);
+  fields[field_count++] = loom_pass_report_detail_uint64_field(
+      IREE_SV("target_applicable_count"), target_applicable_count);
+  fields[field_count++] = loom_pass_report_detail_uint64_field(
+      IREE_SV("possible_count"), possible_count);
+  fields[field_count++] = loom_pass_report_detail_uint64_field(
+      IREE_SV("best_exact_count"), best_exact_count);
+  return loom_pass_report_append_detail(
+      state->pass, IREE_SV("template-selection"), fields, field_count);
 }
 
 //===----------------------------------------------------------------------===//
@@ -818,13 +953,44 @@ static iree_status_t loom_template_selection_append_entry(
   return iree_ok_status();
 }
 
+static void loom_template_selection_record_blocker(
+    loom_template_selection_state_t* state,
+    loom_template_selection_entry_t* entry,
+    loom_template_selection_blocker_t blocker) {
+  entry->blocker = blocker;
+  ++state->statistics->unresolved_sites;
+  switch (blocker) {
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER:
+      ++state->statistics->no_provider_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH:
+      ++state->statistics->target_mismatch_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED:
+      ++state->statistics->rejected_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS:
+      ++state->statistics->missing_fact_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS:
+      ++state->statistics->ambiguous_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION:
+      ++state->statistics->materialization_blocked_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_NONE:
+    default:
+      break;
+  }
+}
+
 static iree_status_t loom_template_selection_mark_exact_priority(
     loom_template_selection_state_t* state,
     loom_symbol_liveness_contributor_context_t* context,
     const loom_op_t* apply_op, loom_func_provider_slice_t providers,
     int64_t priority) {
   const loom_symbol_ref_t apply_target =
-      loom_template_selection_apply_target(state->module, context);
+      loom_template_selection_apply_target(state, context);
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
     if (!loom_template_selection_provider_applies_to_target(apply_target,
@@ -851,7 +1017,7 @@ static iree_status_t loom_template_selection_mark_missing_fact_candidates(
     const loom_op_t* apply_op, loom_func_provider_slice_t providers,
     bool has_exact, int64_t exact_priority) {
   const loom_symbol_ref_t apply_target =
-      loom_template_selection_apply_target(state->module, context);
+      loom_template_selection_apply_target(state, context);
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
     if (!loom_template_selection_provider_applies_to_target(apply_target,
@@ -900,27 +1066,34 @@ static iree_status_t loom_template_selection_analyze_apply(
 
   ++state->statistics->apply_sites;
 
+  const loom_symbol_ref_t apply_target =
+      loom_template_selection_apply_target(state, context);
   loom_func_provider_slice_t providers =
       loom_func_provider_catalog_lookup(&state->catalog, contract_id);
   if (providers.count == 0) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER;
-    ++state->statistics->unresolved_sites;
-    return iree_ok_status();
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER);
+    return loom_template_selection_append_report_detail(
+        state, context, entry, apply_target, providers.count,
+        /*target_applicable_count=*/0, /*possible_count=*/0,
+        /*best_exact_count=*/0, /*highest_provider_priority=*/INT64_MIN);
   }
 
   bool has_exact = false;
   bool has_maybe = false;
   int64_t best_exact_priority = INT64_MIN;
+  int64_t highest_provider_priority = INT64_MIN;
   int64_t highest_maybe_priority = INT64_MIN;
   uint32_t best_exact_count = 0;
   uint32_t target_applicable_count = 0;
   uint32_t possible_count = 0;
   const loom_func_provider_summary_t* best_exact_provider = NULL;
-  const loom_symbol_ref_t apply_target =
-      loom_template_selection_apply_target(state->module, context);
 
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
+    if (provider->priority > highest_provider_priority) {
+      highest_provider_priority = provider->priority;
+    }
     if (!loom_template_selection_provider_applies_to_target(apply_target,
                                                             provider)) {
       continue;
@@ -953,47 +1126,68 @@ static iree_status_t loom_template_selection_analyze_apply(
   }
 
   if (target_applicable_count == 0) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH;
-    ++state->statistics->unresolved_sites;
-    return iree_ok_status();
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH);
+    return loom_template_selection_append_report_detail(
+        state, context, entry, apply_target, providers.count,
+        target_applicable_count, possible_count, best_exact_count,
+        highest_provider_priority);
   }
 
   if (possible_count == 0) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED;
-    ++state->statistics->unresolved_sites;
-    return iree_ok_status();
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED);
+    return loom_template_selection_append_report_detail(
+        state, context, entry, apply_target, providers.count,
+        target_applicable_count, possible_count, best_exact_count,
+        highest_provider_priority);
   }
 
   if (!has_exact ||
       (has_maybe && highest_maybe_priority >= best_exact_priority)) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS);
     IREE_RETURN_IF_ERROR(loom_template_selection_mark_missing_fact_candidates(
         state, context, apply_op, providers, has_exact, best_exact_priority));
-    ++state->statistics->unresolved_sites;
-    return iree_ok_status();
+    return loom_template_selection_append_report_detail(
+        state, context, entry, apply_target, providers.count,
+        target_applicable_count, possible_count, best_exact_count,
+        highest_provider_priority);
   }
 
   if (best_exact_count > 1) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS);
     IREE_RETURN_IF_ERROR(loom_template_selection_mark_exact_priority(
         state, context, apply_op, providers, best_exact_priority));
-    ++state->statistics->unresolved_sites;
-    return iree_ok_status();
+    return loom_template_selection_append_report_detail(
+        state, context, entry, apply_target, providers.count,
+        target_applicable_count, possible_count, best_exact_count,
+        highest_provider_priority);
   }
 
   entry->selected_provider = best_exact_provider;
   IREE_RETURN_IF_ERROR(loom_template_selection_mark_provider_live(
       state, context, best_exact_provider));
   if (!loom_template_provider_is_materializable(best_exact_provider)) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION;
-    ++state->statistics->unresolved_sites;
-    return iree_ok_status();
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION);
+    return loom_template_selection_append_report_detail(
+        state, context, entry, apply_target, providers.count,
+        target_applicable_count, possible_count, best_exact_count,
+        highest_provider_priority);
   }
 
   entry->action = LOOM_TEMPLATE_SELECTION_ACTION_SELECT;
   entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_NONE;
+  if (best_exact_provider->priority < highest_provider_priority) {
+    ++state->statistics->fallback_selected_sites;
+  }
   ++state->statistics->selected_sites;
-  return iree_ok_status();
+  return loom_template_selection_append_report_detail(
+      state, context, entry, apply_target, providers.count,
+      target_applicable_count, possible_count, best_exact_count,
+      highest_provider_priority);
 }
 
 static iree_status_t loom_template_selection_visit_reachable_op(
@@ -1166,6 +1360,7 @@ iree_status_t loom_template_selection_run(loom_pass_t* pass,
       .statistics = loom_template_selection_statistics(pass),
       .module = module,
       .mode = loom_template_selection_mode(pass),
+      .reports_enabled = loom_pass_report_is_enabled(pass),
       .pruning_options =
           {
               .flags = LOOM_SYMBOL_PRUNING_RETAIN_TARGET_SOURCE_ENTRIES,
@@ -1201,5 +1396,6 @@ iree_status_t loom_template_selection_run(loom_pass_t* pass,
   if (!pass->changed) {
     return iree_ok_status();
   }
-  return loom_module_compact_symbols(module, pass->arena, NULL);
+  return loom_target_pass_compact_symbols_preserving_target_ref(
+      pass, module, pass->arena, NULL);
 }

@@ -72,6 +72,7 @@ loom_cc_library(
     loom::analysis::symbol_facts
     loom::codegen::low::descriptors
     loom::error::emitter
+    loom::error::error_defs
     loom::ir
     loom::ops::func_symbol_facts
     loom::ops::target

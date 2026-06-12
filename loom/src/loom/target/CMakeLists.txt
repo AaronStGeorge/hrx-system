@@ -43,6 +43,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    selection
+  HDRS
+    "selection.h"
+  SRCS
+    "selection.c"
+  DEPS
+    ::types
+    iree::base
+    iree::base::internal::arena
+    loom::ir
+    loom::pass::environment
+    loom::pass::types
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     launch_test
@@ -50,6 +67,17 @@ loom_cc_test(
     "launch_test.cc"
   DEPS
     ::launch
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    selection_test
+  SRCS
+    "selection_test.cc"
+  DEPS
+    ::selection
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -84,6 +112,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::analysis::symbol_dependencies
     loom::ir
+    loom::ops::low
     loom::ops::op_defs
   PUBLIC
 )
@@ -117,6 +146,7 @@ loom_cc_test(
     loom::ir
     loom::ops::func
     loom::ops::global
+    loom::ops::low
     loom::ops::target
     loom::testing::module_ptr
     loom::util::stream
@@ -342,6 +372,7 @@ loom_cc_library(
     loom::codegen::low::lower
     loom::codegen::low::verify
     loom::ir
+    loom::ops::op_defs
     loom::pass::environment
     loom::pass::registry
   PUBLIC
@@ -384,6 +415,7 @@ loom_cc_library(
     "predicate.c"
   DEPS
     ::function_contract
+    ::selection
     ::types
     iree::base
     iree::base::internal::arena
@@ -430,7 +462,9 @@ loom_cc_test(
     loom::ops::pass
     loom::ops::target
     loom::ops::test
+    loom::pass::environment
     loom::pass::verify
+    loom::target::selection
     loom::target::test::target_record_table
     loom::testing::module_ptr
 )

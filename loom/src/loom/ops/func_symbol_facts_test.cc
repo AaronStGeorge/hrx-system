@@ -239,20 +239,19 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @kernel() {
   EXPECT_FALSE(facts->has_export_linkage);
 }
 
-TEST_F(FuncSymbolFactsTest, ContractRequiresTargetRecord) {
+TEST_F(FuncSymbolFactsTest, TargetlessAbiFactsRemainTargetIndependent) {
   ModulePtr module = ParseModule(R"(
 func.def abi(object_function) @semantic() {
   func.return
 }
 )");
 
-  const loom_symbol_facts_base_t* base_facts = nullptr;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_symbol_fact_table_lookup(
-          &fact_table_, module.get(),
-          FindSymbol(module.get(), IREE_SV("semantic")), &base_facts));
-  EXPECT_EQ(base_facts, nullptr);
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("semantic"));
+  EXPECT_TRUE(facts->has_abi);
+  EXPECT_EQ(facts->abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
+  EXPECT_FALSE(loom_symbol_ref_is_valid(facts->target_symbol));
+  EXPECT_FALSE(facts->exports);
 }
 
 }  // namespace

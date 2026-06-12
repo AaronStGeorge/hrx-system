@@ -34,6 +34,9 @@ typedef struct emit_amdgpu_offline_state_t {
   // Optional output path supplied by the caller.
   const char* output_path;
 
+  // Optional artifact manifest output path supplied by the caller.
+  const char* manifest_output_path;
+
   // AMDGPU target package linked into this embedding binary.
   loomc_target_environment_t* target_environment;
 
@@ -86,12 +89,32 @@ static void print_result_diagnostics(const loomc_result_t* result) {
   }
 }
 
+static void print_usage(FILE* file) {
+  fprintf(file,
+          "Usage: emit_amdgpu_offline [processor [output.hsaco "
+          "[manifest.json]]]\n");
+  fprintf(
+      file,
+      "  processor    AMDGPU processor key, such as gfx11-generic, gfx1100, "
+      "or gfx942.\n");
+  fprintf(file,
+          "  output.hsaco Optional path for the emitted AMDGPU HSACO ELF "
+          "artifact.\n");
+  fprintf(file,
+          "  manifest.json Optional path for the emitted artifact manifest "
+          "JSON sidecar.\n");
+  fprintf(file,
+          "Omitting processor uses gfx11-generic. The example always compiles "
+          "the embedded targetless_store_i32 kernel.\n");
+}
+
 static void emit_amdgpu_offline_state_initialize(
     emit_amdgpu_offline_state_t* state, const char* processor,
-    const char* output_path) {
+    const char* output_path, const char* manifest_output_path) {
   memset(state, 0, sizeof(*state));
   state->processor = processor;
   state->output_path = output_path;
+  state->manifest_output_path = manifest_output_path;
 }
 
 static void emit_amdgpu_offline_state_deinitialize(
@@ -259,19 +282,6 @@ static loomc_status_t deserialize_source(emit_amdgpu_offline_state_t* state) {
   return status;
 }
 
-static loomc_status_t assign_targetless_kernels(
-    emit_amdgpu_offline_state_t* state) {
-  loomc_amdgpu_target_assignment_t assignment = {0};
-  loomc_status_t status = loomc_amdgpu_module_assign_targetless_kernel_targets(
-      state->module, state->target_profile, &assignment);
-  if (loomc_status_is_ok(status)) {
-    printf("assigned processor=%s targetless_kernels=%u changed=%s\n",
-           state->processor, assignment.targetless_kernel_count,
-           assignment.changed ? "true" : "false");
-  }
-  return status;
-}
-
 static loomc_status_t compile_module_to_prepared_low(
     emit_amdgpu_offline_state_t* state) {
   loomc_target_selection_options_t target_options = {
@@ -321,10 +331,18 @@ static loomc_status_t emit_amdgpu_artifact(emit_amdgpu_offline_state_t* state) {
       .entries = emit_entries,
       .entry_count = 1,
   };
+  loomc_artifact_manifest_options_t manifest_options = {
+      .type = LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS,
+      .structure_size = sizeof(manifest_options),
+      .next = &option_dict,
+      .mode = LOOMC_ARTIFACT_MANIFEST_MODE_DETAILS,
+      .identifier = loomc_string_view_empty(),
+  };
   loomc_emit_options_t emit_options = {
       .type = LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
       .structure_size = sizeof(emit_options),
-      .next = &option_dict,
+      .next = state->manifest_output_path != NULL ? &manifest_options
+                                                  : (const void*)&option_dict,
       .artifact_format =
           loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_AMDGPU_HSACO),
       .artifact_flags = LOOMC_EMIT_ARTIFACT_FLAG_PRIMARY,
@@ -334,6 +352,37 @@ static loomc_status_t emit_amdgpu_artifact(emit_amdgpu_offline_state_t* state) {
       loomc_allocator_system(), &state->result);
   if (loomc_status_is_ok(status)) {
     status = require_successful_result(state->result, "AMDGPU emission failed");
+  }
+  return status;
+}
+
+static loomc_status_t summarize_and_maybe_write_manifest(
+    emit_amdgpu_offline_state_t* state) {
+  if (state->manifest_output_path == NULL) {
+    return loomc_ok_status();
+  }
+  const loomc_artifact_t* manifest = find_result_artifact(
+      state->result, LOOMC_ARTIFACT_KIND_REPORT,
+      loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_ARTIFACT_MANIFEST_JSON));
+  if (manifest == NULL) {
+    return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
+                             "artifact manifest sidecar was not produced");
+  }
+  if (manifest->contents.data_length == 0 ||
+      manifest->contents.data[0] != '{') {
+    return loomc_make_status(LOOMC_STATUS_FAILED_PRECONDITION,
+                             "artifact manifest sidecar is not JSON");
+  }
+
+  printf("manifest %.*s format=%.*s bytes=%zu magic=JSON\n",
+         (int)manifest->identifier.size, manifest->identifier.data,
+         (int)manifest->format.size, manifest->format.data,
+         (size_t)manifest->contents.data_length);
+  loomc_status_t status = loomc_artifact_write_to_path(
+      manifest, loomc_make_cstring_view(state->manifest_output_path),
+      loomc_allocator_system());
+  if (loomc_status_is_ok(status)) {
+    printf("wrote %s\n", state->manifest_output_path);
   }
   return status;
 }
@@ -371,17 +420,15 @@ static loomc_status_t summarize_and_maybe_write_artifact(
   return status;
 }
 
-static loomc_status_t run_emit_amdgpu_offline_example(const char* processor,
-                                                      const char* output_path) {
+static loomc_status_t run_emit_amdgpu_offline_example(
+    const char* processor, const char* output_path, const char* manifest_path) {
   emit_amdgpu_offline_state_t state;
-  emit_amdgpu_offline_state_initialize(&state, processor, output_path);
+  emit_amdgpu_offline_state_initialize(&state, processor, output_path,
+                                       manifest_path);
 
   loomc_status_t status = create_resources(&state);
   if (loomc_status_is_ok(status)) {
     status = deserialize_source(&state);
-  }
-  if (loomc_status_is_ok(status)) {
-    status = assign_targetless_kernels(&state);
   }
   if (loomc_status_is_ok(status)) {
     status = compile_module_to_prepared_low(&state);
@@ -392,16 +439,30 @@ static loomc_status_t run_emit_amdgpu_offline_example(const char* processor,
   if (loomc_status_is_ok(status)) {
     status = summarize_and_maybe_write_artifact(&state);
   }
+  if (loomc_status_is_ok(status)) {
+    status = summarize_and_maybe_write_manifest(&state);
+  }
 
   emit_amdgpu_offline_state_deinitialize(&state);
   return status;
 }
 
 int main(int argc, char** argv) {
+  if (argc > 1 &&
+      (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
+    print_usage(stdout);
+    return 0;
+  }
+  if (argc > 4) {
+    print_usage(stderr);
+    return 1;
+  }
+
   const char* processor = argc > 1 ? argv[1] : "gfx11-generic";
   const char* output_path = argc > 2 ? argv[2] : NULL;
+  const char* manifest_path = argc > 3 ? argv[3] : NULL;
   loomc_status_t status =
-      run_emit_amdgpu_offline_example(processor, output_path);
+      run_emit_amdgpu_offline_example(processor, output_path, manifest_path);
   if (loomc_status_is_ok(status)) {
     return 0;
   }

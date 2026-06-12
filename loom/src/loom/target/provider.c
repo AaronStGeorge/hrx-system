@@ -6,6 +6,9 @@
 
 #include "loom/target/provider.h"
 
+#include "loom/ir/module.h"
+#include "loom/ops/op_defs.h"
+
 static iree_status_t loom_target_environment_append_low_descriptor_registry(
     loom_target_environment_t* environment,
     const loom_target_provider_t* provider) {
@@ -322,4 +325,99 @@ iree_status_t loom_target_environment_contribute_pipeline(
     IREE_RETURN_IF_ERROR(provider->contribute_pipeline(&contribution));
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_target_environment_validate_materialized_target_ref(
+    const loom_module_t* module, loom_symbol_ref_t target_ref) {
+  if (!loom_symbol_ref_is_valid(target_ref)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target provider materialized a null target ref");
+  }
+  if (target_ref.module_id != 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target provider materialized non-local target ref {%u, %u}",
+        (unsigned)target_ref.module_id, (unsigned)target_ref.symbol_id);
+  }
+  if (target_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target provider materialized target symbol id %u, but module has "
+        "only %" PRIhsz " symbols",
+        (unsigned)target_ref.symbol_id, module->symbols.count);
+  }
+
+  const loom_symbol_t* symbol = &module->symbols.entries[target_ref.symbol_id];
+  if (symbol->defining_op == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target provider materialized unbound target symbol id %u",
+        (unsigned)target_ref.symbol_id);
+  }
+  const loom_target_like_t target =
+      loom_target_like_cast(module, symbol->defining_op);
+  if (!loom_target_like_isa(target)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target provider materialized symbol id %u, but its defining op is "
+        "not target-like",
+        (unsigned)target_ref.symbol_id);
+  }
+  const loom_symbol_ref_t defining_ref = loom_target_like_symbol(target);
+  if (defining_ref.module_id != target_ref.module_id ||
+      defining_ref.symbol_id != target_ref.symbol_id) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target provider materialized symbol id %u, but the target-like op "
+        "defines {%u, %u}",
+        (unsigned)target_ref.symbol_id, (unsigned)defining_ref.module_id,
+        (unsigned)defining_ref.symbol_id);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_target_environment_materialize_selection(
+    const loom_target_environment_t* environment, loom_module_t* module,
+    loom_target_selection_t target_selection,
+    loom_symbol_ref_t* out_target_ref) {
+  IREE_ASSERT_ARGUMENT(environment);
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(out_target_ref);
+  *out_target_ref = loom_symbol_ref_null();
+  if (loom_target_selection_is_empty(target_selection)) {
+    return iree_ok_status();
+  }
+
+  const loom_target_provider_set_t* provider_set = environment->provider_set;
+  const loom_target_selection_materialization_request_t request = {
+      .target_environment = environment,
+      .module = module,
+      .target_selection = target_selection,
+  };
+  for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
+    const loom_target_provider_t* provider = provider_set->providers[i];
+    if (provider->materialize_selection == NULL) {
+      continue;
+    }
+    bool materialized = false;
+    loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+    IREE_RETURN_IF_ERROR(provider->materialize_selection(
+        provider, &request, &materialized, &target_ref));
+    if (!materialized) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_target_environment_validate_materialized_target_ref(module,
+                                                                 target_ref));
+    *out_target_ref = target_ref;
+    return iree_ok_status();
+  }
+
+  const iree_string_view_t target_name = target_selection.bundle
+                                             ? target_selection.bundle->name
+                                             : IREE_SV("<target-data-only>");
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "no linked target provider can materialize selected target '%.*s'",
+      (int)target_name.size, target_name.data);
 }

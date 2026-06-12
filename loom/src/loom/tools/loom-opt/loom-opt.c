@@ -743,7 +743,8 @@ static iree_status_t loom_opt_run_passes(
           &low_registry->registry, &low_lower_policy_registry,
           &low_legality_provider_list, &legalizer_provider_list,
           &math_policy_registry, /*compile_report=*/NULL,
-          loom_target_selection_empty(), &low_pass_environment_storage),
+          loom_target_selection_empty(), loom_symbol_ref_null(),
+          &low_pass_environment_storage),
       .predicate_provider =
           loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,

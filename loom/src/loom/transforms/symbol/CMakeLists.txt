@@ -31,9 +31,11 @@ loom_cc_library(
     loom::ops::op_defs
     loom::pass::pipeline
     loom::pass::registry
+    loom::pass::report
     loom::pass::types
     loom::pass::value_facts
     loom::rewrite::rewriter
+    loom::target::selection
   PUBLIC
 )
 
@@ -55,6 +57,7 @@ loom_cc_library(
     loom::pass::types
     loom::rewrite::callable
     loom::rewrite::rewriter
+    loom::target::selection
   PUBLIC
 )
 
@@ -120,6 +123,7 @@ loom_cc_library(
     loom::analysis::symbol_liveness
     loom::ir
     loom::pass::types
+    loom::target::selection
   PUBLIC
 )
 

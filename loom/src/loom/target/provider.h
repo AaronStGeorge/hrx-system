@@ -53,6 +53,26 @@ typedef void (*loom_target_math_policy_registry_initializer_t)(
 
 typedef struct loom_builder_t loom_builder_t;
 typedef struct loom_target_environment_t loom_target_environment_t;
+typedef struct loom_target_provider_t loom_target_provider_t;
+
+// Target materialization request passed to target providers.
+typedef struct loom_target_selection_materialization_request_t {
+  // Composed target environment receiving the request.
+  const loom_target_environment_t* target_environment;
+
+  // Mutable module that will receive any materialized target record.
+  loom_module_t* module;
+
+  // Invocation-selected target bundle and target-owned payload.
+  loom_target_selection_t target_selection;
+} loom_target_selection_materialization_request_t;
+
+// Materializes a provider-owned target selection into a module-local target
+// record.
+typedef iree_status_t (*loom_target_provider_materialize_selection_fn_t)(
+    const loom_target_provider_t* provider,
+    const loom_target_selection_materialization_request_t* request,
+    bool* out_materialized, loom_symbol_ref_t* out_target_ref);
 
 // Target emission artifact storage release callback.
 typedef void (*loom_target_emit_artifact_release_fn_t)(
@@ -214,7 +234,7 @@ typedef iree_status_t (*loom_target_provider_pipeline_contribution_fn_t)(
     const loom_target_pipeline_contribution_t* contribution);
 
 // Target-owned compiler capability contribution linked into a tool or driver.
-typedef struct loom_target_provider_t {
+struct loom_target_provider_t {
   // Optional function that registers target-owned dialects.
   loom_target_provider_context_registration_fn_t register_context;
   // Optional function that initializes target-low descriptor-set providers.
@@ -241,7 +261,9 @@ typedef struct loom_target_provider_t {
   const loom_pass_registry_t* pass_registry;
   // Optional pass-pipeline contribution callback.
   loom_target_provider_pipeline_contribution_fn_t contribute_pipeline;
-} loom_target_provider_t;
+  // Optional invocation-target materialization callback.
+  loom_target_provider_materialize_selection_fn_t materialize_selection;
+};
 
 // Static target provider table linked into a binary or embedding.
 typedef struct loom_target_provider_set_t {
@@ -385,6 +407,13 @@ iree_status_t loom_target_environment_contribute_pipeline(
     const loom_target_environment_t* environment,
     loom_target_pipeline_phase_t phase,
     loom_pass_environment_t pass_environment, loom_builder_t* builder);
+
+// Materializes |target_selection| into |module| using the first provider that
+// recognizes the selection. Empty selections return a null target ref.
+iree_status_t loom_target_environment_materialize_selection(
+    const loom_target_environment_t* environment, loom_module_t* module,
+    loom_target_selection_t target_selection,
+    loom_symbol_ref_t* out_target_ref);
 
 #ifdef __cplusplus
 }  // extern "C"

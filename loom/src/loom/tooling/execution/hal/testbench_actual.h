@@ -24,7 +24,6 @@
 #include "loom/tooling/execution/hal/candidate.h"
 #include "loom/tooling/execution/hal/invocation.h"
 #include "loom/tooling/execution/hal/runtime.h"
-#include "loom/tooling/execution/hal/target_assignment.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/testbench/requirements.h"
 #include "loom/tooling/testbench/testbench.h"

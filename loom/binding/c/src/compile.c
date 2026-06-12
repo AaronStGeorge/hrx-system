@@ -114,7 +114,8 @@ static iree_status_t loomc_compile_capture_diagnostic_emission(
 static loomc_status_t loomc_compile_run_pass_program(
     loomc_compiler_t* compiler, loomc_workspace_t* workspace,
     const loomc_pass_program_t* pass_program, loom_module_t* internal_module,
-    loom_target_selection_t target_selection, loomc_result_t* result) {
+    loom_target_selection_t target_selection, loom_symbol_ref_t target_ref,
+    loomc_result_t* result) {
   loomc_compile_diagnostic_capture_t capture = {
       .result = result,
   };
@@ -126,7 +127,8 @@ static loomc_status_t loomc_compile_run_pass_program(
       loomc_context_target_pass_environment(compiler->context);
   if (target_environment != NULL) {
     pass_environment = loomc_target_pass_environment_make_loom_pass_environment(
-        target_environment, target_selection, &low_environment_storage);
+        target_environment, target_selection, target_ref,
+        &low_environment_storage);
     loom_target_pass_predicate_provider_storage_initialize(
         loomc_workspace_block_pool(workspace), &predicate_storage);
     predicate_provider =
@@ -412,8 +414,23 @@ loomc_status_t loomc_compile_module(loomc_compiler_t* compiler,
   loomc_target_selection_t* target_selection = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_options_resolve(
       options ? options->next : NULL, &target_selection));
+  const loomc_target_environment_t* context_target_environment =
+      loomc_context_target_environment(compiler->context);
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
-      target_selection, loomc_context_target_environment(compiler->context)));
+      target_selection, context_target_environment));
+  const loom_target_selection_t internal_target_selection =
+      loomc_target_selection_loom_target_selection(target_selection);
+  loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+  const loom_target_environment_t* internal_target_environment =
+      loomc_target_environment_loom_target_environment(
+          context_target_environment);
+  if (internal_target_environment != NULL &&
+      !loom_target_selection_is_empty(internal_target_selection)) {
+    LOOMC_RETURN_IF_ERROR(
+        loomc_status_from_iree(loom_target_environment_materialize_selection(
+            internal_target_environment, internal_module,
+            internal_target_selection, &target_ref)));
+  }
 
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
@@ -438,7 +455,7 @@ loomc_status_t loomc_compile_module(loomc_compiler_t* compiler,
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_compile_run_pass_program(
         compiler, workspace, pass_program, internal_module,
-        loomc_target_selection_loom_target_selection(target_selection), result);
+        internal_target_selection, target_ref, result);
   }
   if (loomc_status_is_ok(status)) {
     status = loomc_compile_emit_requested_artifacts(result, options, module);

@@ -871,6 +871,27 @@ ERR_TARGET_051 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_052: Function target conflicts with invocation target.
+ERR_TARGET_052 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=52,
+    severity=Severity.ERROR,
+    summary="Function target conflicts with invocation target.",
+    message=(
+        "function '@{function_name}' target record '@{authored_target_name}' "
+        "is incompatible with invocation target '{selected_target_name}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("authored_target_name", ParamKind.STRING),
+        ErrorParam("selected_target_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Compile this function with a compatible target selection or remove "
+        "the explicit target record from the source function."
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -915,4 +936,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_049,
     ERR_TARGET_050,
     ERR_TARGET_051,
+    ERR_TARGET_052,
 )

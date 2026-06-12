@@ -146,6 +146,23 @@ TEST_F(PassInterpreterTest, AppendsExecutionReportRecords) {
   EXPECT_TRUE(iree_string_view_equal(function_record.statistics[1].name,
                                      IREE_SV("synthetic-events")));
   EXPECT_EQ(function_record.statistics[1].value, 1);
+  ASSERT_EQ(function_record.detail_count, 1u);
+  ASSERT_NE(function_record.details, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(function_record.details->category,
+                                     IREE_SV("test.mark-changed")));
+  ASSERT_EQ(function_record.details->field_count, 3u);
+  EXPECT_TRUE(iree_string_view_equal(function_record.details->fields[0].name,
+                                     IREE_SV("event")));
+  EXPECT_TRUE(
+      iree_string_view_equal(function_record.details->fields[0].string_value,
+                             IREE_SV("synthetic-change")));
+  EXPECT_TRUE(iree_string_view_equal(function_record.details->fields[1].name,
+                                     IREE_SV("symbol")));
+  EXPECT_TRUE(iree_string_view_equal(
+      function_record.details->fields[1].string_value, IREE_SV("main")));
+  EXPECT_TRUE(iree_string_view_equal(function_record.details->fields[2].name,
+                                     IREE_SV("synthetic_event_count")));
+  EXPECT_EQ(function_record.details->fields[2].uint64_value, 1u);
 }
 
 TEST_F(PassInterpreterTest, AppliesNamePredicateToCurrentFunction) {

@@ -300,7 +300,7 @@ LOOMC_API_EXPORT loomc_status_t loomc_target_profile_create_empty(
 ///
 /// Empty selections behave the same as omitting target-selection options. They
 /// are provided so bindings and frameworks can construct uniform option chains
-/// without treating targetless compilation as a special case.
+/// without treating source-selected compilation as a special case.
 ///
 /// @param allocator Host allocator used for selection-owned storage.
 /// @param out_target_selection Receives one retained target selection on

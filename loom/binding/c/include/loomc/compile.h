@@ -139,7 +139,7 @@ typedef struct loomc_compiler_options_t {
 /// rather than on the prepared compiler so autotuning and JIT sweeps can vary
 /// config without constructing many compiler handles. Target selections are
 /// supplied through `loomc_target_selection_options_t` on `next` so the same
-/// compiler can be reused across targetless, partial-target, and concrete
+/// compiler can be reused across source-selected, partial-target, and concrete
 /// target invocations.
 typedef struct loomc_compile_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_COMPILE_OPTIONS` when

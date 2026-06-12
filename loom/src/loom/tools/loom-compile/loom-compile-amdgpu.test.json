@@ -2,7 +2,7 @@
   "version": 1,
   "cases": [
     {
-      "name": "assigns explicit AMDGPU target to targetless HAL kernel",
+      "name": "uses invocation AMDGPU target for HAL root without target attr",
       "steps": [
         {
           "name": "write-source",
@@ -52,7 +52,7 @@
       ]
     },
     {
-      "name": "rejects targetless AMDGPU HAL kernel without target key",
+      "name": "requires invocation target for AMDGPU HAL root without target attr",
       "steps": [
         {
           "name": "write-source",
@@ -76,7 +76,7 @@
           },
           "stderr": {
             "contains": [
-              "HAL backend 'amdgpu-hal' cannot compile 1 targetless kernel without an explicit --target= key or target(...) attrs"
+              "HAL backend 'amdgpu-hal' requires --target= when 1 kernel.def root omit target(...) attrs"
             ]
           }
         }

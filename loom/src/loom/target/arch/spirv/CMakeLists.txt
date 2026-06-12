@@ -292,9 +292,12 @@ loom_cc_library(
     ::low_verify
     ::math_policy
     iree::base
+    loom::ir
+    loom::pass::builder
     loom::target::arch::spirv::descriptors::low_registry
     loom::target::arch::spirv::lower
     loom::target::arch::spirv::ops
+    loom::target::arch::spirv::records::target_records
     loom::target::provider
   PUBLIC
 )

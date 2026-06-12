@@ -23,6 +23,7 @@ loom_cc_library(
     loom::ops::test
     loom::pass::environment
     loom::pass::registry
+    loom::pass::report
     loom::pass::types
   TESTONLY
   PUBLIC

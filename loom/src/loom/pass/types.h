@@ -28,6 +28,8 @@ extern "C" {
 typedef struct loom_module_t loom_module_t;
 typedef struct loom_pass_environment_t loom_pass_environment_t;
 typedef struct loom_pass_decoded_options_t loom_pass_decoded_options_t;
+typedef struct loom_pass_report_detail_t loom_pass_report_detail_t;
+typedef struct loom_pass_report_t loom_pass_report_t;
 typedef struct loom_pass_t loom_pass_t;
 typedef struct loom_pass_value_fact_owner_t loom_pass_value_fact_owner_t;
 
@@ -56,7 +58,7 @@ typedef struct loom_pass_option_def_t {
 
 enum {
   // Maximum number of statistic fields one pass descriptor may expose.
-  LOOM_PASS_STATISTIC_FIELD_COUNT_MAX = 10,
+  LOOM_PASS_STATISTIC_FIELD_COUNT_MAX = 16,
 };
 
 // Describes one int64_t statistic field in a pass-owned statistics struct.
@@ -181,6 +183,14 @@ struct loom_pass_t {
   iree_arena_allocator_t* arena;
   // Per-invocation typed statistic storage matching info->statistic_layout.
   void* statistic_storage;
+  // Optional pass report collecting invocation records, statistics, and rows.
+  loom_pass_report_t* report;
+  // First pending detail row emitted by this pass invocation.
+  loom_pass_report_detail_t* report_detail_head;
+  // Last pending detail row emitted by this pass invocation.
+  loom_pass_report_detail_t* report_detail_tail;
+  // Number of pending detail rows emitted by this pass invocation.
+  iree_host_size_t report_detail_count;
   // Per-invocation state produced by create() and consumed by destroy().
   void* state;
   // True when the pass callback explicitly records an IR or semantic change.

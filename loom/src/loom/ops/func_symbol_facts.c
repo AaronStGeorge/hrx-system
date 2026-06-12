@@ -194,16 +194,6 @@ static iree_status_t loom_func_symbol_fact_compute(
   loom_string_id_t export_symbol_id = loom_func_like_export_symbol(func);
   bool has_export_symbol = export_symbol_id != LOOM_STRING_ID_INVALID;
   loom_named_attr_slice_t export_attrs = loom_func_like_export_attrs(func);
-  const bool has_direct_export_contract = loom_func_symbol_attr_present(
-      func, func.vtable->export_linkage_attr_index);
-  bool has_func_contract = has_abi_attr || facts->abi_attrs.count > 0 ||
-                           has_export_symbol || export_attrs.count > 0 ||
-                           has_direct_export_contract;
-  if (has_func_contract && !loom_symbol_ref_is_valid(facts->target_symbol)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "func target ABI/export contracts require a target record");
-  }
   if (has_export_symbol) {
     IREE_RETURN_IF_ERROR(loom_func_symbol_string_from_id(
         module, export_symbol_id, IREE_SV("export_symbol"),
