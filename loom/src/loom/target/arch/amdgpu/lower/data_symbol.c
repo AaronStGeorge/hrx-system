@@ -6,38 +6,13 @@
 
 #include "loom/target/arch/amdgpu/lower/data_symbol.h"
 
-#include <inttypes.h>
 #include <stdint.h>
 
 #include "loom/codegen/low/builder.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
-
-static iree_status_t loom_amdgpu_data_symbol_resolve_descriptor_ref(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref,
-    const loom_low_descriptor_t** out_descriptor,
-    loom_string_id_t* out_opcode_id) {
-  *out_descriptor = NULL;
-  *out_opcode_id = LOOM_STRING_ID_INVALID;
-  const uint32_t descriptor_ordinal =
-      loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(
-        IREE_STATUS_INTERNAL,
-        "generated AMDGPU data-symbol lowering references missing descriptor "
-        "ref %" PRIu16,
-        descriptor_ref);
-  }
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
-  iree_string_view_t key = loom_low_descriptor_set_string(
-      descriptor_set, descriptor->key_string_offset);
-  IREE_RETURN_IF_ERROR(loom_builder_intern_string(builder, key, out_opcode_id));
-  *out_descriptor = descriptor;
-  return iree_ok_status();
-}
 
 static iree_status_t loom_amdgpu_data_symbol_build_rel32_attrs(
     loom_builder_t* builder, loom_amdgpu_data_symbol_address_t target,
@@ -80,7 +55,7 @@ iree_status_t loom_amdgpu_build_data_symbol_address(
 
   const loom_low_descriptor_t* getpc_descriptor = NULL;
   loom_string_id_t getpc_opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_data_symbol_resolve_descriptor_ref(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_GETPC_B64,
       &getpc_descriptor, &getpc_opcode_id));
   loom_op_t* getpc_op = NULL;
@@ -106,7 +81,7 @@ iree_status_t loom_amdgpu_build_data_symbol_address(
 
   const loom_low_descriptor_t* add_low_descriptor = NULL;
   loom_string_id_t add_low_opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_data_symbol_resolve_descriptor_ref(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set,
       LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32_RHS_SYMBOL_REL32_LO,
       &add_low_descriptor, &add_low_opcode_id));
@@ -121,7 +96,7 @@ iree_status_t loom_amdgpu_build_data_symbol_address(
 
   const loom_low_descriptor_t* add_high_descriptor = NULL;
   loom_string_id_t add_high_opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_data_symbol_resolve_descriptor_ref(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set,
       LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32_RHS_SYMBOL_REL32_HI,
       &add_high_descriptor, &add_high_opcode_id));

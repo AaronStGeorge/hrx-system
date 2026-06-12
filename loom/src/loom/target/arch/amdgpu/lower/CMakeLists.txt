@@ -101,8 +101,10 @@ loom_cc_library(
     "constants.h"
     "control.h"
     "data_symbol.h"
+    "descriptor_ref.h"
     "dot.h"
     "emit.h"
+    "feedback.h"
     "legality.h"
     "lower.h"
     "mask.h"
@@ -139,8 +141,10 @@ loom_cc_library(
     "collective_scan.c"
     "control.c"
     "data_symbol.c"
+    "descriptor_ref.c"
     "dot.c"
     "emit_support.c"
+    "feedback.c"
     "lds_layout.c"
     "mask.c"
     "matrix.c"
@@ -186,12 +190,14 @@ loom_cc_library(
     loom::ops::index
     loom::ops::kernel
     loom::ops::low
+    loom::ops::op_defs
     loom::ops::scalar
     loom::ops::scf
     loom::ops::vector
     loom::ops::view
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs
+    loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::lower::candidates::arithmetic_candidates
     loom::target::arch::amdgpu::lower::candidates::async_gather_candidates
@@ -228,6 +234,29 @@ loom_cc_test(
     loom::ops::low
     loom::ops::op_defs
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    feedback_test
+  SRCS
+    "feedback_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   LABELS
