@@ -50,15 +50,10 @@ iree_status_t loom_function_contract_verify(const loom_module_t* module,
   const bool has_export_symbol =
       loom_func_like_export_symbol(function) != LOOM_STRING_ID_INVALID;
   const bool has_export_attrs = loom_func_like_export_attrs(function).count > 0;
-  const bool has_artifact =
-      loom_symbol_ref_is_valid(loom_func_like_artifact(function));
-  const bool has_export_ordinal = loom_function_contract_attr_present(
-      function, function.vtable->export_ordinal_attr_index);
   const bool has_export_linkage = loom_function_contract_attr_present(
       function, function.vtable->export_linkage_attr_index);
-  if (!has_target &&
-      (has_abi || has_abi_attrs || has_export_symbol || has_export_attrs ||
-       has_artifact || has_export_ordinal || has_export_linkage)) {
+  if (!has_target && (has_abi || has_abi_attrs || has_export_symbol ||
+                      has_export_attrs || has_export_linkage)) {
     return loom_function_contract_emit_attr_constraint(
         emitter, op, IREE_SV("target"),
         IREE_SV("present when ABI or export attrs are present"));

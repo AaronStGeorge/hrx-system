@@ -57,9 +57,9 @@ enum loom_target_artifact_manifest_artifact_flag_bits_e {
 };
 
 typedef struct loom_target_artifact_manifest_artifact_t {
-  // Stable artifact format name, such as "amdgpu-hsaco" or "spirv-binary".
+  // Stable artifact format name, such as "elf" or "spirv-binary".
   iree_string_view_t format;
-  // Optional artifact name supplied by the packager or target artifact symbol.
+  // Optional artifact name supplied by the emitter or packager.
   iree_string_view_t name;
   // Bitfield selecting optional artifact facts that are present.
   loom_target_artifact_manifest_artifact_flags_t flags;

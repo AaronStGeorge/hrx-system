@@ -836,35 +836,6 @@ loom_named_attr_slice_t loom_func_like_export_attrs(loom_func_like_t func) {
       loom_op_attrs(func.op)[func.vtable->export_attrs_attr_index]);
 }
 
-loom_symbol_ref_t loom_func_like_artifact(loom_func_like_t func) {
-  if (!func.vtable ||
-      func.vtable->artifact_attr_index == LOOM_ATTR_INDEX_NONE) {
-    return loom_symbol_ref_null();
-  }
-  loom_attribute_t attr =
-      loom_op_attrs(func.op)[func.vtable->artifact_attr_index];
-  if (loom_attr_is_absent(attr)) {
-    return loom_symbol_ref_null();
-  }
-  return loom_attr_as_symbol(attr);
-}
-
-bool loom_func_like_export_ordinal(loom_func_like_t func,
-                                   int64_t* out_ordinal) {
-  *out_ordinal = 0;
-  if (!func.vtable ||
-      func.vtable->export_ordinal_attr_index == LOOM_ATTR_INDEX_NONE) {
-    return false;
-  }
-  loom_attribute_t attr =
-      loom_op_attrs(func.op)[func.vtable->export_ordinal_attr_index];
-  if (loom_attr_is_absent(attr)) {
-    return false;
-  }
-  *out_ordinal = loom_attr_as_i64(attr);
-  return true;
-}
-
 bool loom_func_like_export_linkage(loom_func_like_t func,
                                    uint8_t* out_linkage) {
   *out_linkage = 0;

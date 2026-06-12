@@ -165,9 +165,7 @@ static bool loomc_module_function_symbol_has_export_info(
   if (!loom_func_like_isa(func)) {
     return false;
   }
-  int64_t export_ordinal = 0;
-  return loom_func_like_export_symbol(func) != LOOM_STRING_ID_INVALID ||
-         loom_func_like_export_ordinal(func, &export_ordinal);
+  return loom_func_like_export_symbol(func) != LOOM_STRING_ID_INVALID;
 }
 
 static bool loomc_module_function_symbol_is_public(
@@ -428,9 +426,8 @@ static loomc_status_t loomc_module_function_resolve(
 
 static bool loomc_module_function_populate_export_info(
     const loom_module_t* module, const loom_symbol_t* symbol,
-    bool* out_invalid_ordinal, loomc_module_function_export_info_t* out_info) {
+    loomc_module_function_export_info_t* out_info) {
   *out_info = (loomc_module_function_export_info_t){0};
-  *out_invalid_ordinal = false;
   loom_func_like_t func = loom_func_like_cast(module, symbol->defining_op);
   if (!loom_func_like_isa(func)) {
     return false;
@@ -444,16 +441,6 @@ static bool loomc_module_function_populate_export_info(
     out_info->export_symbol =
         loomc_string_view_from_iree(module->strings.entries[export_symbol_id]);
     out_info->flags |= LOOMC_MODULE_FUNCTION_EXPORT_FLAG_HAS_SYMBOL;
-  }
-
-  int64_t export_ordinal = 0;
-  if (loom_func_like_export_ordinal(func, &export_ordinal)) {
-    if (export_ordinal < 0 || export_ordinal > UINT32_MAX) {
-      *out_invalid_ordinal = true;
-      return false;
-    }
-    out_info->export_ordinal = (uint32_t)export_ordinal;
-    out_info->flags |= LOOMC_MODULE_FUNCTION_EXPORT_FLAG_HAS_ORDINAL;
   }
   return out_info->flags != 0;
 }
@@ -649,9 +636,8 @@ bool loomc_module_function_try_get_export_info_at(
                                             &symbol, &kind)) {
     return false;
   }
-  bool invalid_ordinal = false;
   return loomc_module_function_populate_export_info(internal_module, symbol,
-                                                    &invalid_ordinal, out_info);
+                                                    out_info);
 }
 
 loomc_status_t loomc_module_function_get_export_info_at(
@@ -674,14 +660,10 @@ loomc_status_t loomc_module_function_get_export_info_at(
     return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
                              "module function ordinal was not found");
   }
-  bool invalid_ordinal = false;
   if (!loomc_module_function_populate_export_info(internal_module, symbol,
-                                                  &invalid_ordinal, out_info)) {
-    return loomc_make_status(
-        invalid_ordinal ? LOOMC_STATUS_INVALID_ARGUMENT
-                        : LOOMC_STATUS_NOT_FOUND,
-        invalid_ordinal ? "module function export ordinal must fit uint32"
-                        : "module function has no export metadata");
+                                                  out_info)) {
+    return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
+                             "module function has no export metadata");
   }
   return loomc_ok_status();
 }
@@ -700,9 +682,8 @@ bool loomc_module_function_try_get_export_info(
                                          &symbol, &kind)) {
     return false;
   }
-  bool invalid_ordinal = false;
   return loomc_module_function_populate_export_info(internal_module, symbol,
-                                                    &invalid_ordinal, out_info);
+                                                    out_info);
 }
 
 loomc_status_t loomc_module_function_get_export_info(
@@ -717,14 +698,10 @@ loomc_status_t loomc_module_function_get_export_info(
   loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
   LOOMC_RETURN_IF_ERROR(loomc_module_function_resolve(
       module, function, &internal_module, &symbol, &kind));
-  bool invalid_ordinal = false;
   if (!loomc_module_function_populate_export_info(internal_module, symbol,
-                                                  &invalid_ordinal, out_info)) {
-    return loomc_make_status(
-        invalid_ordinal ? LOOMC_STATUS_INVALID_ARGUMENT
-                        : LOOMC_STATUS_NOT_FOUND,
-        invalid_ordinal ? "module function export ordinal must fit uint32"
-                        : "module function has no export metadata");
+                                                  out_info)) {
+    return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
+                             "module function has no export metadata");
   }
   return loomc_ok_status();
 }

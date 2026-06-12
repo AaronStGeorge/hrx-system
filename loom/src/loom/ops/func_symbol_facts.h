@@ -111,20 +111,11 @@ typedef struct loom_func_symbol_facts_t {
   // Borrowed export symbol name, or empty to preserve the func symbol name.
   iree_string_view_t export_symbol;
 
-  // Artifact/package symbol from export attrs, or null when unassigned.
-  loom_symbol_ref_t artifact_symbol;
-
   // True when export_linkage was explicitly provided.
   bool has_export_linkage;
 
   // Export linkage override when has_export_linkage is true.
   loom_target_linkage_t export_linkage;
-
-  // True when export_ordinal was explicitly provided.
-  bool has_export_ordinal;
-
-  // Export ordinal within artifact_symbol when has_export_ordinal is true.
-  uint32_t export_ordinal;
 
 } loom_func_symbol_facts_t;
 

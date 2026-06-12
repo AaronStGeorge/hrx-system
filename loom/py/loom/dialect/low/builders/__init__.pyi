@@ -45,8 +45,6 @@ class LowBuilder(DialectBuilder):
         target: str,
         abi_layout: Mapping[str, Any] | None = ...,
         export_symbol: str | None = ...,
-        artifact: str | None = ...,
-        export_ordinal: int | None = ...,
         export_linkage: str | None = ...,
         workgroup_size_x: int | None = ...,
         workgroup_size_y: int | None = ...,

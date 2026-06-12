@@ -1509,18 +1509,6 @@ static iree_status_t loom_low_lower_create_kernel_op(
     build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL;
   }
 
-  loom_symbol_ref_t artifact =
-      loom_func_like_artifact(context->source_function);
-  if (loom_symbol_ref_is_valid(artifact)) {
-    build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ARTIFACT;
-  }
-
-  int64_t export_ordinal = 0;
-  if (loom_func_like_export_ordinal(context->source_function,
-                                    &export_ordinal)) {
-    build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_ORDINAL;
-  }
-
   uint8_t export_linkage = 0;
   if (loom_func_like_export_linkage(context->source_function,
                                     &export_linkage)) {
@@ -1546,11 +1534,10 @@ static iree_status_t loom_low_lower_create_kernel_op(
       /*result_types=*/NULL, /*result_count=*/0, &abi_layout));
   IREE_RETURN_IF_ERROR(loom_low_kernel_def_build(
       &context->builder, build_flags, /*allocation=*/0, /*schedule=*/0,
-      context->options->target_ref, abi_layout, export_symbol, artifact,
-      export_ordinal, export_linkage, workgroup_size.x, workgroup_size.y,
-      workgroup_size.z, low_func_ref, arg_types, arg_count, predicates,
-      predicate_count, context->source_function.op->location,
-      &context->low_func_op));
+      context->options->target_ref, abi_layout, export_symbol, export_linkage,
+      workgroup_size.x, workgroup_size.y, workgroup_size.z, low_func_ref,
+      arg_types, arg_count, predicates, predicate_count,
+      context->source_function.op->location, &context->low_func_op));
 
   loom_region_t* low_body = loom_low_lower_low_body(context);
   low_body->flags = source_body->flags;

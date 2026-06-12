@@ -18,7 +18,7 @@ module {
 }
 // -----
 module {
-  hal.executable.export public @b ordinal(0)
+  hal.executable.export public @b
   func.func @impl()
 }
 """

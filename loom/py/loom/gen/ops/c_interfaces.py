@@ -123,8 +123,6 @@ INTERFACES: tuple[InterfaceSpec, ...] = (
             InterfaceFieldSpec("abi_attrs", "abi_attrs_attr_index", "attr"),
             InterfaceFieldSpec("export_symbol", "export_symbol_attr_index", "attr"),
             InterfaceFieldSpec("export_attrs", "export_attrs_attr_index", "attr"),
-            InterfaceFieldSpec("artifact", "artifact_attr_index", "attr"),
-            InterfaceFieldSpec("export_ordinal", "export_ordinal_attr_index", "attr"),
             InterfaceFieldSpec("export_linkage", "export_linkage_attr_index", "attr"),
             InterfaceFieldSpec("visibility", "visibility_attr_index", "attr"),
             InterfaceFieldSpec("cc", "cc_attr_index", "attr"),

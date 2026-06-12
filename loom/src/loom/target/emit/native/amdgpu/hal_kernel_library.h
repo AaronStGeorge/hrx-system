@@ -25,10 +25,6 @@ extern "C" {
 #endif
 
 typedef struct loom_amdgpu_hal_kernel_library_options_t {
-  // Optional target.artifact symbol to emit as one multi-export kernel library.
-  // Empty emits every AMDGPU HAL-native-compatible function with a target
-  // record. A leading '@' is accepted for command-line ergonomics.
-  iree_string_view_t artifact_symbol;
   // Optional AMDHSA processor name such as `gfx1100` overriding the selected
   // target record's processor. This preserves the target record's
   // descriptor-set family while letting JIT runners specialize to the concrete

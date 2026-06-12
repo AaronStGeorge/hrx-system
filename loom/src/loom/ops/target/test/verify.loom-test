@@ -1,10 +1,6 @@
 // RUN: verify
 
 target.generic<reference> @ok
-target.artifact @not_target target(@ok)
-
-// ERROR@+1: SYMBOL/003 "not_target" "target artifact" "target"
-target.artifact @bad target(@not_target)
 
 target.generic<reference> @duplicate
 // ERROR@+1: SYMBOL/005 "duplicate"

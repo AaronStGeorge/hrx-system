@@ -257,8 +257,6 @@ TEST(ModuleTest, QueriesFunctionsAndKernelSidecars) {
       module.get(), entry->function_ordinal, &export_info));
   EXPECT_TRUE(export_info.flags & LOOMC_MODULE_FUNCTION_EXPORT_FLAG_HAS_SYMBOL);
   EXPECT_EQ(ToString(export_info.export_symbol), "dispatch");
-  EXPECT_FALSE(export_info.flags &
-               LOOMC_MODULE_FUNCTION_EXPORT_FLAG_HAS_ORDINAL);
 }
 
 TEST(ModuleTest, LooksUpFunctionNamesWithOrWithoutSigil) {

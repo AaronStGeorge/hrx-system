@@ -111,7 +111,6 @@ class KernelFacts:
     target_driver: str | None
     target_format: str | None
     export_name: str | None
-    export_ordinal: int | None
     function_name: str
     workgroup_size: tuple[int, int, int] | None
     subgroup_size: int | None

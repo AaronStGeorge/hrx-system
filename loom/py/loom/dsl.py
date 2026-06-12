@@ -3313,10 +3313,6 @@ class FuncLikeInterface(NamedTuple):
     export_symbol: str | None = None
     # Optional export payload dictionary attr.
     export_attrs: str | None = None
-    # Optional target artifact symbol attr for entry-style exports.
-    artifact: str | None = None
-    # Optional export ordinal attr for entry-style exports.
-    export_ordinal: str | None = None
     # Optional export linkage attr for entry-style exports.
     export_linkage: str | None = None
     # Visibility enum attr (e.g., public). None if not applicable.

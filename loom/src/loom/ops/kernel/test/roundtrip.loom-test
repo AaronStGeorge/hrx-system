@@ -19,9 +19,7 @@ kernel.def @empty_kernel() {
 
 test.target<low_core> @test_target
 
-target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
-
-kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal(0) linkage(dso_local) @entry() {
+kernel.def target(@test_target) export("entry") linkage(dso_local) @entry() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   %c16 = index.constant 16 : index
@@ -33,9 +31,7 @@ kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal
 // ----
 test.target<low_core> @test_target
 
-target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
-
-kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal(0) linkage(dso_local) @entry() {
+kernel.def target(@test_target) export("entry") linkage(dso_local) @entry() {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index
   %c16 = index.constant 16 : index

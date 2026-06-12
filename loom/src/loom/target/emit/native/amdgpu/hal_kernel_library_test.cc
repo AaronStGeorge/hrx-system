@@ -126,8 +126,8 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
   void ParseGfx11Kernel(loom_module_t** out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx1100> @gfx_target\n"
-        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
-        "@loom_kernel() {\n"
+        "low.kernel.def target(@gfx_target) export(\"loom_kernel\") "
+        "workgroup_size(64, 1, 1) @loom_kernel() {\n"
         "  low.return\n"
         "}\n";
     ASSERT_NO_FATAL_FAILURE(
@@ -141,7 +141,7 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
         "abi_layout({constant_count = 1, direct_arg_count = 1, "
         "direct_arg_names = {arg0 = \"extent\"}, direct_arg_sizes = [4], "
         "resource_count = 1, uses_kernarg_segment_ptr = true}) "
-        "workgroup_size(64, 1, 1) @loom_kernel() {\n"
+        "export(\"loom_kernel\") workgroup_size(64, 1, 1) @loom_kernel() {\n"
         "  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : "
         "reg<amdgpu.sgpr x2>\n"
         "  %extent = low.op<amdgpu.s_load_dword_offset_only>(%kernarg) "
@@ -157,12 +157,12 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
   void ParseGfx11MultiKernel(loom_module_t** out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx1100> @gfx_target\n"
-        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
-        "@first_kernel() {\n"
+        "low.kernel.def target(@gfx_target) export(\"first_kernel\") "
+        "workgroup_size(64, 1, 1) @first_kernel() {\n"
         "  low.return\n"
         "}\n"
-        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
-        "@second_kernel() {\n"
+        "low.kernel.def target(@gfx_target) export(\"second_kernel\") "
+        "workgroup_size(64, 1, 1) @second_kernel() {\n"
         "  low.return\n"
         "}\n";
     ASSERT_NO_FATAL_FAILURE(
@@ -172,8 +172,8 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
   void ParseGfx942Kernel(loom_module_t** out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx942> @gfx_target\n"
-        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
-        "@loom_kernel() {\n"
+        "low.kernel.def target(@gfx_target) export(\"loom_kernel\") "
+        "workgroup_size(64, 1, 1) @loom_kernel() {\n"
         "  low.return\n"
         "}\n";
     ASSERT_NO_FATAL_FAILURE(
@@ -199,8 +199,8 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
     }
     source +=
         "\n"
-        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
-        "@loom_kernel() {\n"
+        "low.kernel.def target(@gfx_target) export(\"loom_kernel\") "
+        "workgroup_size(64, 1, 1) @loom_kernel() {\n"
         "  low.return\n"
         "}\n";
 

@@ -55,8 +55,6 @@ class KernelModuleSpec:
     arguments: Sequence[KernelArgumentSpec]
     config_arguments: Sequence[KernelConfigArgumentSpec] = ()
     target_symbol: str | None = None
-    artifact_symbol: str | None = None
-    export_ordinal: int | None = None
     launch_config: KernelLaunchConfigSpec | None = field(
         default_factory=KernelLaunchConfigSpec
     )
@@ -97,22 +95,6 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         spec.target_preset, fallback="target"
     )
     _build_target_record(builder, target_symbol, spec.target_preset)
-    artifact_symbol = spec.artifact_symbol
-    if artifact_symbol is None and spec.export_ordinal is not None:
-        artifact_symbol = sanitize_symbol(f"{spec.callee}_artifact")
-    if artifact_symbol is not None:
-        artifact_symbol = sanitize_symbol(artifact_symbol, fallback="artifact")
-        if artifact_symbol in {target_symbol, spec.callee}:
-            artifact_symbol = sanitize_symbol(
-                f"{artifact_symbol}_artifact",
-                fallback="artifact",
-            )
-        _build_target_artifact(
-            builder,
-            artifact_symbol,
-            target_symbol,
-            spec.target_preset,
-        )
     config_names = NameAllocator()
     config_arguments_by_ordinal = {
         argument.ordinal: builder.value(
@@ -142,8 +124,6 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
     builder.kernel.def_(
         target=target_symbol,
         export_symbol=spec.export_symbol,
-        artifact=artifact_symbol,
-        export_ordinal=spec.export_ordinal,
         callee=spec.callee,
         config_args=[
             (
@@ -292,30 +272,6 @@ def _build_target_record(
         )
         return
     builder.target.generic(symbol=target_symbol, kind="reference")
-
-
-def _build_target_artifact(
-    builder: loom.LoomBuilder,
-    artifact_symbol: str,
-    target_symbol: str,
-    target_preset: str,
-) -> None:
-    builder.target.artifact(
-        symbol=artifact_symbol,
-        target=target_symbol,
-        artifact_format=_artifact_format(target_preset),
-        abi="hal_executable",
-    )
-
-
-def _artifact_format(target_preset: str) -> str:
-    if "spirv" in target_preset:
-        return "spirv_binary"
-    if "wasm" in target_preset:
-        return "wasm_binary"
-    if "vm" in target_preset:
-        return "vm_bytecode"
-    return "elf"
 
 
 def _amdgpu_target_selection(target_preset: str) -> _AmdgpuTargetSelection | None:

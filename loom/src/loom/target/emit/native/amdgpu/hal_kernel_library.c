@@ -672,10 +672,6 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
   iree_arena_initialize(&block_pool, &table_arena);
 
   loom_target_entry_list_t entries = {0};
-  const iree_string_view_t artifact_symbol =
-      options
-          ? loom_target_entry_normalize_symbol_name(options->artifact_symbol)
-          : iree_string_view_empty();
   loom_verify_result_t verify_result = {0};
   if (iree_status_is_ok(status)) {
     status = loom_target_entry_verify_module(
@@ -685,15 +681,9 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
   bool selected = false;
   if (iree_status_is_ok(status) && verify_result.error_count == 0 &&
       diagnostic_emitter.error_count == 0) {
-    if (!iree_string_view_is_empty(artifact_symbol)) {
-      status = loom_target_entry_select_artifact_entries(
-          module, artifact_symbol, entry_predicate, &diagnostic_emitter,
-          IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &entries);
-    } else {
-      status = loom_target_entry_select_all_entries(
-          module, &target_options, entry_predicate, &diagnostic_emitter,
-          IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &entries);
-    }
+    status = loom_target_entry_select_all_entries(
+        module, &target_options, entry_predicate, &diagnostic_emitter,
+        IREE_SV("AMDGPU HAL-native"), &table_arena, &selected, &entries);
   }
   if (iree_status_is_ok(status) && selected && options != NULL) {
     for (uint16_t i = 0; i < entries.count && iree_status_is_ok(status); ++i) {

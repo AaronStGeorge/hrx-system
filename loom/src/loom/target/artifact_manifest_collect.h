@@ -14,10 +14,10 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/symbol_dependencies.h"
-#include "loom/analysis/symbol_facts.h"
 #include "loom/ir/ir.h"
 #include "loom/target/artifact_manifest.h"
-#include "loom/target/artifact_plan.h"
+#include "loom/target/entry_selection.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,26 +40,32 @@ typedef struct loom_target_artifact_manifest_collect_options_t {
 
   // Emitted artifact byte length when ARTIFACT_BYTE_LENGTH is set.
   uint64_t artifact_byte_length;
+
+  // Optional artifact name supplied by the emitter or packager.
+  iree_string_view_t artifact_name;
+
+  // Emitted artifact format. UNKNOWN falls back to the first selected entry's
+  // target snapshot format when entries are present.
+  loom_target_artifact_format_t artifact_format;
 } loom_target_artifact_manifest_collect_options_t;
 
 // Initializes collection options with manifest collection disabled.
 void loom_target_artifact_manifest_collect_options_initialize(
     loom_target_artifact_manifest_collect_options_t* out_options);
 
-// Collects a manifest for |plan| into arena-owned storage.
+// Collects a manifest for selected emitted entries into arena-owned storage.
 //
 // NONE mode only clears |out_manifest|. SUMMARY mode collects cheap structural
-// facts already present in the artifact plan, symbol facts, target facts, and
-// symbol dependency table. DETAILS and ANALYSIS modes additionally collect
+// facts already present in selected entries, target facts, and the symbol
+// dependency table. DETAILS and ANALYSIS modes additionally collect
 // per-parameter rows from function signatures. Expensive artifact byte scans,
 // hashing, disassembly, target-specific static analysis, and pass reports are
 // intentionally outside this shared collector.
 //
 // Manifest arrays are allocated from |arena|. String views borrow storage from
-// |module|, |fact_table|, and static literals and must not outlive them.
-iree_status_t loom_target_artifact_manifest_collect_from_plan(
-    const loom_module_t* module, const loom_target_artifact_plan_t* plan,
-    loom_symbol_fact_table_t* fact_table,
+// |module|, |entries|, and static literals and must not outlive them.
+iree_status_t loom_target_artifact_manifest_collect_from_entries(
+    const loom_module_t* module, loom_target_entry_list_t entries,
     const loom_symbol_dependency_table_t* dependency_table,
     const loom_target_artifact_manifest_collect_options_t* options,
     iree_arena_allocator_t* arena,

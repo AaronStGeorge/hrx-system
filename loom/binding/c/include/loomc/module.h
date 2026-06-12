@@ -167,9 +167,6 @@ typedef struct loomc_module_function_t {
 typedef enum loomc_module_function_export_flag_bits_e {
   /// `loomc_module_function_export_info_t::export_symbol` is present.
   LOOMC_MODULE_FUNCTION_EXPORT_FLAG_HAS_SYMBOL = 1u << 0,
-
-  /// `loomc_module_function_export_info_t::export_ordinal` is present.
-  LOOMC_MODULE_FUNCTION_EXPORT_FLAG_HAS_ORDINAL = 1u << 1,
 } loomc_module_function_export_flag_bits_t;
 
 /// Bitmask of `loomc_module_function_export_flag_bits_t` values.
@@ -190,9 +187,6 @@ typedef struct loomc_module_function_export_info_t {
 
   /// Optional artifact export symbol without a leading `@`.
   loomc_string_view_t export_symbol;
-
-  /// Optional artifact export ordinal.
-  uint32_t export_ordinal;
 } loomc_module_function_export_info_t;
 
 /// Kernel function metadata flag bits.

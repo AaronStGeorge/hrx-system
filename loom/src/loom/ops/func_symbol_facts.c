@@ -44,24 +44,6 @@ static iree_status_t loom_func_symbol_string_attr(
                                          field_name, out_string);
 }
 
-static iree_status_t loom_func_symbol_u32_attr(const loom_attribute_t* attr,
-                                               iree_string_view_t field_name,
-                                               uint32_t* out_value) {
-  if (attr->kind != LOOM_ATTR_I64) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "func contract field %.*s must be an integer",
-                            (int)field_name.size, field_name.data);
-  }
-  int64_t value = loom_attr_as_i64(*attr);
-  if (value < 0 || value > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "func contract field %.*s must fit in u32",
-                            (int)field_name.size, field_name.data);
-  }
-  *out_value = (uint32_t)value;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_func_symbol_linkage_attr(
     const loom_module_t* module, const loom_attribute_t* attr,
     loom_target_linkage_t* out_linkage) {
@@ -87,17 +69,7 @@ static iree_status_t loom_func_symbol_linkage_attr(
 static iree_status_t loom_func_symbol_apply_export_attr(
     const loom_module_t* module, iree_string_view_t name,
     const loom_attribute_t* value, loom_func_symbol_facts_t* facts) {
-  if (iree_string_view_equal(name, IREE_SV("artifact"))) {
-    if (value->kind != LOOM_ATTR_SYMBOL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "func export field artifact must be a symbol");
-    }
-    facts->artifact_symbol = loom_attr_as_symbol(*value);
-  } else if (iree_string_view_equal(name, IREE_SV("ordinal"))) {
-    IREE_RETURN_IF_ERROR(
-        loom_func_symbol_u32_attr(value, name, &facts->export_ordinal));
-    facts->has_export_ordinal = true;
-  } else if (iree_string_view_equal(name, IREE_SV("linkage"))) {
+  if (iree_string_view_equal(name, IREE_SV("linkage"))) {
     IREE_RETURN_IF_ERROR(
         loom_func_symbol_linkage_attr(module, value, &facts->export_linkage));
     facts->has_export_linkage = true;
@@ -126,24 +98,6 @@ static iree_status_t loom_func_symbol_apply_export_attrs(
 
 static iree_status_t loom_func_symbol_apply_direct_export_attrs(
     loom_func_like_t func, loom_func_symbol_facts_t* facts) {
-  loom_symbol_ref_t artifact_symbol = loom_func_like_artifact(func);
-  if (loom_symbol_ref_is_valid(artifact_symbol)) {
-    facts->artifact_symbol = artifact_symbol;
-    facts->exports = true;
-  }
-
-  int64_t export_ordinal = 0;
-  if (loom_func_like_export_ordinal(func, &export_ordinal)) {
-    if (export_ordinal < 0 || export_ordinal > UINT32_MAX) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "func contract field export_ordinal must fit "
-                              "in u32");
-    }
-    facts->export_ordinal = (uint32_t)export_ordinal;
-    facts->has_export_ordinal = true;
-    facts->exports = true;
-  }
-
   uint8_t export_linkage = 0;
   if (loom_func_like_export_linkage(func, &export_linkage)) {
     facts->export_linkage = (loom_target_linkage_t)export_linkage;
@@ -234,12 +188,8 @@ static iree_status_t loom_func_symbol_fact_compute(
   loom_string_id_t export_symbol_id = loom_func_like_export_symbol(func);
   bool has_export_symbol = export_symbol_id != LOOM_STRING_ID_INVALID;
   loom_named_attr_slice_t export_attrs = loom_func_like_export_attrs(func);
-  const bool has_direct_export_contract =
-      loom_symbol_ref_is_valid(loom_func_like_artifact(func)) ||
-      loom_func_symbol_attr_present(func,
-                                    func.vtable->export_ordinal_attr_index) ||
-      loom_func_symbol_attr_present(func,
-                                    func.vtable->export_linkage_attr_index);
+  const bool has_direct_export_contract = loom_func_symbol_attr_present(
+      func, func.vtable->export_linkage_attr_index);
   bool has_func_contract = has_abi_attr || facts->abi_attrs.count > 0 ||
                            has_export_symbol || export_attrs.count > 0 ||
                            has_direct_export_contract;

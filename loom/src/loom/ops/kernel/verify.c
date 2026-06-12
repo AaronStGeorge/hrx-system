@@ -83,28 +83,12 @@ static iree_status_t loom_kernel_verify_def_contract(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op) {
   const bool has_export_symbol = loom_kernel_optional_attr_is_present(
       op, loom_kernel_def_export_symbol_ATTR_INDEX);
-  const bool has_artifact = loom_kernel_optional_attr_is_present(
-      op, loom_kernel_def_artifact_ATTR_INDEX);
-  const bool has_export_ordinal = loom_kernel_optional_attr_is_present(
-      op, loom_kernel_def_export_ordinal_ATTR_INDEX);
   const bool has_export_linkage = loom_kernel_optional_attr_is_present(
       op, loom_kernel_def_export_linkage_ATTR_INDEX);
-  if (!has_export_symbol &&
-      (has_artifact || has_export_ordinal || has_export_linkage)) {
+  if (!has_export_symbol && has_export_linkage) {
     return loom_kernel_verify_contract_attr_present(
         emitter, op, loom_kernel_def_export_symbol_ATTR_INDEX,
-        IREE_SV("export"),
-        IREE_SV("present when artifact, ordinal, or linkage is present"));
-  }
-  if (!has_artifact && (has_export_ordinal || has_export_linkage)) {
-    return loom_kernel_verify_contract_attr_present(
-        emitter, op, loom_kernel_def_artifact_ATTR_INDEX, IREE_SV("artifact"),
-        IREE_SV("present when ordinal or linkage is present"));
-  }
-  if (has_artifact) {
-    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
-        emitter, op, loom_kernel_def_target_ATTR_INDEX, IREE_SV("target"),
-        IREE_SV("present when artifact is present")));
+        IREE_SV("export"), IREE_SV("present when linkage is present"));
   }
   return iree_ok_status();
 }

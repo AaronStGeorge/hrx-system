@@ -114,7 +114,7 @@ typedef enum loomc_link_symbol_kind_e {
   /// Global value or configuration symbol.
   LOOMC_LINK_SYMBOL_KIND_GLOBAL = 5,
 
-  /// Executable artifact symbol.
+  /// Executable/package symbol.
   LOOMC_LINK_SYMBOL_KIND_EXECUTABLE = 6,
 
   /// Record symbol.

@@ -680,16 +680,6 @@ static iree_status_t loom_link_merge_func_contract(
           .field_name = IREE_SV("export_attrs"),
       },
       {
-          .source_attr_index = source_func.vtable->artifact_attr_index,
-          .target_attr_index = target_func.vtable->artifact_attr_index,
-          .field_name = IREE_SV("artifact"),
-      },
-      {
-          .source_attr_index = source_func.vtable->export_ordinal_attr_index,
-          .target_attr_index = target_func.vtable->export_ordinal_attr_index,
-          .field_name = IREE_SV("export_ordinal"),
-      },
-      {
           .source_attr_index = source_func.vtable->export_linkage_attr_index,
           .target_attr_index = target_func.vtable->export_linkage_attr_index,
           .field_name = IREE_SV("export_linkage"),

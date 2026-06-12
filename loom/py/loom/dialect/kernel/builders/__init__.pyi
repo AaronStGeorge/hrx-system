@@ -18,8 +18,6 @@ class KernelBuilder(DialectBuilder):
         *,
         target: str | None = ...,
         export_symbol: str | None = ...,
-        artifact: str | None = ...,
-        export_ordinal: int | None = ...,
         export_linkage: str | None = ...,
         callee: str,
         config_args: Sequence[tuple[str, Type]] = ...,

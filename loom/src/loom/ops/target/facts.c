@@ -90,25 +90,6 @@ static void loom_target_projection_apply(
   }
 }
 
-static loom_target_artifact_abi_kind_t loom_target_artifact_default_abi(
-    loom_target_artifact_format_t format) {
-  switch (format) {
-    case LOOM_TARGET_ARTIFACT_FORMAT_ELF:
-    case LOOM_TARGET_ARTIFACT_FORMAT_COFF:
-    case LOOM_TARGET_ARTIFACT_FORMAT_MACHO:
-      return LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE;
-    case LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY:
-      return LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE;
-    case LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE:
-      return LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE;
-    case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
-      return LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE;
-    case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
-    default:
-      return LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN;
-  }
-}
-
 static iree_status_t loom_target_symbol_fact_compute(
     const loom_symbol_fact_domain_t* domain,
     loom_symbol_fact_context_t* context, const loom_module_t* module,
@@ -146,55 +127,8 @@ static iree_status_t loom_target_symbol_fact_compute(
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_artifact_symbol_fact_compute(
-    const loom_symbol_fact_domain_t* domain,
-    loom_symbol_fact_context_t* context, const loom_module_t* module,
-    loom_symbol_id_t symbol_id, const loom_symbol_t* symbol,
-    const loom_symbol_facts_base_t** out_facts) {
-  *out_facts = NULL;
-
-  loom_target_artifact_symbol_facts_t* facts = NULL;
-  IREE_RETURN_IF_ERROR(loom_symbol_fact_context_allocate(
-      context, sizeof(*facts), (void**)&facts));
-  memset(facts, 0, sizeof(*facts));
-
-  facts->base.domain = domain;
-  facts->base.symbol_kind = symbol->kind;
-  facts->artifact_op = symbol->defining_op;
-  facts->symbol = (loom_symbol_ref_t){
-      .module_id = 0,
-      .symbol_id = symbol_id,
-  };
-  facts->name = module->strings.entries[symbol->name_id];
-
-  facts->target_symbol = loom_target_artifact_target(symbol->defining_op);
-  const loom_symbol_facts_base_t* target_base_facts = NULL;
-  IREE_RETURN_IF_ERROR(loom_symbol_fact_context_lookup_ref(
-      context, facts->target_symbol, &target_base_facts));
-  facts->target = loom_target_symbol_facts_cast(target_base_facts);
-
-  facts->format =
-      (loom_target_artifact_format_t)loom_target_artifact_artifact_format(
-          symbol->defining_op);
-  if (facts->format == LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN) {
-    facts->format = facts->target->storage.snapshot.artifact_format;
-  }
-  facts->abi_kind = (loom_target_artifact_abi_kind_t)loom_target_artifact_abi(
-      symbol->defining_op);
-  if (facts->abi_kind == LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN) {
-    facts->abi_kind = loom_target_artifact_default_abi(facts->format);
-  }
-
-  *out_facts = &facts->base;
-  return iree_ok_status();
-}
-
 const loom_symbol_fact_domain_t loom_target_symbol_fact_domain = {
     .compute = loom_target_symbol_fact_compute,
-};
-
-const loom_symbol_fact_domain_t loom_target_artifact_symbol_fact_domain = {
-    .compute = loom_target_artifact_symbol_fact_compute,
 };
 
 const loom_target_symbol_facts_t* loom_target_symbol_facts_cast(
@@ -203,12 +137,4 @@ const loom_target_symbol_facts_t* loom_target_symbol_facts_cast(
     return NULL;
   }
   return (const loom_target_symbol_facts_t*)facts;
-}
-
-const loom_target_artifact_symbol_facts_t*
-loom_target_artifact_symbol_facts_cast(const loom_symbol_facts_base_t* facts) {
-  if (!facts || facts->domain != &loom_target_artifact_symbol_fact_domain) {
-    return NULL;
-  }
-  return (const loom_target_artifact_symbol_facts_t*)facts;
 }

@@ -21,12 +21,10 @@ static bool loom_target_pass_predicate_is_supported_attr(
     iree_string_view_t name) {
   return iree_string_view_equal(name, IREE_SV("target")) ||
          iree_string_view_equal(name, IREE_SV("target_op")) ||
-         iree_string_view_equal(name, IREE_SV("artifact")) ||
          iree_string_view_equal(name, IREE_SV("bundle")) ||
          iree_string_view_equal(name, IREE_SV("snapshot")) ||
          iree_string_view_equal(name, IREE_SV("codegen")) ||
          iree_string_view_equal(name, IREE_SV("artifact_format")) ||
-         iree_string_view_equal(name, IREE_SV("artifact_abi")) ||
          iree_string_view_equal(name, IREE_SV("abi")) ||
          iree_string_view_equal(name, IREE_SV("config")) ||
          iree_string_view_equal(name, IREE_SV("contract"));
@@ -161,8 +159,6 @@ typedef struct loom_target_pass_predicate_target_facts_t {
   const loom_op_t* target_op;
   // Resolved function target bundle.
   loom_target_bundle_storage_t bundle_storage;
-  // Resolved artifact facts when the function exports into target.artifact.
-  const loom_target_artifact_symbol_facts_t* artifact;
 } loom_target_pass_predicate_target_facts_t;
 
 static iree_status_t loom_target_pass_predicate_resolve_facts(
@@ -206,15 +202,6 @@ static iree_status_t loom_target_pass_predicate_resolve_facts(
     return iree_ok_status();
   }
 
-  if (loom_symbol_ref_is_valid(out_facts->func->artifact_symbol)) {
-    const loom_symbol_facts_base_t* artifact_base_facts = NULL;
-    IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup_ref(
-        &fact_table, context->target_module, out_facts->func->artifact_symbol,
-        &artifact_base_facts));
-    out_facts->artifact =
-        loom_target_artifact_symbol_facts_cast(artifact_base_facts);
-  }
-
   *out_valid = true;
   return iree_ok_status();
 }
@@ -237,12 +224,6 @@ static bool loom_target_pass_predicate_match_attr(
     return iree_string_view_equal(
         loom_op_name(context->target_module, facts->target_op), expected);
   }
-  if (iree_string_view_equal(name, IREE_SV("artifact"))) {
-    return loom_target_pass_predicate_symbol_matches(
-        loom_target_pass_predicate_symbol_name(context->target_module,
-                                               facts->func->artifact_symbol),
-        expected);
-  }
   if (iree_string_view_equal(name, IREE_SV("bundle"))) {
     return iree_string_view_equal(storage->bundle.name, expected);
   }
@@ -255,19 +236,8 @@ static bool loom_target_pass_predicate_match_attr(
         expected);
   }
   if (iree_string_view_equal(name, IREE_SV("artifact_format"))) {
-    loom_target_artifact_format_t format = storage->snapshot.artifact_format;
-    if (facts->artifact != NULL) {
-      format = facts->artifact->format;
-    }
-    return iree_string_view_equal(loom_target_artifact_format_name(format),
-                                  expected);
-  }
-  if (iree_string_view_equal(name, IREE_SV("artifact_abi"))) {
-    if (facts->artifact == NULL) {
-      return false;
-    }
     return iree_string_view_equal(
-        loom_target_artifact_abi_kind_name(facts->artifact->abi_kind),
+        loom_target_artifact_format_name(storage->snapshot.artifact_format),
         expected);
   }
   if (iree_string_view_equal(name, IREE_SV("abi"))) {

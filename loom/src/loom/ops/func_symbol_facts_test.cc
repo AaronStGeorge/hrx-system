@@ -177,12 +177,11 @@ func.decl import("env") @do_work(%arg0: i32) -> (i32)
   EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do_work")));
 }
 
-TEST_F(FuncSymbolFactsTest, KernelDefFactsCarryFuncContractsOnly) {
+TEST_F(FuncSymbolFactsTest, KernelDefFactsCarryExportContract) {
   ModulePtr module = ParseModule(R"(
 test.target<low_core> @target
-test.record @artifact
 
-kernel.def target(@target) export("dispatch") artifact(@artifact) ordinal(5) linkage(dso_local) @kernel() {
+kernel.def target(@target) export("dispatch") linkage(dso_local) @kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch() {
@@ -199,11 +198,8 @@ kernel.def target(@target) export("dispatch") artifact(@artifact) ordinal(5) lin
   EXPECT_TRUE(facts->exports);
   EXPECT_TRUE(
       iree_string_view_equal(facts->export_symbol, IREE_SV("dispatch")));
-  EXPECT_TRUE(loom_symbol_ref_is_valid(facts->artifact_symbol));
   EXPECT_TRUE(facts->has_export_linkage);
   EXPECT_EQ(facts->export_linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
-  EXPECT_TRUE(facts->has_export_ordinal);
-  EXPECT_EQ(facts->export_ordinal, 5u);
 }
 
 TEST_F(FuncSymbolFactsTest, ContractRequiresTargetRecord) {

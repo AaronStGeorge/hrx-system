@@ -184,33 +184,5 @@ func.def target(@other_target) abi(object_function) @rejected() {
   EXPECT_FALSE(Evaluate(module.get(), where_op, IREE_SV("rejected")));
 }
 
-TEST_F(TargetPredicateTest, MatchesExportArtifactFacts) {
-  ModulePtr module = ParseModule(R"(
-test.target<low_core> @test_target {abi = hal_kernel}
-target.artifact @object target(@test_target) {abi = hal_executable, artifact_format = elf}
-target.artifact @wasm target(@test_target) {abi = wasm_module, artifact_format = wasm_binary}
-
-pass.pipeline<module> @pipeline pipeline {
-  for func {
-    where target(artifact = "@object", artifact_format = "elf", artifact_abi = "hal_executable") {
-    }
-  }
-}
-
-low.kernel.def target(@test_target) export("entry") artifact(@object) ordinal(0) workgroup_size(1, 1, 1) @object_func() {
-  low.return
-}
-
-low.kernel.def target(@test_target) export("entry") artifact(@wasm) ordinal(0) workgroup_size(1, 1, 1) @wasm_func() {
-  low.return
-}
-)");
-
-  loom_op_t* where_op =
-      FirstWhere(FindPipeline(module.get(), IREE_SV("pipeline")));
-  EXPECT_TRUE(Evaluate(module.get(), where_op, IREE_SV("object_func")));
-  EXPECT_FALSE(Evaluate(module.get(), where_op, IREE_SV("wasm_func")));
-}
-
 }  // namespace
 }  // namespace loom

@@ -942,13 +942,6 @@ typedef struct loom_func_like_vtable_t {
   // Index of the optional export payload dict. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t export_attrs_attr_index;
 
-  // Index of the optional target artifact symbol attr. LOOM_ATTR_INDEX_NONE if
-  // absent.
-  uint8_t artifact_attr_index;
-
-  // Index of the optional export ordinal attr. LOOM_ATTR_INDEX_NONE if absent.
-  uint8_t export_ordinal_attr_index;
-
   // Index of the optional export linkage attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t export_linkage_attr_index;
 

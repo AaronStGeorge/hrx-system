@@ -176,8 +176,7 @@ static bool loom_inline_symbol_is_transferable(const loom_module_t* module,
     return false;
   }
   if (loom_func_like_export_symbol(function) != LOOM_STRING_ID_INVALID ||
-      loom_func_like_export_attrs(function).count > 0 ||
-      loom_symbol_ref_is_valid(loom_func_like_artifact(function))) {
+      loom_func_like_export_attrs(function).count > 0) {
     return false;
   }
   return true;

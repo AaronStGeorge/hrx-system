@@ -10,7 +10,6 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/symbol_dependencies.h"
-#include "loom/analysis/symbol_facts.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -18,14 +17,20 @@
 #include "loom/ops/global/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/artifact_manifest.h"
+#include "loom/target/entry_selection.h"
 #include "loom/testing/module_ptr.h"
-#include "loom/util/call_graph.h"
 #include "loom/util/stream.h"
 
 namespace loom {
 namespace {
 
 using ModulePtr = ::loom::testing::ModulePtr;
+
+bool AcceptEntry(void* user_data, const loom_target_entry_t* entry) {
+  (void)user_data;
+  (void)entry;
+  return true;
+}
 
 class ArtifactManifestCollectTest : public ::testing::Test {
  protected:
@@ -38,7 +43,6 @@ class ArtifactManifestCollectTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
-    loom_symbol_fact_table_initialize(&fact_table_, &analysis_arena_);
   }
 
   void TearDown() override {
@@ -67,37 +71,23 @@ class ArtifactManifestCollectTest : public ::testing::Test {
     return ModulePtr(module);
   }
 
-  loom_symbol_id_t FindSymbol(const loom_module_t* module,
-                              iree_string_view_t name) {
-    loom_string_id_t name_id = loom_module_lookup_string(module, name);
-    IREE_ASSERT(name_id != LOOM_STRING_ID_INVALID);
-    loom_symbol_id_t symbol_id = loom_module_find_symbol(module, name_id);
-    IREE_ASSERT(symbol_id != LOOM_SYMBOL_ID_INVALID);
-    return symbol_id;
-  }
-
-  loom_symbol_ref_t SymbolRef(const loom_module_t* module,
-                              iree_string_view_t name) {
-    return (loom_symbol_ref_t){
-        .module_id = 0,
-        .symbol_id = FindSymbol(module, name),
-    };
-  }
-
-  iree_status_t BuildPlanAndDependencies(
-      const loom_module_t* module, iree_string_view_t artifact_name,
-      loom_target_artifact_plan_t* out_plan,
+  iree_status_t SelectEntriesAndBuildDependencies(
+      const loom_module_t* module, loom_target_entry_list_t* out_entries,
       loom_symbol_dependency_table_t* out_dependencies) {
-    loom_call_graph_t call_graph;
-    IREE_RETURN_IF_ERROR(
-        loom_call_graph_build(module, &analysis_arena_, &call_graph));
-    bool valid = false;
-    IREE_RETURN_IF_ERROR(loom_target_artifact_plan_build(
-        module, SymbolRef(module, artifact_name), &fact_table_, &call_graph,
-        iree_diagnostic_emitter_t{}, &analysis_arena_, &valid, out_plan));
-    if (!valid) {
+    loom_target_entry_options_t options = {};
+    loom_target_entry_diagnostic_emitter_t diagnostic_emitter = {};
+    loom_target_entry_diagnostic_emitter_initialize(
+        module, &options, LOOM_EMITTER_VERIFIER, &diagnostic_emitter);
+    const loom_target_entry_predicate_t predicate = {
+        .fn = AcceptEntry,
+    };
+    bool selected = false;
+    IREE_RETURN_IF_ERROR(loom_target_entry_select_all_entries(
+        module, &options, predicate, &diagnostic_emitter, IREE_SV("test"),
+        &analysis_arena_, &selected, out_entries));
+    if (!selected) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "artifact plan unexpectedly invalid");
+                              "expected exported entries");
     }
     return loom_symbol_dependency_table_build(module, &analysis_arena_,
                                               out_dependencies);
@@ -108,14 +98,14 @@ class ArtifactManifestCollectTest : public ::testing::Test {
       const loom_target_artifact_manifest_collect_options_t* collect_options,
       loom_target_artifact_manifest_mode_t format_mode,
       iree_string_builder_t* builder) {
-    loom_target_artifact_plan_t plan;
+    loom_target_entry_list_t entries;
     loom_symbol_dependency_table_t dependencies;
-    IREE_CHECK_OK(BuildPlanAndDependencies(module, IREE_SV("module"), &plan,
-                                           &dependencies));
+    IREE_CHECK_OK(
+        SelectEntriesAndBuildDependencies(module, &entries, &dependencies));
     loom_target_artifact_manifest_t manifest;
-    IREE_CHECK_OK(loom_target_artifact_manifest_collect_from_plan(
-        module, &plan, &fact_table_, &dependencies, collect_options,
-        &analysis_arena_, &manifest));
+    IREE_CHECK_OK(loom_target_artifact_manifest_collect_from_entries(
+        module, entries, &dependencies, collect_options, &analysis_arena_,
+        &manifest));
 
     iree_string_builder_initialize(iree_allocator_system(), builder);
     loom_output_stream_t stream;
@@ -131,7 +121,6 @@ class ArtifactManifestCollectTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   iree_arena_allocator_t analysis_arena_;
-  loom_symbol_fact_table_t fact_table_;
 };
 
 TEST_F(ArtifactManifestCollectTest, CollectsSummaryFunctionsAndGlobals) {
@@ -140,17 +129,17 @@ target.generic<reference> @test_target {
   artifact_format = elf,
   subgroup_size = 32
 }
-target.artifact @module target(@test_target) {artifact_format = elf}
 
 global.constant @weights : i32 = 1
 global.variable @scratch : i32
 
-func.def target(@test_target) abi(object_function) export("run", {artifact = @module, ordinal = 0}) @entry(%input: i32) {
+func.def target(@test_target) abi(object_function) export("run") @entry(%input: i32) {
+  func.call @forward() : ()
   func.call @helper() : ()
   func.return
 }
 
-func.def target(@test_target) abi(object_function) export("aux", {artifact = @module, ordinal = 1}) @aux() {
+func.def target(@test_target) abi(object_function) export("aux") @aux() {
   func.return
 }
 
@@ -163,6 +152,10 @@ func.def target(@test_target) abi(object_function) @helper() {
 func.def target(@test_target) abi(object_function) @unused() {
   func.return
 }
+
+func.def target(@test_target) abi(object_function) export("forward") @forward() {
+  func.return
+}
 )");
 
   loom_target_artifact_manifest_collect_options_t options;
@@ -171,6 +164,8 @@ func.def target(@test_target) abi(object_function) @unused() {
   options.flags =
       LOOM_TARGET_ARTIFACT_MANIFEST_COLLECT_FLAG_ARTIFACT_BYTE_LENGTH;
   options.artifact_byte_length = 0;
+  options.artifact_name = IREE_SV("module");
+  options.artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF;
 
   iree_string_builder_t builder;
   iree_string_view_t output =
@@ -192,6 +187,10 @@ func.def target(@test_target) abi(object_function) @unused() {
                       "{\"name\":\"aux\","
                       "\"targets\":[\"test_target\"],"
                       "\"interface\":{\"parameter_count\":0},"
+                      "\"execution\":{\"subgroup_size\":32}},"
+                      "{\"name\":\"forward\","
+                      "\"targets\":[\"test_target\"],"
+                      "\"interface\":{\"parameter_count\":0},"
                       "\"execution\":{\"subgroup_size\":32}}],"
                       "\"globals\":[{\"name\":\"weights\","
                       "\"targets\":[\"test_target\"]},"
@@ -200,12 +199,50 @@ func.def target(@test_target) abi(object_function) @unused() {
   iree_string_builder_deinitialize(&builder);
 }
 
+TEST_F(ArtifactManifestCollectTest, CollectsGlobalsInModuleOrder) {
+  ModulePtr module = ParseModule(R"(
+target.generic<reference> @test_target {artifact_format = elf}
+
+func.def target(@test_target) abi(object_function) export("run") @entry() {
+  %late_value = global.load @late : i32
+  %early_value = global.load @early : i32
+  func.return
+}
+
+global.constant @early : i32 = 1
+global.constant @late : i32 = 2
+)");
+
+  loom_target_artifact_manifest_collect_options_t options;
+  loom_target_artifact_manifest_collect_options_initialize(&options);
+  options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY;
+
+  iree_string_builder_t builder;
+  iree_string_view_t output =
+      CollectAndFormat(module.get(), &options,
+                       LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY, &builder);
+  EXPECT_TRUE(iree_string_view_equal(
+      output, IREE_SV("{\"kind\":\"loom.artifact_manifest\","
+                      "\"schema_version\":1,"
+                      "\"mode\":\"summary\","
+                      "\"artifact\":{\"format\":\"elf\"},"
+                      "\"targets\":[{\"name\":\"test_target\"}],"
+                      "\"functions\":[{\"name\":\"run\","
+                      "\"source\":\"entry\","
+                      "\"targets\":[\"test_target\"],"
+                      "\"interface\":{\"parameter_count\":0}}],"
+                      "\"globals\":[{\"name\":\"early\","
+                      "\"targets\":[\"test_target\"]},"
+                      "{\"name\":\"late\","
+                      "\"targets\":[\"test_target\"]}]}")));
+  iree_string_builder_deinitialize(&builder);
+}
+
 TEST_F(ArtifactManifestCollectTest, CollectsDetailsParameters) {
   ModulePtr module = ParseModule(R"(
 target.generic<reference> @test_target {artifact_format = spirv_binary}
-target.artifact @module target(@test_target) {artifact_format = spirv_binary}
 
-func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry(%lhs: i32, %rhs: f32) {
+func.def target(@test_target) abi(object_function) export("entry") @entry(%lhs: i32, %rhs: f32) {
   func.return
 }
 )");
@@ -213,6 +250,8 @@ func.def target(@test_target) abi(object_function) export("entry", {artifact = @
   loom_target_artifact_manifest_collect_options_t options;
   loom_target_artifact_manifest_collect_options_initialize(&options);
   options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_DETAILS;
+  options.artifact_name = IREE_SV("module");
+  options.artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY;
 
   iree_string_builder_t builder;
   iree_string_view_t output =
@@ -238,25 +277,12 @@ func.def target(@test_target) abi(object_function) export("entry", {artifact = @
 }
 
 TEST_F(ArtifactManifestCollectTest, NoneModeLeavesManifestEmpty) {
-  ModulePtr module = ParseModule(R"(
-target.generic<reference> @test_target
-target.artifact @module target(@test_target)
-
-func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
-  func.return
-}
-)");
-  loom_target_artifact_plan_t plan;
-  loom_symbol_dependency_table_t dependencies;
-  IREE_ASSERT_OK(BuildPlanAndDependencies(module.get(), IREE_SV("module"),
-                                          &plan, &dependencies));
-
   loom_target_artifact_manifest_collect_options_t options;
   loom_target_artifact_manifest_collect_options_initialize(&options);
   loom_target_artifact_manifest_t manifest;
-  IREE_ASSERT_OK(loom_target_artifact_manifest_collect_from_plan(
-      module.get(), &plan, &fact_table_, &dependencies, &options,
-      &analysis_arena_, &manifest));
+  IREE_ASSERT_OK(loom_target_artifact_manifest_collect_from_entries(
+      /*module=*/nullptr, loom_target_entry_list_t{},
+      /*dependency_table=*/nullptr, &options, /*arena=*/nullptr, &manifest));
   EXPECT_TRUE(iree_string_view_is_empty(manifest.artifact.format));
   EXPECT_EQ(manifest.function_count, 0u);
   EXPECT_EQ(manifest.global_count, 0u);
