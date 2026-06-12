@@ -974,13 +974,13 @@ TEST_F(ExecuteTest, PassModeCapturesPassDiagnostic) {
   EXPECT_NE(DiagnosticJsonString(result).find("\"emitter\":\"pass\""),
             std::string::npos);
   EXPECT_NE(
-      DiagnosticJsonString(result).find("\"error_id\":\"ERR_SUBRANGE_005\""),
+      DiagnosticJsonString(result).find("\"error_id\":\"ERR_SUBRANGE_010\""),
       std::string::npos);
   EXPECT_NE(DiagnosticJsonString(result).find(
                 "\"source_location\":{\"provenance\":\"exact_source\","
                 "\"filename\":\"test.loom-test\""),
             std::string::npos);
-  EXPECT_NE(DetailString(result).find("SUBRANGE/005"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("SUBRANGE/010"), std::string::npos);
   EXPECT_NE(DetailString(result).find("test.loom-test:"), std::string::npos);
   EXPECT_NE(DetailString(result).find("%loaded = vector.load"),
             std::string::npos);

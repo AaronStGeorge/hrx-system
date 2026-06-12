@@ -21,7 +21,7 @@ func.def @static_dense_store_in_bounds(%buffer: buffer, %base: offset, %value: v
 func.def @static_dense_load_out_of_bounds(%buffer: buffer, %base: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%base] : buffer -> view<8xf32, %layout>
-  // ERROR@+1: SUBRANGE/005 {op_name="vector.load", view_axis="0", vector_axis="0", origin="5", proof_code="upper_bound_unproven", requirement_code="axis_end_within_bound"}
+  // ERROR@+1: SUBRANGE/010 "vector.load" "full-vector footprint upper bound" "origin + vector_extent <= view_bound"
   %loaded = vector.load %view[5] : view<8xf32, %layout> -> vector<4xf32>
   func.return
 }
@@ -42,7 +42,7 @@ func.def @dynamic_unproven_tail(%buffer: buffer, %base: offset, %n: index, %iv: 
   %layout = encoding.layout.dense : encoding<layout>
   %iv2 = index.assume %iv [range(%iv, 0, 4096)] : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]xf32, %layout>
-  // ERROR@+1: SUBRANGE/005
+  // ERROR@+1: SUBRANGE/010 "full-vector footprint upper bound" "origin + vector_extent <= view_bound"
   %loaded = vector.load %view[%iv2] : view<[%n]xf32, %layout> -> vector<16xf32>
   func.return
 }
@@ -68,6 +68,19 @@ func.def @dynamic_unit_axis_proven_by_assume_relation(%buffer: buffer, %base: of
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]x4xf32, %layout>
   %row_in_bounds, %n_assumed = index.assume %row, %n [ge(%row, 0), lt(%row, %n)] : index, index
   %loaded = vector.load %view[%row_in_bounds, 0] : view<[%n]x4xf32, %layout> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
+func.def @dynamic_scaled_vector_origin_proven_by_assume_relation(%buffer: buffer, %base: offset, %i: index, %n: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %four = index.constant 4 : index
+  %i_in_bounds, %n_assumed = index.assume %i, %n [ge(%i, 0), lt(%i, %n)] : index, index
+  %element_count = index.mul %n_assumed, %four : index
+  %origin = index.mul %i_in_bounds, %four : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%element_count]xf32, %layout>
+  %loaded = vector.load %view[%origin] : view<[%element_count]xf32, %layout> -> vector<4xf32>
   func.return
 }
 
@@ -126,6 +139,43 @@ kernel.def @dynamic_unit_axis_proven_by_workitem_id_launch_config(%columns: inde
 
 // ====
 
+kernel.def @dynamic_scaled_vector_origin_proven_by_workitem_id_launch_config(%columns: index) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%columns, %c1, %c1) : index
+} launch(%buffer: buffer, %base: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %four = index.constant 4 : index
+  %column = kernel.workitem.id<x> : index
+  %column_count = kernel.workgroup.size<x> : index
+  %element_count = index.mul %column_count, %four : index
+  %origin = index.mul %column, %four : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%element_count]xf32, %layout>
+  %loaded = vector.load %view[%origin] : view<[%element_count]xf32, %layout> -> vector<4xf32>
+  kernel.return
+}
+
+// ====
+
+kernel.def @dynamic_scaled_vector_origin_rejects_offset_workitem_id(%columns: index) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%columns, %c1, %c1) : index
+} launch(%buffer: buffer, %base: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %one = index.constant 1 : index
+  %four = index.constant 4 : index
+  %column = kernel.workitem.id<x> : index
+  %column_count = kernel.workgroup.size<x> : index
+  %element_count = index.mul %column_count, %four : index
+  %next_column = index.add %column, %one : index
+  %origin = index.mul %next_column, %four : index
+  %view = buffer.view %buffer[%base] : buffer -> view<[%element_count]xf32, %layout>
+  // ERROR@+1: SUBRANGE/010 "full-vector footprint upper bound" "origin + vector_extent <= view_bound"
+  %loaded = vector.load %view[%origin] : view<[%element_count]xf32, %layout> -> vector<4xf32>
+  kernel.return
+}
+
+// ====
+
 kernel.def @dynamic_unit_axis_rejects_offset_workgroup_id(%rows: index) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%rows, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
@@ -136,7 +186,7 @@ kernel.def @dynamic_unit_axis_rejects_offset_workgroup_id(%rows: index) {
   %next_row = index.add %row, %one : index
   %row_count = kernel.workgroup.count<x> : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%row_count]x2xf32, %layout>
-  // ERROR@+1: SUBRANGE/005
+  // ERROR@+1: SUBRANGE/011 "scalar-axis footprint upper bound" "origin + 1 <= view_bound"
   %loaded = vector.load %view[%next_row, 0] : view<[%row_count]x2xf32, %layout> -> vector<2xf32>
   kernel.return
 }
@@ -216,13 +266,26 @@ func.def @iota_gather_rank_two_crosses_dense_row_in_bounds(%buffer: buffer, %bas
 
 // ====
 
+func.def @rank_two_offset_vector_is_rejected_by_footprint(%buffer: buffer, %base: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %view = buffer.view %buffer[%base] : buffer -> view<4x4xf32, %layout>
+  %offsets = vector.iota %c0 step %c1 : vector<2x2xindex>
+  // ERROR@+1: SUBRANGE/017 "vector.gather" "rank-1 vector offsets"
+  %loaded = vector.gather %view[0, 0][%offsets] : view<4x4xf32, %layout>, vector<2x2xindex> -> vector<2x2xf32>
+  func.return
+}
+
+// ====
+
 func.def @iota_gather_rank_two_linear_out_of_bounds(%buffer: buffer, %base: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %c0 = index.constant 0 : index
   %c1 = index.constant 1 : index
   %view = buffer.view %buffer[%base] : buffer -> view<2x4xf32, %layout>
   %offsets = vector.iota %c0 step %c1 : vector<2xindex>
-  // ERROR@+1: SUBRANGE/006 {op_name="vector.gather", origin="<linearized origin>", proof_code="linear_upper_bound_unproven", requirement_code="linear_span_within_storage"}
+  // ERROR@+1: SUBRANGE/016 "vector.gather" "linear footprint upper bound" "linearized_origin + max(offsets) + 1 <= view_storage_span"
   %loaded = vector.gather %view[1, 3][%offsets] : view<2x4xf32, %layout>, vector<2xindex> -> vector<2xf32>
   func.return
 }
@@ -235,7 +298,7 @@ func.def @iota_gather_out_of_bounds(%buffer: buffer, %base: offset) {
   %c1 = index.constant 1 : index
   %view = buffer.view %buffer[%base] : buffer -> view<4xf32, %layout>
   %offsets = vector.iota %c1 step %c1 : vector<4xindex>
-  // ERROR@+1: SUBRANGE/006 {op_name="vector.gather", origin="<linearized origin>", proof_code="linear_upper_bound_unproven", requirement_code="linear_span_within_storage"}
+  // ERROR@+1: SUBRANGE/016 "vector.gather" "linear footprint upper bound" "linearized_origin + max(offsets) + 1 <= view_storage_span"
   %loaded = vector.gather %view[%c0][%offsets] : view<4xf32, %layout>, vector<4xindex> -> vector<4xf32>
   func.return
 }
@@ -285,7 +348,7 @@ func.def @masked_offset_ops_uniform_false_skip(%buffer: buffer, %base: offset, %
 
 func.def @unresolved_layout(%buffer: buffer, %base: offset, %layout: encoding<layout>) {
   %view = buffer.view %buffer[%base] : buffer -> view<4xf32, %layout>
-  // ERROR@+1: SUBRANGE/005 {op_name="vector.load", view_axis="-1", vector_axis="-1", origin="<unknown>", proof_code="view_layout_unresolved", requirement_code="view_layout_resolved"}
+  // ERROR@+1: SUBRANGE/007 "vector.load" "requires a resolved view layout"
   %loaded = vector.load %view[0] : view<4xf32, %layout> -> vector<4xf32>
   func.return
 }

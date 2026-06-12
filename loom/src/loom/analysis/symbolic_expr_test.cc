@@ -275,6 +275,54 @@ TEST_F(SymbolicExprTest, AssumedValueRelationPredicatesProveRelations) {
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
 }
 
+TEST_F(SymbolicExprTest, ScaledStrictRelationProvesLessEqualWithUnitExtent) {
+  loom_value_id_t induction = DefineIndexValue();
+  loom_value_id_t upper_bound = DefineIndexValue();
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_LT,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE},
+      .args = {induction, upper_bound},
+  };
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_index_assume_build(&builder_, &induction, 1, &predicate,
+                                         1, &index_type, 1,
+                                         LOOM_LOCATION_UNKNOWN, &assume_op));
+  loom_value_id_t assumed_induction =
+      loom_index_assume_results(assume_op).values[0];
+
+  loom_value_id_t four = loom_index_constant_result(BuildIndexConstant(4));
+  loom_op_t* scaled_induction_op = nullptr;
+  IREE_ASSERT_OK(loom_index_mul_build(&builder_, assumed_induction, four,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN,
+                                      &scaled_induction_op));
+  loom_op_t* scaled_bound_op = nullptr;
+  IREE_ASSERT_OK(loom_index_mul_build(&builder_, upper_bound, four,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &scaled_bound_op));
+
+  loom_symbolic_expr_t scaled_induction = {0};
+  IREE_ASSERT_OK(loom_symbolic_expr_from_value(
+      &expression_context_, loom_index_mul_result(scaled_induction_op),
+      &scaled_induction));
+  loom_symbolic_expr_t unit_extent = {0};
+  loom_symbolic_expr_constant(4, &unit_extent);
+  loom_symbolic_expr_t exclusive_end = {0};
+  IREE_ASSERT_OK(loom_symbolic_expr_add(&expression_context_, &scaled_induction,
+                                        &unit_extent, &exclusive_end));
+  loom_symbolic_expr_t scaled_bound = {0};
+  IREE_ASSERT_OK(loom_symbolic_expr_from_value(
+      &expression_context_, loom_index_mul_result(scaled_bound_op),
+      &scaled_bound));
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_le(
+      &expression_context_, &exclusive_end, &scaled_bound, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
 TEST_F(SymbolicExprTest, AssumedRightValueRelationPredicatesAreSwapped) {
   loom_value_id_t induction = DefineIndexValue();
   loom_value_id_t upper_bound = DefineIndexValue();

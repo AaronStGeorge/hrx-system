@@ -330,6 +330,17 @@ iree_native_test(
 
 iree_native_test(
   NAME
+    "packed_q8_dequant_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_q8_dequant_dot.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
     "sync_barrier"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/sync_barrier.loom-test"

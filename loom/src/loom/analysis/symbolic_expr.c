@@ -203,8 +203,20 @@ static iree_status_t loom_symbolic_expr_make_linear(
   iree_host_size_t write_index = 0;
   for (iree_host_size_t read_index = 0; read_index < term_count;) {
     loom_value_id_t value_id = terms[read_index].value_id;
+    loom_value_id_t relation_value_id = terms[read_index].relation_value_id;
+    if (relation_value_id == LOOM_VALUE_ID_INVALID) {
+      relation_value_id = value_id;
+    }
     int64_t coefficient = 0;
     while (read_index < term_count && terms[read_index].value_id == value_id) {
+      loom_value_id_t term_relation_value_id =
+          terms[read_index].relation_value_id;
+      if (term_relation_value_id == LOOM_VALUE_ID_INVALID) {
+        term_relation_value_id = value_id;
+      }
+      if (term_relation_value_id != relation_value_id) {
+        relation_value_id = value_id;
+      }
       int64_t new_coefficient = 0;
       if (!loom_checked_add_i64(coefficient, terms[read_index].coefficient,
                                 &new_coefficient)) {
@@ -218,6 +230,7 @@ static iree_status_t loom_symbolic_expr_make_linear(
     terms[write_index++] = (loom_symbolic_term_t){
         .coefficient = coefficient,
         .value_id = value_id,
+        .relation_value_id = relation_value_id,
     };
   }
 
@@ -262,6 +275,7 @@ iree_status_t loom_symbolic_expr_value(loom_symbolic_expr_context_t* context,
   context->scratch_terms[0] = (loom_symbolic_term_t){
       .coefficient = 1,
       .value_id = representative,
+      .relation_value_id = value_id,
   };
   return loom_symbolic_expr_make_linear(context, 0, context->scratch_terms, 1,
                                         facts, out_expression);
@@ -333,6 +347,7 @@ static iree_status_t loom_symbolic_expr_add_or_sub(
     context->scratch_terms[term_ordinal++] = (loom_symbolic_term_t){
         .coefficient = coefficient,
         .value_id = right_expression->terms[i].value_id,
+        .relation_value_id = right_expression->terms[i].relation_value_id,
     };
   }
   return loom_symbolic_expr_make_linear(context, constant,
@@ -391,6 +406,7 @@ iree_status_t loom_symbolic_expr_mul_i64(loom_symbolic_expr_context_t* context,
     context->scratch_terms[i] = (loom_symbolic_term_t){
         .coefficient = coefficient,
         .value_id = expression->terms[i].value_id,
+        .relation_value_id = expression->terms[i].relation_value_id,
     };
   }
   return loom_symbolic_expr_make_linear(
@@ -480,15 +496,33 @@ static iree_status_t loom_symbolic_expr_from_select_value(
   return loom_symbolic_expr_value(context, result_value, out_expression);
 }
 
+static iree_status_t loom_symbolic_expr_attach_identity_relation_value(
+    loom_symbolic_expr_context_t* context, loom_value_id_t relation_value,
+    loom_symbolic_expr_t* expression) {
+  if (!loom_symbolic_expr_is_linear(expression) || expression->constant != 0 ||
+      expression->term_count != 1 || expression->terms[0].coefficient != 1) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_ensure_scratch_terms(context, 1));
+  context->scratch_terms[0] = expression->terms[0];
+  context->scratch_terms[0].relation_value_id = relation_value;
+  return loom_symbolic_expr_make_linear(context, expression->constant,
+                                        context->scratch_terms, 1,
+                                        expression->facts, expression);
+}
+
 static iree_status_t loom_symbolic_expr_from_assume_value(
     loom_symbolic_expr_context_t* context, const loom_value_slice_t values,
-    uint16_t result_index, loom_symbolic_expr_t* out_expression) {
+    loom_value_id_t result_value, uint16_t result_index,
+    loom_symbolic_expr_t* out_expression) {
   if (result_index >= values.count) {
     loom_symbolic_expr_unknown(loom_value_facts_unknown(), out_expression);
     return iree_ok_status();
   }
-  return loom_symbolic_expr_from_value(context, values.values[result_index],
-                                       out_expression);
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_from_value(
+      context, values.values[result_index], out_expression));
+  return loom_symbolic_expr_attach_identity_relation_value(
+      context, result_value, out_expression);
 }
 
 static iree_status_t loom_symbolic_expr_from_value_uncached(
@@ -533,7 +567,7 @@ static iree_status_t loom_symbolic_expr_from_value_uncached(
       break;
     case LOOM_OP_INDEX_ASSUME:
       status = loom_symbolic_expr_from_assume_value(
-          context, loom_index_assume_values(defining_op),
+          context, loom_index_assume_values(defining_op), value_id,
           loom_value_def_index(value), out_expression);
       break;
     case LOOM_OP_INDEX_ADD:
@@ -600,7 +634,7 @@ static iree_status_t loom_symbolic_expr_from_value_uncached(
       break;
     case LOOM_OP_SCALAR_ASSUME:
       status = loom_symbolic_expr_from_assume_value(
-          context, loom_scalar_assume_values(defining_op),
+          context, loom_scalar_assume_values(defining_op), value_id,
           loom_value_def_index(value), out_expression);
       break;
     case LOOM_OP_SCF_SELECT:
@@ -691,34 +725,63 @@ static bool loom_symbolic_expr_accumulate_checked(int64_t term_min,
   return true;
 }
 
+static loom_value_facts_t loom_symbolic_expr_intersect_integer_facts(
+    loom_value_facts_t lhs, loom_value_facts_t rhs) {
+  if (loom_value_facts_is_unknown(lhs) || loom_value_facts_is_float(lhs)) {
+    return rhs;
+  }
+  if (loom_value_facts_is_unknown(rhs) || loom_value_facts_is_float(rhs)) {
+    return lhs;
+  }
+  int64_t lower_bound = loom_max_i64(lhs.range_lo, rhs.range_lo);
+  int64_t upper_bound = loom_min_i64(lhs.range_hi, rhs.range_hi);
+  if (lower_bound > upper_bound) {
+    return loom_value_facts_unknown();
+  }
+  return loom_value_facts_make(lower_bound, upper_bound, 1);
+}
+
+static loom_value_facts_t loom_symbolic_expr_term_facts(
+    const loom_symbolic_expr_context_t* context,
+    const loom_symbolic_term_t term) {
+  loom_value_facts_t facts =
+      loom_symbolic_expr_lookup_facts(context, term.value_id);
+  if (term.relation_value_id == LOOM_VALUE_ID_INVALID ||
+      term.relation_value_id == term.value_id) {
+    return facts;
+  }
+  loom_value_facts_t relation_facts =
+      loom_symbolic_expr_lookup_facts(context, term.relation_value_id);
+  return loom_symbolic_expr_intersect_integer_facts(facts, relation_facts);
+}
+
+static void loom_symbolic_expr_mul_interval_bound(int64_t lhs, int64_t rhs,
+                                                  int64_t* out_product) {
+  if (loom_checked_mul_i64(lhs, rhs, out_product)) {
+    return;
+  }
+  *out_product = (lhs < 0) != (rhs < 0) ? INT64_MIN : INT64_MAX;
+}
+
 static bool loom_symbolic_expr_term_interval(
     const loom_symbolic_expr_context_t* context,
     const loom_symbolic_term_t term, int64_t* out_min, int64_t* out_max) {
-  loom_value_facts_t facts =
-      loom_symbolic_expr_lookup_facts(context, term.value_id);
+  loom_value_facts_t facts = loom_symbolic_expr_term_facts(context, term);
   if (loom_value_facts_is_unknown(facts) || loom_value_facts_is_float(facts)) {
     return false;
   }
   int64_t lower_product = 0;
   int64_t upper_product = 0;
   if (term.coefficient >= 0) {
-    if (!loom_checked_mul_i64(term.coefficient, facts.range_lo,
-                              &lower_product)) {
-      return false;
-    }
-    if (!loom_checked_mul_i64(term.coefficient, facts.range_hi,
-                              &upper_product)) {
-      return false;
-    }
+    loom_symbolic_expr_mul_interval_bound(term.coefficient, facts.range_lo,
+                                          &lower_product);
+    loom_symbolic_expr_mul_interval_bound(term.coefficient, facts.range_hi,
+                                          &upper_product);
   } else {
-    if (!loom_checked_mul_i64(term.coefficient, facts.range_hi,
-                              &lower_product)) {
-      return false;
-    }
-    if (!loom_checked_mul_i64(term.coefficient, facts.range_lo,
-                              &upper_product)) {
-      return false;
-    }
+    loom_symbolic_expr_mul_interval_bound(term.coefficient, facts.range_hi,
+                                          &lower_product);
+    loom_symbolic_expr_mul_interval_bound(term.coefficient, facts.range_lo,
+                                          &upper_product);
   }
   *out_min = lower_product;
   *out_max = upper_product;
@@ -766,6 +829,7 @@ static iree_status_t loom_symbolic_expr_normalize_difference_into_scratch(
     context->scratch_terms[term_ordinal++] = (loom_symbolic_term_t){
         .coefficient = -coefficient,
         .value_id = right_expression->terms[i].value_id,
+        .relation_value_id = right_expression->terms[i].relation_value_id,
     };
   }
   if (term_ordinal > 1) {
@@ -776,9 +840,22 @@ static iree_status_t loom_symbolic_expr_normalize_difference_into_scratch(
   iree_host_size_t write_index = 0;
   for (iree_host_size_t read_index = 0; read_index < term_ordinal;) {
     loom_value_id_t value_id = context->scratch_terms[read_index].value_id;
+    loom_value_id_t relation_value_id =
+        context->scratch_terms[read_index].relation_value_id;
+    if (relation_value_id == LOOM_VALUE_ID_INVALID) {
+      relation_value_id = value_id;
+    }
     int64_t coefficient = 0;
     while (read_index < term_ordinal &&
            context->scratch_terms[read_index].value_id == value_id) {
+      loom_value_id_t term_relation_value_id =
+          context->scratch_terms[read_index].relation_value_id;
+      if (term_relation_value_id == LOOM_VALUE_ID_INVALID) {
+        term_relation_value_id = value_id;
+      }
+      if (term_relation_value_id != relation_value_id) {
+        relation_value_id = value_id;
+      }
       int64_t new_coefficient = 0;
       if (!loom_checked_add_i64(coefficient,
                                 context->scratch_terms[read_index].coefficient,
@@ -792,6 +869,7 @@ static iree_status_t loom_symbolic_expr_normalize_difference_into_scratch(
     context->scratch_terms[write_index++] = (loom_symbolic_term_t){
         .coefficient = coefficient,
         .value_id = value_id,
+        .relation_value_id = relation_value_id,
     };
   }
   *out_term_count = write_index;
@@ -841,26 +919,6 @@ static iree_status_t loom_symbolic_expr_prove_le_linear(
   } else {
     *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
   }
-  return iree_ok_status();
-}
-
-iree_status_t loom_symbolic_expr_prove_le(
-    loom_symbolic_expr_context_t* context,
-    const loom_symbolic_expr_t* left_expression,
-    const loom_symbolic_expr_t* right_expression,
-    loom_symbolic_proof_result_t* out_result) {
-  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
-  if (loom_symbolic_expr_is_linear(left_expression) &&
-      loom_symbolic_expr_is_linear(right_expression)) {
-    IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_linear(
-        context, left_expression, right_expression, out_result));
-    if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) return iree_ok_status();
-  }
-  // Expanded expressions may still carry stronger facts from their defining
-  // SSA value, such as index.assume range facts on a value that algebraically
-  // expands back to its unconstrained source.
-  *out_result =
-      loom_symbolic_expr_prove_le_by_facts(left_expression, right_expression);
   return iree_ok_status();
 }
 
@@ -1279,6 +1337,132 @@ static iree_status_t loom_symbolic_expr_prove_assumed_value_relation(
   return iree_ok_status();
 }
 
+static iree_status_t loom_symbolic_expr_prove_direct_value_relation(
+    loom_symbolic_expr_context_t* context,
+    loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
+    loom_value_id_t right_value, loom_symbolic_proof_result_t* out_result) {
+  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  bool assumed_relation_matched = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_assumed_value_relation(
+      context, relation, left_value, right_value, &assumed_relation_matched,
+      out_result));
+  if (assumed_relation_matched) return iree_ok_status();
+
+  bool kernel_relation_matched = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_kernel_coordinate_proves_relation(
+      context, relation, left_value, right_value, &kernel_relation_matched,
+      out_result));
+  return iree_ok_status();
+}
+
+static bool loom_symbolic_expr_scaled_pair_terms(
+    const loom_symbolic_term_t* terms, iree_host_size_t term_count,
+    int64_t* out_scale, loom_value_id_t* out_positive_relation_value,
+    loom_value_id_t* out_negative_relation_value) {
+  if (term_count != 2) return false;
+  const loom_symbolic_term_t* positive_term = NULL;
+  const loom_symbolic_term_t* negative_term = NULL;
+  if (terms[0].coefficient > 0 && terms[1].coefficient < 0) {
+    positive_term = &terms[0];
+    negative_term = &terms[1];
+  } else if (terms[1].coefficient > 0 && terms[0].coefficient < 0) {
+    positive_term = &terms[1];
+    negative_term = &terms[0];
+  } else {
+    return false;
+  }
+  if (negative_term->coefficient == INT64_MIN ||
+      positive_term->coefficient != -negative_term->coefficient) {
+    return false;
+  }
+  *out_scale = positive_term->coefficient;
+  *out_positive_relation_value = positive_term->relation_value_id;
+  if (*out_positive_relation_value == LOOM_VALUE_ID_INVALID) {
+    *out_positive_relation_value = positive_term->value_id;
+  }
+  *out_negative_relation_value = negative_term->relation_value_id;
+  if (*out_negative_relation_value == LOOM_VALUE_ID_INVALID) {
+    *out_negative_relation_value = negative_term->value_id;
+  }
+  return true;
+}
+
+static iree_status_t loom_symbolic_expr_prove_le_by_scaled_relation(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_expr_t* left_expression,
+    const loom_symbolic_expr_t* right_expression,
+    loom_symbolic_proof_result_t* out_result) {
+  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  int64_t constant = 0;
+  iree_host_size_t term_count = 0;
+  bool linear = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
+      context, left_expression, right_expression, &constant, &term_count,
+      &linear));
+  if (!linear) return iree_ok_status();
+
+  int64_t scale = 0;
+  loom_value_id_t positive_relation_value = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t negative_relation_value = LOOM_VALUE_ID_INVALID;
+  if (!loom_symbolic_expr_scaled_pair_terms(context->scratch_terms, term_count,
+                                            &scale, &positive_relation_value,
+                                            &negative_relation_value)) {
+    return iree_ok_status();
+  }
+
+  loom_symbolic_proof_result_t strict_relation = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_direct_value_relation(
+      context, LOOM_SYMBOLIC_INTEGER_RELATION_LT, positive_relation_value,
+      negative_relation_value, &strict_relation));
+  if (strict_relation == LOOM_SYMBOLIC_PROOF_TRUE && constant <= scale) {
+    *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+    return iree_ok_status();
+  }
+  if (strict_relation == LOOM_SYMBOLIC_PROOF_FALSE && constant > 0) {
+    *out_result = LOOM_SYMBOLIC_PROOF_FALSE;
+    return iree_ok_status();
+  }
+
+  loom_symbolic_proof_result_t nonstrict_relation = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_direct_value_relation(
+      context, LOOM_SYMBOLIC_INTEGER_RELATION_LE, positive_relation_value,
+      negative_relation_value, &nonstrict_relation));
+  if (nonstrict_relation == LOOM_SYMBOLIC_PROOF_TRUE && constant <= 0) {
+    *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+    return iree_ok_status();
+  }
+  int64_t false_lower_bound = 0;
+  if (nonstrict_relation == LOOM_SYMBOLIC_PROOF_FALSE &&
+      loom_checked_add_i64(scale, constant, &false_lower_bound) &&
+      false_lower_bound > 0) {
+    *out_result = LOOM_SYMBOLIC_PROOF_FALSE;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_symbolic_expr_prove_le(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_expr_t* left_expression,
+    const loom_symbolic_expr_t* right_expression,
+    loom_symbolic_proof_result_t* out_result) {
+  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  if (loom_symbolic_expr_is_linear(left_expression) &&
+      loom_symbolic_expr_is_linear(right_expression)) {
+    IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_linear(
+        context, left_expression, right_expression, out_result));
+    if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) return iree_ok_status();
+    IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_by_scaled_relation(
+        context, left_expression, right_expression, out_result));
+    if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) return iree_ok_status();
+  }
+  // Expanded expressions may still carry stronger facts from their defining
+  // SSA value, such as index.assume range facts on a value that algebraically
+  // expands back to its unconstrained source.
+  *out_result =
+      loom_symbolic_expr_prove_le_by_facts(left_expression, right_expression);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_symbolic_expr_prove_equal(
     loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_t* left_expression,
@@ -1324,21 +1508,9 @@ iree_status_t loom_symbolic_expr_prove_value_relation(
     loom_symbolic_expr_context_t* context,
     loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
     loom_value_id_t right_value, loom_symbolic_proof_result_t* out_result) {
-  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
-  bool assumed_relation_matched = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_assumed_value_relation(
-      context, relation, left_value, right_value, &assumed_relation_matched,
-      out_result));
-  if (assumed_relation_matched) {
-    return iree_ok_status();
-  }
-  bool kernel_relation_matched = false;
-  IREE_RETURN_IF_ERROR(loom_symbolic_expr_kernel_coordinate_proves_relation(
-      context, relation, left_value, right_value, &kernel_relation_matched,
-      out_result));
-  if (kernel_relation_matched) {
-    return iree_ok_status();
-  }
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_direct_value_relation(
+      context, relation, left_value, right_value, out_result));
+  if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) return iree_ok_status();
 
   loom_symbolic_expr_t left_expression = {0};
   IREE_RETURN_IF_ERROR(
