@@ -127,8 +127,15 @@ loom-compile linked.loombc \
 `--target=gfx1100` is not a source rewrite. It selects the compiler target
 context for this invocation, materializes the matching target record when
 needed, selects target-applicable providers, lowers targetless roots with that
-effective target, and emits the requested artifacts. The same selection travels
-through the loomc C API as compile target-selection options.
+effective target, and emits the requested artifacts.
+
+The loomc C API uses the same model with `loomc_target_selection_options_t`.
+When an embedder splits linking and compilation into separate calls, pass the
+target-selection option on both `loomc_link_options_t.next` and
+`loomc_compile_options_t.next`. The link phase then materializes the
+module-local target record and keeps the provider candidates needed by the
+selected target context, while the compile phase uses the same selection for
+template selection, pass predicates, lowering, reporting, and emission.
 
 The artifact manifest is the sidecar a packager or benchmark database should
 keep with `scale_i32.hsaco`. The compile report is the per-invocation feedback
