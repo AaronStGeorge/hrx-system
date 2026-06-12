@@ -10,12 +10,11 @@
 
 #include "loom/codegen/low/builder.h"
 #include "loom/ir/module.h"
-#include "loom/ops/cache.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/lower/control_packet.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
+#include "loom/target/arch/amdgpu/lower/system_memory.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
-#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/registers.h"
 
 static loom_amdgpu_signal_values_t loom_amdgpu_signal_values_empty(void) {
@@ -43,32 +42,6 @@ static iree_status_t loom_amdgpu_signal_build_offset_attr(
     loom_named_attr_t* out_attr) {
   return loom_amdgpu_signal_build_u32_attr(builder, IREE_SV("offset"),
                                            byte_offset, out_attr);
-}
-
-static iree_status_t loom_amdgpu_signal_build_explicit_packet(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref, loom_named_attr_slice_t attrs,
-    loom_location_id_t location) {
-  const loom_low_descriptor_t* descriptor = NULL;
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
-      builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
-  loom_op_t* op = NULL;
-  return loom_low_build_resolved_descriptor_op(
-      builder, descriptor_set, descriptor, opcode_id, /*operands=*/NULL,
-      /*operand_count=*/0, attrs, /*result_types=*/NULL, /*result_count=*/0,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, location, &op);
-}
-
-static loom_amdgpu_vector_memory_cache_policy_encoding_t
-loom_amdgpu_signal_vector_cache_encoding(
-    const loom_low_descriptor_set_t* descriptor_set) {
-  const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
-      loom_amdgpu_target_info_descriptor_set_at(
-          descriptor_set->descriptor_set_ordinal);
-  return descriptor_set_info == NULL
-             ? LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
-             : descriptor_set_info->vector_memory_cache_policy_encoding;
 }
 
 static bool loom_amdgpu_signal_type_is_register_class(
@@ -392,50 +365,6 @@ static iree_status_t loom_amdgpu_signal_append_optional_m0_operand(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_signal_build_release_ordering(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
-    loom_location_id_t location) {
-  switch (encoding) {
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC: {
-      loom_named_attr_t waitcnt_attrs[2] = {0};
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-          builder, IREE_SV("vmcnt"), 0, &waitcnt_attrs[0]));
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-          builder, IREE_SV("lgkmcnt"), 15, &waitcnt_attrs[1]));
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_explicit_packet(
-          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT,
-          loom_make_named_attr_slice(waitcnt_attrs,
-                                     IREE_ARRAYSIZE(waitcnt_attrs)),
-          location));
-
-      loom_named_attr_t vscnt_attr = {0};
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-          builder, IREE_SV("vscnt"), 0, &vscnt_attr));
-      return loom_amdgpu_signal_build_explicit_packet(
-          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT_VSCNT,
-          loom_make_named_attr_slice(&vscnt_attr, 1), location);
-    }
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
-      return loom_amdgpu_signal_build_explicit_packet(
-          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2,
-          loom_make_named_attr_slice(NULL, 0), location);
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH: {
-      loom_named_attr_t scope_attr = {0};
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-          builder, IREE_SV("scope"), LOOM_CACHE_SCOPE_SYSTEM, &scope_attr));
-      return loom_amdgpu_signal_build_explicit_packet(
-          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_WB,
-          loom_make_named_attr_slice(&scope_attr, 1), location);
-    }
-    default:
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU signal release operation is not supported by the descriptor "
-          "set");
-  }
-}
-
 static iree_status_t loom_amdgpu_signal_build_scalar_load(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t base_address,
@@ -460,45 +389,9 @@ static iree_status_t loom_amdgpu_signal_build_scalar_load(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_signal_build_release_store_attrs(
-    loom_builder_t* builder,
-    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
-    loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
-    iree_host_size_t* inout_attr_count) {
-  switch (encoding) {
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
-      if (*inout_attr_count + 2 > attr_capacity) {
-        return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                                "AMDGPU signal store attr capacity exceeded");
-      }
-      loom_named_attr_t sc0_attr = {0};
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-          builder, IREE_SV("sc0"), 1, &sc0_attr));
-      attrs[(*inout_attr_count)++] = sc0_attr;
-      loom_named_attr_t sc1_attr = {0};
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-          builder, IREE_SV("sc1"), 1, &sc1_attr));
-      attrs[(*inout_attr_count)++] = sc1_attr;
-      return iree_ok_status();
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH:
-      if (*inout_attr_count + 1 > attr_capacity) {
-        return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                                "AMDGPU signal store attr capacity exceeded");
-      }
-      loom_named_attr_t scope_attr = {0};
-      IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-          builder, IREE_SV("scope"), LOOM_CACHE_SCOPE_SYSTEM, &scope_attr));
-      attrs[(*inout_attr_count)++] = scope_attr;
-      return iree_ok_status();
-    default:
-      return iree_ok_status();
-  }
-}
-
 static iree_status_t loom_amdgpu_signal_build_global_store_b64(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t zero_vaddr, loom_value_id_t saddr, loom_value_id_t value,
-    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
     loom_location_id_t location) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_require_register_class(
       builder, descriptor_set, zero_vaddr, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1));
@@ -518,8 +411,8 @@ static iree_status_t loom_amdgpu_signal_build_global_store_b64(
   iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_signal_build_offset_attr(builder, 0, &attrs[attr_count++]));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_release_store_attrs(
-      builder, encoding, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_append_release_store_attrs(
+      builder, descriptor_set, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
 
   loom_value_id_t operands[4] = {zero_vaddr, value, saddr,
                                  LOOM_VALUE_ID_INVALID};
@@ -536,8 +429,7 @@ static iree_status_t loom_amdgpu_signal_build_global_store_b64(
 }
 
 static iree_status_t loom_amdgpu_signal_build_atomic_attrs(
-    loom_builder_t* builder,
-    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
     iree_host_size_t* out_attr_count) {
   *out_attr_count = 0;
@@ -545,19 +437,8 @@ static iree_status_t loom_amdgpu_signal_build_atomic_attrs(
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_offset_attr(
       builder, LOOM_AMDGPU_SIGNAL_VALUE_OFFSET, &offset_attr));
   attrs[(*out_attr_count)++] = offset_attr;
-  if (encoding !=
-      LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH) {
-    return iree_ok_status();
-  }
-  if (*out_attr_count >= attr_capacity) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "AMDGPU signal atomic attr capacity exceeded");
-  }
-  loom_named_attr_t scope_attr = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_u32_attr(
-      builder, IREE_SV("scope"), LOOM_CACHE_SCOPE_SYSTEM, &scope_attr));
-  attrs[(*out_attr_count)++] = scope_attr;
-  return iree_ok_status();
+  return loom_amdgpu_system_memory_append_no_return_atomic_attrs(
+      builder, descriptor_set, attrs, attr_capacity, out_attr_count);
 }
 
 static iree_status_t loom_amdgpu_signal_build_m0_from_sgpr(
@@ -625,10 +506,8 @@ iree_status_t loom_amdgpu_build_signal_add_one_release(
       builder, descriptor_set, signal_address, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
       2));
 
-  const loom_amdgpu_vector_memory_cache_policy_encoding_t encoding =
-      loom_amdgpu_signal_vector_cache_encoding(descriptor_set);
-  IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_release_ordering(
-      builder, descriptor_set, encoding, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_release_ordering(
+      builder, descriptor_set, location));
 
   loom_value_id_t zero_vaddr = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_vgpr_u32_const(
@@ -646,7 +525,7 @@ iree_status_t loom_amdgpu_build_signal_add_one_release(
   loom_named_attr_t attrs[2] = {0};
   iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_atomic_attrs(
-      builder, encoding, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
+      builder, descriptor_set, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
   loom_value_id_t operands[4] = {zero_vaddr, one64, signal_address,
                                  LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 3;
@@ -718,19 +597,17 @@ iree_status_t loom_amdgpu_build_signal_poke_mailbox(
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_require_register_class(
       builder, descriptor_set, event_id, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1));
 
-  const loom_amdgpu_vector_memory_cache_policy_encoding_t encoding =
-      loom_amdgpu_signal_vector_cache_encoding(descriptor_set);
   loom_value_id_t zero_vaddr = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_vgpr_u32_const(
       builder, descriptor_set, 0, location, &zero_vaddr));
   loom_value_id_t event_id64 = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_vgpr_u64_zero_extend(
       builder, descriptor_set, event_id, location, &event_id64));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_release_ordering(
-      builder, descriptor_set, encoding, location));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_release_ordering(
+      builder, descriptor_set, location));
   IREE_RETURN_IF_ERROR(loom_amdgpu_signal_build_global_store_b64(
       builder, descriptor_set, zero_vaddr, event_mailbox_ptr, event_id64,
-      encoding, location));
+      location));
 
   loom_value_id_t message_id = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_signal_mailbox_message_id(

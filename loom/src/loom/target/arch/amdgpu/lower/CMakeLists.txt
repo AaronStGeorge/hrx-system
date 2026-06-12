@@ -119,6 +119,7 @@ loom_cc_library(
     "structural.h"
     "subgroup.h"
     "sync.h"
+    "system_memory.h"
     "table.h"
     "topology.h"
     "types.h"
@@ -168,6 +169,7 @@ loom_cc_library(
     "subgroup_shuffle.c"
     "support.c"
     "sync.c"
+    "system_memory.c"
     "table.c"
     "values.c"
   DEPS
@@ -280,6 +282,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ir
+    loom::ops::cache
     loom::ops::low
     loom::ops::op_defs
     loom::target::arch::amdgpu::descriptors::low_registry
@@ -304,12 +307,35 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     loom::ir
+    loom::ops::cache
     loom::ops::low
     loom::ops::op_defs
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::signal_abi
     loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    system_memory_test
+  SRCS
+    "system_memory_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::cache
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )

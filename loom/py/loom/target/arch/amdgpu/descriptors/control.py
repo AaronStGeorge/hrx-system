@@ -436,6 +436,7 @@ def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_inv",
             encoding_name="ENC_MUBUF",
             semantic_tag="memory.cache.invalidate.buffer",
+            cache_fields=(("SC0", 1), ("SC1", 1)),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.buffer_wbl2",
@@ -443,6 +444,7 @@ def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_wbl2",
             encoding_name="ENC_MUBUF",
             semantic_tag="memory.cache.writeback.buffer.l2",
+            cache_fields=(("SC0", 1), ("SC1", 1)),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.s_dcache_inv",

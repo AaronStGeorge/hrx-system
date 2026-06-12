@@ -16,6 +16,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cache.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
@@ -26,7 +27,7 @@
 
 namespace {
 
-constexpr int64_t kSystemCacheScope = 3;
+constexpr int64_t kSystemCacheScope = LOOM_CACHE_SCOPE_SYSTEM;
 
 std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
@@ -355,13 +356,17 @@ TEST_F(AmdgpuSignalTest, AddsOneWithCdnaM0AndWriteback) {
   std::vector<loom_op_t*> writeback_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2);
   ASSERT_EQ(writeback_ops.size(), 1u);
-  EXPECT_EQ(loom_low_op_attrs(writeback_ops[0]).count, 0u);
+  ASSERT_EQ(loom_low_op_attrs(writeback_ops[0]).count, 2u);
+  ExpectAttrI64(loom_low_op_attrs(writeback_ops[0]), IREE_SV("sc0"), 1);
+  ExpectAttrI64(loom_low_op_attrs(writeback_ops[0]), IREE_SV("sc1"), 1);
 
   std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
   ASSERT_EQ(atomic_ops.size(), 1u);
   ExpectSignalAddAtomic(atomic_ops[0], signal_address);
   EXPECT_EQ(loom_low_op_operands(atomic_ops[0]).count, 4u);
+  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 2u);
+  ExpectAttrI64(loom_low_op_attrs(atomic_ops[0]), IREE_SV("sc1"), 1);
 }
 
 TEST_F(AmdgpuSignalTest, AddsOneWithGfx12SystemScope) {
@@ -375,6 +380,10 @@ TEST_F(AmdgpuSignalTest, AddsOneWithGfx12SystemScope) {
   ASSERT_EQ(writeback_ops.size(), 1u);
   ExpectAttrI64(loom_low_op_attrs(writeback_ops[0]), IREE_SV("scope"),
                 kSystemCacheScope);
+  std::vector<loom_op_t*> storecnt_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAIT_STORECNT);
+  ASSERT_EQ(storecnt_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(storecnt_ops[0]), IREE_SV("storecnt"), 0);
 
   std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
@@ -458,6 +467,9 @@ TEST_F(AmdgpuSignalTest, PokesMailboxWithCdnaM0Store) {
   std::vector<loom_op_t*> writeback_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2);
   ASSERT_EQ(writeback_ops.size(), 1u);
+  ASSERT_EQ(loom_low_op_attrs(writeback_ops[0]).count, 2u);
+  ExpectAttrI64(loom_low_op_attrs(writeback_ops[0]), IREE_SV("sc0"), 1);
+  ExpectAttrI64(loom_low_op_attrs(writeback_ops[0]), IREE_SV("sc1"), 1);
   std::vector<loom_op_t*> store_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
   ASSERT_EQ(store_ops.size(), 1u);
@@ -483,6 +495,10 @@ TEST_F(AmdgpuSignalTest, PokesMailboxWithGfx12SystemScope) {
   ASSERT_EQ(writeback_ops.size(), 1u);
   ExpectAttrI64(loom_low_op_attrs(writeback_ops[0]), IREE_SV("scope"),
                 kSystemCacheScope);
+  std::vector<loom_op_t*> storecnt_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAIT_STORECNT);
+  ASSERT_EQ(storecnt_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(storecnt_ops[0]), IREE_SV("storecnt"), 0);
   std::vector<loom_op_t*> store_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
   ASSERT_EQ(store_ops.size(), 1u);

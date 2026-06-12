@@ -854,6 +854,21 @@ def test_gfx12_global_cache_controls_expose_scope_immediate() -> None:
             assert _immediate_default(descriptor.immediates, "scope") == 0
 
 
+def test_cdna_scoped_cache_controls_expose_sc_immediates() -> None:
+    for overlays in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        for descriptor_key in (
+            "amdgpu.buffer_inv",
+            "amdgpu.buffer_wbl2",
+        ):
+            descriptor = next(
+                overlay
+                for overlay in overlays
+                if overlay.descriptor_key == descriptor_key
+            )
+            assert _immediate_default(descriptor.immediates, "sc0") == 0
+            assert _immediate_default(descriptor.immediates, "sc1") == 0
+
+
 def test_vop3_shift_immediate_is_constrained_to_inline_source_selector() -> None:
     descriptor = next(
         overlay

@@ -136,6 +136,30 @@ iree_status_t loom_amdgpu_build_feedback_reservation_head_load(
     loom_value_id_t channel_base, loom_location_id_t location,
     loom_value_id_t* out_value);
 
+// Emits target-low IR that loads channel->read_tail with acquire semantics.
+//
+// |channel_base| must be an SGPRx2 pointer to the device-visible feedback
+// channel header. The host drain release-stores this cursor after consuming
+// ready packets; device producers use the acquire load when checking capacity
+// so subsequent decisions observe the host-published tail.
+iree_status_t loom_amdgpu_build_feedback_read_tail_acquire_load(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_location_id_t location,
+    loom_value_id_t* out_value);
+
+// Emits target-low IR that acq-rel compare-exchanges channel->reservation_head.
+//
+// |channel_base| must be an SGPRx2 pointer to the device-visible feedback
+// channel header. |expected_head| and |desired_head| must be 64-bit low
+// register values. The returned |out_old_head| is the value observed by the
+// atomic; a caller reserves storage only when it equals |expected_head|.
+iree_status_t
+loom_amdgpu_build_feedback_reservation_head_compare_exchange_acq_rel(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_value_id_t expected_head,
+    loom_value_id_t desired_head, loom_location_id_t location,
+    loom_value_id_t* out_old_head);
+
 // Emits target-low IR that initializes a reserved feedback packet header.
 //
 // |packet_address| must reference packet storage returned by reservation.
