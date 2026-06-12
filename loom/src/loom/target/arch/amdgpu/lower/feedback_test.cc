@@ -117,6 +117,23 @@ class AmdgpuFeedbackTest : public ::testing::Test {
                                                  descriptor_ordinal);
   }
 
+  iree_host_size_t PacketOperandCountForRef(
+      loom_amdgpu_descriptor_ref_t descriptor_ref) const {
+    const loom_low_descriptor_t* descriptor = DescriptorForRef(descriptor_ref);
+    EXPECT_NE(descriptor, nullptr);
+    if (descriptor == nullptr) {
+      return 0;
+    }
+    EXPECT_LT(descriptor->canonical_asm_form_ordinal,
+              descriptor_set_->asm_form_count);
+    if (descriptor->canonical_asm_form_ordinal >=
+        descriptor_set_->asm_form_count) {
+      return 0;
+    }
+    return descriptor_set_->asm_forms[descriptor->canonical_asm_form_ordinal]
+        .operand_index_count;
+  }
+
   void ExpectLowOpDescriptorRef(
       const loom_op_t* op, loom_amdgpu_descriptor_ref_t descriptor_ref) const {
     ASSERT_TRUE(loom_low_op_isa(op));
@@ -243,8 +260,15 @@ class AmdgpuFeedbackTest : public ::testing::Test {
                      uint32_t expected_value_unit_count) const {
     ExpectLowOpDescriptorRef(op, descriptor_ref);
     loom_value_slice_t operands = loom_low_op_operands(op);
-    ASSERT_EQ(operands.count, 3u);
+    ASSERT_EQ(operands.count, PacketOperandCountForRef(descriptor_ref));
     EXPECT_EQ(operands.values[2], expected_packet_base);
+    if (operands.count == 4) {
+      const loom_value_t* m0_value =
+          loom_module_value(module_, operands.values[3]);
+      ASSERT_FALSE(loom_value_is_block_arg(m0_value));
+      ExpectLowConstDescriptorRef(loom_value_def_op(m0_value),
+                                  LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM);
+    }
     loom_type_t expected_vaddr_type = loom_low_register_type(
         descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
     EXPECT_TRUE(

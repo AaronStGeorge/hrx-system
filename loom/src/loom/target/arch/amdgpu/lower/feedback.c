@@ -138,6 +138,89 @@ static iree_status_t loom_amdgpu_feedback_build_const_u32(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_feedback_descriptor_operand_type(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index,
+    loom_type_t* out_type) {
+  *out_type = loom_type_none();
+  if (descriptor_operand_index >= descriptor->operand_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU feedback descriptor operand index is out of range");
+  }
+  const uint32_t operand_index =
+      (uint32_t)descriptor->operand_start + descriptor_operand_index;
+  if (operand_index >= descriptor_set->operand_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU feedback descriptor operand row is out of range");
+  }
+  const loom_low_operand_t* operand = &descriptor_set->operands[operand_index];
+  for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
+    const uint32_t alt_index = operand->reg_class_alt_start + i;
+    if (alt_index >= descriptor_set->reg_class_alt_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU feedback descriptor operand register-class alternative is "
+          "out of range");
+    }
+    const loom_low_reg_class_alt_t* alt =
+        &descriptor_set->reg_class_alts[alt_index];
+    if (iree_any_bit_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE)) {
+      continue;
+    }
+    return loom_low_build_register_type(descriptor_set, alt->reg_class_id,
+                                        operand->unit_count, out_type);
+  }
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "AMDGPU feedback descriptor operand has no register alternative");
+}
+
+static iree_status_t loom_amdgpu_feedback_asm_operand_type(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t asm_operand_index,
+    loom_type_t* out_type) {
+  *out_type = loom_type_none();
+  if (descriptor->canonical_asm_form_ordinal >=
+      descriptor_set->asm_form_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU feedback descriptor has no canonical asm form");
+  }
+  const loom_low_asm_form_t* asm_form =
+      &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
+  if (asm_operand_index >= asm_form->operand_index_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU feedback asm operand index is out of "
+                            "range");
+  }
+  const uint32_t operand_index =
+      (uint32_t)asm_form->operand_index_start + asm_operand_index;
+  if (operand_index >= descriptor_set->asm_operand_index_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU feedback asm operand row is out of range");
+  }
+  return loom_amdgpu_feedback_descriptor_operand_type(
+      descriptor_set, descriptor,
+      descriptor_set->asm_operand_indices[operand_index], out_type);
+}
+
+static iree_status_t loom_amdgpu_feedback_build_m0_const_u32(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* consumer_descriptor,
+    uint16_t consumer_asm_operand_index, uint32_t value,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  *out_value = LOOM_VALUE_ID_INVALID;
+  loom_type_t m0_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_asm_operand_type(
+      descriptor_set, consumer_descriptor, consumer_asm_operand_index,
+      &m0_type));
+  return loom_amdgpu_feedback_build_const_u32(
+      builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM,
+      value, m0_type, location, out_value);
+}
+
 static iree_status_t loom_amdgpu_feedback_build_vgpr_u32_const(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     uint32_t value, loom_location_id_t location, loom_value_id_t* out_value) {
@@ -275,6 +358,21 @@ static iree_status_t loom_amdgpu_feedback_build_global_store(
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
+  if (descriptor->canonical_asm_form_ordinal >=
+      descriptor_set->asm_form_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU feedback global store descriptor has no canonical asm form");
+  }
+  const loom_low_asm_form_t* asm_form =
+      &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
+  if (asm_form->operand_index_count != 3 &&
+      asm_form->operand_index_count != 4) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU feedback global store descriptor has an unsupported packet "
+        "operand count");
+  }
   loom_named_attr_t attrs[3] = {0};
   iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_offset_attr(
@@ -287,11 +385,19 @@ static iree_status_t loom_amdgpu_feedback_build_global_store(
   for (iree_host_size_t i = 0; i < extra_attr_count; ++i) {
     attrs[attr_count++] = extra_attrs[i];
   }
-  loom_value_id_t operands[] = {zero_vaddr, vgpr_value, packet_base};
+  loom_value_id_t operands[4] = {zero_vaddr, vgpr_value, packet_base,
+                                 LOOM_VALUE_ID_INVALID};
+  iree_host_size_t operand_count = 3;
+  if (asm_form->operand_index_count == 4) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_m0_const_u32(
+        builder, descriptor_set, descriptor,
+        /*consumer_asm_operand_index=*/3, 0, location,
+        &operands[operand_count++]));
+  }
   loom_op_t* store_op = NULL;
   return loom_low_build_resolved_descriptor_op(
-      builder, descriptor_set, descriptor, opcode_id, operands,
-      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
+      builder, descriptor_set, descriptor, opcode_id, operands, operand_count,
+      loom_make_named_attr_slice(attrs, attr_count),
       /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
       /*tied_result_count=*/0, location, &store_op);
 }
