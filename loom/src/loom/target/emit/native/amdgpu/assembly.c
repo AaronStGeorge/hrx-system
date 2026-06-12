@@ -1211,6 +1211,17 @@ static bool loom_amdgpu_descriptor_uses_data_share_format(
   }
 }
 
+static bool loom_amdgpu_descriptor_uses_buffer_format(
+    const loom_low_descriptor_t* descriptor) {
+  switch (descriptor->encoding_format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_host_size_t loom_amdgpu_explicit_packet_operand_count(
     const loom_native_assembly_packet_context_t* context) {
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
@@ -1442,6 +1453,223 @@ static iree_status_t loom_amdgpu_append_waitcnt_packet(
   return iree_string_builder_append_format(
       context->builder, " vmcnt(%" PRId64 ") lgkmcnt(%" PRId64 ")", vmcnt,
       lgkmcnt);
+}
+
+typedef enum loom_amdgpu_descriptor_packet_route_flag_bits_e {
+  // Descriptor has a read effect.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT = 1u << 0,
+  // Descriptor has a write effect.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT = 1u << 1,
+  // Descriptor has a counter effect.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_COUNTER_EFFECT = 1u << 2,
+  // Descriptor reads global memory and writes LDS.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_TO_LDS = 1u << 3,
+  // Descriptor uses MUBUF or VBUFFER encoding.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT = 1u << 4,
+  // Descriptor uses a global flat/vector-global encoding.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT = 1u << 5,
+  // Descriptor uses a flat scratch/vector-scratch encoding.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT = 1u << 6,
+  // Descriptor uses DS or VDS encoding.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_DATA_SHARE_FORMAT = 1u << 7,
+  // Descriptor has exactly the two immediates used by s_waitcnt.
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_TWO_IMMEDIATES = 1u << 8,
+} loom_amdgpu_descriptor_packet_route_flag_bits_t;
+typedef uint32_t loom_amdgpu_descriptor_packet_route_flags_t;
+
+typedef iree_status_t (*loom_amdgpu_append_descriptor_packet_fn_t)(
+    const loom_native_assembly_packet_context_t* context);
+
+typedef struct loom_amdgpu_descriptor_packet_route_t {
+  // Fact bits required for this route to match.
+  loom_amdgpu_descriptor_packet_route_flags_t required_flags;
+  // Fact bits that prevent this route from matching.
+  loom_amdgpu_descriptor_packet_route_flags_t forbidden_flags;
+  // Assembly appender used when the route matches.
+  loom_amdgpu_append_descriptor_packet_fn_t append;
+} loom_amdgpu_descriptor_packet_route_t;
+
+static bool loom_amdgpu_descriptor_packet_route_matches(
+    const loom_amdgpu_descriptor_packet_route_t* route,
+    loom_amdgpu_descriptor_packet_route_flags_t flags) {
+  return iree_all_bits_set(flags, route->required_flags) &&
+         !iree_any_bit_set(flags, route->forbidden_flags);
+}
+
+static iree_status_t loom_amdgpu_read_descriptor_packet_route_flags(
+    const loom_native_assembly_packet_context_t* context,
+    loom_amdgpu_descriptor_packet_route_flags_t* out_flags) {
+  *out_flags = 0;
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+
+  bool has_read_effect = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
+      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_READ, &has_read_effect));
+  if (has_read_effect) {
+    *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT;
+  }
+  bool has_write_effect = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
+      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_WRITE,
+      &has_write_effect));
+  if (has_write_effect) {
+    *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT;
+  }
+  bool has_counter_effect = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
+      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_COUNTER,
+      &has_counter_effect));
+  if (has_counter_effect) {
+    *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_COUNTER_EFFECT;
+  }
+  if (has_read_effect && has_write_effect) {
+    bool is_global_to_lds = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_is_global_to_lds(
+        descriptor_set, descriptor, &is_global_to_lds));
+    if (is_global_to_lds) {
+      *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_TO_LDS;
+    }
+  }
+  if (loom_amdgpu_descriptor_uses_buffer_format(descriptor)) {
+    *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT;
+  }
+  if (loom_amdgpu_descriptor_uses_global_pointer_format(descriptor)) {
+    *out_flags |=
+        LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT;
+  }
+  if (loom_amdgpu_descriptor_uses_scratch_format(descriptor)) {
+    *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT;
+  }
+  if (loom_amdgpu_descriptor_uses_data_share_format(descriptor)) {
+    *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_DATA_SHARE_FORMAT;
+  }
+  if (descriptor->immediate_count == 2) {
+    *out_flags |= LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_TWO_IMMEDIATES;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
+    const loom_native_assembly_packet_context_t* context,
+    loom_amdgpu_descriptor_packet_route_flags_t flags, bool* out_matched) {
+  static const loom_amdgpu_descriptor_packet_route_t kRoutes[] = {
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_TO_LDS |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
+          .append = loom_amdgpu_append_global_load_lds_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_TO_LDS |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
+          .append = loom_amdgpu_append_mubuf_load_lds_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
+          .append = loom_amdgpu_append_buffer_atomic_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
+          .append = loom_amdgpu_append_memory_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_DATA_SHARE_FORMAT,
+          .append = loom_amdgpu_append_memory_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
+          .append = loom_amdgpu_append_mubuf_load_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
+          .append = loom_amdgpu_append_mubuf_store_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
+          .append = loom_amdgpu_append_scratch_load_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
+          .append = loom_amdgpu_append_scratch_store_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
+          .append = loom_amdgpu_append_global_load_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
+          .append = loom_amdgpu_append_global_store_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_DATA_SHARE_FORMAT,
+          .append = loom_amdgpu_append_memory_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
+          .append = loom_amdgpu_append_memory_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
+          .forbidden_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
+          .append = loom_amdgpu_append_memory_packet,
+      },
+  };
+  *out_matched = false;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kRoutes); ++i) {
+    const loom_amdgpu_descriptor_packet_route_t* route = &kRoutes[i];
+    if (!loom_amdgpu_descriptor_packet_route_matches(route, flags)) {
+      continue;
+    }
+    *out_matched = true;
+    return route->append(context);
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_append_materialized_wait_packet(
@@ -2590,60 +2818,25 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
       return iree_ok_status();
     }
   }
-  bool has_read_effect = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
-      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_READ, &has_read_effect));
-  bool has_write_effect = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
-      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_WRITE,
-      &has_write_effect));
-  if (has_read_effect && has_write_effect) {
-    bool is_global_to_lds = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_is_global_to_lds(
-        descriptor_set, descriptor, &is_global_to_lds));
-    if (is_global_to_lds &&
-        loom_amdgpu_descriptor_uses_global_pointer_format(descriptor)) {
-      return loom_amdgpu_append_global_load_lds_packet(context);
-    }
-    if (is_global_to_lds &&
-        (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_MUBUF ||
-         descriptor->encoding_format_id ==
-             LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER)) {
-      return loom_amdgpu_append_mubuf_load_lds_packet(context);
-    }
-    if (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_MUBUF ||
-        descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER) {
-      return loom_amdgpu_append_buffer_atomic_packet(context);
-    }
-    if (loom_amdgpu_descriptor_uses_global_pointer_format(descriptor) ||
-        loom_amdgpu_descriptor_uses_data_share_format(descriptor)) {
-      return loom_amdgpu_append_memory_packet(context);
-    }
+
+  loom_amdgpu_descriptor_packet_route_flags_t route_flags = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_read_descriptor_packet_route_flags(context, &route_flags));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_try_append_descriptor_packet_route(
+      context, route_flags, &matched));
+  if (matched) {
+    return iree_ok_status();
+  }
+  if (iree_all_bits_set(
+          route_flags,
+          LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT)) {
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU assembly descriptor '%.*s' has both read and write effects",
         (int)key.size, key.data);
-  }
-  if (has_read_effect || has_write_effect) {
-    if (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_MUBUF ||
-        descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER) {
-      return has_read_effect ? loom_amdgpu_append_mubuf_load_packet(context)
-                             : loom_amdgpu_append_mubuf_store_packet(context);
-    }
-    if (loom_amdgpu_descriptor_uses_scratch_format(descriptor)) {
-      return has_read_effect ? loom_amdgpu_append_scratch_load_packet(context)
-                             : loom_amdgpu_append_scratch_store_packet(context);
-    }
-    if (loom_amdgpu_descriptor_uses_global_pointer_format(descriptor)) {
-      return has_read_effect ? loom_amdgpu_append_global_load_packet(context)
-                             : loom_amdgpu_append_global_store_packet(context);
-    }
-    return loom_amdgpu_append_memory_packet(context);
-  }
-  if (loom_amdgpu_descriptor_uses_data_share_format(descriptor)) {
-    return loom_amdgpu_append_memory_packet(context);
   }
   bool uses_matrix_resource = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_uses_resource_kind(
@@ -2652,11 +2845,10 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
   if (uses_matrix_resource) {
     return loom_amdgpu_append_matrix_packet(context);
   }
-  bool has_counter_effect = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
-      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_COUNTER,
-      &has_counter_effect));
-  if (has_counter_effect && descriptor->immediate_count == 2) {
+  if (iree_all_bits_set(
+          route_flags,
+          LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_COUNTER_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_TWO_IMMEDIATES)) {
     return loom_amdgpu_append_waitcnt_packet(context);
   }
   return loom_amdgpu_append_canonical_asm_form_packet(context);
