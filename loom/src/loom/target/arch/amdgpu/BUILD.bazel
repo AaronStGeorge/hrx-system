@@ -192,6 +192,26 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "signal_abi",
+    hdrs = ["signal_abi.h"],
+    visibility = (
+        _AMDGPU_LOWER_VISIBILITY +
+        _AMDGPU_NATIVE_VISIBILITY +
+        _AMDGPU_TOOLING_VISIBILITY
+    ),
+)
+
+loom_cc_test(
+    name = "signal_abi_test",
+    srcs = ["signal_abi_test.cc"],
+    deps = [
+        ":signal_abi",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "math_policy",
     srcs = ["math_policy.c"],
     hdrs = ["math_policy.h"],
