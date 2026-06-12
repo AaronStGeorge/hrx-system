@@ -56,7 +56,7 @@ typedef struct loom_pass_option_def_t {
 
 enum {
   // Maximum number of statistic fields one pass descriptor may expose.
-  LOOM_PASS_STATISTIC_FIELD_COUNT_MAX = 10,
+  LOOM_PASS_STATISTIC_FIELD_COUNT_MAX = 16,
 };
 
 // Describes one int64_t statistic field in a pass-owned statistics struct.

@@ -134,6 +134,24 @@ human-readable IR. `select-templates` should remove residual
 the selected provider boundary, and `legalize-math` should rewrite semantic
 SiLU before target-low emission.
 
+For pass-pipeline debugging outside the full artifact path, `loom-opt` can emit
+an aggregate pass report:
+
+```bash
+loom-opt --pass=select-templates --pass-report=json input.loom \
+  --output=/tmp/selected.loom
+```
+
+The `select-templates` report statistics include `apply-sites`,
+`selected-sites`, `fallback-selected-sites`, `no-provider-sites`,
+`target-mismatch-sites`, `rejected-sites`, `missing-fact-sites`,
+`ambiguous-sites`, and `materialization-blocked-sites`. That report answers the
+first triage question quickly: whether provider selection picked a lower
+priority fallback, failed before selection, or left unresolved applies because
+more predicate facts are needed. Full artifact runs should still use
+`loom-compile --dump-ir-*`, artifact manifests, and compile reports for target
+emission evidence.
+
 Standalone `loom-compile` emits the artifact, manifest, and compile report. To
 keep target-owned assembly/listing text with benchmark evidence, run
 `iree-benchmark-loom` with a debug or full artifact bundle on an AMDGPU-capable

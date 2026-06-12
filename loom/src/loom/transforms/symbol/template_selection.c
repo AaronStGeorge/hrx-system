@@ -49,16 +49,37 @@ static const loom_pass_option_def_t kTemplateSelectionOptions[] = {
               "emits diagnostics for every unresolved live apply.")},
 };
 
-#define LOOM_TEMPLATE_SELECTION_STATISTICS(V, statistics_type) \
-  V(statistics_type, apply_sites, "apply-sites",               \
-    "Number of live func.apply sites analyzed.")               \
-  V(statistics_type, selected_sites, "selected-sites",         \
-    "Number of func.apply sites resolved to inline calls.")    \
-  V(statistics_type, unresolved_sites, "unresolved-sites",     \
-    "Number of live func.apply sites left unresolved.")        \
-  V(statistics_type, provider_edges, "provider-edges",         \
-    "Number of apply-generated provider liveness edges.")      \
-  V(statistics_type, symbols_pruned, "symbols-pruned",         \
+#define LOOM_TEMPLATE_SELECTION_STATISTICS(V, statistics_type)           \
+  V(statistics_type, apply_sites, "apply-sites",                         \
+    "Number of live func.apply sites analyzed.")                         \
+  V(statistics_type, selected_sites, "selected-sites",                   \
+    "Number of func.apply sites resolved to inline calls.")              \
+  V(statistics_type, fallback_selected_sites, "fallback-selected-sites", \
+    "Number of selected sites that used a lower-priority "               \
+    "provider while a higher-priority candidate existed.")               \
+  V(statistics_type, unresolved_sites, "unresolved-sites",               \
+    "Number of live func.apply sites left unresolved.")                  \
+  V(statistics_type, no_provider_sites, "no-provider-sites",             \
+    "Number of unresolved sites with no provider for the "               \
+    "requested contract.")                                               \
+  V(statistics_type, target_mismatch_sites, "target-mismatch-sites",     \
+    "Number of unresolved sites with no target-applicable "              \
+    "provider.")                                                         \
+  V(statistics_type, rejected_sites, "rejected-sites",                   \
+    "Number of unresolved sites whose providers were rejected "          \
+    "by signature or predicates.")                                       \
+  V(statistics_type, missing_fact_sites, "missing-fact-sites",           \
+    "Number of unresolved sites blocked by unknown predicate "           \
+    "facts.")                                                            \
+  V(statistics_type, ambiguous_sites, "ambiguous-sites",                 \
+    "Number of unresolved sites with multiple best providers.")          \
+  V(statistics_type, materialization_blocked_sites,                      \
+    "materialization-blocked-sites",                                     \
+    "Number of unresolved sites with a selected provider that "          \
+    "could not be materialized.")                                        \
+  V(statistics_type, provider_edges, "provider-edges",                   \
+    "Number of apply-generated provider liveness edges.")                \
+  V(statistics_type, symbols_pruned, "symbols-pruned",                   \
     "Number of unreachable private symbols pruned after selection.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_template_selection_statistics,
@@ -822,6 +843,37 @@ static iree_status_t loom_template_selection_append_entry(
   return iree_ok_status();
 }
 
+static void loom_template_selection_record_blocker(
+    loom_template_selection_state_t* state,
+    loom_template_selection_entry_t* entry,
+    loom_template_selection_blocker_t blocker) {
+  entry->blocker = blocker;
+  ++state->statistics->unresolved_sites;
+  switch (blocker) {
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER:
+      ++state->statistics->no_provider_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH:
+      ++state->statistics->target_mismatch_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED:
+      ++state->statistics->rejected_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS:
+      ++state->statistics->missing_fact_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS:
+      ++state->statistics->ambiguous_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION:
+      ++state->statistics->materialization_blocked_sites;
+      break;
+    case LOOM_TEMPLATE_SELECTION_BLOCKER_NONE:
+    default:
+      break;
+  }
+}
+
 static iree_status_t loom_template_selection_mark_exact_priority(
     loom_template_selection_state_t* state,
     loom_symbol_liveness_contributor_context_t* context,
@@ -907,14 +959,15 @@ static iree_status_t loom_template_selection_analyze_apply(
   loom_func_provider_slice_t providers =
       loom_func_provider_catalog_lookup(&state->catalog, contract_id);
   if (providers.count == 0) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER;
-    ++state->statistics->unresolved_sites;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER);
     return iree_ok_status();
   }
 
   bool has_exact = false;
   bool has_maybe = false;
   int64_t best_exact_priority = INT64_MIN;
+  int64_t highest_provider_priority = INT64_MIN;
   int64_t highest_maybe_priority = INT64_MIN;
   uint32_t best_exact_count = 0;
   uint32_t target_applicable_count = 0;
@@ -925,6 +978,9 @@ static iree_status_t loom_template_selection_analyze_apply(
 
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
+    if (provider->priority > highest_provider_priority) {
+      highest_provider_priority = provider->priority;
+    }
     if (!loom_template_selection_provider_applies_to_target(apply_target,
                                                             provider)) {
       continue;
@@ -957,31 +1013,31 @@ static iree_status_t loom_template_selection_analyze_apply(
   }
 
   if (target_applicable_count == 0) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH;
-    ++state->statistics->unresolved_sites;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH);
     return iree_ok_status();
   }
 
   if (possible_count == 0) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED;
-    ++state->statistics->unresolved_sites;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED);
     return iree_ok_status();
   }
 
   if (!has_exact ||
       (has_maybe && highest_maybe_priority >= best_exact_priority)) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS);
     IREE_RETURN_IF_ERROR(loom_template_selection_mark_missing_fact_candidates(
         state, context, apply_op, providers, has_exact, best_exact_priority));
-    ++state->statistics->unresolved_sites;
     return iree_ok_status();
   }
 
   if (best_exact_count > 1) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS);
     IREE_RETURN_IF_ERROR(loom_template_selection_mark_exact_priority(
         state, context, apply_op, providers, best_exact_priority));
-    ++state->statistics->unresolved_sites;
     return iree_ok_status();
   }
 
@@ -989,13 +1045,16 @@ static iree_status_t loom_template_selection_analyze_apply(
   IREE_RETURN_IF_ERROR(loom_template_selection_mark_provider_live(
       state, context, best_exact_provider));
   if (!loom_template_provider_is_materializable(best_exact_provider)) {
-    entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION;
-    ++state->statistics->unresolved_sites;
+    loom_template_selection_record_blocker(
+        state, entry, LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION);
     return iree_ok_status();
   }
 
   entry->action = LOOM_TEMPLATE_SELECTION_ACTION_SELECT;
   entry->blocker = LOOM_TEMPLATE_SELECTION_BLOCKER_NONE;
+  if (best_exact_provider->priority < highest_provider_priority) {
+    ++state->statistics->fallback_selected_sites;
+  }
   ++state->statistics->selected_sites;
   return iree_ok_status();
 }

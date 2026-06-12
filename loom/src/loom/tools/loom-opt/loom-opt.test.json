@@ -123,6 +123,36 @@
       ]
     },
     {
+      "name": "reports template selection fallback statistics",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--pass=select-templates",
+          "--pass-report=json",
+          "--output={tmp}/selected.loom"
+        ],
+        "stdin": {
+          "text": "func.template<demo.report> priority(10) @aligned(%m: index) -> (index) where [mul(%m, 16)] {\n  func.return %m : index\n}\n\nfunc.template<demo.report> priority(1) @fallback(%m: index) -> (index) {\n  func.return %m : index\n}\n\nfunc.def public @entry() -> (index) {\n  %n = index.constant 15 : index\n  %result = func.apply<demo.report>(%n) : (index) -> (index)\n  func.return %result : index\n}\n"
+        }
+      },
+      "stderr": {
+        "contains": [
+          "\"pass\":\"select-templates\"",
+          "\"apply-sites\":1",
+          "\"selected-sites\":1",
+          "\"fallback-selected-sites\":1",
+          "\"unresolved-sites\":0",
+          "\"rejected-sites\":0"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/selected.loom",
+          "contains": ["func.call inline @fallback"]
+        }
+      ]
+    },
+    {
       "name": "materializes config values",
       "run": {
         "tool": "loom-opt",
