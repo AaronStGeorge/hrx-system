@@ -574,6 +574,19 @@ low.func.def target(@gfx11_target) @gfx11_mad_u32_u24_literal(%value: reg<amdgpu
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_bfi_b32_literal waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_bfi_b32_literal(%insert: reg<amdgpu.vgpr>, %base: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %packed = v_bfi_b32_src0_lit %insert, %base, 3840
+  return
+}
+
+// ----
+  v_bfi_b32_src0_lit v0, v0, v1, 3840
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_salu_shift_inline waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_salu_shift_inline(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
