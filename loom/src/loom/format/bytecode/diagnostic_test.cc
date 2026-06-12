@@ -75,7 +75,7 @@ TEST(BytecodeDiagnostic, InvalidRecordFieldRendersPathAndOffset) {
 
   IREE_ASSERT_OK(loom_bytecode_reader_emit_invalid_record_field(
       &context, IREE_SV("SECTIONS"), IREE_SV("directory"), 3, IREE_SV("offset"),
-      offset, IREE_SV("overlaps previous section")));
+      offset, IREE_SV("overlapping_range")));
 
   EXPECT_EQ(captured.emitter, LOOM_EMITTER_BYTECODE_READER);
   EXPECT_EQ(captured.error,
@@ -86,7 +86,7 @@ TEST(BytecodeDiagnostic, InvalidRecordFieldRendersPathAndOffset) {
   EXPECT_EQ(captured.origin.end, (iree_host_size_t)(offset + 1));
   EXPECT_NE(captured.text.find("error [BYTECODE/006]: invalid field 'offset' "
                                "in SECTIONS/directory[3] at offset "
-                               "4294967296: overlaps previous section"),
+                               "4294967296: overlapping_range"),
             std::string::npos)
       << captured.text;
   EXPECT_NE(captured.json.find("\"emitter\":\"bytecode_reader\""),
@@ -106,6 +106,9 @@ TEST(BytecodeDiagnostic, InvalidRecordFieldRendersPathAndOffset) {
   EXPECT_NE(captured.json.find("\"record_index\":3"), std::string::npos)
       << captured.json;
   EXPECT_NE(captured.json.find("\"offset\":4294967296"), std::string::npos)
+      << captured.json;
+  EXPECT_NE(captured.json.find("\"failure_code\":\"overlapping_range\""),
+            std::string::npos)
       << captured.json;
 }
 
