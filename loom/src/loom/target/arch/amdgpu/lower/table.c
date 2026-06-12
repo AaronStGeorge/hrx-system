@@ -99,6 +99,11 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i32_index_lane(
       lane_type, out_index_lane);
 }
 
+static bool loom_amdgpu_table_lookup_i8_extract_prefers_bfe(
+    uint32_t byte_offset) {
+  return byte_offset != 0;
+}
+
 static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_indices,
@@ -111,6 +116,17 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
   IREE_RETURN_IF_ERROR(loom_amdgpu_table_lookup_slice_if_needed(
       context, source_op, low_indices, plan->index_register_count,
       register_offset, lane_type, &source_register));
+
+  if (loom_amdgpu_table_lookup_i8_extract_prefers_bfe(byte_offset)) {
+    bool selected_bfe = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_vgpr_b32_bfe_extract(
+        context, source_op, source_register, byte_offset * 8u, 8u,
+        LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_NONE, lane_type, out_index_lane,
+        &selected_bfe));
+    if (selected_bfe) {
+      return iree_ok_status();
+    }
+  }
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(

@@ -44,31 +44,28 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_table_lookup_i8_code
   %39 = v_cndmask_b32 %37, %g2, %38
   %40 = v_cmp_eq_i32 %35, %34
   %41 = v_cndmask_b32 %39, %g3, %40
-  %42 = v_lshrrev_b32_src0_inline %codes, 8
-  %43 = v_and_b32_lit %42, 255
-  %44 = v_cmp_eq_i32 %43, %30
-  %45 = v_cndmask_b32 %g0, %g1, %44
-  %46 = v_cmp_eq_i32 %43, %32
-  %47 = v_cndmask_b32 %45, %g2, %46
-  %48 = v_cmp_eq_i32 %43, %34
-  %49 = v_cndmask_b32 %47, %g3, %48
-  %50 = v_lshrrev_b32_src0_inline %codes, 16
-  %51 = v_and_b32_lit %50, 255
-  %52 = v_cmp_eq_i32 %51, %30
-  %53 = v_cndmask_b32 %g0, %g1, %52
-  %54 = v_cmp_eq_i32 %51, %32
-  %55 = v_cndmask_b32 %53, %g2, %54
-  %56 = v_cmp_eq_i32 %51, %34
-  %57 = v_cndmask_b32 %55, %g3, %56
-  %58 = v_lshrrev_b32_src0_inline %codes, 24
-  %59 = v_and_b32_lit %58, 255
-  %60 = v_cmp_eq_i32 %59, %30
-  %61 = v_cndmask_b32 %g0, %g1, %60
-  %62 = v_cmp_eq_i32 %59, %32
-  %63 = v_cndmask_b32 %61, %g2, %62
-  %64 = v_cmp_eq_i32 %59, %34
-  %65 = v_cndmask_b32 %63, %g3, %64
-  %decoded = concat(%41, %49, %57, %65) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %42 = v_bfe_u32_offset_width_inline %codes {offset = 8, width = 8}
+  %43 = v_cmp_eq_i32 %42, %30
+  %44 = v_cndmask_b32 %g0, %g1, %43
+  %45 = v_cmp_eq_i32 %42, %32
+  %46 = v_cndmask_b32 %44, %g2, %45
+  %47 = v_cmp_eq_i32 %42, %34
+  %48 = v_cndmask_b32 %46, %g3, %47
+  %49 = v_bfe_u32_offset_width_inline %codes {offset = 16, width = 8}
+  %50 = v_cmp_eq_i32 %49, %30
+  %51 = v_cndmask_b32 %g0, %g1, %50
+  %52 = v_cmp_eq_i32 %49, %32
+  %53 = v_cndmask_b32 %51, %g2, %52
+  %54 = v_cmp_eq_i32 %49, %34
+  %55 = v_cndmask_b32 %53, %g3, %54
+  %56 = v_bfe_u32_offset_width_inline %codes {offset = 24, width = 8}
+  %57 = v_cmp_eq_i32 %56, %30
+  %58 = v_cndmask_b32 %g0, %g1, %57
+  %59 = v_cmp_eq_i32 %56, %32
+  %60 = v_cndmask_b32 %58, %g2, %59
+  %61 = v_cmp_eq_i32 %56, %34
+  %62 = v_cndmask_b32 %60, %g3, %61
+  %decoded = concat(%41, %48, %55, %62) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   global_store_b128_saddr %21, %decoded, %output_view
   return
 }
