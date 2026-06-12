@@ -136,6 +136,7 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
       options.allocation_fixed_value_spec_count,
+      loom_low_schedule_pair_affinity_list_empty(),
       /*storage_lease_provider=*/NULL, &spill_free_options, &frame));
   if (request->diagnostic_collector != NULL &&
       request->diagnostic_collector->count != 0) {

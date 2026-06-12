@@ -28,6 +28,7 @@
 #include "loom/target/arch/amdgpu/planning/occupancy.h"
 #include "loom/target/arch/amdgpu/planning/packet_plan.h"
 #include "loom/target/arch/amdgpu/planning/storage_lease.h"
+#include "loom/target/arch/amdgpu/planning/vopd_plan.h"
 #include "loom/target/arch/amdgpu/provider.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/compile_report_low.h"
@@ -449,6 +450,10 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
       loom_low_schedule_pressure_cliff_list_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
       descriptor_set, table_arena, &schedule_pressure_cliffs));
+  loom_low_schedule_pair_affinity_list_t schedule_pair_affinities =
+      loom_low_schedule_pair_affinity_list_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_build_schedule_pair_affinities(
+      descriptor_set, table_arena, &schedule_pair_affinities));
 
   loom_low_emission_frame_t frame = {0};
   loom_low_storage_lease_provider_t storage_lease_provider = {0};
@@ -461,6 +466,7 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
               .data = target_selection.data,
           },
       .schedule_pressure_cliffs = schedule_pressure_cliffs,
+      .schedule_pair_affinities = schedule_pair_affinities,
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .memory_access_table = loom_low_memory_access_table_empty(),
       .allocation_fixed_values = plan->fixed_values,

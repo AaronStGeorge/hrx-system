@@ -430,6 +430,7 @@ iree_status_t loom_check_low_emit_packetize_function(
     iree_host_size_t allocation_budget_count,
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
+    loom_low_schedule_pair_affinity_list_t schedule_pair_affinities,
     const loom_low_storage_lease_provider_t* storage_lease_provider,
     const loom_low_emission_frame_spill_free_options_t* spill_free_options,
     loom_low_emission_frame_t* out_frame) {
@@ -468,6 +469,7 @@ iree_status_t loom_check_low_emit_packetize_function(
   loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &request->low_registry->registry,
       .schedule_strategy = schedule_strategy,
+      .schedule_pair_affinities = schedule_pair_affinities,
       .allocation_budgets = allocation_budgets,
       .allocation_budget_count = allocation_budget_count,
       .allocation_fixed_values = fixed_values,

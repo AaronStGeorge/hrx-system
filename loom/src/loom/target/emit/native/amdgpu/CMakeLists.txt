@@ -70,6 +70,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::planning::address_state
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::planning::storage_lease
+    loom::target::arch::amdgpu::planning::vopd_plan
     loom::tools::loom-check::execute
   TESTONLY
   PUBLIC
@@ -439,6 +440,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::planning::occupancy
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::planning::storage_lease
+    loom::target::arch::amdgpu::planning::vopd_plan
     loom::target::arch::amdgpu::provider
     loom::target::arch::amdgpu::target_info
     loom::target::artifact_manifest_collect

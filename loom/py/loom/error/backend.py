@@ -236,9 +236,9 @@ ERR_BACKEND_015 = ErrorDef(
         "'@{function_name}' scheduler chose '{chosen_packet}' over "
         "'{rejected_packet}' at block '{block_name}' ordinal "
         "{scheduled_ordinal}: {candidate_count} ready candidate(s), chosen "
-        "dep-latency/latency/projected/killed/produced "
+        "dep-latency/latency/pair-affinity/projected/killed/produced "
         "{chosen_dependency_latency_cycles}/{chosen_latency_cycles}/"
-        "{chosen_projected_live_units}/"
+        "{chosen_pair_affinity_score}/{chosen_projected_live_units}/"
         "{chosen_killed_live_units}/{chosen_produced_live_units}, chosen "
         "data/resource/hazard/effective stall "
         "{chosen_data_ready_stall_cycles}/{chosen_resource_stall_cycles}/"
@@ -247,9 +247,9 @@ ERR_BACKEND_015 = ErrorDef(
         "{chosen_pressure_cliff_reg_class_id}/{chosen_pressure_cliff_units}/"
         "{chosen_pressure_cliff_penalty}/"
         "{chosen_units_until_pressure_cliff}, rejected "
-        "dep-latency/latency/projected/killed/produced "
+        "dep-latency/latency/pair-affinity/projected/killed/produced "
         "{rejected_dependency_latency_cycles}/{rejected_latency_cycles}/"
-        "{rejected_projected_live_units}/"
+        "{rejected_pair_affinity_score}/{rejected_projected_live_units}/"
         "{rejected_killed_live_units}/{rejected_produced_live_units}, rejected "
         "data/resource/hazard/effective stall "
         "{rejected_data_ready_stall_cycles}/{rejected_resource_stall_cycles}/"
@@ -272,6 +272,7 @@ ERR_BACKEND_015 = ErrorDef(
         ErrorParam("rejected_packet", ParamKind.STRING),
         ErrorParam("chosen_dependency_latency_cycles", ParamKind.U32),
         ErrorParam("chosen_latency_cycles", ParamKind.U32),
+        ErrorParam("chosen_pair_affinity_score", ParamKind.U32),
         ErrorParam("chosen_projected_live_units", ParamKind.U64),
         ErrorParam("chosen_killed_live_units", ParamKind.U64),
         ErrorParam("chosen_produced_live_units", ParamKind.U64),
@@ -285,6 +286,7 @@ ERR_BACKEND_015 = ErrorDef(
         ErrorParam("chosen_units_until_pressure_cliff", ParamKind.U32),
         ErrorParam("rejected_dependency_latency_cycles", ParamKind.U32),
         ErrorParam("rejected_latency_cycles", ParamKind.U32),
+        ErrorParam("rejected_pair_affinity_score", ParamKind.U32),
         ErrorParam("rejected_projected_live_units", ParamKind.U64),
         ErrorParam("rejected_killed_live_units", ParamKind.U64),
         ErrorParam("rejected_produced_live_units", ParamKind.U64),

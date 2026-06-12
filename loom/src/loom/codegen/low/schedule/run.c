@@ -61,6 +61,8 @@ typedef struct loom_low_schedule_candidate_score_t {
   uint16_t bottleneck_resource_id;
   // Target pressure-cliff penalty from projected live units.
   uint32_t pressure_cliff_penalty;
+  // Target pair-affinity reward. Larger scores are better.
+  uint16_t pair_affinity_score;
   // Register class for the closest crossed or future pressure cliff.
   uint16_t pressure_cliff_reg_class_id;
   // Crossed pressure cliff, or LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE.
@@ -788,6 +790,128 @@ static iree_status_t loom_low_schedule_score_candidate_pressure_cliffs(
   return iree_ok_status();
 }
 
+static bool loom_low_schedule_node_result_used_by(
+    const loom_low_schedule_node_t* producer,
+    const loom_low_schedule_node_t* consumer) {
+  const loom_value_ordinal_t* result_ordinals =
+      loom_low_schedule_node_const_result_ordinals(producer);
+  const loom_value_ordinal_t* operand_ordinals =
+      loom_low_schedule_node_const_operand_ordinals(consumer);
+  for (uint16_t result_index = 0; result_index < producer->result_count;
+       ++result_index) {
+    const loom_value_ordinal_t result_ordinal = result_ordinals[result_index];
+    for (uint16_t operand_index = 0; operand_index < consumer->operand_count;
+         ++operand_index) {
+      if (result_ordinal == operand_ordinals[operand_index]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool loom_low_schedule_node_is_pair_transparent(
+    const loom_low_schedule_node_t* node) {
+  if (node->kind != LOOM_LOW_SCHEDULE_NODE_STRUCTURAL || node->op == NULL) {
+    return false;
+  }
+  switch (node->op->kind) {
+    case LOOM_OP_LOW_SLICE:
+    case LOOM_OP_LOW_CONCAT:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static uint16_t loom_low_schedule_pair_affinity_priority(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_node_t* first,
+    const loom_low_schedule_node_t* second) {
+  if (first == NULL || second == NULL || first->descriptor == NULL ||
+      second->descriptor == NULL) {
+    return 0;
+  }
+  const loom_low_schedule_pair_affinity_list_t affinities =
+      state->options->pair_affinities;
+  for (iree_host_size_t i = 0; i < affinities.count; ++i) {
+    const loom_low_schedule_pair_affinity_t* affinity = &affinities.values[i];
+    if (affinity->priority == 0) {
+      continue;
+    }
+    if (affinity->first_descriptor == first->descriptor &&
+        affinity->second_descriptor == second->descriptor) {
+      return affinity->priority;
+    }
+  }
+  return 0;
+}
+
+static bool loom_low_schedule_node_can_start_pair_affinity(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_node_t* node) {
+  if (node == NULL || node->descriptor == NULL) {
+    return false;
+  }
+  const loom_low_schedule_pair_affinity_list_t affinities =
+      state->options->pair_affinities;
+  for (iree_host_size_t i = 0; i < affinities.count; ++i) {
+    const loom_low_schedule_pair_affinity_t* affinity = &affinities.values[i];
+    if (affinity->priority != 0 &&
+        affinity->first_descriptor == node->descriptor) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static uint16_t loom_low_schedule_scale_direct_pair_affinity(
+    uint16_t priority) {
+  return priority > UINT16_MAX / 2u ? UINT16_MAX : (uint16_t)(priority * 2u);
+}
+
+static uint16_t loom_low_schedule_score_candidate_pair_affinity(
+    const loom_low_schedule_build_state_t* state, uint32_t node_index) {
+  if (loom_low_schedule_pair_affinity_list_is_empty(
+          state->options->pair_affinities) ||
+      state->pending_pair_affinity_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
+    return 0;
+  }
+  const loom_low_schedule_node_t* anchor =
+      &state->nodes[state->pending_pair_affinity_node];
+  const loom_low_schedule_node_t* candidate = &state->nodes[node_index];
+  uint16_t priority =
+      loom_low_schedule_pair_affinity_priority(state, anchor, candidate);
+  if (priority != 0 &&
+      !loom_low_schedule_node_result_used_by(anchor, candidate)) {
+    return loom_low_schedule_scale_direct_pair_affinity(priority);
+  }
+
+  if (!loom_low_schedule_node_is_pair_transparent(candidate) ||
+      state->outgoing_heads == NULL || state->outgoing_next_indices == NULL) {
+    return 0;
+  }
+  for (uint32_t dependency_index = state->outgoing_heads[node_index];
+       dependency_index != LOOM_LOW_SCHEDULE_NODE_NONE;
+       dependency_index = state->outgoing_next_indices[dependency_index]) {
+    const loom_low_schedule_dependency_t* dependency =
+        &state->dependencies[dependency_index];
+    if (dependency->kind != LOOM_LOW_SCHEDULE_DEPENDENCY_SSA ||
+        dependency->producer_node != node_index) {
+      continue;
+    }
+    const loom_low_schedule_node_t* consumer =
+        &state->nodes[dependency->consumer_node];
+    priority =
+        loom_low_schedule_pair_affinity_priority(state, anchor, consumer);
+    if (priority != 0 &&
+        !loom_low_schedule_node_result_used_by(anchor, consumer)) {
+      return priority;
+    }
+  }
+  return 0;
+}
+
 static iree_status_t loom_low_schedule_score_candidate(
     const loom_low_schedule_build_state_t* state,
     loom_low_schedule_pressure_state_t* pressure_state, uint32_t node_index,
@@ -876,6 +1000,8 @@ static iree_status_t loom_low_schedule_score_candidate(
       .dependency_latency_cycles = dependency_latency_cycles,
       .latency_cycles = node->latency_cycles,
       .data_ready_stall_cycles = data_ready_stall_cycles,
+      .pair_affinity_score =
+          loom_low_schedule_score_candidate_pair_affinity(state, node_index),
       .bottleneck_resource_id = LOOM_LOW_RESOURCE_NONE,
       .pressure_cliff_reg_class_id = LOOM_LOW_REG_CLASS_NONE,
       .pressure_cliff_units = LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE,
@@ -930,6 +1056,9 @@ static bool loom_low_schedule_candidate_score_less(
   if (lhs.pressure_cliff_penalty != rhs.pressure_cliff_penalty) {
     return lhs.pressure_cliff_penalty < rhs.pressure_cliff_penalty;
   }
+  if (lhs.pair_affinity_score != rhs.pair_affinity_score) {
+    return lhs.pair_affinity_score > rhs.pair_affinity_score;
+  }
   if (lhs.projected_live_units != rhs.projected_live_units) {
     return lhs.projected_live_units < rhs.projected_live_units;
   }
@@ -967,9 +1096,11 @@ static void loom_low_schedule_record_candidate_decision(
           .chosen_dependency_latency_cycles =
               chosen_score.dependency_latency_cycles,
           .chosen_latency_cycles = chosen_score.latency_cycles,
+          .chosen_pair_affinity_score = chosen_score.pair_affinity_score,
           .rejected_dependency_latency_cycles =
               rejected_score.dependency_latency_cycles,
           .rejected_latency_cycles = rejected_score.latency_cycles,
+          .rejected_pair_affinity_score = rejected_score.pair_affinity_score,
           .chosen_projected_live_units = chosen_score.projected_live_units,
           .chosen_killed_live_units = chosen_score.killed_live_units,
           .chosen_produced_live_units = chosen_score.produced_live_units,
@@ -1005,6 +1136,35 @@ static void loom_low_schedule_record_candidate_decision(
           .rejected_units_until_pressure_cliff =
               rejected_score.units_until_pressure_cliff,
       };
+}
+
+static void loom_low_schedule_note_pair_affinity_node_scheduled(
+    loom_low_schedule_build_state_t* state, uint32_t node_index,
+    loom_low_schedule_candidate_score_t score) {
+  if (loom_low_schedule_pair_affinity_list_is_empty(
+          state->options->pair_affinities)) {
+    state->pending_pair_affinity_node = LOOM_LOW_SCHEDULE_NODE_NONE;
+    return;
+  }
+
+  const loom_low_schedule_node_t* node = &state->nodes[node_index];
+  if (node->descriptor != NULL) {
+    if (score.pair_affinity_score != 0 &&
+        state->pending_pair_affinity_node != LOOM_LOW_SCHEDULE_NODE_NONE) {
+      state->pending_pair_affinity_node = LOOM_LOW_SCHEDULE_NODE_NONE;
+      return;
+    }
+    state->pending_pair_affinity_node =
+        loom_low_schedule_node_can_start_pair_affinity(state, node)
+            ? node_index
+            : LOOM_LOW_SCHEDULE_NODE_NONE;
+    return;
+  }
+
+  if (loom_low_schedule_node_is_pair_transparent(node)) {
+    return;
+  }
+  state->pending_pair_affinity_node = LOOM_LOW_SCHEDULE_NODE_NONE;
 }
 
 static iree_status_t loom_low_schedule_note_pressure_node_scheduled(
@@ -1202,6 +1362,8 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
       outgoing_heads[dependency->producer_node] = (uint32_t)i;
     }
   }
+  state->outgoing_heads = outgoing_heads;
+  state->outgoing_next_indices = outgoing_next_indices;
 
   for (iree_host_size_t block_index = 0; block_index < state->body->block_count;
        ++block_index) {
@@ -1210,6 +1372,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
         block_record->node_start + block_record->node_count;
     state->current_block_index = block_index;
     state->current_issue_cycle = 0;
+    state->pending_pair_affinity_node = LOOM_LOW_SCHEDULE_NODE_NONE;
     if (state->resource_ready_issue_cycles != NULL) {
       memset(state->resource_ready_issue_cycles, 0,
              state->target.descriptor_set->resource_count *
@@ -1282,6 +1445,8 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
       state->current_issue_cycle = state->nodes[chosen_node].scheduled_ordinal;
       state->scheduled_node_indices[state->scheduled_node_count++] =
           chosen_node;
+      loom_low_schedule_note_pair_affinity_node_scheduled(state, chosen_node,
+                                                          chosen_score);
       if (loom_low_schedule_uses_pressure_strategy(state)) {
         loom_low_schedule_record_candidate_decision(
             state, block_index, state->nodes[chosen_node].scheduled_ordinal,

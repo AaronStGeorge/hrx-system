@@ -179,6 +179,55 @@ static bool loom_amdgpu_vopd_target_supports_base_vopd(
   }
 }
 
+static void loom_amdgpu_vopd_append_schedule_pair_affinity(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    loom_low_schedule_pair_affinity_t* affinities,
+    iree_host_size_t* affinity_count) {
+  const loom_low_descriptor_t* descriptor =
+      loom_amdgpu_descriptor_ref_descriptor(descriptor_set, descriptor_ref);
+  if (descriptor == NULL) {
+    return;
+  }
+  affinities[(*affinity_count)++] = (loom_low_schedule_pair_affinity_t){
+      .first_descriptor = descriptor,
+      .second_descriptor = descriptor,
+      .priority = 1,
+  };
+}
+
+iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_arena_allocator_t* arena,
+    loom_low_schedule_pair_affinity_list_t* out_affinities) {
+  *out_affinities = loom_low_schedule_pair_affinity_list_empty();
+  if (descriptor_set == NULL || arena == NULL ||
+      !loom_amdgpu_vopd_target_supports_base_vopd(descriptor_set)) {
+    return iree_ok_status();
+  }
+
+  enum { kMaxSchedulePairAffinities = 3 };
+  loom_low_schedule_pair_affinity_t* affinities = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(arena, kMaxSchedulePairAffinities,
+                                sizeof(*affinities), (void**)&affinities));
+  iree_host_size_t affinity_count = 0;
+  loom_amdgpu_vopd_append_schedule_pair_affinity(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAC_F32, affinities,
+      &affinity_count);
+  loom_amdgpu_vopd_append_schedule_pair_affinity(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F32, affinities,
+      &affinity_count);
+  loom_amdgpu_vopd_append_schedule_pair_affinity(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32, affinities,
+      &affinity_count);
+  *out_affinities = (loom_low_schedule_pair_affinity_list_t){
+      .values = affinities,
+      .count = affinity_count,
+  };
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_vopd_verify_wait_packet_plan(
     const loom_low_schedule_table_t* schedule,
     const loom_amdgpu_wait_packet_plan_t* wait_packets) {

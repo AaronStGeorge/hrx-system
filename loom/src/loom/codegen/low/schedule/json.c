@@ -283,6 +283,7 @@ iree_status_t loom_low_schedule_format_json(
           ",\"candidate_count\":%" PRIu32 ",\"chosen_node\":%" PRIu32
           ",\"chosen_dependency_latency_cycles\":%" PRIu16
           ",\"chosen_latency_cycles\":%" PRIu16
+          ",\"chosen_pair_affinity_score\":%" PRIu16
           ",\"chosen_projected_live_units\":%" PRIu64
           ",\"chosen_killed_live_units\":%" PRIu64
           ",\"chosen_produced_live_units\":%" PRIu64
@@ -294,7 +295,7 @@ iree_status_t loom_low_schedule_format_json(
           decision->block_index, decision->scheduled_ordinal,
           decision->ready_candidate_count, decision->chosen_node,
           decision->chosen_dependency_latency_cycles,
-          decision->chosen_latency_cycles,
+          decision->chosen_latency_cycles, decision->chosen_pair_affinity_score,
           decision->chosen_projected_live_units,
           decision->chosen_killed_live_units,
           decision->chosen_produced_live_units,
@@ -333,6 +334,7 @@ iree_status_t loom_low_schedule_format_json(
             &stream,
             "null,\"rejected_dependency_latency_cycles\":null"
             ",\"rejected_latency_cycles\":null"
+            ",\"rejected_pair_affinity_score\":null"
             ",\"rejected_projected_live_units\":null"
             ",\"rejected_killed_live_units\":null"
             ",\"rejected_produced_live_units\":null"
@@ -350,6 +352,7 @@ iree_status_t loom_low_schedule_format_json(
             &stream,
             "%" PRIu32 ",\"rejected_dependency_latency_cycles\":%" PRIu16
             ",\"rejected_latency_cycles\":%" PRIu16
+            ",\"rejected_pair_affinity_score\":%" PRIu16
             ",\"rejected_projected_live_units\":%" PRIu64
             ",\"rejected_killed_live_units\":%" PRIu64
             ",\"rejected_produced_live_units\":%" PRIu64
@@ -361,6 +364,7 @@ iree_status_t loom_low_schedule_format_json(
             decision->rejected_node,
             decision->rejected_dependency_latency_cycles,
             decision->rejected_latency_cycles,
+            decision->rejected_pair_affinity_score,
             decision->rejected_projected_live_units,
             decision->rejected_killed_live_units,
             decision->rejected_produced_live_units,

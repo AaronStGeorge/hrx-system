@@ -42,6 +42,8 @@ typedef struct loom_low_emission_frame_options_t {
   loom_low_memory_access_table_t memory_access_table;
   // Optional target-provided register-pressure cliff table.
   loom_low_schedule_pressure_cliff_list_t schedule_pressure_cliffs;
+  // Optional target-provided descriptor pair-affinity table.
+  loom_low_schedule_pair_affinity_list_t schedule_pair_affinities;
   // Candidate selection strategy used by the scheduler.
   loom_low_schedule_strategy_t schedule_strategy;
   // Optional structured scheduler feedback to emit.

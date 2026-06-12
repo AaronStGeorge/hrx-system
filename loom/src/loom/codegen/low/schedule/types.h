@@ -130,6 +130,40 @@ static inline bool loom_low_schedule_pressure_cliff_list_is_empty(
   return list.count == 0;
 }
 
+// One target-provided pair-affinity row.
+//
+// These rows are optimistic scheduling hints. The generic scheduler can place
+// pair-compatible descriptors adjacent, including through transparent
+// structural ops, but final target packetization remains responsible for exact
+// legality such as register banks, tied operands, literal payloads, and whether
+// a structural packet truly emits no native instruction after allocation.
+typedef struct loom_low_schedule_pair_affinity_t {
+  // Descriptor that can be the first visible packet in a pair.
+  const loom_low_descriptor_t* first_descriptor;
+  // Descriptor that can be the second visible packet in a pair.
+  const loom_low_descriptor_t* second_descriptor;
+  // Relative benefit for forming this pair. Zero disables the row.
+  uint16_t priority;
+} loom_low_schedule_pair_affinity_t;
+
+// List of target-provided pair-affinity rows.
+typedef struct loom_low_schedule_pair_affinity_list_t {
+  // Borrowed pair-affinity rows.
+  const loom_low_schedule_pair_affinity_t* values;
+  // Number of entries in |values|.
+  iree_host_size_t count;
+} loom_low_schedule_pair_affinity_list_t;
+
+static inline loom_low_schedule_pair_affinity_list_t
+loom_low_schedule_pair_affinity_list_empty(void) {
+  return (loom_low_schedule_pair_affinity_list_t){0};
+}
+
+static inline bool loom_low_schedule_pair_affinity_list_is_empty(
+    loom_low_schedule_pair_affinity_list_t list) {
+  return list.count == 0;
+}
+
 // One scheduled operation in a low function body.
 typedef struct loom_low_schedule_node_t {
   // Operation represented by this node.
@@ -277,10 +311,14 @@ typedef struct loom_low_schedule_candidate_decision_t {
   uint16_t chosen_dependency_latency_cycles;
   // Chosen descriptor latency in cycles.
   uint16_t chosen_latency_cycles;
+  // Chosen target pair-affinity score.
+  uint16_t chosen_pair_affinity_score;
   // Best rejected maximum same-block producer latency among SSA operands.
   uint16_t rejected_dependency_latency_cycles;
   // Best rejected descriptor latency in cycles.
   uint16_t rejected_latency_cycles;
+  // Best rejected target pair-affinity score.
+  uint16_t rejected_pair_affinity_score;
   // Chosen aggregate live register units after scheduling the node.
   uint64_t chosen_projected_live_units;
   // Chosen live register units killed by scheduling the node.
@@ -546,6 +584,8 @@ typedef struct loom_low_schedule_options_t {
   loom_low_memory_access_table_t memory_access_table;
   // Optional target-provided register-pressure cliff table.
   loom_low_schedule_pressure_cliff_list_t pressure_cliffs;
+  // Optional target-provided pair-affinity table.
+  loom_low_schedule_pair_affinity_list_t pair_affinities;
   // Structured diagnostic emitter for user IR failures.
   iree_diagnostic_emitter_t emitter;
   // Optional backend feedback diagnostics to emit after scheduling analysis.
