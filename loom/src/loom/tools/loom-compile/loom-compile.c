@@ -66,8 +66,9 @@ IREE_FLAG_NAMED(string, module_name, "module-name", "loom",
                 "Module name to store in VM bytecode archives.");
 IREE_FLAG(string, target, "",
           "Optional HAL backend target key, such as 'gfx1100'. When present, "
-          "targetless kernels use this selected target during compilation, "
-          "and compatible explicit targets are specialized with the same "
+          "the invocation selects target facts used by source roots that omit "
+          "target(...) attrs, provider/template selection, lowering, and "
+          "emission. Compatible authored targets are refined with the same "
           "backend-owned target facts.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before artifact emission. Use 'default' or "
@@ -694,14 +695,14 @@ static iree_status_t loom_compile_select_explicit_hal_target(
   return iree_ok_status();
 }
 
-static iree_status_t loom_compile_require_targeted_hal_kernels(
+static iree_status_t loom_compile_require_hal_target_selection(
     const loom_run_hal_artifact_provider_t* artifact_provider,
     const loom_run_hal_device_target_t* explicit_target,
     loom_module_t* module) {
   if (artifact_provider == NULL || explicit_target != NULL) {
     return iree_ok_status();
   }
-  uint32_t targetless_kernel_count = 0;
+  uint32_t unselected_root_count = 0;
   if (module == NULL || module->body == NULL ||
       module->body->block_count == 0) {
     return iree_make_status(
@@ -712,19 +713,18 @@ static iree_status_t loom_compile_require_targeted_hal_kernels(
   loom_block_for_each_op(loom_module_block(module), op) {
     if (loom_kernel_def_isa(op) &&
         !loom_symbol_ref_is_valid(loom_kernel_def_target(op))) {
-      ++targetless_kernel_count;
+      ++unselected_root_count;
     }
   }
-  if (targetless_kernel_count == 0) {
+  if (unselected_root_count == 0) {
     return iree_ok_status();
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "HAL backend '%.*s' cannot compile %u targetless kernel%s without an "
-      "explicit --target= key or target(...) attrs in the source module",
+      "HAL backend '%.*s' requires --target= when %u kernel.def root%s omit "
+      "target(...) attrs",
       (int)artifact_provider->name.size, artifact_provider->name.data,
-      (unsigned)targetless_kernel_count,
-      targetless_kernel_count == 1 ? "" : "s");
+      (unsigned)unselected_root_count, unselected_root_count == 1 ? "" : "s");
 }
 
 int main(int argc, char** argv) {
@@ -815,7 +815,7 @@ int main(int argc, char** argv) {
         &explicit_hal_target);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_compile_require_targeted_hal_kernels(
+    status = loom_compile_require_hal_target_selection(
         hal_artifact_provider,
         explicit_hal_target_selected ? &explicit_hal_target : NULL,
         run_module.module);

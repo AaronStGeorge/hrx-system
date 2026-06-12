@@ -7,11 +7,12 @@
 // Pass execution environment capabilities.
 //
 // Pass environments expose caller-owned, typed compiler capabilities to pass
-// verification, program compilation, and invocation. They are deliberately not
-// target selection state: heterogeneous modules still decide target context
-// from IR facts on each symbol. Environment capabilities answer whether the
-// compiler binary/session has linked the machinery a pass requires, such as
-// target-low descriptor registries or source-to-low lowering policies.
+// verification, program compilation, and invocation. Capabilities may describe
+// linked compiler machinery, such as target-low descriptor registries and
+// source-to-low lowering policies, or invocation facts, such as a selected
+// target and its module-local materialized target record. Heterogeneous modules
+// still resolve target context per symbol; invocation facts only provide the
+// fallback target used by source symbols that omit authored target attrs.
 
 #ifndef LOOM_PASS_ENVIRONMENT_H_
 #define LOOM_PASS_ENVIRONMENT_H_

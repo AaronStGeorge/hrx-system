@@ -61,7 +61,7 @@ struct loomc_target_selection_t {
   // Allocator used to release target-selection storage.
   loomc_allocator_t allocator;
 
-  // Profile retained by this selection, or NULL for targetless selection.
+  // Profile retained by this selection, or NULL for an empty selection.
   loomc_target_profile_t* profile;
 
   // Compiler-facing target selection snapshot.

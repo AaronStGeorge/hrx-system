@@ -6,11 +6,12 @@
 
 // Source module selection for source-to-low lowering.
 //
-// This is cold compilation setup: it resolves a func-owned target record
-// through symbol facts, checks that the low lowering policy supports the
-// resulting target contract, and returns the concrete inputs needed by the core
-// lowerer. The selected target comes from each func contract, never from a
-// target record pointing back at a source func.
+// This is cold compilation setup: it resolves each source symbol's effective
+// target, checks that the low lowering policy supports the resulting target
+// contract, and returns the concrete inputs needed by the core lowerer.
+// Authored func target records win over invocation target selection; compatible
+// invocation selections refine the target bundle and provide target-owned
+// payloads without rewriting source attrs.
 
 #ifndef LOOM_CODEGEN_LOW_LOWER_SOURCE_SELECTION_H_
 #define LOOM_CODEGEN_LOW_LOWER_SOURCE_SELECTION_H_
