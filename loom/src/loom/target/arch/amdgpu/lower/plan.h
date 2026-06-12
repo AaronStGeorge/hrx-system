@@ -653,6 +653,11 @@ typedef enum loom_amdgpu_memory_payload_register_class_e {
   LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR = 1,
 } loom_amdgpu_memory_payload_register_class_t;
 
+typedef enum loom_amdgpu_memory_payload_format_e {
+  LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_GENERIC = 0,
+  LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT = 1,
+} loom_amdgpu_memory_payload_format_t;
+
 typedef enum loom_amdgpu_memory_scalar_offset_placement_e {
   LOOM_AMDGPU_MEMORY_SCALAR_OFFSET_PLACEMENT_SOFFSET = 0,
   LOOM_AMDGPU_MEMORY_SCALAR_OFFSET_PLACEMENT_BASE = 1,
@@ -680,6 +685,8 @@ typedef struct loom_amdgpu_memory_access_t {
   loom_amdgpu_memory_scalar_offset_placement_t scalar_offset_placement;
   // Register file selected for the memory packet payload.
   loom_amdgpu_memory_payload_register_class_t payload_register_class;
+  // Semantic payload family used to choose same-footprint memory descriptors.
+  loom_amdgpu_memory_payload_format_t payload_format;
   // Number of 32-bit registers moved by the selected memory packet payload.
   uint32_t payload_register_count;
   // Number of bytes moved by the selected memory packet.

@@ -230,7 +230,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16_scalar_roundtrip
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %18 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %20 = v_mov_b32 0
-  %loaded = global_load_u16_saddr %20, %input_view
+  %loaded = global_load_d16_b16_saddr %20, %input_view
   ds_write_b16 %20, %loaded
   %roundtrip = ds_read_u16 %20
   global_store_short_saddr %20, %roundtrip, %output_view
@@ -265,7 +265,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16_scalar_roundtri
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %18 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %20 = v_mov_b32 0
-  %loaded = global_load_u16_saddr %20, %input_view
+  %loaded = global_load_d16_b16_saddr %20, %input_view
   ds_write_b16 %20, %loaded
   %roundtrip = ds_read_u16 %20
   global_store_short_saddr %20, %roundtrip, %output_view
@@ -309,7 +309,7 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %31 = storage {byte_alignment = 2, byte_length = 512} : low.storage<workgroup>
   %33 = v_lshl_add_u32_shift_imm %row, %col, 4
   %34 = v_lshlrev_b32_src0_inline %33, 1
-  %loaded = global_load_u16_saddr %34, %input_view
+  %loaded = global_load_d16_b16_saddr %34, %input_view
   %36 = v_lshlrev_b32_src0_inline %row, 1
   %37 = v_lshlrev_b32_src0_inline %col, 5
   %38 = v_add_u32 %36, %37

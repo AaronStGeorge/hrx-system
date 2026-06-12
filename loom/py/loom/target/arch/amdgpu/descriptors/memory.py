@@ -856,7 +856,7 @@ def _buffer_load_b16_d16_overlay(
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_load_b16_d16",
         instruction_name="BUFFER_LOAD_SHORT_D16",
-        mnemonic="buffer_load_short_d16",
+        mnemonic="buffer_load_d16_b16",
         encoding_name=encoding_name,
         semantic_tag="memory.load.u16.d16.low",
         schedule_class=_SCHEDULE_VMEM_LOAD,
@@ -1969,7 +1969,7 @@ def _global_load_b16_d16_overlay(
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name="GLOBAL_LOAD_SHORT_D16",
-        mnemonic="global_load_short_d16",
+        mnemonic="global_load_d16_b16",
         encoding_name=encoding_name,
         semantic_tag="memory.load.u16.d16.low",
         schedule_class=_SCHEDULE_VMEM_LOAD,
@@ -1984,7 +1984,7 @@ def _global_load_b16_d16_overlay(
         effects=(_global_read_effect(16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_global_saddr_asm(
-            mnemonic="global_load_short_d16",
+            mnemonic="global_load_d16_b16",
             results=("dst",),
             operands=("addr", "saddr"),
             implicit_m0=implicit_m0,
@@ -1992,7 +1992,7 @@ def _global_load_b16_d16_overlay(
         )
         if saddr_off is None
         else _global_vaddr_asm(
-            mnemonic="global_load_short_d16",
+            mnemonic="global_load_d16_b16",
             results=("dst",),
             operands=("addr",),
             immediates=_memory_asm_immediate_names(cache_fields),

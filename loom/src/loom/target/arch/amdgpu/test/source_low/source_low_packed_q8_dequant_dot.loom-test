@@ -88,7 +88,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @q8_packed_word_global_d
   %48 = v_lshlrev_b32_src0_inline %lane, 2
   %packed = global_load_b32_saddr %48, %scale_view
   %50 = v_lshlrev_b32_src0_inline %scale_index, 1
-  %scale = global_load_u16_saddr %50, %scale_view
+  %scale = global_load_d16_b16_saddr %50, %scale_view
   %52 = v_lshlrev_b32_src0_inline %lane, 4
   %rhs = global_load_b128_saddr %52, %rhs_view
   %54 = v_bfe_i32_offset_width_inline %packed {offset = 0, width = 8}

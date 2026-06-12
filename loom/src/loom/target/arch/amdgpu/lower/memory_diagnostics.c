@@ -282,6 +282,12 @@ static const loom_amdgpu_memory_access_rejection_key_t
         },
         {
             .rejection_bit =
+                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_LOW16_DESCRIPTOR_MISSING,
+            .constraint_key =
+                IREE_SVL("memory_access.low16_descriptor_missing"),
+        },
+        {
+            .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_IMMEDIATE,
             .constraint_key =
                 IREE_SVL("memory_access.descriptor_offset_immediate"),
