@@ -246,6 +246,7 @@ loom_cc_library(
         "//loom/src/loom/target:compile_report_format",
         "//loom/src/loom/target:entry_selection",
         "//loom/src/loom/target:legalization",
+        "//loom/src/loom/target:low_asm_diagnostics",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:low_packet_diagnostics",

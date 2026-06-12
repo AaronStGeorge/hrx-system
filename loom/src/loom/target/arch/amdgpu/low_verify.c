@@ -8,6 +8,7 @@
 
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
+#include "loom/target/arch/amdgpu/low_aliases.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 
 typedef struct loom_amdgpu_low_verify_state_t {
@@ -16,57 +17,6 @@ typedef struct loom_amdgpu_low_verify_state_t {
   // Borrowed function name used in diagnostics.
   iree_string_view_t function_name;
 } loom_amdgpu_low_verify_state_t;
-
-typedef struct loom_amdgpu_low_blocked_alias_t {
-  // Low descriptor key or direct mnemonic spelling that should not be authored.
-  iree_string_view_t alias_name;
-  // ISA mnemonic that carries the compatibility semantics.
-  iree_string_view_t alias_mnemonic;
-  // Stable key authors should use for ordinary FMA semantics.
-  iree_string_view_t replacement_descriptor_name;
-  // ISA mnemonic authors should use for ordinary FMA semantics.
-  iree_string_view_t replacement_mnemonic;
-} loom_amdgpu_low_blocked_alias_t;
-
-static const loom_amdgpu_low_blocked_alias_t kLoomAmdgpuLowBlockedAliases[] = {
-    {
-        .alias_name = IREE_SVL("amdgpu.v_fma_dx9_zero_f32"),
-        .alias_mnemonic = IREE_SVL("v_fma_dx9_zero_f32"),
-        .replacement_descriptor_name = IREE_SVL("amdgpu.v_fma_f32"),
-        .replacement_mnemonic = IREE_SVL("v_fma_f32"),
-    },
-    {
-        .alias_name = IREE_SVL("v_fma_dx9_zero_f32"),
-        .alias_mnemonic = IREE_SVL("v_fma_dx9_zero_f32"),
-        .replacement_descriptor_name = IREE_SVL("amdgpu.v_fma_f32"),
-        .replacement_mnemonic = IREE_SVL("v_fma_f32"),
-    },
-    {
-        .alias_name = IREE_SVL("amdgpu.v_fmac_dx9_zero_f32"),
-        .alias_mnemonic = IREE_SVL("v_fmac_dx9_zero_f32"),
-        .replacement_descriptor_name = IREE_SVL("amdgpu.v_fmac_f32"),
-        .replacement_mnemonic = IREE_SVL("v_fmac_f32"),
-    },
-    {
-        .alias_name = IREE_SVL("v_fmac_dx9_zero_f32"),
-        .alias_mnemonic = IREE_SVL("v_fmac_dx9_zero_f32"),
-        .replacement_descriptor_name = IREE_SVL("amdgpu.v_fmac_f32"),
-        .replacement_mnemonic = IREE_SVL("v_fmac_f32"),
-    },
-};
-
-static const loom_amdgpu_low_blocked_alias_t*
-loom_amdgpu_low_blocked_alias_lookup(iree_string_view_t name) {
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kLoomAmdgpuLowBlockedAliases);
-       ++i) {
-    const loom_amdgpu_low_blocked_alias_t* alias =
-        &kLoomAmdgpuLowBlockedAliases[i];
-    if (iree_string_view_equal(name, alias->alias_name)) {
-      return alias;
-    }
-  }
-  return NULL;
-}
 
 static iree_status_t loom_amdgpu_low_verify_begin_function(
     const loom_low_verify_provider_t* provider,

@@ -645,6 +645,22 @@ static iree_status_t loom_parse_low_asm_instruction(
       parser->low_asm_environment.state, descriptor_set, mnemonic_token.text,
       &packet));
   if (packet.descriptor == NULL) {
+    if (parser->low_asm_environment.vtable->diagnose_unknown_mnemonic != NULL) {
+      loom_text_low_asm_diagnostic_t diagnostic = {0};
+      IREE_RETURN_IF_ERROR(
+          parser->low_asm_environment.vtable->diagnose_unknown_mnemonic(
+              parser->low_asm_environment.state, descriptor_set,
+              mnemonic_token.text, &diagnostic));
+      if (diagnostic.param_count > IREE_ARRAYSIZE(diagnostic.params)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low asm unknown-mnemonic diagnostic parameter capacity exceeded");
+      }
+      if (diagnostic.error != NULL) {
+        return loom_parser_emit(parser, diagnostic.error, diagnostic.params,
+                                diagnostic.param_count, mnemonic_token);
+      }
+    }
     return loom_parser_emit_low_asm_error(parser, mnemonic_token,
                                           IREE_SV("unknown low asm mnemonic"));
   }

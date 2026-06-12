@@ -326,6 +326,16 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "low_asm_diagnostics",
+    hdrs = ["low_asm_diagnostics.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/format/text:low_asm",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
@@ -333,6 +343,7 @@ loom_cc_library(
         ":artifact_manifest",
         ":compile_report",
         ":legalization",
+        ":low_asm_diagnostics",
         ":low_descriptor_registry",
         ":low_legality",
         ":low_packet_diagnostics",

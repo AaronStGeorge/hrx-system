@@ -11,6 +11,7 @@
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/diagnostics/packet_diagnostics.h"
 #include "loom/target/arch/amdgpu/legalization.h"
+#include "loom/target/arch/amdgpu/low_asm_diagnostics.h"
 #include "loom/target/arch/amdgpu/low_verify.h"
 #include "loom/target/arch/amdgpu/lower/lower.h"
 #include "loom/target/arch/amdgpu/math_policy.h"
@@ -33,6 +34,11 @@ static const loom_target_legalizer_provider_t* kLoomAmdgpuLegalizerProviders[] =
 static const loom_target_low_packet_diagnostic_provider_t*
     kLoomAmdgpuLowPacketDiagnosticProviders[] = {
         &loom_amdgpu_low_packet_diagnostic_provider_storage,
+};
+
+static const loom_target_low_asm_diagnostic_provider_t*
+    kLoomAmdgpuLowAsmDiagnosticProviders[] = {
+        &loom_amdgpu_low_asm_diagnostic_provider,
 };
 
 static const loom_low_verify_provider_t* kLoomAmdgpuLowVerifyProviders[] = {
@@ -266,6 +272,11 @@ const loom_target_provider_t loom_amdgpu_target_provider = {
         {
             .count = IREE_ARRAYSIZE(kLoomAmdgpuLowPacketDiagnosticProviders),
             .values = kLoomAmdgpuLowPacketDiagnosticProviders,
+        },
+    .low_asm_diagnostic_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kLoomAmdgpuLowAsmDiagnosticProviders),
+            .values = kLoomAmdgpuLowAsmDiagnosticProviders,
         },
     .low_verify_provider_list =
         {

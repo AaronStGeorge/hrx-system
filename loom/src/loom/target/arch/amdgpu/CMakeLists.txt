@@ -175,6 +175,39 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
+    low_aliases
+  HDRS
+    "low_aliases.h"
+  SRCS
+    "low_aliases.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
+    low_asm_diagnostics
+  HDRS
+    "low_asm_diagnostics.h"
+  SRCS
+    "low_asm_diagnostics.c"
+  DEPS
+    ::error_defs
+    ::low_aliases
+    iree::base
+    loom::codegen::low::descriptors
+    loom::error::error_defs
+    loom::target::low_asm_diagnostics
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
     low_verify
   HDRS
     "low_verify.h"
@@ -182,6 +215,7 @@ loom_cc_library(
     "low_verify.c"
   DEPS
     ::error_defs
+    ::low_aliases
     iree::base
     loom::codegen::low::diagnostics
     loom::codegen::low::verify
@@ -201,6 +235,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::legalization
+    ::low_asm_diagnostics
     ::low_verify
     ::math_policy
     ::pass_registry

@@ -152,6 +152,7 @@ static const loom_target_provider_t kFakeTargetProvider = {
     /*.low_legality_provider_list=*/{},
     /*.legalizer_provider_list=*/{},
     /*.low_packet_diagnostic_provider_list=*/{},
+    /*.low_asm_diagnostic_provider_list=*/{},
     /*.low_verify_provider_list=*/{},
     /*.emitter_list=*/{},
     /*.pass_registry=*/nullptr,

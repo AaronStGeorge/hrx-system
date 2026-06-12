@@ -101,6 +101,7 @@ loom_cc_library(
     loom::target::compile_report_format
     loom::target::entry_selection
     loom::target::legalization
+    loom::target::low_asm_diagnostics
     loom::target::low_descriptor_registry
     loom::target::low_legality
     loom::target::low_packet_diagnostics

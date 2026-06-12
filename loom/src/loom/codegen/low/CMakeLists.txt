@@ -89,6 +89,7 @@ loom_cc_library(
     loom::ir
     loom::ops::low
     loom::ops::target
+    loom::target::low_asm_diagnostics
     loom::target::registers
   PUBLIC
 )

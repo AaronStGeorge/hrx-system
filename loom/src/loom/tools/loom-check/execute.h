@@ -32,6 +32,7 @@
 #include "loom/ir/context.h"
 #include "loom/pass/registry.h"
 #include "loom/target/legalization.h"
+#include "loom/target/low_asm_diagnostics.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
@@ -346,6 +347,10 @@ struct loom_check_environment_t {
   // Optional target-low packet diagnostic providers linked into this runner.
   loom_target_low_packet_diagnostic_provider_list_t
       low_packet_diagnostic_provider_list;
+  // Optional target-owned text low-asm diagnostic providers linked into this
+  // runner.
+  loom_target_low_asm_diagnostic_provider_list_t
+      low_asm_diagnostic_provider_list;
   // Optional target-owned low verifier providers linked into this runner.
   loom_low_verify_provider_list_t low_verify_provider_list;
   // Optional emit providers linked into this runner.

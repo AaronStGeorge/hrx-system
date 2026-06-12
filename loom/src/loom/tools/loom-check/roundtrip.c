@@ -37,9 +37,11 @@ iree_status_t loom_check_execute_roundtrip(
   iree_status_t registry_status =
       loom_check_environment_initialize_low_descriptor_registry(environment,
                                                                 &low_registry);
+  loom_low_descriptor_text_asm_environment_storage_t low_asm_storage = {0};
   if (iree_status_is_ok(registry_status)) {
-    loom_low_descriptor_text_asm_environment_initialize(
-        &low_registry.registry, &parse_options.low_asm_environment);
+    loom_low_descriptor_text_asm_environment_initialize_with_diagnostics(
+        &low_registry.registry, environment->low_asm_diagnostic_provider_list,
+        &low_asm_storage, &parse_options.low_asm_environment);
   }
   iree_status_t parse_status =
       iree_status_is_ok(registry_status)

@@ -112,6 +112,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:low_asm_diagnostics",
         "//loom/src/loom/target:registers",
         "//runtime/src/iree/base",
     ],

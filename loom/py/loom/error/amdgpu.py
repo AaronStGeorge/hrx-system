@@ -649,6 +649,35 @@ ERR_AMDGPU_031 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_032: AMDGPU FMA asm mnemonic has compatibility-only semantics.
+ERR_AMDGPU_032 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=32,
+    severity=Severity.ERROR,
+    summary="AMDGPU FMA asm mnemonic has compatibility-only semantics.",
+    message=(
+        "low asm descriptor set '{descriptor_set_name}' rejects mnemonic "
+        "'{alias_mnemonic}': it has '{alias_semantics}' compatibility "
+        "semantics and is not an ordinary f32 FMA; use descriptor "
+        "'{replacement_descriptor_name}' with mnemonic "
+        "'{replacement_mnemonic}' instead: {decision}, reason '{reason}'"
+    ),
+    params=(
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("alias_mnemonic", ParamKind.STRING),
+        ErrorParam("alias_semantics", ParamKind.STRING),
+        ErrorParam("replacement_descriptor_name", ParamKind.STRING),
+        ErrorParam("replacement_mnemonic", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use ordinary v_fma_f32 or v_fmac_f32 mnemonics for IEEE f32 FMA; "
+        "DX9-zero aliases are compatibility opcodes with different zero "
+        "semantics"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -680,4 +709,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_029,
     ERR_AMDGPU_030,
     ERR_AMDGPU_031,
+    ERR_AMDGPU_032,
 )

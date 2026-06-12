@@ -1711,8 +1711,10 @@ iree_status_t loom_check_execute_emit(
                           .user_data = &diagnostic_collector},
       .max_errors = 20,
   };
-  loom_low_descriptor_text_asm_environment_initialize(
-      &low_registry.registry, &parse_options.low_asm_environment);
+  loom_low_descriptor_text_asm_environment_storage_t low_asm_storage = {0};
+  loom_low_descriptor_text_asm_environment_initialize_with_diagnostics(
+      &low_registry.registry, environment->low_asm_diagnostic_provider_list,
+      &low_asm_storage, &parse_options.low_asm_environment);
   iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
   if (iree_status_is_ok(status)) {
     status = loom_text_parse(stripped_view, filename, context, block_pool,

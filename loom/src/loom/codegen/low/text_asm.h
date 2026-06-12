@@ -13,6 +13,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/format/text/low_asm.h"
 #include "loom/format/text/printer.h"
+#include "loom/target/low_asm_diagnostics.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,6 +25,22 @@ extern "C" {
 // returned environment.
 void loom_low_descriptor_text_asm_environment_initialize(
     const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_text_low_asm_environment_t* out_environment);
+
+typedef struct loom_low_descriptor_text_asm_environment_storage_t {
+  // Registry used for descriptor-set, packet, and register-type lookup.
+  const loom_low_descriptor_registry_t* descriptor_registry;
+  // Target-owned diagnostic providers used for unknown asm mnemonics.
+  loom_target_low_asm_diagnostic_provider_list_t diagnostic_provider_list;
+} loom_low_descriptor_text_asm_environment_storage_t;
+
+// Initializes |out_environment| with target-owned diagnostic providers. The
+// descriptor registry and |out_storage| are borrowed and must outlive every
+// parse using the returned environment.
+void loom_low_descriptor_text_asm_environment_initialize_with_diagnostics(
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_target_low_asm_diagnostic_provider_list_t diagnostic_provider_list,
+    loom_low_descriptor_text_asm_environment_storage_t* out_storage,
     loom_text_low_asm_environment_t* out_environment);
 
 // Descriptor-backed text printer context for target-low types.

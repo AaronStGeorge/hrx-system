@@ -200,11 +200,33 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "low_aliases",
+    srcs = ["low_aliases.c"],
+    hdrs = ["low_aliases.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
+    name = "low_asm_diagnostics",
+    srcs = ["low_asm_diagnostics.c"],
+    hdrs = ["low_asm_diagnostics.h"],
+    deps = [
+        ":error_defs",
+        ":low_aliases",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/target:low_asm_diagnostics",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_verify",
     srcs = ["low_verify.c"],
     hdrs = ["low_verify.h"],
     deps = [
         ":error_defs",
+        ":low_aliases",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/error:error_defs",
@@ -220,6 +242,7 @@ loom_cc_library(
     visibility = _AMDGPU_PROVIDER_VISIBILITY,
     deps = [
         ":legalization",
+        ":low_asm_diagnostics",
         ":low_verify",
         ":math_policy",
         ":pass_registry",

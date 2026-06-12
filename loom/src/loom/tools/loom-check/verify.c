@@ -60,8 +60,10 @@ iree_status_t loom_check_execute_verify(
                             .user_data = &collector},
         .max_errors = 100,
     };
-    loom_low_descriptor_text_asm_environment_initialize(
-        &low_registry.registry, &parse_options.low_asm_environment);
+    loom_low_descriptor_text_asm_environment_storage_t low_asm_storage = {0};
+    loom_low_descriptor_text_asm_environment_initialize_with_diagnostics(
+        &low_registry.registry, environment->low_asm_diagnostic_provider_list,
+        &low_asm_storage, &parse_options.low_asm_environment);
     status = loom_text_parse(stripped_view, filename, context, block_pool,
                              &parse_options, &module);
     collector.module = module;

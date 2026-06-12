@@ -192,6 +192,7 @@ const loom_check_environment_t kExecuteTestProviderEnvironment = {
     /*.low_legality_provider_list=*/{},
     /*.legalizer_provider_list=*/{},
     /*.low_packet_diagnostic_provider_list=*/{},
+    /*.low_asm_diagnostic_provider_list=*/{},
     /*.low_verify_provider_list=*/{},
     /*.emit_providers=*/
     {
