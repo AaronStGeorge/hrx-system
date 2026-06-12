@@ -614,6 +614,34 @@ def test_vop2_f32_uses_inline_then_literal_operand_forms() -> None:
         )
 
 
+def test_fmamk_f32_descriptor_pins_literal_multiply_slot() -> None:
+    descriptor_sets = (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    )
+    for descriptor_set in descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        descriptor = descriptors["amdgpu.v_fmamk_f32"]
+        assert descriptor.instruction_name == "V_FMAMK_F32"
+        assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+            "VDST",
+            "SRC0",
+            "VSRC1",
+        )
+        assert tuple(
+            operand.descriptor_operand.field_name for operand in descriptor.operands
+        ) == ("dst", "a", "c")
+        assert descriptor.immediate_fields == ("LITERAL",)
+        assert tuple(immediate.field_name for immediate in descriptor.immediates) == (
+            "imm32",
+        )
+
+
 def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
     rdna3_descriptors = {
         descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()

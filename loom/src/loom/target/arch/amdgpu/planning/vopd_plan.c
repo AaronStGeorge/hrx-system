@@ -88,6 +88,8 @@ iree_string_view_t loom_amdgpu_vopd_pair_reason_name(
       return IREE_SV("dual_fmac_f32");
     case LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32:
       return IREE_SV("dual_fmaak_f32");
+    case LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32:
+      return IREE_SV("dual_fmamk_f32");
     case LOOM_AMDGPU_VOPD_PAIR_REASON_UNKNOWN:
     default:
       return IREE_SV("unknown");
@@ -447,12 +449,12 @@ static iree_status_t loom_amdgpu_vopd_read_fmac_component(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_vopd_read_fmaak_component(
+static iree_status_t loom_amdgpu_vopd_read_literal_fma_component(
     const loom_amdgpu_vopd_plan_builder_t* builder,
-    const loom_low_packet_view_t* packet,
+    const loom_low_packet_view_t* packet, uint16_t component_op,
     loom_amdgpu_vopd_candidate_component_t* out_component, bool* out_eligible) {
   *out_component = (loom_amdgpu_vopd_candidate_component_t){
-      .op = LOOM_AMDGPU_VOPD_OP_FMAAK_F32,
+      .op = component_op,
       .flags = LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL,
   };
   *out_eligible = false;
@@ -508,8 +510,17 @@ static iree_status_t loom_amdgpu_vopd_read_component(
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F32);
   if (fmaak_descriptor != NULL && packet->descriptor == fmaak_descriptor) {
-    return loom_amdgpu_vopd_read_fmaak_component(builder, packet, out_component,
-                                                 out_eligible);
+    return loom_amdgpu_vopd_read_literal_fma_component(
+        builder, packet, LOOM_AMDGPU_VOPD_OP_FMAAK_F32, out_component,
+        out_eligible);
+  }
+  const loom_low_descriptor_t* fmamk_descriptor =
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32);
+  if (fmamk_descriptor != NULL && packet->descriptor == fmamk_descriptor) {
+    return loom_amdgpu_vopd_read_literal_fma_component(
+        builder, packet, LOOM_AMDGPU_VOPD_OP_FMAMK_F32, out_component,
+        out_eligible);
   }
   return iree_ok_status();
 }
@@ -528,6 +539,9 @@ static bool loom_amdgpu_vopd_pair_reason_for_components(
       return true;
     case LOOM_AMDGPU_VOPD_OP_FMAAK_F32:
       *out_reason = LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32;
+      return true;
+    case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
+      *out_reason = LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32;
       return true;
     default:
       return false;

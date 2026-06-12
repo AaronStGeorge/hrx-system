@@ -34,6 +34,8 @@ extern "C" {
 #define LOOM_AMDGPU_VOPD_OP_FMAC_F32 UINT16_C(0)
 // Component opcode for v_fmaak_f32 in a VOPD X/Y slot.
 #define LOOM_AMDGPU_VOPD_OP_FMAAK_F32 UINT16_C(1)
+// Component opcode for v_fmamk_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_FMAMK_F32 UINT16_C(2)
 
 typedef enum loom_amdgpu_vopd_packet_role_e {
   // Packet is not part of a VOPD pair.
@@ -51,6 +53,8 @@ typedef enum loom_amdgpu_vopd_pair_reason_e {
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 = 1,
   // Two independent v_fmaak_f32 packets were fused into v_dual_fmaak_f32.
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 = 2,
+  // Two independent v_fmamk_f32 packets were fused into v_dual_fmamk_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32 = 3,
 } loom_amdgpu_vopd_pair_reason_t;
 
 typedef enum loom_amdgpu_vopd_pair_flag_bits_e {

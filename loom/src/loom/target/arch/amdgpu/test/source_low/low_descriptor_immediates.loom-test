@@ -31,6 +31,14 @@ low.func.def target(@gfx11_target) @vop3p_fma_mix_f16_lanes(%addr: reg<amdgpu.vg
 // ====
 
 amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @vop2_fmamk_literal_multiply_slot(%a: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fmamk_f32 %a, %c, 1065353216
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @sop2_inline_source_shift(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   %shifted = s_lshl_b32_rhs_inline %value, 64
   return

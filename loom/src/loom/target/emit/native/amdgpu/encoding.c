@@ -1512,7 +1512,7 @@ static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
                                      out_vsrc1);
 }
 
-static iree_status_t loom_amdgpu_encode_vopd_fmaak_component(
+static iree_status_t loom_amdgpu_encode_vopd_literal_fma_component(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet,
     loom_amdgpu_encoding_vopdxy_fields_t* fields,
     loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
@@ -1536,8 +1536,8 @@ static iree_status_t loom_amdgpu_encode_vopd_fmaak_component(
   if (op->result_count != 1 || op->operand_count != 2 ||
       packet->descriptor->immediate_count != 1) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU VOPD fmaak component has unexpected "
-                            "operand shape");
+                            "AMDGPU VOPD literal FMA component has "
+                            "unexpected operand shape");
   }
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_packet_result_vgpr(state, packet, 0, out_vdst));
@@ -1568,7 +1568,10 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
       return loom_amdgpu_encode_vopd_fmac_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
     case LOOM_AMDGPU_VOPD_OP_FMAAK_F32:
-      return loom_amdgpu_encode_vopd_fmaak_component(
+      return loom_amdgpu_encode_vopd_literal_fma_component(
+          state, packet, fields, out_flags, out_literal_u32, slot);
+    case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
+      return loom_amdgpu_encode_vopd_literal_fma_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
@@ -1582,7 +1585,8 @@ static iree_status_t loom_amdgpu_encode_vopd_pair(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* first,
     const loom_amdgpu_vopd_pair_t* pair) {
   if (pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32) {
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 &&
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32) {
     iree_string_view_t reason = loom_amdgpu_vopd_pair_reason_name(pair->reason);
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU native encoding VOPD pair reason '%.*s' "

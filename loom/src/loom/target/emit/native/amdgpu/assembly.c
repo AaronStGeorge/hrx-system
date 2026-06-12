@@ -367,6 +367,40 @@ static iree_status_t loom_amdgpu_read_packet_immediate_i64(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_append_packet_immediate_u32_hex(
+    const loom_native_assembly_packet_context_t* context,
+    uint16_t descriptor_immediate_index) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  if (descriptor_immediate_index >= descriptor->immediate_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly descriptor immediate index is out of range");
+  }
+  const uint32_t immediate_row =
+      descriptor->immediate_start + descriptor_immediate_index;
+  if (immediate_row >= descriptor_set->immediate_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly descriptor immediate row is outside the descriptor "
+        "set");
+  }
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[immediate_row];
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_read_packet_immediate_i64(context, immediate, &value));
+  if (value < 0 || value > UINT32_MAX) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly descriptor immediate value %" PRId64 " is not a u32",
+        value);
+  }
+  return iree_string_builder_append_format(context->builder, "0x%08" PRIx32,
+                                           (uint32_t)value);
+}
+
 static iree_status_t loom_amdgpu_find_packet_immediate(
     const loom_native_assembly_packet_context_t* context,
     iree_string_view_t field_name, const loom_low_immediate_t** out_immediate) {
@@ -1903,6 +1937,19 @@ static iree_status_t loom_amdgpu_append_matrix_packet(
   return loom_amdgpu_append_canonical_asm_form_packet(context);
 }
 
+static iree_status_t loom_amdgpu_append_fmamk_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "v_fmamk_f32 "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_packet_immediate_u32_hex(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return loom_amdgpu_append_operand(context, 1);
+}
+
 static iree_status_t loom_amdgpu_append_exec_restore_packet(
     const loom_native_assembly_packet_context_t* context) {
   IREE_RETURN_IF_ERROR(
@@ -1948,6 +1995,23 @@ static iree_status_t loom_amdgpu_append_vopd_fmaak_component(
                                            literal_u32);
 }
 
+static iree_status_t loom_amdgpu_append_vopd_fmamk_component(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_packet_view_t* packet, uint32_t literal_u32) {
+  loom_native_assembly_packet_context_t component_context = *context;
+  component_context.packet = packet;
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(context->builder,
+                                                          "v_dual_fmamk_f32 "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(&component_context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(&component_context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      context->builder, "0x%08" PRIx32, literal_u32));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return loom_amdgpu_append_operand(&component_context, 1);
+}
+
 static iree_status_t loom_amdgpu_append_vopd_component(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_packet_view_t* packet, uint16_t vopd_op,
@@ -1957,6 +2021,9 @@ static iree_status_t loom_amdgpu_append_vopd_component(
       return loom_amdgpu_append_vopd_fmac_component(context, packet);
     case LOOM_AMDGPU_VOPD_OP_FMAAK_F32:
       return loom_amdgpu_append_vopd_fmaak_component(context, packet,
+                                                     literal_u32);
+    case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
+      return loom_amdgpu_append_vopd_fmamk_component(context, packet,
                                                      literal_u32);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
@@ -1970,7 +2037,8 @@ static iree_status_t loom_amdgpu_append_vopd_pair_packet(
     const loom_native_assembly_packet_context_t* context,
     const loom_amdgpu_vopd_pair_t* pair) {
   if (pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32) {
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 &&
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32) {
     iree_string_view_t reason = loom_amdgpu_vopd_pair_reason_name(pair->reason);
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU assembly VOPD pair reason '%.*s' is not "
@@ -2004,6 +2072,11 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_FULL)) {
     return loom_amdgpu_append_exec_full_packet(context);
+  }
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32)) {
+    return loom_amdgpu_append_fmamk_packet(context);
   }
   bool has_read_effect = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
