@@ -17,11 +17,6 @@
 extern "C" {
 #endif
 
-enum {
-  // Default number of detailed rows captured per report row category.
-  LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT = 8,
-};
-
 typedef enum loom_run_compile_report_sink_format_e {
   // Report capture and output are disabled.
   LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE = 0,
@@ -34,27 +29,17 @@ typedef enum loom_run_compile_report_sink_format_e {
 typedef struct loom_run_compile_report_capture_options_t {
   // Output sink format requested by the caller.
   loom_run_compile_report_sink_format_t sink_format;
-  // Bounded report detail level captured and emitted by the sink.
+  // Report detail level captured and emitted by the sink.
   loom_target_compile_report_format_mode_t detail_mode;
-  // Maximum copied rows per row category in details mode.
-  iree_host_size_t row_limit;
 } loom_run_compile_report_capture_options_t;
 
 typedef struct loom_run_compile_report_capture_t {
   // Capture options used to configure and format |report|.
   loom_run_compile_report_capture_options_t options;
-  // Host allocator used for optional row arrays.
+  // Host allocator used for optional detail rows.
   iree_allocator_t host_allocator;
   // Compile report populated by candidate compilation.
   loom_target_compile_report_t report;
-  // Capture-owned pressure row storage passed to candidate compilation.
-  loom_target_compile_report_pressure_row_t* pressure_rows;
-  // Capture-owned spill row storage passed to candidate compilation.
-  loom_target_compile_report_spill_row_t* spill_rows;
-  // Capture-owned source-low row storage passed to candidate compilation.
-  loom_target_compile_report_source_low_row_t* source_low_rows;
-  // Capture-owned target-legalization row storage passed to compilation.
-  loom_target_compile_report_legalization_row_t* target_legalization_rows;
 } loom_run_compile_report_capture_t;
 
 // Initializes capture options with report output disabled.
@@ -71,11 +56,6 @@ iree_status_t loom_run_compile_report_capture_options_parse_request(
     iree_string_view_t value,
     loom_run_compile_report_capture_options_t* options);
 
-// Parses and stores the per-category row limit for details mode.
-iree_status_t loom_run_compile_report_capture_options_parse_row_limit(
-    iree_string_view_t value,
-    loom_run_compile_report_capture_options_t* options);
-
 // Returns true when report capture and sink emission are enabled.
 bool loom_run_compile_report_capture_options_is_enabled(
     const loom_run_compile_report_capture_options_t* options);
@@ -84,7 +64,7 @@ bool loom_run_compile_report_capture_options_is_enabled(
 bool loom_run_compile_report_capture_is_enabled(
     const loom_run_compile_report_capture_t* capture);
 
-// Allocates optional row storage for |options| and initializes |out_capture|.
+// Initializes |out_capture| and its allocator-owned report.
 iree_status_t loom_run_compile_report_capture_initialize(
     const loom_run_compile_report_capture_options_t* options,
     iree_allocator_t host_allocator,

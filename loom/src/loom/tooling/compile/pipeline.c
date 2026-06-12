@@ -184,8 +184,8 @@ iree_status_t loom_compile_run_pipeline(
   loom_target_pass_predicate_provider_storage_initialize(block_pool,
                                                          &predicate_storage);
   if (options->report != NULL) {
-    loom_target_compile_report_initialize_if_empty(
-        options->report, &options->report_row_storage);
+    loom_target_compile_report_initialize_if_empty(options->report,
+                                                   block_pool->block_allocator);
   }
 
   loom_pass_trace_options_t trace_options = {0};

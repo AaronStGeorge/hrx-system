@@ -24,6 +24,7 @@
 #include "loom/pass/environment.h"
 #include "loom/pass/registry.h"
 #include "loom/target/artifact_manifest.h"
+#include "loom/target/compile_report.h"
 #include "loom/target/legalization.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
@@ -127,6 +128,9 @@ typedef struct loom_target_emit_request_t {
 
   // Optional artifact manifest request.
   loom_target_emit_artifact_manifest_request_t artifact_manifest;
+
+  // Optional caller-owned structured compile report to populate.
+  loom_target_compile_report_t* compile_report;
 
   // Diagnostic emitter that reports target diagnostics into the operation
   // result.

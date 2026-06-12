@@ -295,6 +295,7 @@ static iree_status_t loomc_amdgpu_emit_module_artifact(
               .user_data = &diagnostic_emitter,
           },
       .max_errors = 20,
+      .report = request->compile_report,
       .artifact_name = request->identifier,
       .artifact_manifest_identifier = request->artifact_manifest.identifier,
       .artifact_manifest =

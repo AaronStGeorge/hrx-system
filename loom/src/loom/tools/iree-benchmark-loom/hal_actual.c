@@ -61,7 +61,6 @@ iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(
                 .user_data = &out_provider->diagnostics,
             },
         .report = report_options.report,
-        .report_row_storage = report_options.report_row_storage,
         .artifact_flags = artifact_flags,
     };
     loom_run_hal_testbench_actual_provider_initialize(&provider_options,

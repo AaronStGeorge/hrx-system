@@ -20,6 +20,7 @@ loom_cc_library(
     "include/loomc/artifact_manifest.h"
     "include/loomc/base.h"
     "include/loomc/compile.h"
+    "include/loomc/compile_report.h"
     "include/loomc/config.h"
     "include/loomc/context.h"
     "include/loomc/diagnostic.h"
@@ -52,6 +53,7 @@ loom_cc_library(
     "src/base.c"
     "src/base_system.c"
     "src/compile.c"
+    "src/compile_report.c"
     "src/config.c"
     "src/context.c"
     "src/diagnostic.c"
@@ -102,6 +104,8 @@ loom_cc_library(
     loom::pass::registry
     loom::pass::tooling
     loom::target::artifact_manifest
+    loom::target::compile_report
+    loom::target::compile_report_format
     loom::target::pipeline
     loom::target::predicate
     loom::target::provider
@@ -129,6 +133,7 @@ loom_cc_library(
     "include/loomc/artifact_manifest.h"
     "include/loomc/base.h"
     "include/loomc/compile.h"
+    "include/loomc/compile_report.h"
     "include/loomc/config.h"
     "include/loomc/context.h"
     "include/loomc/diagnostic.h"

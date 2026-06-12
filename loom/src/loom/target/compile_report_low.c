@@ -563,54 +563,47 @@ loom_target_compile_report_source_low_selection_kind(
   }
 }
 
-void loom_target_compile_report_record_low_lowering(
+iree_status_t loom_target_compile_report_record_low_lowering(
     loom_target_compile_report_t* report,
     const loom_low_lower_result_t* lower_result) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
   report->source_low_selected_op_count +=
       lower_result->selected_source_op_count;
   report->source_low_emitted_op_count += lower_result->emitted_low_op_count;
-  for (iree_host_size_t i = 0; i < lower_result->report_row_count; ++i) {
-    const loom_low_lower_report_row_t* source_row =
-        &lower_result->report_rows[i];
-    const loom_target_compile_report_source_low_row_t row = {
-        .function_name = source_row->function_name,
-        .source_op_name = source_row->source_op_name,
-        .source_op_kind = source_row->source_op_kind,
-        .selection_kind = loom_target_compile_report_source_low_selection_kind(
-            source_row->selection_kind),
-        .rule_set_index = source_row->rule_set_index,
-        .rule_index = source_row->rule_index,
-        .plan_id = source_row->plan_id,
-        .descriptor_id = source_row->descriptor_id,
-        .emitted_low_op_count = source_row->emitted_low_op_count,
-    };
-    loom_target_compile_report_record_source_low_row(report, &row);
+  for (const loom_low_lower_report_row_vec_t* vec =
+           lower_result->report_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_low_lower_report_row_t* source_rows =
+        loom_low_lower_report_row_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i) {
+      const loom_low_lower_report_row_t* source_row = &source_rows[i];
+      const loom_target_compile_report_source_low_row_t row = {
+          .function_name = source_row->function_name,
+          .source_op_name = source_row->source_op_name,
+          .source_op_kind = source_row->source_op_kind,
+          .selection_kind =
+              loom_target_compile_report_source_low_selection_kind(
+                  source_row->selection_kind),
+          .rule_set_index = source_row->rule_set_index,
+          .rule_index = source_row->rule_index,
+          .plan_id = source_row->plan_id,
+          .descriptor_id = source_row->descriptor_id,
+          .emitted_low_op_count = source_row->emitted_low_op_count,
+      };
+      IREE_RETURN_IF_ERROR(
+          loom_target_compile_report_record_source_low_row(report, &row));
+    }
   }
-  if (lower_result->report_row_total_count > lower_result->report_row_count) {
-    report->source_low_row_total_count +=
-        lower_result->report_row_total_count - lower_result->report_row_count;
-  }
+  return iree_ok_status();
 }
 
-iree_status_t loom_target_compile_report_allocate_low_lowering_rows(
-    const loom_target_compile_report_t* report, iree_arena_allocator_t* arena,
-    loom_low_lower_report_storage_t* out_storage) {
-  *out_storage = (loom_low_lower_report_storage_t){0};
-  if (report == NULL || report->source_low_rows == NULL ||
-      report->source_low_row_count >= report->source_low_row_capacity) {
-    return iree_ok_status();
-  }
-  out_storage->row_capacity =
-      report->source_low_row_capacity - report->source_low_row_count;
-  return iree_arena_allocate_array(arena, out_storage->row_capacity,
-                                   sizeof(*out_storage->rows),
-                                   (void**)&out_storage->rows);
-}
-
-static void loom_target_compile_report_record_pressure_rows(
+static iree_status_t loom_target_compile_report_record_pressure_rows(
     loom_target_compile_report_t* report,
     const loom_liveness_analysis_t* liveness) {
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {
+    return iree_ok_status();
+  }
   for (iree_host_size_t i = 0; i < liveness->pressure_summary_count; ++i) {
     const loom_liveness_pressure_summary_t* summary =
         &liveness->pressure_summaries[i];
@@ -629,13 +622,19 @@ static void loom_target_compile_report_record_pressure_rows(
                                          liveness->module, summary->peak_op)
                                    : IREE_SV("<block-boundary>"),
     };
-    loom_target_compile_report_record_pressure_row(report, &row);
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_pressure_row(report, &row));
   }
+  return iree_ok_status();
 }
 
-static void loom_target_compile_report_record_spill_rows(
+static iree_status_t loom_target_compile_report_record_spill_rows(
     loom_target_compile_report_t* report,
     const loom_low_allocation_table_t* allocation) {
+  if (!loom_target_compile_report_wants_details(
+          report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
+    return iree_ok_status();
+  }
   for (iree_host_size_t i = 0; i < allocation->spill_plan_count; ++i) {
     const loom_low_allocation_spill_plan_t* spill_plan =
         &allocation->spill_plans[i];
@@ -661,8 +660,10 @@ static void loom_target_compile_report_record_spill_rows(
         .store_count = spill_plan->store_count,
         .reload_count = spill_plan->reload_count,
     };
-    loom_target_compile_report_record_spill_row(report, &row);
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_record_spill_row(report, &row));
   }
+  return iree_ok_status();
 }
 
 iree_status_t loom_target_compile_report_record_low_emission_frame(
@@ -689,8 +690,12 @@ iree_status_t loom_target_compile_report_record_low_emission_frame(
       frame->allocation.materialized_copy_count);
   loom_target_compile_report_record_low_static_instruction_mix(report, frame);
   loom_target_compile_report_record_move_causes(report, frame);
-  loom_target_compile_report_record_pressure_rows(report, liveness);
-  loom_target_compile_report_record_spill_rows(report, &frame->allocation);
+  iree_status_t status =
+      loom_target_compile_report_record_pressure_rows(report, liveness);
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_record_spill_rows(report,
+                                                          &frame->allocation);
+  }
   loom_low_allocation_release_value_scratch(&value_scratch);
-  return iree_ok_status();
+  return status;
 }

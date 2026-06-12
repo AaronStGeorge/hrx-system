@@ -181,7 +181,6 @@ loom_cc_library(
     ::compile_report
     ::registers
     iree::base
-    iree::base::internal::arena
     loom::codegen::low::descriptors
     loom::codegen::low::frame
     loom::codegen::low::lower
@@ -331,6 +330,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::artifact_manifest
+    ::compile_report
     ::legalization
     ::low_descriptor_registry
     ::low_legality

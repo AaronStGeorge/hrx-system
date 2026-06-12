@@ -261,6 +261,9 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_artifact_manifest_options_t`.
   LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS = 30,
+
+  /// `loomc_compile_report_options_t`.
+  LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS = 31,
 } loomc_structure_type_t;
 
 /// One loose string option entry.

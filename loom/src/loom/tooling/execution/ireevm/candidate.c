@@ -8,13 +8,18 @@
 
 #include "loom/target/emit/ireevm/archive_emitter.h"
 
-static void loom_ireevm_run_candidate_publish_compile_report(
+static iree_status_t loom_ireevm_run_candidate_publish_compile_report(
     const loom_run_candidate_compile_options_t* options,
     const loom_ireevm_run_candidate_t* candidate) {
   if (options->report == NULL) {
-    return;
+    return iree_ok_status();
   }
-  *options->report = candidate->compile_report;
+  loom_target_compile_report_t report = {0};
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_clone(
+      &candidate->compile_report, options->report->allocator, &report));
+  loom_target_compile_report_deinitialize(options->report);
+  *options->report = report;
+  return iree_ok_status();
 }
 
 iree_status_t loom_ireevm_run_candidate_emit(
@@ -27,9 +32,13 @@ iree_status_t loom_ireevm_run_candidate_emit(
   loom_target_compile_report_t* report =
       options->report != NULL ? &out_candidate->compile_report : NULL;
   if (report != NULL) {
-    *report = *options->report;
-    loom_target_compile_report_initialize_if_empty(
-        report, &options->report_row_storage);
+    const iree_allocator_t report_allocator =
+        iree_allocator_is_null(options->report->allocator)
+            ? iree_allocator_null()
+            : allocator;
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_clone(
+        options->report, report_allocator, report));
+    loom_target_compile_report_initialize_if_empty(report, report_allocator);
   }
 
   const loom_ireevm_archive_emit_options_t archive_emit_options = {
@@ -38,12 +47,13 @@ iree_status_t loom_ireevm_run_candidate_emit(
       .source_resolver = options->source_resolver,
       .max_errors = options->max_errors,
       .report = report,
-      .report_row_storage = options->report_row_storage,
   };
   iree_status_t status = loom_ireevm_emit_module_archive_from_ir(
       run_module->module, &archive_emit_options, allocator,
       &out_candidate->emitted, &out_candidate->archive);
-  loom_ireevm_run_candidate_publish_compile_report(options, out_candidate);
+  status = iree_status_join(
+      status,
+      loom_ireevm_run_candidate_publish_compile_report(options, out_candidate));
   if (!iree_status_is_ok(status)) {
     loom_ireevm_run_candidate_deinitialize(out_candidate);
   }
@@ -57,5 +67,6 @@ void loom_ireevm_run_candidate_deinitialize(
   }
   loom_ireevm_module_archive_deinitialize(&candidate->archive,
                                           candidate->host_allocator);
+  loom_target_compile_report_deinitialize(&candidate->compile_report);
   *candidate = (loom_ireevm_run_candidate_t){0};
 }

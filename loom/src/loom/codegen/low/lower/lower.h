@@ -364,13 +364,38 @@ typedef struct loom_low_lower_report_row_t {
   uint32_t emitted_low_op_count;
 } loom_low_lower_report_row_t;
 
-// Caller-owned row storage for source-to-low report details.
-typedef struct loom_low_lower_report_storage_t {
-  // Caller-owned source-low row storage.
-  loom_low_lower_report_row_t* rows;
-  // Capacity of |rows|.
-  iree_host_size_t row_capacity;
-} loom_low_lower_report_storage_t;
+// Linked storage block for homogeneous source-to-low report rows.
+typedef struct loom_low_lower_report_row_vec_t {
+  // Next row block in allocation order, or NULL for the final block.
+  struct loom_low_lower_report_row_vec_t* next;
+  // Number of rows populated in this block.
+  iree_host_size_t count;
+  // Maximum number of rows that fit in this block.
+  iree_host_size_t capacity;
+} loom_low_lower_report_row_vec_t;
+
+// Owned linked list of source-to-low report rows.
+typedef struct loom_low_lower_report_row_list_t {
+  // First row storage block, or NULL when empty.
+  loom_low_lower_report_row_vec_t* head;
+  // Last row storage block, or NULL when empty.
+  loom_low_lower_report_row_vec_t* tail;
+  // Total number of rows stored across all blocks.
+  iree_host_size_t count;
+} loom_low_lower_report_row_list_t;
+
+// Returns mutable row storage for |vec|.
+static inline loom_low_lower_report_row_t* loom_low_lower_report_row_vec_rows(
+    loom_low_lower_report_row_vec_t* vec) {
+  return (loom_low_lower_report_row_t*)(vec + 1);
+}
+
+// Returns immutable row storage for |vec|.
+static inline const loom_low_lower_report_row_t*
+loom_low_lower_report_row_vec_const_rows(
+    const loom_low_lower_report_row_vec_t* vec) {
+  return (const loom_low_lower_report_row_t*)(vec + 1);
+}
 
 typedef iree_status_t (*loom_low_lower_select_op_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
@@ -525,10 +550,8 @@ typedef struct loom_low_lower_options_t {
   // Optional arena receiving production tables that must outlive lowering,
   // such as source-derived memory access summaries consumed by packetization.
   iree_arena_allocator_t* table_arena;
-  // Enables production source-to-low report counters and optional rows.
-  bool report_enabled;
-  // Optional caller-owned storage for production source-low report rows.
-  loom_low_lower_report_storage_t report_storage;
+  // Optional allocator enabling production source-low report rows.
+  iree_allocator_t report_allocator;
 } loom_low_lower_options_t;
 
 typedef struct loom_low_lower_result_t {
@@ -546,14 +569,10 @@ typedef struct loom_low_lower_result_t {
   uint64_t selected_source_op_count;
   // Reported number of low operations emitted from source operation selections.
   uint64_t emitted_low_op_count;
-  // Caller-owned source-low report row storage.
-  loom_low_lower_report_row_t* report_rows;
-  // Capacity of |report_rows|.
-  iree_host_size_t report_row_capacity;
-  // Number of rows copied into |report_rows|.
-  iree_host_size_t report_row_count;
-  // Total number of available report rows before capacity truncation.
-  iree_host_size_t report_row_total_count;
+  // Allocator used for owned source-low report rows.
+  iree_allocator_t report_allocator;
+  // Owned source-low report rows.
+  loom_low_lower_report_row_list_t report_rows;
   // Source-derived memory access summaries for emitted low memory packets.
   loom_low_memory_access_table_t memory_access_table;
 } loom_low_lower_result_t;
@@ -578,6 +597,9 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
                                       loom_func_like_t source_function,
                                       const loom_low_lower_options_t* options,
                                       loom_low_lower_result_t* out_result);
+
+// Releases report row storage owned by |result|.
+void loom_low_lower_result_deinitialize(loom_low_lower_result_t* result);
 
 // Lowers one target-bound external function declaration into a low.func.decl.
 //

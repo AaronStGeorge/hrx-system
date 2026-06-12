@@ -64,10 +64,6 @@ IREE_FLAG_NAMED(
     "Optional compile report output. Use 'summary'/'details' for structured "
     "JSON, 'text-summary'/'text-details' for human-readable text, or "
     "empty/'none'.");
-IREE_FLAG_NAMED(int32_t, compile_report_row_limit, "compile-report-row-limit",
-                LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-                "Maximum rows per report row category to capture for "
-                "--compile-report=details.");
 IREE_FLAG_NAMED(string, emit_target_artifact, "emit-target-artifact", "",
                 "Optional output path for the selected HAL backend's "
                 "target-native artifact, such as AMDGPU HSACO.");
@@ -349,13 +345,6 @@ static iree_status_t iree_run_loom_compile_report_options_initialize(
   loom_run_compile_report_capture_options_initialize(out_options);
   IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_request(
       iree_make_cstring_view(FLAG_compile_report), out_options));
-  if (FLAG_compile_report_row_limit < 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "--compile-report-row-limit must be non-negative; got %d",
-        (int)FLAG_compile_report_row_limit);
-  }
-  out_options->row_limit = (iree_host_size_t)FLAG_compile_report_row_limit;
   return iree_ok_status();
 }
 
@@ -375,7 +364,6 @@ static iree_status_t iree_run_loom_run_pass_pipeline(
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(run_module);
   pipeline_options.report = compile_options->report;
-  pipeline_options.report_row_storage = compile_options->report_row_storage;
   pipeline_options.diagnostic_sink = (loom_diagnostic_sink_t){
       .fn = loom_diagnostic_stderr_sink,
   };

@@ -115,8 +115,6 @@ typedef struct loom_run_hal_testbench_actual_provider_options_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate.
   loom_target_compile_report_t* report;
-  // Optional caller-owned row storage for detailed compile report rows.
-  loom_target_compile_report_row_storage_t report_row_storage;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
 } loom_run_hal_testbench_actual_provider_options_t;
@@ -150,8 +148,6 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate.
   loom_target_compile_report_t* report;
-  // Optional caller-owned row storage for detailed compile report rows.
-  loom_target_compile_report_row_storage_t report_row_storage;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
   // Parsed compile module owned by this provider.

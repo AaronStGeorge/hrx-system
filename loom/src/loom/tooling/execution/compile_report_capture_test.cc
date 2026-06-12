@@ -12,12 +12,11 @@
 namespace loom {
 namespace {
 
-TEST(CompileReportCaptureTest, ConfiguresDetailedRowStorage) {
+TEST(CompileReportCaptureTest, ConfiguresDetailedReportRequest) {
   loom_run_compile_report_capture_options_t options = {};
   loom_run_compile_report_capture_options_initialize(&options);
   options.sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;
   options.detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS;
-  options.row_limit = 2;
 
   loom_run_compile_report_capture_t capture = {};
   IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
@@ -28,18 +27,12 @@ TEST(CompileReportCaptureTest, ConfiguresDetailedRowStorage) {
   loom_run_compile_report_capture_configure_compile_options(&capture,
                                                             &compile_options);
   EXPECT_EQ(compile_options.report, &capture.report);
-  EXPECT_EQ(compile_options.report_row_storage.pressure_rows,
-            capture.pressure_rows);
-  EXPECT_EQ(compile_options.report_row_storage.pressure_row_capacity, 2u);
-  EXPECT_EQ(compile_options.report_row_storage.spill_rows, capture.spill_rows);
-  EXPECT_EQ(compile_options.report_row_storage.spill_row_capacity, 2u);
-  EXPECT_EQ(compile_options.report_row_storage.source_low_rows,
-            capture.source_low_rows);
-  EXPECT_EQ(compile_options.report_row_storage.source_low_row_capacity, 2u);
-  EXPECT_EQ(compile_options.report_row_storage.target_legalization_rows,
-            capture.target_legalization_rows);
-  EXPECT_EQ(compile_options.report_row_storage.target_legalization_row_capacity,
-            2u);
+  EXPECT_TRUE(iree_all_bits_set(
+      capture.report.requested_detail_flags,
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS));
 
   loom_run_compile_report_capture_deinitialize(&capture);
 }

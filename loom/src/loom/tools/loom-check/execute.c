@@ -359,38 +359,6 @@ typedef enum loom_check_pass_output_kind_e {
   LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT = 1,
 } loom_check_pass_output_kind_t;
 
-static iree_status_t loom_check_compile_report_row_storage_initialize(
-    iree_arena_allocator_t* arena,
-    loom_target_compile_report_row_storage_t* out_storage) {
-  enum { LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY = 64 };
-  memset(out_storage, 0, sizeof(*out_storage));
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena,
-                          LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY *
-                              sizeof(*out_storage->pressure_rows),
-                          (void**)&out_storage->pressure_rows));
-  out_storage->pressure_row_capacity = LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate(
-      arena,
-      LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY * sizeof(*out_storage->spill_rows),
-      (void**)&out_storage->spill_rows));
-  out_storage->spill_row_capacity = LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena,
-                          LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY *
-                              sizeof(*out_storage->source_low_rows),
-                          (void**)&out_storage->source_low_rows));
-  out_storage->source_low_row_capacity = LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena,
-                          LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY *
-                              sizeof(*out_storage->target_legalization_rows),
-                          (void**)&out_storage->target_legalization_rows));
-  out_storage->target_legalization_row_capacity =
-      LOOM_CHECK_COMPILE_REPORT_ROW_CAPACITY;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_check_execute_pass_with_output(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -465,17 +433,16 @@ static iree_status_t loom_check_execute_pass_with_output(
   loom_pass_run_result_t run_result = {0};
   loom_target_compile_report_t compile_report = {0};
   loom_target_compile_report_t* compile_report_ref = NULL;
-  loom_target_compile_report_row_storage_t compile_report_row_storage = {0};
   if (iree_status_is_ok(status) &&
       output_kind == LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT) {
-    status = loom_check_compile_report_row_storage_initialize(
-        &diagnostic_arena, &compile_report_row_storage);
-    if (iree_status_is_ok(status)) {
-      loom_target_compile_report_initialize(&compile_report);
-      loom_target_compile_report_set_row_storage(&compile_report,
-                                                 &compile_report_row_storage);
-      compile_report_ref = &compile_report;
-    }
+    loom_target_compile_report_initialize(
+        &compile_report, iree_arena_allocator(&diagnostic_arena));
+    compile_report.requested_detail_flags =
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
+    compile_report_ref = &compile_report;
   }
   if (iree_status_is_ok(status)) {
     loom_low_lower_policy_registry_t low_lower_policy_registry = {0};

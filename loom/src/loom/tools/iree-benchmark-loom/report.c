@@ -1408,10 +1408,7 @@ static iree_status_t iree_benchmark_loom_write_static_summary_json(
         report->source_low_emitted_op_count));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
         stream, &first_field, "source_low_row_count",
-        report->source_low_row_count));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_field, "source_low_row_total_count",
-        report->source_low_row_total_count));
+        report->source_low_rows.count));
   }
   if (iree_any_bit_set(
           report->detail_flags,
@@ -1443,27 +1440,18 @@ static iree_status_t iree_benchmark_loom_write_static_summary_json(
         report->target_legalization_unhandled_op_count));
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
         stream, &first_field, "target_legalization_row_count",
-        report->target_legalization_row_count));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_field, "target_legalization_row_total_count",
-        report->target_legalization_row_total_count));
+        report->target_legalization_rows.count));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
         stream, &first_field, "pressure_row_count",
-        report->pressure_row_count));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_field, "pressure_row_total_count",
-        report->pressure_row_total_count));
+        report->pressure_rows.count));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_field, "spill_row_count", report->spill_row_count));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-        stream, &first_field, "spill_row_total_count",
-        report->spill_row_total_count));
+        stream, &first_field, "spill_row_count", report->spill_rows.count));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES)) {

@@ -111,10 +111,6 @@ IREE_FLAG_NAMED(string, compile_report_output, "compile-report-output",
                 "stderr",
                 "Output path for --compile-report. Use 'stderr', '-', or a "
                 "file path.");
-IREE_FLAG_NAMED(int32_t, compile_report_row_limit, "compile-report-row-limit",
-                LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-                "Maximum rows per report row category to capture for "
-                "--compile-report=details.");
 
 #if LOOM_COMPILE_HAVE_AMDGPU
 static const loom_run_execution_provider_t kLoomCompileAmdgpuProvider = {
@@ -272,13 +268,6 @@ static iree_status_t loom_compile_report_options_initialize(
   loom_run_compile_report_capture_options_initialize(out_options);
   IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_request(
       iree_make_cstring_view(FLAG_compile_report), out_options));
-  if (FLAG_compile_report_row_limit < 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "--compile-report-row-limit must be non-negative; got %d",
-        (int)FLAG_compile_report_row_limit);
-  }
-  out_options->row_limit = (iree_host_size_t)FLAG_compile_report_row_limit;
   return iree_ok_status();
 }
 
@@ -388,7 +377,6 @@ static iree_status_t loom_compile_run_pass_pipeline(
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(run_module);
   pipeline_options.report = compile_options->report;
-  pipeline_options.report_row_storage = compile_options->report_row_storage;
   pipeline_options.trace_options = trace_options;
 
   return loom_compile_run_pipeline(run_module->module, &pipeline_options,

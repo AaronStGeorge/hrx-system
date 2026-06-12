@@ -612,12 +612,10 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
 
   loom_run_candidate_compile_options_t options = {};
   InitializeCandidateOptions(&run_module, &options);
-  loom_target_compile_report_pressure_row_t pressure_rows[4] = {};
-  options.report_row_storage = {
-      .pressure_rows = pressure_rows,
-      .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
-  };
   loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report, iree_allocator_system());
+  report.requested_detail_flags =
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
   options.report = &report;
 
   loom_ireevm_run_candidate_t candidate = {};
@@ -650,21 +648,23 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
   EXPECT_GT(candidate.compile_report.emitted_code_byte_count, 0u);
   EXPECT_GE(candidate.compile_report.emitted_code_storage_byte_count,
             candidate.compile_report.emitted_code_byte_count);
-  EXPECT_EQ(candidate.compile_report.pressure_rows, pressure_rows);
-  EXPECT_GT(candidate.compile_report.pressure_row_total_count, 0u);
-  EXPECT_GT(candidate.compile_report.pressure_row_count, 0u);
-  EXPECT_GT(candidate.compile_report.pressure_rows[0].peak_live_units, 0u);
+  EXPECT_GT(candidate.compile_report.pressure_rows.count, 0u);
+  ASSERT_NE(candidate.compile_report.pressure_rows.head, nullptr);
+  const auto* pressure_rows =
+      static_cast<const loom_target_compile_report_pressure_row_t*>(
+          loom_target_compile_report_vec_const_rows(
+              candidate.compile_report.pressure_rows.head));
+  EXPECT_GT(pressure_rows[0].peak_live_units, 0u);
   EXPECT_EQ(candidate.compile_report.source_low_selected_op_count, 0u);
   EXPECT_EQ(candidate.compile_report.source_low_emitted_op_count, 0u);
-  EXPECT_EQ(candidate.compile_report.source_low_row_total_count, 0u);
-  EXPECT_EQ(candidate.compile_report.source_low_row_count, 0u);
+  EXPECT_EQ(candidate.compile_report.source_low_rows.count, 0u);
   EXPECT_EQ(candidate.compile_report.artifact_size,
             candidate.archive.data_length);
   EXPECT_EQ(report.artifact_kind, candidate.compile_report.artifact_kind);
   EXPECT_EQ(report.artifact_size, candidate.compile_report.artifact_size);
-  EXPECT_EQ(report.pressure_row_total_count,
-            candidate.compile_report.pressure_row_total_count);
-  EXPECT_EQ(report.source_low_row_total_count, 0u);
+  EXPECT_EQ(report.pressure_rows.count,
+            candidate.compile_report.pressure_rows.count);
+  EXPECT_EQ(report.source_low_rows.count, 0u);
 
   iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
   ParseArchive(&candidate.archive, &module_def);
@@ -684,6 +684,47 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
   EXPECT_EQ(iree_vm_ExportFunctionDef_internal_ordinal(export_def), 1);
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_target_compile_report_deinitialize(&report);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithNullReportAllocator) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report, iree_allocator_null());
+  report.requested_detail_flags =
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
+  options.report = &report;
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+  EXPECT_EQ(candidate.compile_report.status_code, IREE_STATUS_OK);
+  EXPECT_TRUE(
+      iree_all_bits_set(candidate.compile_report.detail_flags,
+                        LOOM_TARGET_COMPILE_REPORT_DETAIL_ARTIFACT_SIZE));
+  EXPECT_TRUE(iree_all_bits_set(candidate.compile_report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
+  EXPECT_TRUE(
+      iree_all_bits_set(candidate.compile_report.detail_flags,
+                        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
+  EXPECT_GT(candidate.compile_report.schedule_node_count, 0u);
+  EXPECT_EQ(candidate.compile_report.artifact_size,
+            candidate.archive.data_length);
+  EXPECT_EQ(candidate.compile_report.pressure_rows.count, 0u);
+  EXPECT_EQ(candidate.compile_report.pressure_rows.head, nullptr);
+  EXPECT_EQ(report.detail_flags, candidate.compile_report.detail_flags);
+  EXPECT_EQ(report.artifact_size, candidate.compile_report.artifact_size);
+  EXPECT_EQ(report.pressure_rows.count, 0u);
+  EXPECT_EQ(report.pressure_rows.head, nullptr);
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_target_compile_report_deinitialize(&report);
   loom_run_module_deinitialize(&run_module);
 }
 
@@ -701,8 +742,8 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithoutReport) {
   EXPECT_EQ(candidate.compile_report.detail_flags,
             LOOM_TARGET_COMPILE_REPORT_DETAIL_NONE);
   EXPECT_EQ(candidate.compile_report.artifact_size, 0u);
-  EXPECT_EQ(candidate.compile_report.pressure_rows, nullptr);
-  EXPECT_EQ(candidate.compile_report.source_low_rows, nullptr);
+  EXPECT_EQ(candidate.compile_report.pressure_rows.count, 0u);
+  EXPECT_EQ(candidate.compile_report.source_low_rows.count, 0u);
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);

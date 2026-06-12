@@ -31,6 +31,11 @@
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/registers.h"
 
+enum {
+  // Default allocation block size for source-to-low report rows.
+  LOOM_LOW_LOWER_REPORT_ROW_VEC_DEFAULT_BYTE_LENGTH = 4096,
+};
+
 typedef struct loom_low_lower_descriptor_matrix_plan_t {
   // Shared source adapter used by this matrix descriptor plan.
   loom_target_contract_descriptor_matrix_source_t source;
@@ -1091,6 +1096,9 @@ iree_status_t loom_low_lower_source_query_scope_create(
   scope->result = (loom_low_lower_result_t){
       .low_func_ref = loom_symbol_ref_null(),
   };
+  if (!iree_allocator_is_null(options->report_allocator)) {
+    scope->result.report_allocator = options->report_allocator;
+  }
   scope->context = (loom_low_lower_context_t){
       .module = module,
       .source_function = source_function,
@@ -1134,6 +1142,7 @@ void loom_low_lower_source_query_scope_destroy(
     loom_low_lowering_frame_deinitialize(&scope->context);
     scope->value_domain_initialized = false;
   }
+  loom_low_lower_result_deinitialize(&scope->result);
   iree_arena_deinitialize(&scope->context.arena);
   memset(scope, 0, sizeof(*scope));
 }
@@ -1155,22 +1164,81 @@ const loom_local_value_domain_t* loom_low_lower_source_query_scope_value_domain(
                                          : NULL;
 }
 
-static void loom_low_lower_record_report_row(
+static void loom_low_lower_report_row_list_deinitialize(
+    iree_allocator_t allocator, loom_low_lower_report_row_list_t* list) {
+  loom_low_lower_report_row_vec_t* vec = list->head;
+  while (vec != NULL) {
+    loom_low_lower_report_row_vec_t* next = vec->next;
+    iree_allocator_free(allocator, vec);
+    vec = next;
+  }
+  *list = (loom_low_lower_report_row_list_t){0};
+}
+
+void loom_low_lower_result_deinitialize(loom_low_lower_result_t* result) {
+  if (result == NULL) {
+    return;
+  }
+  loom_low_lower_report_row_list_deinitialize(result->report_allocator,
+                                              &result->report_rows);
+  result->report_allocator = iree_allocator_null();
+}
+
+static iree_status_t loom_low_lower_report_row_list_append(
+    loom_low_lower_report_row_list_t* list, iree_allocator_t allocator,
+    const loom_low_lower_report_row_t* row) {
+  if (iree_allocator_is_null(allocator)) {
+    return iree_ok_status();
+  }
+  if (list->tail == NULL || list->tail->count == list->tail->capacity) {
+    iree_host_size_t capacity =
+        (LOOM_LOW_LOWER_REPORT_ROW_VEC_DEFAULT_BYTE_LENGTH -
+         sizeof(loom_low_lower_report_row_vec_t)) /
+        sizeof(*row);
+    capacity = iree_max((iree_host_size_t)1, capacity);
+    iree_host_size_t row_bytes = 0;
+    if (!iree_host_size_checked_mul(capacity, sizeof(*row), &row_bytes)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "source-to-low report row block is too large");
+    }
+    iree_host_size_t block_bytes = 0;
+    if (!iree_host_size_checked_add(sizeof(loom_low_lower_report_row_vec_t),
+                                    row_bytes, &block_bytes)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "source-to-low report row block is too large");
+    }
+    loom_low_lower_report_row_vec_t* vec = NULL;
+    IREE_RETURN_IF_ERROR(
+        iree_allocator_malloc(allocator, block_bytes, (void**)&vec));
+    *vec = (loom_low_lower_report_row_vec_t){
+        .capacity = capacity,
+    };
+    if (list->tail != NULL) {
+      list->tail->next = vec;
+    } else {
+      list->head = vec;
+    }
+    list->tail = vec;
+  }
+  loom_low_lower_report_row_t* rows =
+      loom_low_lower_report_row_vec_rows(list->tail);
+  rows[list->tail->count++] = *row;
+  ++list->count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_record_report_row(
     loom_low_lower_context_t* context,
     const loom_low_lower_selected_plan_t* selected_plan,
     uint32_t emitted_low_op_count) {
   loom_low_lower_result_t* result = context->result;
+  if (iree_allocator_is_null(context->options->report_allocator)) {
+    return iree_ok_status();
+  }
   ++result->selected_source_op_count;
   result->emitted_low_op_count += emitted_low_op_count;
-  ++result->report_row_total_count;
-  if (result->report_rows == NULL ||
-      result->report_row_count >= result->report_row_capacity) {
-    return;
-  }
 
-  loom_low_lower_report_row_t* row =
-      &result->report_rows[result->report_row_count++];
-  *row = (loom_low_lower_report_row_t){
+  loom_low_lower_report_row_t row = {
       .function_name = loom_low_lower_context_function_name(context),
       .source_op_name = loom_op_name(context->module, selected_plan->source_op),
       .source_op_kind = selected_plan->source_op->kind,
@@ -1182,13 +1250,13 @@ static void loom_low_lower_record_report_row(
       .emitted_low_op_count = emitted_low_op_count,
   };
   if (selected_plan->rule != NULL) {
-    row->selection_kind = LOOM_LOW_LOWER_REPORT_SELECTION_RULE;
-    row->rule_set_index = selected_plan->rule_set_index;
-    row->rule_index = selected_plan->rule_index;
-    row->plan_id = LOOM_LOW_LOWER_PLAN_ID_NONE;
+    row.selection_kind = LOOM_LOW_LOWER_REPORT_SELECTION_RULE;
+    row.rule_set_index = selected_plan->rule_set_index;
+    row.rule_index = selected_plan->rule_index;
+    row.plan_id = LOOM_LOW_LOWER_PLAN_ID_NONE;
     if (selected_plan->rule->emit_count != 0 &&
         selected_plan->resolved_emits != NULL) {
-      row->descriptor_id =
+      row.descriptor_id =
           selected_plan->resolved_emits[0].descriptor.descriptor->stable_id;
     }
   } else if (selected_plan->kind ==
@@ -1196,8 +1264,10 @@ static void loom_low_lower_record_report_row(
     const loom_low_lower_descriptor_matrix_plan_t* plan =
         (const loom_low_lower_descriptor_matrix_plan_t*)
             selected_plan->plan.target_data;
-    row->descriptor_id = plan->descriptor.descriptor->stable_id;
+    row.descriptor_id = plan->descriptor.descriptor->stable_id;
   }
+  return loom_low_lower_report_row_list_append(&result->report_rows,
+                                               result->report_allocator, &row);
 }
 
 static iree_status_t loom_low_lower_try_select_op_callback(
@@ -1660,6 +1730,9 @@ iree_status_t loom_low_lower_import_declaration(
   *out_result = (loom_low_lower_result_t){
       .low_func_ref = loom_symbol_ref_null(),
   };
+  if (!iree_allocator_is_null(options->report_allocator)) {
+    out_result->report_allocator = options->report_allocator;
+  }
 
   const loom_symbol_ref_t low_func_ref =
       loom_func_like_callee(source_declaration);
@@ -2302,10 +2375,8 @@ static iree_status_t loom_low_lower_emit_elided_selected_plan(
     IREE_RETURN_IF_ERROR(
         loom_low_lower_elide_value(context, source_results[i]));
   }
-  if (context->options->report_enabled) {
-    loom_low_lower_record_report_row(context, selected_plan,
-                                     /*emitted_low_op_count=*/0);
-  }
+  IREE_RETURN_IF_ERROR(loom_low_lower_record_report_row(
+      context, selected_plan, /*emitted_low_op_count=*/0));
   return iree_ok_status();
 }
 
@@ -2669,10 +2740,11 @@ static iree_status_t loom_low_lower_emit_selected_plan(
                        LOOM_LOW_LOWER_SELECTED_PLAN_ELIDED)) {
     return loom_low_lower_emit_elided_selected_plan(context, &selected_plan);
   }
-  const bool report_enabled = context->options->report_enabled;
+  const bool report_allocator_provided =
+      !iree_allocator_is_null(context->options->report_allocator);
   loom_block_t* insertion_block = context->builder.ip.block;
   uint32_t before_op_count = 0;
-  if (report_enabled) {
+  if (report_allocator_provided) {
     IREE_ASSERT(insertion_block != NULL);
     before_op_count = insertion_block->op_count;
   }
@@ -2696,11 +2768,11 @@ static iree_status_t loom_low_lower_emit_selected_plan(
         context->policy->emit_op.fn(context->policy->emit_op.user_data, context,
                                     source_op, selected_plan.plan));
   }
-  if (report_enabled) {
+  if (report_allocator_provided) {
     const uint32_t after_op_count = insertion_block->op_count;
     IREE_ASSERT_GE(after_op_count, before_op_count);
-    loom_low_lower_record_report_row(context, &selected_plan,
-                                     after_op_count - before_op_count);
+    IREE_RETURN_IF_ERROR(loom_low_lower_record_report_row(
+        context, &selected_plan, after_op_count - before_op_count));
   }
   return iree_ok_status();
 }
@@ -2779,10 +2851,6 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
       .result = out_result,
   };
   context.lowering.fact_table = options->fact_table;
-  if (options->report_enabled) {
-    out_result->report_rows = options->report_storage.rows;
-    out_result->report_row_capacity = options->report_storage.row_capacity;
-  }
   iree_arena_initialize(module->arena.block_pool, &context.arena);
 
   iree_status_t status =

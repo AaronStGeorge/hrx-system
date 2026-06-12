@@ -225,25 +225,6 @@ loom_amdgpu_hal_artifact_provider_resolve_device_target_ref(
       &builder, processor, *out_target_ref, LOOM_LOCATION_UNKNOWN, &target_op);
 }
 
-static loom_target_compile_report_row_storage_t
-loom_amdgpu_hal_artifact_provider_report_row_storage(
-    loom_target_compile_report_t* report) {
-  if (report == NULL) {
-    return (loom_target_compile_report_row_storage_t){0};
-  }
-  return (loom_target_compile_report_row_storage_t){
-      .pressure_rows = report->pressure_rows,
-      .pressure_row_capacity = report->pressure_row_capacity,
-      .spill_rows = report->spill_rows,
-      .spill_row_capacity = report->spill_row_capacity,
-      .source_low_rows = report->source_low_rows,
-      .source_low_row_capacity = report->source_low_row_capacity,
-      .target_legalization_rows = report->target_legalization_rows,
-      .target_legalization_row_capacity =
-          report->target_legalization_row_capacity,
-  };
-}
-
 static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
     const loom_run_hal_device_target_t* target,
@@ -280,8 +261,6 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
       .source_resolver = source_resolver,
       .max_errors = max_errors,
       .report = report,
-      .report_row_storage =
-          loom_amdgpu_hal_artifact_provider_report_row_storage(report),
       .capture_target_listing = iree_all_bits_set(
           artifact_flags, LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING),
       .artifact_name = artifact_manifest ? artifact_manifest->artifact_name

@@ -46,8 +46,6 @@ typedef struct loom_amdgpu_hal_kernel_library_options_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate.
   loom_target_compile_report_t* report;
-  // Optional caller-owned row storage for detailed compile report rows.
-  loom_target_compile_report_row_storage_t report_row_storage;
   // True to retain target-owned textual assembly listings for debug artifacts.
   bool capture_target_listing;
   // Emitted artifact name recorded inside an artifact manifest.

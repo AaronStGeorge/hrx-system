@@ -67,8 +67,6 @@ typedef struct loom_compile_pipeline_options_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate during passes.
   loom_target_compile_report_t* report;
-  // Optional caller-owned row storage for detailed compile report rows.
-  loom_target_compile_report_row_storage_t report_row_storage;
   // Optional caller-owned trace configuration for selected pass boundaries.
   const loom_pass_trace_options_t* trace_options;
 } loom_compile_pipeline_options_t;

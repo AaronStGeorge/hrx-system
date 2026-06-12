@@ -237,6 +237,7 @@ iree_status_t loom_low_source_workload_run_pipeline(
       if (iree_status_is_ok(status)) {
         lowered_funcs[i] = func_lower_result.low_func_op;
       }
+      loom_low_lower_result_deinitialize(&func_lower_result);
     }
     if (iree_status_is_ok(status)) {
       out_counters->lower_error_count = lower_result.error_count;

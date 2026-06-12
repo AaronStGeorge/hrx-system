@@ -25,6 +25,8 @@ typedef enum loom_target_compile_artifact_kind_e {
   LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE = 2,
   // Target-native HAL kernel library artifact.
   LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_KERNEL_LIBRARY = 3,
+  // Target-native artifact such as ELF, SPIR-V, WASM, or object bytes.
+  LOOM_TARGET_COMPILE_ARTIFACT_KIND_TARGET_ARTIFACT = 4,
 } loom_target_compile_artifact_kind_t;
 
 typedef uint32_t loom_target_compile_report_detail_flags_t;
@@ -208,7 +210,7 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t register_move_count;
 } loom_target_compile_report_static_instruction_mix_t;
 
-// One register-pressure peak row copied into a compile report.
+// One register-pressure peak row in a compile report.
 typedef struct loom_target_compile_report_pressure_row_t {
   // Register class name for register values, or an empty string otherwise.
   iree_string_view_t register_class;
@@ -228,7 +230,7 @@ typedef struct loom_target_compile_report_pressure_row_t {
   iree_string_view_t peak_operation_name;
 } loom_target_compile_report_pressure_row_t;
 
-// One predicted spill row copied into a compile report.
+// One predicted spill row in a compile report.
 typedef struct loom_target_compile_report_spill_row_t {
   // SSA value name represented by the spilled assignment.
   iree_string_view_t value_name;
@@ -328,40 +330,59 @@ typedef struct loom_target_compile_report_legalization_row_t {
   uint64_t erased_op_count;
 } loom_target_compile_report_legalization_row_t;
 
-// Caller-owned storage for optional detailed compile report rows.
-typedef struct loom_target_compile_report_row_storage_t {
-  // Caller-owned pressure row storage.
-  loom_target_compile_report_pressure_row_t* pressure_rows;
-  // Capacity of |pressure_rows|.
-  iree_host_size_t pressure_row_capacity;
-  // Caller-owned spill row storage.
-  loom_target_compile_report_spill_row_t* spill_rows;
-  // Capacity of |spill_rows|.
-  iree_host_size_t spill_row_capacity;
-  // Caller-owned source-low row storage.
-  loom_target_compile_report_source_low_row_t* source_low_rows;
-  // Capacity of |source_low_rows|.
-  iree_host_size_t source_low_row_capacity;
-  // Caller-owned target-legalization row storage.
-  loom_target_compile_report_legalization_row_t* target_legalization_rows;
-  // Capacity of |target_legalization_rows|.
-  iree_host_size_t target_legalization_row_capacity;
-} loom_target_compile_report_row_storage_t;
+// Linked storage block for homogeneous compile report detail rows.
+//
+// Row payloads are stored immediately after this header. Blocks are allocator
+// owned by the report that contains the list, and their payload row type is
+// determined by the report field that references the list.
+typedef struct loom_target_compile_report_vec_t {
+  // Next row block in allocation order, or NULL for the final block.
+  struct loom_target_compile_report_vec_t* next;
+  // Number of rows populated in this block.
+  iree_host_size_t count;
+  // Maximum number of rows that fit in this block.
+  iree_host_size_t capacity;
+} loom_target_compile_report_vec_t;
+
+// Owned linked list of homogeneous compile report detail rows.
+typedef struct loom_target_compile_report_row_list_t {
+  // First row storage block, or NULL when empty.
+  loom_target_compile_report_vec_t* head;
+  // Last row storage block, or NULL when empty.
+  loom_target_compile_report_vec_t* tail;
+  // Total number of rows stored across all blocks.
+  iree_host_size_t count;
+} loom_target_compile_report_row_list_t;
+
+// Returns mutable row storage for |vec|.
+static inline void* loom_target_compile_report_vec_rows(
+    loom_target_compile_report_vec_t* vec) {
+  return (void*)(vec + 1);
+}
+
+// Returns immutable row storage for |vec|.
+static inline const void* loom_target_compile_report_vec_const_rows(
+    const loom_target_compile_report_vec_t* vec) {
+  return (const void*)(vec + 1);
+}
 
 // Structured feedback from one module-to-artifact compilation.
 //
-// Reports are allocation-free and borrow every string view from the compiled
-// module, target records, compile options, backend tables, or artifact storage.
-// Optional detail rows are copied into caller-owned row storage configured
-// before row recording; compile entry points expose this through their options
-// because they initialize reports before populating them. Consumers that need a
-// report to outlive those owners must copy the strings and rows before
-// releasing the module or candidate.
+// Reports borrow every string view from the compiled module, target records,
+// compile options, backend tables, or artifact storage. Detail row lists are
+// owned by the report and allocated from |allocator| as rows are recorded.
+// Consumers that need a report to outlive those string owners must copy the
+// strings before releasing the module or candidate.
 typedef struct loom_target_compile_report_t {
+  // Host allocator used for owned row storage.
+  iree_allocator_t allocator;
   // Artifact kind requested or produced by compilation.
   loom_target_compile_artifact_kind_t artifact_kind;
   // Terminal status code observed by compilation.
   iree_status_code_t status_code;
+  // Detail categories requested by the caller. Producers use this to avoid
+  // detail-only work in summary mode.
+  loom_target_compile_report_detail_flags_t requested_detail_flags;
   // Optional detail flags indicating which numeric summaries are populated.
   loom_target_compile_report_detail_flags_t detail_flags;
   // VM module name requested for archive emission.
@@ -446,60 +467,49 @@ typedef struct loom_target_compile_report_t {
       move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
   // Static descriptor-backed instruction-mix feature counters.
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
-  // Caller-owned pressure row storage.
-  loom_target_compile_report_pressure_row_t* pressure_rows;
-  // Capacity of |pressure_rows|.
-  iree_host_size_t pressure_row_capacity;
-  // Number of pressure rows copied into |pressure_rows|.
-  iree_host_size_t pressure_row_count;
-  // Total number of available pressure rows before capacity truncation.
-  iree_host_size_t pressure_row_total_count;
-  // Caller-owned spill row storage.
-  loom_target_compile_report_spill_row_t* spill_rows;
-  // Capacity of |spill_rows|.
-  iree_host_size_t spill_row_capacity;
-  // Number of spill rows copied into |spill_rows|.
-  iree_host_size_t spill_row_count;
-  // Total number of available spill rows before capacity truncation.
-  iree_host_size_t spill_row_total_count;
-  // Caller-owned source-low row storage.
-  loom_target_compile_report_source_low_row_t* source_low_rows;
-  // Capacity of |source_low_rows|.
-  iree_host_size_t source_low_row_capacity;
-  // Number of source-low rows copied into |source_low_rows|.
-  iree_host_size_t source_low_row_count;
-  // Total number of available source-low rows before capacity truncation.
-  iree_host_size_t source_low_row_total_count;
-  // Caller-owned target-legalization row storage.
-  loom_target_compile_report_legalization_row_t* target_legalization_rows;
-  // Capacity of |target_legalization_rows|.
-  iree_host_size_t target_legalization_row_capacity;
-  // Number of target-legalization rows copied into storage.
-  iree_host_size_t target_legalization_row_count;
-  // Total number of available target-legalization rows before truncation.
-  iree_host_size_t target_legalization_row_total_count;
+  // Owned register-pressure peak rows.
+  loom_target_compile_report_row_list_t pressure_rows;
+  // Owned predicted spill rows.
+  loom_target_compile_report_row_list_t spill_rows;
+  // Owned source-to-low selection rows.
+  loom_target_compile_report_row_list_t source_low_rows;
+  // Owned target-legalization decision rows.
+  loom_target_compile_report_row_list_t target_legalization_rows;
   // Estimated target private memory bytes.
   uint64_t private_memory_bytes;
   // Estimated target local/shared memory bytes.
   uint64_t local_memory_bytes;
 } loom_target_compile_report_t;
 
-// Initializes an empty compile report.
+// Initializes an empty compile report using |allocator| for row storage.
 void loom_target_compile_report_initialize(
-    loom_target_compile_report_t* out_report);
+    loom_target_compile_report_t* out_report, iree_allocator_t allocator);
 
-// Configures caller-owned row storage for optional detailed report rows.
-void loom_target_compile_report_set_row_storage(
-    loom_target_compile_report_t* report,
-    const loom_target_compile_report_row_storage_t* row_storage);
+// Returns true when |report| requests all |detail_flags|.
+static inline bool loom_target_compile_report_wants_details(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_detail_flags_t detail_flags) {
+  return report != NULL &&
+         iree_all_bits_set(report->requested_detail_flags, detail_flags);
+}
 
-// Initializes a zeroed report and attaches row storage only when no report
-// details or row storage have been populated yet. Artifact emitters use this to
-// support direct zeroed-report callers without wiping pass-phase report rows
+// Releases row storage owned by |report| and resets it to zero.
+void loom_target_compile_report_deinitialize(
+    loom_target_compile_report_t* report);
+
+// Initializes |out_target| as a deep copy of |source| using |allocator| for
+// owned row storage. String views remain borrowed from the same owners
+// referenced by |source|.
+iree_status_t loom_target_compile_report_clone(
+    const loom_target_compile_report_t* source, iree_allocator_t allocator,
+    loom_target_compile_report_t* out_target);
+
+// Initializes a zeroed report only when no details have been requested or
+// populated yet. Artifact emitters use this to support direct zeroed-report
+// callers without overwriting caller-selected row storage or pass-phase rows
 // already appended by a compile pipeline.
 void loom_target_compile_report_initialize_if_empty(
-    loom_target_compile_report_t* report,
-    const loom_target_compile_report_row_storage_t* row_storage);
+    loom_target_compile_report_t* report, iree_allocator_t allocator);
 
 // Records a terminal status code in |report|.
 void loom_target_compile_report_record_status(
@@ -548,18 +558,18 @@ void loom_target_compile_report_record_memory(
     loom_target_compile_report_t* report, uint64_t private_memory_bytes,
     uint64_t local_memory_bytes);
 
-// Records one pressure row, truncating only the copied row storage when full.
-void loom_target_compile_report_record_pressure_row(
+// Records one pressure row.
+iree_status_t loom_target_compile_report_record_pressure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_row_t* row);
 
-// Records one spill row, truncating only the copied row storage when full.
-void loom_target_compile_report_record_spill_row(
+// Records one spill row.
+iree_status_t loom_target_compile_report_record_spill_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_spill_row_t* row);
 
-// Records one source-low row, truncating only the copied row storage when full.
-void loom_target_compile_report_record_source_low_row(
+// Records one source-low row.
+iree_status_t loom_target_compile_report_record_source_low_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_row_t* row);
 
@@ -570,9 +580,8 @@ void loom_target_compile_report_record_legalization_summary(
     loom_target_compile_report_legalization_action_t action,
     loom_target_compile_report_legalizer_strategy_t legalizer_strategy);
 
-// Records one target-legalization row, truncating only the copied row storage
-// when full.
-void loom_target_compile_report_record_legalization_row(
+// Records one target-legalization row.
+iree_status_t loom_target_compile_report_record_legalization_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_legalization_row_t* row);
 

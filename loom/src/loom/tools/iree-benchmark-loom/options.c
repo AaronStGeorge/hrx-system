@@ -65,10 +65,6 @@ IREE_FLAG(bool, agents_md, false,
 IREE_FLAG_NAMED(string, compile_report, "compile-report", "summary",
                 "Structured compile report embedded in benchmark rows. Use "
                 "'summary', 'details', or empty/'none'.");
-IREE_FLAG_NAMED(int32_t, compile_report_row_limit, "compile-report-row-limit",
-                LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-                "Maximum rows per report row category to capture for "
-                "--compile-report=details.");
 IREE_FLAG_NAMED(
     string, profile_data, "profile-data", "",
     "HAL profiling data families for the final profiled batch as a "
@@ -176,8 +172,6 @@ void iree_benchmark_loom_options_initialize(
       IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL;
   out_options->measure = IREE_SV("case_end_to_end");
   out_options->compile_report = IREE_SV("summary");
-  out_options->compile_report_row_limit =
-      LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT;
   out_options->sample_compilation_mode =
       IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE;
   out_options->input_ring_min_bytes =
@@ -309,15 +303,6 @@ iree_status_t iree_benchmark_loom_options_from_flags(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_non_negative_i32_to_host_size(
       "input-ring-count", FLAG_input_ring_count,
       &out_options->input_ring_count));
-  if (FLAG_compile_report_row_limit < 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "--compile-report-row-limit must be non-negative; got %d",
-        (int)FLAG_compile_report_row_limit);
-  }
-  out_options->compile_report_row_limit =
-      (iree_host_size_t)FLAG_compile_report_row_limit;
-
   const iree_flag_string_list_t profile_counters = FLAG_profile_counter_list();
   out_options->profile_counters = (iree_string_view_list_t){
       .count = profile_counters.count,
