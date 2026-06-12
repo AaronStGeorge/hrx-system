@@ -10,11 +10,13 @@
 
 #include "loom/codegen/low/builder.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cache.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/feedback_abi.h"
 #include "loom/target/arch/amdgpu/lower/data_symbol.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/registers.h"
 
 static loom_amdgpu_feedback_config_values_t
@@ -56,6 +58,32 @@ static iree_status_t loom_amdgpu_feedback_build_offset_attr(
     loom_named_attr_t* out_attr) {
   return loom_amdgpu_feedback_build_u32_attr(builder, IREE_SV("offset"),
                                              byte_offset, out_attr);
+}
+
+static iree_status_t loom_amdgpu_feedback_build_explicit_packet(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref, loom_named_attr_slice_t attrs,
+    loom_location_id_t location) {
+  const loom_low_descriptor_t* descriptor = NULL;
+  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
+      builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
+  loom_op_t* op = NULL;
+  return loom_low_build_resolved_descriptor_op(
+      builder, descriptor_set, descriptor, opcode_id, /*operands=*/NULL,
+      /*operand_count=*/0, attrs, /*result_types=*/NULL, /*result_count=*/0,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, location, &op);
+}
+
+static loom_amdgpu_vector_memory_cache_policy_encoding_t
+loom_amdgpu_feedback_vector_cache_encoding(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
+      loom_amdgpu_target_info_descriptor_set_at(
+          descriptor_set->descriptor_set_ordinal);
+  return descriptor_set_info == NULL
+             ? LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
+             : descriptor_set_info->vector_memory_cache_policy_encoding;
 }
 
 static bool loom_amdgpu_feedback_type_is_register_class(
@@ -237,7 +265,8 @@ static iree_status_t loom_amdgpu_feedback_build_global_store(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t zero_vaddr,
     loom_value_id_t packet_base, uint32_t byte_offset, loom_value_id_t value,
-    uint32_t value_unit_count, loom_location_id_t location) {
+    uint32_t value_unit_count, const loom_named_attr_t* extra_attrs,
+    iree_host_size_t extra_attr_count, loom_location_id_t location) {
   loom_value_id_t vgpr_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_materialize_vgpr_registers(
       builder, descriptor_set, value, value_unit_count, location, &vgpr_value));
@@ -246,14 +275,23 @@ static iree_status_t loom_amdgpu_feedback_build_global_store(
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
       builder, descriptor_set, descriptor_ref, &descriptor, &opcode_id));
-  loom_named_attr_t offset_attr = {0};
+  loom_named_attr_t attrs[3] = {0};
+  iree_host_size_t attr_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_offset_attr(
-      builder, byte_offset, &offset_attr));
+      builder, byte_offset, &attrs[attr_count++]));
+  if (extra_attr_count > IREE_ARRAYSIZE(attrs) - attr_count) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "AMDGPU feedback global store attr capacity "
+                            "exceeded");
+  }
+  for (iree_host_size_t i = 0; i < extra_attr_count; ++i) {
+    attrs[attr_count++] = extra_attrs[i];
+  }
   loom_value_id_t operands[] = {zero_vaddr, vgpr_value, packet_base};
   loom_op_t* store_op = NULL;
   return loom_low_build_resolved_descriptor_op(
       builder, descriptor_set, descriptor, opcode_id, operands,
-      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&offset_attr, 1),
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(attrs, attr_count),
       /*result_types=*/NULL, /*result_count=*/0, /*tied_results=*/NULL,
       /*tied_result_count=*/0, location, &store_op);
 }
@@ -265,7 +303,8 @@ static iree_status_t loom_amdgpu_feedback_build_global_store_b32(
   return loom_amdgpu_feedback_build_global_store(
       builder, descriptor_set,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR, zero_vaddr,
-      packet_base, byte_offset, value, /*value_unit_count=*/1, location);
+      packet_base, byte_offset, value, /*value_unit_count=*/1,
+      /*extra_attrs=*/NULL, /*extra_attr_count=*/0, location);
 }
 
 static iree_status_t loom_amdgpu_feedback_build_global_store_b64(
@@ -275,7 +314,83 @@ static iree_status_t loom_amdgpu_feedback_build_global_store_b64(
   return loom_amdgpu_feedback_build_global_store(
       builder, descriptor_set,
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR, zero_vaddr,
-      packet_base, byte_offset, value, /*value_unit_count=*/2, location);
+      packet_base, byte_offset, value, /*value_unit_count=*/2,
+      /*extra_attrs=*/NULL, /*extra_attr_count=*/0, location);
+}
+
+static iree_status_t loom_amdgpu_feedback_build_publish_state_store(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t zero_vaddr, loom_value_id_t packet_base,
+    loom_value_id_t ready_value,
+    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
+    loom_location_id_t location) {
+  loom_named_attr_t extra_attrs[2] = {0};
+  iree_host_size_t extra_attr_count = 0;
+  switch (encoding) {
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1: {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+          builder, IREE_SV("sc0"), 1, &extra_attrs[extra_attr_count++]));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+          builder, IREE_SV("sc1"), 1, &extra_attrs[extra_attr_count++]));
+      break;
+    }
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH: {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+          builder, IREE_SV("scope"), LOOM_CACHE_SCOPE_SYSTEM,
+          &extra_attrs[extra_attr_count++]));
+      break;
+    }
+    default:
+      break;
+  }
+  return loom_amdgpu_feedback_build_global_store(
+      builder, descriptor_set,
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR, zero_vaddr,
+      packet_base, LOOM_AMDGPU_FEEDBACK_PACKET_STATE_OFFSET, ready_value,
+      /*value_unit_count=*/1, extra_attrs, extra_attr_count, location);
+}
+
+static iree_status_t loom_amdgpu_feedback_build_release_ordering(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
+    loom_location_id_t location) {
+  switch (encoding) {
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC: {
+      loom_named_attr_t waitcnt_attrs[2] = {0};
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+          builder, IREE_SV("vmcnt"), 0, &waitcnt_attrs[0]));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+          builder, IREE_SV("lgkmcnt"), 15, &waitcnt_attrs[1]));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_explicit_packet(
+          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT,
+          loom_make_named_attr_slice(waitcnt_attrs,
+                                     IREE_ARRAYSIZE(waitcnt_attrs)),
+          location));
+
+      loom_named_attr_t vscnt_attr = {0};
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+          builder, IREE_SV("vscnt"), 0, &vscnt_attr));
+      return loom_amdgpu_feedback_build_explicit_packet(
+          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT_VSCNT,
+          loom_make_named_attr_slice(&vscnt_attr, 1), location);
+    }
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
+      return loom_amdgpu_feedback_build_explicit_packet(
+          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2,
+          loom_make_named_attr_slice(NULL, 0), location);
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH: {
+      loom_named_attr_t scope_attr = {0};
+      IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+          builder, IREE_SV("scope"), LOOM_CACHE_SCOPE_SYSTEM, &scope_attr));
+      return loom_amdgpu_feedback_build_explicit_packet(
+          builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_WB,
+          loom_make_named_attr_slice(&scope_attr, 1), location);
+    }
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU feedback release publication is not "
+                              "supported by the descriptor set");
+  }
 }
 
 static iree_status_t loom_amdgpu_feedback_build_scalar_load(
@@ -446,6 +561,29 @@ iree_status_t loom_amdgpu_build_feedback_packet_header(
   return loom_amdgpu_feedback_build_global_store_b64(
       builder, descriptor_set, zero_vaddr, packet_base,
       LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_1_OFFSET, zero64, location);
+}
+
+iree_status_t loom_amdgpu_build_feedback_publish_packet_state(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t packet_base, loom_location_id_t location) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_require_register_class(
+      builder, descriptor_set, packet_base, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2));
+
+  const loom_amdgpu_vector_memory_cache_policy_encoding_t encoding =
+      loom_amdgpu_feedback_vector_cache_encoding(descriptor_set);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_release_ordering(
+      builder, descriptor_set, encoding, location));
+
+  loom_value_id_t zero_vaddr = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, 0, location, &zero_vaddr));
+  loom_value_id_t ready_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, LOOM_AMDGPU_FEEDBACK_PACKET_STATE_READY,
+      location, &ready_value));
+  return loom_amdgpu_feedback_build_publish_state_store(
+      builder, descriptor_set, zero_vaddr, packet_base, ready_value, encoding,
+      location);
 }
 
 iree_status_t loom_amdgpu_build_feedback_send_message(

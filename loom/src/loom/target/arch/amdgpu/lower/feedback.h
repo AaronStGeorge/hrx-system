@@ -107,6 +107,15 @@ iree_status_t loom_amdgpu_build_feedback_packet_header(
     const loom_amdgpu_feedback_packet_header_t* header,
     loom_location_id_t location);
 
+// Emits target-low IR that release-publishes a reserved feedback packet state.
+//
+// |packet_base| must be the SGPRx2 device-visible packet address returned by
+// reservation. This only publishes the packet state; producer-specific code is
+// responsible for emitting any later host notification or failure policy.
+iree_status_t loom_amdgpu_build_feedback_publish_packet_state(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t packet_base, loom_location_id_t location);
+
 // Emits an AMDGPU message-send packet with the given target-defined message
 // immediate.
 iree_status_t loom_amdgpu_build_feedback_send_message(

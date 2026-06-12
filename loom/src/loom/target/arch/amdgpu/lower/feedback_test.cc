@@ -25,6 +25,8 @@
 
 namespace {
 
+constexpr int64_t kSystemCacheScope = 3;
+
 std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
 }
@@ -67,6 +69,14 @@ class AmdgpuFeedbackTest : public ::testing::Test {
         .module_id = 0,
         .symbol_id = symbol_id,
     };
+  }
+
+  void UseDescriptorSet(iree_string_view_t key) {
+    descriptor_set_ =
+        loom_low_descriptor_registry_lookup(&low_registry_.registry, key);
+    if (descriptor_set_ == NULL) {
+      GTEST_SKIP() << "AMDGPU descriptor set is not linked: " << ToString(key);
+    }
   }
 
   void BuildFunctionBody() {
@@ -143,6 +153,33 @@ class AmdgpuFeedbackTest : public ::testing::Test {
       }
     }
     return filtered_ops;
+  }
+
+  iree_status_t BuildFeedbackPacketBase(loom_value_id_t* out_packet_base) {
+    *out_packet_base = LOOM_VALUE_ID_INVALID;
+    loom_symbol_ref_t config_symbol =
+        AddSymbol(IREE_SV("iree_feedback_config"));
+    loom_amdgpu_feedback_config_values_t config_values = {};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_config_values(
+        &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+        &config_values));
+    loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_channel_header_values(
+        &builder_, descriptor_set_, config_values.channel_base,
+        LOOM_LOCATION_UNKNOWN, &channel_values));
+    *out_packet_base = channel_values.ring_base;
+    return iree_ok_status();
+  }
+
+  void ExpectAttrI64(loom_named_attr_slice_t attrs, iree_string_view_t name,
+                     int64_t expected_value) const {
+    for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+      if (iree_string_view_equal(String(attrs.entries[i].name_id), name)) {
+        EXPECT_EQ(loom_attr_as_i64(attrs.entries[i].value), expected_value);
+        return;
+      }
+    }
+    FAIL() << "expected attr not found: " << ToString(name);
   }
 
   void ExpectLowConstU32(loom_value_id_t value, uint32_t expected_value) const {
@@ -242,10 +279,17 @@ class AmdgpuFeedbackTest : public ::testing::Test {
         loom_type_equal(expected_value_type,
                         loom_module_value_type(module_, operands.values[1])));
     ASSERT_EQ(loom_low_op_results(op).count, 0u);
-    loom_named_attr_slice_t attrs = loom_low_op_attrs(op);
-    ASSERT_EQ(attrs.count, 1u);
-    EXPECT_EQ(ToString(String(attrs.entries[0].name_id)), "offset");
-    EXPECT_EQ(loom_attr_as_i64(attrs.entries[0].value), expected_byte_offset);
+    ExpectAttrI64(loom_low_op_attrs(op), IREE_SV("offset"),
+                  expected_byte_offset);
+  }
+
+  void ExpectPublishStateStore(const loom_op_t* op,
+                               loom_value_id_t expected_packet_base) const {
+    ExpectStoreOp(op, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
+                  expected_packet_base,
+                  LOOM_AMDGPU_FEEDBACK_PACKET_STATE_OFFSET, 1);
+    ExpectLowConstU32(loom_low_op_operands(op).values[1],
+                      LOOM_AMDGPU_FEEDBACK_PACKET_STATE_READY);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -446,6 +490,70 @@ TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
                 LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
                 channel_values.ring_base,
                 LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_1_OFFSET, 2);
+}
+
+TEST_F(AmdgpuFeedbackTest, PublishesPacketStateWithRdnaReleaseOrdering) {
+  loom_value_id_t packet_base = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(BuildFeedbackPacketBase(&packet_base));
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_publish_packet_state(
+      &builder_, descriptor_set_, packet_base, LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> waitcnt_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT);
+  ASSERT_EQ(waitcnt_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("vmcnt"), 0);
+  ExpectAttrI64(loom_low_op_attrs(waitcnt_ops[0]), IREE_SV("lgkmcnt"), 15);
+
+  std::vector<loom_op_t*> vscnt_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT_VSCNT);
+  ASSERT_EQ(vscnt_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(vscnt_ops[0]), IREE_SV("vscnt"), 0);
+
+  std::vector<loom_op_t*> b32_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
+  ASSERT_EQ(b32_stores.size(), 1u);
+  ExpectPublishStateStore(b32_stores[0], packet_base);
+}
+
+TEST_F(AmdgpuFeedbackTest, PublishesPacketStateWithCdnaReleaseOrdering) {
+  UseDescriptorSet(IREE_SV("amdgpu.cdna3.core"));
+  loom_value_id_t packet_base = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(BuildFeedbackPacketBase(&packet_base));
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_publish_packet_state(
+      &builder_, descriptor_set_, packet_base, LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> writeback_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_WBL2);
+  ASSERT_EQ(writeback_ops.size(), 1u);
+  EXPECT_EQ(loom_low_op_attrs(writeback_ops[0]).count, 0u);
+
+  std::vector<loom_op_t*> b32_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
+  ASSERT_EQ(b32_stores.size(), 1u);
+  ExpectPublishStateStore(b32_stores[0], packet_base);
+  ExpectAttrI64(loom_low_op_attrs(b32_stores[0]), IREE_SV("sc0"), 1);
+  ExpectAttrI64(loom_low_op_attrs(b32_stores[0]), IREE_SV("sc1"), 1);
+}
+
+TEST_F(AmdgpuFeedbackTest, PublishesPacketStateWithGfx12SystemScope) {
+  UseDescriptorSet(IREE_SV("amdgpu.rdna4.core"));
+  loom_value_id_t packet_base = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(BuildFeedbackPacketBase(&packet_base));
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_publish_packet_state(
+      &builder_, descriptor_set_, packet_base, LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> writeback_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_WB);
+  ASSERT_EQ(writeback_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(writeback_ops[0]), IREE_SV("scope"),
+                kSystemCacheScope);
+
+  std::vector<loom_op_t*> b32_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
+  ASSERT_EQ(b32_stores.size(), 1u);
+  ExpectPublishStateStore(b32_stores[0], packet_base);
+  ExpectAttrI64(loom_low_op_attrs(b32_stores[0]), IREE_SV("scope"),
+                kSystemCacheScope);
 }
 
 TEST_F(AmdgpuFeedbackTest, EmitsFeedbackControlPrimitives) {
