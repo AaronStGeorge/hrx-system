@@ -115,6 +115,16 @@ iree_status_t loom_amdgpu_build_feedback_uniform_packet_address(
     loom_value_id_t packet_base, loom_location_id_t location,
     loom_amdgpu_feedback_packet_address_t* out_address);
 
+// Emits target-low IR that increments channel->dropped_packet_count.
+//
+// |channel_base| must be an SGPRx2 pointer to the device-visible feedback
+// channel header. The update uses relaxed system-scope atomic semantics because
+// the counter is diagnostic telemetry and does not publish packet contents or
+// participate in reservation ownership.
+iree_status_t loom_amdgpu_build_feedback_dropped_packet_count_increment(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_location_id_t location);
+
 // Emits target-low IR that initializes a reserved feedback packet header.
 //
 // |packet_address| must reference packet storage returned by reservation.

@@ -327,15 +327,36 @@ class AmdgpuFeedbackTest : public ::testing::Test {
                       LOOM_AMDGPU_FEEDBACK_PACKET_STATE_READY);
   }
 
-  void ExpectSignalAddAtomic(const loom_op_t* op,
-                             loom_value_id_t expected_signal_address) const {
+  void ExpectGlobalAtomicAddU64(const loom_op_t* op,
+                                loom_value_id_t expected_base,
+                                uint32_t expected_byte_offset) const {
     ExpectLowOpDescriptorRef(
         op, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
     loom_value_slice_t operands = loom_low_op_operands(op);
     ASSERT_EQ(operands.count,
               PacketOperandCountForRef(
                   LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR));
-    EXPECT_EQ(operands.values[2], expected_signal_address);
+    EXPECT_EQ(operands.values[2], expected_base);
+    if (operands.count == 4) {
+      const loom_value_t* m0_value =
+          loom_module_value(module_, operands.values[3]);
+      ASSERT_FALSE(loom_value_is_block_arg(m0_value));
+      ExpectLowConstDescriptorRef(loom_value_def_op(m0_value),
+                                  LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM);
+    }
+    loom_type_t expected_vaddr_type = loom_low_register_type(
+        descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
+    EXPECT_TRUE(
+        loom_type_equal(expected_vaddr_type,
+                        loom_module_value_type(module_, operands.values[0])));
+    loom_type_t expected_value_type = loom_low_register_type(
+        descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2);
+    EXPECT_TRUE(
+        loom_type_equal(expected_value_type,
+                        loom_module_value_type(module_, operands.values[1])));
+    ASSERT_EQ(loom_low_op_results(op).count, 0u);
+    ExpectAttrI64(loom_low_op_attrs(op), IREE_SV("offset"),
+                  expected_byte_offset);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -466,6 +487,81 @@ TEST_F(AmdgpuFeedbackTest, BuildsUniformPacketAddress) {
       descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
   EXPECT_TRUE(loom_type_equal(
       vgpr_type, loom_module_value_type(module_, packet_address.byte_offset)));
+}
+
+TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCount) {
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_dropped_packet_count_increment(
+      &builder_, descriptor_set_, channel_values.address,
+      LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
+  ASSERT_EQ(atomic_ops.size(), 1u);
+  ExpectGlobalAtomicAddU64(
+      atomic_ops[0], channel_values.address,
+      LOOM_AMDGPU_FEEDBACK_CHANNEL_DROPPED_PACKET_COUNT_OFFSET);
+  ASSERT_EQ(loom_low_op_attrs(atomic_ops[0]).count, 1u);
+}
+
+TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCountWithCdnaM0) {
+  UseDescriptorSet(IREE_SV("amdgpu.cdna3.core"));
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_dropped_packet_count_increment(
+      &builder_, descriptor_set_, channel_values.address,
+      LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
+  ASSERT_EQ(atomic_ops.size(), 1u);
+  ExpectGlobalAtomicAddU64(
+      atomic_ops[0], channel_values.address,
+      LOOM_AMDGPU_FEEDBACK_CHANNEL_DROPPED_PACKET_COUNT_OFFSET);
+  ASSERT_EQ(loom_low_op_operands(atomic_ops[0]).count, 4u);
+}
+
+TEST_F(AmdgpuFeedbackTest, IncrementsDroppedPacketCountWithGfx12SystemScope) {
+  UseDescriptorSet(IREE_SV("amdgpu.rdna4.core"));
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_dropped_packet_count_increment(
+      &builder_, descriptor_set_, channel_values.address,
+      LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
+  ASSERT_EQ(atomic_ops.size(), 1u);
+  ExpectGlobalAtomicAddU64(
+      atomic_ops[0], channel_values.address,
+      LOOM_AMDGPU_FEEDBACK_CHANNEL_DROPPED_PACKET_COUNT_OFFSET);
+  ExpectAttrI64(loom_low_op_attrs(atomic_ops[0]), IREE_SV("scope"),
+                kSystemCacheScope);
 }
 
 TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
@@ -657,7 +753,8 @@ TEST_F(AmdgpuFeedbackTest, PublishesPacketAndNotifiesHost) {
   std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
       LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
   ASSERT_EQ(atomic_ops.size(), 1u);
-  ExpectSignalAddAtomic(atomic_ops[0], config_values.notify_signal);
+  ExpectGlobalAtomicAddU64(atomic_ops[0], config_values.notify_signal,
+                           LOOM_AMDGPU_SIGNAL_VALUE_OFFSET);
 
   const loom_op_t* mailbox_load = FindLoadOp(
       LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX2_OFFSET_ONLY,

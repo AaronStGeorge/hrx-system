@@ -474,6 +474,31 @@ static iree_status_t loom_amdgpu_feedback_build_publish_state_store(
       /*value_unit_count=*/1, extra_attrs, extra_attr_count, location);
 }
 
+static iree_status_t loom_amdgpu_feedback_build_global_atomic_attrs(
+    loom_builder_t* builder,
+    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
+    uint32_t byte_offset, loom_named_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count) {
+  *out_attr_count = 0;
+  loom_named_attr_t offset_attr = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_offset_attr(
+      builder, byte_offset, &offset_attr));
+  attrs[(*out_attr_count)++] = offset_attr;
+  if (encoding !=
+      LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH) {
+    return iree_ok_status();
+  }
+  if (*out_attr_count >= attr_capacity) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "AMDGPU feedback atomic attr capacity exceeded");
+  }
+  loom_named_attr_t scope_attr = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_u32_attr(
+      builder, IREE_SV("scope"), LOOM_CACHE_SCOPE_SYSTEM, &scope_attr));
+  attrs[(*out_attr_count)++] = scope_attr;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_feedback_build_release_ordering(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_vector_memory_cache_policy_encoding_t encoding,
@@ -601,6 +626,68 @@ iree_status_t loom_amdgpu_build_feedback_uniform_packet_address(
       builder, descriptor_set, 0, location, &address.byte_offset));
   *out_address = address;
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_feedback_dropped_packet_count_increment(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_location_id_t location) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_require_register_class(
+      builder, descriptor_set, channel_base, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2));
+
+  loom_value_id_t zero_vaddr = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u32_const(
+      builder, descriptor_set, 0, location, &zero_vaddr));
+  loom_value_id_t one64 = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_vgpr_u64_const(
+      builder, descriptor_set, 1, location, &one64));
+
+  const loom_low_descriptor_t* descriptor = NULL;
+  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_descriptor_ref(
+      builder, descriptor_set,
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR, &descriptor,
+      &opcode_id));
+  if (descriptor->canonical_asm_form_ordinal >=
+      descriptor_set->asm_form_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU feedback atomic descriptor has no "
+                            "canonical asm form");
+  }
+  const loom_low_asm_form_t* asm_form =
+      &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
+  if (asm_form->operand_index_count != 3 &&
+      asm_form->operand_index_count != 4) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU feedback atomic descriptor has an unsupported packet operand "
+        "count");
+  }
+
+  const loom_amdgpu_vector_memory_cache_policy_encoding_t encoding =
+      loom_amdgpu_feedback_vector_cache_encoding(descriptor_set);
+  loom_named_attr_t attrs[2] = {0};
+  iree_host_size_t attr_count = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_atomic_attrs(
+      builder, encoding,
+      LOOM_AMDGPU_FEEDBACK_CHANNEL_DROPPED_PACKET_COUNT_OFFSET, attrs,
+      IREE_ARRAYSIZE(attrs), &attr_count));
+
+  loom_value_id_t operands[4] = {zero_vaddr, one64, channel_base,
+                                 LOOM_VALUE_ID_INVALID};
+  iree_host_size_t operand_count = 3;
+  if (asm_form->operand_index_count == 4) {
+    loom_value_id_t m0_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_m0_const_u32(
+        builder, descriptor_set, descriptor,
+        /*consumer_asm_operand_index=*/3, 0, location, &m0_value));
+    operands[operand_count++] = m0_value;
+  }
+  loom_op_t* op = NULL;
+  return loom_low_build_resolved_descriptor_op(
+      builder, descriptor_set, descriptor, opcode_id, operands, operand_count,
+      loom_make_named_attr_slice(attrs, attr_count), /*result_types=*/NULL,
+      /*result_count=*/0, /*tied_results=*/NULL, /*tied_result_count=*/0,
+      location, &op);
 }
 
 iree_status_t loom_amdgpu_build_feedback_packet_header(
