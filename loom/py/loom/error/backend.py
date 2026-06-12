@@ -240,6 +240,9 @@ ERR_BACKEND_015 = ErrorDef(
         "{chosen_dependency_latency_cycles}/{chosen_latency_cycles}/"
         "{chosen_projected_live_units}/"
         "{chosen_killed_live_units}/{chosen_produced_live_units}, chosen "
+        "data/resource/hazard/effective stall "
+        "{chosen_data_ready_stall_cycles}/{chosen_resource_stall_cycles}/"
+        "{chosen_hazard_stall_cycles}/{chosen_effective_stall_cycles}, chosen "
         "cliff class/units/penalty/next "
         "{chosen_pressure_cliff_reg_class_id}/{chosen_pressure_cliff_units}/"
         "{chosen_pressure_cliff_penalty}/"
@@ -248,6 +251,10 @@ ERR_BACKEND_015 = ErrorDef(
         "{rejected_dependency_latency_cycles}/{rejected_latency_cycles}/"
         "{rejected_projected_live_units}/"
         "{rejected_killed_live_units}/{rejected_produced_live_units}, rejected "
+        "data/resource/hazard/effective stall "
+        "{rejected_data_ready_stall_cycles}/{rejected_resource_stall_cycles}/"
+        "{rejected_hazard_stall_cycles}/{rejected_effective_stall_cycles}, "
+        "rejected "
         "cliff class/units/penalty/next "
         "{rejected_pressure_cliff_reg_class_id}/"
         "{rejected_pressure_cliff_units}/{rejected_pressure_cliff_penalty}/"
@@ -268,6 +275,10 @@ ERR_BACKEND_015 = ErrorDef(
         ErrorParam("chosen_projected_live_units", ParamKind.U64),
         ErrorParam("chosen_killed_live_units", ParamKind.U64),
         ErrorParam("chosen_produced_live_units", ParamKind.U64),
+        ErrorParam("chosen_data_ready_stall_cycles", ParamKind.U32),
+        ErrorParam("chosen_resource_stall_cycles", ParamKind.U32),
+        ErrorParam("chosen_hazard_stall_cycles", ParamKind.U32),
+        ErrorParam("chosen_effective_stall_cycles", ParamKind.U32),
         ErrorParam("chosen_pressure_cliff_reg_class_id", ParamKind.U32),
         ErrorParam("chosen_pressure_cliff_units", ParamKind.U32),
         ErrorParam("chosen_pressure_cliff_penalty", ParamKind.U32),
@@ -277,6 +288,10 @@ ERR_BACKEND_015 = ErrorDef(
         ErrorParam("rejected_projected_live_units", ParamKind.U64),
         ErrorParam("rejected_killed_live_units", ParamKind.U64),
         ErrorParam("rejected_produced_live_units", ParamKind.U64),
+        ErrorParam("rejected_data_ready_stall_cycles", ParamKind.U32),
+        ErrorParam("rejected_resource_stall_cycles", ParamKind.U32),
+        ErrorParam("rejected_hazard_stall_cycles", ParamKind.U32),
+        ErrorParam("rejected_effective_stall_cycles", ParamKind.U32),
         ErrorParam("rejected_pressure_cliff_reg_class_id", ParamKind.U32),
         ErrorParam("rejected_pressure_cliff_units", ParamKind.U32),
         ErrorParam("rejected_pressure_cliff_penalty", ParamKind.U32),
