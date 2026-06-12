@@ -1996,6 +1996,19 @@ static iree_status_t loom_amdgpu_append_fmamk_packet(
   return loom_amdgpu_append_operand(context, 1);
 }
 
+static iree_status_t loom_amdgpu_append_fmaak_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "v_fmaak_f32 "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return loom_amdgpu_append_packet_immediate_u32_hex(context, 0);
+}
+
 static bool loom_amdgpu_source0_immediate_asm_form(
     iree_string_view_t canonical_mnemonic) {
   const bool plain_literal =
@@ -2282,6 +2295,11 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_FULL)) {
     return loom_amdgpu_append_exec_full_packet(context);
+  }
+  if (descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F32)) {
+    return loom_amdgpu_append_fmaak_packet(context);
   }
   if (descriptor ==
       loom_amdgpu_descriptor_ref_descriptor(

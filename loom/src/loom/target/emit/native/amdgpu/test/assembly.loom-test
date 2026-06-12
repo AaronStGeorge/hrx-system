@@ -405,8 +405,8 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmaak_literal_mismatch(%resource:
 }
 
 // ----
-  v_fmaak_f32 v5, v0, v1, 1065353216
-  v_fmaak_f32 v6, v2, v4, 1073741824
+  v_fmaak_f32 v5, v0, v1, 0x3f800000
+  v_fmaak_f32 v6, v2, v4, 0x40000000
   buffer_store_dword v5, v3, s[0:3], s4 offen offset:0
   buffer_store_dword v6, v3, s[0:3], s4 offen offset:4
   buffer_store_dword v0, v3, s[0:3], s4 offen offset:8
