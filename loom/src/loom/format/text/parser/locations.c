@@ -52,19 +52,99 @@ static iree_status_t loom_parser_resolve_location_source(
   return iree_ok_status();
 }
 
-static iree_status_t loom_parse_location_u16(loom_parser_t* parser,
-                                             uint16_t* out_value) {
+static iree_status_t loom_parse_location_integer_u16(loom_parser_t* parser,
+                                                     iree_string_view_t detail,
+                                                     uint16_t* out_value) {
   loom_token_t token = loom_token_none();
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_INTEGER, &token);
 
   int64_t value = 0;
   if (!iree_string_view_atoi_int64(token.text, &value) || value < 0 ||
       value > UINT16_MAX) {
-    return loom_parser_emit_location_error(
-        parser, IREE_SV("line/column must be an integer in [0, 65535]"), token);
+    return loom_parser_emit_location_error(parser, detail, token);
   }
 
   *out_value = (uint16_t)value;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_location_u16(loom_parser_t* parser,
+                                             uint16_t* out_value) {
+  return loom_parse_location_integer_u16(
+      parser, IREE_SV("line/column must be an integer in [0, 65535]"),
+      out_value);
+}
+
+static iree_status_t loom_parse_location_tag(loom_parser_t* parser,
+                                             loom_location_tag_t* out_tag) {
+  *out_tag = LOOM_LOCATION_TAG_INVALID;
+  loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+  if (token.kind == LOOM_TOKEN_BARE_IDENT) {
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &token);
+    if (!loom_location_tag_parse(token.text, out_tag)) {
+      return loom_parser_emit_location_error(
+          parser, IREE_SV("unknown tagged location tag"), token);
+    }
+    return iree_ok_status();
+  }
+
+  if (token.kind == LOOM_TOKEN_INTEGER) {
+    uint16_t value = 0;
+    IREE_RETURN_IF_ERROR(loom_parse_location_integer_u16(
+        parser, IREE_SV("tag must be an integer in [1, 65535]"), &value));
+    if (value == LOOM_LOCATION_TAG_INVALID) {
+      return loom_parser_emit_location_error(
+          parser, IREE_SV("tagged location tag 0 is invalid"), token);
+    }
+    *out_tag = (loom_location_tag_t)value;
+    return iree_ok_status();
+  }
+
+  return loom_parser_emit_location_error(
+      parser, IREE_SV("expected a tagged location tag name or integer"), token);
+}
+
+static int loom_parse_location_hex_digit(char value) {
+  if (value >= '0' && value <= '9') return value - '0';
+  if (value >= 'a' && value <= 'f') return 10 + value - 'a';
+  if (value >= 'A' && value <= 'F') return 10 + value - 'A';
+  return -1;
+}
+
+static iree_status_t loom_parse_location_hex_payload(
+    loom_parser_t* parser, loom_token_t token, uint8_t** out_data,
+    uint32_t* out_data_length) {
+  *out_data = NULL;
+  *out_data_length = 0;
+  if (token.text.size % 2 != 0) {
+    return loom_parser_emit_location_error(
+        parser, IREE_SV("tagged location payload hex length must be even"),
+        token);
+  }
+  iree_host_size_t data_length = token.text.size / 2;
+  if (data_length > UINT32_MAX) {
+    return loom_parser_emit_location_error(
+        parser, IREE_SV("tagged location payload is too large"), token);
+  }
+  if (data_length == 0) {
+    return iree_ok_status();
+  }
+  uint8_t* data = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(&parser->module->arena, data_length, (void**)&data));
+  for (iree_host_size_t i = 0; i < data_length; ++i) {
+    int high = loom_parse_location_hex_digit(token.text.data[2 * i]);
+    int low = loom_parse_location_hex_digit(token.text.data[2 * i + 1]);
+    if (high < 0 || low < 0) {
+      return loom_parser_emit_location_error(
+          parser,
+          IREE_SV("tagged location payload must contain only hex digits"),
+          token);
+    }
+    data[i] = (uint8_t)((high << 4) | low);
+  }
+  *out_data = data;
+  *out_data_length = (uint32_t)data_length;
   return iree_ok_status();
 }
 
@@ -201,6 +281,35 @@ static iree_status_t loom_parse_opaque_location_body(
   return loom_module_add_location(parser->module, entry, out_location);
 }
 
+static iree_status_t loom_parse_tagged_location_body(
+    loom_parser_t* parser, uint16_t nesting_depth,
+    loom_location_id_t* out_location) {
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, NULL);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LANGLE, NULL);
+
+  loom_location_tag_t tag = LOOM_LOCATION_TAG_INVALID;
+  IREE_RETURN_IF_ERROR(loom_parse_location_tag(parser, &tag));
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COMMA, NULL);
+
+  loom_token_t data_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &data_token);
+  uint8_t* data = NULL;
+  uint32_t data_length = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_parse_location_hex_payload(parser, data_token, &data, &data_length));
+
+  loom_location_id_t child = LOOM_LOCATION_UNKNOWN;
+  if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+    IREE_RETURN_IF_ERROR(loom_parse_location_body(
+        parser, (uint16_t)(nesting_depth + 1), &child));
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
+
+  loom_location_entry_t entry =
+      loom_location_tagged(tag, child, data, data_length);
+  return loom_module_add_location(parser->module, entry, out_location);
+}
+
 static iree_status_t loom_parse_location_body(
     loom_parser_t* parser, uint16_t nesting_depth,
     loom_location_id_t* out_location) {
@@ -223,8 +332,14 @@ static iree_status_t loom_parse_location_body(
       iree_string_view_equal(token.text, IREE_SV("opaque"))) {
     return loom_parse_opaque_location_body(parser, out_location);
   }
+  if (token.kind == LOOM_TOKEN_BARE_IDENT &&
+      iree_string_view_equal(token.text, IREE_SV("tagged"))) {
+    return loom_parse_tagged_location_body(parser, nesting_depth, out_location);
+  }
   return loom_parser_emit_location_error(
-      parser, IREE_SV("expected a file location string, 'fused', or 'opaque'"),
+      parser,
+      IREE_SV(
+          "expected a file location string, 'fused', 'opaque', or 'tagged'"),
       token);
 }
 

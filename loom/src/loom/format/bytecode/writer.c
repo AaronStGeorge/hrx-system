@@ -3633,6 +3633,29 @@ static iree_status_t loom_bytecode_write_locations_section(
         }
         break;
       }
+      case LOOM_LOCATION_TAGGED: {
+        if (entry->tagged.tag == LOOM_LOCATION_TAG_INVALID) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "tagged location has invalid tag 0");
+        }
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, entry->tagged.tag));
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, entry->tagged.child));
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, entry->tagged.data_length));
+        if (entry->tagged.data_length > 0) {
+          if (!entry->tagged.data) {
+            return iree_make_status(
+                IREE_STATUS_INVALID_ARGUMENT,
+                "tagged location has data_length %u but NULL data",
+                entry->tagged.data_length);
+          }
+          IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write(
+              page_writer, entry->tagged.data, entry->tagged.data_length));
+        }
+        break;
+      }
       default:
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "unknown location kind %d", (int)entry->kind);

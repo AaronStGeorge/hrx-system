@@ -57,6 +57,7 @@ from loom.ir import (
     StorageType,
     SymbolKind,
     SymbolName,
+    TaggedLocation,
     Type,
     TypeKind,
     Value,
@@ -154,7 +155,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 14
+FORMAT_VERSION = 15
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -823,6 +824,15 @@ class BytecodeWriter:
                 buf.write_u8(3)  # OPAQUE
                 buf.write_u8(loc.flags)
                 buf.write_varint(loc.source_id)
+                buf.write_varint(len(loc.data))
+                buf.write_bytes(loc.data)
+            elif isinstance(loc, TaggedLocation):
+                if loc.tag <= 0 or loc.tag > 0xFFFF:
+                    raise ValueError("tagged location tag must be in [1, 65535]")
+                buf.write_u8(4)  # TAGGED
+                buf.write_u8(loc.flags)
+                buf.write_varint(loc.tag)
+                buf.write_varint(loc.child)
                 buf.write_varint(len(loc.data))
                 buf.write_bytes(loc.data)
         return buf.get_bytes()

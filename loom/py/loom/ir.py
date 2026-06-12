@@ -74,9 +74,15 @@ __all__ = [
     "binding_element_type",
     # Locations.
     "LocationKind",
+    "LOCATION_TAG_SANITIZER_SITE",
+    "LOCATION_TAG_TEMPLATE_INSTANTIATION",
+    "LOCATION_TAG_TILE_LOWERING",
+    "LOCATION_TAG_UKERNEL_SELECTION",
+    "LOCATION_TAG_USER_BASE",
     "FileLocation",
     "FusedLocation",
     "OpaqueLocation",
+    "TaggedLocation",
     "LocationData",
     "LOCATION_UNKNOWN",
     "LOCATION_FLAG_SYNTHETIC",
@@ -749,10 +755,18 @@ class LocationKind(IntEnum):
     FILE = 1
     FUSED = 2
     OPAQUE = 3
+    TAGGED = 4
 
 
 # Location flag bits (matches loom_location_flag_bits_e in ir.h).
 LOCATION_FLAG_SYNTHETIC = 1 << 0
+
+# Built-in tagged location payload tags (matches loom_location_tag_e).
+LOCATION_TAG_SANITIZER_SITE = 0x0001
+LOCATION_TAG_TEMPLATE_INSTANTIATION = 0x0002
+LOCATION_TAG_TILE_LOWERING = 0x0003
+LOCATION_TAG_UKERNEL_SELECTION = 0x0004
+LOCATION_TAG_USER_BASE = 0x8000
 
 
 @dataclass(frozen=True, slots=True)
@@ -784,8 +798,20 @@ class OpaqueLocation:
     flags: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class TaggedLocation:
+    """Compiler-owned compact metadata payload with optional child location."""
+
+    tag: int
+    child: int = 0
+    data: bytes = b""
+    flags: int = 0
+
+
 # Union of location data.
-type LocationData = FileLocation | FusedLocation | OpaqueLocation | None
+type LocationData = (
+    FileLocation | FusedLocation | OpaqueLocation | TaggedLocation | None
+)
 
 LOCATION_UNKNOWN = 0  # Location ID 0 is always unknown.
 

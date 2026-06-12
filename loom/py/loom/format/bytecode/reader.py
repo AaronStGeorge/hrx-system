@@ -79,6 +79,7 @@ from loom.ir import (
     Symbol,
     SymbolKind,
     SymbolName,
+    TaggedLocation,
     TiedResult,
     Type,
     TypeKind,
@@ -664,6 +665,17 @@ class BytecodeReader:
                     opaque_data = data[offset : offset + data_length]
                     offset += data_length
                     module.locations.add(OpaqueLocation(source_id, opaque_data, flags))
+                case 4:  # TAGGED
+                    tag, offset = decode_varint(data, offset)
+                    child, offset = decode_varint(data, offset)
+                    data_length, offset = decode_varint(data, offset)
+                    tagged_data = data[offset : offset + data_length]
+                    offset += data_length
+                    module.locations.add(
+                        TaggedLocation(
+                            tag=tag, child=child, data=tagged_data, flags=flags
+                        )
+                    )
 
     def _read_comment_list(
         self, data: bytes, offset: int

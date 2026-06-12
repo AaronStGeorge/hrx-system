@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 13)
+//   4       1     format_version (currently 15)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 14
+#define LOOM_BYTECODE_FORMAT_VERSION 15
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -425,7 +425,7 @@ typedef enum loom_bytecode_section_kind_e {
 //
 //   [location_count: varint]
 //   For each location:
-//     [kind: byte]   (0=none, 1=file, 2=fused, 3=opaque)
+//     [kind: byte]   (0=none, 1=file, 2=fused, 3=opaque, 4=tagged)
 //     [flags: byte]
 //     (FILE:
 //       [source_index: varint]  (index into SOURCES section)
@@ -438,6 +438,11 @@ typedef enum loom_bytecode_section_kind_e {
 //       For each child: [location_index: varint])
 //     (OPAQUE:
 //       [source_index: varint]  (tag: "torch", "jax", etc.)
+//       [data_length: varint]
+//       [data: bytes])
+//     (TAGGED:
+//       [tag: varint]
+//       [child_location_index: varint]  (0 if no child)
 //       [data_length: varint]
 //       [data: bytes])
 

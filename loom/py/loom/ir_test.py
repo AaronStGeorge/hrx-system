@@ -64,6 +64,7 @@ from loom.ir import (
     Symbol,
     SymbolKind,
     SymbolRef,
+    TaggedLocation,
     TiedResult,
     TypeKind,
     TypeTable,
@@ -458,6 +459,13 @@ class TestLocations:
         assert loc.data == b"node_id=42"
         assert loc.flags == 0
 
+    def test_tagged_location(self) -> None:
+        loc = TaggedLocation(tag=1, child=2, data=b"\x01\x2a\xff")
+        assert loc.tag == 1
+        assert loc.child == 2
+        assert loc.data == b"\x01\x2a\xff"
+        assert loc.flags == 0
+
     def test_unknown_is_zero(self) -> None:
         assert LOCATION_UNKNOWN == 0
 
@@ -472,6 +480,13 @@ class TestLocations:
     def test_fused_location_hashable(self) -> None:
         a = FusedLocation(children=(1, 2))
         b = FusedLocation(children=(1, 2))
+        assert hash(a) == hash(b)
+        s = {a, b}
+        assert len(s) == 1
+
+    def test_tagged_location_hashable(self) -> None:
+        a = TaggedLocation(tag=1, child=2, data=b"\x01")
+        b = TaggedLocation(tag=1, child=2, data=b"\x01")
         assert hash(a) == hash(b)
         s = {a, b}
         assert len(s) == 1
@@ -1028,6 +1043,12 @@ class TestLocationTable:
         lt = LocationTable()
         a = FusedLocation(children=(1, 2))
         b = FusedLocation(children=(1, 2))
+        assert lt.add(a) == lt.add(b)
+
+    def test_tagged_dedup(self) -> None:
+        lt = LocationTable()
+        a = TaggedLocation(tag=1, child=2, data=b"\x01")
+        b = TaggedLocation(tag=1, child=2, data=b"\x01")
         assert lt.add(a) == lt.add(b)
 
     def test_iteration(self) -> None:

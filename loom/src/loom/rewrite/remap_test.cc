@@ -6,6 +6,8 @@
 
 #include "loom/rewrite/remap.h"
 
+#include <cstring>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -465,6 +467,53 @@ TEST_F(RemapTest, RemapsLocationsAcrossModules) {
   ASSERT_NE(target_child.file.field_spans, nullptr);
   EXPECT_NE(target_child.file.field_spans, &field_span);
   EXPECT_EQ(target_child.file.field_spans[0].end_col, 7u);
+}
+
+TEST_F(RemapTest, RemapsTaggedLocationsAcrossModules) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_register_source(source_, IREE_SV("model.loom"), &source_id));
+
+  loom_location_id_t child_location_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(
+      source_, loom_location_file_range(source_id, 5, 6, 5, 6),
+      &child_location_id));
+
+  const uint8_t data[] = {0x01, 0x2A, 0xFF};
+  loom_location_id_t tagged_location_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(
+      source_,
+      loom_location_tagged(LOOM_LOCATION_TAG_SANITIZER_SITE, child_location_id,
+                           data, IREE_ARRAYSIZE(data)),
+      &tagged_location_id));
+
+  loom_ir_remap_t remap = InitializeRemap();
+  loom_location_id_t target_location_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_ir_remap_location_id(&remap, tagged_location_id,
+                                           &target_location_id));
+
+  ASSERT_LT(target_location_id, target_->locations.count);
+  const loom_location_entry_t& target_tagged =
+      target_->locations.entries[target_location_id];
+  ASSERT_EQ(target_tagged.kind, LOOM_LOCATION_TAGGED);
+  EXPECT_EQ(target_tagged.tagged.tag, LOOM_LOCATION_TAG_SANITIZER_SITE);
+  ASSERT_NE(target_tagged.tagged.child, LOOM_LOCATION_UNKNOWN);
+  ASSERT_LT(target_tagged.tagged.child, target_->locations.count);
+  ASSERT_EQ(target_tagged.tagged.data_length, IREE_ARRAYSIZE(data));
+  ASSERT_NE(target_tagged.tagged.data, nullptr);
+  EXPECT_NE(target_tagged.tagged.data, data);
+  EXPECT_EQ(std::memcmp(target_tagged.tagged.data, data, IREE_ARRAYSIZE(data)),
+            0);
+
+  const loom_location_entry_t& target_child =
+      target_->locations.entries[target_tagged.tagged.child];
+  ASSERT_EQ(target_child.kind, LOOM_LOCATION_FILE);
+  ASSERT_LT(target_child.file.source_id, target_->sources.count);
+  EXPECT_TRUE(iree_string_view_equal(
+      target_->sources.entries[target_child.file.source_id],
+      IREE_SV("model.loom")));
+  EXPECT_EQ(target_child.file.start_line, 5u);
+  EXPECT_EQ(target_child.file.start_col, 6u);
 }
 
 static iree_status_t RemapSymbolByName(void* user_data,

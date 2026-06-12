@@ -2489,6 +2489,86 @@ TEST_F(PrintOpTest, LocationOpaqueRejectsInvalidUtf8Data) {
       print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
 }
 
+TEST_F(PrintOpTest, LocationTagged) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_register_source(module_, IREE_SV("model.loom"), &source_id));
+
+  loom_location_id_t child_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(
+      module_, loom_location_file_range(source_id, 42, 3, 42, 58), &child_id));
+
+  const uint8_t data[] = {0x01, 0x2A, 0xFF};
+  loom_location_entry_t tagged_loc = loom_location_tagged(
+      LOOM_LOCATION_TAG_SANITIZER_SITE, child_id, data, IREE_ARRAYSIZE(data));
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
+  std::string output =
+      print_op(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_NE(output.find("loc(tagged<sanitizer_site, \"012aff\", "
+                        "\"model.loom\":42:3 to 42:58>)"),
+            std::string::npos)
+      << "Expected tagged location, got: " << output;
+}
+
+TEST_F(PrintOpTest, LocationTaggedPrintsNumericUserTag) {
+  loom_location_entry_t tagged_loc =
+      loom_location_tagged(LOOM_LOCATION_TAG_USER_BASE, LOOM_LOCATION_UNKNOWN,
+                           /*data=*/NULL, /*data_length=*/0);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
+  std::string output =
+      print_op(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_NE(output.find("loc(tagged<32768, \"\">)"), std::string::npos)
+      << "Expected numeric user tag, got: " << output;
+}
+
+TEST_F(PrintOpTest, LocationTaggedRejectsInvalidTag) {
+  loom_location_entry_t tagged_loc =
+      loom_location_tagged(LOOM_LOCATION_TAG_INVALID, LOOM_LOCATION_UNKNOWN,
+                           /*data=*/NULL, /*data_length=*/0);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
+}
+
+TEST_F(PrintOpTest, LocationTaggedRejectsOutOfRangeChildId) {
+  loom_location_entry_t tagged_loc = loom_location_tagged(
+      LOOM_LOCATION_TAG_SANITIZER_SITE, /*child=*/42, /*data=*/NULL,
+      /*data_length=*/0);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, tagged_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
+}
+
 TEST_F(PrintOpTest, LocationFusedPrintsNestedLocationBodies) {
   loom_source_id_t jax_source_id = LOOM_SOURCE_ID_INVALID;
   IREE_ASSERT_OK(

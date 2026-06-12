@@ -94,6 +94,7 @@ from loom.ir import (
     Symbol,
     SymbolKind,
     SymbolName,
+    TaggedLocation,
     TiedResult,
     Type,
     TypeKind,
@@ -476,6 +477,12 @@ class TestFileHeader:
             write_module(
                 Module(name="test"), location_mode=LOCATION_MODE_FULL_LOCATIONS
             )
+
+    def test_tagged_location_invalid_tag_rejected(self) -> None:
+        module = Module(name="test")
+        module.locations.add(TaggedLocation(tag=0, data=b""))
+        with pytest.raises(ValueError, match="tagged location tag"):
+            write_module(module)
 
     def test_module_count_one(self) -> None:
         data = write_module(Module(name="test"))

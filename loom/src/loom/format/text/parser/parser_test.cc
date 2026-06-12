@@ -2225,6 +2225,26 @@ TEST_F(ParserTest, TrailingFusedAndOpaqueLocationsRoundTrip) {
             "opaque<\"torch\", \"node\\n42\">>>)\n");
 }
 
+TEST_F(ParserTest, TrailingTaggedLocationRoundTrip) {
+  std::string text = RoundTrip(
+      "%c = test.constant 42 : i32 "
+      "loc(tagged<sanitizer_site, \"012aff\", \"model.loom\":5:6>)\n",
+      LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_EQ(text,
+            "%c = test.constant 42 : i32 "
+            "loc(tagged<sanitizer_site, \"012aff\", \"model.loom\":5:6>)\n");
+}
+
+TEST_F(ParserTest, TrailingTaggedLocationNumericTagRoundTrip) {
+  std::string text = RoundTrip(
+      "%c = test.constant 42 : i32 "
+      "loc(tagged<32768, \"\", \"model.loom\":5:6>)\n",
+      LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_EQ(text,
+            "%c = test.constant 42 : i32 "
+            "loc(tagged<32768, \"\", \"model.loom\":5:6>)\n");
+}
+
 TEST_F(ParserTest, FallbackParserLocationPrintedWhenNoExplicitLoc) {
   loom_module_t* module = ParseOk("%c = test.constant 42 : i32\n");
   ASSERT_NE(module, nullptr);
@@ -2259,7 +2279,29 @@ TEST_F(ParserTest, TrailingLocationRejectsUnknownBodyKeyword) {
   ExpectError(diagnostics[0],
               loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 11));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0),
-            "expected a file location string, 'fused', or 'opaque'");
+            "expected a file location string, 'fused', 'opaque', or 'tagged'");
+}
+
+TEST_F(ParserTest, TrailingTaggedLocationRejectsOddHexPayload) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 42 : i32 "
+      "loc(tagged<sanitizer_site, \"123\", \"model.loom\":1:2>)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 11));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
+            "tagged location payload hex length must be even");
+}
+
+TEST_F(ParserTest, TrailingTaggedLocationRejectsInvalidTagZero) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 42 : i32 "
+      "loc(tagged<0, \"\", \"model.loom\":1:2>)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 11));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
+            "tagged location tag 0 is invalid");
 }
 
 TEST_F(ParserTest, TrailingLocationRejectsOutOfRangeCoordinates) {

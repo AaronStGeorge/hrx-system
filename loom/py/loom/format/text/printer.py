@@ -1160,11 +1160,71 @@ class Printer:
     def _format_location(self, location_id: int, module: Module) -> str:
         """Format a location annotation, or return empty string for unknown."""
         from loom.ir import (
+            LOCATION_TAG_SANITIZER_SITE,
+            LOCATION_TAG_TEMPLATE_INSTANTIATION,
+            LOCATION_TAG_TILE_LOWERING,
+            LOCATION_TAG_UKERNEL_SELECTION,
             LOCATION_UNKNOWN,
             FileLocation,
             FusedLocation,
             OpaqueLocation,
+            TaggedLocation,
         )
+
+        location_tag_names = {
+            LOCATION_TAG_SANITIZER_SITE: "sanitizer_site",
+            LOCATION_TAG_TEMPLATE_INSTANTIATION: "template_instantiation",
+            LOCATION_TAG_TILE_LOWERING: "tile_lowering",
+            LOCATION_TAG_UKERNEL_SELECTION: "ukernel_selection",
+        }
+
+        def format_file_body(loc: FileLocation, *, always_print_range: bool) -> str:
+            source = (
+                module.sources[loc.source_id]
+                if loc.source_id < len(module.sources)
+                else "?"
+            )
+            text = f"{_format_string_literal(source)}:{loc.start_line}:{loc.start_col}"
+            if (
+                always_print_range
+                or loc.end_line != loc.start_line
+                or loc.end_col != loc.start_col
+            ):
+                text += f" to {loc.end_line}:{loc.end_col}"
+            return text
+
+        def format_body(body_location_id: int) -> str:
+            body = module.locations.get(body_location_id)
+            if body is None:
+                return ""
+            if isinstance(body, FileLocation):
+                return format_file_body(body, always_print_range=False)
+            if isinstance(body, FusedLocation):
+                parts = [format_body(child_id) for child_id in body.children]
+                return f"fused<{', '.join(parts)}>"
+            if isinstance(body, OpaqueLocation):
+                tag = (
+                    module.sources[body.source_id]
+                    if body.source_id < len(module.sources)
+                    else "?"
+                )
+                try:
+                    data = body.data.decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    raise ValueError("opaque location data is not valid UTF-8") from exc
+                return (
+                    f"opaque<{_format_string_literal(tag)}, "
+                    f"{_format_string_literal(data)}>"
+                )
+            if isinstance(body, TaggedLocation):
+                if body.tag <= 0 or body.tag > 0xFFFF:
+                    raise ValueError("tagged location tag must be in [1, 65535]")
+                tag = location_tag_names.get(body.tag, str(body.tag))
+                text = f"tagged<{tag}, {_format_string_literal(body.data.hex())}"
+                if body.child != LOCATION_UNKNOWN:
+                    text += f", {format_body(body.child)}"
+                return text + ">"
+            return ""
 
         if location_id == LOCATION_UNKNOWN:
             return ""
@@ -1172,46 +1232,8 @@ class Printer:
         if loc is None:
             return ""
         if isinstance(loc, FileLocation):
-            source = (
-                module.sources[loc.source_id]
-                if loc.source_id < len(module.sources)
-                else "?"
-            )
-            return (
-                f"loc({_format_string_literal(source)}:"
-                f"{loc.start_line}:{loc.start_col}"
-                f" to {loc.end_line}:{loc.end_col})"
-            )
-        if isinstance(loc, FusedLocation):
-            parts = []
-            for child_id in loc.children:
-                child = module.locations.get(child_id)
-                if isinstance(child, FileLocation):
-                    source = (
-                        module.sources[child.source_id]
-                        if child.source_id < len(module.sources)
-                        else "?"
-                    )
-                    parts.append(
-                        f"{_format_string_literal(source)}:"
-                        f"{child.start_line}:{child.start_col}"
-                    )
-            return f"loc(fused<{', '.join(parts)}>)"
-        if isinstance(loc, OpaqueLocation):
-            tag = (
-                module.sources[loc.source_id]
-                if loc.source_id < len(module.sources)
-                else "?"
-            )
-            try:
-                data = loc.data.decode("utf-8")
-            except UnicodeDecodeError as exc:
-                raise ValueError("opaque location data is not valid UTF-8") from exc
-            return (
-                f"loc(opaque<{_format_string_literal(tag)}, "
-                f"{_format_string_literal(data)}>)"
-            )
-        return ""
+            return f"loc({format_file_body(loc, always_print_range=True)})"
+        return f"loc({format_body(location_id)})"
 
     def _walk_format_inline(
         self,

@@ -1980,6 +1980,40 @@ TEST_F(ReaderTest, ReadsLocationTablesWithModuleSources) {
   loom_module_free(module);
 }
 
+TEST_F(ReaderTest, ReadsTaggedLocationTables) {
+  loom_module_t* module = CreateLocatedModule();
+  const uint8_t data[] = {0x01, 0x2A, 0xFF};
+  loom_location_id_t tagged_location_id = LOOM_LOCATION_UNKNOWN;
+  IREE_CHECK_OK(loom_module_add_location(
+      module,
+      loom_location_tagged(LOOM_LOCATION_TAG_SANITIZER_SITE,
+                           /*child=*/1, data, IREE_ARRAYSIZE(data)),
+      &tagged_location_id));
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->locations.count, 3u);
+  const loom_location_entry_t& tagged_location =
+      read_module->locations.entries[tagged_location_id];
+  EXPECT_EQ(tagged_location.kind, LOOM_LOCATION_TAGGED);
+  EXPECT_EQ(tagged_location.tagged.tag, LOOM_LOCATION_TAG_SANITIZER_SITE);
+  EXPECT_EQ(tagged_location.tagged.child, 1u);
+  EXPECT_EQ(tagged_location.tagged.data_length, IREE_ARRAYSIZE(data));
+  ASSERT_NE(tagged_location.tagged.data, nullptr);
+  EXPECT_EQ(
+      std::memcmp(tagged_location.tagged.data, data, IREE_ARRAYSIZE(data)), 0);
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
 TEST_F(ReaderTest, ReadsMultiBlockFunctionBodyModule) {
   loom_module_t* module = CreateMultiBlockFunctionModule();
   auto bytes = WriteModule(module);

@@ -85,6 +85,10 @@ from loom.ir import (
     GROUP_SCOPE_BY_NAME,
     I1,
     INDEX,
+    LOCATION_TAG_SANITIZER_SITE,
+    LOCATION_TAG_TEMPLATE_INSTANTIATION,
+    LOCATION_TAG_TILE_LOWERING,
+    LOCATION_TAG_UKERNEL_SELECTION,
     NONE_TYPE,
     OFFSET,
     PREDICATE_KINDS,
@@ -116,6 +120,7 @@ from loom.ir import (
     StaticDim,
     StorageType,
     SymbolName,
+    TaggedLocation,
     Type,
     TypeKind,
     Value,
@@ -129,6 +134,13 @@ from loom.ir import (
 )
 from loom.stable_id import stable_id_from_string
 from loom.target.descriptor_sets import DESCRIPTOR_SET_REGISTRATIONS
+
+_LOCATION_TAG_NAMES = {
+    "sanitizer_site": LOCATION_TAG_SANITIZER_SITE,
+    "template_instantiation": LOCATION_TAG_TEMPLATE_INSTANTIATION,
+    "tile_lowering": LOCATION_TAG_TILE_LOWERING,
+    "ukernel_selection": LOCATION_TAG_UKERNEL_SELECTION,
+}
 
 __all__ = [
     "ParseError",
@@ -1810,9 +1822,12 @@ class Parser:
         elif tok.at(TokenKind.BARE_IDENT) and tok.peek().text == "opaque":
             # OPAQUE location: opaque<"tag", "data">
             location_id = self._parse_opaque_location()
+        elif tok.at(TokenKind.BARE_IDENT) and tok.peek().text == "tagged":
+            # TAGGED location: tagged<tag, "hex", child>
+            location_id = self._parse_tagged_location()
         else:
             raise ParseError(
-                f"expected location kind (string, 'fused', or 'opaque'), "
+                f"expected location kind (string, 'fused', 'opaque', or 'tagged'), "
                 f"got {tok.peek().kind.name} {tok.peek().text!r}",
                 tok.peek().location,
                 tok._filename,
@@ -1920,6 +1935,60 @@ class Parser:
 
         tok.expect(TokenKind.RANGLE)
         return self._module.add_location(OpaqueLocation(source_id=source_id, data=data))
+
+    def _parse_tagged_location(self) -> int:
+        """Parse tagged<tag, "hex", child>.
+
+        The payload string is hexadecimal text that decodes to arbitrary bytes.
+        """
+        tok = self._tokenizer
+        tok.expect(TokenKind.BARE_IDENT, "tagged")
+        tok.expect(TokenKind.LANGLE)
+
+        tag_token = tok.peek()
+        if tag_token.kind == TokenKind.BARE_IDENT:
+            tag_name = tok.expect(TokenKind.BARE_IDENT).text
+            if tag_name not in _LOCATION_TAG_NAMES:
+                raise ParseError(
+                    f"unknown tagged location tag {tag_name!r}",
+                    tag_token.location,
+                    tok._filename,
+                )
+            tag = _LOCATION_TAG_NAMES[tag_name]
+        else:
+            tag = int(tok.expect(TokenKind.INTEGER).text)
+            if tag <= 0 or tag > 0xFFFF:
+                raise ParseError(
+                    "tagged location tag must be in [1, 65535]",
+                    tag_token.location,
+                    tok._filename,
+                )
+
+        tok.expect(TokenKind.COMMA)
+        payload_token = tok.expect(TokenKind.STRING)
+        payload_hex = payload_token.text
+        if len(payload_hex) % 2:
+            raise ParseError(
+                "tagged location payload hex length must be even",
+                payload_token.location,
+                tok._filename,
+            )
+        if any(c not in "0123456789abcdefABCDEF" for c in payload_hex):
+            raise ParseError(
+                "tagged location payload must contain only hex digits",
+                payload_token.location,
+                tok._filename,
+            )
+        data = bytes.fromhex(payload_hex)
+
+        child = 0
+        if tok.try_consume(TokenKind.COMMA):
+            child = self._parse_fused_child()
+
+        tok.expect(TokenKind.RANGLE)
+        return self._module.add_location(
+            TaggedLocation(tag=tag, child=child, data=data)
+        )
 
     def _walk_format(
         self,
