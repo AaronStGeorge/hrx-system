@@ -18,6 +18,9 @@
 extern "C" {
 #endif
 
+typedef struct loom_check_diagnostic_collector_t
+    loom_check_diagnostic_collector_t;
+
 enum {
   LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS = 8,
   LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_FIXED_VALUES = 16,
@@ -66,16 +69,19 @@ iree_status_t loom_check_low_emit_parse_allocation_option(
 // Finds a module-local target-low function definition by symbol name.
 iree_status_t loom_check_low_emit_find_low_function_def(
     loom_module_t* module, iree_string_view_t symbol_name,
-    loom_op_t** out_low_function);
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    loom_check_diagnostic_collector_t* diagnostic_collector,
+    iree_diagnostic_emitter_t emitter, loom_op_t** out_low_function);
 
 // Resolves parsed fixed-location specs against the selected low function body.
 // The returned fixed value array is allocated from |arena|.
 iree_status_t loom_check_low_emit_resolve_fixed_value_specs(
     loom_module_t* module, loom_op_t* low_function,
     const loom_check_low_emit_fixed_value_spec_t* fixed_specs,
-    iree_host_size_t fixed_spec_count,
+    iree_host_size_t fixed_spec_count, iree_diagnostic_emitter_t emitter,
     const loom_low_allocation_fixed_value_t** out_fixed_values,
-    iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena);
+    iree_host_size_t* out_fixed_value_count, bool* out_resolved,
+    iree_arena_allocator_t* arena);
 
 // Packetizes the selected low function through the registry linked into the
 // emit provider request. |out_frame| stores table pointers allocated

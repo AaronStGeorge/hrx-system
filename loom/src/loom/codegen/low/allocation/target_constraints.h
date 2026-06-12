@@ -195,8 +195,9 @@ iree_status_t
 loom_low_allocation_target_constraints_validate_register_location_capacity(
     loom_low_allocation_target_constraints_t* constraints,
     uint16_t reg_class_id, loom_low_allocation_location_kind_t location_kind,
-    uint32_t location_base, uint32_t location_count, iree_string_view_t subject,
-    const loom_op_t* diagnostic_op, bool* out_valid);
+    uint32_t location_base, uint32_t location_count,
+    iree_string_view_t request_kind, const loom_op_t* diagnostic_op,
+    bool* out_valid);
 
 // Emits a structured allocation-capacity failure for |value_class|.
 iree_status_t loom_low_allocation_target_constraints_emit_failure(

@@ -66,7 +66,7 @@ static iree_status_t loom_check_diagnostic_collector_copy_string(
 static iree_status_t loom_check_render_string_list_param(
     loom_diagnostic_string_list_t string_list, loom_output_stream_t* stream) {
   if (string_list.count > 0 && !string_list.values) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "string list param has count > 0 but values NULL");
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
@@ -294,7 +294,7 @@ iree_status_t loom_check_diagnostic_emitter_capture_emit(
       (loom_check_diagnostic_emitter_capture_t*)user_data;
   if (!capture || !capture->diagnostic_collector || !emission ||
       !emission->error) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "diagnostic emitter capture requires an emission");
   }
 
@@ -328,6 +328,88 @@ iree_status_t loom_check_diagnostic_emitter_capture_emit(
       capture->diagnostic_collector, &diagnostic));
   ++capture->emission_count;
   return iree_ok_status();
+}
+
+static loom_source_range_t loom_check_case_source_range(
+    iree_string_view_t filename, iree_string_view_t source) {
+  iree_host_size_t line_start = 0;
+  uint32_t line = 1;
+  while (line_start < source.size) {
+    iree_string_view_t remaining =
+        iree_string_view_substr(source, line_start, IREE_HOST_SIZE_MAX);
+    const iree_host_size_t newline_position =
+        iree_string_view_find_char(remaining, '\n', 0);
+    const iree_host_size_t line_length =
+        newline_position == IREE_STRING_VIEW_NPOS ? remaining.size
+                                                  : newline_position;
+    iree_string_view_t line_text =
+        iree_string_view_substr(source, line_start, line_length);
+    iree_string_view_t trimmed = iree_string_view_trim(line_text);
+    if (!iree_string_view_is_empty(trimmed) &&
+        !iree_string_view_starts_with(trimmed, IREE_SV("//"))) {
+      const iree_host_size_t start =
+          line_start + (iree_host_size_t)(trimmed.data - line_text.data);
+      const iree_host_size_t end = start + trimmed.size;
+      const uint32_t start_column = (uint32_t)(start - line_start) + 1;
+      const uint32_t end_column = start_column + (uint32_t)trimmed.size;
+      return (loom_source_range_t){
+          .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
+          .filename = filename,
+          .source = source,
+          .start = start,
+          .end = end,
+          .start_line = line,
+          .start_column = start_column,
+          .end_line = line,
+          .end_column = end_column,
+      };
+    }
+    if (newline_position == IREE_STRING_VIEW_NPOS) {
+      break;
+    }
+    line_start += newline_position + 1;
+    ++line;
+  }
+  if (source.size == 0) {
+    return (loom_source_range_t){
+        .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
+    };
+  }
+  return (loom_source_range_t){
+      .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
+      .filename = filename,
+      .source = source,
+      .start = 0,
+      .end = 0,
+      .start_line = 1,
+      .start_column = 1,
+      .end_line = 1,
+      .end_column = 1,
+  };
+}
+
+iree_status_t loom_check_diagnostic_collector_emit_case_source(
+    loom_check_diagnostic_collector_t* collector,
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    loom_emitter_t emitter, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
+  if (!collector) return iree_ok_status();
+  if (!test_case || !error) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "case-source diagnostic emission is malformed");
+  }
+  const loom_source_range_t source_range =
+      loom_check_case_source_range(filename, test_case->input);
+  const loom_diagnostic_t diagnostic = {
+      .severity = error->severity,
+      .error = error,
+      .params = params,
+      .param_count = param_count,
+      .emitter = emitter,
+      .origin = source_range,
+      .source_location = source_range,
+  };
+  return loom_check_diagnostic_collector_sink(collector, &diagnostic);
 }
 
 //===----------------------------------------------------------------------===//

@@ -478,7 +478,7 @@ ERR_BACKEND_022 = ErrorDef(
     summary="Register location exceeds allocation capacity.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "cannot place {subject_kind} for '@{function_name}' in "
+        "cannot place {request_kind} for '@{function_name}' in "
         "{register_class}: location range [{location_base}, {location_end}) "
         "with {location_count} unit(s) exceeds allocation capacity "
         "{allocation_capacity}"
@@ -488,7 +488,7 @@ ERR_BACKEND_022 = ErrorDef(
         ErrorParam("export_name", ParamKind.STRING),
         ErrorParam("config_key", ParamKind.STRING),
         ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("request_kind", ParamKind.STRING),
         ErrorParam("register_class", ParamKind.STRING),
         ErrorParam("location_base", ParamKind.U32),
         ErrorParam("location_count", ParamKind.U32),
@@ -499,6 +499,415 @@ ERR_BACKEND_022 = ErrorDef(
         "Constrain the requested fixed or reserved location to the target "
         "register class capacity, or select a target descriptor set with a "
         "larger allocation space"
+    ),
+)
+
+# ERR_BACKEND_023: Allocation budget references an unknown register class.
+ERR_BACKEND_023 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=23,
+    severity=Severity.ERROR,
+    summary="Allocation budget references an unknown register class.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply allocation budget for '@{function_name}': register "
+        "class '{register_class}' is not defined by descriptor set "
+        "'{descriptor_set_key}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a register class defined by the selected target descriptor set, "
+        "or select a descriptor set that provides the requested class"
+    ),
+)
+
+# ERR_BACKEND_024: Allocation budget duplicates register-class storage.
+ERR_BACKEND_024 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=24,
+    severity=Severity.ERROR,
+    summary="Allocation budget duplicates register-class storage.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply allocation budget for '@{function_name}': register "
+        "class '{register_class}' aliases storage already budgeted by "
+        "'{existing_register_class}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("existing_register_class", ParamKind.STRING),
+    ),
+    fix_hint=("Specify one budget for each aliasing register-storage class group"),
+)
+
+# ERR_BACKEND_025: Reserved range is missing a register class.
+ERR_BACKEND_025 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=25,
+    severity=Severity.ERROR,
+    summary="Reserved range is missing a register class.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply reserved range {reserved_range_index} for "
+        "'@{function_name}': register_class is empty"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("reserved_range_index", ParamKind.U64),
+    ),
+    fix_hint="Provide the descriptor-set register class owned by the range",
+)
+
+# ERR_BACKEND_026: Reserved range references an unknown register class.
+ERR_BACKEND_026 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=26,
+    severity=Severity.ERROR,
+    summary="Reserved range references an unknown register class.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply reserved range {reserved_range_index} for "
+        "'@{function_name}': register class '{register_class}' is not "
+        "defined by descriptor set '{descriptor_set_key}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("reserved_range_index", ParamKind.U64),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Reserve storage from a register class defined by the selected "
+        "target descriptor set"
+    ),
+)
+
+# ERR_BACKEND_027: Allocation location kind is unsupported for the request.
+ERR_BACKEND_027 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=27,
+    severity=Severity.ERROR,
+    summary="Allocation location kind is unsupported for the request.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place {request_kind} for '@{function_name}': location kind "
+        "'{location_kind}' is not target-visible register storage"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("request_kind", ParamKind.STRING),
+        ErrorParam("location_kind", ParamKind.STRING),
+    ),
+    fix_hint="Use physical_register or target_id for fixed and reserved ranges",
+)
+
+# ERR_BACKEND_028: Allocation location range is empty.
+ERR_BACKEND_028 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=28,
+    severity=Severity.ERROR,
+    summary="Allocation location range is empty.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place {request_kind} for '@{function_name}': location range "
+        "at {location_base} in '{location_kind}' has zero units"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("request_kind", ParamKind.STRING),
+        ErrorParam("location_kind", ParamKind.STRING),
+        ErrorParam("location_base", ParamKind.U32),
+    ),
+    fix_hint="Request at least one storage unit",
+)
+
+# ERR_BACKEND_029: Allocation location range overflows uint32 storage.
+ERR_BACKEND_029 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=29,
+    severity=Severity.ERROR,
+    summary="Allocation location range overflows uint32 storage.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place {request_kind} for '@{function_name}': location range "
+        "[{location_base}, {location_end}) in '{location_kind}' with "
+        "{location_count} unit(s) exceeds uint32 storage"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("request_kind", ParamKind.STRING),
+        ErrorParam("location_kind", ParamKind.STRING),
+        ErrorParam("location_base", ParamKind.U32),
+        ErrorParam("location_count", ParamKind.U32),
+        ErrorParam("location_end", ParamKind.U64),
+    ),
+    fix_hint="Reduce the requested base or unit count",
+)
+
+# ERR_BACKEND_030: Allocation location kind does not match the register class.
+ERR_BACKEND_030 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=30,
+    severity=Severity.ERROR,
+    summary="Allocation location kind does not match the register class.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place {request_kind} for '@{function_name}' in "
+        "{register_class}: requested location kind '{location_kind}' but "
+        "the class uses '{expected_location_kind}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("request_kind", ParamKind.STRING),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("location_kind", ParamKind.STRING),
+        ErrorParam("expected_location_kind", ParamKind.STRING),
+    ),
+    fix_hint="Use the location kind owned by the selected register class",
+)
+
+# ERR_BACKEND_031: Reserved ranges overlap.
+ERR_BACKEND_031 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=31,
+    severity=Severity.ERROR,
+    summary="Reserved ranges overlap.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply reserved range {reserved_range_index} for "
+        "'@{function_name}' in {register_class}: range "
+        "[{location_base}, {location_end}) overlaps existing range "
+        "{existing_reserved_range_index} [{existing_location_base}, "
+        "{existing_location_end})"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("reserved_range_index", ParamKind.U64),
+        ErrorParam("existing_reserved_range_index", ParamKind.U64),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("location_base", ParamKind.U32),
+        ErrorParam("location_count", ParamKind.U32),
+        ErrorParam("location_end", ParamKind.U64),
+        ErrorParam("existing_location_base", ParamKind.U32),
+        ErrorParam("existing_location_count", ParamKind.U32),
+        ErrorParam("existing_location_end", ParamKind.U64),
+    ),
+    fix_hint="Make target-owned reserved ranges disjoint",
+)
+
+# ERR_BACKEND_032: Fixed allocation references an invalid SSA value ID.
+ERR_BACKEND_032 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=32,
+    severity=Severity.ERROR,
+    summary="Fixed allocation references an invalid SSA value ID.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply fixed value {fixed_value_index} for "
+        "'@{function_name}': value id {value_id} is outside the module value "
+        "table with {value_count} entries"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("fixed_value_index", ParamKind.U64),
+        ErrorParam("value_id", ParamKind.U32),
+        ErrorParam("value_count", ParamKind.U64),
+    ),
+    fix_hint="Use an SSA value from the allocated function",
+)
+
+# ERR_BACKEND_033: Fixed allocation value has no allocatable interval.
+ERR_BACKEND_033 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=33,
+    severity=Severity.ERROR,
+    summary="Fixed allocation value has no allocatable interval.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place fixed value '%{value_name}' for '@{function_name}': "
+        "value id {value_id} has no allocatable live interval"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("value_id", ParamKind.U32),
+    ),
+    fix_hint="Only fix values that participate in low allocation",
+)
+
+# ERR_BACKEND_034: Fixed allocation unit count does not match liveness.
+ERR_BACKEND_034 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=34,
+    severity=Severity.ERROR,
+    summary="Fixed allocation unit count does not match liveness.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place fixed value '%{value_name}' for '@{function_name}': "
+        "value id {value_id} requires {required_unit_count} unit(s), but "
+        "the fixed location has {location_count}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("value_id", ParamKind.U32),
+        ErrorParam("required_unit_count", ParamKind.U32),
+        ErrorParam("location_count", ParamKind.U32),
+    ),
+    fix_hint="Match the fixed location size to the value allocation unit count",
+)
+
+# ERR_BACKEND_035: Fixed allocation base is misaligned.
+ERR_BACKEND_035 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=35,
+    severity=Severity.ERROR,
+    summary="Fixed allocation base is misaligned.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place fixed value '%{value_name}' for '@{function_name}': "
+        "value id {value_id} location base {location_base} is not aligned "
+        "to {required_alignment}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("value_id", ParamKind.U32),
+        ErrorParam("location_base", ParamKind.U32),
+        ErrorParam("required_alignment", ParamKind.U32),
+    ),
+    fix_hint="Choose a fixed location base aligned for the value",
+)
+
+# ERR_BACKEND_036: Fixed allocation duplicates an SSA value.
+ERR_BACKEND_036 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=36,
+    severity=Severity.ERROR,
+    summary="Fixed allocation duplicates an SSA value.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply fixed value {fixed_value_index} for "
+        "'@{function_name}': value '%{value_name}' with id {value_id} was "
+        "already fixed by request {existing_fixed_value_index}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("fixed_value_index", ParamKind.U64),
+        ErrorParam("existing_fixed_value_index", ParamKind.U64),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("value_id", ParamKind.U32),
+    ),
+    fix_hint="Provide at most one fixed allocation request per SSA value",
+)
+
+# ERR_BACKEND_037: Fixed allocation selector is unresolved.
+ERR_BACKEND_037 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=37,
+    severity=Severity.ERROR,
+    summary="Fixed allocation selector is unresolved.",
+    message=(
+        "cannot apply fixed allocation request for '@{function_name}': "
+        "selector '%{value_name}' does not name a value in the low function"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+    ),
+    fix_hint="Use an SSA value name or numeric value id from the selected low function",
+)
+
+# ERR_BACKEND_038: Fixed allocation selector is ambiguous.
+ERR_BACKEND_038 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=38,
+    severity=Severity.ERROR,
+    summary="Fixed allocation selector is ambiguous.",
+    message=(
+        "cannot apply fixed allocation request for '@{function_name}': "
+        "selector '%{value_name}' matches value ids {first_value_id} and "
+        "{second_value_id}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("first_value_id", ParamKind.U32),
+        ErrorParam("second_value_id", ParamKind.U32),
+    ),
+    fix_hint="Use a numeric value id or give the intended SSA value a unique name",
+)
+
+# ERR_BACKEND_039: Schedule pressure cliff references an unknown register class.
+ERR_BACKEND_039 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=39,
+    severity=Severity.ERROR,
+    summary="Schedule pressure cliff references an unknown register class.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot apply pressure cliff for '@{function_name}': register class "
+        "'{register_class}' is not defined by descriptor set "
+        "'{descriptor_set_key}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a pressure cliff register class defined by the selected target "
+        "descriptor set"
     ),
 )
 
@@ -519,4 +928,21 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_020,
     ERR_BACKEND_021,
     ERR_BACKEND_022,
+    ERR_BACKEND_023,
+    ERR_BACKEND_024,
+    ERR_BACKEND_025,
+    ERR_BACKEND_026,
+    ERR_BACKEND_027,
+    ERR_BACKEND_028,
+    ERR_BACKEND_029,
+    ERR_BACKEND_030,
+    ERR_BACKEND_031,
+    ERR_BACKEND_032,
+    ERR_BACKEND_033,
+    ERR_BACKEND_034,
+    ERR_BACKEND_035,
+    ERR_BACKEND_036,
+    ERR_BACKEND_037,
+    ERR_BACKEND_038,
+    ERR_BACKEND_039,
 )

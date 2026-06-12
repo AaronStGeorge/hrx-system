@@ -88,22 +88,6 @@ static const char* loom_low_allocation_json_mode_name(uint8_t mode) {
   }
 }
 
-static const char* loom_low_allocation_json_location_kind_name(
-    loom_low_allocation_location_kind_t kind) {
-  switch (kind) {
-    case LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED:
-      return "unassigned";
-    case LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER:
-      return "physical_register";
-    case LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID:
-      return "target_id";
-    case LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT:
-      return "spill_slot";
-    default:
-      return "unknown";
-  }
-}
-
 static const char* loom_low_allocation_json_remark_kind_name(
     loom_low_allocation_remark_kind_t kind) {
   switch (kind) {
@@ -215,9 +199,9 @@ static iree_status_t loom_low_allocation_json_write_location(
     const loom_low_allocation_assignment_t* assignment,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"kind\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       stream,
-      loom_low_allocation_json_location_kind_name(assignment->location_kind)));
+      loom_low_allocation_location_kind_name(assignment->location_kind)));
   const char* base_name =
       assignment->location_kind == LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT
           ? "slot"
