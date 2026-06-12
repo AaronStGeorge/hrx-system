@@ -32,18 +32,19 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build(
       schedule, allocation, &record_options, &record, scratch_arena));
 
-  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  loom_amdgpu_encoded_instruction_stream_t stream = {0};
   const loom_amdgpu_packet_plan_t* packet_plan =
       options ? options->packet_plan : NULL;
   if (packet_plan != NULL) {
     const loom_amdgpu_encode_instruction_stream_options_t encode_options = {
         .packet_plan = packet_plan,
     };
-    IREE_RETURN_IF_ERROR(loom_amdgpu_encode_instruction_stream_with_options(
-        schedule, allocation, &encode_options, &text, scratch_arena));
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_encode_instruction_stream_result_with_options(
+            schedule, allocation, &encode_options, &stream, scratch_arena));
   } else {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_encode_instruction_stream(
-        schedule, allocation, &text, scratch_arena));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encode_instruction_stream_result(
+        schedule, allocation, &stream, scratch_arena));
   }
 
   const loom_amdgpu_hsaco_kernel_t kernel = {
@@ -53,7 +54,9 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
               .flags = record.descriptor_flags,
               .user_sgpr_count = record.user_sgpr_count,
           },
-      .text = text,
+      .text = stream.text,
+      .text_fixups = stream.text_fixups,
+      .text_fixup_count = stream.text_fixup_count,
   };
   const uint64_t instruction_count =
       loom_amdgpu_packet_plan_instruction_count(schedule, packet_plan);
@@ -64,8 +67,8 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
       .summary =
           {
               .instruction_count = instruction_count,
-              .text_byte_count = text.data_length,
-              .text_storage_byte_count = text.data_length,
+              .text_byte_count = stream.text.data_length,
+              .text_storage_byte_count = stream.text.data_length,
               .private_segment_fixed_size =
                   record.metadata.private_segment_fixed_size,
               .group_segment_fixed_size =

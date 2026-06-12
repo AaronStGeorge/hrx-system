@@ -18,6 +18,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/io/stream.h"
 #include "loom/target/emit/native/amdgpu/descriptor.h"
+#include "loom/target/emit/native/amdgpu/text_fixup.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,29 +31,6 @@ typedef struct loom_amdgpu_hsaco_kernel_descriptor_options_t {
   // Minimum user SGPR count implied by descriptor-only ABI flags.
   uint32_t user_sgpr_count;
 } loom_amdgpu_hsaco_kernel_descriptor_options_t;
-
-// Kind of text literal patch applied after HSACO section layout is fixed.
-typedef enum loom_amdgpu_hsaco_text_fixup_kind_e {
-  LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_NONE = 0,
-  // Patches the low 32 bits of a data-symbol address relative to a text PC.
-  LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_LO = 1,
-  // Patches the high 32 bits of a data-symbol address relative to a text PC.
-  LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_HI = 2,
-} loom_amdgpu_hsaco_text_fixup_kind_t;
-
-// One text literal patch against an AMDGPU HSACO data symbol.
-typedef struct loom_amdgpu_hsaco_text_fixup_t {
-  // Kind of literal value written by this fixup.
-  loom_amdgpu_hsaco_text_fixup_kind_t kind;
-  // Byte offset of the 32-bit literal word within the kernel text bytes.
-  uint64_t literal_byte_offset;
-  // Byte offset within the kernel text of the PC-relative base address.
-  uint64_t base_pc_byte_offset;
-  // Data symbol used as the target address.
-  iree_string_view_t target_symbol;
-  // Byte offset from the start of |target_symbol|.
-  uint64_t target_symbol_byte_offset;
-} loom_amdgpu_hsaco_text_fixup_t;
 
 // One kernel entry emitted into an AMDGPU HSA code object.
 typedef struct loom_amdgpu_hsaco_kernel_t {
