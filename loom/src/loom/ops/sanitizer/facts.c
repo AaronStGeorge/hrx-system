@@ -8,6 +8,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/sanitizer/ops.h"
+#include "loom/ops/view/reference.h"
 
 static bool loom_sanitizer_type_accepts_integer_predicates(loom_type_t type) {
   if (!loom_type_is_scalar(type)) return false;
@@ -93,4 +94,17 @@ iree_status_t loom_sanitizer_assert_value_facts(
                                      &resolved_predicate);
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_sanitizer_assert_layout_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_type_t source_type =
+      loom_module_value_type(module, loom_sanitizer_assert_layout_view(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_sanitizer_assert_layout_result(op));
+  return loom_view_reference_make_refine(
+      context, module, loom_sanitizer_assert_layout_view(op), operand_facts[0],
+      source_type, result_type, &result_facts[0]);
 }

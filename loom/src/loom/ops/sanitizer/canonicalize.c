@@ -154,11 +154,10 @@ static bool loom_sanitizer_predicate_is_proven(
   return false;
 }
 
-static bool loom_sanitizer_assert_value_is_proven(loom_op_t* op,
-                                                  loom_rewriter_t* rewriter) {
-  loom_attribute_t predicates = loom_sanitizer_assert_value_predicates(op);
+static bool loom_sanitizer_predicate_list_is_proven(loom_attribute_t predicates,
+                                                    loom_rewriter_t* rewriter,
+                                                    loom_value_slice_t values) {
   if (predicates.kind != LOOM_ATTR_PREDICATE_LIST) return false;
-  loom_value_slice_t values = loom_sanitizer_assert_value_values(op);
   for (uint16_t i = 0; i < predicates.count; ++i) {
     if (!loom_sanitizer_predicate_is_proven(&predicates.predicate_list[i],
                                             rewriter, values)) {
@@ -173,9 +172,20 @@ iree_status_t loom_sanitizer_assert_value_canonicalize(
   loom_value_slice_t values = loom_sanitizer_assert_value_values(op);
   loom_value_slice_t results = loom_sanitizer_assert_value_results(op);
   if (values.count != results.count) return iree_ok_status();
-  if (!loom_sanitizer_assert_value_is_proven(op, rewriter)) {
+  if (!loom_sanitizer_predicate_list_is_proven(
+          loom_sanitizer_assert_value_predicates(op), rewriter, values)) {
     return iree_ok_status();
   }
   return loom_rewriter_replace_all_uses_and_erase(rewriter, op, values.values,
                                                   values.count);
+}
+
+iree_status_t loom_sanitizer_assert_op_canonicalize(loom_op_t* op,
+                                                    loom_rewriter_t* rewriter) {
+  if (!loom_sanitizer_predicate_list_is_proven(
+          loom_sanitizer_assert_op_predicates(op), rewriter,
+          loom_sanitizer_assert_op_values(op))) {
+    return iree_ok_status();
+  }
+  return loom_rewriter_erase(rewriter, op);
 }

@@ -146,6 +146,7 @@ TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
       LOOM_SANITIZER_ASSERTION_KIND_ACCESS,
       LOOM_SANITIZER_ASSERTION_KIND_VALUE,
       LOOM_SANITIZER_ASSERTION_KIND_OPERATION,
+      LOOM_SANITIZER_ASSERTION_KIND_LAYOUT,
   };
   const loom_sanitizer_check_kind_t check_kinds[] = {
       LOOM_SANITIZER_CHECK_KIND_UNKNOWN,
@@ -157,6 +158,7 @@ TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
       LOOM_SANITIZER_CHECK_KIND_INTEGER_OVERFLOW,
       LOOM_SANITIZER_CHECK_KIND_DIVIDE_BY_ZERO,
       LOOM_SANITIZER_CHECK_KIND_INVALID_SHIFT,
+      LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT,
   };
   const loom_sanitizer_provenance_kind_t provenance_kinds[] = {
       LOOM_SANITIZER_PROVENANCE_KIND_UNKNOWN,
@@ -340,9 +342,15 @@ TEST(SanitizerSitePayloadTest, ReturnsKnownFieldNames) {
   EXPECT_EQ(StringViewToString(loom_sanitizer_assertion_kind_name(
                 LOOM_SANITIZER_ASSERTION_KIND_OPERATION)),
             "operation");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_assertion_kind_name(
+                LOOM_SANITIZER_ASSERTION_KIND_LAYOUT)),
+            "layout");
   EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
                 LOOM_SANITIZER_CHECK_KIND_VALUE_DIVISIBILITY)),
             "value_divisibility");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
+                LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT)),
+            "layout_refinement");
   EXPECT_EQ(StringViewToString(loom_sanitizer_provenance_kind_name(
                 LOOM_SANITIZER_PROVENANCE_KIND_USER_ASSERTION)),
             "user_assertion");

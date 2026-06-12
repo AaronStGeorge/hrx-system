@@ -19,6 +19,8 @@ iree_string_view_t loom_sanitizer_assertion_kind_name(
       return IREE_SV("value");
     case LOOM_SANITIZER_ASSERTION_KIND_OPERATION:
       return IREE_SV("operation");
+    case LOOM_SANITIZER_ASSERTION_KIND_LAYOUT:
+      return IREE_SV("layout");
     default:
       return iree_string_view_empty();
   }
@@ -45,6 +47,8 @@ iree_string_view_t loom_sanitizer_check_kind_name(
       return IREE_SV("divide_by_zero");
     case LOOM_SANITIZER_CHECK_KIND_INVALID_SHIFT:
       return IREE_SV("invalid_shift");
+    case LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT:
+      return IREE_SV("layout_refinement");
     default:
       return iree_string_view_empty();
   }

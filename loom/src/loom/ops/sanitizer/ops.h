@@ -19,9 +19,41 @@ extern "C" {
 #endif
 
 enum {
-  LOOM_OP_SANITIZER_ASSERT_VALUE = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 0),
-  LOOM_OP_SANITIZER_COUNT_ = 1,
+  LOOM_OP_SANITIZER_ASSERT_ACCESS = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 0),
+  LOOM_OP_SANITIZER_ASSERT_VALUE = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 1),
+  LOOM_OP_SANITIZER_ASSERT_OP = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 2),
+  LOOM_OP_SANITIZER_ASSERT_LAYOUT = LOOM_OP_KIND(LOOM_DIALECT_SANITIZER, 3),
+  LOOM_OP_SANITIZER_COUNT_ = 4,
 };
+
+// Logical memory access kind covered by a sanitizer access assertion.
+typedef enum loom_sanitizer_assert_access_kind_e {
+  LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ = 0,
+  LOOM_SANITIZER_ASSERT_ACCESS_KIND_WRITE = 1,
+  LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ_WRITE = 2,
+  LOOM_SANITIZER_ASSERT_ACCESS_KIND_COUNT_ = 3,
+} loom_sanitizer_assert_access_kind_t;
+
+// LOOM_OP_SANITIZER_ASSERT_ACCESS: Assert that a logical indexed view access is valid. The assertion has the same index-list shape as ordinary view memory operations so source-level memory contracts remain typed until target lowering materializes address checks.
+// sanitizer.assert.access<read> %view[%row, %col] : view<[%M]x[%N]xf32, %layout>
+LOOM_DEFINE_ISA(loom_sanitizer_assert_access_isa, LOOM_OP_SANITIZER_ASSERT_ACCESS)
+LOOM_DEFINE_OPERAND(loom_sanitizer_assert_access_view, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_sanitizer_assert_access_indices, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_sanitizer_assert_access_kind, 0, loom_sanitizer_assert_access_kind_t)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_sanitizer_assert_access_static_indices, 1)
+iree_status_t loom_sanitizer_assert_access_build(
+    loom_builder_t* builder,
+    loom_sanitizer_assert_access_kind_t kind,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_sanitizer_assert_access_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_SANITIZER_ASSERT_VALUE: Assert predicate constraints over SSA values and return checked identity aliases. Unlike assume ops, this op is executable: failing the assertion reports the site and aborts execution. Passing the assertion refines facts for the returned aliases.
 // %n_checked = sanitizer.assert.value %n [range(%n, 0, 4096), mul(%n, 16)] : index
@@ -46,6 +78,47 @@ iree_status_t loom_sanitizer_assert_value_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 iree_status_t loom_sanitizer_assert_value_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_SANITIZER_ASSERT_OP: Assert operation-level predicate constraints without producing checked aliases. This is the executable form for contracts such as valid divide operands, shift counts, overflow preconditions, and other facts where the checked operation itself remains the semantic anchor.
+// sanitizer.assert.op %lhs, %rhs [ne(%rhs, 0)] : i32, i32
+LOOM_DEFINE_ISA(loom_sanitizer_assert_op_isa, LOOM_OP_SANITIZER_ASSERT_OP)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_sanitizer_assert_op_values, 0)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_sanitizer_assert_op_predicates, 0)
+iree_status_t loom_sanitizer_assert_op_build(
+    loom_builder_t* builder,
+    const loom_value_id_t* values,
+    iree_host_size_t values_count,
+    const loom_predicate_t* predicates,
+    iree_host_size_t predicates_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_sanitizer_assert_op_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_sanitizer_assert_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_SANITIZER_ASSERT_LAYOUT: Assert that a view satisfies a refined layout, shape, or encoding contract and return the same view on the continuing path. This is the executable counterpart to view.refine for diagnostics that must abort instead of trusting unchecked layout facts.
+// %checked = sanitizer.assert.layout %view : view<[%M]x[%N]xf32, %layout> -> view<16x[%N]xf32, %layout>
+LOOM_DEFINE_ISA(loom_sanitizer_assert_layout_isa, LOOM_OP_SANITIZER_ASSERT_LAYOUT)
+LOOM_DEFINE_OPERAND(loom_sanitizer_assert_layout_view, 0)
+LOOM_DEFINE_RESULT(loom_sanitizer_assert_layout_result, 0)
+iree_status_t loom_sanitizer_assert_layout_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t view,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_sanitizer_assert_layout_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_sanitizer_assert_layout_type_transfer(
+    loom_type_transfer_context_t* context,
+    const loom_module_t* module, loom_op_t* op);
+iree_status_t loom_sanitizer_assert_layout_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

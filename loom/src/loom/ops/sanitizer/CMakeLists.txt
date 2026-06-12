@@ -17,6 +17,7 @@ loom_generated_cc_library(
   SRCS
     "canonicalize.c"
     "facts.c"
+    "type_transfer.c"
     "verify.c"
   GENERATED_SRC_FLAGS
     "--builders"
@@ -35,7 +36,9 @@ loom_generated_cc_library(
     loom::ir
     loom::ir::facts
     loom::ops::op_defs
+    loom::ops::view
     loom::rewrite::rewriter
+    loom::rewrite::type_propagation
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

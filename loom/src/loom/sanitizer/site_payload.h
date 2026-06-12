@@ -36,6 +36,8 @@ enum loom_sanitizer_assertion_kind_e {
   LOOM_SANITIZER_ASSERTION_KIND_VALUE = 2,
   // Operation-level assertion.
   LOOM_SANITIZER_ASSERTION_KIND_OPERATION = 3,
+  // View layout, shape, or encoding assertion.
+  LOOM_SANITIZER_ASSERTION_KIND_LAYOUT = 4,
   // Number of known assertion categories.
   LOOM_SANITIZER_ASSERTION_KIND_COUNT_,
 };
@@ -61,6 +63,8 @@ enum loom_sanitizer_check_kind_e {
   LOOM_SANITIZER_CHECK_KIND_DIVIDE_BY_ZERO = 7,
   // Shift count must be in range for the shifted type.
   LOOM_SANITIZER_CHECK_KIND_INVALID_SHIFT = 8,
+  // View must satisfy a refined layout, shape, or encoding contract.
+  LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT = 9,
   // Number of known checked contracts.
   LOOM_SANITIZER_CHECK_KIND_COUNT_,
 };

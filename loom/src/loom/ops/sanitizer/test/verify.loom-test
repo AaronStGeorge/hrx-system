@@ -1,5 +1,21 @@
 // RUN: verify
 
+func.def @access_index_count_mismatch(%layout: encoding<layout>, %view: view<4x4xf32, %layout>, %row: index) {
+  // ERROR@+1: SUBRANGE/001 "view" "1" "2"
+  sanitizer.assert.access<read> %view[%row] : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @access_static_index_out_of_bounds(%layout: encoding<layout>, %view: view<4x4xf32, %layout>) {
+  // ERROR@+1: SUBRANGE/004
+  sanitizer.assert.access<write> %view[4, 0] : view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
 func.def @count_mismatch(%x: index) -> (index, index) {
   // ERROR@+1: STRUCTURE/013 "values" "1" "results" "2"
   %a, %b = sanitizer.assert.value %x [ge(%x, 0)] : index, index
@@ -20,4 +36,36 @@ func.def @integer_predicate_rejects_float(%x: f32) -> (f32) {
   // ERROR@+1: TYPE/003 "predicates[0].arg[0]" "f32" "integer, index, or offset value"
   %checked = sanitizer.assert.value %x [ge(%x, 0)] : f32
   func.return %checked : f32
+}
+
+// ====
+
+func.def @op_predicate_value_must_be_assert_operand(%x: index, %y: index) {
+  // ERROR@+1: STRUCTURE/032 "predicates[0].arg[1]" "an assertion operand"
+  sanitizer.assert.op %x [lt(%x, %y)] : index
+  func.return
+}
+
+// ====
+
+func.def @op_integer_predicate_rejects_float(%x: f32) {
+  // ERROR@+1: TYPE/003 "predicates[0].arg[0]" "f32" "integer, index, or offset value"
+  sanitizer.assert.op %x [ge(%x, 0)] : f32
+  func.return
+}
+
+// ====
+
+func.def @layout_missing_result_layout(%m: index, %layout: encoding<layout>, %view: view<[%m]xf32, %layout>) -> (view<16xf32>) {
+  // ERROR@+1: ENCODING/001 "result type layout" "view type"
+  %checked = sanitizer.assert.layout %view : view<[%m]xf32, %layout> -> view<16xf32>
+  func.return %checked : view<16xf32>
+}
+
+// ====
+
+func.def @layout_static_dimension_mismatch(%layout: encoding<layout>, %view: view<4xf32, %layout>) -> (view<8xf32, %layout>) {
+  // ERROR@+1: SHAPE/001 "source static dimension" "4" "result static dimension" "8"
+  %checked = sanitizer.assert.layout %view : view<4xf32, %layout> -> view<8xf32, %layout>
+  func.return %checked : view<8xf32, %layout>
 }

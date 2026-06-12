@@ -15,6 +15,7 @@ loom_generated_cc_library(
   GENERATOR
     loom::py::loom::gen::ops::c_tables_view_generator
   SRCS
+    "access_verifier.c"
     "facts.c"
     "reference.c"
     "type_transfer.c"
@@ -26,6 +27,7 @@ loom_generated_cc_library(
     "builders.c"
     "tables.c"
   HDRS
+    "access_verifier.h"
     "ops.h"
     "reference.h"
   ARGS
