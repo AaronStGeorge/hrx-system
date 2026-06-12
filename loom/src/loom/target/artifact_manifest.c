@@ -183,6 +183,137 @@ static iree_status_t loom_target_artifact_manifest_json_write_workgroup_size(
       workgroup_size[1], workgroup_size[2]);
 }
 
+static bool loom_target_artifact_manifest_workgroup_size_has_limit(
+    loom_target_workgroup_size_t value) {
+  return value.x != 0 || value.y != 0 || value.z != 0;
+}
+
+static bool loom_target_artifact_manifest_grid_size_has_limit(
+    loom_target_grid_size_t value) {
+  return value.x != 0 || value.y != 0 || value.z != 0;
+}
+
+static bool loom_target_artifact_manifest_workgroup_count_has_limit(
+    loom_target_workgroup_count_limit_t value) {
+  return value.x != 0 || value.y != 0 || value.z != 0;
+}
+
+static iree_status_t
+loom_target_artifact_manifest_json_write_optional_dimension_field(
+    loom_output_stream_t* stream, bool* inout_first_field, const char* name,
+    uint32_t value) {
+  if (value == 0) {
+    return iree_ok_status();
+  }
+  return loom_target_artifact_manifest_json_write_u32_field(
+      stream, inout_first_field, name, value);
+}
+
+static iree_status_t
+loom_target_artifact_manifest_json_write_workgroup_size_limit_field(
+    loom_output_stream_t* stream, bool* inout_first_field, const char* name,
+    loom_target_workgroup_size_t value) {
+  IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_begin_field(
+      stream, inout_first_field, name));
+  bool first_dimension = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "x", value.x));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "y", value.y));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "z", value.z));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t
+loom_target_artifact_manifest_json_write_grid_size_limit_field(
+    loom_output_stream_t* stream, bool* inout_first_field, const char* name,
+    loom_target_grid_size_t value) {
+  IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_begin_field(
+      stream, inout_first_field, name));
+  bool first_dimension = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "x", value.x));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "y", value.y));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "z", value.z));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t
+loom_target_artifact_manifest_json_write_workgroup_count_limit_field(
+    loom_output_stream_t* stream, bool* inout_first_field, const char* name,
+    loom_target_workgroup_count_limit_t value) {
+  IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_begin_field(
+      stream, inout_first_field, name));
+  bool first_dimension = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "x", value.x));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "y", value.y));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_dimension_field(
+          stream, &first_dimension, "z", value.z));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t
+loom_target_artifact_manifest_json_write_optional_address_space_field(
+    loom_output_stream_t* stream, bool* inout_first_field, const char* name,
+    uint32_t value) {
+  if (value == UINT32_MAX) {
+    return iree_ok_status();
+  }
+  return loom_target_artifact_manifest_json_write_u32_field(
+      stream, inout_first_field, name, value);
+}
+
+static iree_status_t
+loom_target_artifact_manifest_json_write_address_spaces_field(
+    loom_output_stream_t* stream, bool* inout_first_field,
+    loom_target_memory_space_map_t memory_spaces) {
+  IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_begin_field(
+      stream, inout_first_field, "address_spaces"));
+  bool first_address_space = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_address_space_field(
+          stream, &first_address_space, "generic", memory_spaces.generic));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_address_space_field(
+          stream, &first_address_space, "global", memory_spaces.global));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_address_space_field(
+          stream, &first_address_space, "workgroup", memory_spaces.workgroup));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_address_space_field(
+          stream, &first_address_space, "constant", memory_spaces.constant));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_address_space_field(
+          stream, &first_address_space, "private",
+          memory_spaces.private_memory));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_address_space_field(
+          stream, &first_address_space, "host", memory_spaces.host));
+  IREE_RETURN_IF_ERROR(
+      loom_target_artifact_manifest_json_write_optional_address_space_field(
+          stream, &first_address_space, "descriptor",
+          memory_spaces.descriptor));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t loom_target_artifact_manifest_json_write_name_array_field(
     loom_output_stream_t* stream, bool* inout_first_field, const char* name,
     const iree_string_view_t* values, iree_host_size_t count) {
@@ -285,7 +416,7 @@ static iree_status_t loom_target_artifact_manifest_format_artifact_json(
 
 static iree_status_t loom_target_artifact_manifest_format_target_json(
     const loom_target_artifact_manifest_target_t* target,
-    loom_output_stream_t* stream) {
+    loom_target_artifact_manifest_mode_t mode, loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_require_string(
       target->name, "target.name"));
   bool first_field = true;
@@ -312,6 +443,90 @@ static iree_status_t loom_target_artifact_manifest_format_target_json(
       loom_target_artifact_manifest_json_write_name_array_field(
           stream, &first_field, "features", target->feature_names,
           target->feature_name_count));
+  if (loom_target_artifact_manifest_mode_includes_details(mode)) {
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_DEFAULT_POINTER_BITWIDTH)) {
+      IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_write_u32_field(
+          stream, &first_field, "default_pointer_bitwidth",
+          target->default_pointer_bitwidth));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_INDEX_BITWIDTH)) {
+      IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_write_u32_field(
+          stream, &first_field, "index_bitwidth", target->index_bitwidth));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_OFFSET_BITWIDTH)) {
+      IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_write_u32_field(
+          stream, &first_field, "offset_bitwidth", target->offset_bitwidth));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_WORKGROUP_SIZE) &&
+        loom_target_artifact_manifest_workgroup_size_has_limit(
+            target->max_workgroup_size)) {
+      IREE_RETURN_IF_ERROR(
+          loom_target_artifact_manifest_json_write_workgroup_size_limit_field(
+              stream, &first_field, "max_workgroup_size",
+              target->max_workgroup_size));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_FLAT_WORKGROUP_SIZE)) {
+      IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_write_u32_field(
+          stream, &first_field, "max_flat_workgroup_size",
+          target->max_flat_workgroup_size));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_WORKGROUP_STORAGE_BYTES)) {
+      IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_write_u64_field(
+          stream, &first_field, "max_workgroup_storage_bytes",
+          target->max_workgroup_storage_bytes));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_SUBGROUP_SIZE)) {
+      IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_write_u32_field(
+          stream, &first_field, "subgroup_size", target->subgroup_size));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_GRID_SIZE) &&
+        loom_target_artifact_manifest_grid_size_has_limit(
+            target->max_grid_size)) {
+      IREE_RETURN_IF_ERROR(
+          loom_target_artifact_manifest_json_write_grid_size_limit_field(
+              stream, &first_field, "max_grid_size", target->max_grid_size));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_FLAT_GRID_SIZE)) {
+      IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_json_write_u64_field(
+          stream, &first_field, "max_flat_grid_size",
+          target->max_flat_grid_size));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_WORKGROUP_COUNT) &&
+        loom_target_artifact_manifest_workgroup_count_has_limit(
+            target->max_workgroup_count)) {
+      IREE_RETURN_IF_ERROR(
+          loom_target_artifact_manifest_json_write_workgroup_count_limit_field(
+              stream, &first_field, "max_workgroup_count",
+              target->max_workgroup_count));
+    }
+    if (iree_any_bit_set(
+            target->flags,
+            LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MEMORY_SPACES)) {
+      IREE_RETURN_IF_ERROR(
+          loom_target_artifact_manifest_json_write_address_spaces_field(
+              stream, &first_field, target->memory_spaces));
+    }
+  }
   return loom_output_stream_write_cstring(stream, "}");
 }
 
@@ -504,7 +719,8 @@ static iree_status_t loom_target_artifact_manifest_format_global_json(
 
 static iree_status_t loom_target_artifact_manifest_format_targets_json(
     const loom_target_artifact_manifest_t* manifest,
-    loom_output_stream_t* stream, bool* inout_first_field) {
+    loom_target_artifact_manifest_mode_t mode, loom_output_stream_t* stream,
+    bool* inout_first_field) {
   if (manifest->target_count == 0) {
     return iree_ok_status();
   }
@@ -518,7 +734,7 @@ static iree_status_t loom_target_artifact_manifest_format_targets_json(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
     }
     IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_format_target_json(
-        &manifest->targets[i], stream));
+        &manifest->targets[i], mode, stream));
   }
   return loom_output_stream_write_cstring(stream, "]");
 }
@@ -604,7 +820,7 @@ iree_status_t loom_target_artifact_manifest_format_json(
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_format_artifact_json(
       &manifest->artifact, stream));
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_format_targets_json(
-      manifest, stream, &first_field));
+      manifest, options->mode, stream, &first_field));
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_format_functions_json(
       manifest, options->mode, stream, &first_field));
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_format_globals_json(

@@ -6,6 +6,7 @@
 
 #include "loom/target/artifact_manifest_collect.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "loom/ops/op_defs.h"
@@ -126,8 +127,110 @@ static iree_string_view_t loom_target_artifact_manifest_entry_target_name(
   return entry->bundle_storage.bundle.name;
 }
 
+static bool loom_target_artifact_manifest_snapshot_has_workgroup_size_limit(
+    const loom_target_snapshot_t* snapshot) {
+  return snapshot->max_workgroup_size.x != 0 ||
+         snapshot->max_workgroup_size.y != 0 ||
+         snapshot->max_workgroup_size.z != 0;
+}
+
+static bool loom_target_artifact_manifest_snapshot_has_grid_size_limit(
+    const loom_target_snapshot_t* snapshot) {
+  return snapshot->max_grid_size.x != 0 || snapshot->max_grid_size.y != 0 ||
+         snapshot->max_grid_size.z != 0;
+}
+
+static bool loom_target_artifact_manifest_snapshot_has_workgroup_count_limit(
+    const loom_target_snapshot_t* snapshot) {
+  return snapshot->max_workgroup_count.x != 0 ||
+         snapshot->max_workgroup_count.y != 0 ||
+         snapshot->max_workgroup_count.z != 0;
+}
+
+static bool loom_target_artifact_manifest_memory_space_is_target_specific(
+    uint32_t value) {
+  return value != 0 && value != UINT32_MAX;
+}
+
+static bool loom_target_artifact_manifest_snapshot_has_memory_spaces(
+    const loom_target_snapshot_t* snapshot) {
+  const loom_target_memory_space_map_t memory_spaces = snapshot->memory_spaces;
+  return loom_target_artifact_manifest_memory_space_is_target_specific(
+             memory_spaces.generic) ||
+         loom_target_artifact_manifest_memory_space_is_target_specific(
+             memory_spaces.global) ||
+         loom_target_artifact_manifest_memory_space_is_target_specific(
+             memory_spaces.workgroup) ||
+         loom_target_artifact_manifest_memory_space_is_target_specific(
+             memory_spaces.constant) ||
+         loom_target_artifact_manifest_memory_space_is_target_specific(
+             memory_spaces.private_memory) ||
+         loom_target_artifact_manifest_memory_space_is_target_specific(
+             memory_spaces.host) ||
+         loom_target_artifact_manifest_memory_space_is_target_specific(
+             memory_spaces.descriptor);
+}
+
+static void loom_target_artifact_manifest_collect_target_details(
+    const loom_target_snapshot_t* snapshot,
+    loom_target_artifact_manifest_target_t* target) {
+  if (snapshot->default_pointer_bitwidth != 0) {
+    target->flags |=
+        LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_DEFAULT_POINTER_BITWIDTH;
+    target->default_pointer_bitwidth = snapshot->default_pointer_bitwidth;
+  }
+  if (snapshot->index_bitwidth != 0) {
+    target->flags |= LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_INDEX_BITWIDTH;
+    target->index_bitwidth = snapshot->index_bitwidth;
+  }
+  if (snapshot->offset_bitwidth != 0) {
+    target->flags |= LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_OFFSET_BITWIDTH;
+    target->offset_bitwidth = snapshot->offset_bitwidth;
+  }
+  if (loom_target_artifact_manifest_snapshot_has_workgroup_size_limit(
+          snapshot)) {
+    target->flags |=
+        LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_WORKGROUP_SIZE;
+    target->max_workgroup_size = snapshot->max_workgroup_size;
+  }
+  if (snapshot->max_flat_workgroup_size != 0) {
+    target->flags |=
+        LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_FLAT_WORKGROUP_SIZE;
+    target->max_flat_workgroup_size = snapshot->max_flat_workgroup_size;
+  }
+  if (snapshot->max_workgroup_storage_bytes != 0) {
+    target->flags |=
+        LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_WORKGROUP_STORAGE_BYTES;
+    target->max_workgroup_storage_bytes = snapshot->max_workgroup_storage_bytes;
+  }
+  if (snapshot->subgroup_size != 0) {
+    target->flags |= LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_SUBGROUP_SIZE;
+    target->subgroup_size = snapshot->subgroup_size;
+  }
+  if (loom_target_artifact_manifest_snapshot_has_grid_size_limit(snapshot)) {
+    target->flags |= LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_GRID_SIZE;
+    target->max_grid_size = snapshot->max_grid_size;
+  }
+  if (snapshot->max_flat_grid_size != 0) {
+    target->flags |=
+        LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_FLAT_GRID_SIZE;
+    target->max_flat_grid_size = snapshot->max_flat_grid_size;
+  }
+  if (loom_target_artifact_manifest_snapshot_has_workgroup_count_limit(
+          snapshot)) {
+    target->flags |=
+        LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MAX_WORKGROUP_COUNT;
+    target->max_workgroup_count = snapshot->max_workgroup_count;
+  }
+  if (loom_target_artifact_manifest_snapshot_has_memory_spaces(snapshot)) {
+    target->flags |= LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MEMORY_SPACES;
+    target->memory_spaces = snapshot->memory_spaces;
+  }
+}
+
 static iree_status_t loom_target_artifact_manifest_collect_targets(
-    loom_target_entry_list_t entries, iree_arena_allocator_t* arena,
+    loom_target_entry_list_t entries, loom_target_artifact_manifest_mode_t mode,
+    iree_arena_allocator_t* arena,
     loom_target_artifact_manifest_target_t** out_targets,
     iree_host_size_t* out_target_count,
     iree_string_view_t** out_target_name_refs) {
@@ -154,6 +257,11 @@ static iree_status_t loom_target_artifact_manifest_collect_targets(
     targets[target_count++] = (loom_target_artifact_manifest_target_t){
         .name = target_name,
     };
+    if (loom_target_artifact_manifest_collect_mode_includes_details(mode)) {
+      loom_target_artifact_manifest_collect_target_details(
+          &entries.values[i].bundle_storage.snapshot,
+          &targets[target_count - 1]);
+    }
   }
 
   iree_string_view_t* target_name_refs = NULL;
@@ -446,7 +554,8 @@ iree_status_t loom_target_artifact_manifest_collect_from_entries(
   iree_host_size_t target_count = 0;
   iree_string_view_t* target_name_refs = NULL;
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_collect_targets(
-      entries, arena, &targets, &target_count, &target_name_refs));
+      entries, options->mode, arena, &targets, &target_count,
+      &target_name_refs));
 
   loom_target_artifact_manifest_function_t* functions = NULL;
   IREE_RETURN_IF_ERROR(loom_target_artifact_manifest_collect_functions(

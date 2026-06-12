@@ -203,8 +203,8 @@ INTERFACES: tuple[InterfaceSpec, ...] = (
 
 
 _TARGET_PROJECTION_FIELDS: dict[str, tuple[str, str]] = {
-    "codegen_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "snapshot.codegen_format"),
-    "artifact_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "snapshot.artifact_format"),
+    "codegen_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U8", "snapshot.codegen_format"),
+    "artifact_format": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U8", "snapshot.artifact_format"),
     "default_pointer_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.default_pointer_bitwidth"),
     "index_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.index_bitwidth"),
     "offset_bitwidth": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.offset_bitwidth"),
@@ -227,9 +227,9 @@ _TARGET_PROJECTION_FIELDS: dict[str, tuple[str, str]] = {
     "memory_space_private": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.private_memory"),
     "memory_space_host": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.host"),
     "memory_space_descriptor": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.memory_spaces.descriptor"),
-    "abi": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "export_plan.abi_kind"),
+    "abi": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U8", "export_plan.abi_kind"),
     "export_symbol": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "export_plan.export_symbol"),
-    "linkage": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U32", "export_plan.linkage"),
+    "linkage": ("LOOM_TARGET_PROJECTION_VALUE_ENUM_U8", "export_plan.linkage"),
     "hal_buffer_resource_flags": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "export_plan.hal_kernel.buffer_resource_flags"),
     "contract_set_key": ("LOOM_TARGET_PROJECTION_VALUE_STRING_VIEW", "config.contract_set_key"),
     "contract_feature_bits": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U64", "config.contract_feature_bits"),

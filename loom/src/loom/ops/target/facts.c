@@ -74,8 +74,8 @@ static void loom_target_projection_apply(
   uint8_t* storage_base = (uint8_t*)storage;
   void* destination = storage_base + projection->storage_offset;
   switch (projection->value_kind) {
-    case LOOM_TARGET_PROJECTION_VALUE_ENUM_U32:
-      *(uint32_t*)destination = (uint32_t)loom_attr_as_enum(attr);
+    case LOOM_TARGET_PROJECTION_VALUE_ENUM_U8:
+      *(uint8_t*)destination = (uint8_t)loom_attr_as_enum(attr);
       break;
     case LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32:
       *(uint32_t*)destination = (uint32_t)loom_attr_as_i64(attr);

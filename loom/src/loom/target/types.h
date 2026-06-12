@@ -300,8 +300,8 @@ typedef struct loom_target_bundle_table_t {
 } loom_target_bundle_table_t;
 
 enum loom_target_projection_value_bits_e {
-  // Enum attr projected into a target enum field.
-  LOOM_TARGET_PROJECTION_VALUE_ENUM_U32 = 1,
+  // Enum attr projected into a uint8_t target enum field.
+  LOOM_TARGET_PROJECTION_VALUE_ENUM_U8 = 1,
   // I64 attr projected into a uint32_t field after verification.
   LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32 = 2,
   // I64 attr projected into a uint64_t field after verification.

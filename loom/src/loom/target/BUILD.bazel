@@ -60,6 +60,7 @@ loom_cc_library(
     srcs = ["artifact_manifest.c"],
     hdrs = ["artifact_manifest.h"],
     deps = [
+        ":types",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",

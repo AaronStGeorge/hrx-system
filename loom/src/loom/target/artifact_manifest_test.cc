@@ -192,6 +192,23 @@ TEST(ArtifactManifestTest, FormatsDetailsFacts) {
   targets[0].name = IREE_SVL("gfx942");
   targets[0].family = IREE_SVL("amdgpu");
   targets[0].processor = IREE_SVL("gfx942");
+  targets[0].flags =
+      LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_DEFAULT_POINTER_BITWIDTH |
+      LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_INDEX_BITWIDTH |
+      LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_OFFSET_BITWIDTH |
+      LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_SUBGROUP_SIZE |
+      LOOM_TARGET_ARTIFACT_MANIFEST_TARGET_FLAG_MEMORY_SPACES;
+  targets[0].default_pointer_bitwidth = 64;
+  targets[0].index_bitwidth = 32;
+  targets[0].offset_bitwidth = 64;
+  targets[0].subgroup_size = 64;
+  targets[0].memory_spaces.generic = 0;
+  targets[0].memory_spaces.global = 1;
+  targets[0].memory_spaces.workgroup = 3;
+  targets[0].memory_spaces.constant = 4;
+  targets[0].memory_spaces.private_memory = 5;
+  targets[0].memory_spaces.host = UINT32_MAX;
+  targets[0].memory_spaces.descriptor = 7;
 
   loom_target_artifact_manifest_parameter_t parameters[2] = {};
   parameters[0].name = IREE_SVL("weights");
@@ -240,7 +257,17 @@ TEST(ArtifactManifestTest, FormatsDetailsFacts) {
                       "\"artifact\":{\"format\":\"amdgpu-hsaco\"},"
                       "\"targets\":[{\"name\":\"gfx942\","
                       "\"family\":\"amdgpu\","
-                      "\"processor\":\"gfx942\"}],"
+                      "\"processor\":\"gfx942\","
+                      "\"default_pointer_bitwidth\":64,"
+                      "\"index_bitwidth\":32,"
+                      "\"offset_bitwidth\":64,"
+                      "\"subgroup_size\":64,"
+                      "\"address_spaces\":{\"generic\":0,"
+                      "\"global\":1,"
+                      "\"workgroup\":3,"
+                      "\"constant\":4,"
+                      "\"private\":5,"
+                      "\"descriptor\":7}}],"
                       "\"functions\":[{\"name\":\"gemv_q4\","
                       "\"source\":\"gemv_q4_template\","
                       "\"targets\":[\"gfx942\"],"

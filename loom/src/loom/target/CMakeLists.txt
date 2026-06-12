@@ -62,6 +62,7 @@ loom_cc_library(
   SRCS
     "artifact_manifest.c"
   DEPS
+    ::types
     iree::base
     loom::util::json
     loom::util::stream

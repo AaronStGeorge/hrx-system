@@ -263,7 +263,10 @@ func.def target(@test_target) abi(object_function) export("entry") @entry(%lhs: 
                       "\"mode\":\"details\","
                       "\"artifact\":{\"format\":\"spirv-binary\","
                       "\"name\":\"module\"},"
-                      "\"targets\":[{\"name\":\"test_target\"}],"
+                      "\"targets\":[{\"name\":\"test_target\","
+                      "\"default_pointer_bitwidth\":64,"
+                      "\"index_bitwidth\":64,"
+                      "\"offset_bitwidth\":64}],"
                       "\"functions\":[{\"name\":\"entry\","
                       "\"targets\":[\"test_target\"],"
                       "\"interface\":{\"parameter_count\":2,"
@@ -273,6 +276,65 @@ func.def target(@test_target) abi(object_function) export("entry") @entry(%lhs: 
                       "{\"name\":\"rhs\","
                       "\"kind\":\"value\","
                       "\"index\":1}]}}]}")));
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST_F(ArtifactManifestCollectTest, CollectsTargetDetailsInDetailsMode) {
+  ModulePtr module = ParseModule(R"(
+target.generic<reference> @gpu {
+  default_pointer_bitwidth = 64,
+  index_bitwidth = 32,
+  offset_bitwidth = 64,
+  max_workgroup_size_x = 256,
+  max_workgroup_size_y = 8,
+  max_workgroup_size_z = 4,
+  max_flat_workgroup_size = 1024,
+  subgroup_size = 32,
+  max_grid_size_x = 4096,
+  max_grid_size_y = 2048,
+  max_grid_size_z = 1024,
+  max_flat_grid_size = 8589934592,
+  max_workgroup_count_x = 128,
+  max_workgroup_count_y = 64,
+  max_workgroup_count_z = 32
+}
+
+func.def target(@gpu) abi(object_function) export("entry") @entry() {
+  func.return
+}
+)");
+
+  loom_target_artifact_manifest_collect_options_t options;
+  loom_target_artifact_manifest_collect_options_initialize(&options);
+  options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_DETAILS;
+
+  iree_string_builder_t builder;
+  iree_string_view_t output =
+      CollectAndFormat(module.get(), &options,
+                       LOOM_TARGET_ARTIFACT_MANIFEST_MODE_DETAILS, &builder);
+  EXPECT_TRUE(iree_string_view_equal(
+      output, IREE_SV("{\"kind\":\"loom.artifact_manifest\","
+                      "\"schema_version\":1,"
+                      "\"mode\":\"details\","
+                      "\"artifact\":{\"format\":\"vm-bytecode\"},"
+                      "\"targets\":[{\"name\":\"gpu\","
+                      "\"default_pointer_bitwidth\":64,"
+                      "\"index_bitwidth\":32,"
+                      "\"offset_bitwidth\":64,"
+                      "\"max_workgroup_size\":{\"x\":256,\"y\":8,\"z\":4},"
+                      "\"max_flat_workgroup_size\":1024,"
+                      "\"subgroup_size\":32,"
+                      "\"max_grid_size\":{\"x\":4096,"
+                      "\"y\":2048,"
+                      "\"z\":1024},"
+                      "\"max_flat_grid_size\":8589934592,"
+                      "\"max_workgroup_count\":{\"x\":128,"
+                      "\"y\":64,"
+                      "\"z\":32}}],"
+                      "\"functions\":[{\"name\":\"entry\","
+                      "\"targets\":[\"gpu\"],"
+                      "\"interface\":{\"parameter_count\":0},"
+                      "\"execution\":{\"subgroup_size\":32}}]}")));
   iree_string_builder_deinitialize(&builder);
 }
 
