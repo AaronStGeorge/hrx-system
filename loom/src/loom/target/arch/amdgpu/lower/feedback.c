@@ -15,6 +15,7 @@
 #include "loom/target/arch/amdgpu/feedback_abi.h"
 #include "loom/target/arch/amdgpu/lower/data_symbol.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
+#include "loom/target/arch/amdgpu/lower/signal.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/registers.h"
@@ -669,6 +670,29 @@ iree_status_t loom_amdgpu_build_feedback_publish_packet_state(
   return loom_amdgpu_feedback_build_publish_state_store(
       builder, descriptor_set, zero_vaddr, packet_base, ready_value, encoding,
       location);
+}
+
+iree_status_t loom_amdgpu_build_feedback_notify_host(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t notify_signal, loom_location_id_t location) {
+  loom_amdgpu_signal_values_t signal_values = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_signal_values(
+      builder, descriptor_set, notify_signal, location, &signal_values));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_signal_add_one_release(
+      builder, descriptor_set, signal_values.address, location));
+  return loom_amdgpu_build_signal_poke_mailbox(
+      builder, descriptor_set, signal_values.event_mailbox_ptr,
+      signal_values.event_id, location);
+}
+
+iree_status_t loom_amdgpu_build_feedback_publish_packet(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t packet_base, loom_value_id_t notify_signal,
+    loom_location_id_t location) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_publish_packet_state(
+      builder, descriptor_set, packet_base, location));
+  return loom_amdgpu_build_feedback_notify_host(builder, descriptor_set,
+                                                notify_signal, location);
 }
 
 iree_status_t loom_amdgpu_build_feedback_channel_header_values(

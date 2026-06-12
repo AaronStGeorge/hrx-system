@@ -116,6 +116,27 @@ iree_status_t loom_amdgpu_build_feedback_publish_packet_state(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t packet_base, loom_location_id_t location);
 
+// Emits target-low IR that wakes the runtime feedback service.
+//
+// |notify_signal| must be the SGPRx2 host-interrupt signal loaded from an
+// enabled feedback config. This helper does not emit null checks for the signal
+// or its mailbox pointer; callers must only use it after branching onto a path
+// where the runtime feedback ABI guarantees an interrupt-capable signal.
+iree_status_t loom_amdgpu_build_feedback_notify_host(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t notify_signal, loom_location_id_t location);
+
+// Emits target-low IR that release-publishes a reserved packet and wakes the
+// runtime feedback service.
+//
+// |packet_base| must be the SGPRx2 device-visible packet address returned by
+// reservation and |notify_signal| must satisfy
+// loom_amdgpu_build_feedback_notify_host's preconditions.
+iree_status_t loom_amdgpu_build_feedback_publish_packet(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t packet_base, loom_value_id_t notify_signal,
+    loom_location_id_t location);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

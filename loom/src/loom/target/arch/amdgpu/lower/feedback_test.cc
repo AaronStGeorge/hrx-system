@@ -21,6 +21,7 @@
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/feedback_abi.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/target/arch/amdgpu/signal_abi.h"
 #include "loom/target/registers.h"
 
 namespace {
@@ -199,6 +200,26 @@ class AmdgpuFeedbackTest : public ::testing::Test {
     FAIL() << "expected attr not found: " << ToString(name);
   }
 
+  const loom_op_t* FindLoadOp(loom_amdgpu_descriptor_ref_t descriptor_ref,
+                              loom_value_id_t expected_address,
+                              uint32_t expected_byte_offset) const {
+    for (loom_op_t* op : OpsForDescriptorRef(descriptor_ref)) {
+      loom_value_slice_t operands = loom_low_op_operands(op);
+      if (operands.count != 1 || operands.values[0] != expected_address) {
+        continue;
+      }
+      loom_named_attr_slice_t attrs = loom_low_op_attrs(op);
+      if (attrs.count != 1 ||
+          !iree_string_view_equal(String(attrs.entries[0].name_id),
+                                  IREE_SV("offset")) ||
+          loom_attr_as_i64(attrs.entries[0].value) != expected_byte_offset) {
+        continue;
+      }
+      return op;
+    }
+    return nullptr;
+  }
+
   void ExpectLowConstU32(loom_value_id_t value, uint32_t expected_value) const {
     const loom_value_t* ir_value = loom_module_value(module_, value);
     ASSERT_FALSE(loom_value_is_block_arg(ir_value));
@@ -292,6 +313,17 @@ class AmdgpuFeedbackTest : public ::testing::Test {
                   LOOM_AMDGPU_FEEDBACK_PACKET_STATE_OFFSET, 1);
     ExpectLowConstU32(loom_low_op_operands(op).values[1],
                       LOOM_AMDGPU_FEEDBACK_PACKET_STATE_READY);
+  }
+
+  void ExpectSignalAddAtomic(const loom_op_t* op,
+                             loom_value_id_t expected_signal_address) const {
+    ExpectLowOpDescriptorRef(
+        op, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
+    loom_value_slice_t operands = loom_low_op_operands(op);
+    ASSERT_EQ(operands.count,
+              PacketOperandCountForRef(
+                  LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR));
+    EXPECT_EQ(operands.values[2], expected_signal_address);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -556,6 +588,79 @@ TEST_F(AmdgpuFeedbackTest, PublishesPacketStateWithGfx12SystemScope) {
   ExpectPublishStateStore(b32_stores[0], packet_base);
   ExpectAttrI64(loom_low_op_attrs(b32_stores[0]), IREE_SV("scope"),
                 kSystemCacheScope);
+}
+
+TEST_F(AmdgpuFeedbackTest, PublishesPacketAndNotifiesHost) {
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_publish_packet(
+      &builder_, descriptor_set_, channel_values.ring_base,
+      config_values.notify_signal, LOOM_LOCATION_UNKNOWN));
+
+  std::vector<loom_op_t*> waitcnt_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT);
+  ASSERT_EQ(waitcnt_ops.size(), 3u);
+  std::vector<loom_op_t*> vscnt_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_WAITCNT_VSCNT);
+  ASSERT_EQ(vscnt_ops.size(), 3u);
+
+  std::vector<loom_op_t*> b32_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
+  ASSERT_EQ(b32_stores.size(), 1u);
+  ExpectPublishStateStore(b32_stores[0], channel_values.ring_base);
+
+  std::vector<loom_op_t*> atomic_ops = OpsForDescriptorRef(
+      LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_ATOMIC_ADD_U64_SADDR);
+  ASSERT_EQ(atomic_ops.size(), 1u);
+  ExpectSignalAddAtomic(atomic_ops[0], config_values.notify_signal);
+
+  const loom_op_t* mailbox_load = FindLoadOp(
+      LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX2_OFFSET_ONLY,
+      config_values.notify_signal, LOOM_AMDGPU_SIGNAL_EVENT_MAILBOX_PTR_OFFSET);
+  ASSERT_NE(mailbox_load, nullptr);
+  const loom_value_id_t mailbox_ptr =
+      loom_value_slice_get(loom_low_op_results(mailbox_load), 0);
+  const loom_op_t* event_id_load = FindLoadOp(
+      LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORD_OFFSET_ONLY,
+      config_values.notify_signal, LOOM_AMDGPU_SIGNAL_EVENT_ID_OFFSET);
+  ASSERT_NE(event_id_load, nullptr);
+  const loom_value_id_t event_id =
+      loom_value_slice_get(loom_low_op_results(event_id_load), 0);
+
+  std::vector<loom_op_t*> b64_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
+  ASSERT_EQ(b64_stores.size(), 1u);
+  ExpectStoreOp(b64_stores[0],
+                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR, mailbox_ptr,
+                /*expected_byte_offset=*/0, /*expected_value_unit_count=*/2);
+
+  std::vector<loom_op_t*> and_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B32);
+  ASSERT_EQ(and_ops.size(), 1u);
+  loom_value_slice_t and_operands = loom_low_op_operands(and_ops[0]);
+  ASSERT_EQ(and_operands.count, 2u);
+  EXPECT_EQ(and_operands.values[0], event_id);
+
+  std::vector<loom_op_t*> m0_moves =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0);
+  ASSERT_EQ(m0_moves.size(), 1u);
+  EXPECT_EQ(loom_low_op_operands(m0_moves[0]).values[0],
+            loom_value_slice_get(loom_low_op_results(and_ops[0]), 0));
+  std::vector<loom_op_t*> sendmsg_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG);
+  ASSERT_EQ(sendmsg_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(sendmsg_ops[0]), IREE_SV("message"),
+                LOOM_AMDGPU_SIGNAL_INTERRUPT_SENDMSG);
+  ASSERT_EQ(loom_low_op_operands(sendmsg_ops[0]).count, 1u);
+  EXPECT_EQ(loom_low_op_operands(sendmsg_ops[0]).values[0],
+            loom_value_slice_get(loom_low_op_results(m0_moves[0]), 0));
 }
 
 }  // namespace

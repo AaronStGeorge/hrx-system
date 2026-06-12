@@ -270,6 +270,7 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/arch/amdgpu:feedback_abi",
+        "//loom/src/loom/target/arch/amdgpu:signal_abi",
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//runtime/src/iree/base/internal:arena",
