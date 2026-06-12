@@ -1004,8 +1004,10 @@ static iree_status_t loom_tooling_config_format_schema_entry_json(
   }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"constraints\":"));
-  IREE_RETURN_IF_ERROR(loom_tooling_config_format_predicates_json(
-      loom_config_decl_predicates(op), stream));
+  loom_attribute_t predicates =
+      is_decl ? loom_config_decl_predicates(op) : loom_attr_absent();
+  IREE_RETURN_IF_ERROR(
+      loom_tooling_config_format_predicates_json(predicates, stream));
   return loom_output_stream_write_cstring(stream, "}");
 }
 

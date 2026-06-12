@@ -30,6 +30,7 @@ enum {
 LOOM_DEFINE_ISA(loom_config_decl_isa, LOOM_OP_CONFIG_DECL)
 LOOM_DEFINE_RESULT(loom_config_decl_type, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_config_decl_symbol, 0)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_config_decl_predicates, 1)
 iree_status_t loom_config_decl_build(
     loom_builder_t* builder,
     loom_symbol_ref_t symbol,

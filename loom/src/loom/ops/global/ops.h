@@ -31,6 +31,7 @@ enum {
 LOOM_DEFINE_ISA(loom_global_constant_isa, LOOM_OP_GLOBAL_CONSTANT)
 LOOM_DEFINE_RESULT(loom_global_constant_type, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_global_constant_symbol, 0)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_global_constant_predicates, 1)
 LOOM_DEFINE_ATTR_ANY(loom_global_constant_initializer, 2)
 iree_status_t loom_global_constant_build(
     loom_builder_t* builder,
@@ -50,6 +51,7 @@ iree_status_t loom_global_constant_verify(
 LOOM_DEFINE_ISA(loom_global_variable_isa, LOOM_OP_GLOBAL_VARIABLE)
 LOOM_DEFINE_RESULT(loom_global_variable_type, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_global_variable_symbol, 0)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_global_variable_predicates, 1)
 LOOM_DEFINE_ATTR_ANY(loom_global_variable_initializer, 2)
 iree_status_t loom_global_variable_build(
     loom_builder_t* builder,
@@ -76,6 +78,7 @@ iree_status_t loom_global_load_build(
     iree_host_size_t result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_global_load_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_global_load_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,

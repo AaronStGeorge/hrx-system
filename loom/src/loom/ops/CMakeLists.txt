@@ -194,6 +194,7 @@ loom_generated_cc_library(
     loom::ops::low
     loom::ops::pass
     loom::ops::pool
+    loom::ops::sanitizer
     loom::ops::scalar
     loom::ops::scf
     loom::ops::target

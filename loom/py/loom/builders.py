@@ -551,6 +551,7 @@ def default_ops() -> tuple[Op, ...]:
     from loom.dialect.low import ALL_LOW_OPS
     from loom.dialect.pass_ import ALL_PASS_OPS
     from loom.dialect.pool import ALL_POOL_OPS
+    from loom.dialect.sanitizer import ALL_SANITIZER_OPS
     from loom.dialect.scalar import ALL_SCALAR_OPS
     from loom.dialect.scf import ALL_SCF_OPS
     from loom.dialect.target import ALL_TARGET_OPS
@@ -571,6 +572,7 @@ def default_ops() -> tuple[Op, ...]:
         *ALL_LOW_OPS,
         *ALL_PASS_OPS,
         *ALL_POOL_OPS,
+        *ALL_SANITIZER_OPS,
         *ALL_SCALAR_OPS,
         *ALL_SCF_OPS,
         *ALL_TARGET_OPS,

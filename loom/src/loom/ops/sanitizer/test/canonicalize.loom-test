@@ -1,0 +1,32 @@
+// RUN: pass canonicalize
+
+// A sanitizer assertion is removed only when incoming facts already prove every
+// predicate. The checked result is replaced with the original value.
+func.def @proven_assertion_folds(%n: index) -> (index) {
+  %known = index.assume %n [range(%n, 0, 4096), mul(%n, 16)] : index
+  %checked = sanitizer.assert.value %known [range(%known, 0, 4096), mul(%known, 8)] : index
+  func.return %checked : index
+}
+
+// ----
+func.def @proven_assertion_folds(%n: index) -> (index) {
+  %known = index.assume %n [range(%n, 0, 4096), mul(%n, 16)] : index
+  func.return %known : index
+}
+
+// ====
+
+// Exact result facts are allowed to flow through an unproven assertion, but the
+// assertion remains as the executable trap/report boundary.
+func.def @unproven_exact_assertion_survives(%n: index) -> (index, index) {
+  %checked = sanitizer.assert.value %n [eq(%n, 42)] : index
+  %sum = index.add %checked, %checked : index
+  func.return %checked, %sum : index, index
+}
+
+// ----
+func.def @unproven_exact_assertion_survives(%n: index) -> (index, index) {
+  %checked = sanitizer.assert.value %n [eq(%n, 42)] : index
+  %sum = index.constant 84 : index
+  func.return %checked, %sum : index, index
+}

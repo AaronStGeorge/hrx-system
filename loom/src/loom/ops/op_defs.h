@@ -1704,6 +1704,13 @@ loom_attribute_t loom_memory_access_atomic_scope(loom_memory_access_t access);
     return loom_op_attrs(op)[(index)];                            \
   }
 
+// Defines a function that reads a predicate list attribute by index.
+#define LOOM_DEFINE_ATTR_PREDICATE_LIST(func_name, index)         \
+  enum { func_name##_ATTR_INDEX = (index) };                      \
+  static inline loom_attribute_t func_name(const loom_op_t* op) { \
+    return loom_op_attrs(op)[(index)];                            \
+  }
+
 // Defines a function that reads a DICT attribute by index.
 #define LOOM_DEFINE_ATTR_DICT(func_name, index)                          \
   enum { func_name##_ATTR_INDEX = (index) };                             \

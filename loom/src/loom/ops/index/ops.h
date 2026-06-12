@@ -102,6 +102,7 @@ iree_status_t loom_index_cast_verify(
 LOOM_DEFINE_ISA(loom_index_assume_isa, LOOM_OP_INDEX_ASSUME)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_index_assume_values, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_index_assume_results, 0)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_index_assume_predicates, 0)
 iree_status_t loom_index_assume_build(
     loom_builder_t* builder,
     const loom_value_id_t* values,

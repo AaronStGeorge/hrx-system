@@ -229,6 +229,10 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
   if (!rewriter->materialize_constant) return iree_ok_status();
   if (!vtable->infer_facts) return iree_ok_status();
   if (vtable->traits & LOOM_TRAIT_CONSTANT_LIKE) return iree_ok_status();
+  if (loom_traits_has_side_effects(
+          loom_op_effective_traits(rewriter->module, op))) {
+    return iree_ok_status();
+  }
 
   // Check if all results are now exact constants.
   const loom_value_id_t* results = loom_op_const_results(op);

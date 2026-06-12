@@ -219,6 +219,14 @@ iree_py_binary(
 )
 
 iree_py_binary(
+    name = "c_tables_sanitizer_generator",
+    srcs = C_TABLES_SRCS,
+    main = "c_tables.py",
+    visibility = GENERATOR_VISIBILITY,
+    deps = C_TABLES_BASE_DEPS + ["//loom/py/loom/dialect/sanitizer"],
+)
+
+iree_py_binary(
     name = "c_tables_scalar_generator",
     srcs = C_TABLES_SRCS,
     main = "c_tables.py",

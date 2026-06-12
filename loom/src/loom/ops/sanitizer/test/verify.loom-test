@@ -1,0 +1,23 @@
+// RUN: verify
+
+func.def @count_mismatch(%x: index) -> (index, index) {
+  // ERROR@+1: STRUCTURE/013 "values" "1" "results" "2"
+  %a, %b = sanitizer.assert.value %x [ge(%x, 0)] : index, index
+  func.return %a, %b : index, index
+}
+
+// ====
+
+func.def @predicate_value_must_be_assert_operand(%x: index, %y: index) -> (index) {
+  // ERROR@+1: STRUCTURE/032 "predicates[0].arg[1]" "an asserted value operand"
+  %checked = sanitizer.assert.value %x [lt(%x, %y)] : index
+  func.return %checked : index
+}
+
+// ====
+
+func.def @integer_predicate_rejects_float(%x: f32) -> (f32) {
+  // ERROR@+1: TYPE/003 "predicates[0].arg[0]" "f32" "integer, index, or offset value"
+  %checked = sanitizer.assert.value %x [ge(%x, 0)] : f32
+  func.return %checked : f32
+}

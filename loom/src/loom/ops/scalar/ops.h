@@ -1887,6 +1887,7 @@ iree_status_t loom_scalar_bitfield_extracts_facts(
 LOOM_DEFINE_ISA(loom_scalar_assume_isa, LOOM_OP_SCALAR_ASSUME)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_scalar_assume_values, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_scalar_assume_results, 0)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_scalar_assume_predicates, 0)
 iree_status_t loom_scalar_assume_build(
     loom_builder_t* builder,
     const loom_value_id_t* values,

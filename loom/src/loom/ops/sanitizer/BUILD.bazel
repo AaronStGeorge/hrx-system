@@ -13,14 +13,14 @@ package(
 )
 
 loom_generated_cc_library(
-    name = "global",
+    name = "sanitizer",
     srcs = [
         "canonicalize.c",
         "facts.c",
         "verify.c",
     ],
     hdrs = ["ops.h"],
-    args = ["--dialect=global"],
+    args = ["--dialect=sanitizer"],
     generated_src_flags = [
         "--builders",
         "--tables",
@@ -29,7 +29,7 @@ loom_generated_cc_library(
         "builders.c",
         "tables.c",
     ],
-    generator = "//loom/py/loom/gen/ops:c_tables_global_generator",
+    generator = "//loom/py/loom/gen/ops:c_tables_sanitizer_generator",
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
@@ -37,6 +37,6 @@ loom_generated_cc_library(
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/rewrite:rewriter",
-        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
     ],
 )

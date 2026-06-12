@@ -1,0 +1,4 @@
+func.def @assert_value_roundtrip(%n: index, %m: index) -> (index, index) {
+  %n_checked, %m_checked = sanitizer.assert.value %n, %m [range(%n, 0, 4096), lt(%n, %m)] : index, index
+  func.return %n_checked, %m_checked : index, index
+}

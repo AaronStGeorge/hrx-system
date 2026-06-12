@@ -1,0 +1,36 @@
+// RUN: pass canonicalize
+
+// Assertions refine the alias results on the path where execution continues.
+// The assertion itself remains because the incoming operand facts do not prove
+// the predicates before the check.
+func.def @assert_refines_integer_facts(%n: index) -> (i64) {
+  %checked = sanitizer.assert.value %n [range(%n, 0, 4096), mul(%n, 16)] : index
+  %divisor = test.fact_divisor %checked : index -> i64
+  func.return %divisor : i64
+}
+
+// ----
+func.def @assert_refines_integer_facts(%n: index) -> (i64) {
+  %checked = sanitizer.assert.value %n [range(%n, 0, 4096), mul(%n, 16)] : index
+  %divisor = scalar.constant 16 : i64
+  func.return %divisor : i64
+}
+
+// ====
+
+// Exact relational operands can refine the checked result without inventing a
+// separate assume op.
+func.def @assert_uses_exact_relational_rhs(%n: index) -> (i64) {
+  %limit = index.constant 128 : index
+  %checked, %limit_checked = sanitizer.assert.value %n, %limit [lt(%n, %limit)] : index, index
+  %upper = test.fact_range_hi %checked : index -> i64
+  func.return %upper : i64
+}
+
+// ----
+func.def @assert_uses_exact_relational_rhs(%n: index) -> (i64) {
+  %limit = index.constant 128 : index
+  %checked, %limit_checked = sanitizer.assert.value %n, %limit [lt(%n, %limit)] : index, index
+  %upper = scalar.constant 127 : i64
+  func.return %upper : i64
+}

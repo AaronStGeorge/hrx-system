@@ -11,8 +11,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/global/ops.h"
 
-#define LOOM_GLOBAL_PREDICATES_ATTR_INDEX 1
-
 static const loom_op_t* loom_global_load_definition(const loom_module_t* module,
                                                     const loom_op_t* op) {
   loom_symbol_ref_t ref = loom_global_load_global(op);
@@ -34,10 +32,9 @@ static loom_value_id_t loom_global_definition_value(const loom_op_t* op) {
 }
 
 static loom_attribute_t loom_global_definition_predicates(const loom_op_t* op) {
-  if (!op || op->attribute_count <= LOOM_GLOBAL_PREDICATES_ATTR_INDEX) {
-    return loom_attr_absent();
-  }
-  return loom_op_attrs(op)[LOOM_GLOBAL_PREDICATES_ATTR_INDEX];
+  if (loom_global_constant_isa(op)) return loom_global_constant_predicates(op);
+  if (loom_global_variable_isa(op)) return loom_global_variable_predicates(op);
+  return loom_attr_absent();
 }
 
 static bool loom_global_scalar_initializer_facts(

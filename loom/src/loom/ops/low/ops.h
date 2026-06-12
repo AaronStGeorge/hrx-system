@@ -126,6 +126,7 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_cc, 8, loom_low_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_purity, 9, loom_low_purity_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_allocation, 10, loom_low_allocation_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_schedule, 11, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_low_func_def_predicates, 12)
 LOOM_DEFINE_REGION(loom_low_func_def_body, 0)
 enum loom_low_func_def_build_flag_bits_e {
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -181,6 +182,7 @@ LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_y, 6)
 LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 7)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_allocation, 8, loom_low_allocation_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_schedule, 9, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_low_kernel_def_predicates, 10)
 LOOM_DEFINE_REGION(loom_low_kernel_def_body, 0)
 enum loom_low_kernel_def_build_flag_bits_e {
   LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 0,
@@ -232,6 +234,7 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_cc, 8, loom_low_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_purity, 9, loom_low_purity_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_allocation, 10, loom_low_allocation_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_schedule, 11, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_PREDICATE_LIST(loom_low_func_decl_predicates, 12)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_import_kind, 13, loom_low_func_decl_import_kind_t)
 LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 14)
 enum loom_low_func_decl_build_flag_bits_e {
