@@ -41,6 +41,46 @@ static bool loom_sanitizer_type_accepts_integer_predicates(loom_type_t type) {
          scalar_type == LOOM_SCALAR_TYPE_OFFSET;
 }
 
+static bool loom_sanitizer_type_accepts_float_predicates(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_scalar_type_is_float(loom_type_element_type(type));
+}
+
+static bool loom_sanitizer_type_accepts_predicate(loom_type_t type,
+                                                  uint8_t predicate_kind) {
+  switch ((loom_predicate_kind_t)predicate_kind) {
+    case LOOM_PREDICATE_EQ:
+    case LOOM_PREDICATE_NE:
+    case LOOM_PREDICATE_LT:
+    case LOOM_PREDICATE_LE:
+    case LOOM_PREDICATE_GT:
+    case LOOM_PREDICATE_GE:
+    case LOOM_PREDICATE_MUL:
+    case LOOM_PREDICATE_MIN:
+    case LOOM_PREDICATE_MAX:
+    case LOOM_PREDICATE_POW2:
+    case LOOM_PREDICATE_RANGE:
+      return loom_sanitizer_type_accepts_integer_predicates(type);
+    case LOOM_PREDICATE_NOT_NAN:
+    case LOOM_PREDICATE_FINITE:
+      return loom_sanitizer_type_accepts_float_predicates(type);
+    case LOOM_PREDICATE_COUNT_:
+      return false;
+  }
+  return false;
+}
+
+static iree_string_view_t loom_sanitizer_predicate_expected_type(
+    uint8_t predicate_kind) {
+  switch ((loom_predicate_kind_t)predicate_kind) {
+    case LOOM_PREDICATE_NOT_NAN:
+    case LOOM_PREDICATE_FINITE:
+      return IREE_SV("floating-point value");
+    default:
+      return IREE_SV("integer, index, or offset value");
+  }
+}
+
 static bool loom_sanitizer_value_is_assert_operand(loom_value_slice_t values,
                                                    loom_value_id_t value_id) {
   for (uint16_t i = 0; i < values.count; ++i) {
@@ -75,14 +115,15 @@ static iree_status_t loom_sanitizer_emit_unlisted_predicate_value(
 
 static iree_status_t loom_sanitizer_emit_predicate_value_type(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
-    uint16_t predicate_index, uint8_t argument_index, loom_type_t actual_type) {
+    uint16_t predicate_index, uint8_t argument_index, loom_type_t actual_type,
+    iree_string_view_t expected_type) {
   char field_name[40];
   loom_sanitizer_format_predicate_arg(field_name, sizeof(field_name),
                                       predicate_index, argument_index);
   loom_diagnostic_param_t params[] = {
       loom_param_string(iree_make_cstring_view(field_name)),
       loom_param_type(actual_type),
-      loom_param_string(IREE_SV("integer, index, or offset value")),
+      loom_param_string(expected_type),
   };
   return loom_sanitizer_emit(emitter, op, LOOM_ERR_TYPE_003, params,
                              IREE_ARRAYSIZE(params));
@@ -112,9 +153,10 @@ static iree_status_t loom_sanitizer_verify_predicates_reference_values(
             expected_constraint);
       }
       loom_type_t value_type = loom_module_value_type(module, value_id);
-      if (!loom_sanitizer_type_accepts_integer_predicates(value_type)) {
+      if (!loom_sanitizer_type_accepts_predicate(value_type, predicate->kind)) {
         return loom_sanitizer_emit_predicate_value_type(
-            emitter, op, predicate_index, argument_index, value_type);
+            emitter, op, predicate_index, argument_index, value_type,
+            loom_sanitizer_predicate_expected_type(predicate->kind));
       }
     }
   }

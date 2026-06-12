@@ -18,6 +18,35 @@ static bool loom_sanitizer_type_accepts_integer_predicates(loom_type_t type) {
          scalar_type == LOOM_SCALAR_TYPE_OFFSET;
 }
 
+static bool loom_sanitizer_type_accepts_float_predicates(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_scalar_type_is_float(loom_type_element_type(type));
+}
+
+static bool loom_sanitizer_type_accepts_predicate(loom_type_t type,
+                                                  uint8_t predicate_kind) {
+  switch ((loom_predicate_kind_t)predicate_kind) {
+    case LOOM_PREDICATE_EQ:
+    case LOOM_PREDICATE_NE:
+    case LOOM_PREDICATE_LT:
+    case LOOM_PREDICATE_LE:
+    case LOOM_PREDICATE_GT:
+    case LOOM_PREDICATE_GE:
+    case LOOM_PREDICATE_MUL:
+    case LOOM_PREDICATE_MIN:
+    case LOOM_PREDICATE_MAX:
+    case LOOM_PREDICATE_POW2:
+    case LOOM_PREDICATE_RANGE:
+      return loom_sanitizer_type_accepts_integer_predicates(type);
+    case LOOM_PREDICATE_NOT_NAN:
+    case LOOM_PREDICATE_FINITE:
+      return loom_sanitizer_type_accepts_float_predicates(type);
+    case LOOM_PREDICATE_COUNT_:
+      return false;
+  }
+  return false;
+}
+
 static bool loom_sanitizer_find_value(loom_value_slice_t values,
                                       loom_value_id_t value_id,
                                       uint16_t* out_ordinal) {
@@ -83,7 +112,9 @@ iree_status_t loom_sanitizer_assert_value_facts(
     if (target_ordinal >= fact_count) continue;
     loom_type_t result_type =
         loom_module_value_type(module, results.values[target_ordinal]);
-    if (!loom_sanitizer_type_accepts_integer_predicates(result_type)) continue;
+    if (!loom_sanitizer_type_accepts_predicate(result_type, predicate->kind)) {
+      continue;
+    }
 
     loom_predicate_t resolved_predicate = {0};
     if (!loom_sanitizer_resolve_predicate_constants(

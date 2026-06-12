@@ -2020,11 +2020,19 @@ class TestPredicateBytecodeRoundTrip:
                     PredicateArg(tag="const", value=512),
                 ),
             ),
+            Predicate(
+                kind="not_nan",
+                args=(PredicateArg(tag="value", value="A"),),
+            ),
+            Predicate(
+                kind="finite",
+                args=(PredicateArg(tag="value", value="A"),),
+            ),
         ]
         m_id = module.add_value(Value(name="M", type=INDEX))
         k_id = module.add_value(Value(name="K", type=INDEX))
         n_id = module.add_value(Value(name="N", type=INDEX))
-        arg_id = module.add_value(Value(name="", type=F32))
+        arg_id = module.add_value(Value(name="A", type=F32))
         result_id = module.add_value(Value(name="", type=F32))
         func_op = Operation(
             name="func.decl",
@@ -2041,7 +2049,7 @@ class TestPredicateBytecodeRoundTrip:
         loaded_op = loaded.symbols[0].op
         assert loaded_op is not None
         loaded_preds = loaded_op.attributes.get("predicates", [])
-        assert len(loaded_preds) == 5
+        assert len(loaded_preds) == 7
 
         # Verify each predicate survived.
         assert loaded_preds[0].kind == "mul"
@@ -2062,6 +2070,14 @@ class TestPredicateBytecodeRoundTrip:
 
         assert loaded_preds[4].kind == "range"
         assert len(loaded_preds[4].args) == 3
+
+        assert loaded_preds[5].kind == "not_nan"
+        assert len(loaded_preds[5].args) == 1
+        assert loaded_preds[5].args[0].value == "A"
+
+        assert loaded_preds[6].kind == "finite"
+        assert len(loaded_preds[6].args) == 1
+        assert loaded_preds[6].args[0].value == "A"
 
     def test_empty_predicates_roundtrip(self) -> None:
         """Function with no predicates survives bytecode round-trip."""

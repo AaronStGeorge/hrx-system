@@ -49,6 +49,53 @@ func.def @stronger_dominated_assertion_survives(%n: index) -> (index) {
 
 // ====
 
+// Exact float facts prove matching float assertions, so no runtime boundary is
+// needed.
+func.def @proven_exact_float_assertion_folds() -> (f32) {
+  %two = scalar.constant 2.0 : f32
+  %checked = sanitizer.assert.value %two [finite(%two)] : f32
+  func.return %checked : f32
+}
+
+// ----
+func.def @proven_exact_float_assertion_folds() -> (f32) {
+  %two = scalar.constant 2.0 : f32
+  func.return %two : f32
+}
+
+// ====
+
+// finite implies not_nan, so a later weaker dominated assertion folds.
+func.def @weaker_dominated_float_assertion_folds(%x: f32) -> (f32) {
+  %finite = sanitizer.assert.value %x [finite(%x)] : f32
+  %not_nan = sanitizer.assert.value %finite [not_nan(%finite)] : f32
+  func.return %not_nan : f32
+}
+
+// ----
+func.def @weaker_dominated_float_assertion_folds(%x: f32) -> (f32) {
+  %finite = sanitizer.assert.value %x [finite(%x)] : f32
+  func.return %finite : f32
+}
+
+// ====
+
+// not_nan does not imply finite because infinities are still allowed.
+func.def @stronger_dominated_float_assertion_survives(%x: f32) -> (f32) {
+  %not_nan = sanitizer.assert.value %x [not_nan(%x)] : f32
+  %finite = sanitizer.assert.value %not_nan [finite(%not_nan)] : f32
+  func.return %finite : f32
+}
+
+// ----
+func.def @stronger_dominated_float_assertion_survives(%x: f32) -> (f32) {
+  %not_nan = sanitizer.assert.value %x [not_nan(%x)] : f32
+  %finite = sanitizer.assert.value %not_nan [finite(%not_nan)] : f32
+  func.return %finite : f32
+}
+
+// ====
+
 // Exact result facts are allowed to flow through an unproven assertion, but the
 // assertion remains as the executable trap/report boundary.
 func.def @unproven_exact_assertion_survives(%n: index) -> (index, index) {

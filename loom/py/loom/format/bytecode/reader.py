@@ -1610,6 +1610,8 @@ class BytecodeReader:
         "max",
         "pow2",
         "range",
+        "not_nan",
+        "finite",
     ]
 
     def _read_predicate_list(

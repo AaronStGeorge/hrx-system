@@ -6,6 +6,8 @@
 
 """Tests for loom.ir — in-memory IR representation."""
 
+import math
+
 import pytest
 
 from loom.ir import (
@@ -1098,7 +1100,7 @@ class TestPredicateEvaluation:
             args=tuple(PredicateArg(tag=t, value=v) for t, v in args),
         )
 
-    def _vals(self, **kwargs: int) -> dict[str, int]:
+    def _vals(self, **kwargs: int | float) -> dict[str, int | float]:
         """Build a values dict with bare name keys."""
         return dict(kwargs)
 
@@ -1221,6 +1223,30 @@ class TestPredicateEvaluation:
         pred = self._pred("range", ("value", "M"), ("const", 32), ("const", 512))
         assert not evaluate_predicate(pred, self._vals(M=31))
         assert not evaluate_predicate(pred, self._vals(M=513))
+
+    def test_not_nan(self) -> None:
+        assert evaluate_predicate(
+            self._pred("not_nan", ("value", "X")),
+            self._vals(X=math.inf),
+        )
+        assert not evaluate_predicate(
+            self._pred("not_nan", ("value", "X")),
+            self._vals(X=math.nan),
+        )
+
+    def test_finite(self) -> None:
+        assert evaluate_predicate(
+            self._pred("finite", ("value", "X")),
+            self._vals(X=1.0),
+        )
+        assert not evaluate_predicate(
+            self._pred("finite", ("value", "X")),
+            self._vals(X=math.inf),
+        )
+        assert not evaluate_predicate(
+            self._pred("finite", ("value", "X")),
+            self._vals(X=math.nan),
+        )
 
     def test_missing_value_always_true(self) -> None:
         """Missing values can't be evaluated — defer judgment."""

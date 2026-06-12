@@ -54,6 +54,10 @@ const char* loom_predicate_kind_name(uint8_t kind) {
       return "pow2";
     case LOOM_PREDICATE_RANGE:
       return "range";
+    case LOOM_PREDICATE_NOT_NAN:
+      return "not_nan";
+    case LOOM_PREDICATE_FINITE:
+      return "finite";
     case LOOM_PREDICATE_COUNT_:
       return NULL;
   }
@@ -73,6 +77,8 @@ uint8_t loom_predicate_kind_argument_count(uint8_t kind) {
     case LOOM_PREDICATE_MAX:
       return 2;
     case LOOM_PREDICATE_POW2:
+    case LOOM_PREDICATE_NOT_NAN:
+    case LOOM_PREDICATE_FINITE:
       return 1;
     case LOOM_PREDICATE_RANGE:
       return 3;

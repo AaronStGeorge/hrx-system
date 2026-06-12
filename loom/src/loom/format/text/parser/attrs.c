@@ -289,6 +289,12 @@ static const struct {
     {(const uint8_t*)"\x05"
                      "range",
      LOOM_PREDICATE_RANGE},
+    {(const uint8_t*)"\x07"
+                     "not_nan",
+     LOOM_PREDICATE_NOT_NAN},
+    {(const uint8_t*)"\x06"
+                     "finite",
+     LOOM_PREDICATE_FINITE},
 };
 
 iree_status_t loom_parse_predicate_list(loom_parser_t* parser,

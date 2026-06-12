@@ -63,7 +63,6 @@ static bool loom_sanitizer_predicate_is_proven(
   }
   loom_value_facts_t target_facts =
       loom_rewriter_value_facts(rewriter, target_value);
-  if (loom_value_facts_is_float(target_facts)) return false;
 
   loom_value_facts_t rhs_facts = {0};
   int64_t rhs_exact = 0;
@@ -71,6 +70,7 @@ static bool loom_sanitizer_predicate_is_proven(
   int64_t upper = 0;
   switch ((loom_predicate_kind_t)predicate->kind) {
     case LOOM_PREDICATE_EQ:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -80,6 +80,7 @@ static bool loom_sanitizer_predicate_is_proven(
              loom_value_facts_is_exact(rhs_facts) &&
              target_facts.range_lo == rhs_facts.range_lo;
     case LOOM_PREDICATE_NE:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -91,6 +92,7 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return loom_sanitizer_ranges_are_disjoint(target_facts, rhs_facts);
     case LOOM_PREDICATE_LT:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -98,6 +100,7 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return target_facts.range_hi < rhs_facts.range_lo;
     case LOOM_PREDICATE_LE:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -105,6 +108,7 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return target_facts.range_hi <= rhs_facts.range_lo;
     case LOOM_PREDICATE_GT:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -112,6 +116,7 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return target_facts.range_lo > rhs_facts.range_hi;
     case LOOM_PREDICATE_GE:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -119,6 +124,7 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return target_facts.range_lo >= rhs_facts.range_hi;
     case LOOM_PREDICATE_MUL:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           !loom_value_facts_as_exact_i64(rhs_facts, &rhs_exact) ||
@@ -127,6 +133,7 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return loom_value_facts_divisible_by(target_facts, rhs_exact);
     case LOOM_PREDICATE_MIN:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -134,6 +141,7 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return target_facts.range_lo >= rhs_facts.range_hi;
     case LOOM_PREDICATE_MAX:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           loom_value_facts_is_float(rhs_facts)) {
@@ -141,8 +149,10 @@ static bool loom_sanitizer_predicate_is_proven(
       }
       return target_facts.range_hi <= rhs_facts.range_lo;
     case LOOM_PREDICATE_POW2:
+      if (loom_value_facts_is_float(target_facts)) return false;
       return loom_value_facts_is_power_of_two(target_facts);
     case LOOM_PREDICATE_RANGE:
+      if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
                                               &rhs_facts) ||
           !loom_value_facts_as_exact_i64(rhs_facts, &lower) ||
@@ -152,6 +162,10 @@ static bool loom_sanitizer_predicate_is_proven(
         return false;
       }
       return target_facts.range_lo >= lower && target_facts.range_hi <= upper;
+    case LOOM_PREDICATE_NOT_NAN:
+      return loom_value_facts_is_not_nan(target_facts);
+    case LOOM_PREDICATE_FINITE:
+      return loom_value_facts_is_finite(target_facts);
     case LOOM_PREDICATE_COUNT_:
       return false;
   }

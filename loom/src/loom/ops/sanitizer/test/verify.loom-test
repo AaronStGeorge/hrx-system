@@ -40,6 +40,14 @@ func.def @integer_predicate_rejects_float(%x: f32) -> (f32) {
 
 // ====
 
+func.def @float_predicate_rejects_integer(%x: index) -> (index) {
+  // ERROR@+1: TYPE/003 "predicates[0].arg[0]" "index" "floating-point value"
+  %checked = sanitizer.assert.value %x [finite(%x)] : index
+  func.return %checked : index
+}
+
+// ====
+
 func.def @op_predicate_value_must_be_assert_operand(%x: index, %y: index) {
   // ERROR@+1: STRUCTURE/032 "predicates[0].arg[1]" "an assertion operand"
   sanitizer.assert.op %x [lt(%x, %y)] : index
@@ -51,6 +59,14 @@ func.def @op_predicate_value_must_be_assert_operand(%x: index, %y: index) {
 func.def @op_integer_predicate_rejects_float(%x: f32) {
   // ERROR@+1: TYPE/003 "predicates[0].arg[0]" "f32" "integer, index, or offset value"
   sanitizer.assert.op %x [ge(%x, 0)] : f32
+  func.return
+}
+
+// ====
+
+func.def @op_float_predicate_rejects_integer(%x: index) {
+  // ERROR@+1: TYPE/003 "predicates[0].arg[0]" "index" "floating-point value"
+  sanitizer.assert.op %x [finite(%x)] : index
   func.return
 }
 

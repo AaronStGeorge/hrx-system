@@ -615,29 +615,67 @@ iree_status_t loom_scalar_cmpf_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
-// Float predicates: exact-only.
+// Float predicate queries fold from exact constants and checked predicate
+// facts.
 static bool isnan_f64(double v) { return v != v; }
 static bool isinf_f64(double v) { return isinf(v) != 0; }
 static bool isfinite_f64(double v) { return isfinite(v) != 0; }
 
-#define FLOAT_PREDICATE_FACTS(name, fn)                                \
-  iree_status_t name(loom_fact_context_t* context,                     \
-                     const loom_module_t* module, const loom_op_t* op, \
-                     const loom_value_facts_t* operand_facts,          \
-                     loom_value_facts_t* result_facts) {               \
-    if (!loom_value_facts_is_exact(operand_facts[0]) ||                \
-        !loom_value_facts_is_float(operand_facts[0])) {                \
-      result_facts[0] = loom_value_facts_make(0, 1, 1);                \
-      return iree_ok_status();                                         \
-    }                                                                  \
-    double v = loom_value_facts_as_f64(operand_facts[0]);              \
-    result_facts[0] = loom_value_facts_exact_i64(fn(v) ? 1 : 0);       \
-    return iree_ok_status();                                           \
+iree_status_t loom_scalar_isnanf_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  if (loom_value_facts_is_not_nan(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_exact_i64(0);
+    return iree_ok_status();
   }
+  if (!loom_value_facts_is_exact(operand_facts[0]) ||
+      !loom_value_facts_is_float(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_make(0, 1, 1);
+    return iree_ok_status();
+  }
+  double value = loom_value_facts_as_f64(operand_facts[0]);
+  result_facts[0] = loom_value_facts_exact_i64(isnan_f64(value) ? 1 : 0);
+  return iree_ok_status();
+}
 
-FLOAT_PREDICATE_FACTS(loom_scalar_isnanf_facts, isnan_f64)
-FLOAT_PREDICATE_FACTS(loom_scalar_isinff_facts, isinf_f64)
-FLOAT_PREDICATE_FACTS(loom_scalar_isfinitef_facts, isfinite_f64)
+iree_status_t loom_scalar_isinff_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  if (loom_value_facts_is_finite(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_exact_i64(0);
+    return iree_ok_status();
+  }
+  if (!loom_value_facts_is_exact(operand_facts[0]) ||
+      !loom_value_facts_is_float(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_make(0, 1, 1);
+    return iree_ok_status();
+  }
+  double value = loom_value_facts_as_f64(operand_facts[0]);
+  result_facts[0] = loom_value_facts_exact_i64(isinf_f64(value) ? 1 : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_scalar_isfinitef_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  if (loom_value_facts_is_finite(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_exact_i64(1);
+    return iree_ok_status();
+  }
+  if (!loom_value_facts_is_exact(operand_facts[0]) ||
+      !loom_value_facts_is_float(operand_facts[0])) {
+    result_facts[0] = loom_value_facts_make(0, 1, 1);
+    return iree_ok_status();
+  }
+  double value = loom_value_facts_as_f64(operand_facts[0]);
+  result_facts[0] = loom_value_facts_exact_i64(isfinite_f64(value) ? 1 : 0);
+  return iree_ok_status();
+}
 
 iree_status_t loom_scalar_signf_facts(loom_fact_context_t* context,
                                       const loom_module_t* module,

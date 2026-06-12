@@ -19,6 +19,7 @@ blocks, and CFG successor edges reference their target blocks directly.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum, unique
@@ -923,6 +924,8 @@ PREDICATE_KINDS: dict[str, int] = {
     "max": 2,  # max(a, n) — a <= n.
     "pow2": 1,  # pow2(a) — a is a power of 2.
     "range": 3,  # range(a, lo, hi) — lo <= a <= hi.
+    "not_nan": 1,  # not_nan(a) — a is not NaN.
+    "finite": 1,  # finite(a) — a is not NaN or infinity.
 }
 
 
@@ -954,8 +957,10 @@ class Predicate:
     args: tuple[PredicateArg, ...]
 
 
-def _resolve_predicate_arg(arg: PredicateArg, values: dict[str, int]) -> int | None:
-    """Resolve a predicate argument to a concrete integer.
+def _resolve_predicate_arg(
+    arg: PredicateArg, values: dict[str, int | float]
+) -> int | float | None:
+    """Resolve a predicate argument to a concrete scalar.
 
     Returns None if the value name is not in the values dict.
     """
@@ -969,10 +974,10 @@ def _resolve_predicate_arg(arg: PredicateArg, values: dict[str, int]) -> int | N
             raise ValueError(f"unknown predicate arg tag: {arg.tag!r}")
 
 
-def evaluate_predicate(predicate: Predicate, values: dict[str, int]) -> bool:
+def evaluate_predicate(predicate: Predicate, values: dict[str, int | float]) -> bool:
     """Evaluate a predicate against concrete dimension values.
 
-    values maps bare SSA names ("M", "K") to their integer values.
+    values maps bare SSA names ("M", "K") to their concrete scalar values.
     Returns True if the predicate is satisfied or if any argument
     cannot be resolved (value name not in the dict).
     """
@@ -1004,11 +1009,17 @@ def evaluate_predicate(predicate: Predicate, values: dict[str, int]) -> bool:
             return args[0] > 0 and (args[0] & (args[0] - 1)) == 0
         case "range":
             return args[1] <= args[0] <= args[2]
+        case "not_nan":
+            return not math.isnan(args[0])
+        case "finite":
+            return math.isfinite(args[0])
         case _:
             raise ValueError(f"unknown predicate kind: {predicate.kind!r}")
 
 
-def evaluate_predicates(predicates: list[Predicate], values: dict[str, int]) -> bool:
+def evaluate_predicates(
+    predicates: list[Predicate], values: dict[str, int | float]
+) -> bool:
     """Evaluate all predicates. Returns True iff all are satisfied."""
     return all(evaluate_predicate(p, values) for p in predicates)
 
