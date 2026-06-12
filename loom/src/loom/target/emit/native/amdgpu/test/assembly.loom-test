@@ -51,6 +51,38 @@ low.func.def target(@gfx11_target) @gfx11_s_delay_alu_native() asm<amdgpu.rdna3.
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_getpc waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_getpc(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %pc = s_getpc_b64
+  %pc_lo = slice %pc[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %pc_lo_vgpr = v_mov_b32_copy %pc_lo
+  buffer_store_dword %pc_lo_vgpr, %resource, %vaddr, %soffset
+  return
+}
+
+// ----
+  s_getpc_b64 s[6:7]
+  v_mov_b32_copy v1, s6
+  buffer_store_dword v1, v0, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_getpc_native waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_getpc_native(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %pc = s_getpc_b64
+  %pc_lo = slice %pc[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %pc_lo_vgpr = v_mov_b32_copy %pc_lo
+  buffer_store_dword %pc_lo_vgpr, %resource, %vaddr, %soffset
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_fmac waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_fmac(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {

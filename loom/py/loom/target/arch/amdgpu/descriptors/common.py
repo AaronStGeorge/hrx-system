@@ -1335,6 +1335,7 @@ _HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE = Immediate(
 
 _MANUAL_SCALAR_DESCRIPTOR_KEYS = (
     "amdgpu.s_mov_b32",
+    "amdgpu.s_getpc_b64",
     "amdgpu.s_mov_b32_m0",
     "amdgpu.s_mov_b32_m0.imm",
     "amdgpu.s_mov_b64_exec",
@@ -1364,6 +1365,7 @@ def _manual_scalar_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
     s_mov_b32_opcode = _instruction_encoding_opcode(spec, "S_MOV_B32", "ENC_SOP1")
+    s_getpc_b64_opcode = _instruction_encoding_opcode(spec, "S_GETPC_B64", "ENC_SOP1")
     s_mov_b64_opcode = _instruction_encoding_opcode(spec, "S_MOV_B64", "ENC_SOP1")
     s_xor_b64_opcode = _instruction_encoding_opcode(spec, "S_XOR_B64", "ENC_SOP2")
     return (
@@ -1378,6 +1380,28 @@ def _manual_scalar_descriptors(
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             encoding_id=s_mov_b32_opcode,
             constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="amdgpu.s_getpc_b64",
+            mnemonic="s_getpc_b64",
+            semantic_tag="address.pc.get.u64",
+            operands=(
+                Operand(
+                    "pc",
+                    OperandRole.RESULT,
+                    _SGPR_ALT,
+                    encoding_field_id=amdgpu_encoding_field_id("SDST"),
+                    unit_count=2,
+                ),
+            ),
+            encoding_field_values=(
+                EncodingFieldValue(amdgpu_encoding_field_id("SSRC0"), 0),
+            ),
+            asm_forms=_asm(results=("pc",)),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=s_getpc_b64_opcode,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
