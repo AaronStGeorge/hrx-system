@@ -7,6 +7,7 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
+    "loom_cc_test",
     "loom_generated_textual_header",
 )
 
@@ -100,6 +101,7 @@ loom_cc_library(
         "collective_reduce.c",
         "collective_scan.c",
         "control.c",
+        "data_symbol.c",
         "dot.c",
         "emit_support.c",
         "lds_layout.c",
@@ -134,6 +136,7 @@ loom_cc_library(
         "collective_payload.h",
         "constants.h",
         "control.h",
+        "data_symbol.h",
         "dot.h",
         "emit.h",
         "legality.h",
@@ -169,6 +172,7 @@ loom_cc_library(
         "//loom/src/loom/analysis:contract_vector",
         "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/analysis:view_regions",
+        "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/codegen/low:source_memory_plan",
@@ -208,5 +212,22 @@ loom_cc_library(
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "data_symbol_test",
+    srcs = ["data_symbol_test.cc"],
+    deps = [
+        ":lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )

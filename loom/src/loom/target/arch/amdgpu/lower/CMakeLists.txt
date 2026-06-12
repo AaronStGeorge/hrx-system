@@ -100,6 +100,7 @@ loom_cc_library(
     "collective_payload.h"
     "constants.h"
     "control.h"
+    "data_symbol.h"
     "dot.h"
     "emit.h"
     "legality.h"
@@ -137,6 +138,7 @@ loom_cc_library(
     "collective_reduce.c"
     "collective_scan.c"
     "control.c"
+    "data_symbol.c"
     "dot.c"
     "emit_support.c"
     "lds_layout.c"
@@ -168,6 +170,7 @@ loom_cc_library(
     loom::analysis::contract_vector
     loom::analysis::symbolic_expr
     loom::analysis::view_regions
+    loom::codegen::low::builder
     loom::codegen::low::descriptors
     loom::codegen::low::function
     loom::codegen::low::lower
@@ -207,6 +210,28 @@ loom_cc_library(
     loom::util::fact_table
     loom::util::math
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    data_symbol_test
+  SRCS
+    "data_symbol_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
 )
 endif()
 
