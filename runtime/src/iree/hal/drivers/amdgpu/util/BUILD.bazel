@@ -342,6 +342,21 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "feedback_channel",
+    srcs = ["feedback_channel.c"],
+    hdrs = ["feedback_channel.h"],
+    deps = [
+        ":libhsa",
+        ":topology",
+        ":vmem",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:headers",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "shadow_map",
     srcs = ["shadow_map.c"],
     hdrs = ["shadow_map.h"],
@@ -409,6 +424,7 @@ iree_runtime_cc_library(
         ":block_pool",
         ":device_library",
         ":device_library_target",
+        ":feedback_channel",
         ":global_table",
         ":info",
         ":kfd",
@@ -752,6 +768,55 @@ iree_runtime_cc_test(
         ":topology",
         ":vmem",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "feedback_channel_test",
+    srcs = ["feedback_channel_test.cc"],
+    deps = [
+        ":feedback_channel",
+        ":libhsa",
+        ":topology",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:headers",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_amdgpu_binary_variants_embed_data(
+    name = "feedback_channel_test_kernels",
+    testonly = True,
+    srcs = ["feedback_channel_test_kernels.c"],
+    binary_name_prefix = "feedback_channel_test_kernels",
+    c_file_output = "feedback_channel_test_kernels.c.embed.c",
+    h_file_output = "feedback_channel_test_kernels.h",
+    identifier = "iree_hal_amdgpu_feedback_channel_test_kernels",
+    internal_hdrs = [
+        "//runtime/src/iree/hal/drivers/amdgpu/abi:amdgpu_abi_bitcode_hdrs",
+        "//runtime/src/iree/hal/drivers/amdgpu/device:bitcode_hdrs",
+    ],
+    tags = ["manual"],
+    target = "amdgcn-amd-amdhsa",
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_runtime_cc_test(
+    name = "feedback_channel_live_test",
+    srcs = ["feedback_channel_live_test.cc"],
+    deps = [
+        ":feedback_channel",
+        ":feedback_channel_test_kernels",
+        ":libhsa",
+        ":packet",
+        ":queue_primitives",
+        ":target_id",
+        ":topology",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -20,6 +20,7 @@ DEVICE_HDRS = [
     "kernel_tables.h",
     "kernels.h",
     "support/common.h",
+    "support/feedback.h",
     "support/kernel.h",
     "support/queue.h",
     "support/signal.h",

@@ -43,9 +43,10 @@ typedef enum iree_hal_amdgpu_vmem_access_mode_e {
 // MEMORY_TYPE_* enumerants; this local enum keeps that upstream namespace leak
 // out of the rest of the driver.
 typedef enum iree_hal_amdgpu_vmem_memory_type_e {
-  // Default vmem allocation mode for device-local pools.
+  // Default vmem allocation mode for the selected memory pool.
   IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_DEFAULT = 0,
-  // Pinned host allocation mode for CPU memory pools.
+  // Pinned allocation mode for memory pools that support the HSA
+  // AllocatePinned flag.
   IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_PINNED_HOST = 1,
 } iree_hal_amdgpu_vmem_memory_type_t;
 
@@ -155,10 +156,7 @@ typedef struct iree_hal_amdgpu_vmem_ringbuffer_t {
 
 // Initializes a ringbuffer by allocating the physical and virtual memory of at
 // least the requested |min_capacity| with at least 64 byte alignment.
-// |memory_type| selects the HSA allocation mode for the selected pool; callers
-// allocating from host CPU pools should use
-// IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_PINNED_HOST while device-local pools
-// generally use IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_DEFAULT.
+// |memory_type| selects the HSA allocation mode for the selected pool.
 // |access_descs| will be used to setup accessibility.
 iree_status_t iree_hal_amdgpu_vmem_ringbuffer_initialize(
     const iree_hal_amdgpu_libhsa_t* libhsa, hsa_agent_t local_agent,
