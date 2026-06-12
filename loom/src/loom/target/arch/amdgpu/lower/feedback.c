@@ -389,10 +389,11 @@ static iree_status_t loom_amdgpu_feedback_build_global_store(
                                  LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 3;
   if (asm_form->operand_index_count == 4) {
+    loom_value_id_t m0_value = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_m0_const_u32(
         builder, descriptor_set, descriptor,
-        /*consumer_asm_operand_index=*/3, 0, location,
-        &operands[operand_count++]));
+        /*consumer_asm_operand_index=*/3, 0, location, &m0_value));
+    operands[operand_count++] = m0_value;
   }
   loom_op_t* store_op = NULL;
   return loom_low_build_resolved_descriptor_op(

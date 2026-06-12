@@ -115,6 +115,7 @@ loom_cc_library(
     "memory_bank_conflict.h"
     "plan.h"
     "preamble.h"
+    "signal.h"
     "structural.h"
     "subgroup.h"
     "sync.h"
@@ -160,6 +161,7 @@ loom_cc_library(
     "preamble.c"
     "prefetch.c"
     "registry.c"
+    "signal.c"
     "structural.c"
     "subgroup_broadcast.c"
     "subgroup_mask.c"
@@ -210,6 +212,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::planning::wait_packets
     loom::target::arch::amdgpu::planning::wait_plan
     loom::target::arch::amdgpu::refs::target_refs
+    loom::target::arch::amdgpu::signal_abi
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
     loom::target::arch::amdgpu::target_info_defs
@@ -282,6 +285,29 @@ loom_cc_test(
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    signal_test
+  SRCS
+    "signal_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::arch::amdgpu::signal_abi
     loom::target::registers
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
