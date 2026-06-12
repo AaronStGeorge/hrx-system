@@ -97,6 +97,7 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "test/assembly.loom-test",
+        "test/assembly_q8.loom-test",
         "test/assembly_wmma.loom-test",
         "test/wait_plan.loom-test",
         "test/wait_states.loom-test",

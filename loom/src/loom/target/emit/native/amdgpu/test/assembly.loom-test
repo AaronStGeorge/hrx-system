@@ -11,7 +11,7 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 // ----
   s_mov_b32 s4, 7
   v_mov_b32 v1, 9
-  v_add_u32_lit v1, v1, 123
+  v_add_u32 v1, 123, v1
   buffer_store_dword v1, v0, s[0:3], s4 offen offset:12
   s_endpgm
 
@@ -462,7 +462,7 @@ low.func.def target(@gfx11_target) @gfx11_sgpr_shift_immediate(%value: reg<amdgp
 }
 
 // ----
-  v_lshlrev_b32_vop3_imm v0, s0, 6
+  v_lshlrev_b32 v0, 6, s0
   s_endpgm
 
 // ====
