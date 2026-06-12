@@ -74,6 +74,36 @@ low.func.def target(@gfx11_target) @gfx11_fma_mix_f16_lanes_native(%addr: reg<am
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_fma_mix_half_result_lanes waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_fma_mix_half_result_lanes(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %low_result = v_fma_mixlo_f16_f32_f32_f32 %a, %b, %c
+  %high_result = v_fma_mixhi_f16_f16lo_f32_f32 %low_result, %b, %c
+  %mixed_result = v_fma_mixlo_f16_f16lo_f32_f16hi %low_result, %b, %high_result
+  return
+}
+
+// ----
+  v_fma_mixlo_f16_f32_f32_f32 v0, v0, v2, v1
+  v_fma_mixhi_f16_f16lo_f32_f32 v1, v0, v2, v1
+  v_fma_mixlo_f16_f16lo_f32_f16hi v0, v0, v2, v1
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_fma_mix_half_result_lanes_native waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_fma_mix_half_result_lanes_native(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %low_result = v_fma_mixlo_f16_f32_f32_f32 %a, %b, %c
+  %high_result = v_fma_mixhi_f16_f16lo_f32_f32 %low_result, %b, %c
+  %mixed_result = v_fma_mixlo_f16_f16lo_f32_f16hi %low_result, %b, %high_result
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_packed_fma_mad waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_packed_fma_mad(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
@@ -124,6 +154,36 @@ low.func.def target(@gfx942_target) @gfx942_packed_fma_f32(%a: reg<amdgpu.vgpr x
 amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @gfx942_packed_fma_f32_native(%a: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr x2>, %c: reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
   %next = v_pk_fma_f32 %a, %b, %c
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx942_mad_mix_half_result_lanes waits=none
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_mad_mix_half_result_lanes(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
+  %low_result = v_mad_mixlo_f16_f32_f32_f32 %a, %b, %c
+  %high_result = v_mad_mixhi_f16_f16lo_f32_f32 %low_result, %b, %c
+  %f32_result = v_mad_mix_f32_f16lo_f32_f16hi %low_result, %b, %high_result
+  return
+}
+
+// ----
+  v_mad_mixlo_f16_f32_f32_f32 v0, v0, v2, v1
+  v_mad_mixhi_f16_f16lo_f32_f32 v1, v0, v2, v1
+  v_mad_mix_f32_f16lo_f32_f16hi v0, v0, v2, v1
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx942_mad_mix_half_result_lanes_native waits=none
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_mad_mix_half_result_lanes_native(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
+  %low_result = v_mad_mixlo_f16_f32_f32_f32 %a, %b, %c
+  %high_result = v_mad_mixhi_f16_f16lo_f32_f32 %low_result, %b, %c
+  %f32_result = v_mad_mix_f32_f16lo_f32_f16hi %low_result, %b, %high_result
   return
 }
 

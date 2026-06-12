@@ -728,6 +728,77 @@ def test_packed_fmac_f16_descriptor_pins_destructive_accumulator() -> None:
         ) == ((0, 1), (0, 1))
 
 
+def _expected_mix_descriptor_keys(
+    descriptor_key_prefix: str, *, include_all_f32: bool
+) -> set[str]:
+    return {
+        f"{descriptor_key_prefix}.{source0}_{source1}_{source2}"
+        for source0 in ("f32", "f16lo", "f16hi")
+        for source1 in ("f32", "f16lo", "f16hi")
+        for source2 in ("f32", "f16lo", "f16hi")
+        if include_all_f32 or (source0, source1, source2) != ("f32", "f32", "f32")
+    }
+
+
+def _assert_mix_descriptor_sources(
+    descriptor: AmdgpuDescriptorOverlay,
+    source_parts: list[str],
+    *,
+    op_sel_field: str,
+    op_sel_hi_field: str,
+) -> None:
+    expected_op_sel = 0
+    expected_op_sel_hi = 0
+    for source_index, source_part in enumerate(source_parts):
+        operand = descriptor.operands[source_index + 1].descriptor_operand
+        if source_part == "f16lo":
+            expected_op_sel_hi |= 1 << source_index
+            assert operand.register_part == _REG_PART_VGPR_LOW16
+        elif source_part == "f16hi":
+            expected_op_sel |= 1 << source_index
+            expected_op_sel_hi |= 1 << source_index
+            assert operand.register_part == _REG_PART_VGPR_HIGH16
+        else:
+            assert source_part == "f32"
+            assert operand.register_part is None
+    assert descriptor.fixed_encoding_fields == (
+        (op_sel_field, expected_op_sel),
+        (op_sel_hi_field, expected_op_sel_hi),
+    )
+
+
+def _assert_mix_descriptor_family(
+    descriptors: dict[str, AmdgpuDescriptorOverlay],
+    descriptor_key_prefix: str,
+    *,
+    include_all_f32: bool,
+    op_sel_field: str,
+    op_sel_hi_field: str,
+    result_register_part: str | None,
+) -> None:
+    expected_keys = _expected_mix_descriptor_keys(
+        descriptor_key_prefix, include_all_f32=include_all_f32
+    )
+    actual_keys = {
+        key for key in descriptors if key.startswith(f"{descriptor_key_prefix}.")
+    }
+    assert actual_keys == expected_keys
+    for descriptor_key in expected_keys:
+        descriptor = descriptors[descriptor_key]
+        source_parts = descriptor_key.removeprefix(f"{descriptor_key_prefix}.").split(
+            "_"
+        )
+        assert descriptor.operands[0].descriptor_operand.register_part == (
+            result_register_part
+        )
+        _assert_mix_descriptor_sources(
+            descriptor,
+            source_parts,
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+        )
+
+
 def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
     rdna3_descriptors = {
         descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
@@ -745,49 +816,101 @@ def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
         descriptor.descriptor_key: descriptor for descriptor in _gfx950_core_overlays()
     }
 
-    expected_keys = {
-        f"amdgpu.v_fma_mix_f32.{source0}_{source1}_{source2}"
-        for source0 in ("f32", "f16lo", "f16hi")
-        for source1 in ("f32", "f16lo", "f16hi")
-        for source2 in ("f32", "f16lo", "f16hi")
-        if (source0, source1, source2) != ("f32", "f32", "f32")
-    }
-
     for descriptors, op_sel_field, op_sel_hi_field in (
         (rdna3_descriptors, "OP_SEL", "OP_SEL_HI"),
         (rdna4_descriptors, "OPSEL", "OPSEL_HI"),
         (gfx1250_descriptors, "OPSEL", "OPSEL_HI"),
     ):
-        actual_keys = {
-            key for key in descriptors if key.startswith("amdgpu.v_fma_mix_f32.")
-        }
-        assert actual_keys == expected_keys
-        for descriptor_key in expected_keys:
-            descriptor = descriptors[descriptor_key]
-            source_parts = descriptor_key.removeprefix("amdgpu.v_fma_mix_f32.").split(
-                "_"
-            )
-            expected_op_sel = 0
-            expected_op_sel_hi = 0
-            for source_index, source_part in enumerate(source_parts):
-                operand = descriptor.operands[source_index + 1].descriptor_operand
-                if source_part == "f16lo":
-                    expected_op_sel_hi |= 1 << source_index
-                    assert operand.register_part == _REG_PART_VGPR_LOW16
-                elif source_part == "f16hi":
-                    expected_op_sel |= 1 << source_index
-                    expected_op_sel_hi |= 1 << source_index
-                    assert operand.register_part == _REG_PART_VGPR_HIGH16
-                else:
-                    assert source_part == "f32"
-                    assert operand.register_part is None
-            assert descriptor.fixed_encoding_fields == (
-                (op_sel_field, expected_op_sel),
-                (op_sel_hi_field, expected_op_sel_hi),
-            )
+        _assert_mix_descriptor_family(
+            descriptors,
+            "amdgpu.v_fma_mix_f32",
+            include_all_f32=False,
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+            result_register_part=None,
+        )
+        _assert_mix_descriptor_family(
+            descriptors,
+            "amdgpu.v_fma_mixlo_f16",
+            include_all_f32=True,
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+            result_register_part=_REG_PART_VGPR_LOW16,
+        )
+        _assert_mix_descriptor_family(
+            descriptors,
+            "amdgpu.v_fma_mixhi_f16",
+            include_all_f32=True,
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+            result_register_part=_REG_PART_VGPR_HIGH16,
+        )
 
-    assert not any(key.startswith("amdgpu.v_fma_mix_f32.") for key in cdna3_descriptors)
-    assert not any(key.startswith("amdgpu.v_fma_mix_f32.") for key in cdna4_descriptors)
+    for descriptor_key_prefix in (
+        "amdgpu.v_fma_mix_f32",
+        "amdgpu.v_fma_mixlo_f16",
+        "amdgpu.v_fma_mixhi_f16",
+    ):
+        assert not any(
+            key.startswith(f"{descriptor_key_prefix}.") for key in cdna3_descriptors
+        )
+        assert not any(
+            key.startswith(f"{descriptor_key_prefix}.") for key in cdna4_descriptors
+        )
+
+
+def test_mad_mix_descriptors_cover_cdna_half_lane_forms() -> None:
+    cdna3_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx940_core_overlays()
+    }
+    cdna4_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx950_core_overlays()
+    }
+    rdna3_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
+    }
+    rdna4_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx12_core_overlays()
+    }
+    gfx1250_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx1250_core_overlays()
+    }
+
+    for descriptors in (cdna3_descriptors, cdna4_descriptors):
+        _assert_mix_descriptor_family(
+            descriptors,
+            "amdgpu.v_mad_mix_f32",
+            include_all_f32=False,
+            op_sel_field="OP_SEL",
+            op_sel_hi_field="OP_SEL_HI",
+            result_register_part=None,
+        )
+        _assert_mix_descriptor_family(
+            descriptors,
+            "amdgpu.v_mad_mixlo_f16",
+            include_all_f32=True,
+            op_sel_field="OP_SEL",
+            op_sel_hi_field="OP_SEL_HI",
+            result_register_part=_REG_PART_VGPR_LOW16,
+        )
+        _assert_mix_descriptor_family(
+            descriptors,
+            "amdgpu.v_mad_mixhi_f16",
+            include_all_f32=True,
+            op_sel_field="OP_SEL",
+            op_sel_hi_field="OP_SEL_HI",
+            result_register_part=_REG_PART_VGPR_HIGH16,
+        )
+
+    for descriptors in (rdna3_descriptors, rdna4_descriptors, gfx1250_descriptors):
+        for descriptor_key_prefix in (
+            "amdgpu.v_mad_mix_f32",
+            "amdgpu.v_mad_mixlo_f16",
+            "amdgpu.v_mad_mixhi_f16",
+        ):
+            assert not any(
+                key.startswith(f"{descriptor_key_prefix}.") for key in descriptors
+            )
 
 
 def test_scalar_memory_loads_early_clobber_results() -> None:

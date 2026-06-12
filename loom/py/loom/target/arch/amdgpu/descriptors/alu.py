@@ -1629,10 +1629,10 @@ def _v_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-_V_FMA_MIX_F32_SOURCE_PARTS = ("f32", "f16lo", "f16hi")
+_V_MIX_SOURCE_PARTS = ("f32", "f16lo", "f16hi")
 
 
-def _v_fma_mix_f32_source_operand(field_name: str, source_part: str) -> Operand:
+def _v_mix_source_operand(field_name: str, source_part: str) -> Operand:
     if source_part == "f32":
         return _sgpr_vgpr_operand(field_name)
     register_part = {
@@ -1642,16 +1642,11 @@ def _v_fma_mix_f32_source_operand(field_name: str, source_part: str) -> Operand:
     return _vgpr_operand(field_name, register_part=register_part)
 
 
-def _v_fma_mix_f32_source_size_reason(source_part: str) -> str | None:
+def _v_mix_source_size_reason(source_part: str) -> str | None:
     return _D16_PARTIAL_REGISTER_SIZE_REASON if source_part != "f32" else None
 
 
-def _v_fma_mix_f32_overlay(
-    source_parts: tuple[str, str, str],
-    *,
-    op_sel_field: str = "OPSEL",
-    op_sel_hi_field: str = "OPSEL_HI",
-) -> AmdgpuDescriptorOverlay:
+def _v_mix_source_selectors(source_parts: tuple[str, str, str]) -> tuple[int, int]:
     op_sel = 0
     op_sel_hi = 0
     for source_index, source_part in enumerate(source_parts):
@@ -1659,38 +1654,50 @@ def _v_fma_mix_f32_overlay(
             op_sel |= 1 << source_index
         if source_part != "f32":
             op_sel_hi |= 1 << source_index
-    if op_sel_hi == 0:
-        raise ValueError("V_FMA_MIX_F32 descriptors require at least one f16 source")
+    return op_sel, op_sel_hi
+
+
+def _v_mix_ternary_overlay(
+    source_parts: tuple[str, str, str],
+    *,
+    descriptor_key_prefix: str,
+    instruction_name: str,
+    mnemonic_prefix: str,
+    result_operand: Operand,
+    semantic_tag_prefix: str,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+    require_half_source: bool = False,
+) -> AmdgpuDescriptorOverlay:
+    op_sel, op_sel_hi = _v_mix_source_selectors(source_parts)
+    if require_half_source and op_sel_hi == 0:
+        raise ValueError(
+            f"{instruction_name} descriptors require at least one f16 source"
+        )
     suffix = "_".join(source_parts)
     return AmdgpuDescriptorOverlay(
-        descriptor_key=f"amdgpu.v_fma_mix_f32.{suffix}",
-        instruction_name="V_FMA_MIX_F32",
-        mnemonic=f"v_fma_mix_f32_{suffix}",
+        descriptor_key=f"{descriptor_key_prefix}.{suffix}",
+        instruction_name=instruction_name,
+        mnemonic=f"{mnemonic_prefix}_{suffix}",
         encoding_name="ENC_VOP3P",
-        semantic_tag=f"float.fma.mix.{'.'.join(source_parts)}",
+        semantic_tag=f"{semantic_tag_prefix}.{'.'.join(source_parts)}",
         schedule_class=_SCHEDULE_VALU,
         operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("VDST", result_operand),
             AmdgpuOperandOverlay(
                 "SRC0",
-                _v_fma_mix_f32_source_operand("a", source_parts[0]),
-                size_exception_reason=_v_fma_mix_f32_source_size_reason(
-                    source_parts[0]
-                ),
+                _v_mix_source_operand("a", source_parts[0]),
+                size_exception_reason=_v_mix_source_size_reason(source_parts[0]),
             ),
             AmdgpuOperandOverlay(
                 "SRC1",
-                _v_fma_mix_f32_source_operand("b", source_parts[1]),
-                size_exception_reason=_v_fma_mix_f32_source_size_reason(
-                    source_parts[1]
-                ),
+                _v_mix_source_operand("b", source_parts[1]),
+                size_exception_reason=_v_mix_source_size_reason(source_parts[1]),
             ),
             AmdgpuOperandOverlay(
                 "SRC2",
-                _v_fma_mix_f32_source_operand("c", source_parts[2]),
-                size_exception_reason=_v_fma_mix_f32_source_size_reason(
-                    source_parts[2]
-                ),
+                _v_mix_source_operand("c", source_parts[2]),
+                size_exception_reason=_v_mix_source_size_reason(source_parts[2]),
             ),
         ),
         fixed_encoding_fields=(
@@ -1701,6 +1708,38 @@ def _v_fma_mix_f32_overlay(
     )
 
 
+def _v_mix_source_combinations(
+    *, include_all_f32: bool
+) -> tuple[tuple[str, str, str], ...]:
+    return tuple(
+        (source0_part, source1_part, source2_part)
+        for source0_part in _V_MIX_SOURCE_PARTS
+        for source1_part in _V_MIX_SOURCE_PARTS
+        for source2_part in _V_MIX_SOURCE_PARTS
+        if include_all_f32
+        or (source0_part, source1_part, source2_part) != ("f32", "f32", "f32")
+    )
+
+
+def _v_fma_mix_f32_overlay(
+    source_parts: tuple[str, str, str],
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> AmdgpuDescriptorOverlay:
+    return _v_mix_ternary_overlay(
+        source_parts,
+        descriptor_key_prefix="amdgpu.v_fma_mix_f32",
+        instruction_name="V_FMA_MIX_F32",
+        mnemonic_prefix="v_fma_mix_f32",
+        result_operand=_vgpr_result(),
+        semantic_tag_prefix="float.fma.mix",
+        op_sel_field=op_sel_field,
+        op_sel_hi_field=op_sel_hi_field,
+        require_half_source=True,
+    )
+
+
 def _v_fma_mix_f32_overlays(
     *,
     op_sel_field: str = "OPSEL",
@@ -1708,14 +1747,152 @@ def _v_fma_mix_f32_overlays(
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return tuple(
         _v_fma_mix_f32_overlay(
-            (source0_part, source1_part, source2_part),
+            source_parts,
             op_sel_field=op_sel_field,
             op_sel_hi_field=op_sel_hi_field,
         )
-        for source0_part in _V_FMA_MIX_F32_SOURCE_PARTS
-        for source1_part in _V_FMA_MIX_F32_SOURCE_PARTS
-        for source2_part in _V_FMA_MIX_F32_SOURCE_PARTS
-        if (source0_part, source1_part, source2_part) != ("f32", "f32", "f32")
+        for source_parts in _v_mix_source_combinations(include_all_f32=False)
+    )
+
+
+def _v_mix_half_result_overlay(
+    source_parts: tuple[str, str, str],
+    *,
+    descriptor_key_prefix: str,
+    instruction_name: str,
+    mnemonic_prefix: str,
+    result_part: str,
+    semantic_tag_prefix: str,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> AmdgpuDescriptorOverlay:
+    result_register_part = {
+        "lo": _REG_PART_VGPR_LOW16,
+        "hi": _REG_PART_VGPR_HIGH16,
+    }[result_part]
+    return _v_mix_ternary_overlay(
+        source_parts,
+        descriptor_key_prefix=descriptor_key_prefix,
+        instruction_name=instruction_name,
+        mnemonic_prefix=mnemonic_prefix,
+        result_operand=_vgpr_result(register_part=result_register_part),
+        semantic_tag_prefix=semantic_tag_prefix,
+        op_sel_field=op_sel_field,
+        op_sel_hi_field=op_sel_hi_field,
+    )
+
+
+def _v_fma_mixlo_f16_overlays(
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_mix_half_result_overlay(
+            source_parts,
+            descriptor_key_prefix="amdgpu.v_fma_mixlo_f16",
+            instruction_name="V_FMA_MIXLO_F16",
+            mnemonic_prefix="v_fma_mixlo_f16",
+            result_part="lo",
+            semantic_tag_prefix="float.fma.mixlo.f16",
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+        )
+        for source_parts in _v_mix_source_combinations(include_all_f32=True)
+    )
+
+
+def _v_fma_mixhi_f16_overlays(
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_mix_half_result_overlay(
+            source_parts,
+            descriptor_key_prefix="amdgpu.v_fma_mixhi_f16",
+            instruction_name="V_FMA_MIXHI_F16",
+            mnemonic_prefix="v_fma_mixhi_f16",
+            result_part="hi",
+            semantic_tag_prefix="float.fma.mixhi.f16",
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+        )
+        for source_parts in _v_mix_source_combinations(include_all_f32=True)
+    )
+
+
+def _v_mad_mix_f32_overlay(
+    source_parts: tuple[str, str, str],
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> AmdgpuDescriptorOverlay:
+    return _v_mix_ternary_overlay(
+        source_parts,
+        descriptor_key_prefix="amdgpu.v_mad_mix_f32",
+        instruction_name="V_MAD_MIX_F32",
+        mnemonic_prefix="v_mad_mix_f32",
+        result_operand=_vgpr_result(),
+        semantic_tag_prefix="float.mad.mix",
+        op_sel_field=op_sel_field,
+        op_sel_hi_field=op_sel_hi_field,
+        require_half_source=True,
+    )
+
+
+def _v_mad_mix_f32_overlays(
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_mad_mix_f32_overlay(
+            source_parts,
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+        )
+        for source_parts in _v_mix_source_combinations(include_all_f32=False)
+    )
+
+
+def _v_mad_mixlo_f16_overlays(
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_mix_half_result_overlay(
+            source_parts,
+            descriptor_key_prefix="amdgpu.v_mad_mixlo_f16",
+            instruction_name="V_MAD_MIXLO_F16",
+            mnemonic_prefix="v_mad_mixlo_f16",
+            result_part="lo",
+            semantic_tag_prefix="float.mad.mixlo.f16",
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+        )
+        for source_parts in _v_mix_source_combinations(include_all_f32=True)
+    )
+
+
+def _v_mad_mixhi_f16_overlays(
+    *,
+    op_sel_field: str = "OPSEL",
+    op_sel_hi_field: str = "OPSEL_HI",
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_mix_half_result_overlay(
+            source_parts,
+            descriptor_key_prefix="amdgpu.v_mad_mixhi_f16",
+            instruction_name="V_MAD_MIXHI_F16",
+            mnemonic_prefix="v_mad_mixhi_f16",
+            result_part="hi",
+            semantic_tag_prefix="float.mad.mixhi.f16",
+            op_sel_field=op_sel_field,
+            op_sel_hi_field=op_sel_hi_field,
+        )
+        for source_parts in _v_mix_source_combinations(include_all_f32=True)
     )
 
 
@@ -2790,6 +2967,8 @@ __all__ = (
     "_v_fma_f32_overlay",
     "_v_fma_mix_f32_overlay",
     "_v_fma_mix_f32_overlays",
+    "_v_fma_mixhi_f16_overlays",
+    "_v_fma_mixlo_f16_overlays",
     "_v_fmac_f32_overlay",
     "_v_fmamk_f32_overlay",
     "_v_pk_fma_f16_overlay",
@@ -2806,6 +2985,10 @@ __all__ = (
     "_v_lshrrev_b32_literal_overlay",
     "_v_lshrrev_b32_overlay",
     "_v_lshrrev_b32_src0_inline_overlay",
+    "_v_mad_mix_f32_overlay",
+    "_v_mad_mix_f32_overlays",
+    "_v_mad_mixhi_f16_overlays",
+    "_v_mad_mixlo_f16_overlays",
     "_v_mad_u32_u24_literal_overlay",
     "_v_mad_u32_u24_overlay",
     "_v_log_f32_overlay",

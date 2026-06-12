@@ -31,6 +31,16 @@ low.func.def target(@gfx11_target) @vop3p_fma_mix_f16_lanes(%addr: reg<amdgpu.vg
 // ====
 
 amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @vop3p_fma_mix_half_result_lanes(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %low_result = v_fma_mixlo_f16_f32_f32_f32 %a, %b, %c
+  %high_result = v_fma_mixhi_f16_f16lo_f32_f32 %low_result, %b, %c
+  %mixed_result = v_fma_mixlo_f16_f16lo_f32_f16hi %low_result, %b, %high_result
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @vop2_fmamk_literal_multiply_slot(%a: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %result = v_fmamk_f32 %a, %c, 1065353216
   return
@@ -52,6 +62,16 @@ low.func.def target(@gfx11_target) @vop3p_packed_fma_mad_forms(%acc: reg<amdgpu.
 amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @vop3p_packed_fma_f32_form(%a: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr x2>, %c: reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
   %result = v_pk_fma_f32 %a, %b, %c
+  return
+}
+
+// ====
+
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @vop3p_mad_mix_half_result_lanes(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
+  %low_result = v_mad_mixlo_f16_f32_f32_f32 %a, %b, %c
+  %high_result = v_mad_mixhi_f16_f16lo_f32_f32 %low_result, %b, %c
+  %f32_result = v_mad_mix_f32_f16lo_f32_f16hi %low_result, %b, %high_result
   return
 }
 
