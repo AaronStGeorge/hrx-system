@@ -101,6 +101,7 @@ loom_cc_library(
         "collective_reduce.c",
         "collective_scan.c",
         "control.c",
+        "control_packet.c",
         "data_symbol.c",
         "descriptor_ref.c",
         "dot.c",
@@ -138,6 +139,7 @@ loom_cc_library(
         "collective_payload.h",
         "constants.h",
         "control.h",
+        "control_packet.h",
         "data_symbol.h",
         "descriptor_ref.h",
         "dot.h",
@@ -218,6 +220,23 @@ loom_cc_library(
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "control_packet_test",
+    srcs = ["control_packet_test.cc"],
+    deps = [
+        ":lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

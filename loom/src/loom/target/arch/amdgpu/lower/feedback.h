@@ -116,39 +116,6 @@ iree_status_t loom_amdgpu_build_feedback_publish_packet_state(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t packet_base, loom_location_id_t location);
 
-// Emits an AMDGPU message-send packet with the given target-defined message
-// immediate and M0 payload.
-//
-// |m0_payload| must be the implicit M0 resource value consumed by the selected
-// S_SENDMSG descriptor. The hardware assembly does not print M0 as an explicit
-// operand, but target-low IR carries it as a packet operand so scheduling,
-// allocation, and dead-code elimination preserve the dependency on the producer
-// that wrote M0.
-iree_status_t loom_amdgpu_build_feedback_send_message_with_m0(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t message, loom_value_id_t m0_payload, loom_location_id_t location);
-
-// Emits an AMDGPU message-send packet with the given target-defined message
-// immediate and a zero M0 payload.
-iree_status_t loom_amdgpu_build_feedback_send_message(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t message, loom_location_id_t location);
-
-// Emits an AMDGPU message-send packet that returns a 32-bit scalar result.
-iree_status_t loom_amdgpu_build_feedback_send_message_rtn_b32(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t message, loom_location_id_t location, loom_value_id_t* out_value);
-
-// Emits an AMDGPU halt packet with the given target-defined reason immediate.
-iree_status_t loom_amdgpu_build_feedback_halt(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t reason, loom_location_id_t location);
-
-// Emits an AMDGPU trap packet with the given target-defined trap id.
-iree_status_t loom_amdgpu_build_feedback_trap(
-    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t trap_id, loom_location_id_t location);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif
