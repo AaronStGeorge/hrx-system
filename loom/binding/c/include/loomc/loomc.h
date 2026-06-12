@@ -28,6 +28,7 @@
 #include "loomc/module.h"
 #include "loomc/pass.h"
 #include "loomc/result.h"
+#include "loomc/sanitizer.h"
 #include "loomc/source.h"
 #include "loomc/status.h"
 #include "loomc/target.h"

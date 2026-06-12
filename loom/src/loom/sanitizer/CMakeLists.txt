@@ -11,6 +11,30 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    options
+  HDRS
+    "options.h"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    pipeline_passes
+  HDRS
+    "pipeline_passes.h"
+  SRCS
+    "pipeline_passes.c"
+  DEPS
+    iree::base
+    loom::ir
+    loom::pass::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     site_collection
   HDRS
     "site_collection.h"

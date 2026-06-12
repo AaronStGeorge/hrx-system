@@ -15,6 +15,7 @@
 #include "loom/codegen/low/transforms/operand_forms.h"
 #include "loom/codegen/low/transforms/pipeline/source_to_low.h"
 #include "loom/codegen/low/transforms/pipeline/target_legalize.h"
+#include "loom/sanitizer/pipeline_passes.h"
 #include "loom/transforms/cfg/branch_fusion.h"
 #include "loom/transforms/cfg/branch_sink.h"
 #include "loom/transforms/cfg/cfg_simplify.h"
@@ -376,6 +377,16 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .create = loom_refine_boundaries_create,
         .option_schema = kRefineBoundariesOptionSchema,
         .option_schema_count = IREE_ARRAYSIZE(kRefineBoundariesOptionSchema),
+    },
+    {
+        .key = IREE_SVL("sanitizer-insert-assertions"),
+        .info = loom_sanitizer_insert_assertions_pass_info,
+        .function_run = loom_sanitizer_insert_assertions_run,
+    },
+    {
+        .key = IREE_SVL("sanitizer-materialize-assertions"),
+        .info = loom_sanitizer_materialize_assertions_pass_info,
+        .function_run = loom_sanitizer_materialize_assertions_run,
     },
     {
         .key = IREE_SVL("scf-to-cfg"),

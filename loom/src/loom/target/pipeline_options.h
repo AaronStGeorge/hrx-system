@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include "loom/target/low_legality.h"
+#include "loom/sanitizer/options.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,8 @@ typedef struct loom_target_pipeline_options_t {
       source_to_low_legality_diagnostic_flags;
   // Control-flow shape selected for the source-to-low boundary.
   loom_target_control_flow_lowering_t control_flow_lowering;
+  // Sanitizer instrumentation selected for this target pipeline.
+  loom_sanitizer_options_t sanitizer;
 } loom_target_pipeline_options_t;
 
 #ifdef __cplusplus

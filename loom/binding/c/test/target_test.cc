@@ -352,6 +352,18 @@ void ExpectSucceededResult(const loomc_result_t* result) {
   EXPECT_TRUE(loomc_result_succeeded(result));
 }
 
+PassProgramPtr CreateTargetPipelinePassProgram(
+    loomc_context_t* context, const loomc_target_pipeline_options_t* options) {
+  loomc_pass_program_t* pass_program = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_pass_program_create_from_target_pipeline(
+      context, options, loomc_allocator_system(), &pass_program, &result);
+  LOOMC_EXPECT_OK(status);
+  ResultPtr result_ptr(result);
+  ExpectSucceededResult(result_ptr.get());
+  return PassProgramPtr(pass_program);
+}
+
 ModulePtr DeserializeModule(loomc_context_t* context,
                             loomc_workspace_t* workspace,
                             const loomc_source_t* source) {
@@ -939,6 +951,107 @@ TEST(TargetTest, RejectsTargetSelectionOptionsWithoutSelection) {
   loomc_pass_program_t* pass_program = nullptr;
   LOOMC_EXPECT_STATUS_IS(
       LOOMC_STATUS_INVALID_ARGUMENT,
+      loomc_pass_program_create_empty(context.get(), &pass_options,
+                                      loomc_allocator_system(), &pass_program));
+  EXPECT_EQ(pass_program, nullptr);
+}
+
+TEST(TargetTest, AcceptsSanitizerAndTargetSelectionPipelineOptions) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  ContextPtr context = CreateSpirvContext(target_environment.get());
+  TargetSelectionPtr selection = CreateEmptySelection();
+
+  loomc_target_selection_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_selection=*/selection.get(),
+  };
+  loomc_sanitizer_options_t sanitizer_first = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      /*.structure_size=*/sizeof(sanitizer_first),
+      /*.next=*/&target_options,
+      /*.checks=*/LOOMC_SANITIZER_CHECKS_ASAN_LIKE |
+          LOOMC_SANITIZER_CHECKS_UBSAN_LIKE,
+      /*.flags=*/0,
+  };
+  loomc_target_pipeline_options_t pipeline_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS,
+      /*.structure_size=*/sizeof(pipeline_options),
+      /*.next=*/&sanitizer_first,
+      /*.identifier=*/loomc_make_cstring_view("sanitizer-first"),
+      /*.kind=*/LOOMC_TARGET_PIPELINE_KIND_SOURCE_LOW,
+      /*.control_flow_lowering=*/LOOMC_TARGET_CONTROL_FLOW_LOWERING_CFG,
+      /*.source_to_low_max_errors=*/0,
+  };
+  PassProgramPtr sanitizer_first_program =
+      CreateTargetPipelinePassProgram(context.get(), &pipeline_options);
+  EXPECT_NE(sanitizer_first_program.get(), nullptr);
+
+  loomc_sanitizer_options_t sanitizer_second = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      /*.structure_size=*/sizeof(sanitizer_second),
+      /*.next=*/nullptr,
+      /*.checks=*/LOOMC_SANITIZER_CHECK_ACCESS,
+      /*.flags=*/0,
+  };
+  target_options.next = &sanitizer_second;
+  pipeline_options.next = &target_options;
+  pipeline_options.identifier = loomc_make_cstring_view("target-first");
+  PassProgramPtr target_first_program =
+      CreateTargetPipelinePassProgram(context.get(), &pipeline_options);
+  EXPECT_NE(target_first_program.get(), nullptr);
+}
+
+TEST(TargetTest, RejectsUnknownSanitizerCheckBits) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  ContextPtr context = CreateSpirvContext(target_environment.get());
+  loomc_sanitizer_options_t sanitizer_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      /*.structure_size=*/sizeof(sanitizer_options),
+      /*.next=*/nullptr,
+      /*.checks=*/1ull << 63,
+      /*.flags=*/0,
+  };
+  loomc_target_pipeline_options_t pipeline_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS,
+      /*.structure_size=*/sizeof(pipeline_options),
+      /*.next=*/&sanitizer_options,
+      /*.identifier=*/loomc_make_cstring_view("bad-sanitizer"),
+      /*.kind=*/LOOMC_TARGET_PIPELINE_KIND_SOURCE_LOW,
+      /*.control_flow_lowering=*/LOOMC_TARGET_CONTROL_FLOW_LOWERING_CFG,
+      /*.source_to_low_max_errors=*/0,
+  };
+
+  loomc_pass_program_t* pass_program = nullptr;
+  loomc_result_t* result = nullptr;
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT,
+                         loomc_pass_program_create_from_target_pipeline(
+                             context.get(), &pipeline_options,
+                             loomc_allocator_system(), &pass_program, &result));
+  EXPECT_EQ(pass_program, nullptr);
+  EXPECT_EQ(result, nullptr);
+}
+
+TEST(TargetTest, RejectsSanitizerOptionsOnPlainPassProgramOptions) {
+  ContextPtr context = CreateContext();
+  loomc_sanitizer_options_t sanitizer_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SANITIZER_OPTIONS,
+      /*.structure_size=*/sizeof(sanitizer_options),
+      /*.next=*/nullptr,
+      /*.checks=*/LOOMC_SANITIZER_CHECK_ACCESS,
+      /*.flags=*/0,
+  };
+  loomc_pass_program_options_t pass_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_PASS_PROGRAM_OPTIONS,
+      /*.structure_size=*/sizeof(pass_options),
+      /*.next=*/&sanitizer_options,
+      /*.identifier=*/loomc_make_cstring_view("plain-pass-program"),
+  };
+
+  loomc_pass_program_t* pass_program = nullptr;
+  LOOMC_EXPECT_STATUS_IS(
+      LOOMC_STATUS_UNIMPLEMENTED,
       loomc_pass_program_create_empty(context.get(), &pass_options,
                                       loomc_allocator_system(), &pass_program));
   EXPECT_EQ(pass_program, nullptr);

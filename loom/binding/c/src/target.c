@@ -12,6 +12,7 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/pass/builtin_registry.h"
 #include "loomc/iree.h"
+#include "option_chain.h"
 #include "source.h"
 
 struct loomc_target_environment_t {
@@ -339,34 +340,10 @@ loomc_status_t loomc_target_selection_options_resolve(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "out_target_selection must not be NULL");
   }
-  *out_target_selection = NULL;
-  while (next != NULL) {
-    const loomc_descriptor_prefix_t* prefix =
-        (const loomc_descriptor_prefix_t*)next;
-    switch (prefix->type) {
-      case LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS: {
-        if (*out_target_selection != NULL) {
-          return loomc_make_status(
-              LOOMC_STATUS_INVALID_ARGUMENT,
-              "option chain contains duplicate target selection options");
-        }
-        const loomc_target_selection_options_t* target_options =
-            (const loomc_target_selection_options_t*)next;
-        LOOMC_RETURN_IF_ERROR(
-            loomc_target_selection_options_validate(target_options));
-        *out_target_selection = target_options->target_selection;
-        next = target_options->next;
-        break;
-      }
-      case LOOMC_STRUCTURE_TYPE_NONE:
-        return loomc_make_status(
-            LOOMC_STATUS_INVALID_ARGUMENT,
-            "option extension is missing a structure type");
-      default:
-        return loomc_make_status(LOOMC_STATUS_UNIMPLEMENTED,
-                                 "option extension type is not supported");
-    }
-  }
+  loomc_option_chain_t options = {0};
+  LOOMC_RETURN_IF_ERROR(loomc_option_chain_resolve(
+      next, LOOMC_OPTION_CHAIN_ALLOW_TARGET_SELECTION, &options));
+  *out_target_selection = options.target_selection;
   return loomc_ok_status();
 }
 

@@ -249,6 +249,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/transforms:operand_forms",
         "//loom/src/loom/codegen/low/transforms/pipeline:source_to_low",
         "//loom/src/loom/codegen/low/transforms/pipeline:target_legalize",
+        "//loom/src/loom/sanitizer:pipeline_passes",
         "//loom/src/loom/transforms/cfg:branch_fusion",
         "//loom/src/loom/transforms/cfg:branch_sink",
         "//loom/src/loom/transforms/cfg:cfg_simplify",

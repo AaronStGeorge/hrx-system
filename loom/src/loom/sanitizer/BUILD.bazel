@@ -13,6 +13,25 @@ package(
 )
 
 loom_cc_library(
+    name = "options",
+    hdrs = ["options.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "pipeline_passes",
+    srcs = ["pipeline_passes.c"],
+    hdrs = ["pipeline_passes.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/pass:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "site_collection",
     srcs = ["site_collection.c"],
     hdrs = ["site_collection.h"],

@@ -364,6 +364,7 @@ loom_cc_library(
     name = "pipeline_options",
     hdrs = ["pipeline_options.h"],
     deps = [
+        "//loom/src/loom/sanitizer:options",
         "//runtime/src/iree/base:core_headers",
     ],
 )
@@ -379,7 +380,26 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/pass:environment",
+        "//loom/src/loom/sanitizer:options",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "pipeline_test",
+    srcs = ["pipeline_test.cc"],
+    deps = [
+        ":pipeline",
+        ":provider",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/sanitizer:options",
+        "//loom/src/loom/testing:module_ptr",
+        "//loom/src/loom/util:walk",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

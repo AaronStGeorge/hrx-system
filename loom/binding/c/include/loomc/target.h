@@ -10,6 +10,7 @@
 #include "loomc/context.h"
 #include "loomc/pass.h"
 #include "loomc/result.h"
+#include "loomc/sanitizer.h"
 
 /// @file
 /// Prepared target environments and target lowering pipelines.
@@ -253,7 +254,7 @@ typedef struct loomc_target_pipeline_options_t {
   loomc_host_size_t structure_size;
 
   /// Extension chain for target pipeline options such as
-  /// `loomc_target_selection_options_t`.
+  /// `loomc_target_selection_options_t` and `loomc_sanitizer_options_t`.
   const void* next;
 
   /// Stable identifier used for the synthetic pipeline module and diagnostics.
@@ -367,6 +368,11 @@ LOOMC_API_EXPORT loomc_status_t loomc_target_selection_create_from_profile(
 /// compatible with the context's target environment. Omitting the extension or
 /// passing an explicit empty selection prepares the target pipeline without a
 /// concrete target overlay.
+///
+/// @par Sanitizer Assertions
+/// `loomc_sanitizer_options_t` may be attached to
+/// `loomc_target_pipeline_options_t::next`. Nonzero check bits insert
+/// sanitizer pass slots at the target pipeline's semantic assertion boundary.
 LOOMC_API_EXPORT loomc_status_t loomc_pass_program_create_from_target_pipeline(
     loomc_context_t* context, const loomc_target_pipeline_options_t* options,
     loomc_allocator_t allocator, loomc_pass_program_t** out_pass_program,

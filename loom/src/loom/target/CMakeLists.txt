@@ -399,6 +399,7 @@ loom_cc_library(
     "pipeline_options.h"
   DEPS
     iree::base::core_headers
+    loom::sanitizer::options
   PUBLIC
 )
 
@@ -417,7 +418,27 @@ loom_cc_library(
     loom::ir
     loom::pass::builder
     loom::pass::environment
+    loom::sanitizer::options
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    pipeline_test
+  SRCS
+    "pipeline_test.cc"
+  DEPS
+    ::pipeline
+    ::provider
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::op_registry
+    loom::ops::pass
+    loom::sanitizer::options
+    loom::testing::module_ptr
+    loom::util::walk
 )
 
 loom_cc_library(
