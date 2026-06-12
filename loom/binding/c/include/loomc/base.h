@@ -252,6 +252,18 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_module_global_query_options_t`.
   LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS = 27,
+
+  /// `loomc_amdgpu_profile_options_t`.
+  LOOMC_STRUCTURE_TYPE_AMDGPU_PROFILE_OPTIONS = 28,
+
+  /// `loomc_amdgpu_emit_options_t`.
+  LOOMC_STRUCTURE_TYPE_AMDGPU_EMIT_OPTIONS = 29,
+
+  /// `loomc_artifact_manifest_options_t`.
+  LOOMC_STRUCTURE_TYPE_ARTIFACT_MANIFEST_OPTIONS = 30,
+
+  /// `loomc_compile_report_options_t`.
+  LOOMC_STRUCTURE_TYPE_COMPILE_REPORT_OPTIONS = 31,
 } loomc_structure_type_t;
 
 /// One loose string option entry.

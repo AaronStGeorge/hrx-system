@@ -81,7 +81,7 @@ You can also run the benchmark planner directly:
 ```bash
 python dev.py bazel run //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom -- \
   loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom \
-  --dry_run
+  --dry-run
 ```
 
 The Bazel HAL driver registry defaults to host-only drivers. On an
@@ -96,13 +96,13 @@ python dev.py bazel run \
   loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom \
   --device=amdgpu \
   --measure=dispatch_complete \
-  --sample_compilation=per_sample \
+  --sample-compilation=per_sample \
   --iterations=1 \
-  --warmup_iterations=0 \
-  --batch_size=1 \
-  --min_time_ms=0 \
-  --max_batches=1 \
-  --input_ring_count=1
+  --warmup-iterations=0 \
+  --batch-size=1 \
+  --min-time-ms=0 \
+  --max-batches=1 \
+  --input-ring-count=1
 ```
 
 The authoring pattern to notice is that correctness policy and benchmark rows
@@ -143,6 +143,53 @@ need different compositions:
 - Tuning servers can reuse compilers, linkers, pass programs, target profiles,
   and frozen indexes across many worker-local workspaces.
 
+## Try AMDGPU/HSA Emission
+
+The AMDGPU examples show the target-profile and HSACO emission side of the C
+API.
+
+Offline synthetic AMDGPU processor profile:
+
+```bash
+python dev.py bazel run //loom/binding/c/example:emit_amdgpu_offline -- \
+  gfx1100 \
+  /tmp/targetless_store_i32.hsaco
+```
+
+Raw HSA probing, HSACO emission, code-object loading, and one kernel dispatch
+without the IREE HAL:
+
+```bash
+python dev.py bazel run //loom/binding/c/example:emit_amdgpu_hsa
+```
+
+Successful launch ends with `launched targetless_store_i32 via raw HSA:
+output=42`.
+
+The same raw-HSA example can start from a checked `.loom` or prelinked
+`.loombc` file when the source defines the one-buffer `targetless_store_i32`
+sample ABI:
+
+```bash
+python dev.py bazel run //loom/binding/c/example:emit_amdgpu_hsa -- \
+  /tmp/targetless_store_i32.loombc \
+  @targetless_store_i32 \
+  targetless_store_i32 \
+  targetless_store_i32
+```
+
+Set `LOOMC_HSA_RUNTIME_PATH` when the HSA runtime is not discoverable through
+the default dynamic loader search path. The value may be the exact
+`libhsa-runtime64.so` path or a directory containing it:
+
+```bash
+LOOMC_HSA_RUNTIME_PATH=/opt/rocm/lib \
+  python dev.py bazel run //loom/binding/c/example:emit_amdgpu_hsa
+```
+
+The raw HSA path is useful when evaluating Loom as an embeddable compiler near
+an application's own HSA/HRX/HIP loading boundary.
+
 ## Try SPIR-V/Vulkan Emission
 
 The SPIR-V examples show the target-profile and emission side of the C API.
@@ -178,7 +225,7 @@ useful when evaluating Loom as a companion to IREE runtime executable caches.
 | Path | Why it matters |
 | --- | --- |
 | [binding/c/include/loomc](binding/c/include/loomc) | Public C ABI contracts, ownership, threading, diagnostics, targets, linking, compile, and emit |
-| [binding/c/example](binding/c/example) | Minimal embedders for source info, compile, link, SPIR-V offline, raw Vulkan, and IREE HAL |
+| [binding/c/example](binding/c/example) | Minimal embedders for source info, compile, link, AMDGPU offline, raw HSA, SPIR-V offline, raw Vulkan, and IREE HAL |
 | [loom/py/loom/dialect](/loom/py/loom/dialect) | Python op/dialect authoring DSL, assembly formats, and source-format migration breadcrumbs |
 | [loom/py/loom/migration](/loom/py/loom/migration) | Source migration driver, rule generation, baselines, compatibility windows, and `loom-migrate` |
 | [src/loom/test/corpus/authoring](src/loom/test/corpus/authoring) | Canonical hand-authored Loom examples for model/kernel-shaped source |

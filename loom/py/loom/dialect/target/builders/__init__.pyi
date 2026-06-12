@@ -13,15 +13,6 @@ from loom.ir import Block, Predicate, Region, Type
 from loom.builders import DialectBuilder
 
 class TargetBuilder(DialectBuilder):
-    def artifact(
-        self,
-        *,
-        symbol: str,
-        target: str,
-        artifact_format: str | None = ...,
-        abi: str | None = ...,
-        location_id: int | None = ...,
-    ) -> None: ...
     def generic(
         self,
         *,

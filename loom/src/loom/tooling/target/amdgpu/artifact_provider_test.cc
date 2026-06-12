@@ -205,7 +205,7 @@ TEST_F(AmdgpuHalArtifactProviderTest, SelectTargetKeyBuildsOfflineTarget) {
   EXPECT_TRUE(iree_string_view_equal(processor->processor, IREE_SV("gfx1100")));
 }
 
-TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
+TEST_F(AmdgpuHalArtifactProviderTest, RecordsDetailedReportRows) {
   ModulePtr module;
   IREE_ASSERT_OK(ParsePreparedArithmeticModule(&module));
   ASSERT_NE(module.get(), nullptr);
@@ -215,21 +215,12 @@ TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1100"), &processor));
   ASSERT_NE(processor, nullptr);
 
-  loom_target_compile_report_pressure_row_t pressure_rows[4] = {};
-  loom_target_compile_report_spill_row_t spill_rows[4] = {};
-  loom_target_compile_report_source_low_row_t source_low_rows[8] = {};
-  const loom_target_compile_report_row_storage_t row_storage = {
-      .pressure_rows = pressure_rows,
-      .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
-      .spill_rows = spill_rows,
-      .spill_row_capacity = IREE_ARRAYSIZE(spill_rows),
-      .source_low_rows = source_low_rows,
-      .source_low_row_capacity = IREE_ARRAYSIZE(source_low_rows),
-  };
-
   loom_target_compile_report_t report = {};
-  loom_target_compile_report_initialize(&report);
-  loom_target_compile_report_set_row_storage(&report, &row_storage);
+  loom_target_compile_report_initialize(&report, iree_allocator_system());
+  report.requested_detail_flags =
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
 
   const loom_target_bundle_t* target_bundle =
       loom_amdgpu_target_bundle_for_descriptor_set(
@@ -248,7 +239,8 @@ TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING,
-      &report, iree_allocator_system(), &emitted, &artifact));
+      /*artifact_manifest=*/nullptr, &report, iree_allocator_system(), &emitted,
+      &artifact));
   EXPECT_TRUE(emitted);
   EXPECT_EQ(artifact.target_artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
   EXPECT_EQ(artifact.target_artifact_data.data, artifact.executable_data.data);
@@ -272,16 +264,13 @@ TEST_F(AmdgpuHalArtifactProviderTest, PreservesDetailedReportRows) {
               IREE_STRING_VIEW_NPOS);
   }
 
-  EXPECT_EQ(report.source_low_rows, source_low_rows);
-  EXPECT_EQ(report.source_low_row_total_count, 0u);
-  EXPECT_EQ(report.source_low_row_count, 0u);
-  EXPECT_EQ(report.pressure_rows, pressure_rows);
-  EXPECT_GT(report.pressure_row_total_count, 0u);
-  EXPECT_GT(report.pressure_row_count, 0u);
-  EXPECT_EQ(report.spill_rows, spill_rows);
+  EXPECT_EQ(report.source_low_rows.count, 0u);
+  EXPECT_GT(report.pressure_rows.count, 0u);
+  EXPECT_NE(report.pressure_rows.head, nullptr);
 
   loom_amdgpu_hal_artifact_provider.deinitialize_artifact(
       &loom_amdgpu_hal_artifact_provider, &artifact, iree_allocator_system());
+  loom_target_compile_report_deinitialize(&report);
 }
 
 TEST_F(AmdgpuHalArtifactProviderTest,
@@ -298,7 +287,8 @@ TEST_F(AmdgpuHalArtifactProviderTest,
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
-      /*report=*/nullptr, iree_allocator_system(), &emitted, &artifact));
+      /*artifact_manifest=*/nullptr, /*report=*/nullptr,
+      iree_allocator_system(), &emitted, &artifact));
   EXPECT_TRUE(emitted);
   EXPECT_NE(
       iree_string_view_find(artifact.executable_format, IREE_SV("gfx942"), 0),

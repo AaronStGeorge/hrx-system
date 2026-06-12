@@ -16,7 +16,9 @@
 #include "iree/base/api.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
+#include "loom/target/artifact_manifest_collect.h"
 #include "loom/target/compile_report.h"
+#include "loom/target/provider.h"
 #include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
@@ -25,10 +27,6 @@ extern "C" {
 #endif
 
 typedef struct loom_amdgpu_hal_kernel_library_options_t {
-  // Optional target.artifact symbol to emit as one multi-export kernel library.
-  // Empty emits every AMDGPU HAL-native-compatible function with a target
-  // record. A leading '@' is accepted for command-line ergonomics.
-  iree_string_view_t artifact_symbol;
   // Optional AMDHSA processor name such as `gfx1100` overriding the selected
   // target record's processor. This preserves the target record's
   // descriptor-set family while letting JIT runners specialize to the concrete
@@ -48,10 +46,14 @@ typedef struct loom_amdgpu_hal_kernel_library_options_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate.
   loom_target_compile_report_t* report;
-  // Optional caller-owned row storage for detailed compile report rows.
-  loom_target_compile_report_row_storage_t report_row_storage;
   // True to retain target-owned textual assembly listings for debug artifacts.
   bool capture_target_listing;
+  // Emitted artifact name recorded inside an artifact manifest.
+  iree_string_view_t artifact_name;
+  // Artifact manifest sidecar identifier.
+  iree_string_view_t artifact_manifest_identifier;
+  // Optional artifact manifest collection request.
+  loom_target_artifact_manifest_collect_options_t artifact_manifest;
 } loom_amdgpu_hal_kernel_library_options_t;
 
 // Allocator-owned AMDGPU HSACO kernel-library artifact.
@@ -68,6 +70,8 @@ typedef struct loom_amdgpu_hal_kernel_library_t {
   char* target_listing_data;
   // Number of bytes in |target_listing_data|, excluding the trailing NUL.
   iree_host_size_t target_listing_data_length;
+  // Artifact manifest sidecar produced beside |hsaco_data|.
+  loom_target_emit_sidecar_artifact_t artifact_manifest;
 } loom_amdgpu_hal_kernel_library_t;
 
 // Releases storage owned by |library|. Safe to call on a zero-initialized

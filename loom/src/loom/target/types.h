@@ -42,16 +42,6 @@ typedef enum loom_target_artifact_format_e {
   LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY = 6,
 } loom_target_artifact_format_e;
 
-typedef uint8_t loom_target_artifact_abi_kind_t;
-typedef enum loom_target_artifact_abi_kind_e {
-  LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN = 0,
-  LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE = 1,
-  LOOM_TARGET_ARTIFACT_ABI_KIND_HAL_EXECUTABLE = 2,
-  LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE = 3,
-  LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE = 4,
-  LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE = 5,
-} loom_target_artifact_abi_kind_e;
-
 typedef uint8_t loom_target_abi_kind_t;
 typedef enum loom_target_abi_kind_e {
   LOOM_TARGET_ABI_UNKNOWN = 0,
@@ -105,26 +95,6 @@ static inline iree_string_view_t loom_target_artifact_format_name(
     case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
       return IREE_SV("wasm_binary");
     case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
-      return IREE_SV("unknown");
-  }
-  return IREE_SV("unknown");
-}
-
-// Returns the assembly spelling for |abi_kind| used in diagnostics.
-static inline iree_string_view_t loom_target_artifact_abi_kind_name(
-    loom_target_artifact_abi_kind_t abi_kind) {
-  switch (abi_kind) {
-    case LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE:
-      return IREE_SV("object_file");
-    case LOOM_TARGET_ARTIFACT_ABI_KIND_HAL_EXECUTABLE:
-      return IREE_SV("hal_executable");
-    case LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE:
-      return IREE_SV("vm_module");
-    case LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE:
-      return IREE_SV("wasm_module");
-    case LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE:
-      return IREE_SV("spirv_module");
-    case LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN:
       return IREE_SV("unknown");
   }
   return IREE_SV("unknown");
@@ -330,8 +300,8 @@ typedef struct loom_target_bundle_table_t {
 } loom_target_bundle_table_t;
 
 enum loom_target_projection_value_bits_e {
-  // Enum attr projected into a target enum field.
-  LOOM_TARGET_PROJECTION_VALUE_ENUM_U32 = 1,
+  // Enum attr projected into a uint8_t target enum field.
+  LOOM_TARGET_PROJECTION_VALUE_ENUM_U8 = 1,
   // I64 attr projected into a uint32_t field after verification.
   LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32 = 2,
   // I64 attr projected into a uint64_t field after verification.

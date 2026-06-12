@@ -188,10 +188,9 @@ function(iree_native_test)
   set_property(TEST ${_TEST_NAME} PROPERTY LABELS "${_RULE_LABELS}")
   set_property(TEST "${_TEST_NAME}" PROPERTY REQUIRED_FILES "${_RULE_DATA}")
   set_property(TEST ${_TEST_NAME} PROPERTY TIMEOUT ${_RULE_TIMEOUT})
-  iree_package_target_name(_TEST_BUILD_TARGET "${_RULE_SRC}")
   iree_register_test_resource_build_target(
     TEST_BUILD_TARGET
-      "${_TEST_BUILD_TARGET}"
+      "${_SRC_TARGET}"
     LABELS
       ${_RULE_LABELS}
   )

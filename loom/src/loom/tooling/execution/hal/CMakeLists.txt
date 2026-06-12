@@ -22,6 +22,7 @@ loom_cc_library(
     loom::ir
     loom::target::compile_report
     loom::target::pipeline_options
+    loom::target::provider
     loom::target::types
     loom::tooling::execution::compile_options
     loom::verify

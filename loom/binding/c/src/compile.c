@@ -92,8 +92,6 @@ static loomc_status_t loomc_compile_validate_options(
       loomc_target_selection_options_resolve(options->next, &target_selection));
   LOOMC_RETURN_IF_ERROR(
       loomc_compile_validate_string_view(options->module_name));
-  LOOMC_RETURN_IF_ERROR(
-      loomc_compile_validate_string_view(options->compile_root_symbol));
   const loomc_compile_artifact_flags_t known_artifact_flags =
       LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_TEXT |
       LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_BYTECODE |
@@ -243,8 +241,6 @@ static iree_status_t loomc_compile_write_report_json(
       options ? &options->config : &empty_config_options;
   const loomc_string_view_t module_name =
       options ? options->module_name : loomc_string_view_empty();
-  const loomc_string_view_t compile_root_symbol =
-      options ? options->compile_root_symbol : loomc_string_view_empty();
 
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '{'));
   IREE_RETURN_IF_ERROR(loomc_compile_write_json_string_field(
@@ -262,9 +258,6 @@ static iree_status_t loomc_compile_write_report_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
   IREE_RETURN_IF_ERROR(loomc_compile_write_json_string_field(
       stream, "module_name", module_name));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-  IREE_RETURN_IF_ERROR(loomc_compile_write_json_string_field(
-      stream, "compile_root", compile_root_symbol));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_format(stream, ",\"config_binding_count\":%zu",
                                       (size_t)config_options->binding_count));

@@ -56,22 +56,70 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
-    artifact_plan
+    artifact_manifest
   HDRS
-    "artifact_plan.h"
+    "artifact_manifest.h"
   SRCS
-    "artifact_plan.c"
+    "artifact_manifest.c"
   DEPS
+    ::types
+    iree::base
+    loom::util::json
+    loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    artifact_manifest_collect
+  HDRS
+    "artifact_manifest_collect.h"
+  SRCS
+    "artifact_manifest_collect.c"
+  DEPS
+    ::artifact_manifest
+    ::entry_selection
+    ::types
     iree::base
     iree::base::internal::arena
-    loom::analysis::symbol_facts
-    loom::error::emitter
-    loom::error::error_defs
+    loom::analysis::symbol_dependencies
     loom::ir
-    loom::ops::func_symbol_facts
-    loom::ops::target
-    loom::util::call_graph
+    loom::ops::op_defs
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    artifact_manifest_test
+  SRCS
+    "artifact_manifest_test.cc"
+  DEPS
+    ::artifact_manifest
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    artifact_manifest_collect_test
+  SRCS
+    "artifact_manifest_collect_test.cc"
+  DEPS
+    ::artifact_manifest
+    ::artifact_manifest_collect
+    ::entry_selection
+    iree::base
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::analysis::symbol_dependencies
+    loom::format::text::parser
+    loom::ir
+    loom::ops::func
+    loom::ops::global
+    loom::ops::target
+    loom::testing::module_ptr
+    loom::util::stream
 )
 
 loom_cc_library(
@@ -134,7 +182,6 @@ loom_cc_library(
     ::compile_report
     ::registers
     iree::base
-    iree::base::internal::arena
     loom::codegen::low::descriptors
     loom::codegen::low::frame
     loom::codegen::low::lower
@@ -283,6 +330,8 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
+    ::artifact_manifest
+    ::compile_report
     ::legalization
     ::low_descriptor_registry
     ::low_legality
@@ -394,7 +443,6 @@ loom_cc_library(
   SRCS
     "entry_selection.c"
   DEPS
-    ::artifact_plan
     ::function_contract
     ::low_descriptor_registry
     ::types
@@ -408,7 +456,6 @@ loom_cc_library(
     loom::ops::func_symbol_facts
     loom::ops::op_defs
     loom::ops::target
-    loom::util::call_graph
     loom::verify
   PUBLIC
 )
@@ -448,29 +495,6 @@ loom_cc_test(
     loom::ops::test
     loom::testing::diagnostic_matchers
     loom::testing::module_ptr
-)
-
-loom_cc_test(
-  NAME
-    artifact_plan_test
-  SRCS
-    "artifact_plan_test.cc"
-  DEPS
-    ::artifact_plan
-    ::types
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::analysis::symbol_facts
-    loom::error::error_defs
-    loom::format::text::parser
-    loom::ir
-    loom::ops::func
-    loom::ops::target
-    loom::ops::test
-    loom::testing::diagnostic_matchers
-    loom::testing::module_ptr
-    loom::util::call_graph
 )
 
 loom_cc_test(

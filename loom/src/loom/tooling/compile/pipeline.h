@@ -18,6 +18,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
 #include "loom/pass/interpreter.h"
+#include "loom/pass/trace.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/pipeline.h"
@@ -48,9 +49,6 @@ typedef struct loom_compile_pipeline_options_t {
   loom_compile_default_pipeline_t default_pipeline;
   // Options used when constructing the selected default target pipeline.
   loom_target_pipeline_options_t target_pipeline_options;
-  // Optional compile-root function symbol used for target-aware pass
-  // predicates and diagnostics. A leading '@' is accepted.
-  iree_string_view_t compile_root_symbol;
   // Target environment linked into this compile front door.
   const loom_target_environment_t* target_environment;
   // Optional runtime-selected target overlay visible to source-to-low passes.
@@ -66,8 +64,8 @@ typedef struct loom_compile_pipeline_options_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate during passes.
   loom_target_compile_report_t* report;
-  // Optional caller-owned row storage for detailed compile report rows.
-  loom_target_compile_report_row_storage_t report_row_storage;
+  // Optional caller-owned trace configuration for selected pass boundaries.
+  const loom_pass_trace_options_t* trace_options;
 } loom_compile_pipeline_options_t;
 
 // Initializes compile pipeline options with the artifact-front-door default:

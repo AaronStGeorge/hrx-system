@@ -345,7 +345,8 @@ static iree_status_t loom_link_index_append_module(
 static iree_status_t loom_link_index_append_symbol(
     loom_link_module_index_t* index, loom_link_module_index_module_t* module,
     iree_string_view_t name, loom_symbol_kind_t kind, loom_symbol_flags_t flags,
-    loom_link_symbol_identity_t identity, loom_link_symbol_flags_t link_flags) {
+    loom_link_symbol_identity_t identity, loom_link_symbol_flags_t link_flags,
+    iree_string_view_t provider_contract) {
   iree_host_size_t symbol_ordinal = index->symbol_count;
   IREE_RETURN_IF_ERROR(
       loom_link_index_reserve_symbols(index, symbol_ordinal + 1));
@@ -366,6 +367,7 @@ static iree_status_t loom_link_index_append_symbol(
       .ir_flags = flags,
       .identity = identity,
       .flags = link_flags,
+      .provider_contract = provider_contract,
       .next_global_duplicate_ordinal = LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL,
   };
 
@@ -375,6 +377,24 @@ static iree_status_t loom_link_index_append_symbol(
     loom_link_index_insert_global_symbol(index, symbol_ordinal);
   }
   return iree_ok_status();
+}
+
+static iree_string_view_t loom_link_materialized_symbol_provider_contract(
+    const loom_module_t* module, const loom_symbol_t* symbol) {
+  if (symbol->kind != LOOM_SYMBOL_FUNC_TEMPLATE &&
+      symbol->kind != LOOM_SYMBOL_FUNC_UKERNEL) {
+    return iree_string_view_empty();
+  }
+  loom_func_like_t func = loom_func_like_cast(module, symbol->defining_op);
+  if (!loom_func_like_isa(func)) {
+    return iree_string_view_empty();
+  }
+  loom_string_id_t contract_id = loom_func_like_implements(func);
+  if (contract_id == LOOM_STRING_ID_INVALID ||
+      contract_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[contract_id];
 }
 
 //===----------------------------------------------------------------------===//
@@ -548,9 +568,12 @@ static iree_status_t loom_link_index_module_materialized_symbols(
         loom_link_symbol_has_global_identity(source_module, symbol)
             ? LOOM_LINK_SYMBOL_IDENTITY_GLOBAL
             : LOOM_LINK_SYMBOL_IDENTITY_PRIVATE;
+    iree_string_view_t provider_contract =
+        loom_link_materialized_symbol_provider_contract(source_module, symbol);
     IREE_RETURN_IF_ERROR(loom_link_index_append_symbol(
         index, module, name, symbol->kind, symbol->flags, identity,
-        loom_link_materialized_symbol_flags(source_module, symbol)));
+        loom_link_materialized_symbol_flags(source_module, symbol),
+        provider_contract));
   }
   return iree_ok_status();
 }
@@ -565,7 +588,8 @@ static iree_status_t loom_link_index_module_bytecode_symbols(
     IREE_RETURN_IF_ERROR(loom_link_index_append_symbol(
         index, module, symbol->name,
         loom_link_bytecode_symbol_kind(symbol->kind),
-        /*flags=*/0, loom_link_bytecode_symbol_identity(symbol, flags), flags));
+        /*flags=*/0, loom_link_bytecode_symbol_identity(symbol, flags), flags,
+        symbol->implements_op_name));
   }
   return iree_ok_status();
 }

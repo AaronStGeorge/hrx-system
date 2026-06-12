@@ -8,6 +8,8 @@
 #define LOOMC_EMIT_H_
 
 #include "loomc/artifact.h"
+#include "loomc/artifact_manifest.h"
+#include "loomc/compile_report.h"
 #include "loomc/module.h"
 #include "loomc/result.h"
 #include "loomc/target.h"
@@ -81,6 +83,21 @@ extern "C" {
 /// Loose option key overriding `loomc_emit_options_t::identifier`.
 #define LOOMC_EMIT_OPTION_KEY_IDENTIFIER "emit.identifier"
 
+/// Loose option key overriding artifact manifest mode.
+#define LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_MODE \
+  "emit.artifact_manifest.mode"
+
+/// Loose option key overriding artifact manifest result identifier.
+#define LOOMC_EMIT_OPTION_KEY_ARTIFACT_MANIFEST_IDENTIFIER \
+  "emit.artifact_manifest.identifier"
+
+/// Loose option key overriding compile report mode.
+#define LOOMC_EMIT_OPTION_KEY_COMPILE_REPORT_MODE "emit.compile_report.mode"
+
+/// Loose option key overriding compile report result identifier.
+#define LOOMC_EMIT_OPTION_KEY_COMPILE_REPORT_IDENTIFIER \
+  "emit.compile_report.identifier"
+
 /// Emit artifact request flags.
 typedef uint32_t loomc_emit_artifact_flags_t;
 
@@ -96,8 +113,9 @@ typedef enum loomc_emit_artifact_flag_bits_e {
 /// Callers zero-initialize this descriptor, set `type` to
 /// `LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS`, set `structure_size` to
 /// `sizeof(loomc_emit_options_t)`, and fill the requested fields. Attach
-/// `loomc_target_selection_options_t`, `loomc_option_dict_t`, and
-/// target-specific descriptors through `next`.
+/// `loomc_target_selection_options_t`,
+/// `loomc_artifact_manifest_options_t`, `loomc_compile_report_options_t`,
+/// `loomc_option_dict_t`, and target-specific descriptors through `next`.
 typedef struct loomc_emit_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS` when nonzero.
   loomc_structure_type_t type;

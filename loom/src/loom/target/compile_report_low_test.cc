@@ -13,7 +13,7 @@
 namespace loom {
 namespace {
 
-TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
+TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
   constexpr uint32_t kSourceAssignmentIndex = 0;
   constexpr uint32_t kResultAssignmentIndex = 1;
   constexpr uint32_t kEdgeCopyCount = 1;
@@ -63,8 +63,6 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
       .reg_classes = reg_classes,
       .reg_class_count = IREE_ARRAYSIZE(reg_classes),
   };
-  loom_target_compile_report_pressure_row_t pressure_rows[1] = {};
-  loom_target_compile_report_spill_row_t spill_rows[1] = {};
   loom_low_schedule_node_t schedule_nodes[13] = {};
   loom_value_t module_values[6] = {};
   loom_value_ordinal_t value_ordinals[6] = {
@@ -93,15 +91,11 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
                                                  /*register_class_id=*/0, 1);
   module_values[5].type = loom_low_register_type(/*descriptor_set_stable_id=*/1,
                                                  /*register_class_id=*/0, 2);
-  const loom_target_compile_report_row_storage_t row_storage = {
-      .pressure_rows = pressure_rows,
-      .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
-      .spill_rows = spill_rows,
-      .spill_row_capacity = IREE_ARRAYSIZE(spill_rows),
-  };
   loom_target_compile_report_t report = {};
-  loom_target_compile_report_initialize(&report);
-  loom_target_compile_report_set_row_storage(&report, &row_storage);
+  loom_target_compile_report_initialize(&report, iree_allocator_system());
+  report.requested_detail_flags =
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS;
 
   const loom_op_t peak_op = {};
   const loom_liveness_pressure_summary_t pressure_summaries[] = {
@@ -339,22 +333,30 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               [LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION]
           .unit_count,
       2u);
-  EXPECT_EQ(report.pressure_row_total_count, 2u);
-  EXPECT_EQ(report.pressure_row_count, 1u);
-  EXPECT_EQ(report.pressure_rows[0].peak_live_units, 7u);
-  EXPECT_EQ(report.pressure_rows[0].peak_live_values, 5u);
+  EXPECT_EQ(report.pressure_rows.count, 2u);
+  ASSERT_NE(report.pressure_rows.head, nullptr);
+  const auto* pressure_rows =
+      static_cast<const loom_target_compile_report_pressure_row_t*>(
+          loom_target_compile_report_vec_const_rows(report.pressure_rows.head));
+  EXPECT_EQ(pressure_rows[0].peak_live_units, 7u);
+  EXPECT_EQ(pressure_rows[0].peak_live_values, 5u);
+  EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].peak_operation_name,
+                                     IREE_SV("<block-boundary>")));
+  EXPECT_EQ(pressure_rows[1].peak_live_units, 11u);
+  EXPECT_EQ(report.spill_rows.count, 2u);
+  ASSERT_NE(report.spill_rows.head, nullptr);
+  const auto* spill_rows =
+      static_cast<const loom_target_compile_report_spill_row_t*>(
+          loom_target_compile_report_vec_const_rows(report.spill_rows.head));
+  EXPECT_EQ(spill_rows[0].assignment_index, 0u);
+  EXPECT_EQ(spill_rows[0].slot_index, 0u);
   EXPECT_TRUE(
-      iree_string_view_equal(report.pressure_rows[0].peak_operation_name,
-                             IREE_SV("<block-boundary>")));
-  EXPECT_EQ(report.spill_row_total_count, 2u);
-  EXPECT_EQ(report.spill_row_count, 1u);
-  EXPECT_EQ(report.spill_rows[0].assignment_index, 0u);
-  EXPECT_EQ(report.spill_rows[0].slot_index, 0u);
-  EXPECT_TRUE(iree_string_view_equal(report.spill_rows[0].slot_space,
-                                     IREE_SV("stack")));
-  EXPECT_EQ(report.spill_rows[0].byte_size, 16u);
-  EXPECT_EQ(report.spill_rows[0].store_count, 1u);
-  EXPECT_EQ(report.spill_rows[0].reload_count, 2u);
+      iree_string_view_equal(spill_rows[0].slot_space, IREE_SV("stack")));
+  EXPECT_EQ(spill_rows[0].byte_size, 16u);
+  EXPECT_EQ(spill_rows[0].store_count, 1u);
+  EXPECT_EQ(spill_rows[0].reload_count, 2u);
+  EXPECT_EQ(spill_rows[1].slot_index, 1u);
+  loom_target_compile_report_deinitialize(&report);
 }
 
 }  // namespace

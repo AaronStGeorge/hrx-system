@@ -99,5 +99,5 @@ Agent-oriented usage is available from:
 
 ```bash
 iree-bazel-run --config=loom-importers \
-    //loom/py/loom/importers/check:loom_import_check -- --agent_md
+    //loom/py/loom/importers/check:loom_import_check -- --agents_md
 ```

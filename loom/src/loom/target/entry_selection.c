@@ -13,9 +13,7 @@
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/facts.h"
-#include "loom/target/artifact_plan.h"
 #include "loom/target/function_contract.h"
-#include "loom/util/call_graph.h"
 
 uint32_t loom_target_entry_max_errors(
     const loom_target_entry_options_t* options, uint32_t default_max_errors) {
@@ -74,14 +72,6 @@ static iree_string_view_t loom_target_entry_module_symbol_name(
     return IREE_SV("<unknown>");
   }
   return module->strings.entries[symbol->name_id];
-}
-
-static const loom_op_t* loom_target_entry_symbol_op(
-    const loom_module_t* module, loom_symbol_id_t symbol_id) {
-  if (symbol_id >= module->symbols.count) {
-    return NULL;
-  }
-  return module->symbols.entries[symbol_id].defining_op;
 }
 
 void loom_target_entry_diagnostic_emitter_initialize(
@@ -357,25 +347,14 @@ static iree_status_t loom_target_entry_emit_ambiguous_entry(
                                 params, IREE_ARRAYSIZE(params));
 }
 
-static iree_status_t loom_target_entry_emit_empty_artifact(
-    loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
-    const loom_op_t* op, iree_string_view_t pipeline_name,
-    iree_string_view_t artifact_name) {
-  const loom_diagnostic_param_t params[] = {
-      loom_param_string(pipeline_name),
-      loom_param_string(artifact_name),
-  };
-  return loom_target_entry_emit(diagnostic_emitter, op, LOOM_ERR_TARGET_013,
-                                params, IREE_ARRAYSIZE(params));
-}
-
 static iree_status_t loom_target_entry_try_entry(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
     const loom_target_entry_options_t* options, loom_symbol_id_t symbol_id,
     loom_target_entry_predicate_t predicate,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t pipeline_name, bool require_compatible,
-    bool* out_compatible, loom_target_entry_t* out_entry) {
+    iree_string_view_t pipeline_name, bool require_export,
+    bool require_compatible, bool* out_compatible,
+    loom_target_entry_t* out_entry) {
   *out_compatible = false;
   const loom_func_symbol_facts_t* func_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_target_entry_lookup_func_facts(
@@ -391,6 +370,9 @@ static iree_status_t loom_target_entry_try_entry(
         "target pipeline '%.*s' entry '@%.*s' must name a function with a body",
         (int)pipeline_name.size, pipeline_name.data, (int)symbol_name.size,
         symbol_name.data);
+  }
+  if (require_export && !func_facts->exports) {
+    return iree_ok_status();
   }
   if (!loom_symbol_ref_is_valid(func_facts->target_symbol)) {
     if (!require_compatible) {
@@ -478,7 +460,8 @@ static iree_status_t loom_target_entry_select_named_entry(
   bool compatible = false;
   IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
       module, fact_table, options, symbol_id, predicate, diagnostic_emitter,
-      pipeline_name, /*require_compatible=*/true, &compatible, out_entry));
+      pipeline_name, /*require_export=*/false, /*require_compatible=*/true,
+      &compatible, out_entry));
   *out_selected = compatible;
   return iree_ok_status();
 }
@@ -497,8 +480,8 @@ static iree_status_t loom_target_entry_select_single_entry(
     loom_target_entry_t candidate = {0};
     IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
         module, fact_table, options, (loom_symbol_id_t)i, predicate,
-        diagnostic_emitter, pipeline_name, /*require_compatible=*/false,
-        &compatible, &candidate));
+        diagnostic_emitter, pipeline_name, /*require_export=*/false,
+        /*require_compatible=*/false, &compatible, &candidate));
     if (!compatible) {
       continue;
     }
@@ -564,20 +547,27 @@ iree_status_t loom_target_entry_select_all_entries(
   loom_target_entry_initialize_fact_table(arena, &fact_table);
 
   uint16_t entry_count = 0;
-  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+  const loom_block_t* module_block =
+      loom_region_const_entry_block(module->body);
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(module_block, op) {
+    loom_symbol_ref_t symbol_ref = loom_symbol_ref_null();
+    if (!loom_op_defining_symbol_ref(module, op, &symbol_ref)) {
+      continue;
+    }
     bool compatible = false;
     loom_target_entry_t candidate = {0};
     IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
-        module, &fact_table, options, (loom_symbol_id_t)i, predicate,
-        diagnostic_emitter, entry_kind, /*require_compatible=*/false,
-        &compatible, &candidate));
+        module, &fact_table, options, symbol_ref.symbol_id, predicate,
+        diagnostic_emitter, entry_kind, /*require_export=*/true,
+        /*require_compatible=*/false, &compatible, &candidate));
     if (!compatible) {
       continue;
     }
     if (entry_count == UINT16_MAX) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "target pipeline '%.*s' has too many "
-                              "compatible entries",
+                              "exported compatible entries",
                               (int)entry_kind.size, entry_kind.data);
     }
     loom_target_entry_assign_entry(&candidate, &entries[entry_count++]);
@@ -590,73 +580,6 @@ iree_status_t loom_target_entry_select_all_entries(
   *out_entries = (loom_target_entry_list_t){
       .values = entries,
       .count = entry_count,
-  };
-  *out_selected = true;
-  return iree_ok_status();
-}
-
-iree_status_t loom_target_entry_select_artifact_entries(
-    const loom_module_t* module, iree_string_view_t artifact_symbol,
-    loom_target_entry_predicate_t predicate,
-    loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
-    bool* out_selected, loom_target_entry_list_t* out_entries) {
-  *out_entries = (loom_target_entry_list_t){0};
-  *out_selected = false;
-
-  artifact_symbol = loom_target_entry_normalize_symbol_name(artifact_symbol);
-
-  loom_symbol_fact_table_t fact_table = {0};
-  loom_target_entry_initialize_fact_table(arena, &fact_table);
-
-  uint16_t artifact_symbol_id = LOOM_SYMBOL_ID_INVALID;
-  if (!loom_target_entry_lookup_symbol_id(module, artifact_symbol,
-                                          &artifact_symbol_id)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "target pipeline '%.*s' artifact '@%.*s' was not found",
-        (int)entry_kind.size, entry_kind.data, (int)artifact_symbol.size,
-        artifact_symbol.data);
-  }
-  loom_call_graph_t call_graph = {0};
-  IREE_RETURN_IF_ERROR(loom_call_graph_build(module, arena, &call_graph));
-  loom_target_artifact_plan_t artifact_plan = {0};
-  bool artifact_plan_valid = false;
-  IREE_RETURN_IF_ERROR(loom_target_artifact_plan_build(
-      module,
-      (loom_symbol_ref_t){
-          .module_id = 0,
-          .symbol_id = artifact_symbol_id,
-      },
-      &fact_table, &call_graph, loom_target_entry_emitter(diagnostic_emitter),
-      arena, &artifact_plan_valid, &artifact_plan));
-  if (!artifact_plan_valid) {
-    return iree_ok_status();
-  }
-  if (artifact_plan.entry_count == 0) {
-    return loom_target_entry_emit_empty_artifact(
-        diagnostic_emitter,
-        loom_target_entry_symbol_op(module, artifact_symbol_id), entry_kind,
-        artifact_symbol);
-  }
-
-  loom_target_entry_t* entries = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, artifact_plan.entry_count, sizeof(*entries), (void**)&entries));
-  for (uint16_t i = 0; i < artifact_plan.entry_count; ++i) {
-    bool compatible = false;
-    IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
-        module, &fact_table, NULL, artifact_plan.entry_symbol_ids[i], predicate,
-        diagnostic_emitter, entry_kind, /*require_compatible=*/true,
-        &compatible, &entries[i]));
-    if (!compatible) {
-      return iree_ok_status();
-    }
-  }
-
-  *out_entries = (loom_target_entry_list_t){
-      .values = entries,
-      .count = artifact_plan.entry_count,
   };
   *out_selected = true;
   return iree_ok_status();

@@ -11,7 +11,6 @@ void loom_run_compile_report_capture_options_initialize(
   *out_options = (loom_run_compile_report_capture_options_t){
       .sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE,
       .detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE,
-      .row_limit = LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
   };
 }
 
@@ -56,20 +55,6 @@ iree_status_t loom_run_compile_report_capture_options_parse_request(
       (int)value.size, value.data);
 }
 
-iree_status_t loom_run_compile_report_capture_options_parse_row_limit(
-    iree_string_view_t value,
-    loom_run_compile_report_capture_options_t* options) {
-  uint64_t row_limit = 0;
-  if (!iree_string_view_atoi_uint64(value, &row_limit) ||
-      row_limit > IREE_HOST_SIZE_MAX) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid compile report row limit '%.*s'",
-                            (int)value.size, value.data);
-  }
-  options->row_limit = (iree_host_size_t)row_limit;
-  return iree_ok_status();
-}
-
 bool loom_run_compile_report_capture_options_is_enabled(
     const loom_run_compile_report_capture_options_t* options) {
   return options != NULL &&
@@ -82,56 +67,6 @@ bool loom_run_compile_report_capture_is_enabled(
          loom_run_compile_report_capture_options_is_enabled(&capture->options);
 }
 
-static iree_status_t loom_run_compile_report_capture_allocate_rows(
-    loom_run_compile_report_capture_t* capture) {
-  if (capture->options.detail_mode !=
-          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS ||
-      capture->options.row_limit == 0) {
-    return iree_ok_status();
-  }
-  iree_host_size_t pressure_rows_size = 0;
-  if (!iree_host_size_checked_mul(capture->options.row_limit,
-                                  sizeof(*capture->pressure_rows),
-                                  &pressure_rows_size)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "compile report pressure row storage is too large");
-  }
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(capture->host_allocator,
-                                             pressure_rows_size,
-                                             (void**)&capture->pressure_rows));
-  iree_host_size_t spill_rows_size = 0;
-  if (!iree_host_size_checked_mul(capture->options.row_limit,
-                                  sizeof(*capture->spill_rows),
-                                  &spill_rows_size)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "compile report spill row storage is too large");
-  }
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      capture->host_allocator, spill_rows_size, (void**)&capture->spill_rows));
-  iree_host_size_t source_low_rows_size = 0;
-  if (!iree_host_size_checked_mul(capture->options.row_limit,
-                                  sizeof(*capture->source_low_rows),
-                                  &source_low_rows_size)) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "compile report source-low row storage is too large");
-  }
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(capture->host_allocator, source_low_rows_size,
-                            (void**)&capture->source_low_rows));
-  iree_host_size_t target_legalization_rows_size = 0;
-  if (!iree_host_size_checked_mul(capture->options.row_limit,
-                                  sizeof(*capture->target_legalization_rows),
-                                  &target_legalization_rows_size)) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "compile report target-legalization row storage is too large");
-  }
-  return iree_allocator_malloc(capture->host_allocator,
-                               target_legalization_rows_size,
-                               (void**)&capture->target_legalization_rows);
-}
-
 iree_status_t loom_run_compile_report_capture_initialize(
     const loom_run_compile_report_capture_options_t* options,
     iree_allocator_t host_allocator,
@@ -140,13 +75,15 @@ iree_status_t loom_run_compile_report_capture_initialize(
       .options = *options,
       .host_allocator = host_allocator,
   };
-  loom_target_compile_report_initialize(&out_capture->report);
-  iree_status_t status =
-      loom_run_compile_report_capture_allocate_rows(out_capture);
-  if (!iree_status_is_ok(status)) {
-    loom_run_compile_report_capture_deinitialize(out_capture);
+  loom_target_compile_report_initialize(&out_capture->report, host_allocator);
+  if (options->detail_mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    out_capture->report.requested_detail_flags =
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
+        LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
   }
-  return status;
+  return iree_ok_status();
 }
 
 void loom_run_compile_report_capture_configure_compile_options(
@@ -156,25 +93,6 @@ void loom_run_compile_report_capture_configure_compile_options(
     return;
   }
   compile_options->report = &capture->report;
-  compile_options->report_row_storage =
-      (loom_target_compile_report_row_storage_t){
-          .pressure_rows = capture->pressure_rows,
-          .pressure_row_capacity =
-              capture->pressure_rows != NULL ? capture->options.row_limit : 0,
-          .spill_rows = capture->spill_rows,
-          .spill_row_capacity =
-              capture->spill_rows != NULL ? capture->options.row_limit : 0,
-          .source_low_rows = capture->source_low_rows,
-          .source_low_row_capacity =
-              capture->source_low_rows != NULL ? capture->options.row_limit : 0,
-          .target_legalization_rows = capture->target_legalization_rows,
-          .target_legalization_row_capacity =
-              capture->target_legalization_rows != NULL
-                  ? capture->options.row_limit
-                  : 0,
-      };
-  loom_target_compile_report_set_row_storage(
-      &capture->report, &compile_options->report_row_storage);
 }
 
 static iree_status_t loom_run_compile_report_capture_append_separator(
@@ -277,10 +195,6 @@ void loom_run_compile_report_capture_deinitialize(
   if (capture == NULL) {
     return;
   }
-  iree_allocator_free(capture->host_allocator, capture->spill_rows);
-  iree_allocator_free(capture->host_allocator, capture->pressure_rows);
-  iree_allocator_free(capture->host_allocator, capture->source_low_rows);
-  iree_allocator_free(capture->host_allocator,
-                      capture->target_legalization_rows);
+  loom_target_compile_report_deinitialize(&capture->report);
   *capture = (loom_run_compile_report_capture_t){0};
 }

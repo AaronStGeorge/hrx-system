@@ -26,8 +26,10 @@ set(IREE_PACKAGE_ROOT_PREFIX "loom/binding/c")
 
 LOOMC_PUBLIC_HDRS = [
     "include/loomc/artifact.h",
+    "include/loomc/artifact_manifest.h",
     "include/loomc/base.h",
     "include/loomc/compile.h",
+    "include/loomc/compile_report.h",
     "include/loomc/config.h",
     "include/loomc/context.h",
     "include/loomc/diagnostic.h",
@@ -50,6 +52,13 @@ LOOMC_TARGET_SPIRV_PUBLIC_HDRS = [
     "include/loomc/target/spirv/base.h",
     "include/loomc/target/spirv/emit.h",
     "include/loomc/target/spirv/profile.h",
+]
+
+LOOMC_TARGET_AMDGPU_PUBLIC_HDRS = [
+    "include/loomc/target/amdgpu.h",
+    "include/loomc/target/amdgpu/base.h",
+    "include/loomc/target/amdgpu/emit.h",
+    "include/loomc/target/amdgpu/profile.h",
 ]
 
 LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS = [
@@ -77,6 +86,7 @@ _LOOMC_FULL_COMPATIBLE_WITH = loom_config_compatible_with([
 ])
 
 exports_files(
+    LOOMC_TARGET_AMDGPU_PUBLIC_HDRS +
     LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS +
     LOOMC_TARGET_SPIRV_PUBLIC_HDRS +
     LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS +
@@ -89,9 +99,11 @@ loom_cc_library(
     name = "loomc",
     srcs = [
         "src/artifact.c",
+        "src/artifact_manifest.c",
         "src/base.c",
         "src/base_system.c",
         "src/compile.c",
+        "src/compile_report.c",
         "src/config.c",
         "src/context.c",
         "src/diagnostic.c",
@@ -155,6 +167,9 @@ loom_cc_library(
         "//loom/src/loom/pass:program",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/target:artifact_manifest",
+        "//loom/src/loom/target:compile_report",
+        "//loom/src/loom/target:compile_report_format",
         "//loom/src/loom/target:pipeline",
         "//loom/src/loom/target:predicate",
         "//loom/src/loom/target:provider",

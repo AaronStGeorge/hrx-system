@@ -19,6 +19,7 @@ package(
 _AMDGPU_TARGET_RECORDS_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/records:target_records"
 
 _AMDGPU_TARGET_RECORDS_VISIBILITY = [
+    "//loom/binding/c/target/amdgpu:__pkg__",
     "//loom/src/loom/target/arch/amdgpu:__pkg__",
     "//loom/src/loom/target/arch/amdgpu/ops:__pkg__",
     "//loom/src/loom/target/emit/native/amdgpu:__pkg__",

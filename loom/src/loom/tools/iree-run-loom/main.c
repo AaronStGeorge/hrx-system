@@ -15,6 +15,7 @@
 #include "iree/base/tooling/flags.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/compile_report_capture.h"
@@ -23,16 +24,11 @@
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 
-IREE_FLAG(string, compile_root, "",
-          "Optional compile-root function symbol, such as '@main'. Native "
-          "backends use this to scope root-sensitive pass pipeline behavior; "
-          "artifact emission otherwise keeps every compatible exported "
-          "function.");
-IREE_FLAG(string, loom_backend, "vm",
+IREE_FLAG(string, backend, "vm",
           "Compilation backend to run, such as 'vm' or a linked native "
           "backend.");
-IREE_FLAG(string, loom_module_name, "loom",
-          "Module name to store in the compiled VM bytecode archive.");
+IREE_FLAG_NAMED(string, module_name, "module-name", "loom",
+                "Module name to store in the compiled VM bytecode archive.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before execution. Use 'default' or empty for "
           "the comprehensive prepared-low pipeline, 'none' to disable pass "
@@ -40,41 +36,39 @@ IREE_FLAG(string, pipeline, "default",
           "comma-separated pass list such as 'canonicalize,cse'.");
 IREE_FLAG(string, function, "",
           "Function/export name to invoke. Empty selects the single VM export "
-          "or HAL executable function. For HAL backends, --compile_root is "
-          "used as the dispatch function name when --function is empty.");
+          "or HAL executable function.");
 IREE_FLAG_LIST(string, input,
                "Appends a VM function input in IREE function I/O syntax.");
 IREE_FLAG_LIST(string, output,
                "Appends a VM function output handling spec in IREE function "
                "I/O syntax. Empty prints all outputs.");
-IREE_FLAG_LIST(string, expected_output,
-               "Appends an expected VM function output in IREE function I/O "
-               "syntax. Expected outputs take precedence over --output.");
-IREE_FLAG(int32_t, output_max_element_count, 1024,
-          "Maximum number of VM output elements to format.");
-IREE_FLAG(string, workgroup_count, "",
-          "Optional HAL dispatch workgroup count as `x,y,z`. When omitted, a "
-          "static kernel.launch.config workgroup count is used when available, "
-          "otherwise one workgroup is dispatched.");
-IREE_FLAG(string, compile_report, "",
-          "Optional compile report output. Use 'summary'/'details' for "
-          "structured JSON, 'text-summary'/'text-details' for human-readable "
-          "text, or empty/'none'.");
-IREE_FLAG(int32_t, compile_report_row_limit,
-          LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-          "Maximum rows per report row category to capture for "
-          "--compile_report=details.");
-IREE_FLAG(string, emit_target_artifact, "",
-          "Optional output path for the selected HAL backend's target-native "
-          "artifact, such as AMDGPU HSACO.");
-IREE_FLAG(string, emit_hal_executable, "",
-          "Optional output path for the executable artifact passed to the HAL "
-          "runtime loader.");
-IREE_FLAG(bool, emit_only, false,
-          "Stops after HAL executable emission without dispatching.");
-IREE_FLAG(bool, probe_hal, false,
-          "Runs the selected backend's target probe, prints the result, and "
-          "exits. Not all backends support probing.");
+IREE_FLAG_LIST_NAMED(
+    string, expected_output, "expected-output",
+    "Appends an expected VM function output in IREE function I/O syntax. "
+    "Expected outputs take precedence over --output.");
+IREE_FLAG_NAMED(int32_t, output_max_element_count, "output-max-element-count",
+                1024, "Maximum number of VM output elements to format.");
+IREE_FLAG_NAMED(
+    string, workgroup_count, "workgroup-count", "",
+    "Optional HAL dispatch workgroup count as `x,y,z`. When omitted, a static "
+    "kernel.launch.config workgroup count is used when available, otherwise "
+    "one workgroup is dispatched.");
+IREE_FLAG_NAMED(
+    string, compile_report, "compile-report", "",
+    "Optional compile report output. Use 'summary'/'details' for structured "
+    "JSON, 'text-summary'/'text-details' for human-readable text, or "
+    "empty/'none'.");
+IREE_FLAG_NAMED(string, emit_target_artifact, "emit-target-artifact", "",
+                "Optional output path for the selected HAL backend's "
+                "target-native artifact, such as AMDGPU HSACO.");
+IREE_FLAG_NAMED(string, emit_hal_executable, "emit-hal-executable", "",
+                "Optional output path for the executable artifact passed to "
+                "the HAL runtime loader.");
+IREE_FLAG_NAMED(bool, emit_only, "emit-only", false,
+                "Stops after HAL executable emission without dispatching.");
+IREE_FLAG_NAMED(bool, probe_hal, "probe-hal", false,
+                "Runs the selected backend's target probe, prints the result, "
+                "and exits. Not all backends support probing.");
 
 typedef struct iree_run_loom_hal_flag_state_t {
   // Dispatch constants in HAL ABI order.
@@ -204,12 +198,12 @@ static void iree_run_loom_print_expected_binding_flag(
             (int)binding_spec.size, binding_spec.data);
   }
 }
-IREE_FLAG_CALLBACK(iree_run_loom_parse_expected_binding_flag,
-                   iree_run_loom_print_expected_binding_flag, NULL,
-                   expected_binding,
-                   "Appends an expected HAL binding after dispatch. When "
-                   "present, one expected binding must be provided for every "
-                   "binding.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_run_loom_parse_expected_binding_flag,
+    iree_run_loom_print_expected_binding_flag, NULL, expected_binding,
+    "expected-binding",
+    "Appends an expected HAL binding after dispatch. When present, one "
+    "expected binding must be provided for every binding.");
 
 static iree_status_t iree_run_loom_register_context(void* user_data,
                                                     loom_context_t* context) {
@@ -236,7 +230,7 @@ static iree_status_t iree_run_loom_parse_workgroup_count(
       !iree_string_view_atoi_uint32(z, &out_workgroup_count[2])) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "invalid --workgroup_count='%.*s'; expected `x,y,z`", (int)value.size,
+        "invalid --workgroup-count='%.*s'; expected `x,y,z`", (int)value.size,
         value.data);
   }
   return iree_ok_status();
@@ -267,13 +261,13 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
   const iree_string_view_t hal_executable_output_path =
       iree_make_cstring_view(FLAG_emit_hal_executable);
   IREE_RETURN_IF_ERROR(iree_run_loom_validate_artifact_output_path(
-      IREE_SV("emit_target_artifact"), target_artifact_output_path));
+      IREE_SV("emit-target-artifact"), target_artifact_output_path));
   IREE_RETURN_IF_ERROR(iree_run_loom_validate_artifact_output_path(
-      IREE_SV("emit_hal_executable"), hal_executable_output_path));
+      IREE_SV("emit-hal-executable"), hal_executable_output_path));
   if (FLAG_output_max_element_count < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--output_max_element_count must be non-negative; got %d",
+        "--output-max-element-count must be non-negative; got %d",
         (int)FLAG_output_max_element_count);
   }
 
@@ -300,10 +294,9 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
                        LOOM_RUN_EXECUTION_BACKEND_FLAG_HAL_OPTIONS)) {
     const iree_string_view_t function_name =
         iree_make_cstring_view(FLAG_function);
-    out_options->hal_function_name =
-        !iree_string_view_is_empty(function_name)
-            ? function_name
-            : iree_make_cstring_view(FLAG_compile_root);
+    out_options->hal_function_name = !iree_string_view_is_empty(function_name)
+                                         ? function_name
+                                         : iree_string_view_empty();
     const iree_string_view_t workgroup_count =
         iree_make_cstring_view(FLAG_workgroup_count);
     if (!iree_string_view_is_empty(workgroup_count)) {
@@ -334,7 +327,7 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
              FLAG_emit_only) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--emit_target_artifact, --emit_hal_executable, and --emit_only "
+        "--emit-target-artifact, --emit-hal-executable, and --emit-only "
         "require a HAL backend");
   }
   return iree_ok_status();
@@ -345,13 +338,6 @@ static iree_status_t iree_run_loom_compile_report_options_initialize(
   loom_run_compile_report_capture_options_initialize(out_options);
   IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_request(
       iree_make_cstring_view(FLAG_compile_report), out_options));
-  if (FLAG_compile_report_row_limit < 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "--compile_report_row_limit must be non-negative; got %d",
-        (int)FLAG_compile_report_row_limit);
-  }
-  out_options->row_limit = (iree_host_size_t)FLAG_compile_report_row_limit;
   return iree_ok_status();
 }
 
@@ -363,15 +349,12 @@ static iree_status_t iree_run_loom_run_pass_pipeline(
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
-  pipeline_options.compile_root_symbol =
-      iree_make_cstring_view(FLAG_compile_root);
   pipeline_options.target_environment = configuration->target_environment;
   pipeline_options.low_descriptor_registry =
       loom_run_session_low_descriptor_registry(session);
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(run_module);
   pipeline_options.report = compile_options->report;
-  pipeline_options.report_row_storage = compile_options->report_row_storage;
   pipeline_options.diagnostic_sink = (loom_diagnostic_sink_t){
       .fn = loom_diagnostic_stderr_sink,
   };
@@ -394,7 +377,7 @@ static iree_status_t iree_run_loom_make_unknown_backend_status(
   }
   status = iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "unknown --loom_backend='%.*s'; expected registered backend in [%.*s]",
+      "unknown --backend='%.*s'; expected registered backend in [%.*s]",
       (int)backend_name.size, backend_name.data,
       (int)iree_string_builder_size(&backend_names),
       iree_string_builder_buffer(&backend_names));
@@ -414,21 +397,21 @@ int iree_run_loom_main(int argc, char** argv,
       "\n"
       "Usage:\n"
       "  iree-run-loom [file.loom] --function=name --input=... "
-      "--expected_output=...\n"
+      "--expected-output=...\n"
       "  cat module.loom | iree-run-loom - --function=name --input=...\n"
       "\n"
       "The 'vm' backend compiles VM-targeted functions into a real IREE VM "
       "bytecode archive and runs them with IREE function I/O syntax for "
-      "--input, --output, and --expected_output. Native execution backends "
+      "--input, --output, and --expected-output. Native execution backends "
       "compile target-low kernels into runtime artifacts and dispatch them "
       "through their production runtime path.\n");
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
   const loom_run_execution_backend_registry_t* backend_registry =
       &configuration->execution_backend_registry;
-  const iree_string_view_t backend_name =
-      iree_make_cstring_view(FLAG_loom_backend);
+  const iree_string_view_t backend_name = iree_make_cstring_view(FLAG_backend);
   const loom_run_execution_backend_t* backend =
       loom_run_execution_backend_registry_lookup(backend_registry,
                                                  backend_name);
@@ -442,7 +425,7 @@ int iree_run_loom_main(int argc, char** argv,
     } else if (backend->probe == NULL) {
       probe_status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "--probe_hal requires --loom_backend to name a probeable backend");
+          "--probe-hal requires --backend to name a probeable backend");
     } else {
       const loom_run_one_shot_probe_request_t probe_request = {
           .host_allocator = allocator,
@@ -515,9 +498,7 @@ int iree_run_loom_main(int argc, char** argv,
   }
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
-  compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
-  compile_options.compile_root_symbol =
-      iree_make_cstring_view(FLAG_compile_root);
+  compile_options.module_name = iree_make_cstring_view(FLAG_module_name);
   loom_run_compile_report_capture_options_t compile_report_options = {0};
   if (iree_status_is_ok(status)) {
     status = iree_run_loom_compile_report_options_initialize(
@@ -548,7 +529,7 @@ int iree_run_loom_main(int argc, char** argv,
                        LOOM_RUN_EXECUTION_BACKEND_FLAG_HAL_OPTIONS) &&
       iree_string_view_is_empty(iree_make_cstring_view(FLAG_workgroup_count))) {
     loom_run_one_shot_options_apply_static_hal_workgroup_count(
-        run_module.module, compile_options.compile_root_symbol,
+        run_module.module, one_shot_options.hal_function_name,
         &one_shot_options);
   }
   if (iree_status_is_ok(status)) {

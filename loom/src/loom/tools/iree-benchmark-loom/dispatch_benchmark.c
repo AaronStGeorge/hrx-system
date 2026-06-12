@@ -519,6 +519,7 @@ iree_status_t iree_benchmark_loom_run_hal_benchmark_sample(
   }
   out_result->compile_report_artifact_path =
       provider->compile_report_artifact_path;
+  out_result->artifact_manifest_path = provider->artifact_manifest_path;
   out_result->target_artifact_path = provider->target_artifact_path;
   out_result->target_listing_path = provider->target_listing_path;
   out_result->hal_executable_path = provider->hal_executable_path;

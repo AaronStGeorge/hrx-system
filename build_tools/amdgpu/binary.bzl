@@ -296,10 +296,13 @@ def iree_amdgpu_binary_variants(
             tags = tags,
             **kwargs
         )
-        selected_srcs += select({
-            target_selection.requested[code_object_target]: [":" + binary_name],
-            "//conditions:default": [],
-        })
+        if AMDGPU_DEVICE_TOOLCHAIN_AVAILABLE:
+            # Keep no-toolchain aggregates empty while per-variant targets stay
+            # incompatible for direct requests.
+            selected_srcs += select({
+                target_selection.requested[code_object_target]: [":" + binary_name],
+                "//conditions:default": [],
+            })
 
     filegroup_kwargs = {}
     if "visibility" in kwargs:

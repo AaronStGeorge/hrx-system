@@ -22,6 +22,7 @@ loom_cc_library(
     iree::io::file_handle
     loom::error::diagnostic
     loom::ir
+    loom::tooling::cli::help
     loom::tooling::compile::pipeline
     loom::tooling::context
     loom::tooling::execution::compile_options

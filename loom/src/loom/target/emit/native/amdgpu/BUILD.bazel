@@ -32,7 +32,10 @@ _AMDGPU_CHECK_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/check:__pkg__"]
 
 _DESCRIPTOR_SET_RDNA3 = LOOM_AMDGPU_DESCRIPTOR_SET_CAPABILITY_BY_KEY["amdgpu.rdna3.core"]
 
-_AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
+_AMDGPU_TOOLING_VISIBILITY = [
+    "//loom/binding/c/target/amdgpu:__pkg__",
+    "//loom/src/loom/tooling/target/amdgpu:__pkg__",
+]
 
 #===------------------------------------------------------------------------===#
 # AMDGPU native assembly fragments
@@ -311,6 +314,7 @@ loom_cc_library(
         "//loom/src/loom/ops:func_symbol_facts",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:artifact_manifest_collect",
         "//loom/src/loom/target:compile_report",
         "//loom/src/loom/target:compile_report_low",
         "//loom/src/loom/target:entry_selection",

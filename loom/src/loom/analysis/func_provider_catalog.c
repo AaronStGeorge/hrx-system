@@ -175,6 +175,7 @@ static iree_status_t loom_func_provider_catalog_populate_local(
                 .module_id = 0,
                 .symbol_id = (loom_symbol_id_t)i,
             },
+        .target_symbol = facts->target_symbol,
         .function = function,
         .func_facts = facts,
         .contract_id = facts->implements_id,

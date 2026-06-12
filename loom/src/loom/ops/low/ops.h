@@ -167,7 +167,7 @@ iree_status_t loom_low_func_def_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_KERNEL_DEF: Target-bound low kernel entry with register-typed launch ABI values. Helper calls stay in low.func.def; kernel launch/export contracts live on this entry op.
-// low.kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) workgroup_size(16, 4, 1) @matmul(%lhs: reg<amdgpu.sgpr x4>, %rhs: reg<amdgpu.sgpr x4>, %out: reg<amdgpu.sgpr x4>) {
+// low.kernel.def target(@gfx1100) export("matmul") workgroup_size(16, 4, 1) @matmul(%lhs: reg<amdgpu.sgpr x4>, %rhs: reg<amdgpu.sgpr x4>, %out: reg<amdgpu.sgpr x4>) {
 //   low.return
 // }
 LOOM_DEFINE_ISA(loom_low_kernel_def_isa, LOOM_OP_LOW_KERNEL_DEF)
@@ -175,25 +175,21 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_target, 1)
 LOOM_DEFINE_ATTR_DICT(loom_low_kernel_def_abi_layout, 2)
 LOOM_DEFINE_ATTR_STRING(loom_low_kernel_def_export_symbol, 3)
-LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_artifact, 4)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_export_ordinal, 5)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_export_linkage, 6, loom_target_linkage_t)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_x, 7)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_y, 8)
-LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 9)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_allocation, 10, loom_low_allocation_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_schedule, 11, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_export_linkage, 4, loom_target_linkage_t)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_x, 5)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_y, 6)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 7)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_allocation, 8, loom_low_allocation_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_schedule, 9, loom_low_schedule_t)
 LOOM_DEFINE_REGION(loom_low_kernel_def_body, 0)
 enum loom_low_kernel_def_build_flag_bits_e {
   LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 0,
   LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 1,
   LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 2,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ARTIFACT = 1u << 3,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_ORDINAL = 1u << 4,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 5,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X = 1u << 6,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y = 1u << 7,
-  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z = 1u << 8,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 3,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X = 1u << 4,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y = 1u << 5,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z = 1u << 6,
 };
 typedef uint32_t loom_low_kernel_def_build_flags_t;
 iree_status_t loom_low_kernel_def_build(
@@ -204,8 +200,6 @@ iree_status_t loom_low_kernel_def_build(
     loom_symbol_ref_t target,
     loom_optional loom_named_attr_slice_t abi_layout,
     loom_optional loom_string_id_t export_symbol,
-    loom_optional loom_symbol_ref_t artifact,
-    loom_optional int64_t export_ordinal,
     loom_optional uint8_t export_linkage,
     loom_optional int64_t workgroup_size_x,
     loom_optional int64_t workgroup_size_y,

@@ -1255,12 +1255,6 @@ loom_string_id_t loom_func_like_export_symbol(loom_func_like_t func);
 // Returns the export payload attrs, or an empty slice if absent.
 loom_named_attr_slice_t loom_func_like_export_attrs(loom_func_like_t func);
 
-// Returns the target artifact symbol ref, or null when absent.
-loom_symbol_ref_t loom_func_like_artifact(loom_func_like_t func);
-
-// Returns true and assigns the export ordinal when present.
-bool loom_func_like_export_ordinal(loom_func_like_t func, int64_t* out_ordinal);
-
 // Returns true and assigns the export linkage enum value when present.
 bool loom_func_like_export_linkage(loom_func_like_t func, uint8_t* out_linkage);
 

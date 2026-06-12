@@ -33,7 +33,7 @@ iree-bazel-run //loom/src/loom/tools/loom-check -- --update path/to/file.loom-te
 is available from:
 
 ```bash
-iree-bazel-run //loom/src/loom/tools/loom-check -- --agent_md
+iree-bazel-run //loom/src/loom/tools/loom-check -- --agents_md
 ```
 
 Emit-mode JSON targets should stay small. When a case only needs structured

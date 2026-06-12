@@ -13,6 +13,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/io/file.h"
@@ -28,9 +29,9 @@ IREE_FLAG(string, case, "",
 IREE_FLAG(int32_t, sample, -1,
           "Optional concrete sample ordinal to execute for the selected case "
           "or cases. Negative executes all planned samples.");
-IREE_FLAG(int32_t, max_samples_per_case,
-          LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
-          "Maximum number of samples planned per check.case.");
+IREE_FLAG_NAMED(int32_t, max_samples_per_case, "max-samples-per-case",
+                LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
+                "Maximum number of samples planned per check.case.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used for HAL actual invocations. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
@@ -335,6 +336,7 @@ int iree_test_loom_main(int argc, char** argv,
       "Usage:\n"
       "  iree-test-loom file.loom --case=@smoke\n"
       "  cat module.loom | iree-test-loom -\n");
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
@@ -364,7 +366,7 @@ int iree_test_loom_main(int argc, char** argv,
   }
   if (iree_status_is_ok(status) && FLAG_max_samples_per_case <= 0) {
     status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "--max_samples_per_case must be positive; got "
+                              "--max-samples-per-case must be positive; got "
                               "%d",
                               (int)FLAG_max_samples_per_case);
   }

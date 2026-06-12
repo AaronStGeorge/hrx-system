@@ -53,6 +53,8 @@ static iree_string_view_t loom_target_compile_report_artifact_kind_name(
       return IREE_SV("hal-executable");
     case LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_KERNEL_LIBRARY:
       return IREE_SV("hal-kernel-library");
+    case LOOM_TARGET_COMPILE_ARTIFACT_KIND_TARGET_ARTIFACT:
+      return IREE_SV("target-artifact");
     default:
       return IREE_SV("unknown");
   }
@@ -284,8 +286,6 @@ static iree_status_t loom_target_compile_report_format_summary(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("backend"), report->backend_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
-      builder, IREE_SV("compile_root"), report->compile_root_symbol));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("bundle"), report->target_bundle_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("lowered"), report->lowered_symbol));
@@ -377,10 +377,9 @@ static iree_status_t loom_target_compile_report_format_summary(
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder,
         "COMPILE-REPORT: source_low selected_ops=%" PRIu64
-        " emitted_ops=%" PRIu64 " rows copied=%" PRIhsz " total=%" PRIhsz "\n",
+        " emitted_ops=%" PRIu64 " rows=%" PRIhsz "\n",
         report->source_low_selected_op_count,
-        report->source_low_emitted_op_count, report->source_low_row_count,
-        report->source_low_row_total_count));
+        report->source_low_emitted_op_count, report->source_low_rows.count));
   }
 
   if (iree_any_bit_set(
@@ -392,7 +391,7 @@ static iree_status_t loom_target_compile_report_format_summary(
         " rewritten=%" PRIu64 " target_rewritten=%" PRIu64
         " reference_rewritten=%" PRIu64 " deferred=%" PRIu64
         " invalid_ir=%" PRIu64 " unsupported=%" PRIu64 " unhandled=%" PRIu64
-        " rows copied=%" PRIhsz " total=%" PRIhsz "\n",
+        " rows=%" PRIhsz "\n",
         report->target_legalization_legal_op_count,
         report->target_legalization_rewritten_op_count,
         report->target_legalization_target_rewritten_op_count,
@@ -401,8 +400,7 @@ static iree_status_t loom_target_compile_report_format_summary(
         report->target_legalization_invalid_ir_op_count,
         report->target_legalization_unsupported_op_count,
         report->target_legalization_unhandled_op_count,
-        report->target_legalization_row_count,
-        report->target_legalization_row_total_count));
+        report->target_legalization_rows.count));
   }
 
   if (iree_any_bit_set(report->detail_flags,
@@ -417,17 +415,15 @@ static iree_status_t loom_target_compile_report_format_summary(
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder,
-        "COMPILE-REPORT: pressure_rows copied=%" PRIhsz " total=%" PRIhsz "\n",
-        report->pressure_row_count, report->pressure_row_total_count));
+        builder, "COMPILE-REPORT: pressure_rows count=%" PRIhsz "\n",
+        report->pressure_rows.count));
   }
 
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder,
-        "COMPILE-REPORT: spill_rows copied=%" PRIhsz " total=%" PRIhsz "\n",
-        report->spill_row_count, report->spill_row_total_count));
+        builder, "COMPILE-REPORT: spill_rows count=%" PRIhsz "\n",
+        report->spill_rows.count));
   }
 
   return iree_ok_status();
@@ -465,30 +461,36 @@ static iree_status_t loom_target_compile_report_format_move_causes(
 static iree_status_t loom_target_compile_report_format_pressure_rows(
     const loom_target_compile_report_t* report,
     iree_string_builder_t* builder) {
-  for (iree_host_size_t i = 0; i < report->pressure_row_count; ++i) {
-    const loom_target_compile_report_pressure_row_t* row =
-        &report->pressure_rows[i];
-    const iree_string_view_t register_class =
-        loom_target_compile_report_non_empty(row->register_class);
-    const iree_string_view_t type_kind_name =
-        loom_target_compile_report_type_kind_name(row->type_kind);
-    const iree_string_view_t element_type_name =
-        loom_target_compile_report_scalar_type_name(row->element_type);
-    const iree_string_view_t peak_block_name =
-        loom_target_compile_report_non_empty(row->peak_block_name);
-    const iree_string_view_t peak_operation_name =
-        loom_target_compile_report_non_empty(row->peak_operation_name);
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder,
-        "COMPILE-REPORT: pressure[%" PRIhsz
-        "] class=%.*s type=%.*s element=%.*s peak_units=%" PRIu64
-        " peak_values=%" PRIu64 " point=%u block=%.*s op=%.*s\n",
-        i, (int)register_class.size, register_class.data,
-        (int)type_kind_name.size, type_kind_name.data,
-        (int)element_type_name.size, element_type_name.data,
-        row->peak_live_units, row->peak_live_values, row->peak_point,
-        (int)peak_block_name.size, peak_block_name.data,
-        (int)peak_operation_name.size, peak_operation_name.data));
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec = report->pressure_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_pressure_row_t* rows =
+        (const loom_target_compile_report_pressure_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_pressure_row_t* row = &rows[i];
+      const iree_string_view_t register_class =
+          loom_target_compile_report_non_empty(row->register_class);
+      const iree_string_view_t type_kind_name =
+          loom_target_compile_report_type_kind_name(row->type_kind);
+      const iree_string_view_t element_type_name =
+          loom_target_compile_report_scalar_type_name(row->element_type);
+      const iree_string_view_t peak_block_name =
+          loom_target_compile_report_non_empty(row->peak_block_name);
+      const iree_string_view_t peak_operation_name =
+          loom_target_compile_report_non_empty(row->peak_operation_name);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: pressure[%" PRIhsz
+          "] class=%.*s type=%.*s element=%.*s peak_units=%" PRIu64
+          " peak_values=%" PRIu64 " point=%u block=%.*s op=%.*s\n",
+          row_index, (int)register_class.size, register_class.data,
+          (int)type_kind_name.size, type_kind_name.data,
+          (int)element_type_name.size, element_type_name.data,
+          row->peak_live_units, row->peak_live_values, row->peak_point,
+          (int)peak_block_name.size, peak_block_name.data,
+          (int)peak_operation_name.size, peak_operation_name.data));
+    }
   }
   return iree_ok_status();
 }
@@ -496,30 +498,38 @@ static iree_status_t loom_target_compile_report_format_pressure_rows(
 static iree_status_t loom_target_compile_report_format_spill_rows(
     const loom_target_compile_report_t* report,
     iree_string_builder_t* builder) {
-  for (iree_host_size_t i = 0; i < report->spill_row_count; ++i) {
-    const loom_target_compile_report_spill_row_t* row = &report->spill_rows[i];
-    const iree_string_view_t value_name =
-        loom_target_compile_report_non_empty(row->value_name);
-    const iree_string_view_t register_class =
-        loom_target_compile_report_non_empty(row->register_class);
-    const iree_string_view_t type_kind_name =
-        loom_target_compile_report_type_kind_name(row->type_kind);
-    const iree_string_view_t element_type_name =
-        loom_target_compile_report_scalar_type_name(row->element_type);
-    const iree_string_view_t slot_space =
-        loom_target_compile_report_non_empty(row->slot_space);
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder,
-        "COMPILE-REPORT: spill[%" PRIhsz
-        "] value=%.*s class=%.*s type=%.*s element=%.*s assignment=%u"
-        " slot=%u space=%.*s bytes=%" PRIu64 " align=%" PRIu64
-        " stores=%" PRIu64 " reloads=%" PRIu64 "\n",
-        i, (int)value_name.size, value_name.data, (int)register_class.size,
-        register_class.data, (int)type_kind_name.size, type_kind_name.data,
-        (int)element_type_name.size, element_type_name.data,
-        row->assignment_index, row->slot_index, (int)slot_space.size,
-        slot_space.data, row->byte_size, row->byte_alignment, row->store_count,
-        row->reload_count));
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec = report->spill_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_spill_row_t* rows =
+        (const loom_target_compile_report_spill_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_spill_row_t* row = &rows[i];
+      const iree_string_view_t value_name =
+          loom_target_compile_report_non_empty(row->value_name);
+      const iree_string_view_t register_class =
+          loom_target_compile_report_non_empty(row->register_class);
+      const iree_string_view_t type_kind_name =
+          loom_target_compile_report_type_kind_name(row->type_kind);
+      const iree_string_view_t element_type_name =
+          loom_target_compile_report_scalar_type_name(row->element_type);
+      const iree_string_view_t slot_space =
+          loom_target_compile_report_non_empty(row->slot_space);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: spill[%" PRIhsz
+          "] value=%.*s class=%.*s type=%.*s element=%.*s assignment=%u"
+          " slot=%u space=%.*s bytes=%" PRIu64 " align=%" PRIu64
+          " stores=%" PRIu64 " reloads=%" PRIu64 "\n",
+          row_index, (int)value_name.size, value_name.data,
+          (int)register_class.size, register_class.data,
+          (int)type_kind_name.size, type_kind_name.data,
+          (int)element_type_name.size, element_type_name.data,
+          row->assignment_index, row->slot_index, (int)slot_space.size,
+          slot_space.data, row->byte_size, row->byte_alignment,
+          row->store_count, row->reload_count));
+    }
   }
   return iree_ok_status();
 }
@@ -527,38 +537,45 @@ static iree_status_t loom_target_compile_report_format_spill_rows(
 static iree_status_t loom_target_compile_report_format_source_low_rows(
     const loom_target_compile_report_t* report,
     iree_string_builder_t* builder) {
-  for (iree_host_size_t i = 0; i < report->source_low_row_count; ++i) {
-    const loom_target_compile_report_source_low_row_t* row =
-        &report->source_low_rows[i];
-    const iree_string_view_t function_name =
-        loom_target_compile_report_non_empty(row->function_name);
-    const iree_string_view_t source_op_name =
-        loom_target_compile_report_non_empty(row->source_op_name);
-    const iree_string_view_t selection_name =
-        loom_target_compile_report_source_low_selection_name(
-            row->selection_kind);
-    if (row->selection_kind ==
-        LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE) {
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec =
+           report->source_low_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_source_low_row_t* rows =
+        (const loom_target_compile_report_source_low_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_source_low_row_t* row = &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
+      const iree_string_view_t source_op_name =
+          loom_target_compile_report_non_empty(row->source_op_name);
+      const iree_string_view_t selection_name =
+          loom_target_compile_report_source_low_selection_name(
+              row->selection_kind);
+      if (row->selection_kind ==
+          LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE) {
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder,
+            "COMPILE-REPORT: source_low[%" PRIhsz
+            "] function=%.*s source_op=%.*s selection=%.*s rule_set=%u rule=%u "
+            "descriptor=%" PRIu64 " emitted_ops=%u\n",
+            row_index, (int)function_name.size, function_name.data,
+            (int)source_op_name.size, source_op_name.data,
+            (int)selection_name.size, selection_name.data, row->rule_set_index,
+            row->rule_index, row->descriptor_id, row->emitted_low_op_count));
+        continue;
+      }
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder,
           "COMPILE-REPORT: source_low[%" PRIhsz
-          "] function=%.*s source_op=%.*s selection=%.*s rule_set=%u rule=%u "
+          "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
           "descriptor=%" PRIu64 " emitted_ops=%u\n",
-          i, (int)function_name.size, function_name.data,
+          row_index, (int)function_name.size, function_name.data,
           (int)source_op_name.size, source_op_name.data,
-          (int)selection_name.size, selection_name.data, row->rule_set_index,
-          row->rule_index, row->descriptor_id, row->emitted_low_op_count));
-      continue;
+          (int)selection_name.size, selection_name.data, row->plan_id,
+          row->descriptor_id, row->emitted_low_op_count));
     }
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder,
-        "COMPILE-REPORT: source_low[%" PRIhsz
-        "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
-        " descriptor=%" PRIu64 " emitted_ops=%u\n",
-        i, (int)function_name.size, function_name.data,
-        (int)source_op_name.size, source_op_name.data, (int)selection_name.size,
-        selection_name.data, row->plan_id, row->descriptor_id,
-        row->emitted_low_op_count));
   }
   return iree_ok_status();
 }
@@ -566,53 +583,61 @@ static iree_status_t loom_target_compile_report_format_source_low_rows(
 static iree_status_t loom_target_compile_report_format_legalization_rows(
     const loom_target_compile_report_t* report,
     iree_string_builder_t* builder) {
-  for (iree_host_size_t i = 0; i < report->target_legalization_row_count; ++i) {
-    const loom_target_compile_report_legalization_row_t* row =
-        &report->target_legalization_rows[i];
-    const iree_string_view_t function_name =
-        loom_target_compile_report_non_empty(row->function_name);
-    const iree_string_view_t source_op_name =
-        loom_target_compile_report_non_empty(row->source_op_name);
-    const iree_string_view_t target_bundle_name =
-        loom_target_compile_report_non_empty(row->target_bundle_name);
-    const iree_string_view_t target_config_name =
-        loom_target_compile_report_non_empty(row->target_config_name);
-    const iree_string_view_t legalizer_name =
-        loom_target_compile_report_non_empty(row->legalizer_name);
-    const iree_string_view_t strategy_name =
-        loom_target_compile_report_legalizer_strategy_name(
-            row->legalizer_strategy);
-    const iree_string_view_t mode_name =
-        loom_target_compile_report_legalization_mode_name(row->mode);
-    const iree_string_view_t policy_name =
-        loom_target_compile_report_legalization_policy_name(row->policy);
-    const iree_string_view_t action_name =
-        loom_target_compile_report_legalization_action_name(row->action);
-    const iree_string_view_t outcome_name =
-        loom_target_compile_report_contract_outcome_name(row->contract_outcome);
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder,
-        "COMPILE-REPORT: target_legalization[%" PRIhsz
-        "] function=%.*s source_op=%.*s mode=%.*s policy=%.*s "
-        "action=%.*s contract=%.*s legalizer=%.*s strategy=%.*s bundle=%.*s "
-        "config=%.*s binding=%u case=%u rule_set=%u rule=%u diagnostic=%u "
-        "descriptor=%" PRIu64 " source_rejections=0x%08" PRIx32
-        " source_rejection_detail=%" PRIu32 " target_rejections=0x%08" PRIx32
-        " missing_features=0x%08" PRIx32 " missing_facts=0x%08" PRIx32
-        " created_ops=%" PRIu64 " erased_ops=%" PRIu64 "\n",
-        i, (int)function_name.size, function_name.data,
-        (int)source_op_name.size, source_op_name.data, (int)mode_name.size,
-        mode_name.data, (int)policy_name.size, policy_name.data,
-        (int)action_name.size, action_name.data, (int)outcome_name.size,
-        outcome_name.data, (int)legalizer_name.size, legalizer_name.data,
-        (int)strategy_name.size, strategy_name.data,
-        (int)target_bundle_name.size, target_bundle_name.data,
-        (int)target_config_name.size, target_config_name.data,
-        row->binding_index, row->case_index, row->rule_set_index,
-        row->rule_index, row->diagnostic_index, row->descriptor_id,
-        row->source_rejection_bits, row->source_rejection_detail,
-        row->target_rejection_bits, row->missing_feature_bits,
-        row->missing_fact_bits, row->created_op_count, row->erased_op_count));
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec =
+           report->target_legalization_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_legalization_row_t* rows =
+        (const loom_target_compile_report_legalization_row_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_legalization_row_t* row = &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
+      const iree_string_view_t source_op_name =
+          loom_target_compile_report_non_empty(row->source_op_name);
+      const iree_string_view_t target_bundle_name =
+          loom_target_compile_report_non_empty(row->target_bundle_name);
+      const iree_string_view_t target_config_name =
+          loom_target_compile_report_non_empty(row->target_config_name);
+      const iree_string_view_t legalizer_name =
+          loom_target_compile_report_non_empty(row->legalizer_name);
+      const iree_string_view_t strategy_name =
+          loom_target_compile_report_legalizer_strategy_name(
+              row->legalizer_strategy);
+      const iree_string_view_t mode_name =
+          loom_target_compile_report_legalization_mode_name(row->mode);
+      const iree_string_view_t policy_name =
+          loom_target_compile_report_legalization_policy_name(row->policy);
+      const iree_string_view_t action_name =
+          loom_target_compile_report_legalization_action_name(row->action);
+      const iree_string_view_t outcome_name =
+          loom_target_compile_report_contract_outcome_name(
+              row->contract_outcome);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: target_legalization[%" PRIhsz
+          "] function=%.*s source_op=%.*s mode=%.*s policy=%.*s "
+          "action=%.*s contract=%.*s legalizer=%.*s strategy=%.*s bundle=%.*s "
+          "config=%.*s binding=%u case=%u rule_set=%u rule=%u diagnostic=%u "
+          "descriptor=%" PRIu64 " source_rejections=0x%08" PRIx32
+          " source_rejection_detail=%" PRIu32 " target_rejections=0x%08" PRIx32
+          " missing_features=0x%08" PRIx32 " missing_facts=0x%08" PRIx32
+          " created_ops=%" PRIu64 " erased_ops=%" PRIu64 "\n",
+          row_index, (int)function_name.size, function_name.data,
+          (int)source_op_name.size, source_op_name.data, (int)mode_name.size,
+          mode_name.data, (int)policy_name.size, policy_name.data,
+          (int)action_name.size, action_name.data, (int)outcome_name.size,
+          outcome_name.data, (int)legalizer_name.size, legalizer_name.data,
+          (int)strategy_name.size, strategy_name.data,
+          (int)target_bundle_name.size, target_bundle_name.data,
+          (int)target_config_name.size, target_config_name.data,
+          row->binding_index, row->case_index, row->rule_set_index,
+          row->rule_index, row->diagnostic_index, row->descriptor_id,
+          row->source_rejection_bits, row->source_rejection_detail,
+          row->target_rejection_bits, row->missing_feature_bits,
+          row->missing_fact_bits, row->created_op_count, row->erased_op_count));
+    }
   }
   return iree_ok_status();
 }
@@ -927,19 +952,26 @@ static iree_status_t loom_target_compile_report_format_pressure_rows_json(
   bool first_field = true;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "copied_count", report->pressure_row_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "total_count", report->pressure_row_total_count));
+      stream, &first_field, "count", report->pressure_rows.count));
   if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
         stream, &first_field, "rows"));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
-    for (iree_host_size_t i = 0; i < report->pressure_row_count; ++i) {
-      if (i != 0) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec =
+             report->pressure_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_pressure_row_t* rows =
+          (const loom_target_compile_report_pressure_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_pressure_row_json(
+                &rows[i], row_index, stream));
       }
-      IREE_RETURN_IF_ERROR(loom_target_compile_report_format_pressure_row_json(
-          &report->pressure_rows[i], i, stream));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
   }
@@ -994,19 +1026,24 @@ static iree_status_t loom_target_compile_report_format_spill_rows_json(
   bool first_field = true;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "copied_count", report->spill_row_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "total_count", report->spill_row_total_count));
+      stream, &first_field, "count", report->spill_rows.count));
   if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
         stream, &first_field, "rows"));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
-    for (iree_host_size_t i = 0; i < report->spill_row_count; ++i) {
-      if (i != 0) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec = report->spill_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_spill_row_t* rows =
+          (const loom_target_compile_report_spill_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(loom_target_compile_report_format_spill_row_json(
+            &rows[i], row_index, stream));
       }
-      IREE_RETURN_IF_ERROR(loom_target_compile_report_format_spill_row_json(
-          &report->spill_rows[i], i, stream));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
   }
@@ -1058,20 +1095,26 @@ static iree_status_t loom_target_compile_report_format_source_low_json(
       stream, &first_field, "emitted_op_count",
       report->source_low_emitted_op_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "copied_count", report->source_low_row_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "total_count", report->source_low_row_total_count));
+      stream, &first_field, "count", report->source_low_rows.count));
   if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
         stream, &first_field, "rows"));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
-    for (iree_host_size_t i = 0; i < report->source_low_row_count; ++i) {
-      if (i != 0) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec =
+             report->source_low_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_source_low_row_t* rows =
+          (const loom_target_compile_report_source_low_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_source_low_row_json(
+                &rows[i], row_index, stream));
       }
-      IREE_RETURN_IF_ERROR(
-          loom_target_compile_report_format_source_low_row_json(
-              &report->source_low_rows[i], i, stream));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
   }
@@ -1181,23 +1224,26 @@ static iree_status_t loom_target_compile_report_format_legalization_json(
       stream, &first_field, "unhandled_op_count",
       report->target_legalization_unhandled_op_count));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "copied_count",
-      report->target_legalization_row_count));
-  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
-      stream, &first_field, "total_count",
-      report->target_legalization_row_total_count));
+      stream, &first_field, "count", report->target_legalization_rows.count));
   if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
         stream, &first_field, "rows"));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
-    for (iree_host_size_t i = 0; i < report->target_legalization_row_count;
-         ++i) {
-      if (i != 0) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    iree_host_size_t row_index = 0;
+    for (const loom_target_compile_report_vec_t* vec =
+             report->target_legalization_rows.head;
+         vec != NULL; vec = vec->next) {
+      const loom_target_compile_report_legalization_row_t* rows =
+          (const loom_target_compile_report_legalization_row_t*)
+              loom_target_compile_report_vec_const_rows(vec);
+      for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+        if (row_index != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_target_compile_report_format_legalization_row_json(
+                &rows[i], row_index, stream));
       }
-      IREE_RETURN_IF_ERROR(
-          loom_target_compile_report_format_legalization_row_json(
-              &report->target_legalization_rows[i], i, stream));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
   }
@@ -1250,9 +1296,6 @@ iree_status_t loom_target_compile_report_format_json(
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "module", report->module_name));
-  IREE_RETURN_IF_ERROR(
-      loom_target_compile_report_json_write_optional_string_field(
-          stream, &first_field, "compile_root", report->compile_root_symbol));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "backend", report->backend_name));

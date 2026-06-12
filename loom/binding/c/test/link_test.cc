@@ -509,6 +509,73 @@ func.def public @unused_library(%x: i32) -> (i32) {
   EXPECT_TRUE(bytecode_path.Remove());
 }
 
+TEST(LinkTest, SelectiveRootPullsBytecodeApplyProviders) {
+  ContextPtr context = CreateContext();
+  BuilderPtr builder = CreateBuilder(context.get());
+  SourcePtr harness = CreateTextSource("harness.loom", R"(
+func.def public @caller(%x: i32) -> (i32) {
+  %y = func.apply<demo.targeted>(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+
+func.def public @unused_harness(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)");
+  std::vector<uint8_t> library_bytes = WriteBytecodeModule(R"(
+func.template<demo.targeted> priority(20) @fast_provider(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.template<demo.targeted> priority(1) @fallback_provider(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.template<demo.unused> @unused_provider(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)");
+  SourcePtr library =
+      CreateSource(LOOMC_SOURCE_FORMAT_BYTECODE, "library.loombc",
+                   library_bytes.data(), library_bytes.size());
+  AddSource(builder.get(), harness.get(), "harness",
+            LOOMC_LINK_PROVIDER_ROLE_INPUT);
+  AddSource(builder.get(), library.get(), "library",
+            LOOMC_LINK_PROVIDER_ROLE_LIBRARY);
+
+  LinkIndexPtr link_index;
+  FinishIndex(builder.get(), &link_index);
+  LinkerPtr linker = CreateLinker(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  const loomc_string_view_t roots[] = {
+      loomc_make_cstring_view("@caller"),
+  };
+  loomc_link_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_NONE,
+      /*.structure_size=*/0,
+      /*.next=*/nullptr,
+      /*.link_index=*/nullptr,
+      /*.module_name=*/loomc_string_view_empty(),
+      /*.root_symbols=*/roots,
+      /*.root_symbol_count=*/1,
+  };
+  ResultPtr result;
+  ModulePtr module = LinkIndex(linker.get(), workspace.get(), link_index.get(),
+                               &options, &result);
+
+  ASSERT_TRUE(loomc_result_succeeded(result.get()));
+  ASSERT_NE(module.get(), nullptr);
+  const loom_module_t* internal_module =
+      loomc_module_const_loom_module(module.get());
+  ASSERT_NE(internal_module, nullptr);
+  VerifyModule(internal_module);
+  EXPECT_TRUE(ModuleHasSymbol(internal_module, "caller"));
+  EXPECT_TRUE(ModuleHasSymbol(internal_module, "fast_provider"));
+  EXPECT_TRUE(ModuleHasSymbol(internal_module, "fallback_provider"));
+  EXPECT_FALSE(ModuleHasSymbol(internal_module, "unused_harness"));
+  EXPECT_FALSE(ModuleHasSymbol(internal_module, "unused_provider"));
+}
+
 TEST(LinkTest, LinkModuleMaterializesInvocationConfigOnLinkedOutput) {
   ContextPtr context = CreateContext();
   BuilderPtr builder = CreateBuilder(context.get());

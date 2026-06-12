@@ -208,6 +208,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    trace
+  HDRS
+    "trace.h"
+  SRCS
+    "trace.c"
+  DEPS
+    ::program
+    ::types
+    iree::base
+    loom::format::text::printer
+    loom::ir
+    loom::util::json
+    loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     interpreter
   HDRS
     "interpreter.h"
@@ -218,6 +236,7 @@ loom_cc_library(
     ::predicate
     ::program
     ::report
+    ::trace
     ::value_facts
     iree::base
     iree::base::internal::arena

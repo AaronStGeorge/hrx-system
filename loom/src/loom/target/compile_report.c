@@ -6,68 +6,179 @@
 
 #include "loom/target/compile_report.h"
 
+#include <string.h>
+
+enum {
+  // Default allocation block size for compile report detail rows.
+  LOOM_TARGET_COMPILE_REPORT_VEC_DEFAULT_BYTE_LENGTH = 4096,
+};
+
 void loom_target_compile_report_initialize(
-    loom_target_compile_report_t* out_report) {
+    loom_target_compile_report_t* out_report, iree_allocator_t allocator) {
   *out_report = (loom_target_compile_report_t){
+      .allocator = allocator,
       .status_code = IREE_STATUS_OK,
   };
 }
 
-void loom_target_compile_report_set_row_storage(
-    loom_target_compile_report_t* report,
-    const loom_target_compile_report_row_storage_t* row_storage) {
-  report->pressure_rows = row_storage ? row_storage->pressure_rows : NULL;
-  report->pressure_row_capacity =
-      report->pressure_rows != NULL ? row_storage->pressure_row_capacity : 0;
-  report->pressure_row_count = 0;
-  report->pressure_row_total_count = 0;
-  report->spill_rows = row_storage ? row_storage->spill_rows : NULL;
-  report->spill_row_capacity =
-      report->spill_rows != NULL ? row_storage->spill_row_capacity : 0;
-  report->spill_row_count = 0;
-  report->spill_row_total_count = 0;
-  report->source_low_rows = row_storage ? row_storage->source_low_rows : NULL;
-  report->source_low_row_capacity = report->source_low_rows != NULL
-                                        ? row_storage->source_low_row_capacity
-                                        : 0;
-  report->source_low_row_count = 0;
-  report->source_low_row_total_count = 0;
-  report->target_legalization_rows =
-      row_storage ? row_storage->target_legalization_rows : NULL;
-  report->target_legalization_row_capacity =
-      report->target_legalization_rows != NULL
-          ? row_storage->target_legalization_row_capacity
-          : 0;
-  report->target_legalization_row_count = 0;
-  report->target_legalization_row_total_count = 0;
+static void loom_target_compile_report_row_list_deinitialize(
+    iree_allocator_t allocator, loom_target_compile_report_row_list_t* list) {
+  loom_target_compile_report_vec_t* vec = list->head;
+  while (vec != NULL) {
+    loom_target_compile_report_vec_t* next = vec->next;
+    iree_allocator_free(allocator, vec);
+    vec = next;
+  }
+  *list = (loom_target_compile_report_row_list_t){0};
 }
 
-static bool loom_target_compile_report_has_row_storage_or_counts(
+void loom_target_compile_report_deinitialize(
+    loom_target_compile_report_t* report) {
+  if (report == NULL) {
+    return;
+  }
+  const iree_allocator_t allocator = report->allocator;
+  loom_target_compile_report_row_list_deinitialize(allocator,
+                                                   &report->pressure_rows);
+  loom_target_compile_report_row_list_deinitialize(allocator,
+                                                   &report->spill_rows);
+  loom_target_compile_report_row_list_deinitialize(allocator,
+                                                   &report->source_low_rows);
+  loom_target_compile_report_row_list_deinitialize(
+      allocator, &report->target_legalization_rows);
+  *report = (loom_target_compile_report_t){0};
+}
+
+static bool loom_target_compile_report_has_rows(
     const loom_target_compile_report_t* report) {
-  return report->pressure_rows != NULL || report->pressure_row_capacity != 0 ||
-         report->pressure_row_count != 0 ||
-         report->pressure_row_total_count != 0 || report->spill_rows != NULL ||
-         report->spill_row_capacity != 0 || report->spill_row_count != 0 ||
-         report->spill_row_total_count != 0 ||
-         report->source_low_rows != NULL ||
-         report->source_low_row_capacity != 0 ||
-         report->source_low_row_count != 0 ||
-         report->source_low_row_total_count != 0 ||
-         report->target_legalization_rows != NULL ||
-         report->target_legalization_row_capacity != 0 ||
-         report->target_legalization_row_count != 0 ||
-         report->target_legalization_row_total_count != 0;
+  return report->pressure_rows.count != 0 || report->spill_rows.count != 0 ||
+         report->source_low_rows.count != 0 ||
+         report->target_legalization_rows.count != 0;
 }
 
 void loom_target_compile_report_initialize_if_empty(
-    loom_target_compile_report_t* report,
-    const loom_target_compile_report_row_storage_t* row_storage) {
+    loom_target_compile_report_t* report, iree_allocator_t allocator) {
   if (report->detail_flags != LOOM_TARGET_COMPILE_REPORT_DETAIL_NONE ||
-      loom_target_compile_report_has_row_storage_or_counts(report)) {
+      report->requested_detail_flags !=
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_NONE ||
+      loom_target_compile_report_has_rows(report)) {
     return;
   }
-  loom_target_compile_report_initialize(report);
-  loom_target_compile_report_set_row_storage(report, row_storage);
+  const loom_target_compile_report_detail_flags_t requested_detail_flags =
+      report->requested_detail_flags;
+  loom_target_compile_report_initialize(report, allocator);
+  report->requested_detail_flags = requested_detail_flags;
+}
+
+static iree_status_t loom_target_compile_report_row_list_append(
+    loom_target_compile_report_row_list_t* list, iree_host_size_t row_size,
+    iree_allocator_t allocator, const void* row) {
+  if (row_size == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "compile report row size must be non-zero");
+  }
+  if (iree_allocator_is_null(allocator)) {
+    return iree_ok_status();
+  }
+  if (list->tail == NULL || list->tail->count == list->tail->capacity) {
+    iree_host_size_t capacity =
+        (LOOM_TARGET_COMPILE_REPORT_VEC_DEFAULT_BYTE_LENGTH -
+         sizeof(loom_target_compile_report_vec_t)) /
+        row_size;
+    capacity = iree_max((iree_host_size_t)1, capacity);
+    iree_host_size_t row_bytes = 0;
+    if (!iree_host_size_checked_mul(capacity, row_size, &row_bytes)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "compile report row block is too large");
+    }
+    iree_host_size_t block_bytes = 0;
+    if (!iree_host_size_checked_add(sizeof(loom_target_compile_report_vec_t),
+                                    row_bytes, &block_bytes)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "compile report row block is too large");
+    }
+    loom_target_compile_report_vec_t* vec = NULL;
+    IREE_RETURN_IF_ERROR(
+        iree_allocator_malloc(allocator, block_bytes, (void**)&vec));
+    *vec = (loom_target_compile_report_vec_t){
+        .capacity = capacity,
+    };
+    if (list->tail != NULL) {
+      list->tail->next = vec;
+    } else {
+      list->head = vec;
+    }
+    list->tail = vec;
+  }
+  uint8_t* rows = (uint8_t*)loom_target_compile_report_vec_rows(list->tail);
+  memcpy(rows + list->tail->count * row_size, row, row_size);
+  ++list->tail->count;
+  ++list->count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_compile_report_row_list_clone(
+    const loom_target_compile_report_row_list_t* source,
+    iree_host_size_t row_size, iree_allocator_t allocator,
+    loom_target_compile_report_row_list_t* target) {
+  *target = (loom_target_compile_report_row_list_t){0};
+  for (const loom_target_compile_report_vec_t* vec = source->head; vec != NULL;
+       vec = vec->next) {
+    const uint8_t* rows =
+        (const uint8_t*)loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_row_list_append(
+          target, row_size, allocator, rows + i * row_size));
+    }
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_target_compile_report_clone(
+    const loom_target_compile_report_t* source, iree_allocator_t allocator,
+    loom_target_compile_report_t* out_target) {
+  loom_target_compile_report_t target = *source;
+  target.allocator = allocator;
+  target.pressure_rows = (loom_target_compile_report_row_list_t){0};
+  target.spill_rows = (loom_target_compile_report_row_list_t){0};
+  target.source_low_rows = (loom_target_compile_report_row_list_t){0};
+  target.target_legalization_rows = (loom_target_compile_report_row_list_t){0};
+  if (source->pressure_rows.count == 0 && source->spill_rows.count == 0 &&
+      source->source_low_rows.count == 0 &&
+      source->target_legalization_rows.count == 0) {
+    *out_target = target;
+    return iree_ok_status();
+  }
+  if (iree_allocator_is_null(allocator)) {
+    *out_target = target;
+    return iree_ok_status();
+  }
+  iree_status_t status = loom_target_compile_report_row_list_clone(
+      &source->pressure_rows, sizeof(loom_target_compile_report_pressure_row_t),
+      allocator, &target.pressure_rows);
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->spill_rows, sizeof(loom_target_compile_report_spill_row_t),
+        allocator, &target.spill_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->source_low_rows,
+        sizeof(loom_target_compile_report_source_low_row_t), allocator,
+        &target.source_low_rows);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_compile_report_row_list_clone(
+        &source->target_legalization_rows,
+        sizeof(loom_target_compile_report_legalization_row_t), allocator,
+        &target.target_legalization_rows);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_target_compile_report_deinitialize(&target);
+    return status;
+  }
+  *out_target = target;
+  return iree_ok_status();
 }
 
 void loom_target_compile_report_record_status(
@@ -169,37 +280,28 @@ void loom_target_compile_report_record_memory(
   report->local_memory_bytes = local_memory_bytes;
 }
 
-void loom_target_compile_report_record_pressure_row(
+iree_status_t loom_target_compile_report_record_pressure_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_pressure_row_t* row) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
-  ++report->pressure_row_total_count;
-  if (report->pressure_rows != NULL &&
-      report->pressure_row_count < report->pressure_row_capacity) {
-    report->pressure_rows[report->pressure_row_count++] = *row;
-  }
+  return loom_target_compile_report_row_list_append(
+      &report->pressure_rows, sizeof(*row), report->allocator, row);
 }
 
-void loom_target_compile_report_record_spill_row(
+iree_status_t loom_target_compile_report_record_spill_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_spill_row_t* row) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS;
-  ++report->spill_row_total_count;
-  if (report->spill_rows != NULL &&
-      report->spill_row_count < report->spill_row_capacity) {
-    report->spill_rows[report->spill_row_count++] = *row;
-  }
+  return loom_target_compile_report_row_list_append(
+      &report->spill_rows, sizeof(*row), report->allocator, row);
 }
 
-void loom_target_compile_report_record_source_low_row(
+iree_status_t loom_target_compile_report_record_source_low_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_row_t* row) {
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
-  ++report->source_low_row_total_count;
-  if (report->source_low_rows != NULL &&
-      report->source_low_row_count < report->source_low_row_capacity) {
-    report->source_low_rows[report->source_low_row_count++] = *row;
-  }
+  return loom_target_compile_report_row_list_append(
+      &report->source_low_rows, sizeof(*row), report->allocator, row);
 }
 
 static void loom_target_compile_report_count_legalization_action(
@@ -250,18 +352,13 @@ void loom_target_compile_report_record_legalization_summary(
       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
   loom_target_compile_report_count_legalization_action(report, action,
                                                        legalizer_strategy);
-  ++report->target_legalization_row_total_count;
 }
 
-void loom_target_compile_report_record_legalization_row(
+iree_status_t loom_target_compile_report_record_legalization_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_legalization_row_t* row) {
   loom_target_compile_report_record_legalization_summary(
       report, row->action, row->legalizer_strategy);
-  if (report->target_legalization_rows != NULL &&
-      report->target_legalization_row_count <
-          report->target_legalization_row_capacity) {
-    report->target_legalization_rows[report->target_legalization_row_count++] =
-        *row;
-  }
+  return loom_target_compile_report_row_list_append(
+      &report->target_legalization_rows, sizeof(*row), report->allocator, row);
 }

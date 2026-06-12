@@ -220,6 +220,7 @@ if(IREE_CMAKE_TRY_FILE)
 endif()
 
 if(IREE_BUILD_TESTS)
+  iree_finalize_test_build_targets()
   iree_create_ctest_customization()
   hrx_create_installed_tests()
 endif()

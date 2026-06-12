@@ -81,6 +81,12 @@ bool IsStorageParameterName(StringRef Name) {
   return Name == "storage" || Name.ends_with("_storage");
 }
 
+StringRef SimpleFunctionName(const FunctionDecl* Function) {
+  const IdentifierInfo* Identifier =
+      Function ? Function->getIdentifier() : nullptr;
+  return Identifier ? Identifier->getName() : StringRef();
+}
+
 bool HasStorageParameter(const FunctionDecl* Function) {
   for (const ParmVarDecl* Parameter : Function->parameters()) {
     if (IsStorageParameterName(Parameter->getName())) {
@@ -108,16 +114,16 @@ bool FirstParameterHasRecordType(const FunctionDecl* Function,
 
 const FunctionDecl* MatchingDeinitializeFunction(const FunctionDecl* Function,
                                                  const RecordDecl* Record) {
-  if (!Function || !Record || !Function->getName().ends_with("_allocate")) {
+  StringRef FunctionName = SimpleFunctionName(Function);
+  if (!Function || !Record || !FunctionName.ends_with("_allocate")) {
     return nullptr;
   }
   std::string DeinitializeName =
-      (Function->getName().drop_back(StringRef("_allocate").size()) +
-       "_deinitialize")
+      (FunctionName.drop_back(StringRef("_allocate").size()) + "_deinitialize")
           .str();
   for (const Decl* Declaration : Function->getDeclContext()->decls()) {
     const auto* Candidate = dyn_cast<FunctionDecl>(Declaration);
-    if (!Candidate || Candidate->getName() != DeinitializeName ||
+    if (!Candidate || SimpleFunctionName(Candidate) != DeinitializeName ||
         !Candidate->getReturnType()->isVoidType()) {
       continue;
     }
@@ -135,7 +141,7 @@ struct CallerOwnedAllocateOutParameter {
 
 std::optional<CallerOwnedAllocateOutParameter>
 CallerOwnedAllocateOutParameterFor(const FunctionDecl* Function) {
-  if (!Function || !Function->getName().ends_with("_allocate")) {
+  if (!Function || !SimpleFunctionName(Function).ends_with("_allocate")) {
     return std::nullopt;
   }
   for (const ParmVarDecl* Parameter : Function->parameters()) {
@@ -154,7 +160,7 @@ CallerOwnedAllocateOutParameterFor(const FunctionDecl* Function) {
 
 const ParmVarDecl* InitializePublishedOutParameterWithoutStorage(
     const FunctionDecl* Function) {
-  if (!Function || !Function->getName().ends_with("_initialize") ||
+  if (!Function || !SimpleFunctionName(Function).ends_with("_initialize") ||
       HasStorageParameter(Function)) {
     return nullptr;
   }
@@ -198,8 +204,8 @@ void LifecycleNamingCheck::check(
     diag(Location,
          "caller-owned output %0 from %1 uses allocate naming but is cleaned "
          "up by %2; use initialize/deinitialize naming")
-        << OutParameter->Parameter->getName() << Function->getName()
-        << OutParameter->DeinitializeFunction->getName();
+        << OutParameter->Parameter->getName() << SimpleFunctionName(Function)
+        << SimpleFunctionName(OutParameter->DeinitializeFunction);
     return;
   }
 
@@ -213,7 +219,7 @@ void LifecycleNamingCheck::check(
   diag(Location,
        "pointer-to-pointer output %0 from %1 uses initialize naming without "
        "an explicit storage parameter")
-      << PublishedOutParameter->getName() << Function->getName();
+      << PublishedOutParameter->getName() << SimpleFunctionName(Function);
 }
 
 }  // namespace clang::tidy::iree

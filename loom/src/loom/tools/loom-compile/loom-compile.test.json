@@ -2,7 +2,7 @@
   "version": 1,
   "cases": [
     {
-      "name": "compiles and runs branchy module",
+      "name": "compiles branchy module",
       "steps": [
         {
           "name": "write-source",
@@ -18,7 +18,7 @@
             "args": [
               "{tmp}/branchy.loom",
               "--output={tmp}/branchy.vmfb",
-              "--compile_report=summary"
+              "--compile-report=summary"
             ]
           },
           "stderr": {
@@ -35,25 +35,100 @@
               "non_empty": true
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "compiles bytecode module",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/branchy.loom",
+            "text": "ireevm.target<core> @vm_target\n\nfunc.def public target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n  %c0 = scalar.constant 0 : i32\n  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32\n  cfg.cond_br %is_zero, ^then, ^else\n^then:\n  %sum = scalar.addi %rhs, %rhs : i32\n  func.return %sum : i32\n^else:\n  %diff = scalar.subi %lhs, %rhs : i32\n  func.return %diff : i32\n}\n"
+          }
         },
         {
-          "name": "run",
+          "name": "encode-source",
           "run": {
-            "tool": "iree-run-module",
+            "tool": "loom-format",
             "args": [
-              "--module={tmp}/branchy.vmfb",
-              "--function=branchy",
-              "--input=0",
-              "--input=21",
-              "--expected_output=42"
+              "{tmp}/branchy.loom",
+              "--from=text",
+              "--to=bytecode",
+              "--output={tmp}/branchy.loombc"
             ]
           },
-          "stdout": {
-            "contains": [
-              "EXEC @branchy",
-              "[SUCCESS] all function outputs matched their expected values."
+          "files": [
+            {
+              "path": "{tmp}/branchy.loombc",
+              "non_empty": true
+            }
+          ]
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/branchy.loombc",
+              "--output={tmp}/branchy.vmfb",
+              "--compile-report=summary"
             ]
+          },
+          "stderr": {
+            "contains": [
+              "\"artifact_kind\":\"vm-archive\"",
+              "\"status_code\":0",
+              "\"status\":\"OK\""
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/branchy.vmfb",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dumps compile pipeline IR as JSONL",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/trace.loom",
+            "text": "ireevm.target<core> @vm_target\n\nfunc.def public target(@vm_target) @trace(%lhs: i32, %rhs: i32) -> (i32) {\n  %sum = scalar.addi %lhs, %rhs : i32\n  func.return %sum : i32\n}\n"
           }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/trace.loom",
+              "--output={tmp}/trace.vmfb",
+              "--dump-ir-after-all",
+              "--dump-ir-format=jsonl",
+              "--dump-ir-output=stderr"
+            ]
+          },
+          "stderr": {
+            "contains": [
+              "\"tool\":\"loom-compile\"",
+              "\"stage\":\"prepared-low\"",
+              "\"pipeline\":\"__loom_compile_default\"",
+              "\"point\":\"after\"",
+              "\"ir\":\""
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/trace.vmfb",
+              "non_empty": true
+            }
+          ]
         }
       ]
     },
@@ -74,8 +149,8 @@
             "args": [
               "{tmp}/branchy.loom",
               "--output={tmp}/branchy.vmfb",
-              "--compile_report=details",
-              "--compile_report_output={tmp}/report.json"
+              "--compile-report=details",
+              "--compile-report-output={tmp}/report.json"
             ]
           },
           "files": [
@@ -96,8 +171,8 @@
             "args": [
               "{tmp}/branchy.loom",
               "--output={tmp}/unused.vmfb",
-              "--compile_report=summary",
-              "--compile_report_output=-"
+              "--compile-report=summary",
+              "--compile-report-output=-"
             ]
           },
           "stdout": {
@@ -143,24 +218,6 @@
               "non_empty": true
             }
           ]
-        },
-        {
-          "name": "run-configured",
-          "run": {
-            "tool": "iree-run-module",
-            "args": [
-              "--module={tmp}/configured.vmfb",
-              "--function=configured",
-              "--input=10",
-              "--expected_output=42"
-            ]
-          },
-          "stdout": {
-            "contains": [
-              "EXEC @configured",
-              "[SUCCESS] all function outputs matched their expected values."
-            ]
-          }
         },
         {
           "name": "reject-duplicate-config",

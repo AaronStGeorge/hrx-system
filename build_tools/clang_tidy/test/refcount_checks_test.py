@@ -117,6 +117,16 @@ class RefCountChecksTest(clang_tidy_test.ClangTidyAssertions):
             ],
         )
 
+    def test_refcount_lifecycle_ignores_cxx_non_identifier_functions(self):
+        output = clang_tidy_test.run_clang_tidy(
+            clang_tidy=_ARGS.clang_tidy,
+            plugin=_ARGS.plugin,
+            checks="-*,iree-refcount-lifecycle",
+            source=clang_tidy_test.source_path(__file__, "non_identifier_functions.cc"),
+            compiler_args=["-std=c++17"],
+        )
+        self.assertContainsNone(output, ["[iree-refcount-lifecycle]"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -225,31 +225,13 @@ loom_amdgpu_hal_artifact_provider_resolve_device_target_ref(
       &builder, processor, *out_target_ref, LOOM_LOCATION_UNKNOWN, &target_op);
 }
 
-static loom_target_compile_report_row_storage_t
-loom_amdgpu_hal_artifact_provider_report_row_storage(
-    loom_target_compile_report_t* report) {
-  if (report == NULL) {
-    return (loom_target_compile_report_row_storage_t){0};
-  }
-  return (loom_target_compile_report_row_storage_t){
-      .pressure_rows = report->pressure_rows,
-      .pressure_row_capacity = report->pressure_row_capacity,
-      .spill_rows = report->spill_rows,
-      .spill_row_capacity = report->spill_row_capacity,
-      .source_low_rows = report->source_low_rows,
-      .source_low_row_capacity = report->source_low_row_capacity,
-      .target_legalization_rows = report->target_legalization_rows,
-      .target_legalization_row_capacity =
-          report->target_legalization_row_capacity,
-  };
-}
-
 static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
     const loom_run_hal_device_target_t* target,
     loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_run_candidate_artifact_flags_t artifact_flags,
+    const loom_run_candidate_artifact_manifest_options_t* artifact_manifest,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
     bool* out_emitted, loom_run_hal_artifact_t* out_artifact) {
   IREE_ASSERT_ARGUMENT(provider);
@@ -279,10 +261,19 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
       .source_resolver = source_resolver,
       .max_errors = max_errors,
       .report = report,
-      .report_row_storage =
-          loom_amdgpu_hal_artifact_provider_report_row_storage(report),
       .capture_target_listing = iree_all_bits_set(
           artifact_flags, LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING),
+      .artifact_name = artifact_manifest ? artifact_manifest->artifact_name
+                                         : iree_string_view_empty(),
+      .artifact_manifest_identifier = artifact_manifest
+                                          ? artifact_manifest->identifier
+                                          : iree_string_view_empty(),
+      .artifact_manifest =
+          {
+              .mode = artifact_manifest
+                          ? artifact_manifest->mode
+                          : LOOM_TARGET_ARTIFACT_MANIFEST_MODE_NONE,
+          },
   };
   bool library_emitted = false;
   iree_status_t status = loom_amdgpu_emit_hal_kernel_library(
@@ -301,6 +292,13 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
         .target_listing_data = iree_make_const_byte_span(
             (const uint8_t*)storage->kernel_library.target_listing_data,
             storage->kernel_library.target_listing_data_length),
+        .sidecars =
+            storage->kernel_library.artifact_manifest.contents.data != NULL
+                ? &storage->kernel_library.artifact_manifest
+                : NULL,
+        .sidecar_count =
+            storage->kernel_library.artifact_manifest.contents.data != NULL ? 1
+                                                                            : 0,
         .executable_data = hsaco_data,
         .storage = storage,
     };

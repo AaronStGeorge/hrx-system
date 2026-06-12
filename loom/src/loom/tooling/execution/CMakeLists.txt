@@ -31,6 +31,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::error::diagnostic
+    loom::target::artifact_manifest
     loom::target::compile_report
     loom::verify
   PUBLIC
@@ -118,6 +119,8 @@ loom_cc_library(
     iree::base::internal::arena
     loom::codegen::low::text_asm
     loom::error::diagnostic
+    loom::format::bytecode::format
+    loom::format::bytecode::reader
     loom::format::text::parser
     loom::ir
     loom::target::low_descriptor_registry

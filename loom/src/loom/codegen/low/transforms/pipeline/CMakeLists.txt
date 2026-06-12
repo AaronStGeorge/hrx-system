@@ -27,6 +27,7 @@ loom_cc_library(
     loom::pass::registry
     loom::pass::types
     loom::pass::value_facts
+    loom::target::compile_report_low
     loom::target::low_legality
   PUBLIC
 )

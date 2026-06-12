@@ -20,7 +20,7 @@
               "--function=branchy",
               "--input=0",
               "--input=21",
-              "--expected_output=42"
+              "--expected-output=42"
             ]
           },
           "stdout": {
@@ -51,7 +51,7 @@
               "--function=branchy",
               "--input=50",
               "--input=8",
-              "--expected_output=42"
+              "--expected-output=42"
             ]
           },
           "stdout": {
@@ -110,8 +110,8 @@
               "--function=branchy",
               "--input=0",
               "--input=21",
-              "--expected_output=42",
-              "--compile_report=summary"
+              "--expected-output=42",
+              "--compile-report=summary"
             ]
           },
           "stdout": {
@@ -145,7 +145,7 @@
               "--function=branchy",
               "--input=0",
               "--input=21",
-              "--expected_output=42"
+              "--expected-output=42"
             ]
           },
           "exit": {
@@ -173,14 +173,14 @@
           "name": "run",
           "run": {
             "tool": "iree-run-loom",
-            "args": ["{tmp}/branchy.loom", "--emit_only"]
+            "args": ["{tmp}/branchy.loom", "--emit-only"]
           },
           "exit": {
             "nonzero": true
           },
           "stderr": {
             "contains": [
-              "--emit_target_artifact, --emit_hal_executable, and --emit_only require a HAL backend"
+              "--emit-target-artifact, --emit-hal-executable, and --emit-only require a HAL backend"
             ]
           }
         }

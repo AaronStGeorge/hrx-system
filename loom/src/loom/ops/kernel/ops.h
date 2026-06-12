@@ -132,17 +132,13 @@ LOOM_DEFINE_ISA(loom_kernel_def_isa, LOOM_OP_KERNEL_DEF)
 LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_target, 1)
 LOOM_DEFINE_ATTR_STRING(loom_kernel_def_export_symbol, 2)
-LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_artifact, 3)
-LOOM_DEFINE_ATTR_I64(loom_kernel_def_export_ordinal, 4)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_def_export_linkage, 5, loom_target_linkage_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_def_export_linkage, 3, loom_target_linkage_t)
 LOOM_DEFINE_REGION(loom_kernel_def_config, 0)
 LOOM_DEFINE_REGION(loom_kernel_def_body, 1)
 enum loom_kernel_def_build_flag_bits_e {
   LOOM_KERNEL_DEF_BUILD_FLAG_HAS_TARGET = 1u << 0,
   LOOM_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 1,
-  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_ARTIFACT = 1u << 2,
-  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_ORDINAL = 1u << 3,
-  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 4,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 2,
 };
 typedef uint32_t loom_kernel_def_build_flags_t;
 iree_status_t loom_kernel_def_build(
@@ -150,8 +146,6 @@ iree_status_t loom_kernel_def_build(
     loom_kernel_def_build_flags_t build_flags,
     loom_optional loom_symbol_ref_t target,
     loom_optional loom_string_id_t export_symbol,
-    loom_optional loom_symbol_ref_t artifact,
-    loom_optional int64_t export_ordinal,
     loom_optional uint8_t export_linkage,
     loom_symbol_ref_t callee,
     const loom_type_t* config_arg_types,

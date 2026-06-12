@@ -199,6 +199,12 @@ bool IsRetainFunctionName(StringRef FunctionName) {
   return FunctionName.ends_with("_retain");
 }
 
+StringRef SimpleFunctionName(const FunctionDecl* Function) {
+  const IdentifierInfo* Identifier =
+      Function ? Function->getIdentifier() : nullptr;
+  return Identifier ? Identifier->getName() : StringRef();
+}
+
 bool IsNamedTypedef(QualType QualType, StringRef Name) {
   QualType = QualType.getUnqualifiedType();
   const Type* TypePtr = QualType.getTypePtrOrNull();
@@ -312,7 +318,7 @@ const RecordDecl* OutParameterPointeeRecord(const ParmVarDecl* Parameter) {
 
 const ParmVarDecl* RefCountedAllocateOutParameter(
     const FunctionDecl* Function, const SourceManager& SourceManager) {
-  if (!Function || !IsAllocateFunctionName(Function->getName())) {
+  if (!Function || !IsAllocateFunctionName(SimpleFunctionName(Function))) {
     return nullptr;
   }
   for (const ParmVarDecl* Parameter : Function->parameters()) {
@@ -644,8 +650,9 @@ std::optional<DirectRefCountOperation> DirectRefCountOperationStatement(
     return std::nullopt;
   }
   const FunctionDecl* Callee = Call->getDirectCallee();
+  StringRef CalleeName = SimpleFunctionName(Callee);
   if (!Callee || !Callee->getReturnType()->isVoidType() ||
-      !FunctionNamePredicate(Callee->getName())) {
+      !FunctionNamePredicate(CalleeName)) {
     return std::nullopt;
   }
   const VarDecl* Variable = ReferencedVariable(Call->getArg(0));
@@ -777,8 +784,9 @@ class ReleasedUseVisitor final
 
   void VisitCallExpr(const CallExpr* Expression) {
     const FunctionDecl* Callee = Expression->getDirectCallee();
-    if (Callee && (IsReleaseFunctionName(Callee->getName()) ||
-                   IsRetainFunctionName(Callee->getName()))) {
+    StringRef CalleeName = SimpleFunctionName(Callee);
+    if (Callee && (IsReleaseFunctionName(CalleeName) ||
+                   IsRetainFunctionName(CalleeName))) {
       VisitChildren(Expression);
       return;
     }
@@ -1014,7 +1022,7 @@ void RefCountLifecycleCheck::check(
     diag(SourceManager.getExpansionLoc(Parameter->getLocation()),
          "refcounted object factory %0 publishes %1 through allocate naming; "
          "use create/destroy/retain/release naming")
-        << Function->getName() << Parameter->getName();
+        << SimpleFunctionName(Function) << Parameter->getName();
     return;
   }
   const Stmt* Body = Function->getBody();
@@ -1035,7 +1043,7 @@ void RefCountLifecycleCheck::check(
          "iree_atomic_ref_count_dec return value must be checked");
     return;
   }
-  StringRef FunctionName = Function->getName();
+  StringRef FunctionName = SimpleFunctionName(Function);
   if (!IsRefCountLifecycleFunctionName(FunctionName)) {
     return;
   }

@@ -21,6 +21,7 @@
 #include "loom/ir/module.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/pipeline_options.h"
+#include "loom/target/provider.h"
 #include "loom/target/types.h"
 #include "loom/tooling/execution/compile_options.h"
 #include "loom/verify/verify.h"
@@ -63,6 +64,10 @@ typedef struct loom_run_hal_artifact_t {
   iree_string_view_t target_listing_format;
   // Target-owned textual listing bytes for debug artifact bundles.
   iree_const_byte_span_t target_listing_data;
+  // Optional sidecar artifacts produced beside executable_data.
+  const loom_target_emit_sidecar_artifact_t* sidecars;
+  // Number of entries in |sidecars|.
+  iree_host_size_t sidecar_count;
   // Provider-owned executable bytes passed to the HAL loader.
   iree_const_byte_span_t executable_data;
   // Provider-owned storage released by |deinitialize_artifact|.
@@ -94,6 +99,7 @@ typedef iree_status_t (*loom_run_hal_emit_artifact_fn_t)(
     loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_run_candidate_artifact_flags_t artifact_flags,
+    const loom_run_candidate_artifact_manifest_options_t* artifact_manifest,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
     bool* out_emitted, loom_run_hal_artifact_t* out_artifact);
 

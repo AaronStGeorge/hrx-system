@@ -17,11 +17,12 @@
             "tool": "loom-compile",
             "args": [
               "{tmp}/targetless_amdgpu.loom",
-              "--loom_backend=amdgpu-hal",
+              "--backend=amdgpu-hal",
               "--target=gfx11-generic",
               "--output={tmp}/targetless_amdgpu.vmfb",
-              "--emit_target_artifact={tmp}/targetless_amdgpu.hsaco",
-              "--compile_report=summary"
+              "--emit-target-artifact={tmp}/targetless_amdgpu.hsaco",
+              "--artifact-manifest=summary",
+              "--compile-report=summary"
             ]
           },
           "stderr": {
@@ -40,6 +41,10 @@
             },
             {
               "path": "{tmp}/targetless_amdgpu.hsaco",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/targetless_amdgpu.hsaco.manifest.json",
               "non_empty": true
             }
           ]
@@ -62,7 +67,7 @@
             "tool": "loom-compile",
             "args": [
               "{tmp}/targetless_amdgpu.loom",
-              "--loom_backend=amdgpu-hal",
+              "--backend=amdgpu-hal",
               "--output={tmp}/targetless_amdgpu.vmfb"
             ]
           },
@@ -93,10 +98,10 @@
             "tool": "loom-compile",
             "args": [
               "{tmp}/amdgpu_i64_to_i8.loom",
-              "--loom_backend=amdgpu-hal",
+              "--backend=amdgpu-hal",
               "--target=gfx11-generic",
               "--output={tmp}/amdgpu_i64_to_i8.hsaco",
-              "--compile_report=summary"
+              "--compile-report=summary"
             ]
           },
           "stderr": {

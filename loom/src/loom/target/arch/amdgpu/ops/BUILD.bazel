@@ -25,6 +25,8 @@ _AMDGPU_TARGET_ID_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/target_id:__
 
 _AMDGPU_TOOLING_VISIBILITY = ["//loom/src/loom/tooling/target/amdgpu:__pkg__"]
 
+_AMDGPU_BINDING_VISIBILITY = ["//loom/binding/c/target/amdgpu:__pkg__"]
+
 loom_generated_cc_library(
     name = "ops",
     srcs = [
@@ -51,7 +53,8 @@ loom_generated_cc_library(
         _AMDGPU_NATIVE_VISIBILITY +
         _AMDGPU_ROOT_VISIBILITY +
         _AMDGPU_TARGET_ID_VISIBILITY +
-        _AMDGPU_TOOLING_VISIBILITY
+        _AMDGPU_TOOLING_VISIBILITY +
+        _AMDGPU_BINDING_VISIBILITY
     ),
     deps = [
         "//loom/src/loom/error:error_defs",

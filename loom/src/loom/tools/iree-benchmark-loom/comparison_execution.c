@@ -28,10 +28,10 @@ static iree_status_t iree_benchmark_loom_comparison_candidate_record_timing(
         IREE_STATUS_OUT_OF_RANGE,
         "interleaved comparison collected more timing rows than planned");
   }
-  const loom_run_benchmark_timing_stats_t* dispatch_timing =
+  const loom_run_benchmark_timing_stats_t* operation_timing =
       &benchmark_result->hal_benchmark.timing.operation_timing;
-  candidate->p50_samples[candidate->sample_count] = dispatch_timing->p50_ns;
-  candidate->p90_samples[candidate->sample_count] = dispatch_timing->p90_ns;
+  candidate->p50_samples[candidate->sample_count] = operation_timing->p50_ns;
+  candidate->p90_samples[candidate->sample_count] = operation_timing->p90_ns;
   ++candidate->sample_count;
   return iree_ok_status();
 }
@@ -218,7 +218,7 @@ iree_benchmark_loom_initialize_dispatch_comparison_candidates(
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "interleaved comparisons require one sample-compilation mode; use "
-        "--sample_compilation=once or --sample_compilation=per_sample");
+        "--sample-compilation=once or --sample-compilation=per_sample");
   }
   if (benchmark_options->interleave_mode ==
           IREE_BENCHMARK_LOOM_INTERLEAVE_ABABA &&
@@ -516,6 +516,7 @@ iree_status_t iree_benchmark_loom_run_dispatch_comparison(
       .filename = options->filename,
       .source = options->source,
       .compile_report_options = options->compile_report_options,
+      .artifact_manifest_options = options->artifact_manifest_options,
       .case_execution_options = options->case_execution_options,
       .execution_arena = options->execution_arena,
       .host_allocator = options->host_allocator,

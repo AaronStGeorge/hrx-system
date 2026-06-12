@@ -149,6 +149,8 @@ typedef struct iree_benchmark_loom_benchmark_result_t {
   const loom_run_compile_report_capture_t* compile_report_capture;
   // Sidecar compile report artifact path for debug/full bundles, if any.
   iree_string_view_t compile_report_artifact_path;
+  // Sidecar artifact manifest path for debug/full bundles, if any.
+  iree_string_view_t artifact_manifest_path;
   // Target-native executable artifact path for debug/full bundles, if any.
   iree_string_view_t target_artifact_path;
   // Target-native textual listing path for debug/full bundles, if any.
@@ -203,6 +205,10 @@ typedef struct iree_benchmark_loom_hal_actual_provider_t {
   iree_string_view_t compile_report_artifact_path;
   // Owned debug/full bundle compile-report artifact path.
   char* compile_report_artifact_path_storage;
+  // Borrowed view into |artifact_manifest_path_storage|.
+  iree_string_view_t artifact_manifest_path;
+  // Owned debug/full bundle artifact-manifest path.
+  char* artifact_manifest_path_storage;
   // Borrowed view into |target_artifact_path_storage|.
   iree_string_view_t target_artifact_path;
   // Owned debug/full bundle target-native artifact path.
@@ -239,9 +245,9 @@ typedef struct iree_benchmark_loom_dispatch_comparison_candidate_t {
   iree_host_size_t correctness_failed_sample_count;
   // True when compile and correctness succeeded and timing windows can run.
   bool runnable;
-  // Per-repetition p50 dispatch timings collected for aggregate rows.
+  // Per-repetition p50 logical-operation timings collected for aggregate rows.
   iree_duration_t* p50_samples;
-  // Per-repetition p90 dispatch timings collected for aggregate rows.
+  // Per-repetition p90 logical-operation timings collected for aggregate rows.
   iree_duration_t* p90_samples;
   // Number of entries populated in |p50_samples| and |p90_samples|.
   iree_host_size_t sample_count;

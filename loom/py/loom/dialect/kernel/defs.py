@@ -227,14 +227,6 @@ _ENTRY_EXPORT_FORMAT: list[FormatElement] = [
         anchor="export_symbol",
     ),
     OptionalGroup(
-        [kw("artifact"), GLUE, LPAREN, SymbolRef("artifact"), GLUE, RPAREN],
-        anchor="artifact",
-    ),
-    OptionalGroup(
-        [kw("ordinal"), GLUE, LPAREN, Attr("export_ordinal"), GLUE, RPAREN],
-        anchor="export_ordinal",
-    ),
-    OptionalGroup(
         [kw("linkage"), GLUE, LPAREN, Attr("export_linkage"), GLUE, RPAREN],
         anchor="export_linkage",
     ),
@@ -267,13 +259,6 @@ _ENTRY_ATTRS = [
         symbol_ref=SymbolReference("target", ["target"]),
     ),
     AttrDef("export_symbol", "string", optional=True),
-    AttrDef(
-        "artifact",
-        "symbol",
-        optional=True,
-        symbol_ref=SymbolReference("target artifact", ["record"]),
-    ),
-    AttrDef("export_ordinal", ATTR_TYPE_I64, optional=True),
     AttrDef("export_linkage", "enum", enum_def=ExportLinkage, optional=True),
     AttrDef("predicates", "predicate_list", optional=True),
 ]
@@ -313,8 +298,6 @@ kernel_def = Op(
             callee="callee",
             target="target",
             export_symbol="export_symbol",
-            artifact="artifact",
-            export_ordinal="export_ordinal",
             export_linkage="export_linkage",
             predicates="predicates",
             body="body",
@@ -331,7 +314,7 @@ kernel_def = Op(
     ],
     examples=[
         "kernel.def @entry() {\n  %one = index.constant 1 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index\n} launch(%buffer: buffer) {\n  kernel.return\n}",
-        'kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) @matmul(%m: index, %n: index) {\n  %one = index.constant 1 : index\n  %threads = index.constant 256 : index\n  kernel.launch.config workgroups(%m, %n, %one) workgroup_size(%threads, %one, %one) : index\n} launch(%lhs: buffer, %rhs: buffer, %out: buffer) {\n  kernel.return\n}',
+        'kernel.def target(@gfx1100) export("matmul") @matmul(%m: index, %n: index) {\n  %one = index.constant 1 : index\n  %threads = index.constant 256 : index\n  kernel.launch.config workgroups(%m, %n, %one) workgroup_size(%threads, %one, %one) : index\n} launch(%lhs: buffer, %rhs: buffer, %out: buffer) {\n  kernel.return\n}',
     ],
 )
 

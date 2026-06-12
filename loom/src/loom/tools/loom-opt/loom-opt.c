@@ -26,10 +26,12 @@
 #include "loom/target/configured/provider.h"
 #include "loom/target/predicate.h"
 #include "loom/target/provider.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/config/config.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
+#include "loom/tooling/pass/trace_cli.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -44,25 +46,30 @@ IREE_FLAG_LIST(
     string, config,
     "Compile/link-time config binding. Repeat as --config=key=value. Bindings "
     "not referenced by the loaded module are ignored.");
-IREE_FLAG_LIST(string, config_file,
-               "JSON/JSONC config object file. Repeat for multiple files. "
-               "Nested object keys are flattened with '.' separators.");
-IREE_FLAG(bool, require_resolved_config, false,
-          "Require all config.decl symbols to be materialized before output.");
-IREE_FLAG(bool, print_config_schema, false,
-          "Print config schema JSON instead of Loom IR.");
+IREE_FLAG_LIST_NAMED(
+    string, config_file, "config-file",
+    "JSON/JSONC config object file. Repeat for multiple files. Nested object "
+    "keys are flattened with '.' separators.");
+IREE_FLAG_NAMED(
+    bool, require_resolved_config, "require-resolved-config", false,
+    "Require all config.decl symbols to be materialized before output.");
+IREE_FLAG_NAMED(bool, print_config_schema, "print-config-schema", false,
+                "Print config schema JSON instead of Loom IR.");
 IREE_FLAG(bool, verify, true,
           "Verify the module before and after executing passes.");
-IREE_FLAG(bool, list_passes, false, "Print registered passes and exit.");
-IREE_FLAG(string, pass_help, "", "Print detailed help for one pass and exit.");
-IREE_FLAG(string, pass_report, "",
-          "Pass execution report format. Use 'json' or empty/'none'.");
-IREE_FLAG(string, pass_reproducer, "",
-          "Path to a one-file pass failure reproducer to write on failure.");
-IREE_FLAG(string, diagnostic_format, "text",
-          "Diagnostic output format. Use 'text' or 'json'.");
-IREE_FLAG(string, low_asm_descriptor_set, "",
-          "Descriptor-set key used when printing low asm regions.");
+IREE_FLAG_NAMED(bool, list_passes, "list-passes", false,
+                "Print registered passes and exit.");
+IREE_FLAG_NAMED(string, pass_help, "pass-help", "",
+                "Print detailed help for one pass and exit.");
+IREE_FLAG_NAMED(string, pass_report, "pass-report", "",
+                "Pass execution report format. Use 'json' or empty/'none'.");
+IREE_FLAG_NAMED(string, pass_reproducer, "pass-reproducer", "",
+                "Path to a one-file pass failure reproducer to write on "
+                "failure.");
+IREE_FLAG_NAMED(string, diagnostic_format, "diagnostic-format", "text",
+                "Diagnostic output format. Use 'text' or 'json'.");
+IREE_FLAG_NAMED(string, low_asm_descriptor_set, "low-asm-descriptor-set", "",
+                "Descriptor-set key used when printing low asm regions.");
 
 typedef enum loom_opt_pass_report_mode_e {
   LOOM_OPT_PASS_REPORT_NONE = 0,
@@ -678,8 +685,8 @@ static iree_status_t loom_opt_run_passes(
     const loom_pass_registry_t* pass_registry,
     iree_arena_block_pool_t* block_pool, loom_run_module_t* run_module,
     loom_diagnostic_sink_t diagnostic_sink, loom_pass_report_t* report,
-    bool* out_execution_started, loom_pass_run_result_t* out_result,
-    iree_allocator_t allocator) {
+    const loom_pass_trace_options_t* trace_options, bool* out_execution_started,
+    loom_pass_run_result_t* out_result, iree_allocator_t allocator) {
   loom_module_t* module = run_module->module;
   *out_execution_started = false;
   *out_result = (loom_pass_run_result_t){0};
@@ -720,6 +727,16 @@ static iree_status_t loom_opt_run_passes(
   loom_target_pass_predicate_provider_storage_t predicate_storage;
   loom_target_pass_predicate_provider_storage_initialize(block_pool,
                                                          &predicate_storage);
+  loom_pass_trace_options_t run_trace_options = {0};
+  loom_pass_trace_t trace = {0};
+  loom_pass_trace_t* trace_ptr = NULL;
+  if (loom_pass_trace_options_is_enabled(trace_options)) {
+    run_trace_options = *trace_options;
+    run_trace_options.stage = has_pipeline_symbol ? IREE_SV("module-pipeline")
+                                                  : IREE_SV("command-line");
+    loom_pass_trace_initialize(&run_trace_options, &trace);
+    trace_ptr = &trace;
+  }
   loom_pass_tool_run_options_t run_options = {
       .registry = pass_registry,
       .environment = loom_low_pass_environment_storage_initialize(
@@ -733,6 +750,7 @@ static iree_status_t loom_opt_run_passes(
       .diagnostic_emitter = {.fn = loom_opt_diagnostic_emitter_emit,
                              .user_data = &pass_emitter},
       .report = report,
+      .trace = trace_ptr,
   };
 
   if (has_pipeline_symbol) {
@@ -968,8 +986,9 @@ int main(int argc, char** argv) {
       "Use --pass-report=json to print a structured execution report to "
       "stderr.\n"
       "Use --diagnostic-format=json to print structured diagnostic JSONL to "
-      "stderr.\n"
+      "stderr.\n" LOOM_TOOLING_PASS_TRACE_USAGE
       "Use --pass-reproducer=file to capture a rerunnable failure file.\n");
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
@@ -994,6 +1013,7 @@ int main(int argc, char** argv) {
   };
   loom_pass_report_t pass_report = {0};
   bool pass_report_initialized = false;
+  loom_tooling_pass_trace_t pass_trace = {0};
   bool pass_execution_started = false;
   loom_tooling_config_materialize_result_t config_materialize_result = {0};
   loom_pass_run_result_t pass_run_result = {0};
@@ -1113,11 +1133,36 @@ int main(int argc, char** argv) {
         diagnostic_sink);
   }
   if (iree_status_is_ok(status) && !metadata_only) {
+    const loom_tooling_pass_trace_stdout_conflict_t stdout_conflicts[] = {
+        {
+            .active = true,
+            .flag_name = IREE_SV("--output"),
+            .path = iree_make_cstring_view(FLAG_output),
+        },
+    };
+    status = loom_tooling_pass_trace_open_from_flags(
+        &(loom_tooling_pass_trace_open_options_t){
+            .tool_name = IREE_SV("loom-opt"),
+            .input_path = filename,
+            .low_asm_descriptor_set_key =
+                iree_make_cstring_view(FLAG_low_asm_descriptor_set),
+            .stdout_conflicts = stdout_conflicts,
+            .stdout_conflict_count = IREE_ARRAYSIZE(stdout_conflicts),
+        },
+        allocator, &pass_trace);
+    if (iree_status_is_ok(status) && pass_trace.enabled) {
+      loom_low_descriptor_text_asm_environment_initialize(
+          &loom_run_session_low_descriptor_registry(&run_session)->registry,
+          &pass_trace.pass_options.print_options.low_asm_environment);
+    }
+  }
+  if (iree_status_is_ok(status) && !metadata_only) {
     pass_pipeline_status = loom_opt_run_passes(
         loom_run_session_low_descriptor_registry(&run_session),
         target_environment, pass_registry,
         loom_run_session_block_pool(&run_session), &run_module, diagnostic_sink,
-        pass_report_initialized ? &pass_report : NULL, &pass_execution_started,
+        pass_report_initialized ? &pass_report : NULL,
+        loom_tooling_pass_trace_options(&pass_trace), &pass_execution_started,
         &pass_run_result, allocator);
     status = pass_pipeline_status;
   }
@@ -1169,6 +1214,7 @@ int main(int argc, char** argv) {
           run_module.module, allocator);
     }
   }
+  status = iree_status_join(status, loom_tooling_pass_trace_close(&pass_trace));
 
   bool had_error = pass_run_result.error_count != 0;
   if (!iree_status_is_ok(status)) {

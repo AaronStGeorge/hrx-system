@@ -48,6 +48,32 @@ loom_cc_binary(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_binary(
+  NAME
+    emit_amdgpu_offline
+  SRCS
+    "emit_amdgpu_offline.c"
+  DEPS
+    loom::binding::c::loomc
+    loom::binding::c::target::amdgpu
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_binary(
+  NAME
+    emit_amdgpu_hsa
+  SRCS
+    "emit_amdgpu_hsa.c"
+  DEPS
+    ${CMAKE_DL_LIBS}
+    iree::third_party::hsa_runtime_headers
+    loom::binding::c::loomc
+    loom::binding::c::target::amdgpu
+)
+endif()
+
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_binary(
   NAME
@@ -94,6 +120,40 @@ loom_cc_binary(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_test(
+  NAME
+    emit_amdgpu_offline_test
+  SRCS
+    "emit_amdgpu_offline.c"
+  DEPS
+    loom::binding::c::loomc
+    loom::binding::c::target::amdgpu
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_test(
+  NAME
+    emit_amdgpu_hsa_test
+  SRCS
+    "emit_amdgpu_hsa.c"
+  DEPS
+    ${CMAKE_DL_LIBS}
+    iree::third_party::hsa_runtime_headers
+    loom::binding::c::loomc
+    loom::binding::c::target::amdgpu
+  LABELS
+    "driver=amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "nodocker"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    loom-amdgpu-tests
+)
+endif()
+
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 loom_cc_test(
   NAME
@@ -106,6 +166,7 @@ loom_cc_test(
     loom::binding::c::target::spirv
     loom::binding::c::target::spirv::vulkan
   LABELS
+    "driver=vulkan"
     "iree-run-requirement=runtime.resource.vulkan_device"
     "runtime-resource=vulkan-device"
   RESOURCE_GROUP
@@ -133,6 +194,7 @@ loom_cc_test(
     loom::binding::c::target::spirv
     loom::binding::c::target::spirv::iree_hal
   LABELS
+    "driver=vulkan"
     "iree-run-requirement=runtime.resource.vulkan_device"
     "runtime-resource=vulkan-device"
   RESOURCE_GROUP

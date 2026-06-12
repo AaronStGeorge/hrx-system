@@ -1565,29 +1565,28 @@ class TestCrossFormatRoundTrip:
 
     def test_enum_future_ordinal_survives_bytecode(self) -> None:
         text = (
-            "target.generic<reference> @future_target\n\n"
-            "target.artifact @future target(@future_target) "
-            "{artifact_format = elf, abi = object_file}\n"
+            "target.generic<reference> @future_target "
+            "{artifact_format = elf, codegen_format = vm}\n"
         )
         parser = Parser()
         parser.register_ops(ALL_TARGET_OPS)
         module = parser.parse(text)
-        artifact_op = module.symbols[1].op
-        assert artifact_op is not None
-        module.symbols[1].op = replace(
-            artifact_op,
+        target_op = module.symbols[0].op
+        assert target_op is not None
+        module.symbols[0].op = replace(
+            target_op,
             attributes={
-                **artifact_op.attributes,
+                **target_op.attributes,
                 "artifact_format": 250,
-                "abi": 251,
+                "codegen_format": 251,
             },
         )
 
         loaded = read_module(write_module(module))
-        loaded_artifact = loaded.symbols[1].op
-        assert loaded_artifact is not None
-        assert loaded_artifact.attributes["artifact_format"] == 250
-        assert loaded_artifact.attributes["abi"] == 251
+        loaded_target = loaded.symbols[0].op
+        assert loaded_target is not None
+        assert loaded_target.attributes["artifact_format"] == 250
+        assert loaded_target.attributes["codegen_format"] == 251
 
     def test_closed_enum_future_ordinal_fails_loudly(self) -> None:
         module = Module(name="closed_enum")

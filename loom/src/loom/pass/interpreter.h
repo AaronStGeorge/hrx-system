@@ -19,6 +19,7 @@
 #include "loom/ir/ir.h"
 #include "loom/pass/environment.h"
 #include "loom/pass/program.h"
+#include "loom/pass/trace.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,8 @@ typedef struct loom_pass_interpreter_options_t {
   loom_pass_environment_t environment;
   // Optional caller-owned execution report appended as passes run.
   loom_pass_report_t* report;
+  // Optional caller-owned IR trace receiving selected pass boundaries.
+  loom_pass_trace_t* trace;
 } loom_pass_interpreter_options_t;
 
 // Executes a module-root compiled pass program.

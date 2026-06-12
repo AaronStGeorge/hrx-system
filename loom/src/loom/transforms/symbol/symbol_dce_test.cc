@@ -212,9 +212,8 @@ low.func.decl target(@test_target) @dead_add(%lhs: reg<test.i32>, %rhs: reg<test
 TEST_F(SymbolDCETest, FunctionExportRootsPrivateEntryAndClosure) {
   const char* source = R"(
 test.target<low_core> @test_target
-target.artifact @module target(@test_target)
 
-func.def target(@test_target) abi(object_function) export("entry", {artifact = @module}) @entry() {
+func.def target(@test_target) abi(object_function) export("entry") @entry() {
   func.call @helper() : ()
   func.return
 }
@@ -236,7 +235,6 @@ func.def target(@test_target) abi(object_function) @dead() {
   EXPECT_NE(pruned_text.find("@entry"), std::string::npos);
   EXPECT_NE(pruned_text.find("@helper"), std::string::npos);
   EXPECT_EQ(pruned_text.find("@dead"), std::string::npos);
-  EXPECT_NE(pruned_text.find("target.artifact @module"), std::string::npos);
 }
 
 TEST_F(SymbolDCETest, ConfigSymbolsAreReachableThroughReads) {

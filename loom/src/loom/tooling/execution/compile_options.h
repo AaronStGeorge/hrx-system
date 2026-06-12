@@ -10,6 +10,7 @@
 #define LOOM_TOOLING_EXECUTION_COMPILE_OPTIONS_H_
 
 #include "iree/base/api.h"
+#include "loom/target/artifact_manifest.h"
 #include "loom/target/compile_report.h"
 #include "loom/verify/verify.h"
 
@@ -26,12 +27,20 @@ typedef enum loom_run_candidate_artifact_flag_bits_e {
 
 typedef uint32_t loom_run_candidate_artifact_flags_t;
 
+typedef struct loom_run_candidate_artifact_manifest_options_t {
+  // Selected manifest detail mode.
+  loom_target_artifact_manifest_mode_t mode;
+
+  // Manifest sidecar output identifier.
+  iree_string_view_t identifier;
+
+  // Emitted artifact name recorded inside the manifest.
+  iree_string_view_t artifact_name;
+} loom_run_candidate_artifact_manifest_options_t;
+
 typedef struct loom_run_candidate_compile_options_t {
   // VM module name stored in VM bytecode archives. Empty uses "loom".
   iree_string_view_t module_name;
-  // Optional compile-root function symbol used by target-aware pass pipelines.
-  // Empty lets the backend compile every compatible function entry.
-  iree_string_view_t compile_root_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
   // allocation diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;
@@ -42,10 +51,10 @@ typedef struct loom_run_candidate_compile_options_t {
   uint32_t max_errors;
   // Optional caller-owned structured compile report to populate.
   loom_target_compile_report_t* report;
-  // Optional caller-owned row storage for detailed compile report rows.
-  loom_target_compile_report_row_storage_t report_row_storage;
   // Optional debug artifacts requested from the selected backend.
   loom_run_candidate_artifact_flags_t artifact_flags;
+  // Optional artifact manifest requested from the selected backend.
+  loom_run_candidate_artifact_manifest_options_t artifact_manifest;
 } loom_run_candidate_compile_options_t;
 
 // Initializes compile options with stderr diagnostics and a small error cap.

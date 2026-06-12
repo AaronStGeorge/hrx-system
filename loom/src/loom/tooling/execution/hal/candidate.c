@@ -6,16 +6,21 @@
 
 #include "loom/tooling/execution/hal/candidate.h"
 
-static void loom_run_hal_candidate_publish_compile_report(
+static iree_status_t loom_run_hal_candidate_publish_compile_report(
     const loom_run_candidate_compile_options_t* options,
     const loom_run_hal_candidate_t* candidate) {
   if (options->report == NULL) {
-    return;
+    return iree_ok_status();
   }
-  *options->report = candidate->compile_report;
+  loom_target_compile_report_t report = {0};
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_clone(
+      &candidate->compile_report, options->report->allocator, &report));
+  loom_target_compile_report_deinitialize(options->report);
+  *options->report = report;
+  return iree_ok_status();
 }
 
-static void loom_run_hal_candidate_initialize(
+static iree_status_t loom_run_hal_candidate_initialize(
     const loom_run_hal_artifact_provider_t* provider,
     const loom_run_candidate_compile_options_t* options,
     iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate) {
@@ -26,15 +31,18 @@ static void loom_run_hal_candidate_initialize(
   loom_target_compile_report_t* report =
       options->report != NULL ? &out_candidate->compile_report : NULL;
   if (report == NULL) {
-    return;
+    return iree_ok_status();
   }
-  *report = *options->report;
-  loom_target_compile_report_initialize_if_empty(report,
-                                                 &options->report_row_storage);
+  const iree_allocator_t report_allocator =
+      iree_allocator_is_null(options->report->allocator) ? iree_allocator_null()
+                                                         : allocator;
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_clone(
+      options->report, report_allocator, report));
+  loom_target_compile_report_initialize_if_empty(report, report_allocator);
   report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  report->compile_root_symbol = options->compile_root_symbol;
   report->backend_name = provider->name;
   report->target_family_name = provider->target_family_name;
+  return iree_ok_status();
 }
 
 static void loom_run_hal_candidate_record_report_status(
@@ -46,7 +54,6 @@ static void loom_run_hal_candidate_record_report_status(
     return;
   }
   report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  report->compile_root_symbol = options->compile_root_symbol;
   report->backend_name = candidate->provider->name;
   report->target_family_name = candidate->provider->target_family_name;
   if (candidate->compiled) {
@@ -75,8 +82,8 @@ static iree_status_t loom_run_hal_candidate_emit_selected_target(
   iree_status_t status = provider->emit_artifact(
       provider, run_module->module, &candidate->device_target,
       options->diagnostic_sink, options->source_resolver, options->max_errors,
-      options->artifact_flags, report, allocator, &candidate->compiled,
-      &candidate->artifact);
+      options->artifact_flags, &options->artifact_manifest, report, allocator,
+      &candidate->compiled, &candidate->artifact);
   if (iree_status_is_ok(status) && candidate->compiled &&
       candidate->artifact.target_bundle == NULL) {
     candidate->artifact.target_bundle = candidate->device_target.target_bundle;
@@ -89,16 +96,15 @@ iree_status_t loom_run_hal_candidate_compile(
     const loom_run_hal_runtime_t* runtime, loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* options,
     iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate) {
-  loom_run_hal_candidate_initialize(provider, options, allocator,
-                                    out_candidate);
-
-  iree_status_t status = iree_ok_status();
+  iree_status_t status = loom_run_hal_candidate_initialize(
+      provider, options, allocator, out_candidate);
   if (provider->select_device_target == NULL) {
-    status = iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "HAL artifact provider '%.*s' is missing required device target "
-        "selection hook",
-        (int)provider->name.size, provider->name.data);
+    status = iree_status_join(
+        status,
+        iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                         "HAL artifact provider '%.*s' is missing required "
+                         "device target selection hook",
+                         (int)provider->name.size, provider->name.data));
   }
 
   if (iree_status_is_ok(status)) {
@@ -114,7 +120,9 @@ iree_status_t loom_run_hal_candidate_compile(
   }
   loom_run_hal_candidate_record_report_status(options, out_candidate,
                                               iree_status_code(status));
-  loom_run_hal_candidate_publish_compile_report(options, out_candidate);
+  status = iree_status_join(
+      status,
+      loom_run_hal_candidate_publish_compile_report(options, out_candidate));
   if (!iree_status_is_ok(status)) {
     loom_run_hal_candidate_deinitialize(out_candidate);
   }
@@ -131,14 +139,18 @@ iree_status_t loom_run_hal_candidate_emit_target(
                             "HAL candidate target emission requires a "
                             "selected target");
   }
-  loom_run_hal_candidate_initialize(provider, options, allocator,
-                                    out_candidate);
-  out_candidate->device_target = *target;
-  iree_status_t status = loom_run_hal_candidate_emit_selected_target(
-      provider, run_module, options, allocator, out_candidate);
+  iree_status_t status = loom_run_hal_candidate_initialize(
+      provider, options, allocator, out_candidate);
+  if (iree_status_is_ok(status)) {
+    out_candidate->device_target = *target;
+    status = loom_run_hal_candidate_emit_selected_target(
+        provider, run_module, options, allocator, out_candidate);
+  }
   loom_run_hal_candidate_record_report_status(options, out_candidate,
                                               iree_status_code(status));
-  loom_run_hal_candidate_publish_compile_report(options, out_candidate);
+  status = iree_status_join(
+      status,
+      loom_run_hal_candidate_publish_compile_report(options, out_candidate));
   if (!iree_status_is_ok(status)) {
     loom_run_hal_candidate_deinitialize(out_candidate);
   }
@@ -150,13 +162,17 @@ iree_status_t loom_run_hal_candidate_emit_module_target(
     loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* options,
     iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate) {
-  loom_run_hal_candidate_initialize(provider, options, allocator,
-                                    out_candidate);
-  iree_status_t status = loom_run_hal_candidate_emit_selected_target(
-      provider, run_module, options, allocator, out_candidate);
+  iree_status_t status = loom_run_hal_candidate_initialize(
+      provider, options, allocator, out_candidate);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_candidate_emit_selected_target(
+        provider, run_module, options, allocator, out_candidate);
+  }
   loom_run_hal_candidate_record_report_status(options, out_candidate,
                                               iree_status_code(status));
-  loom_run_hal_candidate_publish_compile_report(options, out_candidate);
+  status = iree_status_join(
+      status,
+      loom_run_hal_candidate_publish_compile_report(options, out_candidate));
   if (!iree_status_is_ok(status)) {
     loom_run_hal_candidate_deinitialize(out_candidate);
   }
@@ -178,5 +194,6 @@ void loom_run_hal_candidate_deinitialize(loom_run_hal_candidate_t* candidate) {
                                                     &candidate->device_target,
                                                     candidate->host_allocator);
   }
+  loom_target_compile_report_deinitialize(&candidate->compile_report);
   *candidate = (loom_run_hal_candidate_t){0};
 }

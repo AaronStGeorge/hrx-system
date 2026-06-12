@@ -53,7 +53,7 @@ PASSTHROUGH_COMMANDS = {
     ),
 }
 HELP_FLAGS = frozenset(("-h", "--help"))
-AGENT_MD_FLAGS = frozenset(("--agent-md", "--agent_md", "--agents-md", "--agents_md"))
+AGENTS_MD_FLAGS = frozenset(("--agents_md",))
 HOISTED_NO_VALUE_OPTIONS = frozenset(
     (
         "-n",
@@ -263,11 +263,13 @@ def is_short_option_cluster(arg: str) -> bool:
     )
 
 
-def find_agent_md_request(argv: list[str]) -> tuple[tuple[str, ...], str | None] | None:
+def find_agents_md_request(
+    argv: list[str],
+) -> tuple[tuple[str, ...], str | None] | None:
     index = 0
     while index < len(argv):
         arg = argv[index]
-        if arg in AGENT_MD_FLAGS:
+        if arg in AGENTS_MD_FLAGS:
             return LANES, None
         if option_consumes_next_arg(arg):
             index += 2
@@ -282,7 +284,7 @@ def find_agent_md_request(argv: list[str]) -> tuple[tuple[str, ...], str | None]
         index += 1
         while index < len(argv):
             arg = argv[index]
-            if arg in AGENT_MD_FLAGS:
+            if arg in AGENTS_MD_FLAGS:
                 return (lane,), None
             if option_consumes_next_arg(arg):
                 index += 2
@@ -295,7 +297,7 @@ def find_agent_md_request(argv: list[str]) -> tuple[tuple[str, ...], str | None]
             if (
                 command in PASSTHROUGH_COMMANDS[lane]
                 and tail
-                and tail[0] in AGENT_MD_FLAGS
+                and tail[0] in AGENTS_MD_FLAGS
             ):
                 return (lane,), command
             return None
@@ -306,11 +308,10 @@ def find_agent_md_request(argv: list[str]) -> tuple[tuple[str, ...], str | None]
 def add_common_options(parser: argparse.ArgumentParser) -> None:
     add_argument(
         parser,
-        "--agent-md",
-        "--agents-md",
+        "--agents_md",
         action="store_true",
         default=argparse.SUPPRESS,
-        dest="agent_md",
+        dest="agents_md",
         help="Print AGENTS.md-ready command guidance.",
     )
     add_argument(
@@ -399,9 +400,9 @@ def add_profile_option(
 
 def parse_arguments(argv: list[str]) -> argparse.Namespace:
     argv = hoist_passthrough_dev_options(argv)
-    agent_md_request = find_agent_md_request(argv)
-    if agent_md_request is not None:
-        print_agent_md(*agent_md_request)
+    agents_md_request = find_agents_md_request(argv)
+    if agents_md_request is not None:
+        print_agents_md(*agents_md_request)
         raise SystemExit(0)
 
     argv = normalize_passthrough_args(argv)
@@ -420,8 +421,8 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         add_lane_commands(subparsers, lane)
 
     args = parser.parse_args(argv)
-    if not hasattr(args, "agent_md"):
-        args.agent_md = False
+    if not hasattr(args, "agents_md"):
+        args.agents_md = False
     if not hasattr(args, "dry_run"):
         args.dry_run = False
     if not hasattr(args, "verbose"):
@@ -473,9 +474,9 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         and getattr(args, "all_files", False)
     ):
         parser.error("clang-tidy --fix requires a bounded path or git scope")
-    if args.agent_md:
+    if args.agents_md:
         lane = getattr(args, "lane", None)
-        print_agent_md((lane,) if lane else LANES, None)
+        print_agents_md((lane,) if lane else LANES, None)
         raise SystemExit(0)
     if not args.command:
         parser.print_help()
@@ -1266,7 +1267,7 @@ def handle_unimplemented_backend_command(args: argparse.Namespace) -> CommandPla
     )
 
 
-def print_agent_md(lanes: tuple[str, ...], command: str | None) -> None:
+def print_agents_md(lanes: tuple[str, ...], command: str | None) -> None:
     print(help_text.agent_markdown(lanes, command=command).rstrip() + "\n")
 
 

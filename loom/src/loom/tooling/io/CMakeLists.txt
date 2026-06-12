@@ -18,7 +18,9 @@ loom_cc_library(
     "file.c"
   DEPS
     iree::base
+    iree::base::internal::path
     iree::io::file_handle
+    loom::util::stream
   PUBLIC
 )
 

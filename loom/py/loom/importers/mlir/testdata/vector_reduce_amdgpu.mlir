@@ -8,7 +8,7 @@
 
 hal.executable private @smoke {
   hal.executable.variant public @rocm_hsaco_fb target(#executable_target_rocm_hsaco_fb) {
-    hal.executable.export public @vector_reduce_amdgpu ordinal(0) layout(#pipeline_layout)
+    hal.executable.export public @vector_reduce_amdgpu layout(#pipeline_layout)
     builtin.module {
       func.func @vector_reduce_amdgpu() attributes {translation_info = #translation} {
         %c0 = arith.constant 0 : index
@@ -37,9 +37,7 @@ hal.executable private @smoke {
 // ----
 target.generic<reference> @rocm_hsaco_fb
 
-target.artifact @smoke target(@rocm_hsaco_fb) {abi = hal_executable, artifact_format = elf}
-
-kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") artifact(@smoke) ordinal(0) @vector_reduce_amdgpu(%binding0: buffer, %binding1: buffer) {
+kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") @vector_reduce_amdgpu(%binding0: buffer, %binding1: buffer) {
   %wg_count_x = index.constant 1 : index
   %wg_count_y = index.constant 1 : index
   %wg_count_z = index.constant 1 : index
@@ -79,7 +77,7 @@ kernel.def target(@rocm_hsaco_fb) export("vector_reduce_amdgpu") artifact(@smoke
 
 hal.executable private @barrier_smoke {
   hal.executable.variant public @rocm_hsaco_fb target(#executable_target_barrier) {
-    hal.executable.export public @barrier_smoke ordinal(0) layout(#pipeline_layout_barrier)
+    hal.executable.export public @barrier_smoke layout(#pipeline_layout_barrier)
     builtin.module {
       func.func @barrier_smoke() attributes {translation_info = #translation_barrier} {
         %c0 = arith.constant 0 : index
@@ -94,9 +92,7 @@ hal.executable private @barrier_smoke {
 // ----
 target.generic<reference> @rocm_hsaco_fb
 
-target.artifact @barrier_smoke_artifact target(@rocm_hsaco_fb) {abi = hal_executable, artifact_format = elf}
-
-kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") artifact(@barrier_smoke_artifact) ordinal(0) @barrier_smoke(%binding0: buffer) {
+kernel.def target(@rocm_hsaco_fb) export("barrier_smoke") @barrier_smoke(%binding0: buffer) {
   %wg_count_x = index.constant 1 : index
   %wg_count_y = index.constant 1 : index
   %wg_count_z = index.constant 1 : index

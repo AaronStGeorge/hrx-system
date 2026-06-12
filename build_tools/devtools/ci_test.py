@@ -655,7 +655,19 @@ class CiTest(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX in step.argv
+                any(
+                    ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX in arg
+                    for arg in step.argv
+                )
+                for step in test_steps
+            )
+        )
+        self.assertTrue(
+            any(
+                any(
+                    ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX in arg
+                    for arg in step.argv
+                )
                 for step in test_steps
             )
         )
@@ -820,6 +832,12 @@ class CiTest(unittest.TestCase):
                 for step in steps
             )
         )
+        resource_test = next(
+            step
+            for step in steps
+            if step.name == "Test IREE CMake AMDGPU resource tests"
+        )
+        self.assertIn(ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX, resource_test.argv)
 
     def test_cmake_amdgpu_tsan_uses_tsan_specific_xfails(self):
         args = ci.parse_arguments(["iree-cmake-amdgpu-tsan"])
@@ -952,6 +970,7 @@ class CiTest(unittest.TestCase):
             if step.name == "Test IREE CMake Vulkan resource tests"
         )
         self.assertIn(ci_config.VULKAN_CTEST_RESOURCE_LABEL_REGEX, resource_test.argv)
+        self.assertIn(ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX, resource_test.argv)
         self.assertIn(ci_config.VULKAN_CTEST_REGEX, resource_test.argv)
         self.assertFalse(
             any("emit_spirv_vulkan_test" in arg for arg in resource_test.argv)

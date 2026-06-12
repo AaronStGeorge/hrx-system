@@ -263,8 +263,8 @@ void loom_run_hal_testbench_actual_provider_initialize(
       .diagnostic_sink = options->diagnostic_sink,
       .max_errors = options->max_errors,
       .report = options->report,
-      .report_row_storage = options->report_row_storage,
       .artifact_flags = options->artifact_flags,
+      .artifact_manifest = options->artifact_manifest,
   };
   loom_run_hal_invocation_options_initialize(&out_provider->invocation_options);
 }
@@ -708,7 +708,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   pipeline_options.pipeline = provider->pipeline;
   pipeline_options.target_pipeline_options =
       provider->context->artifact_provider->default_pipeline_options;
-  pipeline_options.compile_root_symbol = entry_symbol;
   pipeline_options.target_environment = provider->target_environment;
   pipeline_options.target_selection = (loom_target_selection_t){
       .bundle = provider->compile_device_target.target_bundle,
@@ -720,7 +719,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(&provider->compile_module);
   pipeline_options.report = provider->report;
-  pipeline_options.report_row_storage = provider->report_row_storage;
   const iree_host_size_t compile_error_count = provider->diagnostic_error_count;
   iree_status_t status = loom_compile_run_pipeline(
       provider->compile_module.module, &pipeline_options,
@@ -745,14 +743,13 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = IREE_SV("loom");
-  compile_options.compile_root_symbol = entry_symbol;
   compile_options.diagnostic_sink = diagnostic_sink;
   compile_options.source_resolver =
       loom_run_module_source_resolver(&provider->compile_module);
   compile_options.max_errors = max_errors;
   compile_options.report = provider->report;
-  compile_options.report_row_storage = provider->report_row_storage;
   compile_options.artifact_flags = provider->artifact_flags;
+  compile_options.artifact_manifest = provider->artifact_manifest;
 
   provider->candidate_initialized = true;
   const iree_host_size_t emit_error_count = provider->diagnostic_error_count;
@@ -1101,6 +1098,7 @@ iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
         .diagnostic_sink = options->diagnostic_sink,
         .max_errors = options->max_errors,
         .artifact_flags = options->artifact_flags,
+        .artifact_manifest = options->artifact_manifest,
     };
     loom_run_hal_testbench_actual_provider_initialize(
         &provider_options, &out_sequence->providers[provider_index++]);

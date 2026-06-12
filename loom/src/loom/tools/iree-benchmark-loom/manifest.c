@@ -197,6 +197,11 @@ static iree_status_t iree_benchmark_loom_write_manifest_files_json(
       bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_COMPILE_REPORT, allocator,
       stream));
   IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"artifact_manifests\":"));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_manifest_file_array_json(
+      bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_ARTIFACT_MANIFEST, allocator,
+      stream));
+  IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"target_artifacts\":"));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_manifest_file_array_json(
       bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_TARGET_ARTIFACT, allocator,
@@ -287,6 +292,10 @@ static iree_status_t iree_benchmark_loom_append_artifact_bundle_manifest_json(
         loom_output_stream_write_cstring(&stream, ",\"compile_reports\":"));
     IREE_RETURN_IF_ERROR(
         loom_json_write_escaped_string(&stream, bundle->compile_report_dir));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"artifact_manifests\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, bundle->artifact_manifest_dir));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"target_artifacts\":"));
     IREE_RETURN_IF_ERROR(

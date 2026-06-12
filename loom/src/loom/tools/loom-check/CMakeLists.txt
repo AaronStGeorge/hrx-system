@@ -323,6 +323,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::base::tooling::flags
+    loom::tooling::cli::help
   TESTONLY
   PUBLIC
 )

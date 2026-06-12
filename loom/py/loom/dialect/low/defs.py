@@ -232,13 +232,6 @@ _KERNEL_COMMON_ATTRS = [
     ),
     AttrDef("abi_layout", "dict", optional=True),
     AttrDef("export_symbol", "string", optional=True),
-    AttrDef(
-        "artifact",
-        "symbol",
-        optional=True,
-        symbol_ref=SymbolReference("target artifact", ["record"]),
-    ),
-    AttrDef("export_ordinal", ATTR_TYPE_I64, optional=True),
     AttrDef("export_linkage", "enum", enum_def=ExportLinkage, optional=True),
     AttrDef("workgroup_size_x", ATTR_TYPE_I64, optional=True),
     AttrDef("workgroup_size_y", ATTR_TYPE_I64, optional=True),
@@ -321,14 +314,6 @@ _KERNEL_EXPORT_FORMAT: list[FormatElement] = [
     OptionalGroup(
         [kw("export"), GLUE, LPAREN, Attr("export_symbol"), GLUE, RPAREN],
         anchor="export_symbol",
-    ),
-    OptionalGroup(
-        [kw("artifact"), GLUE, LPAREN, SymbolRef("artifact"), GLUE, RPAREN],
-        anchor="artifact",
-    ),
-    OptionalGroup(
-        [kw("ordinal"), GLUE, LPAREN, Attr("export_ordinal"), GLUE, RPAREN],
-        anchor="export_ordinal",
     ),
     OptionalGroup(
         [kw("linkage"), GLUE, LPAREN, Attr("export_linkage"), GLUE, RPAREN],
@@ -424,8 +409,6 @@ _KERNEL_FUNC_LIKE_COMMON: dict[str, Any] = dict(
     callee="callee",
     target="target",
     export_symbol="export_symbol",
-    artifact="artifact",
-    export_ordinal="export_ordinal",
     export_linkage="export_linkage",
     predicates="predicates",
 )
@@ -506,7 +489,7 @@ low_kernel_def = Op(
         Region("body", syntax="low.asm.optional"),
     ],
     examples=[
-        'low.kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) workgroup_size(16, 4, 1) @matmul(%lhs: reg<amdgpu.sgpr x4>, %rhs: reg<amdgpu.sgpr x4>, %out: reg<amdgpu.sgpr x4>) {\n  low.return\n}',
+        'low.kernel.def target(@gfx1100) export("matmul") workgroup_size(16, 4, 1) @matmul(%lhs: reg<amdgpu.sgpr x4>, %rhs: reg<amdgpu.sgpr x4>, %out: reg<amdgpu.sgpr x4>) {\n  low.return\n}',
     ],
 )
 

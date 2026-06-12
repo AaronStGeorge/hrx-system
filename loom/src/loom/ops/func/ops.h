@@ -195,7 +195,8 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_template_cc, 3, loom_func_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_template_purity, 4, loom_func_purity_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_template_temperature, 5, loom_func_temperature_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_template_inline_policy, 6, loom_func_inline_policy_t)
-LOOM_DEFINE_ATTR_I64(loom_func_template_priority, 8)
+LOOM_DEFINE_ATTR_SYMBOL(loom_func_template_target, 8)
+LOOM_DEFINE_ATTR_I64(loom_func_template_priority, 9)
 LOOM_DEFINE_REGION(loom_func_template_body, 0)
 enum loom_func_template_build_flag_bits_e {
   LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -203,7 +204,8 @@ enum loom_func_template_build_flag_bits_e {
   LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PURITY = 1u << 2,
   LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_TEMPERATURE = 1u << 3,
   LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_INLINE_POLICY = 1u << 4,
-  LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PRIORITY = 1u << 5,
+  LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_TARGET = 1u << 5,
+  LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PRIORITY = 1u << 6,
 };
 typedef uint32_t loom_func_template_build_flags_t;
 iree_status_t loom_func_template_build(
@@ -215,6 +217,7 @@ iree_status_t loom_func_template_build(
     loom_optional uint8_t purity,
     loom_optional uint8_t temperature,
     loom_optional uint8_t inline_policy,
+    loom_optional loom_symbol_ref_t target,
     loom_optional int64_t priority,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,
@@ -239,14 +242,16 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_ukernel_cc, 3, loom_func_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_ukernel_purity, 4, loom_func_purity_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_ukernel_temperature, 5, loom_func_temperature_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_ukernel_inline_policy, 6, loom_func_inline_policy_t)
-LOOM_DEFINE_ATTR_I64(loom_func_ukernel_priority, 8)
+LOOM_DEFINE_ATTR_SYMBOL(loom_func_ukernel_target, 8)
+LOOM_DEFINE_ATTR_I64(loom_func_ukernel_priority, 9)
 enum loom_func_ukernel_build_flag_bits_e {
   LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_CC = 1u << 1,
   LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_PURITY = 1u << 2,
   LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_TEMPERATURE = 1u << 3,
   LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_INLINE_POLICY = 1u << 4,
-  LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_PRIORITY = 1u << 5,
+  LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_TARGET = 1u << 5,
+  LOOM_FUNC_UKERNEL_BUILD_FLAG_HAS_PRIORITY = 1u << 6,
 };
 typedef uint32_t loom_func_ukernel_build_flags_t;
 iree_status_t loom_func_ukernel_build(
@@ -258,6 +263,7 @@ iree_status_t loom_func_ukernel_build(
     loom_optional uint8_t purity,
     loom_optional uint8_t temperature,
     loom_optional uint8_t inline_policy,
+    loom_optional loom_symbol_ref_t target,
     loom_optional int64_t priority,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,

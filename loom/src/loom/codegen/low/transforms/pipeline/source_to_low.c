@@ -13,6 +13,7 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/target/compile_report_low.h"
 #include "loom/target/low_legality.h"
 
 typedef struct loom_low_source_to_low_pass_state_t {
@@ -224,6 +225,13 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       loom_low_pass_capability_descriptor_registry(low_capability);
   const loom_low_lower_policy_registry_t* policy_registry =
       loom_low_pass_capability_lower_policy_registry(low_capability);
+  loom_target_compile_report_t* compile_report =
+      loom_low_pass_capability_compile_report(low_capability);
+  const iree_allocator_t source_low_report_allocator =
+      loom_target_compile_report_wants_details(
+          compile_report, LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)
+          ? compile_report->allocator
+          : iree_allocator_null();
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
@@ -265,12 +273,14 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     statistics->remarks += (int64_t)lower_result.remark_count;
     if (iree_status_is_ok(status) && lower_result.error_count > 0) {
       emitted_error_diagnostics = true;
+      loom_low_lower_result_deinitialize(&lower_result);
       break;
     }
     if (iree_status_is_ok(status)) {
       IREE_ASSERT(lower_result.low_func_op != NULL);
       ++declaration_count;
     }
+    loom_low_lower_result_deinitialize(&lower_result);
   }
   uint32_t function_count = 0;
   for (iree_host_size_t i = 0;
@@ -307,21 +317,29 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .max_errors = state ? state->max_errors : 20,
         .control_flow_lowering = state ? state->control_flow_lowering
                                        : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG,
+        .report_allocator = source_low_report_allocator,
     };
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_function(module, selection->func, &lower_options,
                                      &lower_result);
     loom_pass_value_fact_owner_invalidate(pass->value_facts);
+    if (iree_status_is_ok(status) &&
+        !iree_allocator_is_null(source_low_report_allocator)) {
+      status = loom_target_compile_report_record_low_lowering(compile_report,
+                                                              &lower_result);
+    }
     statistics->errors += (int64_t)lower_result.error_count;
     statistics->remarks += (int64_t)lower_result.remark_count;
     if (iree_status_is_ok(status) && lower_result.error_count > 0) {
       emitted_error_diagnostics = true;
+      loom_low_lower_result_deinitialize(&lower_result);
       break;
     }
     if (iree_status_is_ok(status)) {
       IREE_ASSERT(lower_result.low_func_op != NULL);
       ++function_count;
     }
+    loom_low_lower_result_deinitialize(&lower_result);
   }
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);

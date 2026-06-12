@@ -20,9 +20,8 @@ extern "C" {
 #endif
 
 enum {
-  LOOM_OP_TARGET_ARTIFACT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 0),
-  LOOM_OP_TARGET_GENERIC = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 1),
-  LOOM_OP_TARGET_COUNT_ = 2,
+  LOOM_OP_TARGET_GENERIC = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 0),
+  LOOM_OP_TARGET_COUNT_ = 1,
 };
 
 // Generic target-family row selected by target.generic.
@@ -30,28 +29,6 @@ typedef enum loom_target_generic_kind_e {
   LOOM_TARGET_GENERIC_KIND_REFERENCE = 1,
   LOOM_TARGET_GENERIC_KIND_COUNT_ = 2,
 } loom_target_generic_kind_t;
-
-// LOOM_OP_TARGET_ARTIFACT: Packaging or compile-unit record. Entry functions are derived from function export facts that reference this artifact; the artifact itself never lists functions.
-// target.artifact @gfx11_kernels target(@gfx11) {artifact_format = elf, abi = hal_executable}
-LOOM_DEFINE_ISA(loom_target_artifact_isa, LOOM_OP_TARGET_ARTIFACT)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_symbol, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_target, 1)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_artifact_format, 2, loom_target_artifact_format_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_abi, 3, loom_target_artifact_abi_kind_t)
-enum loom_target_artifact_build_flag_bits_e {
-  LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT = 1u << 0,
-  LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI = 1u << 1,
-};
-typedef uint32_t loom_target_artifact_build_flags_t;
-iree_status_t loom_target_artifact_build(
-    loom_builder_t* builder,
-    loom_target_artifact_build_flags_t build_flags,
-    loom_symbol_ref_t symbol,
-    loom_symbol_ref_t target,
-    loom_optional uint8_t artifact_format,
-    loom_optional uint8_t abi,
-    loom_location_id_t location,
-    loom_op_t** out_op);
 
 // LOOM_OP_TARGET_GENERIC: Generic target-family record for target-independent or host-neutral compilation. The typed selector chooses a generated row; optional attrs structurally override only the authored fields.
 // target.generic<reference> @oracle

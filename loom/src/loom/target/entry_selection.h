@@ -65,7 +65,7 @@ typedef struct loom_target_entry_t {
 } loom_target_entry_t;
 
 typedef struct loom_target_entry_list_t {
-  // Arena-owned entry descriptors in executable export order.
+  // Arena-owned entry descriptors in module order.
   loom_target_entry_t* values;
   // Number of entries in |values|.
   uint16_t count;
@@ -147,23 +147,10 @@ iree_status_t loom_target_entry_select_entry(
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     bool* out_selected, loom_target_entry_t* out_entry);
 
-// Selects every compatible func entry according to |predicate| in module symbol
-// order.
+// Selects every exported compatible func entry according to |predicate| in
+// top-level module operation order.
 iree_status_t loom_target_entry_select_all_entries(
     const loom_module_t* module, const loom_target_entry_options_t* options,
-    loom_target_entry_predicate_t predicate,
-    loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
-    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
-    bool* out_selected, loom_target_entry_list_t* out_entries);
-
-// Selects exported artifact entries in target.artifact plan order.
-//
-// |artifact_symbol| names the target.artifact symbol without or with a leading
-// '@'. The artifact plan is derived from function export facts and call graph
-// closure; this helper only returns exported entry funcs, not private closure
-// funcs. All returned entries are target-record-resolved and predicate-checked.
-iree_status_t loom_target_entry_select_artifact_entries(
-    const loom_module_t* module, iree_string_view_t artifact_symbol,
     loom_target_entry_predicate_t predicate,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t entry_kind, iree_arena_allocator_t* arena,

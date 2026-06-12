@@ -128,7 +128,7 @@ static iree_status_t iree_benchmark_loom_initialize_single_compile_context(
         compile_item->sample_compilation, case_plan,
         compile_item->case_sample_ordinal,
         compile_item->has_case_sample_ordinal, options->compile_report_options,
-        &context->hal_provider);
+        options->artifact_manifest_options, &context->hal_provider);
   }
   if (iree_status_is_ok(status)) {
     context->hal_provider_initialized = true;
@@ -301,6 +301,8 @@ iree_status_t iree_benchmark_loom_prepare_dispatch_work_item(
     if (!compile_context->uses_sequence) {
       benchmark_result.compile_report_artifact_path =
           compile_context->hal_provider.compile_report_artifact_path;
+      benchmark_result.artifact_manifest_path =
+          compile_context->hal_provider.artifact_manifest_path;
       benchmark_result.target_artifact_path =
           compile_context->hal_provider.target_artifact_path;
       benchmark_result.target_listing_path =

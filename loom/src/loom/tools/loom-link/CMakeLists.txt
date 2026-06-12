@@ -30,6 +30,7 @@ loom_cc_binary(
     loom::link::module_index
     loom::link::planner
     loom::target::configured::provider
+    loom::tooling::cli::help
     loom::tooling::config
     loom::tooling::context
     loom::tooling::io::file

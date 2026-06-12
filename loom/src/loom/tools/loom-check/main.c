@@ -14,6 +14,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tools/loom-check/file.h"
 #include "loom/tools/loom-check/json_output.h"
 #include "loom/tools/loom-check/output.h"
@@ -89,12 +90,11 @@ IREE_FLAG_CALLBACK(loom_check_parse_json_flag, loom_check_print_json_flag,
                    "Structured JSON output to stdout. Bare --json is the same\n"
                    "as --json=failures. Modes: failures, summary, all.");
 
-static bool loom_check_is_agent_markdown_arg(const char* arg) {
-  return strcmp(arg, "--agent_md") == 0 || strcmp(arg, "--agent-md") == 0 ||
-         strcmp(arg, "--agents_md") == 0 || strcmp(arg, "--agents-md") == 0;
+static bool loom_check_is_agents_markdown_arg(const char* arg) {
+  return strcmp(arg, "--agents_md") == 0;
 }
 
-static void loom_check_print_agent_markdown(FILE* stream) {
+static void loom_check_print_agents_markdown(FILE* stream) {
   fprintf(
       stream,
       "## loom-check\n"
@@ -173,7 +173,7 @@ int loom_check_main(int argc, char** argv,
       "Usage:\n"
       "  loom-check [flags] [file]\n"
       "  cat test.loom-test | loom-check\n"
-      "  loom-check --agent_md\n"
+      "  loom-check --agents_md\n"
       "\n"
       "Update workflow:\n"
       "  Checked-in .loom-test expectations are updated through Bazel test\n"
@@ -263,11 +263,12 @@ int loom_check_main(int argc, char** argv,
       "Exit code is 0 when all cases pass, 1 if any fail.\n");
 
   for (int i = 1; i < argc; ++i) {
-    if (loom_check_is_agent_markdown_arg(argv[i])) {
-      loom_check_print_agent_markdown(stdout);
+    if (loom_check_is_agents_markdown_arg(argv[i])) {
+      loom_check_print_agents_markdown(stdout);
       return 0;
     }
   }
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t host_allocator = iree_allocator_system();

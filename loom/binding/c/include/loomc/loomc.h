@@ -15,8 +15,10 @@
 /// tests.
 
 #include "loomc/artifact.h"
+#include "loomc/artifact_manifest.h"
 #include "loomc/base.h"
 #include "loomc/compile.h"
+#include "loomc/compile_report.h"
 #include "loomc/config.h"
 #include "loomc/context.h"
 #include "loomc/diagnostic.h"

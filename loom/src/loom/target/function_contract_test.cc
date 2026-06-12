@@ -139,7 +139,7 @@ test.target<low_core> @test_target {
   hal_buffer_resource_flags = 7
 }
 
-low.kernel.def target(@test_target) export("dispatch") ordinal(5) linkage(dso_local) @kernel() {
+low.kernel.def target(@test_target) export("dispatch") linkage(dso_local) @kernel() {
   low.return
 }
 )");

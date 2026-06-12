@@ -16,6 +16,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/target/types.h"
 #include "loom/testing/module_ptr.h"
@@ -34,6 +35,7 @@ class FuncSymbolFactsTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
@@ -88,7 +90,7 @@ class FuncSymbolFactsTest : public ::testing::Test {
   // Block pool shared by parser, module allocation, and analysis storage.
   iree_arena_block_pool_t block_pool_;
 
-  // Context with only the func dialect and synthetic test record dialect.
+  // Context with the func-like dialects and synthetic test target dialect.
   loom_context_t context_;
 
   // Arena for symbol fact table storage and fact payloads.
@@ -177,12 +179,11 @@ func.decl import("env") @do_work(%arg0: i32) -> (i32)
   EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do_work")));
 }
 
-TEST_F(FuncSymbolFactsTest, KernelDefFactsCarryFuncContractsOnly) {
+TEST_F(FuncSymbolFactsTest, KernelDefFactsCarryExportContract) {
   ModulePtr module = ParseModule(R"(
 test.target<low_core> @target
-test.record @artifact
 
-kernel.def target(@target) export("dispatch") artifact(@artifact) ordinal(5) linkage(dso_local) @kernel() {
+kernel.def target(@target) export("dispatch") linkage(dso_local) @kernel() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch() {
@@ -199,11 +200,43 @@ kernel.def target(@target) export("dispatch") artifact(@artifact) ordinal(5) lin
   EXPECT_TRUE(facts->exports);
   EXPECT_TRUE(
       iree_string_view_equal(facts->export_symbol, IREE_SV("dispatch")));
-  EXPECT_TRUE(loom_symbol_ref_is_valid(facts->artifact_symbol));
   EXPECT_TRUE(facts->has_export_linkage);
   EXPECT_EQ(facts->export_linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
-  EXPECT_TRUE(facts->has_export_ordinal);
-  EXPECT_EQ(facts->export_ordinal, 5u);
+}
+
+TEST_F(FuncSymbolFactsTest, KernelDefFactsDefaultToExportedSymbolName) {
+  ModulePtr module = ParseModule(R"(
+test.target<low_core> @target
+
+kernel.def target(@target) @kernel() {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch() {
+  kernel.return
+}
+)");
+
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("kernel"));
+  EXPECT_TRUE(facts->exports);
+  EXPECT_TRUE(iree_string_view_is_empty(facts->export_symbol));
+  EXPECT_FALSE(facts->has_export_linkage);
+}
+
+TEST_F(FuncSymbolFactsTest, LowKernelDefFactsDefaultToExportedSymbolName) {
+  ModulePtr module = ParseModule(R"(
+test.target<low_core> @target
+
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @kernel() {
+  low.return
+}
+)");
+
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("kernel"));
+  EXPECT_TRUE(facts->exports);
+  EXPECT_TRUE(iree_string_view_is_empty(facts->export_symbol));
+  EXPECT_FALSE(facts->has_export_linkage);
 }
 
 TEST_F(FuncSymbolFactsTest, ContractRequiresTargetRecord) {

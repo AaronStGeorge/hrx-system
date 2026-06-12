@@ -53,7 +53,6 @@
 ///   loomc_compile_options_t compile_options = {
 ///       .type = LOOMC_STRUCTURE_TYPE_COMPILE_OPTIONS,
 ///       .structure_size = sizeof(loomc_compile_options_t),
-///       .compile_root_symbol = loomc_make_cstring_view("@entry"),
 ///       .artifact_flags = LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_BYTECODE |
 ///                         LOOMC_COMPILE_ARTIFACT_FLAG_REPORT_JSON,
 ///       .config =
@@ -157,10 +156,6 @@ typedef struct loomc_compile_options_t {
   /// Runtime artifact module name for this invocation. Empty uses the
   /// compiler's default.
   loomc_string_view_t module_name;
-
-  /// Optional compile-root function symbol for root-sensitive pass behavior.
-  /// Empty lets artifact emitters keep every compatible exported function.
-  loomc_string_view_t compile_root_symbol;
 
   /// Requested result artifacts. Zero avoids artifact serialization and keeps
   /// the hot path focused on diagnostics and in-place module transformation.

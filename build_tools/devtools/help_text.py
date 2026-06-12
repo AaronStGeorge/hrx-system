@@ -387,8 +387,9 @@ while the binary runs.""",
   python dev.py bazel try -k -e 'int main() { return 0; }'
   python dev.py bazel try -c -o build/snippet -e 'int main() { return 0; }'
 
-Temporary packages are written under .tmp/iree-bazel-try/ so Bazel can address
-them as // workspace labels. The tool infers common deps from quoted iree/...,
+Temporary packages are written under .iree/bazel-try/ so Bazel can address
+them as // workspace labels while .tmp/ remains hidden from Bazel package
+scans. The tool infers common deps from quoted iree/...,
 loom/..., and loomc/... includes and accepts explicit --dep labels.""",
         )
     if command == "try" and lane == "cmake":
@@ -499,8 +500,8 @@ def agent_markdown_header() -> str:
 Run from the repository root. Prefer generated wrapper aliases such as
 `iree-bazel-build` and `iree-cmake-build`; checked-in
 `build_tools/bin/iree-*-*` launchers are available for root-relative scripts and
-unconfigured shells. Long flags accept hyphen or underscore spellings, such as
-`--dry-run` and `--dry_run`. Common wrapper flags work after the wrapper name:
+unconfigured shells. Common wrapper flags accept hyphen or underscore spellings,
+such as `--dry-run` and `--dry_run`, and work after the wrapper name:
 `-n/--dry-run`, `-v/--verbose`, `--system`, `--venv`, `--tool-root DIR`, and
 `--cmake-build-dir DIR`. Command-specific debugging flags include
 `iree-bazel-run -p/--print-path` and `iree-bazel-try -k/--keep`. Use `--`
@@ -733,8 +734,9 @@ it."""
         return """## iree-bazel-try
 
 Use `iree-bazel-try` for one-shot C/C++ probes without creating a permanent
-BUILD target. It writes a temporary package under `.tmp/iree-bazel-try/` so the
-snippet has a valid Bazel workspace label, builds it with Bazel, then execs the
+BUILD target. It writes a temporary package under `.iree/bazel-try/` so the
+snippet has a valid Bazel workspace label while `.tmp/` remains hidden from
+Bazel package scans. The tool builds the snippet with Bazel, then execs the
 snippet unless `--compile-only` is used. The scratch package is removed by
 default.
 

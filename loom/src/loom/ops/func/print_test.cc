@@ -160,9 +160,9 @@ TEST_F(FuncPrinterTest, TemplateOpRef) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_func_template_build(
-      &builder_, 0, implements_id, 0, 0, 0, 0, 0, /*priority=*/0, callee,
-      arg_types, 1, result_types, 1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
-      &op));
+      &builder_, 0, implements_id, 0, 0, 0, 0, 0, loom_symbol_ref_null(),
+      /*priority=*/0, callee, arg_types, 1, result_types, 1, NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &op));
 
   EXPECT_NE(PrintOp(op).find("func.template<tile.contract>"),
             std::string::npos);
@@ -178,10 +178,27 @@ TEST_F(FuncPrinterTest, TemplateWithPriority) {
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_func_template_build(
       &builder_, LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PRIORITY, implements_id, 0,
-      0, 0, 0, 0, /*priority=*/10, callee, arg_types, 1, result_types, 1, NULL,
-      0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
+      0, 0, 0, 0, loom_symbol_ref_null(), /*priority=*/10, callee, arg_types, 1,
+      result_types, 1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
 
   EXPECT_NE(PrintOp(op).find("priority(10)"), std::string::npos);
+}
+
+TEST_F(FuncPrinterTest, TemplateWithTarget) {
+  loom_symbol_ref_t target = MakeSymbol("gfx1100");
+  loom_symbol_ref_t callee = MakeSymbol("gfx11_matmul");
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_string_id_t implements_id = Intern("tile.contract");
+
+  loom_type_t arg_types[] = {f32};
+  loom_type_t result_types[] = {f32};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_func_template_build(
+      &builder_, LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_TARGET, implements_id, 0, 0,
+      0, 0, 0, target, /*priority=*/0, callee, arg_types, 1, result_types, 1,
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
+
+  EXPECT_NE(PrintOp(op).find("target(@gfx1100)"), std::string::npos);
 }
 
 }  // namespace

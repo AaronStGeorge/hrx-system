@@ -183,7 +183,8 @@ class SpirvVulkanHalArtifactProviderTest : public ::testing::Test {
     static const char kSource[] =
         "spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}\n"
         "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
-        "@loom_kernel(%byte_offset: reg<spirv.offset64>) "
+        "@loom_kernel(%byte_offset: "
+        "reg<spirv.offset64>) "
         "asm<spirv.logical.core> {\n"
         "  %input = resource<hal_binding> {index = 0, source_type = "
         "hal.buffer} : reg<spirv.ptr.storage_buffer>\n"
@@ -213,7 +214,8 @@ class SpirvVulkanHalArtifactProviderTest : public ::testing::Test {
     static const char kSource[] =
         "spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}\n"
         "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
-        "@double_i32(%byte_offset: reg<spirv.offset64>) "
+        "@double_i32(%byte_offset: "
+        "reg<spirv.offset64>) "
         "asm<spirv.logical.core> {\n"
         "  %input = resource<hal_binding> {index = 0, source_type = "
         "hal.buffer} : reg<spirv.ptr.storage_buffer>\n"
@@ -229,7 +231,8 @@ class SpirvVulkanHalArtifactProviderTest : public ::testing::Test {
         "  return\n"
         "}\n"
         "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
-        "@copy_i32(%byte_offset: reg<spirv.offset64>) "
+        "@copy_i32(%byte_offset: "
+        "reg<spirv.offset64>) "
         "asm<spirv.logical.core> {\n"
         "  %input = resource<hal_binding> {index = 0, source_type = "
         "hal.buffer} : reg<spirv.ptr.storage_buffer>\n"
@@ -304,7 +307,8 @@ TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsRawBdaSpirvArtifact) {
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
-      /*report=*/nullptr, iree_allocator_system(), &emitted, &artifact));
+      /*artifact_manifest=*/nullptr, /*report=*/nullptr,
+      iree_allocator_system(), &emitted, &artifact));
 
   EXPECT_TRUE(emitted);
   EXPECT_TRUE(iree_string_view_equal(artifact.executable_format,
@@ -342,7 +346,8 @@ TEST_F(SpirvVulkanHalArtifactProviderTest, EmitsAllCompatibleEntries) {
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
-      /*report=*/nullptr, iree_allocator_system(), &emitted, &artifact));
+      /*artifact_manifest=*/nullptr, /*report=*/nullptr,
+      iree_allocator_system(), &emitted, &artifact));
 
   ASSERT_TRUE(emitted);
   ASSERT_NE(artifact.executable_data.data, nullptr);

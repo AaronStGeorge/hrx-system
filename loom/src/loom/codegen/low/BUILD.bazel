@@ -32,23 +32,8 @@ _LOW_DESCRIPTOR_VISIBILITY = [
 ]
 
 _LOW_TEXT_ASM_VISIBILITY = [
-    "//loom/binding/c:__pkg__",
-    "//loom/src/loom/analysis:__pkg__",
-    "//loom/src/loom/codegen/low/allocation:__pkg__",
-    "//loom/src/loom/codegen/low/schedule:__pkg__",
-    "//loom/src/loom/codegen/low/testing:__pkg__",
-    "//loom/src/loom/format/bytecode:__pkg__",
-    "//loom/src/loom/format/text/parser:__pkg__",
-    "//loom/src/loom/format/text/printer:__pkg__",
-    "//loom/src/loom/format/text/test:__pkg__",
-    "//loom/src/loom/ops/low:__pkg__",
-    "//loom/src/loom/target/emit/native/amdgpu:__pkg__",
-    "//loom/src/loom/tooling/execution:__pkg__",
-    "//loom/src/loom/tooling/target/amdgpu:__pkg__",
-    "//loom/src/loom/tooling/target/spirv:__pkg__",
-    "//loom/src/loom/tools/loom-check:__pkg__",
-    "//loom/src/loom/tools/loom-opt:__pkg__",
-    "//loom/src/loom/transforms/symbol:__pkg__",
+    "//loom/binding/c:__subpackages__",
+    "//loom/src:__subpackages__",
 ]
 
 #===------------------------------------------------------------------------===#

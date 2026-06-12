@@ -545,7 +545,10 @@ def cmake_cpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]:
                 f"Test IREE CMake{sanitizer_name}",
                 exclude_regex=exclude_regex,
                 env=sanitizer_env(sanitizer),
-                label_exclude_regex=ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX,
+                label_exclude_regex=combine_ctest_regex(
+                    ci_config.CTEST_RESOURCE_LABEL_EXCLUDE_REGEX,
+                    ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX,
+                ),
             )
         )
     return steps
@@ -601,6 +604,7 @@ def cmake_amdgpu_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
             command_name,
             f"Test IREE CMake AMDGPU resource tests{sanitizer_name}",
             label_regex=ci_config.AMDGPU_CTEST_RESOURCE_LABEL_REGEX,
+            label_exclude_regex=ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX,
             exclude_regex=resource_exclude_regex,
             env=sanitizer_env(sanitizer),
             parallelism=1,
@@ -664,6 +668,7 @@ def cmake_vulkan_steps(command_name: str, sanitizer: str | None) -> list[CiStep]
                 command_name,
                 f"Test IREE CMake Vulkan resource tests{sanitizer_name}",
                 label_regex=ci_config.VULKAN_CTEST_RESOURCE_LABEL_REGEX,
+                label_exclude_regex=ci_config.CTEST_MANUAL_LABEL_EXCLUDE_REGEX,
                 exclude_regex=ci_config.VULKAN_CTEST_REGEX,
                 env=sanitizer_env(sanitizer),
             )

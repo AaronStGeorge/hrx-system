@@ -13,6 +13,7 @@
 #include "iree/base/tooling/flags.h"
 #include "loom/error/diagnostic.h"
 #include "loom/target/configured/provider.h"
+#include "loom/tooling/cli/help.h"
 #include "loom/tooling/context/context.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tools/loom-format/convert.h"
@@ -55,6 +56,7 @@ int main(int argc, char** argv) {
       "The auto input format detects bytecode by the LOOM file magic and "
       "treats\n"
       "all other input as text.\n");
+  loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();

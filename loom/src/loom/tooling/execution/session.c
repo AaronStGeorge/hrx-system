@@ -6,8 +6,12 @@
 
 #include "loom/tooling/execution/session.h"
 
+#include <string.h>
+
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
+#include "loom/format/bytecode/format.h"
+#include "loom/format/bytecode/reader.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
 
@@ -92,14 +96,15 @@ void loom_run_module_parse_options_initialize(
   };
 }
 
-iree_status_t loom_run_module_parse(
+static bool loom_run_module_input_is_bytecode(iree_string_view_t source) {
+  return source.size >= LOOM_BYTECODE_MAGIC_LENGTH &&
+         memcmp(source.data, LOOM_BYTECODE_MAGIC, LOOM_BYTECODE_MAGIC_LENGTH) ==
+             0;
+}
+
+static iree_status_t loom_run_module_parse_text(
     loom_run_session_t* session, const loom_run_module_parse_options_t* options,
     loom_run_module_t* out_module) {
-  *out_module = (loom_run_module_t){
-      .filename = options->filename,
-      .source = options->source,
-  };
-
   loom_text_parse_options_t parse_options = {
       .diagnostic_sink = options->diagnostic_sink,
       .max_errors = options->max_errors,
@@ -129,8 +134,47 @@ iree_status_t loom_run_module_parse(
           .entries = &out_module->source_entry,
           .count = 1,
       };
+      out_module->has_source_entry = true;
     }
   }
+  return status;
+}
+
+static iree_status_t loom_run_module_read_bytecode(
+    loom_run_session_t* session, const loom_run_module_parse_options_t* options,
+    loom_run_module_t* out_module) {
+  const iree_const_byte_span_t bytecode = iree_make_const_byte_span(
+      options->source.data, (iree_host_size_t)options->source.size);
+  loom_bytecode_read_options_t read_options = {
+      .diagnostic_sink = options->diagnostic_sink,
+      .verify_module = false,
+      .verify_max_errors = options->max_errors,
+  };
+  loom_bytecode_read_result_t read_result = {0};
+  IREE_RETURN_IF_ERROR(loom_bytecode_read_module(
+      bytecode, options->filename, &session->context, &session->block_pool,
+      &read_options, &read_result, &out_module->module,
+      session->host_allocator));
+  if (read_result.error_count > 0 || out_module->module == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT, "failed to read bytecode input '%.*s'",
+        (int)options->filename.size, options->filename.data);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_run_module_parse(
+    loom_run_session_t* session, const loom_run_module_parse_options_t* options,
+    loom_run_module_t* out_module) {
+  *out_module = (loom_run_module_t){
+      .filename = options->filename,
+      .source = options->source,
+  };
+
+  iree_status_t status =
+      loom_run_module_input_is_bytecode(options->source)
+          ? loom_run_module_read_bytecode(session, options, out_module)
+          : loom_run_module_parse_text(session, options, out_module);
   if (!iree_status_is_ok(status)) {
     loom_run_module_deinitialize(out_module);
   }
@@ -147,6 +191,9 @@ void loom_run_module_deinitialize(loom_run_module_t* run_module) {
 
 loom_source_resolver_t loom_run_module_source_resolver(
     loom_run_module_t* run_module) {
+  if (run_module == NULL || !run_module->has_source_entry) {
+    return (loom_source_resolver_t){0};
+  }
   return (loom_source_resolver_t){
       .fn = loom_source_table_resolve,
       .user_data = &run_module->source_table_resolver,

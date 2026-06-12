@@ -154,17 +154,6 @@ class LlvmIrLegalityTest : public ::testing::Test {
         /*contract_set_key=*/LOOM_STRING_ID_INVALID,
         /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &target_op));
     ASSERT_NE(target_op, nullptr);
-
-    loom_symbol_ref_t artifact_symbol = MakeSymbol(IREE_SV("test_artifact"));
-    loom_op_t* artifact_op = NULL;
-    IREE_ASSERT_OK(loom_target_artifact_build(
-        &module_builder_,
-        LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT |
-            LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI,
-        artifact_symbol, target_symbol, LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-        LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE, LOOM_LOCATION_UNKNOWN,
-        &artifact_op));
-    ASSERT_NE(artifact_op, nullptr);
   }
 
   void BuildStructuredIfFunction() {

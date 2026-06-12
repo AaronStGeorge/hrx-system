@@ -19,6 +19,7 @@
 # SANITIZER_SUPPRESSIONS: Sanitizer/name pairs selecting suppression files.
 #     For example: lsan vulkan.
 # TIMEOUT: test timeout in seconds.
+
 function(iree_execution_test_suite)
   if(NOT IREE_BUILD_TESTS)
     return()
@@ -66,6 +67,7 @@ function(iree_execution_test_suite)
     list(APPEND _REQUIRED_FILES "${_MANIFEST_PATH}")
   endforeach()
 
+  set(_TOOL_TARGETS)
   foreach(_TOOL IN LISTS _RULE_TOOLS)
     if(NOT _TOOL MATCHES "^([^=]+)=(.+)$")
       message(FATAL_ERROR
@@ -74,16 +76,8 @@ function(iree_execution_test_suite)
     set(_TOOL_NAME "${CMAKE_MATCH_1}")
     set(_TOOL_TARGET "${CMAKE_MATCH_2}")
     string(REGEX REPLACE "^::" "${_PACKAGE_NS}::" _TOOL_TARGET "${_TOOL_TARGET}")
-    iree_package_target_name(_TOOL_BUILD_TARGET "${_TOOL_TARGET}")
-    if(NOT TARGET "${_TOOL_BUILD_TARGET}")
-      message(FATAL_ERROR
-        "iree_execution_test_suite tool target does not exist: ${_TOOL_TARGET}")
-    endif()
-    get_target_property(_TOOL_IMPORTED "${_TOOL_BUILD_TARGET}" IMPORTED)
-    if(NOT _TOOL_IMPORTED)
-      list(APPEND _TOOL_BUILD_TARGETS "${_TOOL_BUILD_TARGET}")
-    endif()
-    list(APPEND _TEST_ARGS "--tool=${_TOOL_NAME}=$<TARGET_FILE:${_TOOL_BUILD_TARGET}>")
+    list(APPEND _TOOL_TARGETS "${_TOOL_TARGET}")
+    list(APPEND _TEST_ARGS "--tool=${_TOOL_NAME}=$<TARGET_FILE:${_TOOL_TARGET}>")
   endforeach()
 
   iree_package_name(_PACKAGE_NAME)
@@ -94,10 +88,14 @@ function(iree_execution_test_suite)
   endif()
   # Build declared tools before any CTest selection attempts to run the suite.
   add_custom_target(${_TEST_TARGET_NAME} ALL)
-  if(_TOOL_BUILD_TARGETS)
-    list(REMOVE_DUPLICATES _TOOL_BUILD_TARGETS)
-    add_dependencies(${_TEST_TARGET_NAME} ${_TOOL_BUILD_TARGETS})
-  endif()
+  foreach(_TOOL_TARGET IN LISTS _TOOL_TARGETS)
+    iree_register_test_target_dependency(
+      TARGET
+        "${_TEST_TARGET_NAME}"
+      DEPENDENCY
+        "${_TOOL_TARGET}"
+    )
+  endforeach()
   set_property(TARGET ${_TEST_TARGET_NAME} PROPERTY FOLDER ${IREE_IDE_FOLDER}/test)
 
   foreach(_DATA IN LISTS _RULE_DATA)
