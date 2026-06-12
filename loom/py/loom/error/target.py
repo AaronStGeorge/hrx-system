@@ -63,12 +63,12 @@ ERR_TARGET_003 = ErrorDef(
     summary="Target contract guard constraint is not satisfied.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
+        "rejected '{op_name}' {subject_role} '{subject_name}' in "
         "'@{function_name}': constraint '{constraint_key}' is not satisfied"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_role", ParamKind.STRING),
         ErrorParam("subject_name", ParamKind.STRING),
         ErrorParam("constraint_key", ParamKind.STRING),
     ),
@@ -82,13 +82,13 @@ ERR_TARGET_004 = ErrorDef(
     summary="Target contract rejected a count constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
+        "rejected '{op_name}' {subject_role} '{subject_name}' in "
         "'@{function_name}': constraint '{constraint_key}' requires count "
         "{expected_count}"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_role", ParamKind.STRING),
         ErrorParam("subject_name", ParamKind.STRING),
         ErrorParam("constraint_key", ParamKind.STRING),
         ErrorParam("expected_count", ParamKind.U32),
@@ -103,13 +103,13 @@ ERR_TARGET_005 = ErrorDef(
     summary="Target contract rejected a range constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' {subject_kind} '{subject_name}' in "
+        "rejected '{op_name}' {subject_role} '{subject_name}' in "
         "'@{function_name}': constraint '{constraint_key}' requires range "
         "[{minimum}, {maximum}]"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_role", ParamKind.STRING),
         ErrorParam("subject_name", ParamKind.STRING),
         ErrorParam("constraint_key", ParamKind.STRING),
         ErrorParam("minimum", ParamKind.I64),
@@ -125,13 +125,13 @@ ERR_TARGET_006 = ErrorDef(
     summary="Target contract rejected an element range constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' {subject_kind} '{subject_name}' element "
+        "rejected '{op_name}' {subject_role} '{subject_name}' element "
         "{element} in '@{function_name}': constraint '{constraint_key}' "
         "requires range [{minimum}, {maximum}]"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_role", ParamKind.STRING),
         ErrorParam("subject_name", ParamKind.STRING),
         ErrorParam("element", ParamKind.U32),
         ErrorParam("constraint_key", ParamKind.STRING),
@@ -148,13 +148,13 @@ ERR_TARGET_007 = ErrorDef(
     summary="Target contract rejected a relation constraint.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "rejected '{op_name}' {subject_kind} '{subject_name}' and "
+        "rejected '{op_name}' {subject_role} '{subject_name}' and "
         "'{other_subject_name}' in '@{function_name}': constraint "
         "'{constraint_key}' was not satisfied"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("subject_role", ParamKind.STRING),
         ErrorParam("subject_name", ParamKind.STRING),
         ErrorParam("other_subject_name", ParamKind.STRING),
         ErrorParam("constraint_key", ParamKind.STRING),

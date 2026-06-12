@@ -2157,7 +2157,7 @@ TEST_F(VerifyTest, RejectsRankZeroVectorType) {
   EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
   ExpectNoFieldRefParam(*entry, 0);
   ExpectTypeParam(*entry, 1, vector_type);
-  EXPECT_EQ(GetStringParam(*entry, 2), "vector types must have rank >= 1");
+  EXPECT_EQ(GetStringParam(*entry, 2), "vector_rank_zero");
 }
 
 TEST_F(VerifyTest, RejectsOutOfRangeTypeKind) {
@@ -2178,7 +2178,7 @@ TEST_F(VerifyTest, RejectsOutOfRangeTypeKind) {
   EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
   ExpectNoFieldRefParam(*entry, 0);
   ExpectTypeParam(*entry, 1, invalid_type);
-  EXPECT_EQ(GetStringParam(*entry, 2), "type kind is out of range");
+  EXPECT_EQ(GetStringParam(*entry, 2), "type_kind_out_of_range");
 }
 
 TEST_F(VerifyTest, RejectsVectorEncodingAttachment) {
@@ -2203,8 +2203,7 @@ TEST_F(VerifyTest, RejectsVectorEncodingAttachment) {
   EXPECT_EQ(GetStringParam(*entry, 0), "result");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectTypeParam(*entry, 1, vector_type);
-  EXPECT_EQ(GetStringParam(*entry, 2),
-            "vector types must not carry encoding or layout attachments");
+  EXPECT_EQ(GetStringParam(*entry, 2), "vector_encoding_attachment");
 }
 
 //===----------------------------------------------------------------------===//

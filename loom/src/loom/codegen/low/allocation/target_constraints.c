@@ -863,7 +863,7 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
 iree_status_t loom_low_allocation_target_constraints_emit_failure(
     loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
     loom_liveness_value_class_t value_class, uint32_t budget_units,
-    uint32_t peak_units, iree_string_view_t failure_kind) {
+    uint32_t peak_units, iree_string_view_t failure_code) {
   IREE_ASSERT_ARGUMENT(constraints);
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
@@ -875,7 +875,7 @@ iree_status_t loom_low_allocation_target_constraints_emit_failure(
           constraints->target->descriptor_set, value_class)),
       loom_param_u32(budget_units),
       loom_param_u32(peak_units),
-      loom_param_string(failure_kind),
+      loom_param_string(failure_code),
   };
   loom_diagnostic_emission_t emission = {
       .op = op ? op : constraints->function_op,

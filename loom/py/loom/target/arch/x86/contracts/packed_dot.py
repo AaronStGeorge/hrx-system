@@ -42,13 +42,13 @@ _DOT_TYPE_FIELD_NAMES = {
 }
 
 _DOT_KIND_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
+    subject_role="attr",
     subject_name="kind",
     constraint_key="x86.packed_dot.kind",
 )
 
 _DOT_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="x86.packed_dot",
     constraint_key="x86.packed_dot.descriptor",
 )
@@ -114,7 +114,7 @@ def _vector_type(numeric_type: str, lane_count: int) -> TypePattern:
 def _type_diagnostic(field: str) -> GuardDiagnostic:
     field_name = _DOT_TYPE_FIELD_NAMES.get(field, field)
     return GuardDiagnostic(
-        subject_kind="type",
+        subject_role="type",
         subject_name=field,
         constraint_key=f"x86.packed_dot.{field_name}_type",
     )

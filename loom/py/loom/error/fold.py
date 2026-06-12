@@ -14,10 +14,10 @@ ERR_FOLD_001 = ErrorDef(
     code=1,
     severity=Severity.REMARK,
     summary="Operation folded to poison.",
-    message="'{op_name}' folded to poison: {reason}",
+    message="'{op_name}' folded to poison: {poison_code}",
     params=(
         ErrorParam("op_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("poison_code", ParamKind.STRING),
     ),
 )
 

@@ -60,12 +60,12 @@ _DISP32_MIN = -(2**31)
 _DISP32_MAX = (2**31) - 1
 
 _ADDRESS_FORM_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="address-form",
+    subject_role="address-form",
     subject_name="x86-scalar",
     constraint_key="x86.scalar.address_form",
 )
 _SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="source-memory",
+    subject_role="source-memory",
     subject_name="x86-scalar",
     constraint_key="x86.scalar.source_memory",
 )

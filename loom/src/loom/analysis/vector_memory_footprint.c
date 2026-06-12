@@ -42,6 +42,85 @@ typedef struct loom_vector_memory_footprint_state_t {
   bool current_access_failed;
 } loom_vector_memory_footprint_state_t;
 
+typedef enum loom_vector_memory_footprint_proof_failure_e {
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UNKNOWN = 0,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LOWER_BOUND_UNPROVEN = 1,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_UPPER_BOUND_UNPROVEN = 2,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_VIEW_LAYOUT_UNRESOLVED = 3,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_LOWER_BOUND_UNPROVEN = 4,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UPPER_BOUND_UNPROVEN = 5,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_RANK1_VECTOR_OFFSETS_REQUIRED = 6,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEARIZED_ORIGIN_UNKNOWN = 7,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_OFFSET_LANE_RANGE_UNKNOWN = 8,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_LOWER_BOUND_UNPROVEN = 9,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_STORAGE_SPAN_UNKNOWN = 10,
+  LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_UPPER_BOUND_UNPROVEN = 11,
+} loom_vector_memory_footprint_proof_failure_t;
+
+static iree_string_view_t loom_vector_memory_footprint_proof_failure_code(
+    loom_vector_memory_footprint_proof_failure_t proof_failure) {
+  switch (proof_failure) {
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UNKNOWN:
+      return IREE_SV("origin_unknown");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LOWER_BOUND_UNPROVEN:
+      return IREE_SV("lower_bound_unproven");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_UPPER_BOUND_UNPROVEN:
+      return IREE_SV("upper_bound_unproven");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_VIEW_LAYOUT_UNRESOLVED:
+      return IREE_SV("view_layout_unresolved");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_LOWER_BOUND_UNPROVEN:
+      return IREE_SV("origin_lower_bound_unproven");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UPPER_BOUND_UNPROVEN:
+      return IREE_SV("origin_upper_bound_unproven");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_RANK1_VECTOR_OFFSETS_REQUIRED:
+      return IREE_SV("rank1_vector_offsets_required");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEARIZED_ORIGIN_UNKNOWN:
+      return IREE_SV("linearized_origin_unknown");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_OFFSET_LANE_RANGE_UNKNOWN:
+      return IREE_SV("offset_lane_range_unknown");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_LOWER_BOUND_UNPROVEN:
+      return IREE_SV("linear_lower_bound_unproven");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_STORAGE_SPAN_UNKNOWN:
+      return IREE_SV("storage_span_unknown");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_UPPER_BOUND_UNPROVEN:
+      return IREE_SV("linear_upper_bound_unproven");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_vector_memory_footprint_requirement_code(
+    loom_vector_memory_footprint_proof_failure_t proof_failure) {
+  switch (proof_failure) {
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UNKNOWN:
+      return IREE_SV("origin_known");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LOWER_BOUND_UNPROVEN:
+      return IREE_SV("origin_nonnegative");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_UPPER_BOUND_UNPROVEN:
+      return IREE_SV("axis_end_within_bound");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_VIEW_LAYOUT_UNRESOLVED:
+      return IREE_SV("view_layout_resolved");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_LOWER_BOUND_UNPROVEN:
+      return IREE_SV("origin_nonnegative");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UPPER_BOUND_UNPROVEN:
+      return IREE_SV("origin_unit_within_bound");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_RANK1_VECTOR_OFFSETS_REQUIRED:
+      return IREE_SV("rank1_vector_offsets");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEARIZED_ORIGIN_UNKNOWN:
+      return IREE_SV("linearized_origin_known");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_OFFSET_LANE_RANGE_UNKNOWN:
+      return IREE_SV("offset_lane_range_known");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_LOWER_BOUND_UNPROVEN:
+      return IREE_SV("linear_min_access_nonnegative");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_STORAGE_SPAN_UNKNOWN:
+      return IREE_SV("storage_span_known");
+    case LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_UPPER_BOUND_UNPROVEN:
+      return IREE_SV("linear_span_within_storage");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 typedef struct loom_vector_memory_footprint_access_t {
   // Memory op being checked.
   const loom_op_t* op;
@@ -150,8 +229,8 @@ static bool loom_vector_memory_footprint_origin_value(
 static iree_status_t loom_vector_memory_footprint_emit_failure(
     loom_vector_memory_footprint_state_t* state,
     const loom_vector_memory_footprint_access_t* access, int64_t view_axis,
-    int64_t vector_axis, iree_string_view_t origin, iree_string_view_t reason,
-    iree_string_view_t required) {
+    int64_t vector_axis, iree_string_view_t origin,
+    loom_vector_memory_footprint_proof_failure_t proof_failure) {
   state->current_access_failed = true;
   if (loom_vector_memory_footprint_should_suppress_error(state)) {
     return iree_ok_status();
@@ -160,9 +239,14 @@ static iree_status_t loom_vector_memory_footprint_emit_failure(
   iree_string_view_t op_name =
       loom_vector_memory_footprint_op_name(state->module, access->op);
   loom_diagnostic_param_t params[] = {
-      loom_param_string(op_name),  loom_param_i64(view_axis),
-      loom_param_i64(vector_axis), loom_param_string(origin),
-      loom_param_string(reason),   loom_param_string(required),
+      loom_param_string(op_name),
+      loom_param_i64(view_axis),
+      loom_param_i64(vector_axis),
+      loom_param_string(origin),
+      loom_param_string(
+          loom_vector_memory_footprint_proof_failure_code(proof_failure)),
+      loom_param_string(
+          loom_vector_memory_footprint_requirement_code(proof_failure)),
   };
   loom_diagnostic_emission_t emission = {
       .op = access->op,
@@ -176,29 +260,28 @@ static iree_status_t loom_vector_memory_footprint_emit_failure(
 static iree_status_t loom_vector_memory_footprint_fail_axis(
     loom_vector_memory_footprint_state_t* state,
     const loom_vector_memory_footprint_access_t* access, uint8_t view_axis,
-    int64_t vector_axis, iree_string_view_t reason,
-    iree_string_view_t required) {
+    int64_t vector_axis,
+    loom_vector_memory_footprint_proof_failure_t proof_failure) {
   char origin_buffer[32];
   iree_string_view_t origin = loom_vector_memory_footprint_origin_name(
       access->static_indices, access->dynamic_indices, view_axis, origin_buffer,
       IREE_ARRAYSIZE(origin_buffer));
   return loom_vector_memory_footprint_emit_failure(
-      state, access, view_axis, vector_axis, origin, reason, required);
+      state, access, view_axis, vector_axis, origin, proof_failure);
 }
 
 static iree_status_t loom_vector_memory_footprint_fail_general(
     loom_vector_memory_footprint_state_t* state,
     const loom_vector_memory_footprint_access_t* access,
-    iree_string_view_t reason) {
+    loom_vector_memory_footprint_proof_failure_t proof_failure) {
   return loom_vector_memory_footprint_emit_failure(
-      state, access, -1, -1, IREE_SV("<unknown>"), reason,
-      IREE_SV("<layout and footprint proof>"));
+      state, access, -1, -1, IREE_SV("<unknown>"), proof_failure);
 }
 
 static iree_status_t loom_vector_memory_footprint_fail_linear_span(
     loom_vector_memory_footprint_state_t* state,
     const loom_vector_memory_footprint_access_t* access,
-    iree_string_view_t reason, iree_string_view_t required) {
+    loom_vector_memory_footprint_proof_failure_t proof_failure) {
   iree_string_view_t op_name =
       loom_vector_memory_footprint_op_name(state->module, access->op);
   state->current_access_failed = true;
@@ -209,8 +292,10 @@ static iree_status_t loom_vector_memory_footprint_fail_linear_span(
   loom_diagnostic_param_t params[] = {
       loom_param_string(op_name),
       loom_param_string(IREE_SV("<linearized origin>")),
-      loom_param_string(reason),
-      loom_param_string(required),
+      loom_param_string(
+          loom_vector_memory_footprint_proof_failure_code(proof_failure)),
+      loom_param_string(
+          loom_vector_memory_footprint_requirement_code(proof_failure)),
   };
   loom_diagnostic_emission_t emission = {
       .op = access->op,
@@ -537,7 +622,7 @@ static iree_status_t loom_vector_memory_footprint_check_direct_axis(
     return loom_vector_memory_footprint_fail_axis(
         state, access, view_axis,
         loom_vector_memory_footprint_vector_axis(memory_access, view_axis),
-        IREE_SV("origin is unknown"), IREE_SV("origin is known"));
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UNKNOWN);
   }
 
   loom_symbolic_expr_t zero = {0};
@@ -549,7 +634,7 @@ static iree_status_t loom_vector_memory_footprint_check_direct_axis(
     return loom_vector_memory_footprint_fail_axis(
         state, access, view_axis,
         loom_vector_memory_footprint_vector_axis(memory_access, view_axis),
-        IREE_SV("lower bound proof failed"), IREE_SV("0 <= origin"));
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LOWER_BOUND_UNPROVEN);
   }
 
   loom_symbolic_expr_t end = {0};
@@ -579,8 +664,7 @@ static iree_status_t loom_vector_memory_footprint_check_direct_axis(
     return loom_vector_memory_footprint_fail_axis(
         state, access, view_axis,
         loom_vector_memory_footprint_vector_axis(memory_access, view_axis),
-        IREE_SV("upper bound proof failed"),
-        IREE_SV("origin + extent <= bound"));
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_UPPER_BOUND_UNPROVEN);
   }
   return iree_ok_status();
 }
@@ -599,7 +683,8 @@ static iree_status_t loom_vector_memory_footprint_check_direct(
   }
   if (memory_access.layout_kind == LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN) {
     return loom_vector_memory_footprint_fail_general(
-        state, access, IREE_SV("view layout is unresolved"));
+        state, access,
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_VIEW_LAYOUT_UNRESOLVED);
   }
 
   for (uint8_t axis = 0; axis < memory_access.view_rank; ++axis) {
@@ -624,7 +709,7 @@ static iree_status_t loom_vector_memory_footprint_check_origin_axis(
   if (!origin_known) {
     return loom_vector_memory_footprint_fail_axis(
         state, access, view_axis, /*vector_axis=*/-1,
-        IREE_SV("origin is unknown"), IREE_SV("origin is known"));
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UNKNOWN);
   }
 
   loom_symbolic_expr_t zero = {0};
@@ -635,7 +720,7 @@ static iree_status_t loom_vector_memory_footprint_check_origin_axis(
   if (!lower_proven) {
     return loom_vector_memory_footprint_fail_axis(
         state, access, view_axis, /*vector_axis=*/-1,
-        IREE_SV("origin lower bound proof failed"), IREE_SV("0 <= origin"));
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_LOWER_BOUND_UNPROVEN);
   }
 
   loom_symbolic_expr_t exclusive_end = {0};
@@ -655,8 +740,7 @@ static iree_status_t loom_vector_memory_footprint_check_origin_axis(
   if (!upper_proven) {
     return loom_vector_memory_footprint_fail_axis(
         state, access, view_axis, /*vector_axis=*/-1,
-        IREE_SV("origin upper bound proof failed"),
-        IREE_SV("origin + 1 <= bound"));
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_ORIGIN_UPPER_BOUND_UNPROVEN);
   }
   return iree_ok_status();
 }
@@ -911,13 +995,13 @@ static iree_status_t loom_vector_memory_footprint_check_offsets(
   }
   if (memory_access.layout_kind == LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN) {
     return loom_vector_memory_footprint_fail_general(
-        state, access, IREE_SV("view layout is unresolved"));
+        state, access,
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_VIEW_LAYOUT_UNRESOLVED);
   }
   if (memory_access.vector_rank != 1) {
     return loom_vector_memory_footprint_fail_general(
         state, access,
-        IREE_SV("gather/scatter footprint proof currently requires rank-1 "
-                "vector offsets"));
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_RANK1_VECTOR_OFFSETS_REQUIRED);
   }
 
   for (uint8_t view_axis = 0; view_axis < memory_access.view_rank;
@@ -936,8 +1020,8 @@ static iree_status_t loom_vector_memory_footprint_check_offsets(
       &origin_element_offset_known));
   if (!origin_element_offset_known) {
     return loom_vector_memory_footprint_fail_linear_span(
-        state, access, IREE_SV("linearized origin is unknown"),
-        IREE_SV("linearized origin is known"));
+        state, access,
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEARIZED_ORIGIN_UNKNOWN);
   }
 
   loom_symbolic_expr_t lower_offset = {0};
@@ -947,8 +1031,8 @@ static iree_status_t loom_vector_memory_footprint_check_offsets(
       state, access, &lower_offset, &upper_offset, &offsets_known));
   if (!offsets_known) {
     return loom_vector_memory_footprint_fail_linear_span(
-        state, access, IREE_SV("offset lane range is unknown"),
-        IREE_SV("min(offsets) and max(offsets) are known"));
+        state, access,
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_OFFSET_LANE_RANGE_UNKNOWN);
   }
 
   loom_symbolic_expr_t minimum_access = {0};
@@ -961,8 +1045,8 @@ static iree_status_t loom_vector_memory_footprint_check_offsets(
       state, &zero, &minimum_access, &lower_proven));
   if (!lower_proven) {
     return loom_vector_memory_footprint_fail_linear_span(
-        state, access, IREE_SV("lower bound proof failed"),
-        IREE_SV("0 <= linearized_origin + min(offsets)"));
+        state, access,
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_LOWER_BOUND_UNPROVEN);
   }
 
   loom_symbolic_expr_t maximum_access = {0};
@@ -978,8 +1062,8 @@ static iree_status_t loom_vector_memory_footprint_check_offsets(
       state, &memory_access, &storage_span, &storage_span_known));
   if (!storage_span_known) {
     return loom_vector_memory_footprint_fail_linear_span(
-        state, access, IREE_SV("view storage span is unknown"),
-        IREE_SV("view storage span is known"));
+        state, access,
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_STORAGE_SPAN_UNKNOWN);
   }
 
   bool upper_proven = false;
@@ -987,8 +1071,8 @@ static iree_status_t loom_vector_memory_footprint_check_offsets(
       state, &exclusive_end, &storage_span, &upper_proven));
   if (!upper_proven) {
     return loom_vector_memory_footprint_fail_linear_span(
-        state, access, IREE_SV("upper bound proof failed"),
-        IREE_SV("linearized_origin + max(offsets) + 1 <= view storage span"));
+        state, access,
+        LOOM_VECTOR_MEMORY_FOOTPRINT_PROOF_FAILURE_LINEAR_UPPER_BOUND_UNPROVEN);
   }
   return iree_ok_status();
 }

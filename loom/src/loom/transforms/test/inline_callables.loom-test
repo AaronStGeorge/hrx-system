@@ -60,7 +60,7 @@ func.def noinline @double(%value: i32) -> (i32) {
 }
 
 func.def public @entry(%arg: i32) -> (i32) {
-  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="double", reason="inline and noinline policies conflict on this edge"}
+  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="double", failure_code="policy_conflict"}
   %result = func.call inline @double(%arg) : (i32) -> (i32)
   func.return %result : i32
 }
@@ -182,9 +182,9 @@ func.decl inline @extern_a(%value: i32) -> (i32)
 func.decl inline @extern_b(%value: i32) -> (i32)
 
 func.def public @entry(%arg: i32) -> (i32, i32) {
-  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="extern_a", reason="callee has no inlineable body"}
+  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="extern_a", failure_code="callee_missing_body"}
   %a = func.call @extern_a(%arg) : (i32) -> (i32)
-  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="extern_b", reason="callee has no inlineable body"}
+  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="extern_b", failure_code="callee_missing_body"}
   %b = func.call @extern_b(%arg) : (i32) -> (i32)
   func.return %a, %b : i32, i32
 }
@@ -194,13 +194,13 @@ func.def public @entry(%arg: i32) -> (i32, i32) {
 // RUN: pass inline-callables
 
 func.def inline @cycle_a(%value: i32) -> (i32) {
-  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="cycle_b", reason="required inline cycle in the call graph"}
+  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="cycle_b", failure_code="required_cycle"}
   %result = func.call @cycle_b(%value) : (i32) -> (i32)
   func.return %result : i32
 }
 
 func.def inline @cycle_b(%value: i32) -> (i32) {
-  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="cycle_a", reason="required inline cycle in the call graph"}
+  // ERROR@+1: LOWERING/044 {op_name="func.call", phase_name="inline-callables", callee_name="cycle_a", failure_code="required_cycle"}
   %result = func.call @cycle_a(%value) : (i32) -> (i32)
   func.return %result : i32
 }

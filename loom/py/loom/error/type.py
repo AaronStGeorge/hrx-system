@@ -230,11 +230,11 @@ ERR_TYPE_010 = ErrorDef(
     code=10,
     severity=Severity.ERROR,
     summary="Malformed type payload.",
-    message="'{field_name}' has malformed type {actual_type}: {reason}",
+    message=("'{field_name}' has malformed type {actual_type}: {malformation_code}"),
     params=(
         ErrorParam("field_name", ParamKind.STRING),
         ErrorParam("actual_type", ParamKind.TYPE),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("malformation_code", ParamKind.STRING),
     ),
     fix_hint="Construct a well-formed type before verification",
 )

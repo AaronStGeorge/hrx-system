@@ -43,7 +43,7 @@ ERR_BACKEND_005 = ErrorDef(
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "failed to allocate {value_class} registers for '@{function_name}' "
-        "with budget {budget}, peak {peak}, and failure '{failure_kind}'"
+        "with budget {budget}, peak {peak}, and failure code '{failure_code}'"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),
@@ -53,7 +53,7 @@ ERR_BACKEND_005 = ErrorDef(
         ErrorParam("value_class", ParamKind.STRING),
         ErrorParam("budget", ParamKind.U32),
         ErrorParam("peak", ParamKind.U32),
-        ErrorParam("failure_kind", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
     fix_hint=(
         "Lower pressure before allocation or allow spill codegen for "
@@ -447,7 +447,7 @@ ERR_BACKEND_021 = ErrorDef(
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
         "could not prepare a final emission frame for '@{function_name}': "
-        "{failure_kind}; iteration {iteration_count} of {iteration_limit}, "
+        "{failure_code}; iteration {iteration_count} of {iteration_limit}, "
         "{spill_plan_count} pending spill plan(s), "
         "{spill_assignment_count} spill-slot assignment(s), and "
         "{scheduled_packet_count} scheduled packet(s)"
@@ -457,7 +457,7 @@ ERR_BACKEND_021 = ErrorDef(
         ErrorParam("export_name", ParamKind.STRING),
         ErrorParam("config_key", ParamKind.STRING),
         ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("failure_kind", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
         ErrorParam("iteration_count", ParamKind.U64),
         ErrorParam("iteration_limit", ParamKind.U64),
         ErrorParam("spill_plan_count", ParamKind.U64),

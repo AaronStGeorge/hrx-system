@@ -332,27 +332,24 @@ static iree_string_view_t loom_template_selection_context_symbol_name(
   return state->module->strings.entries[context->source_symbol->name_id];
 }
 
-static iree_string_view_t loom_template_selection_blocker_reason(
+static iree_string_view_t loom_template_selection_blocker_code(
     loom_template_selection_blocker_t blocker) {
   switch (blocker) {
     case LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER:
-      return IREE_SV("no provider implements the requested contract");
+      return IREE_SV("no_provider");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_TARGET_MISMATCH:
-      return IREE_SV("no provider is applicable to the enclosing target");
+      return IREE_SV("target_mismatch");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED:
-      return IREE_SV(
-          "all providers were rejected by signature or predicate constraints");
+      return IREE_SV("all_rejected");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS:
-      return IREE_SV(
-          "selection depends on unresolved provider predicate facts");
+      return IREE_SV("missing_facts");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_AMBIGUOUS:
-      return IREE_SV("multiple providers match at the highest priority");
+      return IREE_SV("ambiguous");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_MATERIALIZATION:
-      return IREE_SV(
-          "selected provider cannot be materialized as an inline func.call");
+      return IREE_SV("materialization_blocked");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_NONE:
     default:
-      return IREE_SV("selection did not produce a provider");
+      return IREE_SV("unresolved");
   }
 }
 
@@ -1213,8 +1210,7 @@ static iree_status_t loom_template_selection_emit_blockers(
         loom_param_string(loom_op_name(state->module, entry->apply_op)),
         loom_param_string(state->pass->info->name),
         loom_param_string(entry->contract),
-        loom_param_string(
-            loom_template_selection_blocker_reason(entry->blocker)),
+        loom_param_string(loom_template_selection_blocker_code(entry->blocker)),
     };
     loom_op_t* related_provider_op =
         entry->selected_provider ? entry->selected_provider->function.op : NULL;

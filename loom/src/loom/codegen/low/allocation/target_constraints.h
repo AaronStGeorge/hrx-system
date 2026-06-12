@@ -203,7 +203,7 @@ loom_low_allocation_target_constraints_validate_register_location_capacity(
 iree_status_t loom_low_allocation_target_constraints_emit_failure(
     loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
     loom_liveness_value_class_t value_class, uint32_t budget_units,
-    uint32_t peak_units, iree_string_view_t failure_kind);
+    uint32_t peak_units, iree_string_view_t failure_code);
 
 // Returns the fixed value record for |value_id|, or NULL when the value is not
 // fixed.

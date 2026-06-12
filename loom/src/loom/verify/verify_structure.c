@@ -885,41 +885,65 @@ void loom_verify_operand_dicts(loom_verify_state_t* state, const loom_op_t* op,
   }
 }
 
-static iree_string_view_t loom_verify_type_well_formed_detail(
-    loom_type_t type) {
+typedef enum loom_verify_type_malformation_e {
+  LOOM_VERIFY_TYPE_MALFORMATION_NONE = 0,
+  LOOM_VERIFY_TYPE_MALFORMATION_TYPE_KIND_OUT_OF_RANGE = 1,
+  LOOM_VERIFY_TYPE_MALFORMATION_ENCODING_ROLE_OUT_OF_RANGE = 2,
+  LOOM_VERIFY_TYPE_MALFORMATION_VECTOR_RANK_ZERO = 3,
+  LOOM_VERIFY_TYPE_MALFORMATION_VECTOR_ENCODING_ATTACHMENT = 4,
+} loom_verify_type_malformation_t;
+
+static iree_string_view_t loom_verify_type_malformation_code(
+    loom_verify_type_malformation_t malformation) {
+  switch (malformation) {
+    case LOOM_VERIFY_TYPE_MALFORMATION_TYPE_KIND_OUT_OF_RANGE:
+      return IREE_SV("type_kind_out_of_range");
+    case LOOM_VERIFY_TYPE_MALFORMATION_ENCODING_ROLE_OUT_OF_RANGE:
+      return IREE_SV("encoding_role_out_of_range");
+    case LOOM_VERIFY_TYPE_MALFORMATION_VECTOR_RANK_ZERO:
+      return IREE_SV("vector_rank_zero");
+    case LOOM_VERIFY_TYPE_MALFORMATION_VECTOR_ENCODING_ATTACHMENT:
+      return IREE_SV("vector_encoding_attachment");
+    case LOOM_VERIFY_TYPE_MALFORMATION_NONE:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static loom_verify_type_malformation_t
+loom_verify_type_well_formed_malformation(loom_type_t type) {
   loom_type_kind_t kind = loom_type_kind(type);
   if (!loom_type_kind_is_valid(kind)) {
-    return IREE_SV("type kind is out of range");
+    return LOOM_VERIFY_TYPE_MALFORMATION_TYPE_KIND_OUT_OF_RANGE;
   }
   switch (kind) {
     case LOOM_TYPE_ENCODING:
       if (!loom_encoding_role_is_valid(loom_type_encoding_role(type))) {
-        return IREE_SV("encoding role is out of range");
+        return LOOM_VERIFY_TYPE_MALFORMATION_ENCODING_ROLE_OUT_OF_RANGE;
       }
       break;
     case LOOM_TYPE_VECTOR:
       if (loom_type_rank(type) == 0) {
-        return IREE_SV("vector types must have rank >= 1");
+        return LOOM_VERIFY_TYPE_MALFORMATION_VECTOR_RANK_ZERO;
       }
       if (type.encoding_id != 0 || type.encoding_flags != 0) {
-        return IREE_SV(
-            "vector types must not carry encoding or layout attachments");
+        return LOOM_VERIFY_TYPE_MALFORMATION_VECTOR_ENCODING_ATTACHMENT;
       }
       break;
     default:
       break;
   }
-  return iree_string_view_empty();
+  return LOOM_VERIFY_TYPE_MALFORMATION_NONE;
 }
 
 static void loom_verify_emit_type_well_formed_diagnostic(
     loom_verify_state_t* state, const loom_op_t* op, loom_type_t type,
     iree_string_view_t field_name, loom_diagnostic_field_ref_t field_ref,
-    iree_string_view_t detail) {
+    loom_verify_type_malformation_t malformation) {
   loom_diagnostic_param_t params[] = {
       loom_param_with_field_ref(loom_param_string(field_name), field_ref),
       loom_param_type(type),
-      loom_param_string(detail),
+      loom_param_string(loom_verify_type_malformation_code(malformation)),
   };
   loom_verify_emit_structured(state, op, LOOM_ERR_TYPE_010, params,
                               IREE_ARRAYSIZE(params));
@@ -932,13 +956,14 @@ static void loom_verify_value_type_well_formed(
   if (value_id == LOOM_VALUE_ID_INVALID) return;
   if (value_id >= state->module->values.count) return;
   loom_type_t type = loom_module_value_type(state->module, value_id);
-  iree_string_view_t detail = loom_verify_type_well_formed_detail(type);
-  if (iree_string_view_is_empty(detail)) return;
+  loom_verify_type_malformation_t malformation =
+      loom_verify_type_well_formed_malformation(type);
+  if (malformation == LOOM_VERIFY_TYPE_MALFORMATION_NONE) return;
   char name_buffer[64];
   iree_string_view_t field_name = loom_verify_value_field_name(
       vtable, op, category, value_index, name_buffer, sizeof(name_buffer));
   loom_verify_emit_type_well_formed_diagnostic(state, op, type, field_name,
-                                               field_ref, detail);
+                                               field_ref, malformation);
 }
 
 void loom_verify_op_type_well_formedness(loom_verify_state_t* state,
@@ -966,12 +991,13 @@ void loom_verify_block_arg_type_well_formedness(loom_verify_state_t* state,
     if (arg_id == LOOM_VALUE_ID_INVALID) continue;
     if (arg_id >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, arg_id);
-    iree_string_view_t detail = loom_verify_type_well_formed_detail(type);
-    if (iree_string_view_is_empty(detail)) continue;
+    loom_verify_type_malformation_t malformation =
+        loom_verify_type_well_formed_malformation(type);
+    if (malformation == LOOM_VERIFY_TYPE_MALFORMATION_NONE) continue;
     iree_snprintf(name_buffer, sizeof(name_buffer), "block arg %u", a);
     loom_verify_emit_type_well_formed_diagnostic(
         state, NULL, type, iree_make_cstring_view(name_buffer),
-        loom_diagnostic_field_ref_none(), detail);
+        loom_diagnostic_field_ref_none(), malformation);
   }
 }
 

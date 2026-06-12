@@ -78,18 +78,18 @@ ERR_SUBRANGE_005 = ErrorDef(
     severity=Severity.ERROR,
     summary="Vector memory footprint is not proven in bounds.",
     message="{op_name} footprint proof failed on view axis {view_axis} "
-    "(vector axis {vector_axis}): {reason}; required {required}; "
+    "(vector axis {vector_axis}): {proof_code}; requires {requirement_code}; "
     "origin {origin}",
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("view_axis", ParamKind.I64),
         ErrorParam("vector_axis", ParamKind.I64),
         ErrorParam("origin", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-        ErrorParam("required", ParamKind.STRING),
+        ErrorParam("proof_code", ParamKind.STRING),
+        ErrorParam("requirement_code", ParamKind.STRING),
     ),
     fix_hint="Refine the origin, vector extent, mask, or view layout facts so "
-    "{required} is provable",
+    "{requirement_code} is provable",
 )
 
 # ERR_SUBRANGE_006: Vector memory linear footprint proof failed.
@@ -98,16 +98,16 @@ ERR_SUBRANGE_006 = ErrorDef(
     code=6,
     severity=Severity.ERROR,
     summary="Vector memory linear footprint is not proven in bounds.",
-    message="{op_name} linear footprint proof failed: {reason}; "
-    "required {required}; origin {origin}",
+    message="{op_name} linear footprint proof failed: {proof_code}; "
+    "requires {requirement_code}; origin {origin}",
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("origin", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-        ErrorParam("required", ParamKind.STRING),
+        ErrorParam("proof_code", ParamKind.STRING),
+        ErrorParam("requirement_code", ParamKind.STRING),
     ),
     fix_hint="Refine the origin, offset lane range, or view storage span facts "
-    "so {required} is provable",
+    "so {requirement_code} is provable",
 )
 
 ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (

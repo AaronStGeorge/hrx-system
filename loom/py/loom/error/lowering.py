@@ -344,12 +344,12 @@ ERR_LOWERING_044 = ErrorDef(
     code=44,
     severity=Severity.ERROR,
     summary="Required callable inline failed.",
-    message=("{phase_name} cannot inline {op_name} to @{callee_name}: {reason}"),
+    message=("{phase_name} cannot inline {op_name} to @{callee_name}: {failure_code}"),
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("phase_name", ParamKind.STRING),
         ErrorParam("callee_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
     fix_hint=(
         "Remove the required inline policy, provide an inlineable same-module "
@@ -365,13 +365,13 @@ ERR_LOWERING_045 = ErrorDef(
     summary="Func apply selection failed.",
     message=(
         "{phase_name} cannot select an implementation for {op_name}"
-        "<{contract_key}>: {reason}"
+        "<{contract_key}>: {failure_code}"
     ),
     params=(
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("phase_name", ParamKind.STRING),
         ErrorParam("contract_key", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
     fix_hint=(
         "Add a matching func.template provider, make provider predicates "

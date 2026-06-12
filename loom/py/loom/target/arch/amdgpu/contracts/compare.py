@@ -75,7 +75,7 @@ _I32_VGPR_RHS = ValueRef.operand("rhs", materializer=I32_VGPR_MATERIALIZER.name)
 _ADDRESS_VGPR_LHS = ValueRef.operand("lhs", materializer=ADDRESS_VGPR_MATERIALIZER.name)
 _ADDRESS_VGPR_RHS = ValueRef.operand("rhs", materializer=ADDRESS_VGPR_MATERIALIZER.name)
 _SOURCE_INLINE_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="literal",
+    subject_role="literal",
     subject_name="source-inline-u32",
     constraint_key="amdgpu.source_inline_u32",
 )

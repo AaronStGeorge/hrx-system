@@ -41,57 +41,57 @@ _F32 = Scalar("f32")
 _F64 = Scalar("f64")
 
 _SUPPORTED_SCALAR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="source",
     constraint_key="ireevm.scalar.supported",
 )
 _I32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="i32",
     constraint_key="ireevm.scalar.i32",
 )
 _I64_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="i64",
     constraint_key="ireevm.scalar.i64",
 )
 _F32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="f32",
     constraint_key="ireevm.scalar.f32",
 )
 _F64_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="f64",
     constraint_key="ireevm.scalar.f64",
 )
 _I64_ATTR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
+    subject_role="attr",
     subject_name="value",
     constraint_key="ireevm.constant.i64_attr",
 )
 _F64_ATTR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
+    subject_role="attr",
     subject_name="value",
     constraint_key="ireevm.constant.f64_attr",
 )
 _I1_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
+    subject_role="attr",
     subject_name="value",
     constraint_key="ireevm.constant.i1_range",
 )
 _I32_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
+    subject_role="attr",
     subject_name="value",
     constraint_key="ireevm.constant.i32_range",
 )
 _FLOAT_CONSTANT_EXACT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="value",
+    subject_role="value",
     subject_name="result",
     constraint_key="ireevm.constant.float_exact",
 )
 _PREDICATE_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="attr",
+    subject_role="attr",
     subject_name="predicate",
     constraint_key="ireevm.compare.predicate",
 )
