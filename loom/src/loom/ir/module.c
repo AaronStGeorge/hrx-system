@@ -1036,12 +1036,41 @@ static iree_status_t loom_module_remap_symbol_region_attrs(
   return iree_ok_status();
 }
 
-iree_status_t loom_module_compact_symbols(loom_module_t* module,
-                                          iree_arena_allocator_t* scratch_arena,
-                                          iree_host_size_t* out_removed_count) {
+static bool loom_module_symbol_has_payload(const loom_symbol_t* symbol) {
+  return symbol->kind != LOOM_SYMBOL_NONE || symbol->definition ||
+         symbol->defining_op || symbol->flags != 0;
+}
+
+static iree_host_size_t loom_module_max_preserved_symbol_id(
+    const loom_symbol_ref_t* preserved_symbol_refs,
+    iree_host_size_t preserved_symbol_ref_count,
+    iree_host_size_t old_symbol_count) {
+  iree_host_size_t max_preserved_symbol_id = IREE_HOST_SIZE_MAX;
+  for (iree_host_size_t i = 0; i < preserved_symbol_ref_count; ++i) {
+    loom_symbol_ref_t symbol_ref = preserved_symbol_refs[i];
+    if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+        symbol_ref.symbol_id >= old_symbol_count) {
+      continue;
+    }
+    if (max_preserved_symbol_id == IREE_HOST_SIZE_MAX ||
+        symbol_ref.symbol_id > max_preserved_symbol_id) {
+      max_preserved_symbol_id = symbol_ref.symbol_id;
+    }
+  }
+  return max_preserved_symbol_id;
+}
+
+iree_status_t loom_module_compact_symbols_preserving_symbol_refs(
+    loom_module_t* module, const loom_symbol_ref_t* preserved_symbol_refs,
+    iree_host_size_t preserved_symbol_ref_count,
+    iree_arena_allocator_t* scratch_arena,
+    iree_host_size_t* out_removed_count) {
   if (out_removed_count) *out_removed_count = 0;
   const iree_host_size_t old_symbol_count = module->symbols.count;
   if (old_symbol_count == 0) return iree_ok_status();
+  const iree_host_size_t max_preserved_symbol_id =
+      loom_module_max_preserved_symbol_id(
+          preserved_symbol_refs, preserved_symbol_ref_count, old_symbol_count);
 
   uint8_t* referenced_symbols = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -1068,11 +1097,12 @@ iree_status_t loom_module_compact_symbols(loom_module_t* module,
   iree_host_size_t removed_count = 0;
   for (iree_host_size_t i = 0; i < old_symbol_count; ++i) {
     const loom_symbol_t* symbol = &module->symbols.entries[i];
-    const bool has_definition = symbol->kind != LOOM_SYMBOL_NONE ||
-                                symbol->definition || symbol->defining_op;
-    const bool has_side_data = symbol->flags != 0;
+    const bool has_payload = loom_module_symbol_has_payload(symbol);
+    const bool preserves_external_ref =
+        max_preserved_symbol_id != IREE_HOST_SIZE_MAX &&
+        i <= max_preserved_symbol_id;
     const bool keep =
-        has_definition || has_side_data || referenced_symbols[i] != 0;
+        has_payload || referenced_symbols[i] != 0 || preserves_external_ref;
     if (keep) {
       new_symbol_ids[i] = (uint16_t)new_symbol_count++;
     } else {
@@ -1097,7 +1127,15 @@ iree_status_t loom_module_compact_symbols(loom_module_t* module,
        ++old_index) {
     uint16_t new_symbol_id = new_symbol_ids[old_index];
     if (new_symbol_id == LOOM_SYMBOL_ID_INVALID) continue;
-    module->symbols.entries[new_symbol_id] = module->symbols.entries[old_index];
+    const loom_symbol_t* source_symbol = &module->symbols.entries[old_index];
+    if (!loom_module_symbol_has_payload(source_symbol) &&
+        referenced_symbols[old_index] == 0) {
+      module->symbols.entries[new_symbol_id] = (loom_symbol_t){
+          .name_id = LOOM_STRING_ID_INVALID,
+      };
+      continue;
+    }
+    module->symbols.entries[new_symbol_id] = *source_symbol;
   }
   memset(&module->symbols.entries[new_symbol_count], 0,
          (old_symbol_count - new_symbol_count) *
@@ -1105,6 +1143,13 @@ iree_status_t loom_module_compact_symbols(loom_module_t* module,
   module->symbols.count = new_symbol_count;
   if (out_removed_count) *out_removed_count = removed_count;
   return iree_ok_status();
+}
+
+iree_status_t loom_module_compact_symbols(loom_module_t* module,
+                                          iree_arena_allocator_t* scratch_arena,
+                                          iree_host_size_t* out_removed_count) {
+  return loom_module_compact_symbols_preserving_symbol_refs(
+      module, NULL, 0, scratch_arena, out_removed_count);
 }
 
 //===----------------------------------------------------------------------===//

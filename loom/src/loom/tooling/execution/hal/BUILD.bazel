@@ -65,20 +65,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "target_assignment",
-    srcs = ["target_assignment.c"],
-    hdrs = ["target_assignment.h"],
-    deps = [
-        ":artifact",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/kernel",
-        "//loom/src/loom/rewrite:rewriter",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "invocation",
     srcs = ["invocation.c"],
     hdrs = ["invocation.h"],
@@ -106,7 +92,6 @@ loom_cc_library(
         ":candidate",
         ":invocation",
         ":runtime",
-        ":target_assignment",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",

@@ -6,6 +6,8 @@
 
 #include "loom/target/artifact_manifest_collect.h"
 
+#include <string>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -15,6 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/global/ops.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/artifact_manifest.h"
 #include "loom/target/entry_selection.h"
@@ -41,6 +44,7 @@ class ArtifactManifestCollectTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
   }
@@ -335,6 +339,135 @@ func.def target(@gpu) abi(object_function) export("entry") @entry() {
                       "\"targets\":[\"gpu\"],"
                       "\"interface\":{\"parameter_count\":0},"
                       "\"execution\":{\"subgroup_size\":32}}]}")));
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST_F(ArtifactManifestCollectTest,
+       CollectsPreparedLowHalKernelAbiFactsIncludingZero) {
+  ModulePtr module = ParseModule(R"(
+target.generic<reference> @gpu {
+  artifact_format = elf,
+  abi = hal_kernel,
+  subgroup_size = 64
+}
+
+low.kernel.def target(@gpu) abi_layout({
+  constant_count = 0,
+  direct_arg_count = 0,
+  direct_arg_names = {},
+  direct_arg_sizes = [],
+  resource_count = 0,
+  uses_kernarg_segment_ptr = false
+}) workgroup_size(64, 1, 1) @entry() {
+  low.return
+}
+)");
+
+  loom_target_artifact_manifest_collect_options_t options;
+  loom_target_artifact_manifest_collect_options_initialize(&options);
+  options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY;
+
+  iree_string_builder_t builder;
+  iree_string_view_t output =
+      CollectAndFormat(module.get(), &options,
+                       LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY, &builder);
+  EXPECT_TRUE(iree_string_view_equal(
+      output, IREE_SV("{\"kind\":\"loom.artifact_manifest\","
+                      "\"schema_version\":1,"
+                      "\"mode\":\"summary\","
+                      "\"artifact\":{\"format\":\"elf\"},"
+                      "\"targets\":[{\"name\":\"gpu\"}],"
+                      "\"functions\":[{\"name\":\"entry\","
+                      "\"targets\":[\"gpu\"],"
+                      "\"interface\":{\"parameter_count\":0,"
+                      "\"binding_count\":0,"
+                      "\"constant_byte_length\":0},"
+                      "\"execution\":{\"workgroup_size\":[64,1,1],"
+                      "\"subgroup_size\":64}}]}")))
+      << std::string(output.data, output.size);
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST_F(ArtifactManifestCollectTest,
+       CollectsPreparedLowHalKernelParameterCountFromAbiLayout) {
+  ModulePtr module = ParseModule(R"(
+target.generic<reference> @gpu {
+  artifact_format = elf,
+  abi = hal_kernel
+}
+
+low.kernel.def target(@gpu) abi_layout({
+  constant_count = 1,
+  direct_arg_count = 1,
+  direct_arg_names = {arg0 = "extent"},
+  direct_arg_sizes = [4],
+  resource_count = 1,
+  uses_kernarg_segment_ptr = true
+}) workgroup_size(64, 1, 1) @entry() {
+  low.return
+}
+)");
+
+  loom_target_artifact_manifest_collect_options_t options;
+  loom_target_artifact_manifest_collect_options_initialize(&options);
+  options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY;
+
+  iree_string_builder_t builder;
+  iree_string_view_t output =
+      CollectAndFormat(module.get(), &options,
+                       LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY, &builder);
+  EXPECT_TRUE(iree_string_view_equal(
+      output, IREE_SV("{\"kind\":\"loom.artifact_manifest\","
+                      "\"schema_version\":1,"
+                      "\"mode\":\"summary\","
+                      "\"artifact\":{\"format\":\"elf\"},"
+                      "\"targets\":[{\"name\":\"gpu\"}],"
+                      "\"functions\":[{\"name\":\"entry\","
+                      "\"targets\":[\"gpu\"],"
+                      "\"interface\":{\"parameter_count\":2,"
+                      "\"binding_count\":1,"
+                      "\"constant_byte_length\":4},"
+                      "\"execution\":{\"workgroup_size\":[64,1,1]}}]}")))
+      << std::string(output.data, output.size);
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST_F(ArtifactManifestCollectTest,
+       CollectsLowHalKernelBindingCountBeforeMaterialization) {
+  ModulePtr module = ParseModule(R"(
+target.generic<reference> @gpu {
+  artifact_format = elf,
+  abi = hal_kernel
+}
+
+low.kernel.def target(@gpu) workgroup_size(32, 2, 1) @entry() {
+  %binding0 = low.resource<hal_binding> {index = 0, source_type = i64} : i64
+  %binding1 = low.resource<hal_binding> {index = 1, source_type = i64} : i64
+  low.return
+}
+)");
+
+  loom_target_artifact_manifest_collect_options_t options;
+  loom_target_artifact_manifest_collect_options_initialize(&options);
+  options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY;
+
+  iree_string_builder_t builder;
+  iree_string_view_t output =
+      CollectAndFormat(module.get(), &options,
+                       LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY, &builder);
+  EXPECT_TRUE(iree_string_view_equal(
+      output, IREE_SV("{\"kind\":\"loom.artifact_manifest\","
+                      "\"schema_version\":1,"
+                      "\"mode\":\"summary\","
+                      "\"artifact\":{\"format\":\"elf\"},"
+                      "\"targets\":[{\"name\":\"gpu\"}],"
+                      "\"functions\":[{\"name\":\"entry\","
+                      "\"targets\":[\"gpu\"],"
+                      "\"interface\":{\"parameter_count\":2,"
+                      "\"binding_count\":2,"
+                      "\"constant_byte_length\":0},"
+                      "\"execution\":{\"workgroup_size\":[32,2,1]}}]}")))
+      << std::string(output.data, output.size);
   iree_string_builder_deinitialize(&builder);
 }
 

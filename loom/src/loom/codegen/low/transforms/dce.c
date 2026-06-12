@@ -101,8 +101,10 @@ iree_status_t loom_low_dce_run(loom_pass_t* pass, loom_module_t* module,
       loom_low_pass_capability_from_pass(pass);
   const loom_low_descriptor_registry_t* descriptor_registry =
       loom_low_pass_capability_descriptor_registry(low_capability);
+  const loom_target_pass_capability_t* target_capability =
+      loom_target_pass_capability_from_pass(pass);
   const loom_target_selection_t target_selection =
-      loom_low_pass_capability_target_selection(low_capability);
+      loom_target_pass_capability_target_selection(target_capability);
 
   return loom_low_dce_function(pass, module, function, descriptor_registry,
                                target_selection, pass->diagnostic_emitter);

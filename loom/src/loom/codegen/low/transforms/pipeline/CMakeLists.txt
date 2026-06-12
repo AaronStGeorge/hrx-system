@@ -77,19 +77,26 @@ loom_cc_test(
     loom::codegen::low::lower
     loom::codegen::low::lower::source_selection
     loom::codegen::low::pipeline::pass_environment
+    loom::error::error_defs
     loom::format::text::parser
     loom::ir
     loom::ops::func
     loom::ops::low
+    loom::ops::pass
     loom::ops::scalar
     loom::ops::target
     loom::ops::test
+    loom::pass::registry
+    loom::pass::tooling
     loom::pass::value_facts
     loom::target::test::contracts::core_lower_rules
     loom::target::test::low_registry
     loom::target::test::lower
     loom::target::test::target_record_table
     loom::testing::module_ptr
+    loom::transforms::symbol::inline_callables
+    loom::transforms::symbol::symbol_dce
+    loom::transforms::symbol::template_selection
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

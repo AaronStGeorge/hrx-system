@@ -6,10 +6,6 @@
 
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
 
-#include "loom/ir/module.h"
-#include "loom/ops/op_defs.h"
-#include "loom/target/arch/amdgpu/ops/ops.h"
-#include "loom/target/arch/amdgpu/ops/target.h"
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
@@ -134,97 +130,6 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_target_key(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_hal_artifact_provider_validate_target_symbol(
-    loom_module_t* module, iree_string_view_t symbol_name,
-    const loom_amdgpu_processor_info_t* processor, loom_symbol_ref_t target_ref,
-    bool* out_reusable) {
-  *out_reusable = false;
-  const loom_symbol_t* symbol = &module->symbols.entries[target_ref.symbol_id];
-  if (symbol->defining_op == NULL) {
-    return iree_ok_status();
-  }
-  if (!loom_amdgpu_target_isa(symbol->defining_op)) {
-    return iree_make_status(
-        IREE_STATUS_ALREADY_EXISTS,
-        "AMDGPU target assignment symbol '@%.*s' already names a non-AMDGPU "
-        "target op",
-        (int)symbol_name.size, symbol_name.data);
-  }
-  const iree_string_view_t existing_processor =
-      loom_amdgpu_target_record_processor_name(module, symbol->defining_op);
-  if (!iree_string_view_equal(existing_processor, processor->processor)) {
-    return iree_make_status(
-        IREE_STATUS_ALREADY_EXISTS,
-        "AMDGPU target assignment symbol '@%.*s' selects processor '%.*s', "
-        "but the selected HAL device requires '%.*s'",
-        (int)symbol_name.size, symbol_name.data, (int)existing_processor.size,
-        existing_processor.data, (int)processor->processor.size,
-        processor->processor.data);
-  }
-  *out_reusable = true;
-  return iree_ok_status();
-}
-
-static iree_status_t
-loom_amdgpu_hal_artifact_provider_resolve_device_target_ref(
-    const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
-    const loom_run_hal_device_target_t* target,
-    loom_symbol_ref_t* out_target_ref) {
-  IREE_ASSERT_ARGUMENT(provider);
-  if (out_target_ref == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU HAL target resolver requires an output "
-                            "target ref");
-  }
-  *out_target_ref = loom_symbol_ref_null();
-  if (module == NULL || module->body == NULL ||
-      module->body->block_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU HAL target resolver requires a module "
-                            "with a body block");
-  }
-  if (target == NULL || target->data == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU HAL target resolver requires a selected "
-                            "device target");
-  }
-
-  const loom_amdgpu_processor_info_t* processor =
-      (const loom_amdgpu_processor_info_t*)target->data;
-  if (iree_string_view_is_empty(processor->processor)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU HAL target resolver selected a processor "
-                            "row with no processor name");
-  }
-
-  loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(module, processor->processor, &symbol_name_id));
-  uint16_t symbol_id = loom_module_find_symbol(module, symbol_name_id);
-  if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
-    IREE_RETURN_IF_ERROR(
-        loom_module_add_symbol(module, symbol_name_id, &symbol_id));
-  }
-  *out_target_ref = (loom_symbol_ref_t){.module_id = 0, .symbol_id = symbol_id};
-
-  bool reusable = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_artifact_provider_validate_target_symbol(
-      module, processor->processor, processor, *out_target_ref, &reusable));
-  if (reusable) {
-    return iree_ok_status();
-  }
-
-  loom_block_t* module_block = loom_module_block(module);
-  loom_builder_t builder = {0};
-  loom_builder_initialize(module, &module->arena, module_block, &builder);
-  if (module_block->first_op != NULL) {
-    loom_builder_set_before(&builder, module_block->first_op);
-  }
-  loom_op_t* target_op = NULL;
-  return loom_amdgpu_target_record_build_for_processor(
-      &builder, processor, *out_target_ref, LOOM_LOCATION_UNKNOWN, &target_op);
-}
-
 static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
     const loom_run_hal_device_target_t* target,
@@ -333,8 +238,6 @@ const loom_run_hal_artifact_provider_t loom_amdgpu_hal_artifact_provider = {
     .select_device_target =
         loom_amdgpu_hal_artifact_provider_select_device_target,
     .select_target_key = loom_amdgpu_hal_artifact_provider_select_target_key,
-    .resolve_device_target_ref =
-        loom_amdgpu_hal_artifact_provider_resolve_device_target_ref,
     .emit_artifact = loom_amdgpu_hal_artifact_provider_emit_artifact,
     .deinitialize_artifact =
         loom_amdgpu_hal_artifact_provider_deinitialize_artifact,

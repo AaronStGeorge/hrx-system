@@ -17,7 +17,6 @@
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/ops/registry.h"
-#include "loom/target/arch/amdgpu/ops/target.h"
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/testing/module_ptr.h"
@@ -122,77 +121,10 @@ class AmdgpuHalArtifactProviderTest : public ::testing::Test {
     return iree_ok_status();
   }
 
-  const loom_op_t* TargetOpFromRef(const loom_module_t* module,
-                                   loom_symbol_ref_t target_ref) {
-    IREE_ASSERT(loom_symbol_ref_is_valid(target_ref));
-    IREE_ASSERT(target_ref.module_id == 0);
-    IREE_ASSERT(target_ref.symbol_id < module->symbols.count);
-    const loom_symbol_t* symbol =
-        &module->symbols.entries[target_ref.symbol_id];
-    IREE_ASSERT(symbol->defining_op != nullptr);
-    return symbol->defining_op;
-  }
-
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_ = {};
   loom_target_low_descriptor_registry_t low_registry_ = {};
 };
-
-TEST_F(AmdgpuHalArtifactProviderTest,
-       ResolveDeviceTargetRefBuildsFamilyTargetRecords) {
-  ModulePtr module;
-  IREE_ASSERT_OK(ParseModule(IREE_SV(R"(
-kernel.def @entry() {
-  %unit = index.constant 1 : index
-  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
-} launch() {
-  kernel.return
-}
-)"),
-                             &module));
-  ASSERT_NE(module.get(), nullptr);
-
-  struct Case {
-    iree_string_view_t processor_name;
-    loom_amdgpu_target_kind_t expected_kind;
-  };
-  static const Case cases[] = {
-      {IREE_SV("gfx942"), LOOM_AMDGPU_TARGET_KIND_GFX942},
-      {IREE_SV("gfx1150"), LOOM_AMDGPU_TARGET_KIND_GFX1100},
-      {IREE_SV("gfx1201"), LOOM_AMDGPU_TARGET_KIND_GFX1200},
-      {IREE_SV("gfx1250"), LOOM_AMDGPU_TARGET_KIND_GFX1250},
-  };
-  for (const Case& c : cases) {
-    const loom_amdgpu_processor_info_t* processor = nullptr;
-    IREE_ASSERT_OK(
-        loom_amdgpu_target_info_lookup_processor(c.processor_name, &processor));
-    ASSERT_NE(processor, nullptr);
-    loom_run_hal_device_target_t target = {
-        /*.data=*/processor,
-        /*.target_storage=*/{},
-        /*.target_bundle=*/{},
-        /*.target_key=*/processor->processor,
-    };
-
-    loom_symbol_ref_t target_ref = loom_symbol_ref_null();
-    IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.resolve_device_target_ref(
-        &loom_amdgpu_hal_artifact_provider, module.get(), &target,
-        &target_ref));
-    const loom_op_t* target_op = TargetOpFromRef(module.get(), target_ref);
-    ASSERT_TRUE(loom_amdgpu_target_isa(target_op));
-    EXPECT_EQ(loom_amdgpu_target_kind(target_op), c.expected_kind);
-    EXPECT_TRUE(iree_string_view_equal(
-        loom_amdgpu_target_record_processor_name(module.get(), target_op),
-        processor->processor));
-
-    loom_symbol_ref_t reused_ref = loom_symbol_ref_null();
-    IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.resolve_device_target_ref(
-        &loom_amdgpu_hal_artifact_provider, module.get(), &target,
-        &reused_ref));
-    EXPECT_EQ(reused_ref.module_id, target_ref.module_id);
-    EXPECT_EQ(reused_ref.symbol_id, target_ref.symbol_id);
-  }
-}
 
 TEST_F(AmdgpuHalArtifactProviderTest, SelectTargetKeyBuildsOfflineTarget) {
   loom_run_hal_device_target_t target = {};

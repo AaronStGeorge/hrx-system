@@ -177,6 +177,12 @@ iree_status_t loom_compile_run_pipeline(
   loom_target_entry_diagnostic_emitter_t pass_emitter = {0};
   loom_target_entry_diagnostic_emitter_initialize(
       module, &entry_options, LOOM_EMITTER_PASS, &pass_emitter);
+  loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+  if (!loom_target_selection_is_empty(options->target_selection)) {
+    IREE_RETURN_IF_ERROR(loom_target_environment_materialize_selection(
+        options->target_environment, module, options->target_selection,
+        &target_ref));
+  }
 
   loom_low_pass_environment_storage_t low_pass_environment_storage = {0};
   loom_target_pass_predicate_provider_storage_t predicate_storage = {0};
@@ -202,7 +208,7 @@ iree_status_t loom_compile_run_pipeline(
           &options->low_descriptor_registry->registry,
           &low_lower_policy_registry, &low_legality_provider_list,
           &legalizer_provider_list, &math_policy_registry, options->report,
-          options->target_selection, &low_pass_environment_storage),
+          options->target_selection, target_ref, &low_pass_environment_storage),
       .predicate_provider =
           loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,

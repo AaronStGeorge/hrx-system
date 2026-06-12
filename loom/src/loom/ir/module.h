@@ -436,6 +436,20 @@ iree_status_t loom_module_compact_symbols(loom_module_t* module,
                                           iree_arena_allocator_t* scratch_arena,
                                           iree_host_size_t* out_removed_count);
 
+// Removes symbol-table tombstones while preserving external symbol ref
+// ordinals.
+//
+// Module-local symbol refs stored in op and encoding attributes are rewritten
+// during compaction. Symbol refs held outside the module cannot be discovered
+// or rewritten by the module, so callers that carry such refs across compaction
+// must pass them here. Empty slots before the greatest preserved symbol id are
+// retained as anonymous tombstones so every preserved ref continues to identify
+// the same symbol table entry.
+iree_status_t loom_module_compact_symbols_preserving_symbol_refs(
+    loom_module_t* module, const loom_symbol_ref_t* preserved_symbol_refs,
+    iree_host_size_t preserved_symbol_ref_count,
+    iree_arena_allocator_t* scratch_arena, iree_host_size_t* out_removed_count);
+
 // Allocates a block in the module's arena with initial op capacity.
 iree_status_t loom_module_allocate_block(loom_module_t* module,
                                          loom_block_t** out_block);

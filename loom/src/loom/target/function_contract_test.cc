@@ -205,6 +205,31 @@ TEST_F(TargetFunctionContractTest,
 
   EXPECT_TRUE(loom_target_function_contract_bundles_compatible(
       &module_bundle, &selected_bundle));
+
+  selected_export.abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION;
+  EXPECT_TRUE(loom_target_function_contract_bundles_compatible(
+      &module_bundle, &selected_bundle));
+
+  loom_target_bundle_storage_t storage = {
+      /*.snapshot=*/module_snapshot,
+      /*.export_plan=*/module_export,
+      /*.config=*/module_config,
+      /*.bundle=*/module_bundle,
+  };
+  loom_target_bundle_storage_rebind(&storage);
+  loom_target_function_contract_apply_compatible_selection(&selected_bundle,
+                                                           &storage);
+  EXPECT_TRUE(
+      iree_string_view_equal(storage.snapshot.name, selected_snapshot.name));
+  EXPECT_EQ(storage.snapshot.max_flat_workgroup_size,
+            selected_snapshot.max_flat_workgroup_size);
+  EXPECT_TRUE(
+      iree_string_view_equal(storage.config.name, selected_config.name));
+  EXPECT_EQ(storage.config.contract_feature_bits,
+            selected_config.contract_feature_bits);
+  EXPECT_EQ(storage.export_plan.abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
+  EXPECT_TRUE(
+      iree_string_view_equal(storage.export_plan.name, module_export.name));
 }
 
 TEST_F(TargetFunctionContractTest, BundleCompatibilityRejectsContractShape) {
@@ -248,11 +273,6 @@ TEST_F(TargetFunctionContractTest, BundleCompatibilityRejectsContractShape) {
   EXPECT_FALSE(loom_target_function_contract_bundles_compatible(
       &module_bundle, &selected_bundle));
   selected_snapshot = module_snapshot;
-
-  selected_export.abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION;
-  EXPECT_FALSE(loom_target_function_contract_bundles_compatible(
-      &module_bundle, &selected_bundle));
-  selected_export = module_export;
 
   selected_config.contract_set_key = IREE_SV("other.contract");
   EXPECT_FALSE(loom_target_function_contract_bundles_compatible(

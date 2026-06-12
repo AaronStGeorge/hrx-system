@@ -767,6 +767,7 @@ static iree_status_t loom_pass_interpreter_evaluate_provider_predicate(
           .where_op = instruction->source.op,
           .anchor_kind = frame->kind,
           .predicate = instruction->where.predicate,
+          .environment = &state->options->environment,
           .target_module = state->module,
           .symbol = frame->symbol,
           .function = frame->function,

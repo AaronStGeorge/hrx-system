@@ -125,6 +125,9 @@ loom_cc_test(
     loom::format::text::printer
     loom::ir
     loom::ops::op_registry
+    loom::ops::test
+    loom::target::provider
+    loom::target::types
     loom::verify
 )
 

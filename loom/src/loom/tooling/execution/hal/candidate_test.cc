@@ -146,7 +146,6 @@ const loom_run_hal_artifact_provider_t kFakeHalArtifactProvider = {
     /*.select_device_target=*/FakeHalSelectDeviceTarget,
     /*.select_target_key=*/{},
     /*.deinitialize_device_target=*/{},
-    /*.resolve_device_target_ref=*/{},
     /*.emit_artifact=*/FakeHalEmitArtifact,
     /*.deinitialize_artifact=*/FakeHalDeinitializeArtifact,
 };

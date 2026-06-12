@@ -421,14 +421,14 @@ loomc_status_t loomc_target_pass_registry_initialize(
 loom_pass_environment_t
 loomc_target_pass_environment_make_loom_pass_environment(
     const loomc_target_pass_environment_t* environment,
-    loom_target_selection_t target_selection,
+    loom_target_selection_t target_selection, loom_symbol_ref_t target_ref,
     loom_low_pass_environment_storage_t* out_storage) {
   return loom_low_pass_environment_storage_initialize(
       &environment->low_descriptor_registry.registry,
       &environment->low_lower_policy_registry,
       &environment->low_legality_provider_list,
       &environment->legalizer_provider_list, &environment->math_policy_registry,
-      NULL, target_selection, out_storage);
+      NULL, target_selection, target_ref, out_storage);
 }
 
 void loomc_target_pass_environment_initialize_text_asm_environment(

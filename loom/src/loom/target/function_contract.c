@@ -22,10 +22,21 @@ bool loom_target_function_contract_bundles_compatible(
              selected_bundle->snapshot->codegen_format &&
          module_bundle->snapshot->artifact_format ==
              selected_bundle->snapshot->artifact_format &&
-         module_bundle->export_plan->abi_kind ==
-             selected_bundle->export_plan->abi_kind &&
          iree_string_view_equal(module_bundle->config->contract_set_key,
                                 selected_bundle->config->contract_set_key);
+}
+
+void loom_target_function_contract_apply_compatible_selection(
+    const loom_target_bundle_t* selected_bundle,
+    loom_target_bundle_storage_t* bundle_storage) {
+  IREE_ASSERT_ARGUMENT(selected_bundle);
+  IREE_ASSERT_ARGUMENT(bundle_storage);
+  bundle_storage->snapshot = *selected_bundle->snapshot;
+  bundle_storage->config = *selected_bundle->config;
+  bundle_storage->bundle = *selected_bundle;
+  bundle_storage->bundle.snapshot = &bundle_storage->snapshot;
+  bundle_storage->bundle.export_plan = &bundle_storage->export_plan;
+  bundle_storage->bundle.config = &bundle_storage->config;
 }
 
 static iree_string_view_t loom_target_function_contract_string_from_id(

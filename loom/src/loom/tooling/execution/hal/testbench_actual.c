@@ -669,9 +669,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   provider->compile_module_initialized = true;
   IREE_RETURN_IF_ERROR(
       loom_run_hal_testbench_apply_sample_constants(provider, entry_symbol));
-  IREE_RETURN_IF_ERROR(loom_run_hal_assign_targetless_kernel_targets(
-      provider->context->artifact_provider, &provider->compile_device_target,
-      provider->compile_module.module, NULL));
 
   loom_func_like_t entry_func = {0};
   IREE_RETURN_IF_ERROR(loom_run_hal_testbench_resolve_compile_func(

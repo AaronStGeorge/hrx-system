@@ -1151,25 +1151,11 @@ static loomc_status_t deserialize_source(emit_amdgpu_hsa_state_t* state) {
   return status;
 }
 
-static loomc_status_t assign_targetless_kernels(
-    emit_amdgpu_hsa_state_t* state) {
-  loomc_amdgpu_target_assignment_t assignment = {0};
-  loomc_status_t status = loomc_amdgpu_module_assign_targetless_kernel_targets(
-      state->module, state->target_profile, &assignment);
-  if (loomc_status_is_ok(status)) {
-    printf(
-        "hsa cpu_agent=%s gpu_agent=%s isa=%s processor=%.*s "
-        "targetless_kernels=%u changed=%s\n",
-        state->cpu_agent_name, state->gpu_agent_name, state->isa_name,
-        (int)state->processor.size, state->processor.data,
-        assignment.targetless_kernel_count,
-        assignment.changed ? "true" : "false");
-  }
-  return status;
-}
-
 static loomc_status_t compile_module_to_prepared_low(
     emit_amdgpu_hsa_state_t* state) {
+  printf("hsa cpu_agent=%s gpu_agent=%s isa=%s processor=%.*s\n",
+         state->cpu_agent_name, state->gpu_agent_name, state->isa_name,
+         (int)state->processor.size, state->processor.data);
   loomc_target_selection_options_t target_options = {
       .type = LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
       .structure_size = sizeof(target_options),
@@ -1226,9 +1212,6 @@ static loomc_status_t compile_and_emit_hsaco(emit_amdgpu_hsa_state_t* state) {
   loomc_status_t status = create_compiler_resources(state);
   if (loomc_status_is_ok(status) && !state->skipped) {
     status = deserialize_source(state);
-  }
-  if (loomc_status_is_ok(status) && !state->skipped) {
-    status = assign_targetless_kernels(state);
   }
   if (loomc_status_is_ok(status) && !state->skipped) {
     status = compile_module_to_prepared_low(state);
@@ -1647,19 +1630,33 @@ static loomc_status_t run_emit_amdgpu_hsa_example(
   return status;
 }
 
+static void print_usage(FILE* file) {
+  fprintf(file,
+          "Usage: emit_amdgpu_hsa [source.loom|source.loombc "
+          "[kernel-symbol [module-name]]]\n");
+  fprintf(file,
+          "  source       Optional Loom source or bytecode module. Omit it to "
+          "use the embedded targetless_store_i32 kernel.\n");
+  fprintf(file,
+          "  kernel-symbol HSA executable symbol to launch. The example also "
+          "tries the .kd descriptor spelling when needed.\n");
+  fprintf(file,
+          "  module-name  Module name used for Loom compilation when source is "
+          "provided.\n");
+  fprintf(
+      file,
+      "The example discovers an HSA GPU agent and derives the AMDGPU target "
+      "from the live ISA before emitting HSACO bytes.\n");
+}
+
 int main(int argc, char** argv) {
   if (argc > 1 &&
       (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
-    printf(
-        "Usage: emit_amdgpu_hsa [source.loom|source.loombc "
-        "[kernel-symbol [module-name]]]\n");
-    printf("No source path uses the embedded targetless_store_i32 kernel.\n");
+    print_usage(stdout);
     return 0;
   }
   if (argc > 4) {
-    fprintf(stderr,
-            "Usage: emit_amdgpu_hsa [source.loom|source.loombc "
-            "[kernel-symbol [module-name]]]\n");
+    print_usage(stderr);
     return 1;
   }
 

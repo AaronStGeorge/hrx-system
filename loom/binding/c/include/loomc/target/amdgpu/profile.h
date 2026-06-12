@@ -7,7 +7,6 @@
 #ifndef LOOMC_TARGET_AMDGPU_PROFILE_H_
 #define LOOMC_TARGET_AMDGPU_PROFILE_H_
 
-#include "loomc/module.h"
 #include "loomc/target/amdgpu/base.h"
 
 /// @file
@@ -45,15 +44,6 @@ typedef struct loomc_amdgpu_profile_options_t {
   /// AMDGPU processor name, such as `gfx1100`, `gfx1150`, or `gfx942`.
   loomc_string_view_t processor;
 } loomc_amdgpu_profile_options_t;
-
-/// Result summary from assigning a profile target to targetless kernels.
-typedef struct loomc_amdgpu_target_assignment_t {
-  /// Number of targetless top-level `kernel.def` ops seen before assignment.
-  uint32_t targetless_kernel_count;
-
-  /// True when at least one kernel target reference was changed.
-  bool changed;
-} loomc_amdgpu_target_assignment_t;
 
 /// Creates an AMDGPU target profile from a concrete processor name.
 ///
@@ -93,23 +83,6 @@ loomc_amdgpu_target_profile_processor(const loomc_target_profile_t* profile);
 /// @return OK when the target id is an AMDHSA target id with a known processor.
 LOOMC_API_EXPORT loomc_status_t loomc_amdgpu_processor_from_hsa_isa_name(
     loomc_string_view_t hsa_isa_name, loomc_string_view_t* out_processor);
-
-/// Assigns the selected AMDGPU profile target to targetless kernels in module.
-///
-/// This is the embedding/JIT equivalent of passing `--target=gfx*` to
-/// `loom-compile` before running the target pipeline. It mutates only
-/// top-level `kernel.def` ops that have no target yet and reuses or creates one
-/// module-level `amdgpu.target` record for the profile processor.
-///
-/// @param module Mutable module to update.
-/// @param profile AMDGPU target profile.
-/// @param out_assignment Optional assignment summary.
-/// @return OK when all targetless kernels were assigned or when no targetless
-/// kernels were present.
-LOOMC_API_EXPORT loomc_status_t
-loomc_amdgpu_module_assign_targetless_kernel_targets(
-    loomc_module_t* module, loomc_target_profile_t* profile,
-    loomc_amdgpu_target_assignment_t* out_assignment);
 
 #ifdef __cplusplus
 }  // extern "C"

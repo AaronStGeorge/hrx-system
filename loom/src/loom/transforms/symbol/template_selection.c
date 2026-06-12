@@ -23,6 +23,7 @@
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/target/selection.h"
 #include "loom/transforms/symbol/symbol_pruning.h"
 
 //===----------------------------------------------------------------------===//
@@ -317,18 +318,21 @@ static bool loom_template_selection_symbol_refs_equal(loom_symbol_ref_t lhs,
 }
 
 static loom_symbol_ref_t loom_template_selection_apply_target(
-    const loom_module_t* module,
+    const loom_template_selection_state_t* state,
     const loom_symbol_liveness_contributor_context_t* context) {
   if (!context || !context->source_symbol ||
       !context->source_symbol->defining_op) {
     return loom_symbol_ref_null();
   }
   loom_func_like_t source_function =
-      loom_func_like_cast(module, context->source_symbol->defining_op);
+      loom_func_like_cast(state->module, context->source_symbol->defining_op);
   if (!loom_func_like_isa(source_function)) {
     return loom_symbol_ref_null();
   }
-  return loom_func_like_target(source_function);
+  const loom_target_pass_capability_t* target_capability =
+      loom_target_pass_capability_from_pass(state->pass);
+  return loom_target_effective_target_ref(
+      loom_func_like_target(source_function), target_capability);
 }
 
 static bool loom_template_selection_provider_applies_to_target(
@@ -824,7 +828,7 @@ static iree_status_t loom_template_selection_mark_exact_priority(
     const loom_op_t* apply_op, loom_func_provider_slice_t providers,
     int64_t priority) {
   const loom_symbol_ref_t apply_target =
-      loom_template_selection_apply_target(state->module, context);
+      loom_template_selection_apply_target(state, context);
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
     if (!loom_template_selection_provider_applies_to_target(apply_target,
@@ -851,7 +855,7 @@ static iree_status_t loom_template_selection_mark_missing_fact_candidates(
     const loom_op_t* apply_op, loom_func_provider_slice_t providers,
     bool has_exact, int64_t exact_priority) {
   const loom_symbol_ref_t apply_target =
-      loom_template_selection_apply_target(state->module, context);
+      loom_template_selection_apply_target(state, context);
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
     if (!loom_template_selection_provider_applies_to_target(apply_target,
@@ -917,7 +921,7 @@ static iree_status_t loom_template_selection_analyze_apply(
   uint32_t possible_count = 0;
   const loom_func_provider_summary_t* best_exact_provider = NULL;
   const loom_symbol_ref_t apply_target =
-      loom_template_selection_apply_target(state->module, context);
+      loom_template_selection_apply_target(state, context);
 
   for (iree_host_size_t i = 0; i < providers.count; ++i) {
     const loom_func_provider_summary_t* provider = &providers.providers[i];
@@ -1201,5 +1205,6 @@ iree_status_t loom_template_selection_run(loom_pass_t* pass,
   if (!pass->changed) {
     return iree_ok_status();
   }
-  return loom_module_compact_symbols(module, pass->arena, NULL);
+  return loom_target_pass_compact_symbols_preserving_target_ref(
+      pass, module, pass->arena, NULL);
 }

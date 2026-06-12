@@ -36,6 +36,8 @@ typedef struct loom_pass_predicate_evaluate_context_t {
   loom_pass_kind_t anchor_kind;
   // Predicate key resolved from the pass.where op.
   iree_string_view_t predicate;
+  // Typed execution environment capabilities active for this pass run.
+  const loom_pass_environment_t* environment;
   // Target module currently being transformed.
   const loom_module_t* target_module;
   // Current symbol when anchor_kind is LOOM_PASS_FUNCTION.

@@ -14,6 +14,9 @@
 #include "iree/io/file_contents.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
+#include "loom/ir/module.h"
+#include "loom/ops/kernel/ops.h"
+#include "loom/ops/op_defs.h"
 #include "loom/target/artifact_manifest.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/compile/pipeline.h"
@@ -23,7 +26,6 @@
 #include "loom/tooling/execution/execution_provider.h"
 #include "loom/tooling/execution/hal/artifact.h"
 #include "loom/tooling/execution/hal/candidate.h"
-#include "loom/tooling/execution/hal/target_assignment.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/pass/trace_cli.h"
@@ -64,9 +66,9 @@ IREE_FLAG_NAMED(string, module_name, "module-name", "loom",
                 "Module name to store in VM bytecode archives.");
 IREE_FLAG(string, target, "",
           "Optional HAL backend target key, such as 'gfx1100'. When present, "
-          "targetless kernels are assigned to the selected target before the "
-          "compile pipeline, and compatible explicit targets are specialized "
-          "with the same backend-owned target facts.");
+          "targetless kernels use this selected target during compilation, "
+          "and compatible explicit targets are specialized with the same "
+          "backend-owned target facts.");
 IREE_FLAG(string, pipeline, "default",
           "Pass pipeline to run before artifact emission. Use 'default' or "
           "empty for the shared prepared-low compile pipeline, 'none' to "
@@ -700,8 +702,19 @@ static iree_status_t loom_compile_require_targeted_hal_kernels(
     return iree_ok_status();
   }
   uint32_t targetless_kernel_count = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_run_hal_count_targetless_kernels(module, &targetless_kernel_count));
+  if (module == NULL || module->body == NULL ||
+      module->body->block_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL target validation requires a module with a body block");
+  }
+  loom_op_t* op = NULL;
+  loom_block_for_each_op(loom_module_block(module), op) {
+    if (loom_kernel_def_isa(op) &&
+        !loom_symbol_ref_is_valid(loom_kernel_def_target(op))) {
+      ++targetless_kernel_count;
+    }
+  }
   if (targetless_kernel_count == 0) {
     return iree_ok_status();
   }
@@ -800,10 +813,6 @@ int main(int argc, char** argv) {
     status = loom_compile_select_explicit_hal_target(
         hal_artifact_provider, allocator, &explicit_hal_target_selected,
         &explicit_hal_target);
-  }
-  if (iree_status_is_ok(status) && explicit_hal_target_selected) {
-    status = loom_run_hal_assign_targetless_kernel_targets(
-        hal_artifact_provider, &explicit_hal_target, run_module.module, NULL);
   }
   if (iree_status_is_ok(status)) {
     status = loom_compile_require_targeted_hal_kernels(

@@ -68,23 +68,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    target_assignment
-  HDRS
-    "target_assignment.h"
-  SRCS
-    "target_assignment.c"
-  DEPS
-    ::artifact
-    iree::base
-    loom::ir
-    loom::ops::kernel
-    loom::ops::op_defs
-    loom::rewrite::rewriter
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     invocation
   HDRS
     "invocation.h"
@@ -117,7 +100,6 @@ loom_cc_library(
     ::candidate
     ::invocation
     ::runtime
-    ::target_assignment
     iree::base
     iree::hal
     iree::tooling::device_util

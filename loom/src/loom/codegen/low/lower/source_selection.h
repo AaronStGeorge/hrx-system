@@ -42,6 +42,9 @@ typedef struct loom_low_source_selection_options_t {
   // function's module target record, this bundle refines the target contract
   // used by legality and lowering while preserving the module target symbol.
   loom_target_selection_t target_selection;
+
+  // Module-local target record materialized for |target_selection|, or null.
+  loom_symbol_ref_t target_ref;
 } loom_low_source_selection_options_t;
 
 typedef enum loom_low_source_selection_kind_e {

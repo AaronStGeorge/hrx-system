@@ -7,9 +7,8 @@ func.def @semantic() {
 
 // ====
 
-// ABI and export contracts require an explicit target record.
-// ERROR@+1: STRUCTURE/014 {attr_name="target", actual_value="0", expected_constraint="present when ABI or export attrs are present"}
-func.def abi(object_function) @semantic_requires_target() {
+// ABI contracts can remain target-independent until invocation selection.
+func.def abi(object_function) @targetless_abi() {
   func.return
 }
 

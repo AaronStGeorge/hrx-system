@@ -45,6 +45,9 @@ loom_cc_binary(
     iree::io::file_handle
     loom::codegen::low::text_asm
     loom::error::diagnostic
+    loom::ir
+    loom::ops::kernel
+    loom::ops::op_defs
     loom::target::artifact_manifest
     loom::target::low_descriptor_registry
     loom::tooling::cli::help
@@ -56,7 +59,6 @@ loom_cc_binary(
     loom::tooling::execution::execution_provider
     loom::tooling::execution::hal::artifact
     loom::tooling::execution::hal::candidate
-    loom::tooling::execution::hal::target_assignment
     loom::tooling::execution::session
     loom::tooling::io::file
     loom::tooling::pass::trace_cli

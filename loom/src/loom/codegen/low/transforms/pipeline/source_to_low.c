@@ -225,6 +225,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       loom_low_pass_capability_descriptor_registry(low_capability);
   const loom_low_lower_policy_registry_t* policy_registry =
       loom_low_pass_capability_lower_policy_registry(low_capability);
+  const loom_target_pass_capability_t* target_capability =
+      loom_target_pass_capability_from_pass(pass);
   loom_target_compile_report_t* compile_report =
       loom_low_pass_capability_compile_report(low_capability);
   const iree_allocator_t source_low_report_allocator =
@@ -241,7 +243,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       .diagnostic_emitter = pass->diagnostic_emitter,
       .lowering_kind = IREE_SV("source-to-low"),
       .target_selection =
-          loom_low_pass_capability_target_selection(low_capability),
+          loom_target_pass_capability_target_selection(target_capability),
+      .target_ref = loom_target_pass_capability_target_ref(target_capability),
   };
   iree_status_t status = loom_low_select_source_symbols(
       module, &selection_options, &selection_arena, &selection_list);

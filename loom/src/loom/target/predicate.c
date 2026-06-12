@@ -16,6 +16,7 @@
 #include "loom/ops/pass/ops.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/function_contract.h"
+#include "loom/target/selection.h"
 
 static bool loom_target_pass_predicate_is_supported_attr(
     iree_string_view_t name) {
@@ -155,6 +156,8 @@ static bool loom_target_pass_predicate_symbol_id(
 typedef struct loom_target_pass_predicate_target_facts_t {
   // Resolved function facts for the current function.
   const loom_func_symbol_facts_t* func;
+  // Effective target record symbol selected for |func|.
+  loom_symbol_ref_t target_ref;
   // Target record op named by |func|.
   const loom_op_t* target_op;
   // Resolved function target bundle.
@@ -180,23 +183,38 @@ static iree_status_t loom_target_pass_predicate_resolve_facts(
   IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup(
       &fact_table, context->target_module, symbol_id, &base_facts));
   out_facts->func = loom_func_symbol_facts_cast(base_facts);
-  if (!out_facts->func ||
-      !loom_symbol_ref_is_valid(out_facts->func->target_symbol)) {
+  if (!out_facts->func) {
     return iree_ok_status();
   }
-  if (out_facts->func->target_symbol.module_id != 0 ||
-      out_facts->func->target_symbol.symbol_id >=
+  const loom_target_pass_capability_t* target_capability =
+      loom_target_pass_capability_from_environment(context->environment);
+  out_facts->target_ref = loom_target_effective_target_ref(
+      out_facts->func->target_symbol, target_capability);
+  if (!loom_symbol_ref_is_valid(out_facts->target_ref)) {
+    return iree_ok_status();
+  }
+  if (out_facts->target_ref.module_id != 0 ||
+      out_facts->target_ref.symbol_id >=
           context->target_module->symbols.count) {
     return iree_ok_status();
   }
-  out_facts->target_op = context->target_module->symbols
-                             .entries[out_facts->func->target_symbol.symbol_id]
-                             .defining_op;
+  const loom_symbol_facts_base_t* target_base_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup_ref(
+      &fact_table, context->target_module, out_facts->target_ref,
+      &target_base_facts));
+  const loom_target_symbol_facts_t* target =
+      loom_target_symbol_facts_cast(target_base_facts);
+  if (!target) {
+    return iree_ok_status();
+  }
+  out_facts->target_op =
+      context->target_module->symbols.entries[out_facts->target_ref.symbol_id]
+          .defining_op;
 
   bool contract_valid = false;
-  IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
-      context->target_module, &fact_table, out_facts->func,
-      (iree_diagnostic_emitter_t){0}, &contract_valid,
+  IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve_from_bundle(
+      context->target_module, out_facts->func, target->name,
+      &target->storage.bundle, (iree_diagnostic_emitter_t){0}, &contract_valid,
       &out_facts->bundle_storage));
   if (!contract_valid) {
     return iree_ok_status();
@@ -214,7 +232,7 @@ static bool loom_target_pass_predicate_match_attr(
   if (iree_string_view_equal(name, IREE_SV("target"))) {
     return loom_target_pass_predicate_symbol_matches(
         loom_target_pass_predicate_symbol_name(context->target_module,
-                                               facts->func->target_symbol),
+                                               facts->target_ref),
         expected);
   }
   if (iree_string_view_equal(name, IREE_SV("target_op"))) {

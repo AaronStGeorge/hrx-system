@@ -24,8 +24,13 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/ops/test/ops.h"
+#include "loom/ops/test/registry.h"
+#include "loom/target/provider.h"
+#include "loom/target/types.h"
 #include "loom/verify/verify.h"
 #include "module.h"
+#include "target.h"
 #include "test/util.h"
 
 namespace {
@@ -41,6 +46,122 @@ using LinkerPtr = HandlePtr<loomc_linker_t, loomc_linker_release>;
 using WorkspacePtr = HandlePtr<loomc_workspace_t, loomc_workspace_release>;
 using ModulePtr = HandlePtr<loomc_module_t, loomc_module_release>;
 using ResultPtr = HandlePtr<loomc_result_t, loomc_result_release>;
+using TargetEnvironmentPtr =
+    HandlePtr<loomc_target_environment_t, loomc_target_environment_release>;
+using TargetProfilePtr =
+    HandlePtr<loomc_target_profile_t, loomc_target_profile_release>;
+using TargetSelectionPtr =
+    HandlePtr<loomc_target_selection_t, loomc_target_selection_release>;
+
+static const loom_target_snapshot_t kFakeTargetSnapshot = {
+    /*.name=*/IREE_SVL("fake-link-target"),
+    /*.codegen_format=*/LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
+    /*.artifact_format=*/LOOM_TARGET_ARTIFACT_FORMAT_ELF,
+};
+
+static const loom_target_export_plan_t kFakeTargetExportPlan = {
+    /*.name=*/IREE_SVL("fake-link-target"),
+    /*.export_symbol=*/IREE_SVL(""),
+    /*.abi_kind=*/LOOM_TARGET_ABI_OBJECT_FUNCTION,
+};
+
+static const loom_target_config_t kFakeTargetConfig = {
+    /*.name=*/IREE_SVL("fake-link-target"),
+};
+
+static const loom_target_bundle_t kFakeTargetBundle = {
+    /*.name=*/IREE_SVL("fake-link-target"),
+    /*.snapshot=*/&kFakeTargetSnapshot,
+    /*.export_plan=*/&kFakeTargetExportPlan,
+    /*.config=*/&kFakeTargetConfig,
+};
+
+static iree_status_t RegisterFakeTargetContext(loom_context_t* context) {
+  return loom_test_dialect_register(context);
+}
+
+static iree_status_t MaterializeFakeTargetSelection(
+    const loom_target_provider_t* provider,
+    const loom_target_selection_materialization_request_t* request,
+    bool* out_materialized, loom_symbol_ref_t* out_target_ref) {
+  (void)provider;
+  *out_materialized = false;
+  *out_target_ref = loom_symbol_ref_null();
+  if (request->target_selection.bundle != &kFakeTargetBundle) {
+    return iree_ok_status();
+  }
+
+  loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      request->module, IREE_SV("selected_link_target"), &symbol_name_id));
+  loom_symbol_id_t symbol_id =
+      loom_module_find_symbol(request->module, symbol_name_id);
+  if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(
+        loom_module_add_symbol(request->module, symbol_name_id, &symbol_id));
+  }
+  *out_target_ref = {
+      /*.module_id=*/0,
+      /*.symbol_id=*/symbol_id,
+  };
+  if (request->module->symbols.entries[symbol_id].defining_op != nullptr) {
+    *out_materialized = true;
+    return iree_ok_status();
+  }
+
+  loom_block_t* module_block = loom_module_block(request->module);
+  loom_builder_t builder = {};
+  loom_builder_initialize(request->module, &request->module->arena,
+                          module_block, &builder);
+  if (module_block->first_op != nullptr) {
+    loom_builder_set_before(&builder, module_block->first_op);
+  }
+  loom_op_t* target_op = nullptr;
+  IREE_RETURN_IF_ERROR(loom_test_target_build(
+      &builder, /*build_flags=*/0, LOOM_TEST_TARGET_KIND_LOW_CORE,
+      *out_target_ref, /*codegen_format=*/0, /*artifact_format=*/0,
+      /*default_pointer_bitwidth=*/0, /*index_bitwidth=*/0,
+      /*offset_bitwidth=*/0, /*max_workgroup_size_x=*/0,
+      /*max_workgroup_size_y=*/0, /*max_workgroup_size_z=*/0,
+      /*max_flat_workgroup_size=*/0, /*subgroup_size=*/0,
+      /*max_grid_size_x=*/0, /*max_grid_size_y=*/0,
+      /*max_grid_size_z=*/0, /*max_flat_grid_size=*/0,
+      /*max_workgroup_count_x=*/0, /*max_workgroup_count_y=*/0,
+      /*max_workgroup_count_z=*/0, /*memory_space_generic=*/0,
+      /*memory_space_global=*/0, /*memory_space_workgroup=*/0,
+      /*memory_space_constant=*/0, /*memory_space_private=*/0,
+      /*memory_space_host=*/0, /*memory_space_descriptor=*/0, /*abi=*/0,
+      /*export_symbol=*/LOOM_STRING_ID_INVALID, /*linkage=*/0,
+      /*hal_buffer_resource_flags=*/0,
+      /*contract_set_key=*/LOOM_STRING_ID_INVALID,
+      /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &target_op));
+  *out_materialized = true;
+  return iree_ok_status();
+}
+
+static const loom_target_provider_t kFakeTargetProvider = {
+    /*.register_context=*/RegisterFakeTargetContext,
+    /*.initialize_low_descriptor_registry=*/nullptr,
+    /*.initialize_low_lower_policy_registry=*/nullptr,
+    /*.initialize_math_policy_registry=*/nullptr,
+    /*.low_legality_provider_list=*/{},
+    /*.legalizer_provider_list=*/{},
+    /*.low_packet_diagnostic_provider_list=*/{},
+    /*.low_verify_provider_list=*/{},
+    /*.emitter_list=*/{},
+    /*.pass_registry=*/nullptr,
+    /*.contribute_pipeline=*/nullptr,
+    /*.materialize_selection=*/MaterializeFakeTargetSelection,
+};
+
+static const loom_target_provider_t* const kFakeTargetProviders[] = {
+    &kFakeTargetProvider,
+};
+
+static const loom_target_provider_set_t kFakeTargetProviderSet = {
+    /*.providers=*/kFakeTargetProviders,
+    /*.provider_count=*/IREE_ARRAYSIZE(kFakeTargetProviders),
+};
 
 std::string ToString(loomc_string_view_t value) {
   if (value.size == 0) {
@@ -150,6 +271,62 @@ ContextPtr CreateContext() {
       loomc_context_create(nullptr, loomc_allocator_system(), &context);
   LOOMC_EXPECT_OK(status);
   return ContextPtr(context);
+}
+
+ContextPtr CreateContext(loomc_target_environment_t* target_environment) {
+  loomc_context_target_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_CONTEXT_TARGET_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_environment=*/target_environment,
+  };
+  loomc_context_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_CONTEXT_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/&target_options,
+  };
+  loomc_context_t* context = nullptr;
+  loomc_status_t status =
+      loomc_context_create(&options, loomc_allocator_system(), &context);
+  LOOMC_EXPECT_OK(status);
+  return ContextPtr(context);
+}
+
+TargetEnvironmentPtr CreateFakeTargetEnvironment() {
+  loomc_target_environment_t* target_environment = nullptr;
+  loomc_status_t status = loomc_target_environment_create_from_provider_set(
+      &kFakeTargetProviderSet, loomc_allocator_system(), &target_environment);
+  LOOMC_EXPECT_OK(status);
+  return TargetEnvironmentPtr(target_environment);
+}
+
+TargetProfilePtr CreateFakeTargetProfile(
+    loomc_target_environment_t* target_environment) {
+  loomc_target_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("fake-link-profile"),
+  };
+  loom_target_selection_t selection = {
+      /*.bundle=*/&kFakeTargetBundle,
+      /*.data=*/nullptr,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_status_t status = loomc_target_profile_create_from_selection(
+      target_environment, &options, selection, /*payload_type=*/nullptr,
+      /*payload=*/nullptr, /*deinitialize=*/nullptr, loomc_allocator_system(),
+      &profile);
+  LOOMC_EXPECT_OK(status);
+  return TargetProfilePtr(profile);
+}
+
+TargetSelectionPtr CreateTargetSelection(loomc_target_profile_t* profile) {
+  loomc_target_selection_t* selection = nullptr;
+  loomc_status_t status = loomc_target_selection_create_from_profile(
+      profile, loomc_allocator_system(), &selection);
+  LOOMC_EXPECT_OK(status);
+  return TargetSelectionPtr(selection);
 }
 
 SourcePtr CreateSource(loomc_source_format_t format, const char* identifier,
@@ -662,6 +839,62 @@ func.def public @entry() -> (index) {
       second_text.find("config.def @model36.model.hidden_size = 1024 : index"),
       std::string::npos);
   EXPECT_EQ(second_text.find("4096"), std::string::npos);
+}
+
+TEST(LinkTest, LinkModuleMaterializesInvocationTargetOnLinkedOutput) {
+  TargetEnvironmentPtr target_environment = CreateFakeTargetEnvironment();
+  TargetProfilePtr profile = CreateFakeTargetProfile(target_environment.get());
+  TargetSelectionPtr target_selection = CreateTargetSelection(profile.get());
+  ContextPtr context = CreateContext(target_environment.get());
+  BuilderPtr builder = CreateBuilder(context.get());
+  SourcePtr source = CreateTextSource("multi_root.loom", R"(
+func.def public @first() {
+  func.return
+}
+
+func.def public @second() {
+  func.return
+}
+)");
+  AddSource(builder.get(), source.get(), "multi_root",
+            LOOMC_LINK_PROVIDER_ROLE_INPUT);
+
+  LinkIndexPtr link_index;
+  FinishIndex(builder.get(), &link_index);
+  LinkerPtr linker = CreateLinker(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  loomc_target_selection_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_selection=*/target_selection.get(),
+  };
+  loomc_link_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_NONE,
+      /*.structure_size=*/0,
+      /*.next=*/&target_options,
+      /*.link_index=*/nullptr,
+      /*.module_name=*/loomc_string_view_empty(),
+      /*.root_symbols=*/nullptr,
+      /*.root_symbol_count=*/0,
+  };
+  ResultPtr result;
+  ModulePtr module = LinkIndex(linker.get(), workspace.get(), link_index.get(),
+                               &options, &result);
+
+  ASSERT_TRUE(loomc_result_succeeded(result.get()));
+  ASSERT_NE(module.get(), nullptr);
+  const loom_module_t* internal_module =
+      loomc_module_const_loom_module(module.get());
+  ASSERT_NE(internal_module, nullptr);
+  VerifyModule(internal_module);
+  EXPECT_TRUE(ModuleHasSymbol(internal_module, "first"));
+  EXPECT_TRUE(ModuleHasSymbol(internal_module, "second"));
+  EXPECT_TRUE(ModuleHasSymbol(internal_module, "selected_link_target"));
+
+  std::string linked_text = SerializeModuleToText(module.get());
+  EXPECT_NE(linked_text.find("test.target<low_core> @selected_link_target"),
+            std::string::npos);
 }
 
 TEST(LinkTest, DeserializeParseErrorsProduceFailedResult) {

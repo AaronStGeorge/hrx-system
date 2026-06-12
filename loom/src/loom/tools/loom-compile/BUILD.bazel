@@ -74,6 +74,9 @@ loom_cc_binary(
     deps = [
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/kernel",
         "//loom/src/loom/target:artifact_manifest",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/tooling/cli:help",
@@ -86,7 +89,6 @@ loom_cc_binary(
         "//loom/src/loom/tooling/execution:session",
         "//loom/src/loom/tooling/execution/hal:artifact",
         "//loom/src/loom/tooling/execution/hal:candidate",
-        "//loom/src/loom/tooling/execution/hal:target_assignment",
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/tooling/pass:trace_cli",
         "//runtime/src/iree/base",

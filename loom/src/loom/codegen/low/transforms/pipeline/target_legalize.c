@@ -1218,6 +1218,8 @@ iree_status_t loom_low_target_legalize_run(loom_pass_t* pass,
       loom_low_pass_capability_from_pass(pass);
   const loom_low_lower_policy_registry_t* policy_registry =
       loom_low_pass_capability_lower_policy_registry(low_capability);
+  const loom_target_pass_capability_t* target_capability =
+      loom_target_pass_capability_from_pass(pass);
   const loom_target_low_legality_provider_list_t* legality_provider_list =
       loom_low_pass_capability_legality_provider_list(low_capability);
   const loom_target_legalizer_provider_list_t* target_legalizer_provider_list =
@@ -1246,7 +1248,8 @@ iree_status_t loom_low_target_legalize_run(loom_pass_t* pass,
         .diagnostic_emitter = pass->diagnostic_emitter,
         .lowering_kind = IREE_SV("target-legalize"),
         .target_selection =
-            loom_low_pass_capability_target_selection(low_capability),
+            loom_target_pass_capability_target_selection(target_capability),
+        .target_ref = loom_target_pass_capability_target_ref(target_capability),
     };
     status = loom_low_select_source_funcs(module, &selection_options,
                                           &run_arena, &selection_list);

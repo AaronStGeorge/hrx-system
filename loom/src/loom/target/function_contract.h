@@ -26,16 +26,29 @@ extern "C" {
 #endif
 
 // Returns true when |selected_bundle| can refine |module_bundle| without
-// changing the target family, artifact format, ABI family, or target-low
-// descriptor contract selected by the module IR.
+// changing the target family, artifact format, or target-low descriptor
+// contract selected by the module IR.
 //
 // Runtime/device target selection uses this to apply concrete limits and
 // feature bits after a source module has selected a compatible target record.
-// The comparison intentionally ignores target feature bits because those are
-// the primary facts a selected device bundle is expected to refine.
+// The comparison intentionally ignores ABI/export facts and target feature
+// bits: ABI/export selection belongs to the authored function/target contract,
+// while feature bits are the primary facts a selected device bundle is expected
+// to refine.
 bool loom_target_function_contract_bundles_compatible(
     const loom_target_bundle_t* module_bundle,
     const loom_target_bundle_t* selected_bundle);
+
+// Refines |bundle_storage|'s target snapshot and config with a compatible
+// runtime-selected bundle while preserving the already resolved function-local
+// export plan.
+//
+// Callers must first validate compatibility with
+// loom_target_function_contract_bundles_compatible. This helper only performs
+// the structural overlay used by source selection and low target binding.
+void loom_target_function_contract_apply_compatible_selection(
+    const loom_target_bundle_t* selected_bundle,
+    loom_target_bundle_storage_t* bundle_storage);
 
 // Resolves |func_facts|'s target record and materializes the effective target
 // bundle selected by the func-like symbol.

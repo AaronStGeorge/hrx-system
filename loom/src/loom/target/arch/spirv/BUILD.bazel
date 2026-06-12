@@ -249,10 +249,13 @@ loom_cc_library(
     deps = [
         ":low_verify",
         ":math_policy",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/spirv/descriptors:low_registry",
         "//loom/src/loom/target/arch/spirv/lower",
         "//loom/src/loom/target/arch/spirv/ops",
+        "//loom/src/loom/target/arch/spirv/records:target_records",
         "//runtime/src/iree/base",
     ],
 )

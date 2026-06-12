@@ -33,6 +33,7 @@ loom_cc_library(
     loom::pass::environment
     loom::pass::types
     loom::target::math_policy
+    loom::target::selection
     loom::target::types
   PUBLIC
 )

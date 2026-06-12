@@ -16,6 +16,10 @@
 #include "loom/pass/builder.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/testing/registry_verify.h"
+#include "loom/target/arch/amdgpu/ops/ops.h"
+#include "loom/target/arch/amdgpu/ops/target.h"
+#include "loom/target/arch/amdgpu/records/target_records.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -63,11 +67,13 @@ class AmdgpuProviderTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    loom_context_initialize(iree_allocator_system(), &context_);
-    IREE_ASSERT_OK(loom_op_registry_register_all_dialects(&context_));
-    IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_target_environment_initialize(
         &loom_amdgpu_target_provider_set, &target_environment_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_op_registry_register_all_dialects(&context_));
+    IREE_ASSERT_OK(loom_target_environment_register_context(
+        &target_environment_, &context_));
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
   void TearDown() override {
@@ -84,6 +90,17 @@ class AmdgpuProviderTest : public ::testing::Test {
                                               &module));
     *out_module = ModulePtr(module);
     return iree_ok_status();
+  }
+
+  const loom_op_t* TargetOpFromRef(const loom_module_t* module,
+                                   loom_symbol_ref_t target_ref) {
+    IREE_ASSERT(loom_symbol_ref_is_valid(target_ref));
+    IREE_ASSERT(target_ref.module_id == 0);
+    IREE_ASSERT(target_ref.symbol_id < module->symbols.count);
+    const loom_symbol_t* symbol =
+        &module->symbols.entries[target_ref.symbol_id];
+    IREE_ASSERT(symbol->defining_op != nullptr);
+    return symbol->defining_op;
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -158,6 +175,49 @@ TEST_F(AmdgpuProviderTest, ContributesHalKernelAbiMaterialization) {
       IREE_SV("amdgpu-materialize-hal-kernel-abi")));
   EXPECT_TRUE(loom_pass_yield_isa(where_body->last_op));
   EXPECT_TRUE(loom_pass_yield_isa(pipeline_body->last_op));
+}
+
+TEST_F(AmdgpuProviderTest, MaterializesSelectedProcessors) {
+  ModulePtr module;
+  IREE_ASSERT_OK(AllocateModule(IREE_SV("materialize"), &module));
+
+  struct Case {
+    iree_string_view_t processor_name;
+    loom_amdgpu_target_kind_t expected_kind;
+  };
+  static const Case cases[] = {
+      {IREE_SV("gfx942"), LOOM_AMDGPU_TARGET_KIND_GFX942},
+      {IREE_SV("gfx1150"), LOOM_AMDGPU_TARGET_KIND_GFX1100},
+      {IREE_SV("gfx1201"), LOOM_AMDGPU_TARGET_KIND_GFX1200},
+      {IREE_SV("gfx1250"), LOOM_AMDGPU_TARGET_KIND_GFX1250},
+  };
+  for (const Case& c : cases) {
+    const loom_amdgpu_processor_info_t* processor = nullptr;
+    IREE_ASSERT_OK(
+        loom_amdgpu_target_info_lookup_processor(c.processor_name, &processor));
+    ASSERT_NE(processor, nullptr);
+    const loom_target_selection_t selection = {
+        /*.bundle=*/loom_amdgpu_target_bundle_for_descriptor_set(
+            processor->descriptor_set_ordinal),
+        /*.data=*/const_cast<loom_amdgpu_processor_info_t*>(processor),
+    };
+
+    loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+    IREE_ASSERT_OK(loom_target_environment_materialize_selection(
+        &target_environment_, module.get(), selection, &target_ref));
+    const loom_op_t* target_op = TargetOpFromRef(module.get(), target_ref);
+    ASSERT_TRUE(loom_amdgpu_target_isa(target_op));
+    EXPECT_EQ(loom_amdgpu_target_kind(target_op), c.expected_kind);
+    EXPECT_TRUE(iree_string_view_equal(
+        loom_amdgpu_target_record_processor_name(module.get(), target_op),
+        processor->processor));
+
+    loom_symbol_ref_t reused_ref = loom_symbol_ref_null();
+    IREE_ASSERT_OK(loom_target_environment_materialize_selection(
+        &target_environment_, module.get(), selection, &reused_ref));
+    EXPECT_EQ(reused_ref.module_id, target_ref.module_id);
+    EXPECT_EQ(reused_ref.symbol_id, target_ref.symbol_id);
+  }
 }
 
 }  // namespace
