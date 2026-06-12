@@ -59,6 +59,129 @@ reduction, SiLU, and store. Higher-fidelity math oracles belong in the external
 fixture/reference layer when the expected values are too large or too expensive
 to express inline.
 
+### Q8 Command Flow
+
+Start with the host-only planner when editing source shape, check parameters,
+or benchmark rows:
+
+```bash
+python dev.py bazel run //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom -- \
+  loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom \
+  --dry-run \
+  --output=/tmp/loom-q6q8-plan.json
+```
+
+`--dry-run` parses, verifies, and plans `check.case`/`check.benchmark`
+workloads. It does not compile, allocate device buffers, run correctness, or
+measure timing, so it is the cheapest way to catch source and benchmark
+selection mistakes. Inspect `summary`, `work_items`, `benchmarks`, `failures`,
+and `failed_samples` in the output JSON.
+
+Compile the same authored file to an AMDGPU HAL executable plus a native HSACO
+sidecar when validating target lowering and packaging:
+
+```bash
+python dev.py bazel run //loom/src/loom/tools/loom-compile:loom-compile -- \
+  loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom \
+  --backend=amdgpu-hal \
+  --target=gfx1100 \
+  --output=/tmp/loom-q6q8.vmfb \
+  --emit-target-artifact=/tmp/loom-q6q8.hsaco \
+  --artifact-manifest=summary \
+  --emit-artifact-manifest=/tmp/loom-q6q8.manifest.json \
+  --compile-report=summary \
+  --compile-report-output=/tmp/loom-q6q8.compile-report.json
+```
+
+`--target=gfx1100` is invocation target selection. The source kernel stays
+targetless, template providers are resolved against the effective target, and
+target-sensitive passes see that same selected target. A successful summary
+manifest for this kernel reports one `ffn_gate_up_swiglu_q6q8` function, four
+parameters/bindings, zero constant bytes, workgroup size `[512,1,1]`, and
+subgroup size `32`.
+
+The artifact manifest describes the emitted artifact contract. The compile
+report describes compiler evidence for the invocation: status, selected backend
+and target bundle, schedule size, register pressure, instruction mix, spills,
+emitted code bytes, and memory summaries. Useful first inspections are:
+
+```bash
+jq '{artifact, targets, functions}' /tmp/loom-q6q8.manifest.json
+jq '{status, target_key, target_bundle, target_export, spills:.allocation.spill_count, code_bytes:.emission.code_byte_count, dots:.static_instruction_mix.dot_count}' \
+  /tmp/loom-q6q8.compile-report.json
+```
+
+When provider selection, inlining, or math legalization is suspect, capture IR
+snapshots around those boundaries:
+
+```bash
+python dev.py bazel run //loom/src/loom/tools/loom-compile:loom-compile -- \
+  loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom \
+  --backend=amdgpu-hal \
+  --target=gfx1100 \
+  --output=/tmp/loom-q6q8.vmfb \
+  --emit-target-artifact=/tmp/loom-q6q8.hsaco \
+  --dump-ir-after=select-templates \
+  --dump-ir-after=inline-callables \
+  --dump-ir-after=legalize-math \
+  --dump-ir-format=jsonl \
+  --dump-ir-output=/tmp/loom-q6q8-trace/
+```
+
+The JSONL trace is the scriptable index. The adjacent `.loom` snapshots are the
+human-readable IR. `select-templates` should remove residual
+`func.apply<model.q6q8.accumulate_part>` sites, `inline-callables` should remove
+the selected provider boundary, and `legalize-math` should rewrite semantic
+SiLU before target-low emission.
+
+Standalone `loom-compile` emits the artifact, manifest, and compile report. To
+keep target-owned assembly/listing text with benchmark evidence, run
+`iree-benchmark-loom` with a debug or full artifact bundle on an AMDGPU-capable
+build:
+
+```bash
+python dev.py bazel run \
+  --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null \
+  //loom/src/loom/tools/iree-benchmark-loom:iree-benchmark-loom -- \
+  loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom \
+  --device=amdgpu \
+  --measure=dispatch_complete \
+  --iterations=1 \
+  --warmup-iterations=0 \
+  --batch-size=1 \
+  --min-time-ms=0 \
+  --max-batches=1 \
+  --input-ring-count=1 \
+  --artifact-bundle-dir=/tmp/loom-q6q8-run \
+  --artifact-bundle-policy=debug \
+  --artifact-manifest=summary \
+  --output-format=jsonl
+```
+
+Debug/full bundles keep per-candidate compile reports under
+`compile_reports/`, artifact manifests under `artifact_manifests/`, native
+artifacts under `target_artifacts/`, target-owned listings under
+`target_listings/`, and HAL executable artifacts under `hal_executables/`.
+JSONL compile and benchmark rows link those files with
+`compile_report_path`, `artifact_manifest_path`, `target_artifact_path`,
+`target_listing_path`, and `hal_executable_path`.
+
+For quick object-level disassembly of a standalone HSACO, use the LLVM object
+tools on the emitted sidecar:
+
+```bash
+llvm-objdump -d --mcpu=gfx1100 /tmp/loom-q6q8.hsaco
+```
+
+Treat the evidence channels separately. Planner output answers "what would run?"
+Compile reports answer "what did the compiler emit?" Artifact manifests answer
+"what does this loader-ready artifact contain?" `dispatch_complete` benchmark
+rows answer "how long did completed HAL dispatch work take?" The quick command
+above intentionally uses one hot-reuse input ring and tiny iteration counts for
+smoke coverage; serious timing should use larger batches, warmups, a stable
+minimum duration, and enough input-ring bytes to avoid measuring only cache-hot
+data reuse.
+
 ## Memset i8
 
 `memset_i8.loom` is the minimal byte-fill reference for dynamic extent kernels.
