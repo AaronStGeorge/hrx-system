@@ -572,6 +572,24 @@ void __asan_before_dynamic_init(uint64_t module_name) { (void)module_name; }
 void __asan_handle_no_return(void) {}
 void __asan_init(void) {}
 void __asan_version_mismatch_check_v8(void) {}
+void __sanitizer_ptr_cmp(uint64_t lhs, uint64_t rhs) {
+  (void)lhs;
+  (void)rhs;
+}
+void __sanitizer_ptr_sub(uint64_t lhs, uint64_t rhs) {
+  (void)lhs;
+  (void)rhs;
+}
+
+void __ockl_dm_init_v1(uint64_t heap_address, uint64_t stack_address,
+                       uint32_t heap_base, uint32_t initial_slab_count) {
+  (void)heap_address;
+  (void)stack_address;
+  (void)heap_base;
+  (void)initial_slab_count;
+}
+void __ockl_dm_trim(int* memory) { (void)memory; }
+uint64_t __ockl_dm_nna(void) { return 0; }
 
 #if defined(__clang__)
 #pragma clang attribute pop
