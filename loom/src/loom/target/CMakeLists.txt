@@ -154,6 +154,31 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    artifact_manifest
+  HDRS
+    "artifact_manifest.h"
+  SRCS
+    "artifact_manifest.c"
+  DEPS
+    iree::base
+    loom::util::json
+    loom::util::stream
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    artifact_manifest_test
+  SRCS
+    "artifact_manifest_test.cc"
+  DEPS
+    ::artifact_manifest
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     function_contract
   HDRS
     "function_contract.h"
