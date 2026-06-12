@@ -78,8 +78,8 @@ class AmdgpuHalArtifactProviderTest : public ::testing::Test {
   iree_status_t ParsePreparedArithmeticModule(ModulePtr* out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx1100> @gfx_target\n"
-        "low.kernel.def target(@gfx_target) export(\"loom_kernel\") "
-        "workgroup_size(64, 1, 1) @loom_kernel() {\n"
+        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
+        "@loom_kernel() {\n"
         "  %zero = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
         "reg<amdgpu.vgpr>\n"
         "  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : "
@@ -101,8 +101,8 @@ class AmdgpuHalArtifactProviderTest : public ::testing::Test {
   iree_status_t ParsePreparedCdnaArithmeticModule(ModulePtr* out_module) {
     static const char kSource[] =
         "amdgpu.target<gfx942> @gfx_target\n"
-        "low.kernel.def target(@gfx_target) export(\"loom_kernel\") "
-        "workgroup_size(64, 1, 1) @loom_kernel() {\n"
+        "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
+        "@loom_kernel() {\n"
         "  %zero = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
         "reg<amdgpu.vgpr>\n"
         "  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : "
