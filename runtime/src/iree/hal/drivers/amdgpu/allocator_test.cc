@@ -126,6 +126,10 @@ class AllocatorTest : public ::testing::Test {
 
     iree_hal_device_t* device() const { return base_device_; }
 
+    iree_hal_amdgpu_logical_device_t* logical_device() const {
+      return (iree_hal_amdgpu_logical_device_t*)base_device_;
+    }
+
    private:
     // Creation context supplying the proactor pool and frontier tracker.
     iree::hal::cts::DeviceCreateContext create_context_;
@@ -147,6 +151,32 @@ iree_allocator_t AllocatorTest::host_allocator_;
 iree_hal_amdgpu_libhsa_t AllocatorTest::libhsa_;
 iree_hal_amdgpu_system_info_t AllocatorTest::system_info_;
 iree_hal_amdgpu_topology_t AllocatorTest::topology_;
+
+TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  iree_hal_amdgpu_asan_state_t* asan_state =
+      &test_device.logical_device()->asan;
+  EXPECT_TRUE(iree_hal_amdgpu_asan_state_is_enabled(asan_state));
+
+  iree_hal_amdgpu_shadow_map_t* shadow_map =
+      iree_hal_amdgpu_asan_state_shadow_map(asan_state);
+  ASSERT_NE(shadow_map, nullptr);
+  EXPECT_EQ(shadow_map->shadow_scale_shift, options.asan.shadow_scale_shift);
+  EXPECT_EQ(shadow_map->reservation_size, options.asan.shadow_size);
+  EXPECT_EQ(shadow_map->application_window_base, 0u);
+  EXPECT_EQ(shadow_map->application_window_size,
+            options.asan.shadow_size << options.asan.shadow_scale_shift);
+  EXPECT_GE(shadow_map->slab_size, options.asan.shadow_slab_size);
+  EXPECT_TRUE(iree_device_size_is_power_of_two(shadow_map->slab_size));
+  EXPECT_EQ(shadow_map->slab_count, 0u);
+}
 
 TEST_F(AllocatorTest, QueryMemoryHeapsReportsHsaLimits) {
   TestLogicalDevice test_device;

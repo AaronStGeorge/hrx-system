@@ -48,6 +48,18 @@ TEST(AmdgpuDriverOptionsTest, LogicalDeviceDefaultsUseHostCopyPm4Publication) {
             IREE_HAL_AMDGPU_PM4_COMMAND_BUFFER_PUBLICATION_MODE_HOST_COPY);
 }
 
+TEST(AmdgpuDriverOptionsTest, LogicalDeviceDefaultsDisableAsan) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+
+  EXPECT_FALSE(options.asan.enabled);
+  EXPECT_EQ(options.asan.shadow_scale_shift,
+            IREE_HAL_AMDGPU_SHADOW_MAP_DEFAULT_SCALE_SHIFT);
+  EXPECT_EQ(options.asan.shadow_size, IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE);
+  EXPECT_EQ(options.asan.shadow_slab_size,
+            IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE);
+}
+
 TEST(AmdgpuDriverOptionsTest, RejectsMissingSearchPathStorageBeforeLoadingHsa) {
   iree_hal_amdgpu_driver_options_t options;
   iree_hal_amdgpu_driver_options_initialize(&options);
@@ -177,6 +189,30 @@ TEST(AmdgpuDriverOptionsTest, RejectsActiveWaitBeforeLoadingHsa) {
   options.wait_active_for_ns = 1;
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        CreateDriverWithDefaultDeviceOptions(&options));
+}
+
+TEST(AmdgpuDriverOptionsTest, RejectsInvalidAsanGeometryBeforeLoadingHsa) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.shadow_size = 1000;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        CreateDriverWithDefaultDeviceOptions(&options));
+
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.shadow_slab_size = 1000;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        CreateDriverWithDefaultDeviceOptions(&options));
+
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.shadow_scale_shift = 63;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
                         CreateDriverWithDefaultDeviceOptions(&options));
 }
 

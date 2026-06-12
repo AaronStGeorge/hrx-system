@@ -173,6 +173,12 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
   out_options->host_queues.upload_capacity =
       IREE_HAL_AMDGPU_PHYSICAL_DEVICE_DEFAULT_HOST_QUEUE_UPLOAD_CAPACITY;
 
+  out_options->asan.shadow_scale_shift =
+      IREE_HAL_AMDGPU_SHADOW_MAP_DEFAULT_SCALE_SHIFT;
+  out_options->asan.shadow_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE;
+  out_options->asan.shadow_slab_size =
+      IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE;
+
   out_options->preallocate_pools = 1;
 }
 
@@ -250,6 +256,35 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU wait_active_for_ns is not implemented; "
                             "use 0");
+  }
+  if (options->asan.enabled) {
+    if (options->asan.shadow_scale_shift >= 63) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU ASAN shadow scale shift %u is too large",
+                              options->asan.shadow_scale_shift);
+    }
+    if (options->asan.shadow_size == 0 ||
+        !iree_device_size_is_power_of_two(options->asan.shadow_size)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN shadow size %" PRIu64
+                              " must be a non-zero power of two",
+                              (uint64_t)options->asan.shadow_size);
+    }
+    if (options->asan.shadow_slab_size == 0 ||
+        !iree_device_size_is_power_of_two(options->asan.shadow_slab_size)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN shadow slab size %" PRIu64
+                              " must be a non-zero power of two",
+                              (uint64_t)options->asan.shadow_slab_size);
+    }
+    if (options->asan.shadow_slab_size > options->asan.shadow_size ||
+        options->asan.shadow_size % options->asan.shadow_slab_size != 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN shadow slab size %" PRIu64
+                              " must divide shadow size %" PRIu64,
+                              (uint64_t)options->asan.shadow_slab_size,
+                              (uint64_t)options->asan.shadow_size);
+    }
   }
   return iree_ok_status();
 }
@@ -1674,6 +1709,12 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
     status = iree_hal_amdgpu_logical_device_create_device_spec(logical_device,
                                                                host_allocator);
   }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_asan_state_initialize(
+        options, logical_device->system, logical_device->physical_device_count,
+        logical_device->physical_devices, host_allocator,
+        &logical_device->asan);
+  }
 
   // If requested then warmup pools that we expect to grow on the first usage of
   // the backend. The first use may need more than the warmup provides here but
@@ -1734,6 +1775,7 @@ static void iree_hal_amdgpu_logical_device_destroy(
       &logical_device->profiling.event_streams, logical_device->host_allocator);
 
   iree_hal_amdgpu_logical_device_deassign_frontier(logical_device);
+  iree_hal_amdgpu_asan_state_deinitialize(&logical_device->asan);
 
   // Devices may hold allocations and need to be cleaned up first.
   for (iree_host_size_t i = 0; i < logical_device->physical_device_count; ++i) {

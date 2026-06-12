@@ -67,6 +67,14 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
       3,
 } iree_hal_amdgpu_pm4_command_buffer_publication_mode_t;
 
+// Device-visible virtual shadow reservation size used by ASAN by default.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE \
+  ((iree_device_size_t)1ull << 40)
+
+// Physical shadow slab size used by ASAN by default.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE \
+  ((iree_device_size_t)128 * 1024 * 1024)
+
 // Parameters configuring an iree_hal_amdgpu_logical_device_t.
 // Must be initialized with iree_hal_amdgpu_logical_device_options_initialize
 // prior to use.
@@ -152,6 +160,21 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
     // command-buffer fixup inputs without using the file staging pool.
     uint32_t upload_capacity;
   } host_queues;
+
+  // Optional ASAN device-side checking support.
+  struct {
+    // True to reserve ASAN shadow state for the logical device.
+    uint64_t enabled : 1;
+
+    // Log2 application bytes represented by one shadow byte.
+    uint32_t shadow_scale_shift;
+
+    // Device-visible virtual shadow reservation size in bytes.
+    iree_device_size_t shadow_size;
+
+    // Physical shadow slab size in bytes.
+    iree_device_size_t shadow_slab_size;
+  } asan;
 
   // Preallocates a reasonable number of resources in pools to reduce initial
   // execution latency.

@@ -169,6 +169,8 @@ iree_cc_library(
     "aql_program_builder.h"
     "aql_program_validation.c"
     "aql_program_validation.h"
+    "asan_state.c"
+    "asan_state.h"
     "driver.c"
     "driver.h"
     "executable.c"
@@ -284,6 +286,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::pm4_dispatch
     iree::hal::drivers::amdgpu::util::pm4_program
     iree::hal::drivers::amdgpu::util::queue_primitives
+    iree::hal::drivers::amdgpu::util::shadow_map
     iree::hal::drivers::amdgpu::util::target_id
     iree::hal::drivers::amdgpu::util::topology
     iree::hal::drivers::amdgpu::util::vmem
@@ -311,6 +314,7 @@ iree_cc_library(
     "aql_prepublished_kernarg_storage.h"
     "aql_program_builder.h"
     "aql_program_validation.h"
+    "asan_state.h"
     "buffer.h"
     "driver.h"
     "executable.h"
@@ -368,6 +372,7 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::util::pm4_dispatch
     iree::hal::drivers::amdgpu::util::pm4_program
     iree::hal::drivers::amdgpu::util::queue_primitives
+    iree::hal::drivers::amdgpu::util::shadow_map
     iree::hal::drivers::amdgpu::util::target_id
     iree::hal::drivers::amdgpu::util::topology
     iree::hal::drivers::amdgpu::util::vmem

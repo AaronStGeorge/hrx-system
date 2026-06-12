@@ -12,6 +12,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/amdgpu/api.h"
+#include "iree/hal/drivers/amdgpu/asan_state.h"
 #include "iree/hal/drivers/amdgpu/profile_events.h"
 #include "iree/hal/drivers/amdgpu/profile_metadata.h"
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
@@ -117,6 +118,9 @@ typedef struct iree_hal_amdgpu_logical_device_t {
   // This retains our fixed resources (like the device library) on the subset of
   // the agents available in HSA that are represented as physical devices.
   iree_hal_amdgpu_system_t* system;
+
+  // Optional ASAN state shared by allocator, executable, and queue paths.
+  iree_hal_amdgpu_asan_state_t asan;
 
   // Shared epoch-signal table used by all host queues on this logical device
   // for local cross-queue barrier emission. Owned by the logical device and
