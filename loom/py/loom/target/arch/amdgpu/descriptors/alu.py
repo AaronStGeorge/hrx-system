@@ -2183,7 +2183,17 @@ def _v_pk_ternary_overlay(
     mnemonic: str,
     semantic_tag: str,
     units: int = 1,
+    include_literal_forms: bool = False,
 ) -> AmdgpuDescriptorOverlay:
+    operand_forms: tuple[OperandForm, ...] = ()
+    if include_literal_forms:
+        operand_forms = tuple(
+            _literal_operand_form(
+                replacement_descriptor=f"{descriptor_key}.{source_name}_lit",
+                source_operand=source_operand,
+            )
+            for source_name, _, source_operand, _ in _V_PK_TERNARY_SOURCES
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name=instruction_name,
@@ -2197,12 +2207,103 @@ def _v_pk_ternary_overlay(
             AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b", units=units)),
             AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c", units=units)),
         ),
+        operand_forms=operand_forms,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 
-def _v_pk_fma_f16_overlay() -> AmdgpuDescriptorOverlay:
+_V_PK_TERNARY_SOURCES = (
+    ("src0", "SRC0", "a", _sgpr_vgpr_operand),
+    ("src1", "SRC1", "b", _sgpr_vgpr_operand),
+    ("src2", "SRC2", "c", _sgpr_vgpr_operand),
+)
+
+
+def _v_pk_ternary_literal_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    literal_source: str,
+    units: int = 1,
+) -> AmdgpuDescriptorOverlay:
+    literal_field = ""
+    operands = [AmdgpuOperandOverlay("VDST", _vgpr_result(units=units))]
+    asm_operands = []
+    for (
+        source_name,
+        xml_field_name,
+        operand_name,
+        operand_builder,
+    ) in _V_PK_TERNARY_SOURCES:
+        if source_name == literal_source:
+            literal_field = xml_field_name
+            continue
+        asm_operands.append(operand_name)
+        operands.append(
+            AmdgpuOperandOverlay(
+                xml_field_name, operand_builder(operand_name, units=units)
+            )
+        )
+    if not literal_field:
+        raise ValueError(f"unknown packed VOP3P literal source '{literal_source}'")
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"{descriptor_key}.{literal_source}_lit",
+        instruction_name=instruction_name,
+        mnemonic=f"{mnemonic}_{literal_source}_lit",
+        encoding_name="ENC_VOP3P",
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL,
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_VALU,
+        operands=tuple(operands),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=tuple(asm_operands),
+            immediates=("imm32",),
+        ),
+        immediates=(_LITERAL_U32_IMMEDIATE,),
+        fixed_encoding_fields=((literal_field, _predefined("SRC_LITERAL", "OPR_SRC")),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_pk_ternary_literal_overlays(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    units: int = 1,
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_pk_ternary_literal_overlay(
+            descriptor_key=descriptor_key,
+            instruction_name=instruction_name,
+            mnemonic=mnemonic,
+            semantic_tag=semantic_tag,
+            literal_source=source_name,
+            units=units,
+        )
+        for source_name, _, _, _ in _V_PK_TERNARY_SOURCES
+    )
+
+
+def _v_pk_fma_f16_overlay(
+    *,
+    include_literal_forms: bool = False,
+) -> AmdgpuDescriptorOverlay:
     return _v_pk_ternary_overlay(
+        descriptor_key="amdgpu.v_pk_fma_f16",
+        instruction_name="V_PK_FMA_F16",
+        mnemonic="v_pk_fma_f16",
+        semantic_tag="float.fma.pk2.f16",
+        include_literal_forms=include_literal_forms,
+    )
+
+
+def _v_pk_fma_f16_literal_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return _v_pk_ternary_literal_overlays(
         descriptor_key="amdgpu.v_pk_fma_f16",
         instruction_name="V_PK_FMA_F16",
         mnemonic="v_pk_fma_f16",
@@ -2245,8 +2346,21 @@ def _v_pk_fmac_f16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_pk_mad_i16_overlay() -> AmdgpuDescriptorOverlay:
+def _v_pk_mad_i16_overlay(
+    *,
+    include_literal_forms: bool = False,
+) -> AmdgpuDescriptorOverlay:
     return _v_pk_ternary_overlay(
+        descriptor_key="amdgpu.v_pk_mad_i16",
+        instruction_name="V_PK_MAD_I16",
+        mnemonic="v_pk_mad_i16",
+        semantic_tag="integer.mad.pk2.i16",
+        include_literal_forms=include_literal_forms,
+    )
+
+
+def _v_pk_mad_i16_literal_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return _v_pk_ternary_literal_overlays(
         descriptor_key="amdgpu.v_pk_mad_i16",
         instruction_name="V_PK_MAD_I16",
         mnemonic="v_pk_mad_i16",
@@ -2254,8 +2368,21 @@ def _v_pk_mad_i16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_pk_mad_u16_overlay() -> AmdgpuDescriptorOverlay:
+def _v_pk_mad_u16_overlay(
+    *,
+    include_literal_forms: bool = False,
+) -> AmdgpuDescriptorOverlay:
     return _v_pk_ternary_overlay(
+        descriptor_key="amdgpu.v_pk_mad_u16",
+        instruction_name="V_PK_MAD_U16",
+        mnemonic="v_pk_mad_u16",
+        semantic_tag="integer.mad.pk2.u16",
+        include_literal_forms=include_literal_forms,
+    )
+
+
+def _v_pk_mad_u16_literal_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return _v_pk_ternary_literal_overlays(
         descriptor_key="amdgpu.v_pk_mad_u16",
         instruction_name="V_PK_MAD_U16",
         mnemonic="v_pk_mad_u16",
@@ -3171,10 +3298,13 @@ __all__ = (
     "_v_fmac_f32_overlay",
     "_v_fmamk_f32_overlay",
     "_v_pk_fma_f16_overlay",
+    "_v_pk_fma_f16_literal_overlays",
     "_v_pk_fma_f32_overlay",
     "_v_pk_fmac_f16_overlay",
     "_v_pk_mad_i16_overlay",
+    "_v_pk_mad_i16_literal_overlays",
     "_v_pk_mad_u16_overlay",
+    "_v_pk_mad_u16_literal_overlays",
     "_v_pk_ternary_overlay",
     "_v_lshl_add_u32_shift_immediate_overlay",
     "_v_lshlrev_b32_literal_overlay",

@@ -163,6 +163,46 @@ low.func.def target(@target) @vop3p_fma_mix_src2_literal_zero(%a: reg<amdgpu.vgp
 
 amdgpu.target<gfx1100> @target
 
+low.func.def target(@target) @vop3p_packed_fma_source2_literal(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %literal = low.const<amdgpu.v_mov_b32> {imm32 = 1006632960} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_pk_fma_f16>(%a, %b, %literal) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_fma_source2_literal(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.v_pk_fma_f16.src2_lit>(%a, %b) {imm32 = 1006632960} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+// RUN: pass low-select-operand-forms,low-dce
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_mad_source1_literal(%a: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %literal = low.const<amdgpu.v_mov_b32> {imm32 = 305419896} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_pk_mad_i16>(%a, %literal, %c) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_mad_source1_literal(%a: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.v_pk_mad_i16.src1_lit>(%a, %c) {imm32 = 305419896} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+// RUN: pass low-select-operand-forms,low-dce
+
+amdgpu.target<gfx1100> @target
+
 low.func.def target(@target) @vop3_compare_inline(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) {
   %limit = low.const<amdgpu.v_mov_b32> {imm32 = 19} : reg<amdgpu.vgpr>
   %result = low.op<amdgpu.v_cmp_slt_i32>(%value, %limit) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>

@@ -160,6 +160,23 @@ low.func.def target(@gfx11_target) @gfx11_packed_fma_mad(%acc: reg<amdgpu.vgpr>,
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_packed_fma_mad_literals waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_packed_fma_mad_literals(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %fma = v_pk_fma_f16_src2_lit %a, %b, 1006632960
+  %mad_i = v_pk_mad_i16_src1_lit %a, %c, 305419896
+  %mad_u = v_pk_mad_u16_src0_lit %b, %c, 305419896
+  return
+}
+
+// ----
+  v_pk_fma_f16 v3, v0, v1, 1006632960
+  v_pk_mad_i16 v0, v0, 305419896, v2
+  v_pk_mad_u16 v0, 305419896, v1, v2
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-native @gfx11_packed_fma_mad_native waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_packed_fma_mad_native(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
@@ -569,7 +586,7 @@ low.func.def target(@gfx11_target) @gfx11_mad_u32_u24_literal(%value: reg<amdgpu
 }
 
 // ----
-  v_mad_u32_u24_src1_lit v0, s0, v0, 224
+  v_mad_u32_u24 v0, s0, 224, v0
   s_endpgm
 
 // ====
@@ -582,7 +599,7 @@ low.func.def target(@gfx11_target) @gfx11_bfi_b32_literal(%insert: reg<amdgpu.vg
 }
 
 // ----
-  v_bfi_b32_src0_lit v0, v0, v1, 3840
+  v_bfi_b32 v0, 3840, v0, v1
   s_endpgm
 
 // ====

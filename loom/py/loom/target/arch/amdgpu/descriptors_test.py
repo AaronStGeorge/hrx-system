@@ -699,6 +699,75 @@ def test_packed_fma_mad_descriptors_pin_lane_container_widths() -> None:
         assert "amdgpu.v_pk_fma_f32" not in descriptors
 
 
+def test_packed_fma_mad_rdna_literal_forms_cover_source_positions() -> None:
+    source_fields = {
+        "src0": ("SRC0", "a", ("VDST", "SRC1", "SRC2")),
+        "src1": ("SRC1", "b", ("VDST", "SRC0", "SRC2")),
+        "src2": ("SRC2", "c", ("VDST", "SRC0", "SRC1")),
+    }
+    packed_keys = (
+        "amdgpu.v_pk_fma_f16",
+        "amdgpu.v_pk_mad_i16",
+        "amdgpu.v_pk_mad_u16",
+    )
+    for descriptor_set in (
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key in packed_keys:
+            descriptor = descriptors[descriptor_key]
+            assert tuple(
+                form.replacement_descriptor for form in descriptor.operand_forms
+            ) == tuple(
+                f"{descriptor_key}.{source_name}_lit" for source_name in source_fields
+            )
+            assert tuple(
+                form.matches[0].source_operand for form in descriptor.operand_forms
+            ) == tuple(
+                source_operand for _, source_operand, _ in source_fields.values()
+            )
+            for source_name, (
+                literal_field,
+                _,
+                expected_operand_fields,
+            ) in source_fields.items():
+                literal_descriptor = descriptors[f"{descriptor_key}.{source_name}_lit"]
+                assert literal_descriptor.encoding_name == "ENC_VOP3P"
+                assert (
+                    literal_descriptor.encoding_format_id
+                    == AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL
+                )
+                assert (
+                    tuple(
+                        operand.xml_field_name
+                        for operand in literal_descriptor.operands
+                    )
+                    == expected_operand_fields
+                )
+                assert tuple(
+                    immediate.field_name for immediate in literal_descriptor.immediates
+                ) == ("imm32",)
+                fixed_field, fixed_value = literal_descriptor.fixed_encoding_fields[0]
+                assert fixed_field == literal_field
+                assert isinstance(fixed_value, AmdgpuOperandPredefinedValueRef)
+                assert fixed_value.value_name == "SRC_LITERAL"
+
+    for descriptor_set in (_gfx940_core_overlays(), _gfx950_core_overlays()):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key in packed_keys:
+            assert descriptors[descriptor_key].operand_forms == ()
+            assert not any(
+                key.startswith(f"{descriptor_key}.") and key.endswith("_lit")
+                for key in descriptors
+            )
+
+
 def test_packed_fmac_f16_descriptor_pins_destructive_accumulator() -> None:
     descriptor_sets = (
         _gfx940_core_overlays(),
