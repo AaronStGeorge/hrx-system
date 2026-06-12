@@ -1208,6 +1208,12 @@ class TestPredicateEvaluation:
                 self._vals(N=n),
             ), f"pow2({n}) should be false"
 
+    def test_pow2_rejects_float(self) -> None:
+        assert not evaluate_predicate(
+            self._pred("pow2", ("value", "N")),
+            self._vals(N=8.0),
+        )
+
     def test_range_inside(self) -> None:
         assert evaluate_predicate(
             self._pred("range", ("value", "M"), ("const", 32), ("const", 512)),

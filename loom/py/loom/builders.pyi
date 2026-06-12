@@ -20,6 +20,7 @@ from loom.dialect.llvmir.builders import LlvmirBuilder
 from loom.dialect.low.builders import LowBuilder
 from loom.dialect.pass_.builders import PassBuilder
 from loom.dialect.pool.builders import PoolBuilder
+from loom.dialect.sanitizer.builders import SanitizerBuilder
 from loom.dialect.scalar.builders import ScalarBuilder
 from loom.dialect.scf.builders import ScfBuilder
 from loom.dialect.target.builders import TargetBuilder
@@ -72,6 +73,8 @@ class LoomBuilder:
     def pass_(self) -> PassBuilder: ...
     @property
     def pool(self) -> PoolBuilder: ...
+    @property
+    def sanitizer(self) -> SanitizerBuilder: ...
     @property
     def scalar(self) -> ScalarBuilder: ...
     @property

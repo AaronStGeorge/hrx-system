@@ -28,6 +28,7 @@ loom_cc_library(
     "pipeline_passes.c"
   DEPS
     ::options
+    ::site_payload
     iree::base
     loom::ir
     loom::ops::index

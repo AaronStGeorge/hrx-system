@@ -109,3 +109,24 @@ func.def @access_only_selection_leaves_value_ir_unchanged(%n: index) -> (index) 
   %checked = index.assume %n [range(%n, 0, 1024)] : index
   func.return %checked : index
 }
+
+// ====
+
+// RUN: with-locations pass sanitizer-insert-assertions{checks=value}
+
+// Inserted assertions carry compact sanitizer site payloads while keeping the
+// source location as the tagged location child.
+func.def @assertion_site_payload_locations(%n: index, %x: f32) -> (index, f32) {
+  %bounded = index.assume %n [range(%n, 0, 1024)] : index loc("sanitizer.loom":2:1)
+  %neg = scalar.negf<ninf> %x : f32 loc("sanitizer.loom":3:1)
+  func.return %bounded, %neg : index, f32 loc("sanitizer.loom":4:1)
+} loc("sanitizer.loom":1:1 to 5:1)
+
+// ----
+func.def @assertion_site_payload_locations(%n: index, %x: f32) -> (index, f32) {
+  %bounded = sanitizer.assert.value %n [range(%n, 0, 1024)] : index loc(tagged<sanitizer_site, "0002030201010000", "sanitizer.loom":2:1>)
+  %6 = sanitizer.assert.value %x [not_inf(%x)] : f32 loc(tagged<sanitizer_site, "00020a0601010000", "sanitizer.loom":3:1>)
+  %neg$5 = scalar.negf<ninf> %6 : f32 loc("sanitizer.loom":3:1)
+  %neg$7 = sanitizer.assert.value %neg$5 [not_inf(%neg$5)] : f32 loc(tagged<sanitizer_site, "00020a0601010000", "sanitizer.loom":3:1>)
+  func.return %bounded, %neg$7 : index, f32 loc("sanitizer.loom":4:1)
+} loc("sanitizer.loom":1:1 to 5:1)

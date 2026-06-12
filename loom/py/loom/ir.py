@@ -1007,7 +1007,8 @@ def evaluate_predicate(predicate: Predicate, values: dict[str, int | float]) -> 
         case "max":
             return args[0] <= args[1]
         case "pow2":
-            return args[0] > 0 and (args[0] & (args[0] - 1)) == 0
+            value = args[0]
+            return isinstance(value, int) and value > 0 and (value & (value - 1)) == 0
         case "range":
             return args[1] <= args[0] <= args[2]
         case "not_nan":

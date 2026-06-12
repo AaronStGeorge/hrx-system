@@ -159,6 +159,11 @@ TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
       LOOM_SANITIZER_CHECK_KIND_DIVIDE_BY_ZERO,
       LOOM_SANITIZER_CHECK_KIND_INVALID_SHIFT,
       LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT,
+      LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_INF,
+      LOOM_SANITIZER_CHECK_KIND_VALUE_FINITE,
+      LOOM_SANITIZER_CHECK_KIND_VALUE_POWER_OF_TWO,
+      LOOM_SANITIZER_CHECK_KIND_VALUE_RELATION,
+      LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS,
   };
   const loom_sanitizer_provenance_kind_t provenance_kinds[] = {
       LOOM_SANITIZER_PROVENANCE_KIND_UNKNOWN,
@@ -166,6 +171,10 @@ TEST(SanitizerSitePayloadTest, RoundTripsAllKnownEnumValues) {
       LOOM_SANITIZER_PROVENANCE_KIND_ASSUME,
       LOOM_SANITIZER_PROVENANCE_KIND_ANALYSIS,
       LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT,
+      LOOM_SANITIZER_PROVENANCE_KIND_IMPORTER_PROMISE,
+      LOOM_SANITIZER_PROVENANCE_KIND_FAST_MATH,
+      LOOM_SANITIZER_PROVENANCE_KIND_ABI_PROMISE,
+      LOOM_SANITIZER_PROVENANCE_KIND_OPTIMIZATION_OBLIGATION,
   };
   const loom_sanitizer_lane_policy_t lane_policies[] = {
       LOOM_SANITIZER_LANE_POLICY_UNKNOWN,   LOOM_SANITIZER_LANE_POLICY_SCALAR,
@@ -351,9 +360,36 @@ TEST(SanitizerSitePayloadTest, ReturnsKnownFieldNames) {
   EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
                 LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT)),
             "layout_refinement");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
+                LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_INF)),
+            "value_not_inf");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
+                LOOM_SANITIZER_CHECK_KIND_VALUE_FINITE)),
+            "value_finite");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
+                LOOM_SANITIZER_CHECK_KIND_VALUE_POWER_OF_TWO)),
+            "value_power_of_two");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
+                LOOM_SANITIZER_CHECK_KIND_VALUE_RELATION)),
+            "value_relation");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_check_kind_name(
+                LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS)),
+            "value_constraints");
   EXPECT_EQ(StringViewToString(loom_sanitizer_provenance_kind_name(
                 LOOM_SANITIZER_PROVENANCE_KIND_USER_ASSERTION)),
             "user_assertion");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_provenance_kind_name(
+                LOOM_SANITIZER_PROVENANCE_KIND_IMPORTER_PROMISE)),
+            "importer_promise");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_provenance_kind_name(
+                LOOM_SANITIZER_PROVENANCE_KIND_FAST_MATH)),
+            "fast_math");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_provenance_kind_name(
+                LOOM_SANITIZER_PROVENANCE_KIND_ABI_PROMISE)),
+            "abi_promise");
+  EXPECT_EQ(StringViewToString(loom_sanitizer_provenance_kind_name(
+                LOOM_SANITIZER_PROVENANCE_KIND_OPTIMIZATION_OBLIGATION)),
+            "optimization_obligation");
   EXPECT_EQ(StringViewToString(loom_sanitizer_lane_policy_name(
                 LOOM_SANITIZER_LANE_POLICY_ALL_LANES)),
             "all_lanes");

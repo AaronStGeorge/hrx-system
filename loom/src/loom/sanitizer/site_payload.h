@@ -65,6 +65,16 @@ enum loom_sanitizer_check_kind_e {
   LOOM_SANITIZER_CHECK_KIND_INVALID_SHIFT = 8,
   // View must satisfy a refined layout, shape, or encoding contract.
   LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT = 9,
+  // Floating-point value must not be infinity.
+  LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_INF = 10,
+  // Floating-point value must be finite.
+  LOOM_SANITIZER_CHECK_KIND_VALUE_FINITE = 11,
+  // Integer value must be a power of two.
+  LOOM_SANITIZER_CHECK_KIND_VALUE_POWER_OF_TWO = 12,
+  // Value must satisfy a relation against another value or constant.
+  LOOM_SANITIZER_CHECK_KIND_VALUE_RELATION = 13,
+  // Value must satisfy multiple or generic predicate constraints.
+  LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS = 14,
   // Number of known checked contracts.
   LOOM_SANITIZER_CHECK_KIND_COUNT_,
 };
@@ -82,6 +92,14 @@ enum loom_sanitizer_provenance_kind_e {
   LOOM_SANITIZER_PROVENANCE_KIND_ANALYSIS = 3,
   // Contract came from an internal compiler or target requirement.
   LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT = 4,
+  // Contract came from an importer-owned source program promise.
+  LOOM_SANITIZER_PROVENANCE_KIND_IMPORTER_PROMISE = 5,
+  // Contract came from a floating-point fast-math flag.
+  LOOM_SANITIZER_PROVENANCE_KIND_FAST_MATH = 6,
+  // Contract came from a kernel or target ABI requirement.
+  LOOM_SANITIZER_PROVENANCE_KIND_ABI_PROMISE = 7,
+  // Contract came from a promise required by an optimization.
+  LOOM_SANITIZER_PROVENANCE_KIND_OPTIMIZATION_OBLIGATION = 8,
   // Number of known provenance kinds.
   LOOM_SANITIZER_PROVENANCE_KIND_COUNT_,
 };

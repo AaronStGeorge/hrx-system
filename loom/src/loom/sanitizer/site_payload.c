@@ -49,6 +49,16 @@ iree_string_view_t loom_sanitizer_check_kind_name(
       return IREE_SV("invalid_shift");
     case LOOM_SANITIZER_CHECK_KIND_LAYOUT_REFINEMENT:
       return IREE_SV("layout_refinement");
+    case LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_INF:
+      return IREE_SV("value_not_inf");
+    case LOOM_SANITIZER_CHECK_KIND_VALUE_FINITE:
+      return IREE_SV("value_finite");
+    case LOOM_SANITIZER_CHECK_KIND_VALUE_POWER_OF_TWO:
+      return IREE_SV("value_power_of_two");
+    case LOOM_SANITIZER_CHECK_KIND_VALUE_RELATION:
+      return IREE_SV("value_relation");
+    case LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS:
+      return IREE_SV("value_constraints");
     default:
       return iree_string_view_empty();
   }
@@ -67,6 +77,14 @@ iree_string_view_t loom_sanitizer_provenance_kind_name(
       return IREE_SV("analysis");
     case LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT:
       return IREE_SV("compiler_contract");
+    case LOOM_SANITIZER_PROVENANCE_KIND_IMPORTER_PROMISE:
+      return IREE_SV("importer_promise");
+    case LOOM_SANITIZER_PROVENANCE_KIND_FAST_MATH:
+      return IREE_SV("fast_math");
+    case LOOM_SANITIZER_PROVENANCE_KIND_ABI_PROMISE:
+      return IREE_SV("abi_promise");
+    case LOOM_SANITIZER_PROVENANCE_KIND_OPTIMIZATION_OBLIGATION:
+      return IREE_SV("optimization_obligation");
     default:
       return iree_string_view_empty();
   }

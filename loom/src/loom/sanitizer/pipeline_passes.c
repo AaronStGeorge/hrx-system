@@ -17,6 +17,7 @@
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/sanitizer/options.h"
+#include "loom/sanitizer/site_payload.h"
 
 typedef struct loom_sanitizer_insert_assertions_state_t {
   // Check classes enabled for this pass invocation.
@@ -200,6 +201,108 @@ static bool loom_sanitizer_checks_enabled(const loom_pass_t* pass,
   return iree_any_bit_set(enabled, checks);
 }
 
+static loom_sanitizer_check_kind_t loom_sanitizer_check_kind_for_predicate(
+    loom_predicate_kind_t predicate_kind) {
+  switch (predicate_kind) {
+    case LOOM_PREDICATE_EQ:
+    case LOOM_PREDICATE_NE:
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_RELATION;
+    case LOOM_PREDICATE_LT:
+    case LOOM_PREDICATE_LE:
+    case LOOM_PREDICATE_GT:
+    case LOOM_PREDICATE_GE:
+    case LOOM_PREDICATE_MIN:
+    case LOOM_PREDICATE_MAX:
+    case LOOM_PREDICATE_RANGE:
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_RANGE;
+    case LOOM_PREDICATE_MUL:
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_DIVISIBILITY;
+    case LOOM_PREDICATE_POW2:
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_POWER_OF_TWO;
+    case LOOM_PREDICATE_NOT_NAN:
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_NAN;
+    case LOOM_PREDICATE_NOT_INF:
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_NOT_INF;
+    case LOOM_PREDICATE_FINITE:
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_FINITE;
+    case LOOM_PREDICATE_COUNT_:
+      return LOOM_SANITIZER_CHECK_KIND_UNKNOWN;
+  }
+  return LOOM_SANITIZER_CHECK_KIND_UNKNOWN;
+}
+
+static loom_sanitizer_check_kind_t loom_sanitizer_check_kind_for_predicates(
+    const loom_predicate_t* predicates, uint16_t predicate_count) {
+  if (predicate_count == 0) return LOOM_SANITIZER_CHECK_KIND_UNKNOWN;
+  loom_sanitizer_check_kind_t check_kind = LOOM_SANITIZER_CHECK_KIND_UNKNOWN;
+  bool mixed_kinds = false;
+  bool only_non_finite_parts = true;
+  bool has_not_nan = false;
+  bool has_not_inf = false;
+  for (uint16_t i = 0; i < predicate_count; ++i) {
+    const loom_predicate_kind_t predicate_kind = predicates[i].kind;
+    if (predicate_kind == LOOM_PREDICATE_NOT_NAN) {
+      has_not_nan = true;
+    } else if (predicate_kind == LOOM_PREDICATE_NOT_INF) {
+      has_not_inf = true;
+    } else {
+      only_non_finite_parts = false;
+    }
+
+    const loom_sanitizer_check_kind_t candidate_kind =
+        loom_sanitizer_check_kind_for_predicate(predicate_kind);
+    if (candidate_kind == LOOM_SANITIZER_CHECK_KIND_UNKNOWN) {
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS;
+    }
+    if (check_kind == LOOM_SANITIZER_CHECK_KIND_UNKNOWN) {
+      check_kind = candidate_kind;
+    } else if (check_kind != candidate_kind) {
+      mixed_kinds = true;
+    }
+  }
+  if (mixed_kinds) {
+    if (only_non_finite_parts && has_not_nan && has_not_inf) {
+      return LOOM_SANITIZER_CHECK_KIND_VALUE_FINITE;
+    }
+    return LOOM_SANITIZER_CHECK_KIND_VALUE_CONSTRAINTS;
+  }
+  return check_kind;
+}
+
+static iree_status_t loom_sanitizer_make_site_location(
+    loom_module_t* module, loom_location_id_t source_location,
+    loom_sanitizer_assertion_kind_t assertion_kind,
+    loom_sanitizer_check_kind_t check_kind,
+    loom_sanitizer_provenance_kind_t provenance_kind,
+    loom_sanitizer_lane_policy_t lane_policy,
+    loom_sanitizer_lineage_role_t lineage_role,
+    loom_location_id_t* out_location) {
+  uint8_t payload_storage[LOOM_SANITIZER_SITE_PAYLOAD_HEADER_LENGTH] = {0};
+  const loom_sanitizer_site_payload_t payload = {
+      .assertion_kind = assertion_kind,
+      .check_kind = check_kind,
+      .provenance_kind = provenance_kind,
+      .lane_policy = lane_policy,
+      .lineage_role = lineage_role,
+      .flags = 0,
+      .extension_data = iree_const_byte_span_empty(),
+  };
+  iree_host_size_t encoded_length = 0;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_site_payload_encode(
+      &payload, iree_make_byte_span(payload_storage, sizeof(payload_storage)),
+      &encoded_length));
+
+  uint8_t* stored_payload = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&module->arena, encoded_length,
+                                           (void**)&stored_payload));
+  memcpy(stored_payload, payload_storage, encoded_length);
+  return loom_module_add_location(
+      module,
+      loom_location_tagged(LOOM_LOCATION_TAG_SANITIZER_SITE, source_location,
+                           stored_payload, (uint32_t)encoded_length),
+      out_location);
+}
+
 static bool loom_sanitizer_find_value(loom_value_slice_t values,
                                       loom_value_id_t value_id,
                                       uint16_t* out_ordinal) {
@@ -254,9 +357,9 @@ static bool loom_sanitizer_type_accepts_float_predicates(loom_type_t type) {
          loom_scalar_type_is_float(loom_type_element_type(type));
 }
 
-static bool loom_sanitizer_type_accepts_predicate(loom_type_t type,
-                                                  uint8_t predicate_kind) {
-  switch ((loom_predicate_kind_t)predicate_kind) {
+static bool loom_sanitizer_type_accepts_predicate(
+    loom_type_t type, loom_predicate_kind_t predicate_kind) {
+  switch (predicate_kind) {
     case LOOM_PREDICATE_EQ:
     case LOOM_PREDICATE_NE:
     case LOOM_PREDICATE_LT:
@@ -344,7 +447,7 @@ static bool loom_sanitizer_predicate_is_proven(
   int64_t rhs_exact = 0;
   int64_t lower = 0;
   int64_t upper = 0;
-  switch ((loom_predicate_kind_t)predicate->kind) {
+  switch (predicate->kind) {
     case LOOM_PREDICATE_EQ:
       if (loom_value_facts_is_float(target_facts)) return false;
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,
@@ -468,13 +571,20 @@ static iree_status_t loom_sanitizer_result_types_for_values(
 static iree_status_t loom_sanitizer_build_value_assertion(
     loom_module_t* module, loom_rewriter_t* rewriter, loom_value_slice_t values,
     const loom_predicate_t* predicates, uint16_t predicate_count,
-    loom_location_id_t location, loom_op_t** out_op) {
+    loom_sanitizer_provenance_kind_t provenance_kind,
+    loom_location_id_t source_location, loom_op_t** out_op) {
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_sanitizer_result_types_for_values(
       module, rewriter, values, &result_types));
+  loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_make_site_location(
+      module, source_location, LOOM_SANITIZER_ASSERTION_KIND_VALUE,
+      loom_sanitizer_check_kind_for_predicates(predicates, predicate_count),
+      provenance_kind, LOOM_SANITIZER_LANE_POLICY_SCALAR,
+      LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL, &site_location));
   return loom_sanitizer_assert_value_build(
       &rewriter->builder, values.values, values.count, predicates,
-      predicate_count, result_types, values.count, location, out_op);
+      predicate_count, result_types, values.count, site_location, out_op);
 }
 
 static iree_status_t loom_sanitizer_filter_predicates(
@@ -591,7 +701,7 @@ static iree_status_t loom_sanitizer_replace_assume(
   loom_op_t* assert_op = NULL;
   IREE_RETURN_IF_ERROR(loom_sanitizer_build_value_assertion(
       module, rewriter, assert_values, filtered_predicates, filtered_count,
-      op->location, &assert_op));
+      LOOM_SANITIZER_PROVENANCE_KIND_ASSUME, op->location, &assert_op));
   loom_value_slice_t assert_results =
       loom_sanitizer_assert_value_results(assert_op);
   IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
@@ -664,8 +774,8 @@ static uint8_t loom_sanitizer_scalar_fastmath_flags(const loom_op_t* op) {
   }
 }
 
-static bool loom_sanitizer_fastmath_predicate_kind(uint8_t fastmath_flags,
-                                                   uint8_t* out_kind) {
+static bool loom_sanitizer_fastmath_predicate_kind(
+    uint8_t fastmath_flags, loom_predicate_kind_t* out_kind) {
   const bool no_nans =
       iree_any_bit_set(fastmath_flags, LOOM_SCALAR_FASTMATHFLAGS_NNAN);
   const bool no_infinities =
@@ -686,7 +796,7 @@ static bool loom_sanitizer_fastmath_predicate_kind(uint8_t fastmath_flags,
 }
 
 static loom_predicate_t loom_sanitizer_make_unary_predicate(
-    uint8_t kind, loom_value_id_t value) {
+    loom_predicate_kind_t kind, loom_value_id_t value) {
   return (loom_predicate_t){
       .kind = kind,
       .arg_count = 1,
@@ -703,7 +813,8 @@ static bool loom_sanitizer_value_is_scalar_float(loom_module_t* module,
 }
 
 static bool loom_sanitizer_assertion_has_predicate_for_value(
-    loom_op_t* assert_op, loom_value_id_t value_id, uint8_t predicate_kind) {
+    loom_op_t* assert_op, loom_value_id_t value_id,
+    loom_predicate_kind_t predicate_kind) {
   if (!loom_sanitizer_assert_value_isa(assert_op)) return false;
   loom_attribute_t predicates =
       loom_sanitizer_assert_value_predicates(assert_op);
@@ -720,9 +831,9 @@ static bool loom_sanitizer_assertion_has_predicate_for_value(
   return false;
 }
 
-static bool loom_sanitizer_result_already_asserted(loom_module_t* module,
-                                                   loom_value_id_t value_id,
-                                                   uint8_t predicate_kind) {
+static bool loom_sanitizer_result_already_asserted(
+    loom_module_t* module, loom_value_id_t value_id,
+    loom_predicate_kind_t predicate_kind) {
   loom_value_t* value = loom_module_value(module, value_id);
   const loom_use_t* uses = loom_value_uses(value);
   for (uint32_t i = 0; i < value->use_count; ++i) {
@@ -737,7 +848,7 @@ static bool loom_sanitizer_result_already_asserted(loom_module_t* module,
 
 static iree_status_t loom_sanitizer_build_fastmath_value_assertion(
     loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
-    loom_value_slice_t values, uint8_t predicate_kind,
+    loom_value_slice_t values, loom_predicate_kind_t predicate_kind,
     loom_location_id_t location, loom_op_t** out_op) {
   loom_predicate_t* predicates = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -761,14 +872,15 @@ static iree_status_t loom_sanitizer_build_fastmath_value_assertion(
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(loom_sanitizer_build_value_assertion(
-      module, rewriter, values, predicates, predicate_count, location, out_op));
+      module, rewriter, values, predicates, predicate_count,
+      LOOM_SANITIZER_PROVENANCE_KIND_FAST_MATH, location, out_op));
   ++statistics->value_assertions_inserted;
   return iree_ok_status();
 }
 
 static iree_status_t loom_sanitizer_instrument_fastmath_inputs(
     loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
-    loom_op_t* op, uint8_t predicate_kind, bool* out_changed) {
+    loom_op_t* op, loom_predicate_kind_t predicate_kind, bool* out_changed) {
   *out_changed = false;
   if (op->operand_count == 0) return iree_ok_status();
   loom_value_id_t* values = NULL;
@@ -812,7 +924,7 @@ static iree_status_t loom_sanitizer_instrument_fastmath_inputs(
 
 static iree_status_t loom_sanitizer_instrument_fastmath_results(
     loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
-    loom_op_t* op, uint8_t predicate_kind, bool* out_changed) {
+    loom_op_t* op, loom_predicate_kind_t predicate_kind, bool* out_changed) {
   *out_changed = false;
   if (op->result_count == 0) return iree_ok_status();
   loom_value_id_t* values = NULL;
@@ -860,7 +972,7 @@ static iree_status_t loom_sanitizer_try_instrument_fastmath_op(
     loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
     loom_op_t* op) {
   uint8_t fastmath_flags = loom_sanitizer_scalar_fastmath_flags(op);
-  uint8_t predicate_kind = 0;
+  loom_predicate_kind_t predicate_kind = LOOM_PREDICATE_COUNT_;
   if (!loom_sanitizer_fastmath_predicate_kind(fastmath_flags,
                                               &predicate_kind)) {
     return iree_ok_status();

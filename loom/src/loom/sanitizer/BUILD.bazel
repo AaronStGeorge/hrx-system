@@ -26,6 +26,7 @@ loom_cc_library(
     hdrs = ["pipeline_passes.h"],
     deps = [
         ":options",
+        ":site_payload",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/sanitizer",
