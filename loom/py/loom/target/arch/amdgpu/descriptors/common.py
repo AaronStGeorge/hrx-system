@@ -280,6 +280,7 @@ AMDGPU_DESCRIPTOR_CATEGORIES = (
 _AMDGPU_DESCRIPTOR_SOURCE_DIR = Path("loom/src/loom/target/arch/amdgpu/descriptors")
 _AMDGPU_DESCRIPTOR_PUBLIC_HEADER_DIR = "loom/target/arch/amdgpu/descriptors"
 _AMDGPU_INLINE_F32_ENUM_DOMAIN_NAME = "amdgpu.source_inline_f32"
+_AMDGPU_INLINE_U32_16_ENUM_DOMAIN_NAME = "amdgpu.source_inline_u32_16"
 
 
 def _f32_bits(value: float) -> int:
@@ -299,6 +300,10 @@ _AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN = EnumDomain(
         EnumValue("f32_n4_0", _f32_bits(-4.0)),
         EnumValue("f32_inv_2pi", _f32_bits(0.15915494)),
     ),
+)
+_AMDGPU_SOURCE_INLINE_U32_16_ENUM_DOMAIN = EnumDomain(
+    _AMDGPU_INLINE_U32_16_ENUM_DOMAIN_NAME,
+    values=(EnumValue("u32_16", 16),),
 )
 
 
@@ -325,7 +330,10 @@ def _amdgpu_core_descriptor_set(
     schedule_classes: tuple[ScheduleClass, ...],
     descriptors: tuple[Descriptor, ...] = (),
     register_parts: tuple[RegisterPart, ...] = (),
-    enum_domains: tuple[EnumDomain, ...] = (_AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN,),
+    enum_domains: tuple[EnumDomain, ...] = (
+        _AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN,
+        _AMDGPU_SOURCE_INLINE_U32_16_ENUM_DOMAIN,
+    ),
     categories: tuple[DescriptorCategory, ...] = AMDGPU_DESCRIPTOR_CATEGORIES,
 ) -> DescriptorSet:
     file_stem = _amdgpu_descriptor_set_file_stem(key)
@@ -1121,6 +1129,18 @@ def _source_inline_u32_immediate(field_name: str = "imm32") -> Immediate:
     )
 
 
+def _source_inline_u32_16_immediate(field_name: str = "imm32") -> Immediate:
+    return Immediate(
+        field_name,
+        ImmediateKind.ENUM,
+        bit_width=32,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        enum_domain=_AMDGPU_INLINE_U32_16_ENUM_DOMAIN_NAME,
+        encoding_id=_SOURCE_INLINE_U32_ENCODING_ID,
+        default_value=16,
+    )
+
+
 def _source_inline_f32_immediate(field_name: str = "imm32") -> Immediate:
     return Immediate(
         field_name,
@@ -1134,6 +1154,7 @@ def _source_inline_f32_immediate(field_name: str = "imm32") -> Immediate:
 _U32_IMMEDIATE = _u32_immediate()
 
 _SOURCE_INLINE_U32_IMMEDIATE = _source_inline_u32_immediate()
+_SOURCE_INLINE_U32_16_IMMEDIATE = _source_inline_u32_16_immediate()
 _SOURCE_INLINE_F32_IMMEDIATE = _source_inline_f32_immediate()
 
 _LITERAL_U32_IMMEDIATE = replace(
@@ -2571,6 +2592,7 @@ __all__ = (
     "_SMFMAC_VDST_ACCUMULATOR_REASON",
     "_SOURCE_INLINE_F32_ENCODING_ID",
     "_SOURCE_INLINE_F32_IMMEDIATE",
+    "_SOURCE_INLINE_U32_16_IMMEDIATE",
     "_SOURCE_INLINE_U32_ENCODING_ID",
     "_SOURCE_INLINE_U32_IMMEDIATE",
     "_STORECNT_IMMEDIATE",
@@ -2670,6 +2692,7 @@ __all__ = (
     "_soffset_offset_operand_form",
     "_soffset_zero_operand_form",
     "_source_inline_f32_immediate",
+    "_source_inline_u32_16_immediate",
     "_source_inline_u32_immediate",
     "_stack_memory_effect",
     "_u32_immediate",

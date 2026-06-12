@@ -255,7 +255,7 @@ class EmitDescriptorOp:
             descriptor_set,
             operand_bindings,
         )
-        self._validate_immediates(source_op)
+        self._validate_immediates(source_op, descriptor_set)
         return tuple(produced_temporaries)
 
     def _validate_source_memory_emit(
@@ -327,7 +327,11 @@ class EmitDescriptorOp:
                     "offset materializer"
                 )
 
-    def _validate_immediates(self, source_op: Op) -> None:
+    def _validate_immediates(
+        self,
+        source_op: Op,
+        descriptor_set: DescriptorSet,
+    ) -> None:
         if isinstance(self.immediates, Mapping):
             bound_names = set[str]()
             for immediate_name, binding in self.immediates.items():
@@ -359,7 +363,11 @@ class EmitDescriptorOp:
                         )
                 else:
                     _validate_immediate_literal(
-                        source_op, self.descriptor, immediate, binding
+                        source_op,
+                        descriptor_set,
+                        self.descriptor,
+                        immediate,
+                        binding,
                     )
                 bound_names.add(immediate_name)
         else:

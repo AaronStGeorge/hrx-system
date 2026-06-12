@@ -1228,6 +1228,34 @@ def _v_lshlrev_b32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_lshlrev_b32_src0_16_low16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_lshlrev_b32.src0_16_low16",
+        instruction_name="V_LSHLREV_B32",
+        mnemonic="v_lshlrev_b32",
+        encoding_name="ENC_VOP2",
+        semantic_tag="integer.shl.u32.low16_to_high16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "VSRC1",
+                _vgpr_operand("value", register_part=_REG_PART_VGPR_LOW16),
+                size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
+            ),
+        ),
+        asm_forms=_asm(
+            mnemonic="v_lshlrev_b32_src0_16_low16",
+            results=("dst",),
+            operands=("value",),
+            immediates=("imm32",),
+        ),
+        immediate_fields=("SRC0",),
+        immediates=(_SOURCE_INLINE_U32_16_IMMEDIATE,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_lshlrev_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
     return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_lshlrev_b32.lit",
@@ -1417,6 +1445,7 @@ def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_xor_b32_literal_overlay(),
         _v_lshlrev_b32_overlay(),
         _v_lshlrev_b32_src0_inline_overlay(),
+        _v_lshlrev_b32_src0_16_low16_overlay(),
         _v_lshlrev_b32_literal_overlay(),
         _v_lshlrev_b32_vop3_immediate_overlay(),
         _v_lshl_add_u32_shift_immediate_overlay(),
@@ -3049,6 +3078,7 @@ __all__ = (
     "_v_lshl_add_u32_shift_immediate_overlay",
     "_v_lshlrev_b32_literal_overlay",
     "_v_lshlrev_b32_overlay",
+    "_v_lshlrev_b32_src0_16_low16_overlay",
     "_v_lshlrev_b32_src0_inline_overlay",
     "_v_lshlrev_b32_vop3_immediate_overlay",
     "_v_lshrrev_b32_literal_overlay",

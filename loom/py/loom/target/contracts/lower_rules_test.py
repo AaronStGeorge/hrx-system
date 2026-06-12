@@ -40,7 +40,7 @@ from loom.target.contracts import (
     binary_descriptor_rules,
     compile_lower_rule_set,
 )
-from loom.target.low_descriptors import Immediate, ImmediateKind
+from loom.target.low_descriptors import EnumDomain, EnumValue, Immediate, ImmediateKind
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_F32_DESCRIPTOR,
     TEST_LOW_ADD_I32_DESCRIPTOR,
@@ -335,6 +335,76 @@ def test_compile_lower_rule_set_compiles_const_immediate_emit() -> None:
     assert len(compiled.attr_copies) == 1
     assert compiled.attr_copies[0].kind == LowerAttrCopyKind.I64_LITERAL
     assert compiled.attr_copies[0].literal_i64 == 0
+
+
+def test_compile_lower_rule_set_validates_enum_immediate_literal() -> None:
+    immediate = Immediate(
+        "mode",
+        ImmediateKind.ENUM,
+        bit_width=8,
+        enum_domain="test.enum_mode",
+    )
+    descriptor = replace(TEST_LOW_CONST_I32_DESCRIPTOR, immediates=(immediate,))
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=tuple(
+            descriptor
+            if existing_descriptor == TEST_LOW_CONST_I32_DESCRIPTOR
+            else existing_descriptor
+            for existing_descriptor in TEST_LOW_CORE_DESCRIPTOR_SET.descriptors
+        ),
+        enum_domains=(
+            *TEST_LOW_CORE_DESCRIPTOR_SET.enum_domains,
+            EnumDomain("test.enum_mode", values=(EnumValue("seven", 7),)),
+        ),
+    )
+
+    table = ContractFragment(
+        name="test.enum-immediate",
+        descriptor_set=descriptor_set,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_conversion.scalar_constant,
+                descriptor=descriptor,
+                guards=(Guard.value_type("result", Scalar("i32")),),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=descriptor,
+                        results={"dst": ValueRef.result("result")},
+                        immediates={"mode": 7},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert len(compiled.attr_copies) == 1
+    assert compiled.attr_copies[0].kind == LowerAttrCopyKind.I64_LITERAL
+    assert compiled.attr_copies[0].literal_i64 == 7
+
+    _expect_value_error(
+        lambda: ContractFragment(
+            name="test.bad-enum-immediate",
+            descriptor_set=descriptor_set,
+            cases=[
+                DescriptorRule(
+                    source_op=scalar_conversion.scalar_constant,
+                    descriptor=descriptor,
+                    guards=(Guard.value_type("result", Scalar("i32")),),
+                    emit=(
+                        EmitDescriptorOp(
+                            descriptor=descriptor,
+                            results={"dst": ValueRef.result("result")},
+                            immediates={"mode": 5},
+                        ),
+                    ),
+                )
+            ],
+        ),
+        "literal 5 is not in enum domain 'test.enum_mode'",
+    )
 
 
 def test_compile_lower_rule_set_compiles_instance_flags_guard() -> None:

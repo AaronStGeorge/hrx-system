@@ -89,6 +89,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_xor_b32.lit",
     "amdgpu.v_lshlrev_b32",
     "amdgpu.v_lshlrev_b32.lit",
+    "amdgpu.v_lshlrev_b32.src0_16_low16",
     "amdgpu.v_lshlrev_b32.vop3_imm",
     "amdgpu.v_lshl_add_u32.shift_imm",
     "amdgpu.v_ashrrev_i32",
@@ -569,7 +570,7 @@ def _cast_rule(
 
 
 def _bf16_extf_rule() -> DescriptorRule:
-    descriptor = _descriptor("amdgpu.v_lshlrev_b32.lit")
+    descriptor = _descriptor("amdgpu.v_lshlrev_b32.src0_16_low16")
     return DescriptorRule(
         source_op=scalar_conversion.scalar_extf,
         descriptor=descriptor,

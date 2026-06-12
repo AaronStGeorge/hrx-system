@@ -2201,8 +2201,10 @@ static bool loom_amdgpu_memory_low16_float_use_is_supported(
   const loom_op_t* user_op = loom_use_user_op(*use);
   if (loom_scalar_extf_isa(user_op)) {
     const loom_type_t value_type = loom_module_value_type(module, value_id);
+    const loom_scalar_type_t element_type = loom_type_element_type(value_type);
     return loom_scalar_extf_input(user_op) == value_id &&
-           loom_type_element_type(value_type) == LOOM_SCALAR_TYPE_F16;
+           (element_type == LOOM_SCALAR_TYPE_F16 ||
+            element_type == LOOM_SCALAR_TYPE_BF16);
   }
   if (loom_view_store_isa(user_op) &&
       loom_view_store_value(user_op) == value_id) {

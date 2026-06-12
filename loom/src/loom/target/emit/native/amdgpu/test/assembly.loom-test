@@ -509,6 +509,19 @@ low.func.def target(@gfx11_target) @gfx11_sgpr_shift_immediate(%value: reg<amdgp
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_low16_shift_high waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_low16_shift_high(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %shifted = v_lshlrev_b32_src0_16_low16 %value
+  return
+}
+
+// ----
+  v_lshlrev_b32 v0, 16, v0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_lshl_add_shift_immediate waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_lshl_add_shift_immediate(%value: reg<amdgpu.sgpr>, %addend: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

@@ -2443,6 +2443,8 @@ static bool loom_amdgpu_source0_immediate_asm_form(
       !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src2_lit"));
   return iree_string_view_ends_with(canonical_mnemonic,
                                     IREE_SV("_src0_inline")) ||
+         iree_string_view_ends_with(canonical_mnemonic,
+                                    IREE_SV("_src0_16_low16")) ||
          iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_vop3_imm")) ||
          plain_literal;
 }
