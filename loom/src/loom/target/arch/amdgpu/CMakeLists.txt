@@ -150,6 +150,38 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
+    runtime_requirements
+  HDRS
+    "runtime_requirements.h"
+  SRCS
+    "runtime_requirements.c"
+  DEPS
+    iree::base
+    loom::sanitizer::options
+    loom::target::pipeline_options
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    runtime_requirements_test
+  SRCS
+    "runtime_requirements_test.cc"
+  DEPS
+    ::runtime_requirements
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::sanitizer::options
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
     legalization
   HDRS
     "legalization.h"

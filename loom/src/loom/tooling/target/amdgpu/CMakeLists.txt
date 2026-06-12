@@ -23,6 +23,7 @@ loom_cc_library(
     loom::ops::op_defs
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::records::target_records
+    loom::target::arch::amdgpu::runtime_requirements
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
     loom::target::compile_report

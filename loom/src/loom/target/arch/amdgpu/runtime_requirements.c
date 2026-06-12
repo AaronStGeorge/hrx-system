@@ -1,0 +1,36 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/arch/amdgpu/runtime_requirements.h"
+
+#include "loom/sanitizer/options.h"
+
+iree_status_t loom_amdgpu_runtime_requirements_validate(
+    loom_amdgpu_runtime_requirements_t requirements) {
+  if ((requirements & ~LOOM_AMDGPU_RUNTIME_REQUIREMENTS_KNOWN) != 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU target runtime requirements contain unknown bits");
+  }
+  return iree_ok_status();
+}
+
+loom_amdgpu_runtime_requirements_t
+loom_amdgpu_runtime_requirements_from_target_pipeline_options(
+    const loom_target_pipeline_options_t* options) {
+  if (options == NULL ||
+      !loom_sanitizer_options_is_enabled(&options->sanitizer)) {
+    return LOOM_AMDGPU_RUNTIME_REQUIREMENT_NONE;
+  }
+
+  loom_amdgpu_runtime_requirements_t requirements =
+      LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK;
+  if (iree_any_bit_set(options->sanitizer.checks,
+                       LOOM_SANITIZER_CHECK_ACCESS)) {
+    requirements |= LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW;
+  }
+  return requirements;
+}

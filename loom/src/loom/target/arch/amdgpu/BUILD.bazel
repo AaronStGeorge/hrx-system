@@ -182,6 +182,29 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "runtime_requirements",
+    srcs = ["runtime_requirements.c"],
+    hdrs = ["runtime_requirements.h"],
+    visibility = _AMDGPU_TOOLING_VISIBILITY,
+    deps = [
+        "//loom/src/loom/sanitizer:options",
+        "//loom/src/loom/target:pipeline_options",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "runtime_requirements_test",
+    srcs = ["runtime_requirements_test.cc"],
+    deps = [
+        ":runtime_requirements",
+        "//loom/src/loom/sanitizer:options",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "legalization",
     srcs = ["legalization.c"],
     hdrs = ["legalization.h"],

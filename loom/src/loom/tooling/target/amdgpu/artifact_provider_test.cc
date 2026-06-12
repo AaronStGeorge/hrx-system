@@ -213,7 +213,7 @@ TEST_F(AmdgpuHalArtifactProviderTest, RecordsDetailedReportRows) {
 }
 
 TEST_F(AmdgpuHalArtifactProviderTest,
-       EmitsSanitizerRuntimeGlobalsFromPipelineOptions) {
+       EmitsRuntimeGlobalsFromPipelineRequirements) {
   ModulePtr module;
   IREE_ASSERT_OK(ParsePreparedArithmeticModule(&module));
   ASSERT_NE(module.get(), nullptr);
