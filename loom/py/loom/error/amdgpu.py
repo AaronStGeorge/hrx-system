@@ -493,6 +493,34 @@ ERR_AMDGPU_026 = ErrorDef(
     fix_hint="Use a wavefront size supported by the selected AMDGPU processor",
 )
 
+# ERR_AMDGPU_027: AMDGPU mixed FMA operand-form decision was recorded.
+ERR_AMDGPU_027 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=27,
+    severity=Severity.REMARK,
+    summary="AMDGPU mixed FMA operand-form decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' selected mixed FMA descriptor '{descriptor_name}' for "
+        "'{op_name}' in '@{function_name}' and {decision} source operand "
+        "{source_operand_index} constant form '{constant_form}' in descriptor "
+        "set '{descriptor_set_name}': reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("source_operand_index", ParamKind.U32),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("constant_form", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded descriptor and operand-form fields to explain why "
+        "source-to-low selected or rejected the literal mixed-FMA form"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -519,4 +547,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_024,
     ERR_AMDGPU_025,
     ERR_AMDGPU_026,
+    ERR_AMDGPU_027,
 )

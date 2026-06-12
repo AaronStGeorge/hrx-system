@@ -573,7 +573,8 @@ typedef struct loom_low_lower_options_t {
 typedef struct loom_low_lower_result_t {
   // Number of error diagnostics emitted.
   uint32_t error_count;
-  // Number of remark diagnostics emitted by legality providers.
+  // Number of remark diagnostics emitted by legality providers and lowering
+  // callbacks.
   uint32_t remark_count;
   // Descriptor set selected by |options.bundle|.
   const loom_low_descriptor_set_t* descriptor_set;
@@ -668,12 +669,21 @@ loom_builder_t* loom_low_lower_context_builder(
 loom_func_like_t loom_low_lower_context_source_function(
     const loom_low_lower_context_t* context);
 
+// Returns the source function name used in source-to-low diagnostics.
+iree_string_view_t loom_low_lower_context_function_name(
+    const loom_low_lower_context_t* context);
+
 // Returns the emitted target-low function op, or NULL during planning.
 loom_op_t* loom_low_lower_context_low_function(
     const loom_low_lower_context_t* context);
 
 // Returns the number of error diagnostics emitted by the current lowering run.
 uint32_t loom_low_lower_context_error_count(
+    const loom_low_lower_context_t* context);
+
+// Returns enabled source-to-low diagnostic categories.
+loom_target_low_legality_diagnostic_flags_t
+loom_low_lower_context_diagnostic_flags(
     const loom_low_lower_context_t* context);
 
 // Returns the selected target bundle.

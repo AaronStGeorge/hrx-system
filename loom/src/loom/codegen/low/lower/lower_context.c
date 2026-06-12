@@ -204,6 +204,12 @@ uint32_t loom_low_lower_context_error_count(
   return context->result->error_count;
 }
 
+loom_target_low_legality_diagnostic_flags_t
+loom_low_lower_context_diagnostic_flags(
+    const loom_low_lower_context_t* context) {
+  return context->options->legality_diagnostic_flags;
+}
+
 const loom_target_bundle_t* loom_low_lower_context_bundle(
     const loom_low_lower_context_t* context) {
   return context->options->bundle;

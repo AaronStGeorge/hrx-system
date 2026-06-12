@@ -8,11 +8,13 @@
 
 #include <stdint.h>
 
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
@@ -376,6 +378,58 @@ static void loom_amdgpu_canonicalize_mulf_mix_sources(
   source_kinds[1] = source_kind;
 }
 
+static iree_string_view_t loom_amdgpu_descriptor_set_key(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  if (descriptor_set == NULL) {
+    return IREE_SV("<missing>");
+  }
+  const iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
+  return iree_string_view_is_empty(descriptor_set_key) ? IREE_SV("<empty>")
+                                                       : descriptor_set_key;
+}
+
+static iree_status_t loom_amdgpu_emit_mulf_mix_operand_form_diagnostic(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_mulf_mix_plan_t* plan) {
+  if (!iree_any_bit_set(loom_low_lower_context_diagnostic_flags(context),
+                        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM)) {
+    return iree_ok_status();
+  }
+
+  loom_low_lower_resolved_descriptor_t descriptor = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref(
+      context, plan->descriptor_ref, &descriptor));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  const iree_string_view_t descriptor_name = loom_low_descriptor_set_string(
+      descriptor_set, descriptor.descriptor->key_string_offset);
+  const iree_string_view_t descriptor_set_name =
+      loom_amdgpu_descriptor_set_key(descriptor_set);
+  const iree_string_view_t decision =
+      plan->addend_literal_zero ? IREE_SV("selected") : IREE_SV("rejected");
+  const iree_string_view_t reason =
+      plan->addend_literal_zero ? IREE_SV("literal_descriptor_available")
+                                : IREE_SV("literal_descriptor_unavailable");
+  loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_lower_context_target_key(context)),
+      loom_param_string(loom_low_lower_context_export_name(context)),
+      loom_param_string(loom_low_lower_context_config_key(context)),
+      loom_param_string(loom_low_lower_context_function_name(context)),
+      loom_param_string(loom_op_name(module, source_op)),
+      loom_param_string(descriptor_name),
+      loom_param_u32(2),
+      loom_param_string(descriptor_set_name),
+      loom_param_string(IREE_SV("exact_f32_positive_zero")),
+      loom_param_string(decision),
+      loom_param_string(reason),
+  };
+  return loom_low_lower_emit_error_ref(context, source_op,
+                                       LOOM_ERR_AMDGPU_027_REF, params,
+                                       IREE_ARRAYSIZE(params));
+}
+
 iree_status_t loom_amdgpu_select_scalar_fmaf_mix_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_fma_mix_plan_t* out_plan, bool* out_selected) {
@@ -669,6 +723,9 @@ static iree_status_t loom_amdgpu_mulf_mix_lane_source(
 iree_status_t loom_amdgpu_lower_mulf_mix(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_mulf_mix_plan_t* plan) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_mulf_mix_operand_form_diagnostic(
+      context, source_op, plan));
+
   loom_value_id_t low_sources[2] = {
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
