@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 
+#include "iree/hal/drivers/amdgpu/buffer.h"
 #include "iree/hal/drivers/amdgpu/cts/asan_executable_test_util.h"
 
 namespace iree::hal::cts {
@@ -82,6 +83,8 @@ struct ManualAsanHookCase {
 constexpr uint64_t kManualAsanBufferLength = 64;
 constexpr uint64_t kManualAsanDynamicAccessLength = 23;
 constexpr uint64_t kManualAsanSentinelAccessLength = 37;
+constexpr uint32_t kManualAsanBindingEntrypoint = 0;
+constexpr uint32_t kManualAsanRawAddressEntrypoint = 1;
 
 constexpr std::array<ManualAsanHookCase, 48> kManualAsanHookCases = {{
     {kManualAsanHookLoad1, "__asan_load1",
@@ -190,10 +193,11 @@ static bool ManualAsanHookIsReportSelector(uint32_t selector) {
 static iree_status_t DispatchManualAsanSelector(
     iree_hal_device_t* device, iree_hal_executable_t* executable,
     iree_hal_buffer_ref_list_t bindings, uint32_t selector,
-    uint32_t access_length) {
+    uint32_t access_length, int32_t address_adjustment = 0) {
   const uint32_t constant_data[] = {
       selector,
       access_length,
+      static_cast<uint32_t>(address_adjustment),
   };
   iree_const_byte_span_t constants =
       iree_make_const_byte_span(constant_data, sizeof(constant_data));
@@ -202,8 +206,37 @@ static iree_status_t DispatchManualAsanSelector(
   SemaphoreList dispatch_signal(device, {0}, {1});
   IREE_RETURN_IF_ERROR(iree_hal_device_queue_dispatch(
       device, IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait, dispatch_signal,
-      executable, iree_hal_executable_function_from_index(0),
+      executable,
+      iree_hal_executable_function_from_index(kManualAsanBindingEntrypoint),
       iree_hal_make_static_dispatch_config(1, 1, 1), constants, bindings,
+      IREE_HAL_DISPATCH_FLAG_NONE));
+  return iree_hal_semaphore_list_wait(dispatch_signal, iree_infinite_timeout(),
+                                      IREE_ASYNC_WAIT_FLAG_NONE);
+}
+
+static iree_status_t DispatchManualAsanRawAddress(
+    iree_hal_device_t* device, iree_hal_executable_t* executable,
+    uint64_t address, uint32_t selector, uint32_t access_length) {
+  const uint32_t constant_data[] = {
+      static_cast<uint32_t>(address),
+      static_cast<uint32_t>(address >> 32),
+      selector,
+      access_length,
+  };
+  iree_const_byte_span_t constants =
+      iree_make_const_byte_span(constant_data, sizeof(constant_data));
+
+  SemaphoreList empty_wait;
+  SemaphoreList dispatch_signal(device, {0}, {1});
+  iree_hal_buffer_ref_list_t empty_bindings = {
+      /*.count=*/0,
+      /*.values=*/nullptr,
+  };
+  IREE_RETURN_IF_ERROR(iree_hal_device_queue_dispatch(
+      device, IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait, dispatch_signal,
+      executable,
+      iree_hal_executable_function_from_index(kManualAsanRawAddressEntrypoint),
+      iree_hal_make_static_dispatch_config(1, 1, 1), constants, empty_bindings,
       IREE_HAL_DISPATCH_FLAG_NONE));
   return iree_hal_semaphore_list_wait(dispatch_signal, iree_infinite_timeout(),
                                       IREE_ASYNC_WAIT_FLAG_NONE);
@@ -287,6 +320,19 @@ TEST_P(ManualAsanExecutableTest, ReportsCompatibleHooksThroughFeedback) {
   EXPECT_EQ(allocation_body_report.access_length,
             kManualAsanSentinelAccessLength);
 
+  asan_device.recorder()->Reset();
+  IREE_ASSERT_OK(DispatchManualAsanSelector(asan_device.device(), executable,
+                                            bindings, kManualAsanHookLoad1,
+                                            /*access_length=*/1,
+                                            /*address_adjustment=*/-1));
+  asan_device.recorder()->WaitForAsanReportCount(1);
+  EXPECT_EQ(asan_device.recorder()->asan_report_count(), 1u);
+  iree_hal_device_asan_report_t left_report =
+      asan_device.recorder()->last_report();
+  EXPECT_EQ(left_report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ);
+  EXPECT_EQ(left_report.access_length, 1u);
+  EXPECT_NE(left_report.shadow_value, 0u);
+
   iree_hal_buffer_ref_t tail_binding_refs[1];
   tail_binding_refs[0] = iree_hal_make_buffer_ref(
       output_buffer, kManualAsanBufferLength - 1, /*length=*/1);
@@ -305,6 +351,25 @@ TEST_P(ManualAsanExecutableTest, ReportsCompatibleHooksThroughFeedback) {
   EXPECT_EQ(tail_report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ);
   EXPECT_EQ(tail_report.access_length, 2u);
   EXPECT_NE(tail_report.shadow_value, 0u);
+
+  Ref<iree_hal_buffer_t> stale_buffer;
+  IREE_ASSERT_OK(AsanCreateDeviceBuffer(
+      asan_device.allocator(), kManualAsanBufferLength, stale_buffer.out()));
+  const uint64_t stale_address =
+      (uint64_t)(uintptr_t)iree_hal_amdgpu_buffer_device_pointer(stale_buffer);
+  ASSERT_NE(stale_address, 0u);
+  stale_buffer.reset();
+  asan_device.recorder()->Reset();
+  IREE_ASSERT_OK(DispatchManualAsanRawAddress(
+      asan_device.device(), executable, stale_address, kManualAsanHookLoad1,
+      /*access_length=*/1));
+  asan_device.recorder()->WaitForAsanReportCount(1);
+  EXPECT_EQ(asan_device.recorder()->asan_report_count(), 1u);
+  iree_hal_device_asan_report_t stale_report =
+      asan_device.recorder()->last_report();
+  EXPECT_EQ(stale_report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ);
+  EXPECT_EQ(stale_report.access_length, 1u);
+  EXPECT_NE(stale_report.shadow_value, 0u);
 
   for (const ManualAsanHookCase& hook_case : kManualAsanHookCases) {
     const bool is_report_selector =

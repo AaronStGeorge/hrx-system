@@ -37,6 +37,31 @@ static iree_status_t QueueFillAndWait(iree_hal_device_t* device,
                                       IREE_ASYNC_WAIT_FLAG_NONE);
 }
 
+static iree_status_t AllocateAndExportDevicePointer(
+    iree_hal_allocator_t* allocator, iree_hal_buffer_params_t params,
+    iree_device_size_t allocation_size, iree_hal_buffer_t** out_buffer,
+    uint64_t* out_ptr) {
+  *out_buffer = nullptr;
+  *out_ptr = 0;
+
+  iree_hal_buffer_t* buffer = nullptr;
+  iree_status_t status = iree_hal_allocator_allocate_buffer(
+      allocator, params, allocation_size, &buffer);
+  iree_hal_external_buffer_t external_buffer = {};
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_allocator_export_buffer(
+        allocator, buffer, IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
+        IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &external_buffer);
+  }
+  if (iree_status_is_ok(status)) {
+    *out_buffer = buffer;
+    *out_ptr = external_buffer.handle.device_allocation.ptr;
+  } else {
+    iree_hal_buffer_release(buffer);
+  }
+  return status;
+}
+
 class AllocatorTest : public ::testing::Test {
  protected:
   class HsaAllocation {
@@ -198,7 +223,8 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   }
 }
 
-TEST_F(AllocatorTest, AsanDeviceLocalAllocationReusesReleasedApplicationRange) {
+TEST_F(AllocatorTest,
+       AsanDeviceLocalAllocationQuarantinesReleasedApplicationRange) {
   iree_hal_amdgpu_logical_device_options_t options;
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
@@ -214,27 +240,52 @@ TEST_F(AllocatorTest, AsanDeviceLocalAllocationReusesReleasedApplicationRange) {
   params.queue_affinity = 1ull;
 
   iree_hal_buffer_t* first_buffer = nullptr;
-  IREE_ASSERT_OK(iree_hal_allocator_allocate_buffer(
-      test_device.allocator(), params, /*allocation_size=*/4096,
-      &first_buffer));
-  iree_hal_external_buffer_t first_external_buffer = {};
-  IREE_ASSERT_OK(iree_hal_allocator_export_buffer(
-      test_device.allocator(), first_buffer,
-      IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
-      IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &first_external_buffer));
-  const uint64_t first_ptr = first_external_buffer.handle.device_allocation.ptr;
+  uint64_t first_ptr = 0;
+  IREE_ASSERT_OK(AllocateAndExportDevicePointer(test_device.allocator(), params,
+                                                /*allocation_size=*/4096,
+                                                &first_buffer, &first_ptr));
   iree_hal_buffer_release(first_buffer);
 
   iree_hal_buffer_t* second_buffer = nullptr;
-  IREE_ASSERT_OK(iree_hal_allocator_allocate_buffer(
-      test_device.allocator(), params, /*allocation_size=*/4096,
-      &second_buffer));
-  iree_hal_external_buffer_t second_external_buffer = {};
-  IREE_ASSERT_OK(iree_hal_allocator_export_buffer(
-      test_device.allocator(), second_buffer,
-      IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
-      IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &second_external_buffer));
-  EXPECT_EQ(second_external_buffer.handle.device_allocation.ptr, first_ptr);
+  uint64_t second_ptr = 0;
+  IREE_ASSERT_OK(AllocateAndExportDevicePointer(test_device.allocator(), params,
+                                                /*allocation_size=*/4096,
+                                                &second_buffer, &second_ptr));
+  EXPECT_NE(second_ptr, first_ptr);
+  iree_hal_buffer_release(second_buffer);
+}
+
+TEST_F(
+    AllocatorTest,
+    AsanDeviceLocalAllocationReusesReleasedApplicationRangeWhenUnquarantined) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.quarantine_size = 0;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  iree_hal_buffer_params_t params = {0};
+  params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
+  params.usage =
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_DISPATCH;
+  params.queue_affinity = 1ull;
+
+  iree_hal_buffer_t* first_buffer = nullptr;
+  uint64_t first_ptr = 0;
+  IREE_ASSERT_OK(AllocateAndExportDevicePointer(test_device.allocator(), params,
+                                                /*allocation_size=*/4096,
+                                                &first_buffer, &first_ptr));
+  iree_hal_buffer_release(first_buffer);
+
+  iree_hal_buffer_t* second_buffer = nullptr;
+  uint64_t second_ptr = 0;
+  IREE_ASSERT_OK(AllocateAndExportDevicePointer(test_device.allocator(), params,
+                                                /*allocation_size=*/4096,
+                                                &second_buffer, &second_ptr));
+  EXPECT_EQ(second_ptr, first_ptr);
   iree_hal_buffer_release(second_buffer);
 }
 

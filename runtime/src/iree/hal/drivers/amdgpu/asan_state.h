@@ -27,6 +27,23 @@ typedef struct iree_hal_amdgpu_asan_application_range_t {
   struct iree_hal_amdgpu_asan_application_range_t* next;
 } iree_hal_amdgpu_asan_application_range_t;
 
+typedef void(IREE_API_PTR* iree_hal_amdgpu_asan_quarantine_release_fn_t)(
+    void* user_data);
+
+typedef struct iree_hal_amdgpu_asan_quarantine_entry_t {
+  // Next entry in the ASAN state quarantine FIFO while retained.
+  struct iree_hal_amdgpu_asan_quarantine_entry_t* next;
+
+  // Mapping byte length counted against the quarantine budget.
+  iree_device_size_t mapped_size;
+
+  // Callback invoked to release the retained mapping and entry storage.
+  iree_hal_amdgpu_asan_quarantine_release_fn_t release_fn;
+
+  // User data passed to |release_fn|.
+  void* user_data;
+} iree_hal_amdgpu_asan_quarantine_entry_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
@@ -60,6 +77,21 @@ typedef struct iree_hal_amdgpu_asan_state_t {
 
   // Sorted list of free application ranges within the ASAN-covered window.
   iree_hal_amdgpu_asan_application_range_t* application_free_ranges;
+
+  // Guards quarantine FIFO mutation.
+  iree_slim_mutex_t quarantine_mutex;
+
+  // Oldest freed poisoned mapping retained for stale-pointer checks.
+  iree_hal_amdgpu_asan_quarantine_entry_t* quarantine_head;
+
+  // Newest freed poisoned mapping retained for stale-pointer checks.
+  iree_hal_amdgpu_asan_quarantine_entry_t* quarantine_tail;
+
+  // Current total bytes retained by the quarantine FIFO.
+  iree_device_size_t quarantine_size;
+
+  // Maximum total bytes to retain in the quarantine FIFO.
+  iree_device_size_t quarantine_limit;
 } iree_hal_amdgpu_asan_state_t;
 
 // Initializes |out_state| from logical-device options.
@@ -97,15 +129,18 @@ iree_status_t iree_hal_amdgpu_asan_state_map_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
     iree_device_size_t application_length);
 
-// Marks an ASAN-owned mapped allocation as addressable followed by redzone.
+// Marks an ASAN-owned mapped allocation with one addressable subrange.
 //
-// |accessible_length| bytes beginning at |application_address| become
-// addressable. The remaining bytes up to |mapped_length| become poisoned
-// redzone. The range must have been assigned by
+// The entire mapped range beginning at |mapped_address| is first poisoned as a
+// heap redzone. |accessible_length| bytes beginning at |accessible_address|
+// are then marked addressable, with a final partial shadow byte when the
+// accessible length is not shadow-granule aligned. The mapped range must have
+// been assigned by
 // iree_hal_amdgpu_asan_state_reserve_application_range.
 iree_status_t iree_hal_amdgpu_asan_state_publish_allocated_range(
-    iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
-    iree_device_size_t accessible_length, iree_device_size_t mapped_length);
+    iree_hal_amdgpu_asan_state_t* state, uint64_t mapped_address,
+    iree_device_size_t mapped_length, uint64_t accessible_address,
+    iree_device_size_t accessible_length);
 
 // Re-poisons a previously published mapped allocation before teardown.
 //
@@ -115,6 +150,17 @@ iree_status_t iree_hal_amdgpu_asan_state_publish_allocated_range(
 void iree_hal_amdgpu_asan_state_publish_released_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
     iree_device_size_t mapped_length);
+
+// Retains a released poisoned mapping for stale-pointer checks.
+//
+// |entry| must stay valid until |release_fn| is invoked. This function performs
+// no host allocations. When the quarantine budget is zero or the FIFO exceeds
+// the configured budget, one or more oldest entries are released before return.
+void iree_hal_amdgpu_asan_state_quarantine_entry(
+    iree_hal_amdgpu_asan_state_t* state,
+    iree_hal_amdgpu_asan_quarantine_entry_t* entry,
+    iree_device_size_t mapped_size,
+    iree_hal_amdgpu_asan_quarantine_release_fn_t release_fn, void* user_data);
 
 // Assigns an application virtual address range from the ASAN-covered window.
 //

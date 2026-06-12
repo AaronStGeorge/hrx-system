@@ -60,6 +60,8 @@ TEST(AmdgpuDriverOptionsTest, LogicalDeviceDefaultsDisableAsan) {
   EXPECT_EQ(options.asan.shadow_size, IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE);
   EXPECT_EQ(options.asan.shadow_slab_size,
             IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE);
+  EXPECT_EQ(options.asan.quarantine_size,
+            IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE);
 }
 
 TEST(AmdgpuDriverOptionsTest, RejectsMissingSearchPathStorageBeforeLoadingHsa) {

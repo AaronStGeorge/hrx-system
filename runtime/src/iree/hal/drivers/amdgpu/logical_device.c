@@ -181,6 +181,8 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
   out_options->asan.shadow_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE;
   out_options->asan.shadow_slab_size =
       IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE;
+  out_options->asan.quarantine_size =
+      IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE;
 
   out_options->preallocate_pools = 1;
 }

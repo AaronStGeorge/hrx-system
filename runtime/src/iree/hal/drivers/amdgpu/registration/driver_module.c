@@ -87,6 +87,12 @@ IREE_FLAG(string, amdgpu_asan_report_policy, "report-only",
           "AMDGPU ASAN report policy: 'report-only' emits device events and "
           "keeps the logical device usable; 'fail-device' emits device events "
           "and then fails the logical device.");
+IREE_FLAG(
+    int64_t, amdgpu_asan_quarantine_size,
+    IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE,
+    "Freed ASAN allocation mapping budget in bytes kept resident and poisoned "
+    "for stale-pointer checks. Set to 0 to release freed mappings "
+    "immediately.");
 
 IREE_FLAG(bool, amdgpu_suppress_device_fine_memory, false,
           "Suppresses fine-grained GPU-local memory pools even when reported "
@@ -286,6 +292,9 @@ static iree_status_t iree_hal_amdgpu_driver_factory_try_create(
                             "unrecognized ASAN report policy: '%s'",
                             FLAG_amdgpu_asan_report_policy);
   }
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_flag_int64_to_device_size(
+      "amdgpu_asan_quarantine_size", FLAG_amdgpu_asan_quarantine_size,
+      &device_options->asan.quarantine_size));
 
   device_options->suppress_device_fine_memory =
       FLAG_amdgpu_suppress_device_fine_memory;

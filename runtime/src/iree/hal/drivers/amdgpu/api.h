@@ -82,6 +82,10 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 #define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE \
   ((iree_device_size_t)128 * 1024 * 1024)
 
+// Freed ASAN allocation mapping budget kept resident for stale-pointer checks.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE \
+  ((iree_device_size_t)256 * 1024 * 1024)
+
 // Selects how AMDGPU ASAN reports affect the owning logical device.
 typedef enum iree_hal_amdgpu_asan_report_policy_e {
   // Emit ASAN reports through the device event sink and keep the logical device
@@ -194,6 +198,9 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
 
     // Physical shadow slab size in bytes.
     iree_device_size_t shadow_slab_size;
+
+    // Freed allocation mapping budget in bytes kept resident and poisoned.
+    iree_device_size_t quarantine_size;
   } asan;
 
   // Preallocates a reasonable number of resources in pools to reduce initial

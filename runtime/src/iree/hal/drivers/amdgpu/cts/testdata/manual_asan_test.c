@@ -111,8 +111,9 @@ extern void __asan_poison_region(uint64_t address, uint64_t size);
 extern void __asan_unpoison_memory_region(const void* address, uint64_t size);
 
 IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* output, uint32_t selector,
-                                          uint32_t dynamic_size) {
-  uint64_t address = (uint64_t)output;
+                                          uint32_t dynamic_size,
+                                          int32_t address_adjustment) {
+  uint64_t address = (uint64_t)((uint8_t*)output + address_adjustment);
   switch (selector) {
     case MANUAL_ASAN_HOOK_LOAD1:
       __asan_load1(address);
@@ -268,4 +269,23 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* output, uint32_t selector,
       break;
   }
   output[0] = 0x4153414E53544F34ull;
+}
+
+IREE_AMDGPU_ATTRIBUTE_KERNEL void export1(uint32_t address_lo,
+                                          uint32_t address_hi,
+                                          uint32_t selector,
+                                          uint32_t dynamic_size) {
+  uint64_t address = ((uint64_t)address_hi << 32) | address_lo;
+  switch (selector) {
+    case MANUAL_ASAN_HOOK_LOAD1:
+      __asan_load1(address);
+      break;
+    case MANUAL_ASAN_HOOK_LOADN:
+      __asan_loadN(address, dynamic_size);
+      break;
+    default:
+      break;
+  }
+  volatile uint8_t value = *(volatile uint8_t*)(uintptr_t)address;
+  (void)value;
 }
