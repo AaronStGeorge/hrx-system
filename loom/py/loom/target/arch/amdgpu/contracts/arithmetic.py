@@ -67,6 +67,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_rcp_f32",
     "amdgpu.v_cvt_f32_f16",
     "amdgpu.v_cvt_f16_f32",
+    "amdgpu.v_pk_fmac_f16",
     "amdgpu.v_pk_fma_f16",
     "amdgpu.v_cvt_f32_i32",
     "amdgpu.v_cvt_f32_u32",
@@ -1380,8 +1381,11 @@ def _f32_fma_rules(
     return tuple(rules)
 
 
-def _packed_f16_vector_fma_rule() -> DescriptorRule:
-    descriptor = _descriptor("amdgpu.v_pk_fma_f16")
+def _packed_f16_vector_fma_rule(
+    descriptor_key: str,
+    operands: dict[str, ValueRef],
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
     return DescriptorRule(
         source_op=vector.vector_fmaf,
         descriptor=descriptor,
@@ -1397,14 +1401,31 @@ def _packed_f16_vector_fma_rule() -> DescriptorRule:
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
-                operands={
-                    "a": ValueRef.operand("a"),
-                    "b": ValueRef.operand("b"),
-                    "c": ValueRef.operand("c"),
-                },
+                operands=operands,
                 results={"dst": ValueRef.result("result")},
                 form=DescriptorEmitForm.OP,
             ),
+        ),
+    )
+
+
+def _packed_f16_vector_fma_rules() -> tuple[DescriptorRule, ...]:
+    return (
+        _packed_f16_vector_fma_rule(
+            "amdgpu.v_pk_fmac_f16",
+            operands={
+                "acc": ValueRef.operand("c"),
+                "a": ValueRef.operand("a"),
+                "b": ValueRef.operand("b"),
+            },
+        ),
+        _packed_f16_vector_fma_rule(
+            "amdgpu.v_pk_fma_f16",
+            operands={
+                "a": ValueRef.operand("a"),
+                "b": ValueRef.operand("b"),
+                "c": ValueRef.operand("c"),
+            },
         ),
     )
 
@@ -1528,7 +1549,7 @@ def _rules() -> tuple[ContractCase, ...]:
                 _VEC_F32,
                 "amdgpu.v_max_f32",
             ),
-            _packed_f16_vector_fma_rule(),
+            *_packed_f16_vector_fma_rules(),
             *_f32_fma_rules(vector.vector_fmaf, _VEC_F32),
             _unary_rule(vector.vector_exp2f, _VEC_F32, "amdgpu.v_exp_f32"),
             _unary_rule(vector.vector_log2f, _VEC_F32, "amdgpu.v_log_f32"),

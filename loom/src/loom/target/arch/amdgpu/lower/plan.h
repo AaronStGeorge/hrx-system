@@ -129,7 +129,7 @@ typedef struct loom_amdgpu_fma_mix_plan_t {
 } loom_amdgpu_fma_mix_plan_t;
 
 typedef struct loom_amdgpu_packed_fma_plan_t {
-  // Packed f16 vector values consumed by the selected descriptor in a, b, c
+  // Packed f16 vector values consumed in the selected descriptor's operand
   // order.
   loom_value_id_t sources[3];
   // Packed f16 vector result value.
