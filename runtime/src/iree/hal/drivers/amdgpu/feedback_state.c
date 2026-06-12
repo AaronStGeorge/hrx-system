@@ -10,21 +10,87 @@
 
 #include "iree/base/threading/affinity.h"
 #include "iree/base/threading/thread.h"
+#include "iree/hal/drivers/amdgpu/abi/asan.h"
 #include "iree/hal/drivers/amdgpu/api.h"
 #include "iree/hal/drivers/amdgpu/physical_device.h"
 #include "iree/hal/drivers/amdgpu/system.h"
+
+static const char* iree_hal_amdgpu_feedback_state_asan_access_kind_string(
+    iree_hal_amdgpu_asan_access_kind_t access_kind) {
+  switch (access_kind) {
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_READ:
+      return "read";
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_WRITE:
+      return "write";
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_ATOMIC:
+      return "atomic";
+    case IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
+    iree_host_size_t physical_device_ordinal,
+    const iree_hal_amdgpu_feedback_packet_t* packet) {
+  if (IREE_UNLIKELY(packet->record_length < packet->header_length)) {
+    return iree_make_status(
+        IREE_STATUS_DATA_LOSS,
+        "AMDGPU ASAN feedback packet on physical device %" PRIhsz
+        " has invalid lengths: packet_record_length=%u, "
+        "packet_header_length=%u",
+        physical_device_ordinal, packet->record_length, packet->header_length);
+  }
+  const iree_host_size_t payload_length =
+      packet->record_length - packet->header_length;
+  if (IREE_UNLIKELY(payload_length < sizeof(iree_hal_amdgpu_asan_report_t))) {
+    return iree_make_status(
+        IREE_STATUS_DATA_LOSS,
+        "AMDGPU ASAN feedback packet on physical device %" PRIhsz
+        " is too small: packet_payload_length=%" PRIhsz
+        ", asan_report_length=%" PRIhsz,
+        physical_device_ordinal, payload_length,
+        sizeof(iree_hal_amdgpu_asan_report_t));
+  }
+
+  const iree_hal_amdgpu_asan_report_t* report =
+      (const iree_hal_amdgpu_asan_report_t*)((const uint8_t*)packet +
+                                             packet->header_length);
+  if (IREE_UNLIKELY(
+          report->record_length < sizeof(iree_hal_amdgpu_asan_report_t) ||
+          report->record_length > payload_length ||
+          report->abi_version != IREE_HAL_AMDGPU_ASAN_REPORT_ABI_VERSION_0)) {
+    return iree_make_status(
+        IREE_STATUS_DATA_LOSS,
+        "AMDGPU ASAN report on physical device %" PRIhsz
+        " has unsupported ABI: record_length=%u, payload_length=%" PRIhsz
+        ", abi_version=%u",
+        physical_device_ordinal, report->record_length, payload_length,
+        report->abi_version);
+  }
+
+  return iree_make_status(
+      IREE_STATUS_ABORTED,
+      "AMDGPU ASAN %s access violation on physical device %" PRIhsz
+      " site_id=0x%016" PRIx64 " fault_address=0x%016" PRIx64
+      " access_size=%" PRIu64 " shadow_address=0x%016" PRIx64
+      " shadow_value=0x%016" PRIx64
+      " workgroup_x=%u workitem_x=%u dispatch=0x%016" PRIx64,
+      iree_hal_amdgpu_feedback_state_asan_access_kind_string(
+          report->access_kind),
+      physical_device_ordinal, report->site_id, report->fault_address,
+      report->access_size, report->shadow_address, report->shadow_value,
+      packet->source_workgroup_id_x, packet->source_workitem_id_x,
+      packet->source_dispatch_ptr);
+}
 
 static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
     iree_host_size_t physical_device_ordinal,
     const iree_hal_amdgpu_feedback_packet_t* packet) {
   switch (packet->kind) {
     case IREE_HAL_AMDGPU_FEEDBACK_PACKET_KIND_ASAN:
-      return iree_make_status(
-          IREE_STATUS_ABORTED,
-          "AMDGPU ASAN feedback packet reported on physical device %" PRIhsz
-          " workgroup_x=%u workitem_x=%u dispatch=0x%016" PRIx64,
-          physical_device_ordinal, packet->source_workgroup_id_x,
-          packet->source_workitem_id_x, packet->source_dispatch_ptr);
+      return iree_hal_amdgpu_feedback_state_handle_asan_packet(
+          physical_device_ordinal, packet);
     default:
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,

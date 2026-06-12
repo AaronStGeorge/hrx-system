@@ -1378,6 +1378,14 @@ static void iree_hal_amdgpu_logical_device_error_handler(void* user_data,
   IREE_TRACE_ZONE_END(z0);
 }
 
+static iree_status_t iree_hal_amdgpu_logical_device_check_failure(
+    iree_hal_amdgpu_logical_device_t* logical_device) {
+  iree_status_t failure_status = (iree_status_t)iree_atomic_load(
+      &logical_device->failure_status, iree_memory_order_acquire);
+  if (iree_status_is_ok(failure_status)) return iree_ok_status();
+  return iree_status_clone(failure_status);
+}
+
 static void iree_hal_amdgpu_logical_device_translate_physical_options(
     const iree_hal_amdgpu_logical_device_options_t* options,
     const iree_hal_amdgpu_topology_t* topology,
@@ -2477,6 +2485,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_alloca(
     iree_hal_buffer_t** IREE_RESTRICT out_buffer) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2492,6 +2502,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_dealloca(
     iree_hal_buffer_t* buffer, iree_hal_dealloca_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2528,6 +2540,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_fill(
 
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2545,6 +2559,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_update(
     iree_device_size_t length, iree_hal_update_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2562,6 +2578,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_copy(
     iree_device_size_t length, iree_hal_copy_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2579,6 +2597,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_read(
     iree_device_size_t length, iree_hal_read_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2596,6 +2616,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_write(
     iree_device_size_t length, iree_hal_write_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2612,6 +2634,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_host_call(
     iree_hal_host_call_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2630,6 +2654,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_dispatch(
     iree_hal_dispatch_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2647,6 +2673,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_execute(
     iree_hal_execute_flags_t flags) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   iree_hal_amdgpu_virtual_queue_t* queue = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_select_host_queue(
       logical_device, queue_affinity, &queue));
@@ -2659,6 +2687,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_flush(
     iree_hal_device_t* base_device, iree_hal_queue_affinity_t queue_affinity) {
   iree_hal_amdgpu_logical_device_t* logical_device =
       iree_hal_amdgpu_logical_device_cast(base_device);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_logical_device_check_failure(logical_device));
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_queue_affinity_normalize(
       logical_device->queue_affinity_mask, queue_affinity, &queue_affinity));
 

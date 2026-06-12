@@ -73,6 +73,7 @@ iree_cc_library(
   SRCS
     "asan_executable_test.cc"
   DEPS
+    iree::base::threading::thread
     iree::hal
     iree::hal::cts::util::test_base
     iree::hal::drivers::amdgpu::abi

@@ -71,6 +71,7 @@ iree_runtime_cc_library(
     testonly = True,
     srcs = ["asan_executable_test.cc"],
     deps = [
+        "//runtime/src/iree/base/threading:thread",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/cts/util:test_base",
         "//runtime/src/iree/hal/drivers/amdgpu:headers",

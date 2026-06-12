@@ -190,8 +190,9 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
             shadow_map->application_window_size);
   EXPECT_EQ(config.shadow_size, shadow_map->reservation_size);
   EXPECT_EQ(config.shadow_slab_size, shadow_map->slab_size);
-  EXPECT_EQ(config.report_ring_base, 0u);
-  EXPECT_EQ(config.report_ring_size, 0u);
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(config.reserved); ++i) {
+    EXPECT_EQ(config.reserved[i], 0u);
+  }
 }
 
 TEST_F(AllocatorTest, QueryMemoryHeapsReportsHsaLimits) {

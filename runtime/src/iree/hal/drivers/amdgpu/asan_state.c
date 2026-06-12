@@ -112,8 +112,6 @@ void iree_hal_amdgpu_asan_state_populate_config(
       .application_window_size = shadow_map->application_window_size,
       .shadow_size = shadow_map->reservation_size,
       .shadow_slab_size = shadow_map->slab_size,
-      .report_ring_base = 0,
-      .report_ring_size = 0,
       .reserved = {0},
   };
 }

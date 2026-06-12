@@ -19,6 +19,7 @@ DEVICE_HDRS = [
     "dispatch.h",
     "kernel_tables.h",
     "kernels.h",
+    "support/asan.h",
     "support/common.h",
     "support/feedback.h",
     "support/kernel.h",
