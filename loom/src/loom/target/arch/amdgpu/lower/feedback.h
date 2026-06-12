@@ -56,6 +56,13 @@ typedef struct loom_amdgpu_feedback_channel_header_values_t {
   loom_value_id_t ring_capacity;
 } loom_amdgpu_feedback_channel_header_values_t;
 
+typedef struct loom_amdgpu_feedback_packet_address_t {
+  // Uniform packet base address consumed by GLOBAL_*_SADDR packets.
+  loom_value_id_t base;
+  // Per-lane byte offset from |base| consumed by GLOBAL_*_SADDR packets.
+  loom_value_id_t byte_offset;
+} loom_amdgpu_feedback_packet_address_t;
+
 typedef struct loom_amdgpu_feedback_packet_header_t {
   // Total packet byte length including the fixed header and padded payload.
   uint32_t record_length;
@@ -96,25 +103,38 @@ iree_status_t loom_amdgpu_build_feedback_channel_header_values(
     loom_value_id_t channel_base, loom_location_id_t location,
     loom_amdgpu_feedback_channel_header_values_t* out_values);
 
+// Emits target-low IR that represents a uniform packet address.
+//
+// |packet_base| must be an SGPRx2 device-visible packet address. The returned
+// address uses |packet_base| as the GLOBAL_*_SADDR base and materializes a zero
+// VGPR byte offset. Reservation helpers that compute per-lane ring slots should
+// instead populate loom_amdgpu_feedback_packet_address_t with the ring base and
+// dynamic ring offset directly.
+iree_status_t loom_amdgpu_build_feedback_uniform_packet_address(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t packet_base, loom_location_id_t location,
+    loom_amdgpu_feedback_packet_address_t* out_address);
+
 // Emits target-low IR that initializes a reserved feedback packet header.
 //
-// |packet_base| must be the SGPRx2 device-visible packet address returned by
-// reservation. Dynamic header values may be SGPR or VGPR low registers and are
-// copied into VGPRs as required by global-store packet operands.
+// |packet_address| must reference packet storage returned by reservation.
+// Dynamic header values may be SGPR or VGPR low registers and are copied into
+// VGPRs as required by global-store packet operands.
 iree_status_t loom_amdgpu_build_feedback_packet_header(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t packet_base,
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
     const loom_amdgpu_feedback_packet_header_t* header,
     loom_location_id_t location);
 
 // Emits target-low IR that release-publishes a reserved feedback packet state.
 //
-// |packet_base| must be the SGPRx2 device-visible packet address returned by
-// reservation. This only publishes the packet state; producer-specific code is
-// responsible for emitting any later host notification or failure policy.
+// |packet_address| must reference packet storage returned by reservation. This
+// only publishes the packet state; producer-specific code is responsible for
+// emitting any later host notification or failure policy.
 iree_status_t loom_amdgpu_build_feedback_publish_packet_state(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t packet_base, loom_location_id_t location);
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    loom_location_id_t location);
 
 // Emits target-low IR that wakes the runtime feedback service.
 //
@@ -129,13 +149,13 @@ iree_status_t loom_amdgpu_build_feedback_notify_host(
 // Emits target-low IR that release-publishes a reserved packet and wakes the
 // runtime feedback service.
 //
-// |packet_base| must be the SGPRx2 device-visible packet address returned by
-// reservation and |notify_signal| must satisfy
+// |packet_address| must reference packet storage returned by reservation and
+// |notify_signal| must satisfy
 // loom_amdgpu_build_feedback_notify_host's preconditions.
 iree_status_t loom_amdgpu_build_feedback_publish_packet(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t packet_base, loom_value_id_t notify_signal,
-    loom_location_id_t location);
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    loom_value_id_t notify_signal, loom_location_id_t location);
 
 #ifdef __cplusplus
 }  // extern "C"
