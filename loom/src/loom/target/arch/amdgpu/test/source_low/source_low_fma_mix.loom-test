@@ -74,9 +74,9 @@ func.def target(@gfx942_target) @vector_f32_mulf_splat_extf_cdna(%q: vector<2xf3
 low.func.def target(@gfx942_target) abi(hal_kernel) @vector_f32_mulf_splat_extf_cdna(%q: reg<amdgpu.vgpr x2>, %scale_half: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
   %10 = v_mov_b32 0
   %11 = slice %q[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %12 = v_mad_mix_f32_f32_f16lo_f32 %11, %scale_half, %10
+  %12 = v_mad_mix_f32_f16lo_f32_f32 %scale_half, %11, %10
   %13 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %14 = v_mad_mix_f32_f32_f16lo_f32 %13, %scale_half, %10
+  %14 = v_mad_mix_f32_f16lo_f32_f32 %scale_half, %13, %10
   %result = concat(%12, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %result
 }

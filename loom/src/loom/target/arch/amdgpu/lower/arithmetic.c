@@ -362,6 +362,20 @@ static void loom_amdgpu_reset_mulf_mix_plan(
   };
 }
 
+static void loom_amdgpu_canonicalize_mulf_mix_sources(
+    loom_value_id_t* sources, loom_amdgpu_fma_mix_source_kind_t* source_kinds) {
+  if (source_kinds[0] != LOOM_AMDGPU_FMA_MIX_SOURCE_F32 ||
+      !loom_amdgpu_fma_mix_source_is_f16(source_kinds[1])) {
+    return;
+  }
+  const loom_value_id_t source = sources[0];
+  sources[0] = sources[1];
+  sources[1] = source;
+  const loom_amdgpu_fma_mix_source_kind_t source_kind = source_kinds[0];
+  source_kinds[0] = source_kinds[1];
+  source_kinds[1] = source_kind;
+}
+
 iree_status_t loom_amdgpu_select_scalar_fmaf_mix_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_fma_mix_plan_t* out_plan, bool* out_selected) {
@@ -472,6 +486,7 @@ iree_status_t loom_amdgpu_select_scalar_mulf_mix_plan(
   if (!has_f16_source) {
     return iree_ok_status();
   }
+  loom_amdgpu_canonicalize_mulf_mix_sources(sources, source_kinds);
 
   loom_amdgpu_descriptor_ref_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   bool addend_literal_zero = false;
@@ -562,9 +577,13 @@ iree_status_t loom_amdgpu_select_vector_mulf_mix_plan(
     return iree_ok_status();
   }
 
+  loom_value_id_t sources[2] = {
+      splat_source,
+      vector_source,
+  };
   loom_amdgpu_fma_mix_source_kind_t source_kinds[3] = {
-      LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
       splat_source_kind,
+      LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
       LOOM_AMDGPU_FMA_MIX_SOURCE_F32,
   };
   loom_amdgpu_descriptor_ref_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
@@ -577,7 +596,7 @@ iree_status_t loom_amdgpu_select_vector_mulf_mix_plan(
   }
 
   *out_plan = (loom_amdgpu_mulf_mix_plan_t){
-      .sources = {vector_source, splat_source},
+      .sources = {sources[0], sources[1]},
       .result = result,
       .descriptor_ref = descriptor_ref,
       .addend_literal_zero = addend_literal_zero,
