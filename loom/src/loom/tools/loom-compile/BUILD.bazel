@@ -74,6 +74,7 @@ loom_cc_binary(
     deps = [
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/kernel",

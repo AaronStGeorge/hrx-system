@@ -129,7 +129,13 @@ typedef struct loom_check_result_t {
 // canonical structured diagnostic JSON object to |result->diagnostic_json|
 // when |result| is non-NULL.
 typedef struct loom_check_diagnostic_capture_t {
+  // Type formatter used for rendered diagnostic messages and JSON params.
+  loom_type_formatter_t type_formatter;
+
+  // Human-readable detail builder, or NULL when text capture is disabled.
   iree_string_builder_t* detail;
+
+  // File-level result receiving structured diagnostic JSON, or NULL.
   loom_check_result_t* result;
 } loom_check_diagnostic_capture_t;
 

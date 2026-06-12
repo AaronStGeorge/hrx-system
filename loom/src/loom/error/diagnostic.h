@@ -27,6 +27,7 @@
 #include "iree/base/api.h"
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
+#include "loom/error/renderer.h"
 #include "loom/util/stream.h"
 
 #ifdef __cplusplus
@@ -200,6 +201,21 @@ static inline iree_status_t loom_diagnostic_emit(
   return iree_ok_status();
 }
 
+// Options controlling human-readable diagnostic formatting.
+typedef struct loom_diagnostic_format_options_t {
+  // Type formatter used for LOOM_PARAM_TYPE values in messages and fix hints.
+  loom_type_formatter_t type_formatter;
+} loom_diagnostic_format_options_t;
+
+// Initializes diagnostic format options with the default minimal type
+// formatter.
+static inline void loom_diagnostic_format_options_initialize(
+    loom_diagnostic_format_options_t* out_options) {
+  *out_options = (loom_diagnostic_format_options_t){
+      /*.type_formatter=*/{loom_type_format_minimal, NULL},
+  };
+}
+
 // Formats a diagnostic in Rust/Clang-style caret format. The output
 // flows through a loom_output_stream_t:
 //
@@ -211,6 +227,13 @@ static inline iree_status_t loom_diagnostic_emit(
 //
 iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
                                      loom_output_stream_t* stream);
+
+// Formats a diagnostic using explicit options. A NULL options pointer uses the
+// same defaults as loom_diagnostic_format().
+iree_status_t loom_diagnostic_format_with_options(
+    const loom_diagnostic_t* diagnostic,
+    const loom_diagnostic_format_options_t* options,
+    loom_output_stream_t* stream);
 
 // A diagnostic sink that prints to stderr using loom_diagnostic_format.
 // Pass NULL as user_data.

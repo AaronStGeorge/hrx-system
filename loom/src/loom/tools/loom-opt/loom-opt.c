@@ -92,6 +92,59 @@ typedef struct loom_opt_diagnostic_emitter_t {
   loom_emitter_t emitter;
 } loom_opt_diagnostic_emitter_t;
 
+typedef struct loom_opt_diagnostic_sink_t {
+  // Selected diagnostic output format.
+  loom_opt_diagnostic_format_t format;
+  // Parsed module used for full type rendering after parse succeeds.
+  const loom_run_module_t* run_module;
+  // Printer context used to render target-owned register and storage types.
+  loom_low_descriptor_text_print_context_t type_print_context;
+  // Stream used when structured diagnostics are requested.
+  loom_output_stream_t json_stream;
+} loom_opt_diagnostic_sink_t;
+
+static iree_status_t loom_opt_format_diagnostic_type(
+    loom_type_t type, void* user_data, loom_output_stream_t* stream) {
+  const loom_opt_diagnostic_sink_t* sink =
+      (const loom_opt_diagnostic_sink_t*)user_data;
+  const loom_module_t* module =
+      sink && sink->run_module ? sink->run_module->module : NULL;
+  if (sink && sink->type_print_context.options.low_asm_environment.vtable) {
+    return loom_text_print_type_with_options(type, module, stream,
+                                             &sink->type_print_context.options);
+  }
+  if (module) {
+    return loom_text_print_type(type, module, stream);
+  }
+  return loom_type_format_minimal(type, NULL, stream);
+}
+
+static iree_status_t loom_opt_diagnostic_sink(
+    void* user_data, const loom_diagnostic_t* diagnostic) {
+  loom_opt_diagnostic_sink_t* sink = (loom_opt_diagnostic_sink_t*)user_data;
+  const loom_type_formatter_t type_formatter = {
+      .fn = loom_opt_format_diagnostic_type,
+      .user_data = sink,
+  };
+  switch (sink->format) {
+    case LOOM_OPT_DIAGNOSTIC_FORMAT_TEXT: {
+      loom_output_stream_t stream;
+      loom_output_stream_for_file(stderr, &stream);
+      const loom_diagnostic_format_options_t format_options = {
+          .type_formatter = type_formatter,
+      };
+      return loom_diagnostic_format_with_options(diagnostic, &format_options,
+                                                 &stream);
+    }
+    case LOOM_OPT_DIAGNOSTIC_FORMAT_JSON:
+      return loom_diagnostic_json_write_object(&sink->json_stream, diagnostic,
+                                               type_formatter);
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported diagnostic format");
+  }
+}
+
 static const char* loom_opt_pass_kind_name(loom_pass_kind_t kind) {
   switch (kind) {
     case LOOM_PASS_MODULE:
@@ -1007,10 +1060,12 @@ int main(int argc, char** argv) {
   loom_opt_pass_report_mode_t pass_report_mode = LOOM_OPT_PASS_REPORT_NONE;
   loom_opt_diagnostic_format_t diagnostic_format =
       LOOM_OPT_DIAGNOSTIC_FORMAT_TEXT;
-  loom_output_stream_t diagnostic_json_stream = {0};
-  loom_json_sink_options_t diagnostic_json_options = {0};
+  loom_opt_diagnostic_sink_t diagnostic_sink_state = {
+      .run_module = &run_module,
+  };
   loom_diagnostic_sink_t diagnostic_sink = {
-      .fn = loom_diagnostic_stderr_sink,
+      .fn = loom_opt_diagnostic_sink,
+      .user_data = &diagnostic_sink_state,
   };
   loom_pass_report_t pass_report = {0};
   bool pass_report_initialized = false;
@@ -1037,17 +1092,11 @@ int main(int argc, char** argv) {
     status = loom_opt_parse_diagnostic_format(
         iree_make_cstring_view(FLAG_diagnostic_format), &diagnostic_format);
   }
-  if (iree_status_is_ok(status) &&
-      diagnostic_format == LOOM_OPT_DIAGNOSTIC_FORMAT_JSON) {
-    loom_output_stream_for_file(stderr, &diagnostic_json_stream);
-    diagnostic_json_options = (loom_json_sink_options_t){
-        .stream = &diagnostic_json_stream,
-        .type_formatter = {loom_type_format_minimal, NULL},
-    };
-    diagnostic_sink = (loom_diagnostic_sink_t){
-        .fn = loom_diagnostic_json_sink,
-        .user_data = &diagnostic_json_options,
-    };
+  if (iree_status_is_ok(status)) {
+    diagnostic_sink_state.format = diagnostic_format;
+    if (diagnostic_format == LOOM_OPT_DIAGNOSTIC_FORMAT_JSON) {
+      loom_output_stream_for_file(stderr, &diagnostic_sink_state.json_stream);
+    }
   }
   if (iree_status_is_ok(status) && FLAG_list_passes) {
     status = loom_opt_print_pass_list(pass_registry);
@@ -1088,6 +1137,11 @@ int main(int argc, char** argv) {
             .user_data = (void*)target_environment,
         };
     status = loom_run_session_initialize(&session_options, &run_session);
+    if (iree_status_is_ok(status)) {
+      loom_low_descriptor_text_print_context_initialize(
+          &loom_run_session_low_descriptor_registry(&run_session)->registry,
+          &diagnostic_sink_state.type_print_context);
+    }
   }
   if (iree_status_is_ok(status) && !metadata_only &&
       pass_report_mode != LOOM_OPT_PASS_REPORT_NONE) {

@@ -163,6 +163,56 @@
       ]
     },
     {
+      "name": "prints full target register types in text diagnostics",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--output={tmp}/unused.loom"
+        ],
+        "stdin": {
+          "text": "amdgpu.target<gfx1100> @target\n\nlow.func.def target(@target) @bad_return(%predicate: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) {\n  low.return %predicate : reg<amdgpu.sgpr x2>\n}\n"
+        }
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": [
+          "yielded value has type reg<amdgpu.sgpr x2>",
+          "but expected reg<amdgpu.sgpr>"
+        ],
+        "not_contains": [
+          "reg<...>"
+        ]
+      }
+    },
+    {
+      "name": "prints full target register types in json diagnostics",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "--diagnostic-format=json",
+          "--output={tmp}/unused.loom"
+        ],
+        "stdin": {
+          "text": "amdgpu.target<gfx1100> @target\n\nlow.func.def target(@target) @bad_return_json(%predicate: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) {\n  low.return %predicate : reg<amdgpu.sgpr x2>\n}\n"
+        }
+      },
+      "exit": {
+        "nonzero": true
+      },
+      "stderr": {
+        "contains": [
+          "\"message\":\"yielded value has type reg<amdgpu.sgpr x2>",
+          "\"yield_type\":\"reg<amdgpu.sgpr x2>\"",
+          "\"expected_type\":\"reg<amdgpu.sgpr>\""
+        ],
+        "not_contains": [
+          "reg<...>"
+        ]
+      }
+    },
+    {
       "name": "materializes config values",
       "run": {
         "tool": "loom-opt",

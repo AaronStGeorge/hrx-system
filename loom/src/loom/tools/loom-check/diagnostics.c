@@ -184,8 +184,11 @@ iree_status_t loom_check_diagnostic_collector_sink(
   iree_string_builder_initialize(collector->host_allocator, &formatted_builder);
   loom_output_stream_t formatted_stream;
   loom_output_stream_for_builder(&formatted_builder, &formatted_stream);
-  iree_status_t format_status =
-      loom_diagnostic_format(diagnostic, &formatted_stream);
+  const loom_diagnostic_format_options_t format_options = {
+      .type_formatter = type_formatter,
+  };
+  iree_status_t format_status = loom_diagnostic_format_with_options(
+      diagnostic, &format_options, &formatted_stream);
   iree_string_view_t formatted_diagnostic = iree_string_view_empty();
   if (iree_status_is_ok(format_status)) {
     format_status = loom_check_diagnostic_collector_copy_string(
@@ -208,6 +211,7 @@ iree_status_t loom_check_diagnostic_collector_sink(
           .formatted_diagnostic = formatted_diagnostic,
       };
   loom_check_diagnostic_capture_t diagnostic_capture = {
+      .type_formatter = type_formatter,
       .result = collector->result,
   };
   IREE_RETURN_IF_ERROR(

@@ -14,6 +14,7 @@
 #include "iree/io/file_contents.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
@@ -39,6 +40,44 @@
 #ifndef LOOM_COMPILE_HAVE_SPIRV_VULKAN
 #define LOOM_COMPILE_HAVE_SPIRV_VULKAN 0
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
+
+typedef struct loom_compile_diagnostic_sink_t {
+  // Parsed module used for full type rendering.
+  const loom_run_module_t* run_module;
+  // Printer context used to render target-owned register and storage types.
+  loom_low_descriptor_text_print_context_t type_print_context;
+} loom_compile_diagnostic_sink_t;
+
+static iree_status_t loom_compile_format_diagnostic_type(
+    loom_type_t type, void* user_data, loom_output_stream_t* stream) {
+  const loom_compile_diagnostic_sink_t* sink =
+      (const loom_compile_diagnostic_sink_t*)user_data;
+  const loom_module_t* module =
+      sink && sink->run_module ? sink->run_module->module : NULL;
+  if (sink && sink->type_print_context.options.low_asm_environment.vtable) {
+    return loom_text_print_type_with_options(type, module, stream,
+                                             &sink->type_print_context.options);
+  }
+  if (module) {
+    return loom_text_print_type(type, module, stream);
+  }
+  return loom_type_format_minimal(type, NULL, stream);
+}
+
+static iree_status_t loom_compile_diagnostic_sink(
+    void* user_data, const loom_diagnostic_t* diagnostic) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_file(stderr, &stream);
+  const loom_diagnostic_format_options_t format_options = {
+      .type_formatter =
+          {
+              .fn = loom_compile_format_diagnostic_type,
+              .user_data = user_data,
+          },
+  };
+  return loom_diagnostic_format_with_options(diagnostic, &format_options,
+                                             &stream);
+}
 
 #define LOOM_COMPILE_HAVE_ANY_PROVIDER                      \
   (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREE_VM || \
@@ -367,8 +406,15 @@ static iree_status_t loom_compile_run_pass_pipeline(
   }
   pipeline_options.low_descriptor_registry =
       loom_run_session_low_descriptor_registry(session);
+  loom_compile_diagnostic_sink_t diagnostic_sink = {
+      .run_module = run_module,
+  };
+  loom_low_descriptor_text_print_context_initialize(
+      &pipeline_options.low_descriptor_registry->registry,
+      &diagnostic_sink.type_print_context);
   pipeline_options.diagnostic_sink = (loom_diagnostic_sink_t){
-      .fn = loom_diagnostic_stderr_sink,
+      .fn = loom_compile_diagnostic_sink,
+      .user_data = &diagnostic_sink,
   };
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(run_module);

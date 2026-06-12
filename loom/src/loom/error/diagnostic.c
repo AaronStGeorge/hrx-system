@@ -174,13 +174,24 @@ static iree_status_t loom_diagnostic_format_highlight_omissions(
       diagnostic->highlight_omitted_count == 1 ? "" : "s");
 }
 
-iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
-                                     loom_output_stream_t* stream) {
+static loom_type_formatter_t loom_diagnostic_format_type_formatter(
+    const loom_diagnostic_format_options_t* options) {
+  if (options && options->type_formatter.fn) {
+    return options->type_formatter;
+  }
+  return (loom_type_formatter_t){loom_type_format_minimal, NULL};
+}
+
+iree_status_t loom_diagnostic_format_with_options(
+    const loom_diagnostic_t* diagnostic,
+    const loom_diagnostic_format_options_t* options,
+    loom_output_stream_t* stream) {
   const loom_source_range_t* range = &diagnostic->origin;
   const char* severity_string =
       loom_diagnostic_severity_name(diagnostic->severity);
   bool has_source = loom_source_range_has_text(range);
-  loom_type_formatter_t type_formatter = {loom_type_format_minimal, NULL};
+  loom_type_formatter_t type_formatter =
+      loom_diagnostic_format_type_formatter(options);
 
   // Clang-style first line:
   //   file:line:col: severity: DOMAIN/CODE: message
@@ -246,6 +257,11 @@ iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
   }
 
   return loom_diagnostic_format_related_locations(diagnostic, stream);
+}
+
+iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
+                                     loom_output_stream_t* stream) {
+  return loom_diagnostic_format_with_options(diagnostic, NULL, stream);
 }
 
 //===----------------------------------------------------------------------===//

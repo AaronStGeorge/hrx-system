@@ -128,16 +128,24 @@ iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
   return status;
 }
 
+static loom_type_formatter_t loom_check_capture_type_formatter(
+    const loom_check_diagnostic_capture_t* capture) {
+  if (capture->type_formatter.fn) {
+    return capture->type_formatter;
+  }
+  return (loom_type_formatter_t){loom_type_format_minimal, NULL};
+}
+
 static iree_status_t loom_check_append_diagnostic_json(
-    loom_check_result_t* result, const loom_diagnostic_t* diagnostic) {
+    loom_check_result_t* result, const loom_diagnostic_t* diagnostic,
+    loom_type_formatter_t type_formatter) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&result->diagnostic_json, &stream);
   if (result->diagnostic_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\n"));
   }
-  IREE_RETURN_IF_ERROR(loom_diagnostic_json_write_object(
-      &stream, diagnostic,
-      (loom_type_formatter_t){loom_type_format_minimal, NULL}));
+  IREE_RETURN_IF_ERROR(
+      loom_diagnostic_json_write_object(&stream, diagnostic, type_formatter));
   ++result->diagnostic_count;
   return iree_ok_status();
 }
@@ -146,14 +154,20 @@ iree_status_t loom_check_diagnostic_capture_sink(
     void* user_data, const loom_diagnostic_t* diagnostic) {
   loom_check_diagnostic_capture_t* capture =
       (loom_check_diagnostic_capture_t*)user_data;
+  const loom_type_formatter_t type_formatter =
+      loom_check_capture_type_formatter(capture);
   if (capture->detail) {
     loom_output_stream_t stream;
     loom_output_stream_for_builder(capture->detail, &stream);
-    IREE_RETURN_IF_ERROR(loom_diagnostic_format(diagnostic, &stream));
+    const loom_diagnostic_format_options_t format_options = {
+        .type_formatter = type_formatter,
+    };
+    IREE_RETURN_IF_ERROR(loom_diagnostic_format_with_options(
+        diagnostic, &format_options, &stream));
   }
   if (capture->result) {
-    IREE_RETURN_IF_ERROR(
-        loom_check_append_diagnostic_json(capture->result, diagnostic));
+    IREE_RETURN_IF_ERROR(loom_check_append_diagnostic_json(
+        capture->result, diagnostic, type_formatter));
   }
   return iree_ok_status();
 }

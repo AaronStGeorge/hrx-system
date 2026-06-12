@@ -215,14 +215,13 @@ ERR_TYPE_009 = ErrorDef(
     domain=ErrorDomain.TYPE,
     code=9,
     severity=Severity.ERROR,
-    summary="Yielded value type does not match result tile element type.",
-    message="yielded value has type {yield_type}, but result tile "
-    "element type is {result_element_type}",
+    summary="Yielded value type does not match expected result type.",
+    message="yielded value has type {yield_type}, but expected {expected_type}",
     params=(
         ErrorParam("yield_type", ParamKind.TYPE),
-        ErrorParam("result_element_type", ParamKind.TYPE),
+        ErrorParam("expected_type", ParamKind.TYPE),
     ),
-    fix_hint="Convert yielded value to type {result_element_type}",
+    fix_hint="Convert yielded value to type {expected_type}",
 )
 
 # ERR_TYPE_010: Malformed type payload.
