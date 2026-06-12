@@ -103,6 +103,7 @@ loom_cc_test(
     loom::ops::func
     loom::ops::index
     loom::ops::kernel
+    loom::ops::low
     loom::ops::test
     loom::target::types
     loom::testing::module_ptr

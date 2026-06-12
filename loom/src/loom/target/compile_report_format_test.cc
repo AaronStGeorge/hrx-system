@@ -98,7 +98,6 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
-  report.compile_root_symbol = IREE_SVL("branchy");
   report.target_bundle_name = IREE_SVL("vm_target");
   report.lowered_symbol = IREE_SVL("branchy");
   loom_target_compile_report_record_artifact_size(&report, 128);
@@ -147,8 +146,6 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
 
   iree_string_view_t output = iree_string_builder_view(&builder);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("artifact=vm-archive"), 0),
-            IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("compile_root=branchy"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("pressure_classes=1"), 0),
             IREE_STRING_VIEW_NPOS);
@@ -222,9 +219,6 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"artifact_kind\":\"vm-archive\""), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(
-      iree_string_view_find(output, IREE_SV("\"compile_root\":\"branchy\""), 0),
-      IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"schedule\":{\"node_count\":5"), 0),
             IREE_STRING_VIEW_NPOS);
@@ -309,7 +303,6 @@ TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
   loom_target_compile_report_initialize(&report, iree_allocator_system());
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
   report.backend_name = IREE_SVL("hal");
-  report.compile_root_symbol = IREE_SVL("entry");
   loom_target_compile_report_record_artifact_size(&report, 256);
   IREE_ASSERT_OK(loom_target_compile_report_record_pressure_row(
       &report, &pressure_rows[0]));
@@ -345,7 +338,7 @@ TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
 TEST(CompileReportFormatTest, FormatsJsonEscapedStrings) {
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report, iree_allocator_system());
-  report.compile_root_symbol = IREE_SVL("quote\"line\n");
+  report.backend_name = IREE_SVL("quote\"line\n");
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -359,9 +352,7 @@ TEST(CompileReportFormatTest, FormatsJsonEscapedStrings) {
 
   iree_string_view_t output = iree_string_builder_view(&builder);
   EXPECT_NE(iree_string_view_find(
-                output, IREE_SV("\"compile_root\":\"quote\\\"line\\n\""), 0),
-            IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"backend\":null"), 0),
+                output, IREE_SV("\"backend\":\"quote\\\"line\\n\""), 0),
             IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);

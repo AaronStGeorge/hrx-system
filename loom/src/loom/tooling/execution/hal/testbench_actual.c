@@ -708,7 +708,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   pipeline_options.pipeline = provider->pipeline;
   pipeline_options.target_pipeline_options =
       provider->context->artifact_provider->default_pipeline_options;
-  pipeline_options.compile_root_symbol = entry_symbol;
   pipeline_options.target_environment = provider->target_environment;
   pipeline_options.target_selection = (loom_target_selection_t){
       .bundle = provider->compile_device_target.target_bundle,
@@ -744,7 +743,6 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = IREE_SV("loom");
-  compile_options.compile_root_symbol = entry_symbol;
   compile_options.diagnostic_sink = diagnostic_sink;
   compile_options.source_resolver =
       loom_run_module_source_resolver(&provider->compile_module);

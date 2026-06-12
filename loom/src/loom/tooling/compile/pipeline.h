@@ -49,9 +49,6 @@ typedef struct loom_compile_pipeline_options_t {
   loom_compile_default_pipeline_t default_pipeline;
   // Options used when constructing the selected default target pipeline.
   loom_target_pipeline_options_t target_pipeline_options;
-  // Optional compile-root function symbol used for target-aware pass
-  // predicates and diagnostics. A leading '@' is accepted.
-  iree_string_view_t compile_root_symbol;
   // Target environment linked into this compile front door.
   const loom_target_environment_t* target_environment;
   // Optional runtime-selected target overlay visible to source-to-low passes.

@@ -378,7 +378,6 @@ TEST(BenchmarkSnapshotSinkTest, IncludesRequestedCompileReport) {
   IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
       &capture_options, allocator, &capture));
   capture.report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
-  capture.report.compile_root_symbol = IREE_SV("entry");
 
   iree_benchmark_loom_run_identity_t run = {};
   run.run_id = IREE_SV("run");
@@ -433,9 +432,6 @@ TEST(BenchmarkSnapshotSinkTest, IncludesRequestedCompileReport) {
   iree_string_view_t artifact_kind =
       LookupObject(compile_report, IREE_SV("artifact_kind"));
   EXPECT_TRUE(iree_string_view_equal(artifact_kind, IREE_SV("vm-archive")));
-  iree_string_view_t compile_root =
-      LookupObject(compile_report, IREE_SV("compile_root"));
-  EXPECT_TRUE(iree_string_view_equal(compile_root, IREE_SV("entry")));
 
   iree_string_builder_deinitialize(&output);
   loom_run_compile_report_capture_deinitialize(&capture);

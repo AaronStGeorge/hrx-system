@@ -120,11 +120,11 @@ void loom_run_one_shot_options_initialize(
     loom_run_one_shot_options_t* out_options);
 
 // Applies the static dispatch workgroup count from a source kernel launch
-// config when |compile_root_symbol| names a kernel, or when the module has
-// exactly one kernel and |compile_root_symbol| is empty. Returns false when no
-// unique source kernel with a fully static workgroup count is available.
+// config when |function_name| names a kernel, or when the module has exactly
+// one kernel and |function_name| is empty. Returns false when no unique source
+// kernel with a fully static workgroup count is available.
 bool loom_run_one_shot_options_apply_static_hal_workgroup_count(
-    const loom_module_t* module, iree_string_view_t compile_root_symbol,
+    const loom_module_t* module, iree_string_view_t function_name,
     loom_run_one_shot_options_t* options);
 
 // Initializes a one-shot result. Must be paired with

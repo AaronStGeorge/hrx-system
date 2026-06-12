@@ -172,7 +172,6 @@ static loomc_status_t compile_module(compile_text_state_t* state) {
       .type = LOOMC_STRUCTURE_TYPE_COMPILE_OPTIONS,
       .structure_size = sizeof(options),
       .module_name = loomc_make_cstring_view("jit_kernel"),
-      .compile_root_symbol = loomc_make_cstring_view("@entry"),
       .artifact_flags = LOOMC_COMPILE_ARTIFACT_FLAG_MODULE_TEXT |
                         LOOMC_COMPILE_ARTIFACT_FLAG_REPORT_JSON,
       .config =

@@ -57,11 +57,6 @@
 #include "loom/tooling/target/spirv/artifact_provider.h"
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
 
-IREE_FLAG_NAMED(
-    string, compile_root, "compile-root", "",
-    "Optional compile-root function symbol, such as '@main'. Native backends "
-    "use this to scope root-sensitive pass pipeline behavior; artifact "
-    "emission otherwise keeps every compatible exported function.");
 IREE_FLAG(string, backend, "vm",
           "Compilation backend to emit, such as 'vm' or a linked native "
           "backend.");
@@ -355,8 +350,6 @@ static iree_status_t loom_compile_run_pass_pipeline(
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
-  pipeline_options.compile_root_symbol =
-      iree_make_cstring_view(FLAG_compile_root);
   if (hal_artifact_provider != NULL) {
     pipeline_options.target_pipeline_options =
         hal_artifact_provider->default_pipeline_options;
@@ -822,8 +815,6 @@ int main(int argc, char** argv) {
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = iree_make_cstring_view(FLAG_module_name);
-  compile_options.compile_root_symbol =
-      iree_make_cstring_view(FLAG_compile_root);
   compile_options.artifact_manifest = artifact_manifest_options;
   if (iree_status_is_ok(status)) {
     compile_options.source_resolver =

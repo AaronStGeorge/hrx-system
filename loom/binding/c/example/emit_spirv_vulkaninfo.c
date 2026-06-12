@@ -400,8 +400,6 @@ static loomc_status_t compile_module_to_prepared_low(
       .structure_size = sizeof(compile_options),
       .next = &target_options,
       .module_name = loomc_make_cstring_view("double_i32_at_byte_offset"),
-      .compile_root_symbol =
-          loomc_make_cstring_view("@double_i32_at_byte_offset"),
   };
   loomc_status_t status = loomc_compile_module(
       state->compiler, state->workspace, state->pass_program, state->module,

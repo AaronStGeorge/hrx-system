@@ -182,8 +182,8 @@ class SpirvVulkanHalArtifactProviderTest : public ::testing::Test {
   iree_status_t ParseRawBdaRoundtripModule(ModulePtr* out_module) {
     static const char kSource[] =
         "spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}\n"
-        "low.kernel.def target(@hal_target) export(\"loom_kernel\") "
-        "workgroup_size(1, 1, 1) @loom_kernel(%byte_offset: "
+        "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
+        "@loom_kernel(%byte_offset: "
         "reg<spirv.offset64>) "
         "asm<spirv.logical.core> {\n"
         "  %input = resource<hal_binding> {index = 0, source_type = "
@@ -213,8 +213,8 @@ class SpirvVulkanHalArtifactProviderTest : public ::testing::Test {
   iree_status_t ParseRawBdaMultiEntryModule(ModulePtr* out_module) {
     static const char kSource[] =
         "spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}\n"
-        "low.kernel.def target(@hal_target) export(\"double_i32\") "
-        "workgroup_size(1, 1, 1) @double_i32(%byte_offset: "
+        "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
+        "@double_i32(%byte_offset: "
         "reg<spirv.offset64>) "
         "asm<spirv.logical.core> {\n"
         "  %input = resource<hal_binding> {index = 0, source_type = "
@@ -230,8 +230,8 @@ class SpirvVulkanHalArtifactProviderTest : public ::testing::Test {
         "  OpStore.storage_buffer.i32 %output_view, %result\n"
         "  return\n"
         "}\n"
-        "low.kernel.def target(@hal_target) export(\"copy_i32\") "
-        "workgroup_size(1, 1, 1) @copy_i32(%byte_offset: "
+        "low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) "
+        "@copy_i32(%byte_offset: "
         "reg<spirv.offset64>) "
         "asm<spirv.logical.core> {\n"
         "  %input = resource<hal_binding> {index = 0, source_type = "

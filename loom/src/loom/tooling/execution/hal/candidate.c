@@ -40,7 +40,6 @@ static iree_status_t loom_run_hal_candidate_initialize(
       options->report, report_allocator, report));
   loom_target_compile_report_initialize_if_empty(report, report_allocator);
   report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  report->compile_root_symbol = options->compile_root_symbol;
   report->backend_name = provider->name;
   report->target_family_name = provider->target_family_name;
   return iree_ok_status();
@@ -55,7 +54,6 @@ static void loom_run_hal_candidate_record_report_status(
     return;
   }
   report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  report->compile_root_symbol = options->compile_root_symbol;
   report->backend_name = candidate->provider->name;
   report->target_family_name = candidate->provider->target_family_name;
   if (candidate->compiled) {

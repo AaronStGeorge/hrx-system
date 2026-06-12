@@ -65,7 +65,6 @@ static const char kSourceText[] =
     "}\n";
 
 static const char kDefaultModuleName[] = "targetless_store_i32";
-static const char kDefaultCompileRootSymbol[] = "@targetless_store_i32";
 static const char kDefaultKernelSymbolName[] = "targetless_store_i32";
 
 #if defined(_WIN32)
@@ -270,9 +269,6 @@ typedef struct emit_amdgpu_hsa_state_t {
 
   // Module name assigned during compilation.
   const char* module_name;
-
-  // Compile-root symbol for root-sensitive target lowering.
-  const char* compile_root_symbol;
 
   // HSA kernel symbol expected in the emitted HSACO.
   const char* kernel_symbol_name;
@@ -767,12 +763,10 @@ static loomc_status_t load_hsa_api(emit_amdgpu_hsa_state_t* state) {
 
 static void emit_amdgpu_hsa_state_initialize(emit_amdgpu_hsa_state_t* state,
                                              const char* source_path,
-                                             const char* compile_root_symbol,
                                              const char* kernel_symbol_name,
                                              const char* module_name) {
   memset(state, 0, sizeof(*state));
   state->source_path = source_path;
-  state->compile_root_symbol = compile_root_symbol;
   state->kernel_symbol_name = kernel_symbol_name;
   state->module_name = module_name;
 }
@@ -1186,8 +1180,6 @@ static loomc_status_t compile_module_to_prepared_low(
       .structure_size = sizeof(compile_options),
       .next = &target_options,
       .module_name = loomc_make_cstring_view(state->module_name),
-      .compile_root_symbol =
-          loomc_make_cstring_view(state->compile_root_symbol),
   };
   loomc_status_t status = loomc_compile_module(
       state->compiler, state->workspace, state->pass_program, state->module,
@@ -1634,11 +1626,11 @@ static loomc_status_t run_hsa_launch(emit_amdgpu_hsa_state_t* state) {
 }
 
 static loomc_status_t run_emit_amdgpu_hsa_example(
-    const char* source_path, const char* compile_root_symbol,
-    const char* kernel_symbol_name, const char* module_name) {
+    const char* source_path, const char* kernel_symbol_name,
+    const char* module_name) {
   emit_amdgpu_hsa_state_t state;
-  emit_amdgpu_hsa_state_initialize(&state, source_path, compile_root_symbol,
-                                   kernel_symbol_name, module_name);
+  emit_amdgpu_hsa_state_initialize(&state, source_path, kernel_symbol_name,
+                                   module_name);
 
   loomc_status_t status = discover_hsa_target(&state);
   if (loomc_status_is_ok(status) && !state.skipped) {
@@ -1660,26 +1652,24 @@ int main(int argc, char** argv) {
       (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
     printf(
         "Usage: emit_amdgpu_hsa [source.loom|source.loombc "
-        "[compile-root [kernel-symbol [module-name]]]]\n");
+        "[kernel-symbol [module-name]]]\n");
     printf("No source path uses the embedded targetless_store_i32 kernel.\n");
     return 0;
   }
-  if (argc > 5) {
+  if (argc > 4) {
     fprintf(stderr,
             "Usage: emit_amdgpu_hsa [source.loom|source.loombc "
-            "[compile-root [kernel-symbol [module-name]]]]\n");
+            "[kernel-symbol [module-name]]]\n");
     return 1;
   }
 
   const char* source_path = argc > 1 ? argv[1] : NULL;
-  const char* compile_root_symbol =
-      argc > 2 ? argv[2] : kDefaultCompileRootSymbol;
   const char* kernel_symbol_name =
-      argc > 3 ? argv[3] : kDefaultKernelSymbolName;
-  const char* module_name = argc > 4 ? argv[4] : kDefaultModuleName;
+      argc > 2 ? argv[2] : kDefaultKernelSymbolName;
+  const char* module_name = argc > 3 ? argv[3] : kDefaultModuleName;
 
-  loomc_status_t status = run_emit_amdgpu_hsa_example(
-      source_path, compile_root_symbol, kernel_symbol_name, module_name);
+  loomc_status_t status =
+      run_emit_amdgpu_hsa_example(source_path, kernel_symbol_name, module_name);
   if (loomc_status_is_ok(status)) {
     return 0;
   }
