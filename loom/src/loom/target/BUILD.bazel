@@ -83,11 +83,53 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "artifact_manifest_collect",
+    srcs = ["artifact_manifest_collect.c"],
+    hdrs = ["artifact_manifest_collect.h"],
+    deps = [
+        ":artifact_manifest",
+        ":artifact_plan",
+        ":types",
+        "//loom/src/loom/analysis:symbol_dependencies",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:func_symbol_facts",
+        "//loom/src/loom/ops/target",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "artifact_manifest_test",
     srcs = ["artifact_manifest_test.cc"],
     deps = [
         ":artifact_manifest",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "artifact_manifest_collect_test",
+    srcs = ["artifact_manifest_collect_test.cc"],
+    deps = [
+        ":artifact_manifest",
+        ":artifact_manifest_collect",
+        ":artifact_plan",
+        "//loom/src/loom/analysis:symbol_dependencies",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/testing:module_ptr",
+        "//loom/src/loom/util:call_graph",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

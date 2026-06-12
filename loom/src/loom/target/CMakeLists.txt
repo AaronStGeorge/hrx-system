@@ -88,6 +88,27 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    artifact_manifest_collect
+  HDRS
+    "artifact_manifest_collect.h"
+  SRCS
+    "artifact_manifest_collect.c"
+  DEPS
+    ::artifact_manifest
+    ::artifact_plan
+    ::types
+    iree::base
+    iree::base::internal::arena
+    loom::analysis::symbol_dependencies
+    loom::analysis::symbol_facts
+    loom::ir
+    loom::ops::func_symbol_facts
+    loom::ops::target
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     artifact_manifest_test
@@ -97,6 +118,31 @@ loom_cc_test(
     ::artifact_manifest
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    artifact_manifest_collect_test
+  SRCS
+    "artifact_manifest_collect_test.cc"
+  DEPS
+    ::artifact_manifest
+    ::artifact_manifest_collect
+    ::artifact_plan
+    iree::base
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::analysis::symbol_dependencies
+    loom::analysis::symbol_facts
+    loom::format::text::parser
+    loom::ir
+    loom::ops::func
+    loom::ops::global
+    loom::ops::target
+    loom::testing::module_ptr
+    loom::util::call_graph
+    loom::util::stream
 )
 
 loom_cc_library(
