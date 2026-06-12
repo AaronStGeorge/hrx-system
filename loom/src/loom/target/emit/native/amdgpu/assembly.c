@@ -2922,58 +2922,94 @@ static iree_status_t loom_amdgpu_append_vopd_pair_packet(
                                            pair->literal_u32);
 }
 
+typedef iree_status_t (*loom_amdgpu_try_append_descriptor_dispatch_fn_t)(
+    const loom_native_assembly_packet_context_t* context, bool* out_matched);
+
+typedef struct loom_amdgpu_descriptor_packet_dispatch_rule_t {
+  // Attempts one descriptor-packet assembly spelling and reports whether it
+  // consumed the packet.
+  loom_amdgpu_try_append_descriptor_dispatch_fn_t try_append;
+} loom_amdgpu_descriptor_packet_dispatch_rule_t;
+
+static iree_status_t loom_amdgpu_try_append_mnemonic_dispatch_packet(
+    const loom_native_assembly_packet_context_t* context, bool* out_matched) {
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+      context->schedule->target.descriptor_set,
+      context->packet->descriptor->mnemonic_string_offset, &mnemonic));
+  return loom_amdgpu_try_append_mnemonic_rule_packet(context, mnemonic,
+                                                     out_matched);
+}
+
+static iree_status_t loom_amdgpu_try_append_canonical_asm_form_dispatch_packet(
+    const loom_native_assembly_packet_context_t* context, bool* out_matched) {
+  *out_matched = false;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  if (descriptor->canonical_asm_form_ordinal ==
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
+  const loom_low_asm_form_t* canonical_form = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_lookup_canonical_asm_form(context, &canonical_form));
+  iree_string_view_t canonical_mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+      context->schedule->target.descriptor_set,
+      canonical_form->mnemonic_string_offset, &canonical_mnemonic));
+  return loom_amdgpu_try_append_asm_form_rule_packet(
+      context, canonical_form, canonical_mnemonic, out_matched);
+}
+
+static iree_status_t loom_amdgpu_try_append_effect_route_dispatch_packet(
+    const loom_native_assembly_packet_context_t* context, bool* out_matched) {
+  loom_amdgpu_descriptor_packet_route_flags_t route_flags = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_read_descriptor_packet_route_flags(context, &route_flags));
+  return loom_amdgpu_try_append_descriptor_packet_route(context, route_flags,
+                                                        out_matched);
+}
+
+static iree_status_t loom_amdgpu_try_append_matrix_dispatch_packet(
+    const loom_native_assembly_packet_context_t* context, bool* out_matched) {
+  *out_matched = false;
+  bool uses_matrix_resource = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_uses_resource_kind(
+      context->schedule->target.descriptor_set, context->packet->descriptor,
+      LOOM_LOW_RESOURCE_KIND_MATRIX, &uses_matrix_resource));
+  if (!uses_matrix_resource) {
+    return iree_ok_status();
+  }
+  *out_matched = true;
+  return loom_amdgpu_append_matrix_packet(context);
+}
+
+static iree_status_t loom_amdgpu_append_canonical_dispatch_packet(
+    const loom_native_assembly_packet_context_t* context, bool* out_matched) {
+  *out_matched = true;
+  return loom_amdgpu_append_canonical_asm_form_packet(context);
+}
+
 static iree_status_t loom_amdgpu_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
-  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
-  bool matched = false;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_try_append_descriptor_ref_packet(context, &matched));
-  if (matched) {
-    return iree_ok_status();
-  }
-  iree_string_view_t mnemonic = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-      descriptor_set, descriptor->mnemonic_string_offset, &mnemonic));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_try_append_mnemonic_rule_packet(context, mnemonic, &matched));
-  if (matched) {
-    return iree_ok_status();
-  }
-  iree_string_view_t canonical_mnemonic = iree_string_view_empty();
-  if (descriptor->canonical_asm_form_ordinal !=
-      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
-    const loom_low_asm_form_t* canonical_form = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_lookup_canonical_asm_form(context, &canonical_form));
-    IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-        descriptor_set, canonical_form->mnemonic_string_offset,
-        &canonical_mnemonic));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_try_append_asm_form_rule_packet(
-        context, canonical_form, canonical_mnemonic, &matched));
+  static const loom_amdgpu_descriptor_packet_dispatch_rule_t kRules[] = {
+      {.try_append = loom_amdgpu_try_append_descriptor_ref_packet},
+      {.try_append = loom_amdgpu_try_append_mnemonic_dispatch_packet},
+      {.try_append = loom_amdgpu_try_append_canonical_asm_form_dispatch_packet},
+      {.try_append = loom_amdgpu_try_append_effect_route_dispatch_packet},
+      {.try_append = loom_amdgpu_try_append_matrix_dispatch_packet},
+      {.try_append = loom_amdgpu_append_canonical_dispatch_packet},
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kRules); ++i) {
+    bool matched = false;
+    IREE_RETURN_IF_ERROR(kRules[i].try_append(context, &matched));
     if (matched) {
       return iree_ok_status();
     }
   }
-
-  loom_amdgpu_descriptor_packet_route_flags_t route_flags = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_read_descriptor_packet_route_flags(context, &route_flags));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_try_append_descriptor_packet_route(
-      context, route_flags, &matched));
-  if (matched) {
-    return iree_ok_status();
-  }
-  bool uses_matrix_resource = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_uses_resource_kind(
-      descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_MATRIX,
-      &uses_matrix_resource));
-  if (uses_matrix_resource) {
-    return loom_amdgpu_append_matrix_packet(context);
-  }
-  return loom_amdgpu_append_canonical_asm_form_packet(context);
+  return iree_make_status(
+      IREE_STATUS_INTERNAL,
+      "AMDGPU assembly descriptor packet dispatch reached no fallback");
 }
 
 static iree_status_t loom_amdgpu_update_vgpr_msb_mode_after_descriptor(
