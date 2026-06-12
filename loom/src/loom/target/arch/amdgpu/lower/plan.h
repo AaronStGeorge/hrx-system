@@ -118,6 +118,8 @@ typedef enum loom_amdgpu_fma_mix_source_kind_e {
 typedef struct loom_amdgpu_fma_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b, c order.
   loom_value_id_t sources[3];
+  // Source register-unit offsets consumed by the selected descriptor.
+  uint32_t source_register_offsets[3];
   // Scalar fmaf result value.
   loom_value_id_t result;
   // Descriptor row selected for the mixed-source fma/mad packet.
@@ -129,6 +131,8 @@ typedef struct loom_amdgpu_fma_mix_plan_t {
 typedef struct loom_amdgpu_mulf_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b order.
   loom_value_id_t sources[2];
+  // Source register-unit offsets consumed by the selected descriptor.
+  uint32_t source_register_offsets[2];
   // Scalar or vector mulf result value.
   loom_value_id_t result;
   // Descriptor row selected for the mixed-source fma/mad packet.

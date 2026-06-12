@@ -31,6 +31,39 @@ low.func.def target(@gfx11_target) abi(hal_kernel) @f32_fma_mix_extf_b_c(%a: reg
 
 // ====
 
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f32_fma_mix_extract_high_half(%packed: vector<2xf16>, %b: f32, %c: f32) -> (f32) {
+  %a_half = vector.extract %packed[1] : vector<2xf16> -> f16
+  %a = scalar.extf %a_half : f16 to f32
+  %result = scalar.fmaf %a, %b, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f32_fma_mix_extract_high_half(%packed: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mix_f32_f16hi_f32_f32 %packed, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f32_fma_mix_extract_lane2(%packed: vector<4xf16>, %b: f32, %c: f32) -> (f32) {
+  %a_half = vector.extract %packed[2] : vector<4xf16> -> f16
+  %a = scalar.extf %a_half : f16 to f32
+  %result = scalar.fmaf %a, %b, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f32_fma_mix_extract_lane2(%packed: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %11 = slice %packed[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %result = v_fma_mix_f32_f16lo_f32_f32 %11, %b, %c
+  return %result
+}
+
+// ====
+
 amdgpu.target<gfx942> @gfx942_target
 func.def target(@gfx942_target) @f32_mad_mix_extf_a(%a_half: f16, %b: f32, %c: f32) -> (f32) {
   %a = scalar.extf %a_half : f16 to f32
@@ -95,5 +128,27 @@ low.func.def target(@gfx942_target) abi(hal_kernel) @vector_f32_mulf_splat_extf_
   %13 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %14 = v_mad_mix_f32_f16lo_f32_f32 %scale_half, %13, %10
   %result = concat(%12, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @vector_f32_mulf_splat_extract_high_half(%q: vector<2xf32>, %packed_scale: vector<2xf16>) -> (vector<2xf32>) {
+  %scale_half = vector.extract %packed_scale[1] : vector<2xf16> -> f16
+  %scale = scalar.extf %scale_half : f16 to f32
+  %scale_vector = vector.splat %scale : vector<2xf32>
+  // REMARK@+1: AMDGPU/027 {descriptor_name="amdgpu.v_fma_mix_f32.f16hi_f32_f32.src2_lit", source_operand_index="2", descriptor_set_name="amdgpu.rdna3.core", constant_form="exact_f32_positive_zero", decision="selected", reason="literal_descriptor_available"}
+  %result = vector.mulf<nnan|nsz|contract> %q, %scale_vector : vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @vector_f32_mulf_splat_extract_high_half(%q: reg<amdgpu.vgpr x2>, %packed_scale: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %10 = slice %q[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %11 = v_fma_mix_f32_f16hi_f32_f32_src2_lit %packed_scale, %10, 0
+  %12 = slice %q[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %13 = v_fma_mix_f32_f16hi_f32_f32_src2_lit %packed_scale, %12, 0
+  %result = concat(%11, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %result
 }
