@@ -240,9 +240,10 @@ class AmdgpuFeedbackTest : public ::testing::Test {
                        loom_amdgpu_descriptor_ref_t descriptor_ref,
                        iree_string_view_t expected_attr_name,
                        int64_t expected_attr_value,
+                       iree_host_size_t expected_operand_count,
                        loom_value_id_t expected_result) const {
     ExpectLowOpDescriptorRef(op, descriptor_ref);
-    EXPECT_EQ(loom_low_op_operands(op).count, 0u);
+    EXPECT_EQ(loom_low_op_operands(op).count, expected_operand_count);
     loom_named_attr_slice_t attrs = loom_low_op_attrs(op);
     ASSERT_EQ(attrs.count, 1u);
     EXPECT_EQ(ToString(String(attrs.entries[0].name_id)),
@@ -569,15 +570,24 @@ TEST_F(AmdgpuFeedbackTest, EmitsFeedbackControlPrimitives) {
       &builder_, descriptor_set_, /*trap_id=*/3, LOOM_LOCATION_UNKNOWN));
 
   std::vector<loom_op_t*> ops = Ops();
-  ASSERT_EQ(ops.size(), 4u);
-  ExpectControlOp(ops[0], LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG,
-                  IREE_SV("message"), 1, LOOM_VALUE_ID_INVALID);
-  ExpectControlOp(ops[1], LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG_RTN_B32,
-                  IREE_SV("message"), 2, message_result);
-  ExpectControlOp(ops[2], LOOM_AMDGPU_DESCRIPTOR_REF_S_SETHALT,
-                  IREE_SV("reason"), 5, LOOM_VALUE_ID_INVALID);
-  ExpectControlOp(ops[3], LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP, IREE_SV("trapid"),
-                  3, LOOM_VALUE_ID_INVALID);
+  ASSERT_EQ(ops.size(), 5u);
+  ExpectLowConstDescriptorRef(ops[0],
+                              LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM);
+  loom_named_attr_slice_t m0_attrs = loom_low_const_attrs(ops[0]);
+  ASSERT_EQ(m0_attrs.count, 1u);
+  EXPECT_EQ(ToString(String(m0_attrs.entries[0].name_id)), "imm32");
+  EXPECT_EQ(loom_attr_as_i64(m0_attrs.entries[0].value), 0);
+
+  ExpectControlOp(ops[1], LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG,
+                  IREE_SV("message"), 1, 1, LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(loom_low_op_operands(ops[1]).values[0],
+            loom_low_const_result(ops[0]));
+  ExpectControlOp(ops[2], LOOM_AMDGPU_DESCRIPTOR_REF_S_SENDMSG_RTN_B32,
+                  IREE_SV("message"), 2, 0, message_result);
+  ExpectControlOp(ops[3], LOOM_AMDGPU_DESCRIPTOR_REF_S_SETHALT,
+                  IREE_SV("reason"), 5, 0, LOOM_VALUE_ID_INVALID);
+  ExpectControlOp(ops[4], LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP, IREE_SV("trapid"),
+                  3, 0, LOOM_VALUE_ID_INVALID);
 
   loom_type_t sgpr_type = loom_low_register_type(
       descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
