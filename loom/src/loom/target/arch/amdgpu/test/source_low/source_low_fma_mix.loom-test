@@ -36,6 +36,42 @@ low.func.def target(@gfx11_target) abi(hal_kernel) @packed_f16_vector4_fma(%a: r
 
 // ====
 
+amdgpu.target<gfx942> @gfx942_target
+func.def target(@gfx942_target) @packed_f32_vector_fma(%a: vector<2xf32>, %b: vector<2xf32>, %c: vector<2xf32>) -> (vector<2xf32>) {
+  %result = vector.fmaf %a, %b, %c : vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target(@gfx942_target) abi(hal_kernel) @packed_f32_vector_fma(%a: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr x2>, %c: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
+  %result = v_pk_fma_f32 %a, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx942> @gfx942_target
+func.def target(@gfx942_target) @packed_f32_vector4_fma(%a: vector<4xf32>, %b: vector<4xf32>, %c: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.fmaf %a, %b, %c : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ----
+low.func.def target(@gfx942_target) abi(hal_kernel) @packed_f32_vector4_fma(%a: reg<amdgpu.vgpr x4>, %b: reg<amdgpu.vgpr x4>, %c: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.cdna3.core> {
+  %9 = slice %a[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  %10 = slice %b[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  %11 = slice %c[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  %12 = v_pk_fma_f32 %9, %10, %11
+  %13 = slice %a[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  %14 = slice %b[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  %15 = slice %c[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>
+  %16 = v_pk_fma_f32 %13, %14, %15
+  %result = concat(%12, %16) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
+  return %result
+}
+
+// ====
+
 amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @packed_i16_vector_fmai(%a: vector<2xi16>, %b: vector<2xi16>, %c: vector<2xi16>) -> (vector<2xi16>) {
   %result = vector.fmai %a, %b, %c : vector<2xi16>

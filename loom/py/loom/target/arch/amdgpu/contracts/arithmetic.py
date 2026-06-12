@@ -58,6 +58,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_max_f32.lit",
     "amdgpu.v_max_f32.src0_inline",
     "amdgpu.v_fma_f32",
+    "amdgpu.v_pk_fma_f32",
     "amdgpu.v_exp_f32",
     "amdgpu.v_log_f32",
     "amdgpu.v_sin_f32",
@@ -174,6 +175,11 @@ _VEC_I16_PACKED_EVEN_LANES_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="lane-count",
     subject_name="vector<i16>",
     constraint_key="amdgpu.arithmetic.vector_i16_packed_even_lanes",
+)
+_VEC_F32_PACKED_EVEN_LANES_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="lane-count",
+    subject_name="vector<f32>",
+    constraint_key="amdgpu.arithmetic.vector_f32_packed_even_lanes",
 )
 _I32_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
@@ -1485,6 +1491,35 @@ def _packed_i16_vector_fmai_rules() -> tuple[DescriptorRule, ...]:
     )
 
 
+def _packed_f32_vector_fma_rule() -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_pk_fma_f32")
+    return DescriptorRule(
+        source_op=vector.vector_fmaf,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), _VEC_F32),
+            Guard.value_static_dim0_multiple(
+                "result",
+                2,
+                diagnostic=_VEC_F32_PACKED_EVEN_LANES_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "a": ValueRef.operand("a"),
+                    "b": ValueRef.operand("b"),
+                    "c": ValueRef.operand("c"),
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
 def _commutative_f32_vector_literal_rules(
     source_op: Op,
     descriptor_key: str,
@@ -1604,6 +1639,7 @@ def _rules() -> tuple[ContractCase, ...]:
                 _VEC_F32,
                 "amdgpu.v_max_f32",
             ),
+            _packed_f32_vector_fma_rule(),
             *_packed_f16_vector_fma_rules(),
             *_packed_i16_vector_fmai_rules(),
             *_f32_fma_rules(vector.vector_fmaf, _VEC_F32),

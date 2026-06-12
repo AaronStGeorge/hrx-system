@@ -133,10 +133,14 @@ typedef struct loom_amdgpu_packed_ternary_plan_t {
   loom_value_id_t sources[3];
   // Packed vector result value.
   loom_value_id_t result;
-  // Descriptor row selected for each packed lane-pair packet.
+  // Descriptor row selected for each packed ternary packet.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
-  // Number of packed 32-bit register units in each source and result vector.
+  // Number of 32-bit register units in each source and result vector.
   uint32_t register_count;
+  // Number of 32-bit register units consumed and produced by each packet.
+  uint32_t packet_unit_count;
+  // Number of descriptor packets emitted to cover the full vector payload.
+  uint32_t packet_count;
 } loom_amdgpu_packed_ternary_plan_t;
 
 typedef struct loom_amdgpu_mulf_mix_plan_t {
