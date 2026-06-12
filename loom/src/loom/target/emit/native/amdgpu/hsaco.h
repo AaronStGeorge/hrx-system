@@ -31,6 +31,29 @@ typedef struct loom_amdgpu_hsaco_kernel_descriptor_options_t {
   uint32_t user_sgpr_count;
 } loom_amdgpu_hsaco_kernel_descriptor_options_t;
 
+// Kind of text literal patch applied after HSACO section layout is fixed.
+typedef enum loom_amdgpu_hsaco_text_fixup_kind_e {
+  LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_NONE = 0,
+  // Patches the low 32 bits of a data-symbol address relative to a text PC.
+  LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_LO = 1,
+  // Patches the high 32 bits of a data-symbol address relative to a text PC.
+  LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_HI = 2,
+} loom_amdgpu_hsaco_text_fixup_kind_t;
+
+// One text literal patch against an AMDGPU HSACO data symbol.
+typedef struct loom_amdgpu_hsaco_text_fixup_t {
+  // Kind of literal value written by this fixup.
+  loom_amdgpu_hsaco_text_fixup_kind_t kind;
+  // Byte offset of the 32-bit literal word within the kernel text bytes.
+  uint64_t literal_byte_offset;
+  // Byte offset within the kernel text of the PC-relative base address.
+  uint64_t base_pc_byte_offset;
+  // Data symbol used as the target address.
+  iree_string_view_t target_symbol;
+  // Byte offset from the start of |target_symbol|.
+  uint64_t target_symbol_byte_offset;
+} loom_amdgpu_hsaco_text_fixup_t;
+
 // One kernel entry emitted into an AMDGPU HSA code object.
 typedef struct loom_amdgpu_hsaco_kernel_t {
   // Kernel metadata row shared by the AMDGPU note and kernel descriptor.
@@ -39,6 +62,10 @@ typedef struct loom_amdgpu_hsaco_kernel_t {
   loom_amdgpu_hsaco_kernel_descriptor_options_t descriptor_options;
   // Encoded native instructions for the kernel entry symbol.
   iree_const_byte_span_t text;
+  // Text literal patches resolved after final code-object layout is known.
+  const loom_amdgpu_hsaco_text_fixup_t* text_fixups;
+  // Number of entries in |text_fixups|.
+  iree_host_size_t text_fixup_count;
 } loom_amdgpu_hsaco_kernel_t;
 
 // Bitfield controlling AMDGPU HSACO data-symbol placement and access.

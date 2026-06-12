@@ -222,6 +222,20 @@ static bool loom_amdgpu_hsaco_data_symbol_is_writable(
                           LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE);
 }
 
+static const loom_amdgpu_hsaco_data_symbol_t*
+loom_amdgpu_hsaco_find_data_symbol(const loom_amdgpu_hsaco_file_t* file,
+                                   iree_string_view_t name,
+                                   iree_host_size_t* out_index) {
+  for (iree_host_size_t i = 0; i < file->data_symbol_count; ++i) {
+    if (iree_string_view_equal(file->data_symbols[i].name, name)) {
+      *out_index = i;
+      return &file->data_symbols[i];
+    }
+  }
+  *out_index = IREE_HOST_SIZE_MAX;
+  return NULL;
+}
+
 static iree_status_t loom_amdgpu_hsaco_append_u32(
     iree_byte_span_t target, iree_host_size_t* inout_offset, uint32_t value) {
   if (*inout_offset > target.data_length ||
@@ -418,6 +432,12 @@ static iree_status_t loom_amdgpu_hsaco_validate_file(
                               (int)kernel->metadata.name.size,
                               kernel->metadata.name.data);
     }
+    if (kernel->text_fixup_count != 0 && kernel->text_fixups == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU HSACO kernel '%.*s' has text fixups but no fixup array",
+          (int)kernel->metadata.name.size, kernel->metadata.name.data);
+    }
     if (iree_string_view_equal(kernel->metadata.name,
                                kernel->metadata.descriptor_symbol)) {
       return iree_make_status(
@@ -440,6 +460,39 @@ static iree_status_t loom_amdgpu_hsaco_validate_file(
             IREE_STATUS_INVALID_ARGUMENT,
             "AMDGPU HSACO symbol '%.*s' conflicts with another kernel symbol",
             (int)kernel->metadata.name.size, kernel->metadata.name.data);
+      }
+    }
+    for (iree_host_size_t j = 0; j < kernel->text_fixup_count; ++j) {
+      const loom_amdgpu_hsaco_text_fixup_t* fixup = &kernel->text_fixups[j];
+      switch (fixup->kind) {
+        case LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_LO:
+        case LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_HI:
+          break;
+        case LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_NONE:
+        default:
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "AMDGPU HSACO kernel '%.*s' text fixup %" PRIhsz
+              " has an unsupported kind %d",
+              (int)kernel->metadata.name.size, kernel->metadata.name.data, j,
+              (int)fixup->kind);
+      }
+      IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_validate_symbol(
+          fixup->target_symbol, IREE_SV("kernel.text_fixup.target_symbol")));
+      if (fixup->literal_byte_offset > kernel->text.data_length ||
+          kernel->text.data_length - fixup->literal_byte_offset < 4u) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "AMDGPU HSACO kernel '%.*s' text fixup %" PRIhsz
+                                " literal offset is outside the text payload",
+                                (int)kernel->metadata.name.size,
+                                kernel->metadata.name.data, j);
+      }
+      if (fixup->base_pc_byte_offset > kernel->text.data_length) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "AMDGPU HSACO kernel '%.*s' text fixup %" PRIhsz
+                                " base PC offset is outside the text payload",
+                                (int)kernel->metadata.name.size,
+                                kernel->metadata.name.data, j);
       }
     }
   }
@@ -493,6 +546,33 @@ static iree_status_t loom_amdgpu_hsaco_validate_file(
             "AMDGPU HSACO data symbol '%.*s' conflicts with another data "
             "symbol",
             (int)symbol->name.size, symbol->name.data);
+      }
+    }
+  }
+  for (iree_host_size_t i = 0; i < file->kernel_count; ++i) {
+    const loom_amdgpu_hsaco_kernel_t* kernel = &file->kernels[i];
+    for (iree_host_size_t j = 0; j < kernel->text_fixup_count; ++j) {
+      const loom_amdgpu_hsaco_text_fixup_t* fixup = &kernel->text_fixups[j];
+      iree_host_size_t symbol_index = IREE_HOST_SIZE_MAX;
+      const loom_amdgpu_hsaco_data_symbol_t* symbol =
+          loom_amdgpu_hsaco_find_data_symbol(file, fixup->target_symbol,
+                                             &symbol_index);
+      if (symbol == NULL) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "AMDGPU HSACO kernel '%.*s' text fixup %" PRIhsz
+            " references unknown data symbol '%.*s'",
+            (int)kernel->metadata.name.size, kernel->metadata.name.data, j,
+            (int)fixup->target_symbol.size, fixup->target_symbol.data);
+      }
+      if (fixup->target_symbol_byte_offset > symbol->byte_length) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU HSACO kernel '%.*s' text fixup %" PRIhsz
+            " targets byte %" PRIu64 " beyond data symbol '%.*s'",
+            (int)kernel->metadata.name.size, kernel->metadata.name.data, j,
+            fixup->target_symbol_byte_offset, (int)symbol->name.size,
+            symbol->name.data);
       }
     }
   }
@@ -626,9 +706,9 @@ static iree_status_t loom_amdgpu_hsaco_build_string_tables(
 
 static iree_status_t loom_amdgpu_hsaco_build_text(
     const loom_amdgpu_hsaco_file_t* file,
-    loom_amdgpu_hsaco_payloads_t* payloads, iree_const_byte_span_t* out_text,
+    loom_amdgpu_hsaco_payloads_t* payloads, iree_byte_span_t* out_text,
     iree_arena_allocator_t* arena) {
-  *out_text = iree_make_const_byte_span(NULL, 0);
+  *out_text = iree_make_byte_span(NULL, 0);
 
   uint64_t text_size_u64 = 0;
   for (iree_host_size_t i = 0; i < file->kernel_count; ++i) {
@@ -656,7 +736,89 @@ static iree_status_t loom_amdgpu_hsaco_build_text(
     memcpy(text.data + text_offset, kernel->text.data,
            kernel->text.data_length);
   }
-  *out_text = iree_make_const_byte_span(text.data, text.data_length);
+  *out_text = text;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hsaco_data_symbol_address(
+    const loom_amdgpu_hsaco_file_t* file,
+    const loom_amdgpu_hsaco_payloads_t* payloads, uint64_t rodata_address,
+    uint64_t data_address, iree_string_view_t name, uint64_t* out_address) {
+  iree_host_size_t symbol_index = IREE_HOST_SIZE_MAX;
+  const loom_amdgpu_hsaco_data_symbol_t* symbol =
+      loom_amdgpu_hsaco_find_data_symbol(file, name, &symbol_index);
+  if (symbol == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU HSACO data symbol '%.*s' not found",
+                            (int)name.size, name.data);
+  }
+  const loom_amdgpu_hsaco_data_symbol_layout_t* layout =
+      &payloads->data_symbol_layouts[symbol_index];
+  const uint64_t section_address =
+      layout->logical_section_index == LOOM_AMDGPU_HSACO_SECTION_DATA
+          ? data_address
+          : rodata_address;
+  if (!loom_amdgpu_hsaco_checked_add_uint64(
+          section_address, layout->section_offset, out_address)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU HSACO data symbol address overflow");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hsaco_apply_text_fixups(
+    const loom_amdgpu_hsaco_file_t* file,
+    const loom_amdgpu_hsaco_payloads_t* payloads, uint64_t rodata_address,
+    uint64_t text_address, uint64_t data_address, iree_byte_span_t text) {
+  for (iree_host_size_t i = 0; i < file->kernel_count; ++i) {
+    const loom_amdgpu_hsaco_kernel_t* kernel = &file->kernels[i];
+    const loom_amdgpu_hsaco_kernel_layout_t* kernel_layout =
+        &payloads->kernel_layouts[i];
+    uint64_t kernel_text_address = 0;
+    if (!loom_amdgpu_hsaco_checked_add_uint64(
+            text_address, kernel_layout->text_offset, &kernel_text_address)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU HSACO kernel text address overflow");
+    }
+    for (iree_host_size_t j = 0; j < kernel->text_fixup_count; ++j) {
+      const loom_amdgpu_hsaco_text_fixup_t* fixup = &kernel->text_fixups[j];
+      uint64_t target_address = 0;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_data_symbol_address(
+          file, payloads, rodata_address, data_address, fixup->target_symbol,
+          &target_address));
+      if (!loom_amdgpu_hsaco_checked_add_uint64(
+              target_address, fixup->target_symbol_byte_offset,
+              &target_address)) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU HSACO text fixup target symbol offset overflow");
+      }
+      uint64_t base_address = 0;
+      if (!loom_amdgpu_hsaco_checked_add_uint64(
+              kernel_text_address, fixup->base_pc_byte_offset, &base_address)) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "AMDGPU HSACO text fixup base PC overflow");
+      }
+      const uint64_t delta = target_address - base_address;
+      const uint32_t patch =
+          fixup->kind == LOOM_AMDGPU_HSACO_TEXT_FIXUP_KIND_DATA_SYMBOL_REL32_LO
+              ? (uint32_t)delta
+              : (uint32_t)(delta >> 32);
+
+      uint64_t patch_offset_u64 = 0;
+      if (!loom_amdgpu_hsaco_checked_add_uint64(kernel_layout->text_offset,
+                                                fixup->literal_byte_offset,
+                                                &patch_offset_u64)) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "AMDGPU HSACO text fixup offset overflow");
+      }
+      iree_host_size_t patch_offset = 0;
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_hsaco_cast_host_size(patch_offset_u64, &patch_offset));
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_hsaco_store_u32(text, patch_offset, patch));
+    }
+  }
   return iree_ok_status();
 }
 
@@ -1089,7 +1251,7 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_build_string_tables(
       file, payloads, &string_table, arena));
 
-  iree_const_byte_span_t text = iree_make_const_byte_span(NULL, 0);
+  iree_byte_span_t text = iree_make_byte_span(NULL, 0);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hsaco_build_text(file, payloads, &text, arena));
 
@@ -1177,7 +1339,7 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
           .flags = LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC |
                    LOOM_NATIVE_ELF_SECTION_FLAG_EXECINSTR,
           .alignment = LOOM_AMDGPU_HSACO_SEGMENT_PAGE_ALIGNMENT,
-          .contents = text,
+          .contents = iree_make_const_byte_span(text.data, text.data_length),
       });
   if (payloads->writable_data_size != 0) {
     loom_amdgpu_hsaco_add_section(
@@ -1293,6 +1455,10 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
       file, payloads, rodata_section->address, text_address,
       rodata_section->contents.data_length, &rodata, arena));
   rodata_section->contents = rodata;
+
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_apply_text_fixups(
+      file, payloads, rodata_section->address, text_address, data_address,
+      text));
 
   iree_const_byte_span_t symbol_table = iree_make_const_byte_span(NULL, 0);
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_build_symbol_table(
