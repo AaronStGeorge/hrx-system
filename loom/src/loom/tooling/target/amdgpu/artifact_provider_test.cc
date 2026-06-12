@@ -14,11 +14,13 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/sanitizer/options.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/ops/registry.h"
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/emit/native/amdgpu/runtime_globals.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -174,6 +176,7 @@ TEST_F(AmdgpuHalArtifactProviderTest, RecordsDetailedReportRows) {
       &loom_amdgpu_hal_artifact_provider, module.get(), &target,
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
+      /*target_pipeline_options=*/nullptr,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING,
       /*artifact_manifest=*/nullptr, &report, iree_allocator_system(), &emitted,
       &artifact));
@@ -210,6 +213,58 @@ TEST_F(AmdgpuHalArtifactProviderTest, RecordsDetailedReportRows) {
 }
 
 TEST_F(AmdgpuHalArtifactProviderTest,
+       EmitsSanitizerRuntimeGlobalsFromPipelineOptions) {
+  ModulePtr module;
+  IREE_ASSERT_OK(ParsePreparedArithmeticModule(&module));
+  ASSERT_NE(module.get(), nullptr);
+
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_ASSERT_OK(
+      loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1100"), &processor));
+  ASSERT_NE(processor, nullptr);
+  const loom_target_bundle_t* target_bundle =
+      loom_amdgpu_target_bundle_for_descriptor_set(
+          processor->descriptor_set_ordinal);
+  ASSERT_NE(target_bundle, nullptr);
+
+  const loom_run_hal_device_target_t target = {
+      .data = processor,
+      .target_bundle = target_bundle,
+      .target_key = processor->processor,
+  };
+  const loom_target_pipeline_options_t target_pipeline_options = {
+      .sanitizer =
+          {
+              .checks = LOOM_SANITIZER_CHECK_ACCESS,
+          },
+  };
+  loom_run_hal_artifact_t artifact = {};
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_hal_artifact_provider.emit_artifact(
+      &loom_amdgpu_hal_artifact_provider, module.get(), &target,
+      /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
+      /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
+      &target_pipeline_options,
+      /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
+      /*report=*/nullptr, iree_allocator_system(), &emitted, &artifact));
+
+  EXPECT_TRUE(emitted);
+  ASSERT_NE(artifact.target_artifact_data.data, nullptr);
+  const iree_string_view_t hsaco =
+      iree_make_string_view((const char*)artifact.target_artifact_data.data,
+                            artifact.target_artifact_data.data_length);
+  EXPECT_NE(iree_string_view_find(
+                hsaco, LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_NAME, 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                hsaco, LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME, 0),
+            IREE_STRING_VIEW_NPOS);
+
+  loom_amdgpu_hal_artifact_provider.deinitialize_artifact(
+      &loom_amdgpu_hal_artifact_provider, &artifact, iree_allocator_system());
+}
+
+TEST_F(AmdgpuHalArtifactProviderTest,
        EmitsModuleTargetWithoutProcessorOverride) {
   ModulePtr module;
   IREE_ASSERT_OK(ParsePreparedCdnaArithmeticModule(&module));
@@ -222,6 +277,7 @@ TEST_F(AmdgpuHalArtifactProviderTest,
       &loom_amdgpu_hal_artifact_provider, module.get(), &target,
       /*diagnostic_sink=*/(loom_diagnostic_sink_t){0},
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
+      /*target_pipeline_options=*/nullptr,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
       /*artifact_manifest=*/nullptr, /*report=*/nullptr,
       iree_allocator_system(), &emitted, &artifact));

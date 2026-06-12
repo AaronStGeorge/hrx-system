@@ -421,7 +421,6 @@ static iree_status_t loom_compile_artifact_manifest_options_initialize(
 static iree_status_t loom_compile_run_pass_pipeline(
     const loom_run_execution_environment_t* environment,
     loom_run_session_t* session, loom_run_module_t* run_module,
-    const loom_run_hal_artifact_provider_t* hal_artifact_provider,
     const loom_run_hal_device_target_t* hal_target,
     const loom_run_candidate_compile_options_t* compile_options,
     const loom_pass_trace_options_t* trace_options,
@@ -429,10 +428,8 @@ static iree_status_t loom_compile_run_pass_pipeline(
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
-  if (hal_artifact_provider != NULL) {
-    pipeline_options.target_pipeline_options =
-        hal_artifact_provider->default_pipeline_options;
-  }
+  pipeline_options.target_pipeline_options =
+      compile_options->target_pipeline_options;
   pipeline_options.target_environment =
       loom_run_execution_environment_target_environment(environment);
   if (hal_target != NULL) {
@@ -1186,6 +1183,10 @@ int main(int argc, char** argv) {
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = iree_make_cstring_view(FLAG_module_name);
   compile_options.artifact_manifest = artifact_manifest_options;
+  if (hal_artifact_provider != NULL) {
+    compile_options.target_pipeline_options =
+        hal_artifact_provider->default_pipeline_options;
+  }
   if (iree_status_is_ok(status)) {
     compile_options.source_resolver =
         loom_run_module_source_resolver(&run_module);
@@ -1235,7 +1236,7 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     loom_pass_run_result_t pass_run_result = {0};
     status = loom_compile_run_pass_pipeline(
-        &environment, &session, &run_module, hal_artifact_provider,
+        &environment, &session, &run_module,
         explicit_hal_target_selected ? &explicit_hal_target : NULL,
         &compile_options, loom_tooling_pass_trace_options(&pass_trace),
         &pass_run_result);

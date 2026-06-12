@@ -7,6 +7,7 @@
 #include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
 
 #include <string>
+#include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
@@ -21,6 +22,8 @@
 #include "loom/target/arch/amdgpu/ops/registry.h"
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/target/emit/native/amdgpu/runtime_globals.h"
+#include "loom/target/emit/native/elf.h"
 #include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
@@ -54,6 +57,99 @@ uint32_t LoadLeU32(const uint8_t* bytes, size_t offset) {
   return (uint32_t)bytes[offset] | ((uint32_t)bytes[offset + 1] << 8) |
          ((uint32_t)bytes[offset + 2] << 16) |
          ((uint32_t)bytes[offset + 3] << 24);
+}
+
+uint16_t LoadLeU16(const std::string& bytes, size_t offset) {
+  return (uint16_t)(uint8_t)bytes[offset] |
+         ((uint16_t)(uint8_t)bytes[offset + 1] << 8);
+}
+
+uint32_t LoadLeU32(const std::string& bytes, size_t offset) {
+  return (uint32_t)(uint8_t)bytes[offset] |
+         ((uint32_t)(uint8_t)bytes[offset + 1] << 8) |
+         ((uint32_t)(uint8_t)bytes[offset + 2] << 16) |
+         ((uint32_t)(uint8_t)bytes[offset + 3] << 24);
+}
+
+uint64_t LoadLeU64(const std::string& bytes, size_t offset) {
+  uint64_t value = 0;
+  for (size_t i = 0; i < 8; ++i) {
+    value |= (uint64_t)(uint8_t)bytes[offset + i] << (8 * i);
+  }
+  return value;
+}
+
+std::string ReadNullTerminatedString(const std::string& bytes, size_t offset) {
+  std::string value;
+  while (offset < bytes.size() && bytes[offset] != '\0') {
+    value.push_back(bytes[offset++]);
+  }
+  return value;
+}
+
+struct Section {
+  // Section table ordinal.
+  size_t index;
+  // Section name from .shstrtab.
+  std::string name;
+  // ELF section type.
+  uint32_t type;
+  // ELF section flags.
+  uint64_t flags;
+  // File offset of section contents.
+  uint64_t offset;
+  // Byte length of section contents.
+  uint64_t size;
+  // Linked section index.
+  uint32_t link;
+  // Section entry size for table-like sections.
+  uint64_t entry_size;
+};
+
+std::vector<Section> ReadSections(const std::string& bytes) {
+  const size_t section_header_offset = (size_t)LoadLeU64(bytes, 40);
+  const size_t section_count = LoadLeU16(bytes, 60);
+  const size_t section_name_index = LoadLeU16(bytes, 62);
+  EXPECT_LT(section_name_index, section_count);
+
+  const size_t section_name_header =
+      section_header_offset + section_name_index * 64;
+  const size_t section_name_offset =
+      (size_t)LoadLeU64(bytes, section_name_header + 24);
+  const size_t section_name_size =
+      (size_t)LoadLeU64(bytes, section_name_header + 32);
+  EXPECT_LE(section_name_offset + section_name_size, bytes.size());
+
+  std::vector<Section> sections;
+  sections.reserve(section_count);
+  for (size_t i = 0; i < section_count; ++i) {
+    const size_t header_offset = section_header_offset + i * 64;
+    const uint32_t name_offset = LoadLeU32(bytes, header_offset);
+    EXPECT_LT(name_offset, section_name_size);
+    sections.push_back({
+        .index = i,
+        .name =
+            ReadNullTerminatedString(bytes, section_name_offset + name_offset),
+        .type = LoadLeU32(bytes, header_offset + 4),
+        .flags = LoadLeU64(bytes, header_offset + 8),
+        .offset = LoadLeU64(bytes, header_offset + 24),
+        .size = LoadLeU64(bytes, header_offset + 32),
+        .link = LoadLeU32(bytes, header_offset + 40),
+        .entry_size = LoadLeU64(bytes, header_offset + 56),
+    });
+  }
+  return sections;
+}
+
+const Section& FindSection(const std::vector<Section>& sections,
+                           const char* name) {
+  for (const Section& section : sections) {
+    if (section.name == name) {
+      return section;
+    }
+  }
+  ADD_FAILURE() << "section not found: " << name;
+  return sections[0];
 }
 
 std::string DiagnosticSummary(const DiagnosticCapture& capture) {
@@ -507,6 +603,69 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
   ASSERT_NE(first_manifest_position, std::string::npos) << manifest;
   ASSERT_NE(second_manifest_position, std::string::npos) << manifest;
   EXPECT_LT(first_manifest_position, second_manifest_position) << manifest;
+
+  loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                              iree_allocator_system());
+  loom_module_free(module);
+}
+
+TEST_F(AmdgpuHalKernelLibraryTest, EmitsRequestedRuntimeGlobals) {
+  loom_module_t* module = nullptr;
+  ASSERT_NO_FATAL_FAILURE(ParseGfx11Kernel(&module));
+
+  DiagnosticCapture capture;
+  loom_amdgpu_hal_kernel_library_t library = {};
+  loom_amdgpu_hal_kernel_library_options_t options = {
+      .runtime_globals = LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG |
+                         LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
+      .diagnostic_sink = capture.sink(),
+      .max_errors = 20,
+  };
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+      module, &options, iree_allocator_system(), &emitted, &library));
+
+  EXPECT_TRUE(emitted);
+  EXPECT_TRUE(capture.diagnostics.empty());
+  ASSERT_NE(library.hsaco_data, nullptr);
+  std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
+                    library.hsaco_data_length);
+
+  const std::vector<Section> sections = ReadSections(hsaco);
+  const Section& dynsym = FindSection(sections, ".dynsym");
+  const Section& dynstr = FindSection(sections, ".dynstr");
+  const Section& data = FindSection(sections, ".data");
+
+  EXPECT_EQ(data.type, LOOM_NATIVE_ELF_SECTION_TYPE_PROGBITS);
+  EXPECT_EQ(data.flags, LOOM_NATIVE_ELF_SECTION_FLAG_WRITE |
+                            LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC);
+  EXPECT_EQ(data.size,
+            LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH +
+                LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
+
+  const std::string dynstr_contents =
+      hsaco.substr((size_t)dynstr.offset, (size_t)dynstr.size);
+  ASSERT_EQ(dynsym.entry_size, 24u);
+  ASSERT_EQ(dynsym.size, 5u * 24u);
+
+  const size_t asan_symbol = (size_t)dynsym.offset + 3u * 24u;
+  const size_t feedback_symbol = asan_symbol + 24u;
+  EXPECT_EQ(ReadNullTerminatedString(dynstr_contents,
+                                     LoadLeU32(hsaco, asan_symbol + 0)),
+            StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_NAME));
+  EXPECT_EQ((uint8_t)hsaco[asan_symbol + 4], 0x11u);
+  EXPECT_EQ(LoadLeU16(hsaco, asan_symbol + 6), data.index);
+  EXPECT_EQ(LoadLeU64(hsaco, asan_symbol + 16),
+            LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH);
+
+  EXPECT_EQ(
+      ReadNullTerminatedString(dynstr_contents,
+                               LoadLeU32(hsaco, feedback_symbol + 0)),
+      StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME));
+  EXPECT_EQ((uint8_t)hsaco[feedback_symbol + 4], 0x11u);
+  EXPECT_EQ(LoadLeU16(hsaco, feedback_symbol + 6), data.index);
+  EXPECT_EQ(LoadLeU64(hsaco, feedback_symbol + 16),
+            LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
 
   loom_amdgpu_hal_kernel_library_deinitialize(&library,
                                               iree_allocator_system());

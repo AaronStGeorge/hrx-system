@@ -211,6 +211,7 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
     const loom_run_hal_device_target_t* target,
     loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
+    const loom_target_pipeline_options_t* target_pipeline_options,
     loom_run_candidate_artifact_flags_t artifact_flags,
     const loom_run_candidate_artifact_manifest_options_t* artifact_manifest,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
@@ -220,6 +221,7 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
   IREE_ASSERT_ARGUMENT(target);
   IREE_ASSERT_ARGUMENT(out_emitted);
   IREE_ASSERT_ARGUMENT(out_artifact);
+  (void)target_pipeline_options;
   (void)artifact_flags;
 
   *out_emitted = false;

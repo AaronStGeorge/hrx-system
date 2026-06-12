@@ -35,6 +35,7 @@
 #include "loom/target/emit/native/amdgpu/kernel_assembly.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 #include "loom/target/emit/native/amdgpu/preflight.h"
+#include "loom/target/emit/native/amdgpu/runtime_globals.h"
 #include "loom/target/emit/native/amdgpu/spill_lowering.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/function_contract.h"
@@ -246,8 +247,10 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_hsaco_contribution(
 
 static iree_status_t loom_amdgpu_hal_kernel_library_write_hsaco(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
-    iree_host_size_t contribution_count, iree_const_byte_span_t* out_hsaco,
-    iree_arena_allocator_t* table_arena, iree_allocator_t allocator) {
+    iree_host_size_t contribution_count,
+    const loom_amdgpu_kernel_hsaco_write_options_t* write_options,
+    iree_const_byte_span_t* out_hsaco, iree_arena_allocator_t* table_arena,
+    iree_allocator_t allocator) {
   *out_hsaco = iree_const_byte_span_empty();
 
   iree_io_stream_t* stream = NULL;
@@ -256,7 +259,7 @@ static iree_status_t loom_amdgpu_hal_kernel_library_write_hsaco(
           IREE_IO_STREAM_MODE_SEEKABLE | IREE_IO_STREAM_MODE_RESIZABLE,
       32 * 1024, allocator, &stream));
   iree_status_t status = loom_amdgpu_write_kernel_hsaco_contributions(
-      contributions, contribution_count, stream, table_arena);
+      contributions, contribution_count, write_options, stream, table_arena);
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_hal_kernel_library_read_stream_contents(
         stream, allocator, out_hsaco);
@@ -558,6 +561,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_entries(
       target_options, LOOM_AMDGPU_HAL_KERNEL_LIBRARY_DEFAULT_MAX_ERRORS);
   const bool capture_target_listing =
       options ? options->capture_target_listing : false;
+  const loom_amdgpu_runtime_global_flags_t runtime_globals =
+      options ? options->runtime_globals : LOOM_AMDGPU_RUNTIME_GLOBAL_NONE;
   loom_target_compile_report_t* entry_reports = NULL;
   if (report != NULL) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table_arena, entries.count,
@@ -669,8 +674,19 @@ static iree_status_t loom_amdgpu_hal_kernel_library_entries(
   if (iree_status_is_ok(status) && !diagnostics_failed &&
       diagnostic_emitter->error_count == 0) {
     iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
+    loom_amdgpu_hsaco_data_symbol_t
+        runtime_global_symbols[LOOM_AMDGPU_RUNTIME_GLOBAL_SYMBOL_CAPACITY];
+    iree_host_size_t runtime_global_symbol_count = 0;
+    loom_amdgpu_runtime_global_symbols(runtime_globals, runtime_global_symbols,
+                                       &runtime_global_symbol_count);
+    const loom_amdgpu_kernel_hsaco_write_options_t write_options = {
+        .data_symbols = runtime_global_symbols,
+        .data_symbol_count = runtime_global_symbol_count,
+    };
     status = loom_amdgpu_hal_kernel_library_write_hsaco(
-        contributions, entries.count, &hsaco, table_arena, allocator);
+        contributions, entries.count,
+        runtime_global_symbol_count != 0 ? &write_options : NULL, &hsaco,
+        table_arena, allocator);
     if (iree_status_is_ok(status)) {
       status = loom_amdgpu_hal_kernel_library_set_contents(
           contributions[0].target, hsaco, allocator, out_library);
@@ -730,6 +746,10 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
     loom_amdgpu_hal_kernel_library_t* out_library) {
   *out_emitted = false;
   *out_library = (loom_amdgpu_hal_kernel_library_t){0};
+  const loom_amdgpu_runtime_global_flags_t runtime_globals =
+      options ? options->runtime_globals : LOOM_AMDGPU_RUNTIME_GLOBAL_NONE;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_runtime_global_flags_validate(runtime_globals));
   loom_target_compile_report_t* report = options ? options->report : NULL;
   if (report != NULL) {
     loom_target_compile_report_initialize_if_empty(report, allocator);

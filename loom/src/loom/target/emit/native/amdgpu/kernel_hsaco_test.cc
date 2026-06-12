@@ -206,7 +206,7 @@ TEST(AmdgpuKernelHsacoTest, JoinsMultipleContributionsIntoOneCodeObject) {
   StreamPtr stream = CreateStream();
   TestArena arena;
   IREE_ASSERT_OK(loom_amdgpu_write_kernel_hsaco_contributions(
-      contributions, IREE_ARRAYSIZE(contributions), stream.get(),
+      contributions, IREE_ARRAYSIZE(contributions), NULL, stream.get(),
       arena.arena()));
   const std::string bytes = StreamBytes(stream.get());
 
@@ -258,6 +258,42 @@ TEST(AmdgpuKernelHsacoTest, JoinsMultipleContributionsIntoOneCodeObject) {
   EXPECT_NE(note_contents.find("second_kernel"), std::string::npos);
 }
 
+TEST(AmdgpuKernelHsacoTest, WritesDataSymbolsFromWriteOptions) {
+  const uint8_t s_endpgm[] = {0x00, 0x00, 0x81, 0xbf};
+  const loom_amdgpu_kernel_hsaco_contribution_t contribution =
+      Contribution(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd"),
+                   iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)));
+  const loom_amdgpu_hsaco_data_symbol_t data_symbol = {
+      .name = IREE_SV("loom_runtime_slot"),
+      .byte_length = 16,
+      .alignment = 8,
+      .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+  };
+  const loom_amdgpu_kernel_hsaco_write_options_t write_options = {
+      .data_symbols = &data_symbol,
+      .data_symbol_count = 1,
+  };
+
+  StreamPtr stream = CreateStream();
+  TestArena arena;
+  IREE_ASSERT_OK(loom_amdgpu_write_kernel_hsaco_contributions(
+      &contribution, 1, &write_options, stream.get(), arena.arena()));
+  const std::string bytes = StreamBytes(stream.get());
+
+  const std::vector<Section> sections = ReadSections(bytes);
+  const Section& dynsym = FindSection(sections, ".dynsym");
+  const Section& dynstr = FindSection(sections, ".dynstr");
+  const Section& data = FindSection(sections, ".data");
+  EXPECT_EQ(data.size, 16u);
+
+  const std::string dynstr_contents =
+      bytes.substr((size_t)dynstr.offset, (size_t)dynstr.size);
+  ASSERT_EQ(dynsym.size, 4u * 24u);
+  EXPECT_EQ(ReadNullTerminatedString(dynstr_contents,
+                                     LoadLeU32(bytes, dynsym.offset + 72u)),
+            "loom_runtime_slot");
+}
+
 TEST(AmdgpuKernelHsacoTest, RejectsMismatchedContributionProcessor) {
   const uint8_t text[] = {0x00, 0x00, 0x81, 0xbf};
   loom_amdgpu_kernel_hsaco_contribution_t contributions[] = {
@@ -272,7 +308,7 @@ TEST(AmdgpuKernelHsacoTest, RejectsMismatchedContributionProcessor) {
   TestArena arena;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_amdgpu_write_kernel_hsaco_contributions(
-                            contributions, IREE_ARRAYSIZE(contributions),
+                            contributions, IREE_ARRAYSIZE(contributions), NULL,
                             stream.get(), arena.arena()));
 }
 

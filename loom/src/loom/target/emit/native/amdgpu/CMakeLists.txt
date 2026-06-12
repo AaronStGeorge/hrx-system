@@ -380,6 +380,37 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
+    runtime_globals
+  HDRS
+    "runtime_globals.h"
+  SRCS
+    "runtime_globals.c"
+  DEPS
+    ::hsaco
+    iree::base
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_test(
+  NAME
+    runtime_globals_test
+  SRCS
+    "runtime_globals_test.cc"
+  DEPS
+    ::runtime_globals
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.emit.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_library(
+  NAME
     hal_kernel_library
   HDRS
     "hal_kernel_library.h"
@@ -389,6 +420,7 @@ loom_cc_library(
     ::kernel_assembly
     ::kernel_hsaco
     ::preflight
+    ::runtime_globals
     ::spill_lowering
     iree::base
     iree::base::internal::arena
@@ -433,6 +465,7 @@ loom_cc_test(
     "hal_kernel_library_test.cc"
   DEPS
     ::hal_kernel_library
+    ::runtime_globals
     iree::base
     iree::base::internal::arena
     iree::testing::gtest
@@ -447,6 +480,7 @@ loom_cc_test(
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::target_info
+    loom::target::emit::native::elf
     loom::testing::diagnostic_matchers
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

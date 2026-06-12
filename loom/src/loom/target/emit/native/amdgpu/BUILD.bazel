@@ -326,6 +326,27 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "runtime_globals",
+    srcs = ["runtime_globals.c"],
+    hdrs = ["runtime_globals.h"],
+    visibility = _AMDGPU_TOOLING_VISIBILITY,
+    deps = [
+        ":hsaco",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "runtime_globals_test",
+    srcs = ["runtime_globals_test.cc"],
+    deps = [
+        ":runtime_globals",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "hal_kernel_library",
     srcs = ["hal_kernel_library.c"],
     hdrs = ["hal_kernel_library.h"],
@@ -334,6 +355,7 @@ loom_cc_library(
         ":kernel_assembly",
         ":kernel_hsaco",
         ":preflight",
+        ":runtime_globals",
         ":spill_lowering",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:allocation_materialization",
@@ -374,6 +396,7 @@ loom_cc_test(
     srcs = ["hal_kernel_library_test.cc"],
     deps = [
         ":hal_kernel_library",
+        ":runtime_globals",
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
@@ -384,6 +407,7 @@ loom_cc_test(
         "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
         "//loom/src/loom/target/arch/amdgpu/ops",
         "//loom/src/loom/target/arch/amdgpu/records:target_records",
+        "//loom/src/loom/target/emit/native:elf",
         "//loom/src/loom/testing:diagnostic_matchers",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

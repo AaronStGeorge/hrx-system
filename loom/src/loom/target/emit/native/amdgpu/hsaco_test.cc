@@ -24,6 +24,11 @@ namespace {
 using StreamPtr =
     std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
 
+constexpr char kAsanConfigGlobalName[] = "iree_asan_config";
+constexpr uint64_t kAsanConfigByteLength = 96;
+constexpr char kFeedbackConfigGlobalName[] = "iree_feedback_config";
+constexpr uint64_t kFeedbackConfigByteLength = 64;
+
 struct Section {
   size_t index;
   std::string name;
@@ -36,6 +41,27 @@ struct Section {
   uint32_t info;
   uint64_t alignment;
   uint64_t entry_size;
+};
+
+struct Segment {
+  // Program table ordinal.
+  size_t index;
+  // ELF program header type.
+  uint32_t type;
+  // ELF program header flags.
+  uint32_t flags;
+  // File offset of segment contents.
+  uint64_t offset;
+  // Runtime virtual address of the segment.
+  uint64_t virtual_address;
+  // Runtime physical address of the segment.
+  uint64_t physical_address;
+  // Byte length of the file image.
+  uint64_t file_size;
+  // Byte length of the memory image.
+  uint64_t memory_size;
+  // Program header alignment.
+  uint64_t alignment;
 };
 
 class TestArena {
@@ -147,6 +173,29 @@ std::vector<Section> ReadSections(const std::string& bytes) {
     sections.push_back(section);
   }
   return sections;
+}
+
+std::vector<Segment> ReadSegments(const std::string& bytes) {
+  const size_t program_header_offset = (size_t)LoadLeU64(bytes, 32);
+  const size_t program_header_count = LoadLeU16(bytes, 56);
+
+  std::vector<Segment> segments;
+  segments.reserve(program_header_count);
+  for (size_t i = 0; i < program_header_count; ++i) {
+    const size_t offset = program_header_offset + i * 56;
+    segments.push_back({
+        .index = i,
+        .type = LoadLeU32(bytes, offset + 0),
+        .flags = LoadLeU32(bytes, offset + 4),
+        .offset = LoadLeU64(bytes, offset + 8),
+        .virtual_address = LoadLeU64(bytes, offset + 16),
+        .physical_address = LoadLeU64(bytes, offset + 24),
+        .file_size = LoadLeU64(bytes, offset + 32),
+        .memory_size = LoadLeU64(bytes, offset + 40),
+        .alignment = LoadLeU64(bytes, offset + 48),
+    });
+  }
+  return segments;
 }
 
 const Section& FindSection(const std::vector<Section>& sections,
@@ -368,6 +417,165 @@ TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
   EXPECT_NE(note_contents.find("amdgcn-amd-amdhsa--gfx1100"),
             std::string::npos);
   EXPECT_NE(note_contents.find("loom_kernel.kd"), std::string::npos);
+}
+
+TEST(AmdgpuHsacoTest, WritesWritableRuntimeDataSymbols) {
+  const uint8_t s_endpgm[] = {0x00, 0x00, 0x81, 0xbf};
+  const loom_amdgpu_hsaco_kernel_t kernel = {
+      .metadata =
+          MinimalKernel(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd")),
+      .text = iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
+  };
+  const loom_amdgpu_hsaco_data_symbol_t data_symbols[] = {
+      {
+          .name = IREE_SV(kAsanConfigGlobalName),
+          .byte_length = kAsanConfigByteLength,
+          .alignment = 8,
+          .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+      },
+      {
+          .name = IREE_SV(kFeedbackConfigGlobalName),
+          .byte_length = kFeedbackConfigByteLength,
+          .alignment = 8,
+          .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+      },
+  };
+  const loom_amdgpu_hsaco_file_t file = {
+      .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
+      .processor = IREE_SV("gfx1100"),
+      .kernels = &kernel,
+      .kernel_count = 1,
+      .data_symbols = data_symbols,
+      .data_symbol_count = IREE_ARRAYSIZE(data_symbols),
+  };
+
+  StreamPtr stream = CreateStream();
+  TestArena arena;
+  IREE_ASSERT_OK(
+      loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
+  const std::string bytes = StreamBytes(stream.get());
+
+  const std::vector<Section> sections = ReadSections(bytes);
+  const Section& dynsym = FindSection(sections, ".dynsym");
+  const Section& dynstr = FindSection(sections, ".dynstr");
+  const Section& data = FindSection(sections, ".data");
+  const Section& dynamic = FindSection(sections, ".dynamic");
+
+  EXPECT_EQ(data.type, LOOM_NATIVE_ELF_SECTION_TYPE_PROGBITS);
+  EXPECT_EQ(data.flags, LOOM_NATIVE_ELF_SECTION_FLAG_WRITE |
+                            LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC);
+  EXPECT_EQ(data.alignment, 4096u);
+  EXPECT_EQ(data.size, kAsanConfigByteLength + kFeedbackConfigByteLength);
+  EXPECT_EQ(data.offset & 4095u, 0u);
+  EXPECT_EQ(data.address & 4095u, 0u);
+  ASSERT_LE(data.offset + data.size, bytes.size());
+  for (uint64_t i = 0; i < data.size; ++i) {
+    EXPECT_EQ(bytes[(size_t)(data.offset + i)], '\0');
+  }
+
+  const std::string dynstr_contents =
+      bytes.substr((size_t)dynstr.offset, (size_t)dynstr.size);
+  EXPECT_NE(dynstr_contents.find(kAsanConfigGlobalName), std::string::npos);
+  EXPECT_NE(dynstr_contents.find(kFeedbackConfigGlobalName), std::string::npos);
+
+  ASSERT_EQ(dynsym.size, 5u * 24u);
+  const size_t asan_symbol = (size_t)dynsym.offset + 3u * 24u;
+  const size_t feedback_symbol = asan_symbol + 24u;
+  EXPECT_EQ(ReadNullTerminatedString(dynstr_contents,
+                                     LoadLeU32(bytes, asan_symbol + 0)),
+            kAsanConfigGlobalName);
+  EXPECT_EQ((uint8_t)bytes[asan_symbol + 4], 0x11u);
+  EXPECT_EQ((uint8_t)bytes[asan_symbol + 5], 3u);
+  EXPECT_EQ(LoadLeU16(bytes, asan_symbol + 6), data.index);
+  EXPECT_EQ(LoadLeU64(bytes, asan_symbol + 8), data.address);
+  EXPECT_EQ(LoadLeU64(bytes, asan_symbol + 16), kAsanConfigByteLength);
+
+  EXPECT_EQ(ReadNullTerminatedString(dynstr_contents,
+                                     LoadLeU32(bytes, feedback_symbol + 0)),
+            kFeedbackConfigGlobalName);
+  EXPECT_EQ((uint8_t)bytes[feedback_symbol + 4], 0x11u);
+  EXPECT_EQ((uint8_t)bytes[feedback_symbol + 5], 3u);
+  EXPECT_EQ(LoadLeU16(bytes, feedback_symbol + 6), data.index);
+  EXPECT_EQ(LoadLeU64(bytes, feedback_symbol + 8),
+            data.address + kAsanConfigByteLength);
+  EXPECT_EQ(LoadLeU64(bytes, feedback_symbol + 16), kFeedbackConfigByteLength);
+
+  const std::vector<Segment> segments = ReadSegments(bytes);
+  ASSERT_GT(segments.size(), 4u);
+  const Segment& write_load = segments[3];
+  EXPECT_EQ(write_load.type, LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD);
+  EXPECT_EQ(write_load.flags, LOOM_NATIVE_ELF_PROGRAM_FLAG_READ |
+                                  LOOM_NATIVE_ELF_PROGRAM_FLAG_WRITE);
+  EXPECT_EQ(write_load.offset, data.offset);
+  EXPECT_EQ(write_load.virtual_address, data.address);
+  EXPECT_EQ(write_load.physical_address, data.address);
+  EXPECT_GE(write_load.file_size, dynamic.offset + dynamic.size - data.offset);
+  EXPECT_EQ(write_load.memory_size, write_load.file_size);
+  EXPECT_EQ(write_load.alignment, 4096u);
+  EXPECT_EQ(write_load.offset & 4095u, write_load.virtual_address & 4095u);
+
+  const Segment& dynamic_program_header = segments[4];
+  EXPECT_EQ(dynamic_program_header.type, LOOM_NATIVE_ELF_PROGRAM_TYPE_DYNAMIC);
+  EXPECT_EQ(dynamic_program_header.offset, dynamic.offset);
+  EXPECT_EQ(dynamic_program_header.virtual_address, dynamic.address);
+  EXPECT_EQ(dynamic_program_header.physical_address, dynamic.address);
+  EXPECT_EQ(dynamic_program_header.file_size, dynamic.size);
+}
+
+TEST(AmdgpuHsacoTest, WritesAlignedReadOnlyDataSymbols) {
+  const uint8_t s_endpgm[] = {0x00, 0x00, 0x81, 0xbf};
+  const uint8_t tag_bytes[] = {0x13, 0x37, 0x42, 0x5a};
+  const loom_amdgpu_hsaco_kernel_t kernel = {
+      .metadata =
+          MinimalKernel(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd")),
+      .text = iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
+  };
+  const loom_amdgpu_hsaco_data_symbol_t data_symbol = {
+      .name = IREE_SV("loom_const_tag"),
+      .initial_contents =
+          iree_make_const_byte_span(tag_bytes, sizeof(tag_bytes)),
+      .byte_length = 8,
+      .alignment = 128,
+  };
+  const loom_amdgpu_hsaco_file_t file = {
+      .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
+      .processor = IREE_SV("gfx1100"),
+      .kernels = &kernel,
+      .kernel_count = 1,
+      .data_symbols = &data_symbol,
+      .data_symbol_count = 1,
+  };
+
+  StreamPtr stream = CreateStream();
+  TestArena arena;
+  IREE_ASSERT_OK(
+      loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
+  const std::string bytes = StreamBytes(stream.get());
+
+  const std::vector<Section> sections = ReadSections(bytes);
+  const Section& dynsym = FindSection(sections, ".dynsym");
+  const Section& dynstr = FindSection(sections, ".dynstr");
+  const Section& rodata = FindSection(sections, ".rodata");
+  EXPECT_EQ(rodata.alignment, 128u);
+  EXPECT_EQ(rodata.offset & 127u, 0u);
+  EXPECT_EQ(rodata.address & 127u, 0u);
+  ASSERT_EQ(rodata.size, 128u + data_symbol.byte_length);
+  ASSERT_LE(rodata.offset + rodata.size, bytes.size());
+  EXPECT_EQ(bytes.substr((size_t)rodata.offset + 128u, sizeof(tag_bytes)),
+            std::string((const char*)tag_bytes, sizeof(tag_bytes)));
+
+  const std::string dynstr_contents =
+      bytes.substr((size_t)dynstr.offset, (size_t)dynstr.size);
+  ASSERT_EQ(dynsym.size, 4u * 24u);
+  const size_t symbol = (size_t)dynsym.offset + 3u * 24u;
+  EXPECT_EQ(
+      ReadNullTerminatedString(dynstr_contents, LoadLeU32(bytes, symbol + 0)),
+      "loom_const_tag");
+  EXPECT_EQ((uint8_t)bytes[symbol + 4], 0x11u);
+  EXPECT_EQ((uint8_t)bytes[symbol + 5], 3u);
+  EXPECT_EQ(LoadLeU16(bytes, symbol + 6), rodata.index);
+  EXPECT_EQ(LoadLeU64(bytes, symbol + 8), rodata.address + 128u);
+  EXPECT_EQ(LoadLeU64(bytes, symbol + 16), data_symbol.byte_length);
 }
 
 TEST(AmdgpuHsacoTest, WritesSupportedProcessorCodeObjectFlags) {

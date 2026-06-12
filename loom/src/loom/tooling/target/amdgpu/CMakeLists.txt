@@ -27,6 +27,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::target_info
     loom::target::compile_report
     loom::target::emit::native::amdgpu::hal_kernel_library
+    loom::target::emit::native::amdgpu::runtime_globals
     loom::target::types
     loom::tooling::execution::compile_options
     loom::tooling::execution::hal::artifact
@@ -68,11 +69,13 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::op_registry
+    loom::sanitizer::options
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::ops
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::target_info
     loom::target::compile_report
+    loom::target::emit::native::amdgpu::runtime_globals
     loom::testing::module_ptr
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

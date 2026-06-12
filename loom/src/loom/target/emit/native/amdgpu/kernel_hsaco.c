@@ -81,8 +81,9 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
 
 iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
     const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
-    iree_host_size_t contribution_count, iree_io_stream_t* stream,
-    iree_arena_allocator_t* scratch_arena) {
+    iree_host_size_t contribution_count,
+    const loom_amdgpu_kernel_hsaco_write_options_t* options,
+    iree_io_stream_t* stream, iree_arena_allocator_t* scratch_arena) {
   if (contribution_count == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -121,6 +122,8 @@ iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
       .processor = processor,
       .kernels = kernels,
       .kernel_count = contribution_count,
+      .data_symbols = options ? options->data_symbols : NULL,
+      .data_symbol_count = options ? options->data_symbol_count : 0,
   };
   return loom_amdgpu_hsaco_write_file(&file, stream, scratch_arena);
 }
@@ -141,8 +144,12 @@ iree_status_t loom_amdgpu_emit_kernel_hsaco(
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_kernel_hsaco_contribution(
       schedule, allocation, &contribution_options, &contribution,
       scratch_arena));
+  const loom_amdgpu_kernel_hsaco_write_options_t write_options = {
+      .data_symbols = options ? options->data_symbols : NULL,
+      .data_symbol_count = options ? options->data_symbol_count : 0,
+  };
   IREE_RETURN_IF_ERROR(loom_amdgpu_write_kernel_hsaco_contributions(
-      &contribution, 1, stream, scratch_arena));
+      &contribution, 1, &write_options, stream, scratch_arena));
   if (options != NULL && options->summary != NULL) {
     *options->summary = contribution.summary;
   }
