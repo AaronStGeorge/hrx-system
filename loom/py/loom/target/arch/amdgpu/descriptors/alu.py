@@ -1804,6 +1804,103 @@ def _v_fmamk_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_pk_ternary_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    units: int = 1,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP3P",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=units)),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a", units=units)),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b", units=units)),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c", units=units)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_pk_fma_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_ternary_overlay(
+        descriptor_key="amdgpu.v_pk_fma_f16",
+        instruction_name="V_PK_FMA_F16",
+        mnemonic="v_pk_fma_f16",
+        semantic_tag="float.fma.pk2.f16",
+    )
+
+
+def _v_pk_fmac_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_pk_fmac_f16",
+        instruction_name="V_PK_FMAC_F16",
+        mnemonic="v_pk_fmac_f16",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.fmac.pk2.f16",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "VDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _VGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                ),
+                role_exception_reason=(
+                    "the encoded destination register is also the tied packed "
+                    "accumulator input"
+                ),
+            ),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("b")),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_pk_mad_i16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_ternary_overlay(
+        descriptor_key="amdgpu.v_pk_mad_i16",
+        instruction_name="V_PK_MAD_I16",
+        mnemonic="v_pk_mad_i16",
+        semantic_tag="integer.mad.pk2.i16",
+    )
+
+
+def _v_pk_mad_u16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_ternary_overlay(
+        descriptor_key="amdgpu.v_pk_mad_u16",
+        instruction_name="V_PK_MAD_U16",
+        mnemonic="v_pk_mad_u16",
+        semantic_tag="integer.mad.pk2.u16",
+    )
+
+
+def _v_pk_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_pk_ternary_overlay(
+        descriptor_key="amdgpu.v_pk_fma_f32",
+        instruction_name="V_PK_FMA_F32",
+        mnemonic="v_pk_fma_f32",
+        semantic_tag="float.fma.pk2.f32",
+        units=2,
+    )
+
+
 def _v_unary_f32_overlay(
     *,
     descriptor_key: str,
@@ -2695,6 +2792,12 @@ __all__ = (
     "_v_fma_mix_f32_overlays",
     "_v_fmac_f32_overlay",
     "_v_fmamk_f32_overlay",
+    "_v_pk_fma_f16_overlay",
+    "_v_pk_fma_f32_overlay",
+    "_v_pk_fmac_f16_overlay",
+    "_v_pk_mad_i16_overlay",
+    "_v_pk_mad_u16_overlay",
+    "_v_pk_ternary_overlay",
     "_v_lshl_add_u32_shift_immediate_overlay",
     "_v_lshlrev_b32_literal_overlay",
     "_v_lshlrev_b32_overlay",

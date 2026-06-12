@@ -74,6 +74,63 @@ low.func.def target(@gfx11_target) @gfx11_fma_mix_f16_lanes_native(%addr: reg<am
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_packed_fma_mad waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_packed_fma_mad(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %fmac = v_pk_fmac_f16 %acc, %a, %b
+  %fma = v_pk_fma_f16 %a, %b, %c
+  %mad_i = v_pk_mad_i16 %a, %b, %c
+  %mad_u = v_pk_mad_u16 %a, %b, %c
+  return
+}
+
+// ----
+  v_pk_fmac_f16 v0, v1, v2
+  v_pk_fma_f16 v0, v1, v2, v3
+  v_pk_mad_i16 v0, v1, v2, v3
+  v_pk_mad_u16 v0, v1, v2, v3
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_packed_fma_mad_native waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_packed_fma_mad_native(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %fmac = v_pk_fmac_f16 %acc, %a, %b
+  %fma = v_pk_fma_f16 %a, %b, %c
+  %mad_i = v_pk_mad_i16 %a, %b, %c
+  %mad_u = v_pk_mad_u16 %a, %b, %c
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx942_packed_fma_f32 waits=none
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_packed_fma_f32(%a: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr x2>, %c: reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
+  %next = v_pk_fma_f32 %a, %b, %c
+  return
+}
+
+// ----
+  v_pk_fma_f32 v[0:1], v[0:1], v[2:3], v[4:5]
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx942_packed_fma_f32_native waits=none
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_packed_fma_f32_native(%a: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr x2>, %c: reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
+  %next = v_pk_fma_f32 %a, %b, %c
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_vopd_fmac_pair
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair(%acc0: reg<amdgpu.vgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %acc1: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

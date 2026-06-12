@@ -39,6 +39,25 @@ low.func.def target(@gfx11_target) @vop2_fmamk_literal_multiply_slot(%a: reg<amd
 // ====
 
 amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @vop3p_packed_fma_mad_forms(%acc: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %fmac = v_pk_fmac_f16 %acc, %a, %b
+  %fma = v_pk_fma_f16 %a, %b, %c
+  %mad_i = v_pk_mad_i16 %a, %b, %c
+  %mad_u = v_pk_mad_u16 %a, %b, %c
+  return
+}
+
+// ====
+
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @vop3p_packed_fma_f32_form(%a: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr x2>, %c: reg<amdgpu.vgpr x2>) asm<amdgpu.cdna3.core> {
+  %result = v_pk_fma_f32 %a, %b, %c
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @sop2_inline_source_shift(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   %shifted = s_lshl_b32_rhs_inline %value, 64
   return

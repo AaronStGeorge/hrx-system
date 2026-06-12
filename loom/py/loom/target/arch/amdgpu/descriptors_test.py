@@ -642,6 +642,92 @@ def test_fmamk_f32_descriptor_pins_literal_multiply_slot() -> None:
         )
 
 
+def test_packed_fma_mad_descriptors_pin_lane_container_widths() -> None:
+    descriptor_sets = (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    )
+    expected_32_bit_keys = (
+        "amdgpu.v_pk_fma_f16",
+        "amdgpu.v_pk_mad_i16",
+        "amdgpu.v_pk_mad_u16",
+    )
+    for descriptor_set in descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key in expected_32_bit_keys:
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.encoding_name == "ENC_VOP3P"
+            assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+                "VDST",
+                "SRC0",
+                "SRC1",
+                "SRC2",
+            )
+            assert tuple(
+                operand.descriptor_operand.unit_count for operand in descriptor.operands
+            ) == (1, 1, 1, 1)
+
+    cdna_descriptor_sets = (_gfx940_core_overlays(), _gfx950_core_overlays())
+    for descriptor_set in cdna_descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        descriptor = descriptors["amdgpu.v_pk_fma_f32"]
+        assert descriptor.encoding_name == "ENC_VOP3P"
+        assert tuple(
+            operand.descriptor_operand.unit_count for operand in descriptor.operands
+        ) == (2, 2, 2, 2)
+
+    rdna_descriptor_sets = (
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    )
+    for descriptor_set in rdna_descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        assert "amdgpu.v_pk_fma_f32" not in descriptors
+
+
+def test_packed_fmac_f16_descriptor_pins_destructive_accumulator() -> None:
+    descriptor_sets = (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    )
+    for descriptor_set in descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        descriptor = descriptors["amdgpu.v_pk_fmac_f16"]
+        assert descriptor.encoding_name == "ENC_VOP2"
+        assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+            "VDST",
+            "VDST",
+            "SRC0",
+            "VSRC1",
+        )
+        assert tuple(
+            operand.descriptor_operand.field_name for operand in descriptor.operands
+        ) == ("dst", "acc", "a", "b")
+        assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+            ConstraintKind.TIED,
+            ConstraintKind.DESTRUCTIVE,
+        )
+        assert tuple(
+            (constraint.lhs_operand_index, constraint.rhs_operand_index)
+            for constraint in descriptor.constraints
+        ) == ((0, 1), (0, 1))
+
+
 def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
     rdna3_descriptors = {
         descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
