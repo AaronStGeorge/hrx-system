@@ -8,8 +8,10 @@
 
 #include <stdint.h>
 
+#include "loom/ir/context.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
@@ -212,25 +214,102 @@ static iree_status_t loom_amdgpu_dotf_emit_fmac(
   return iree_ok_status();
 }
 
+static iree_string_view_t loom_amdgpu_dotf_descriptor_set_key(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  if (descriptor_set == NULL) {
+    return IREE_SV("<missing>");
+  }
+  const iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset);
+  return iree_string_view_is_empty(descriptor_set_key) ? IREE_SV("<empty>")
+                                                       : descriptor_set_key;
+}
+
+static iree_status_t loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t lane,
+    bool accumulator_is_dot_local, bool selected_tied_form,
+    iree_string_view_t reason) {
+  if (!iree_any_bit_set(loom_low_lower_context_diagnostic_flags(context),
+                        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM)) {
+    return iree_ok_status();
+  }
+
+  loom_low_lower_resolved_descriptor_t descriptor = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_resolve_descriptor_ref(context, descriptor_ref, &descriptor));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  const iree_string_view_t descriptor_name = loom_low_descriptor_set_string(
+      descriptor_set, descriptor.descriptor->key_string_offset);
+  const iree_string_view_t descriptor_set_name =
+      loom_amdgpu_dotf_descriptor_set_key(descriptor_set);
+  const iree_string_view_t accumulator_kind =
+      accumulator_is_dot_local ? IREE_SV("dot_local") : IREE_SV("incoming");
+  const iree_string_view_t decision =
+      selected_tied_form ? IREE_SV("selected") : IREE_SV("rejected");
+  loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_lower_context_target_key(context)),
+      loom_param_string(loom_low_lower_context_export_name(context)),
+      loom_param_string(loom_low_lower_context_config_key(context)),
+      loom_param_string(loom_low_lower_context_function_name(context)),
+      loom_param_string(loom_op_name(module, source_op)),
+      loom_param_string(descriptor_name),
+      loom_param_u32(lane),
+      loom_param_string(descriptor_set_name),
+      loom_param_string(accumulator_kind),
+      loom_param_string(decision),
+      loom_param_string(reason),
+  };
+  return loom_low_lower_emit_error_ref(context, source_op,
+                                       LOOM_ERR_AMDGPU_028_REF, params,
+                                       IREE_ARRAYSIZE(params));
+}
+
 static iree_status_t loom_amdgpu_dotf_emit_accumulate(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_dotf_plan_t* plan, loom_value_id_t lhs,
-    loom_value_id_t rhs, loom_value_id_t accumulator,
+    loom_value_id_t rhs, loom_value_id_t accumulator, uint32_t lane,
     bool accumulator_is_dot_local, loom_type_t lane_type,
     loom_value_id_t* out_result) {
-  if (accumulator_is_dot_local &&
-      plan->tied_accumulate_descriptor_ref != LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
-    bool rhs_is_one_vgpr = false;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_dotf_low_value_is_one_vgpr(context, rhs, &rhs_is_one_vgpr));
-    if (rhs_is_one_vgpr) {
-      return loom_amdgpu_dotf_emit_fmac(
-          context, source_op, plan->tied_accumulate_descriptor_ref, lhs, rhs,
-          accumulator, lane_type, out_result);
-    }
+  if (!accumulator_is_dot_local) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_F32, lane,
+        accumulator_is_dot_local, /*selected_tied_form=*/false,
+        IREE_SV("incoming_accumulator")));
+    return loom_amdgpu_dotf_emit_fma(context, source_op, lhs, rhs, accumulator,
+                                     lane_type, out_result);
   }
-  return loom_amdgpu_dotf_emit_fma(context, source_op, lhs, rhs, accumulator,
-                                   lane_type, out_result);
+
+  if (plan->tied_accumulate_descriptor_ref == LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_F32, lane,
+        accumulator_is_dot_local, /*selected_tied_form=*/false,
+        IREE_SV("tied_descriptor_unavailable")));
+    return loom_amdgpu_dotf_emit_fma(context, source_op, lhs, rhs, accumulator,
+                                     lane_type, out_result);
+  }
+
+  bool rhs_is_one_vgpr = false;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_dotf_low_value_is_one_vgpr(context, rhs, &rhs_is_one_vgpr));
+  if (!rhs_is_one_vgpr) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMA_F32, lane,
+        accumulator_is_dot_local, /*selected_tied_form=*/false,
+        IREE_SV("rhs_not_one_vgpr")));
+    return loom_amdgpu_dotf_emit_fma(context, source_op, lhs, rhs, accumulator,
+                                     lane_type, out_result);
+  }
+
+  IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_tied_accumulator_diagnostic(
+      context, source_op, plan->tied_accumulate_descriptor_ref, lane,
+      accumulator_is_dot_local, /*selected_tied_form=*/true,
+      IREE_SV("dot_local_accumulator")));
+  return loom_amdgpu_dotf_emit_fmac(context, source_op,
+                                    plan->tied_accumulate_descriptor_ref, lhs,
+                                    rhs, accumulator, lane_type, out_result);
 }
 
 static iree_status_t loom_amdgpu_dotf_extract_lane(
@@ -280,7 +359,7 @@ static iree_status_t loom_amdgpu_dotf_emit_strict_chain(
         loom_amdgpu_dotf_extract_operands(context, source_op, plan, low_lhs,
                                           low_rhs, lane, &lhs_lane, &rhs_lane));
     IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_accumulate(
-        context, source_op, plan, lhs_lane, rhs_lane, accumulator,
+        context, source_op, plan, lhs_lane, rhs_lane, accumulator, lane,
         accumulator_is_dot_local, lane_type, &accumulator));
     accumulator_is_dot_local = true;
   }
@@ -327,7 +406,7 @@ static iree_status_t loom_amdgpu_dotf_emit_relaxed_forest(
   IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_extract_operands(
       context, source_op, plan, low_lhs, low_rhs, lane, &lhs_lane, &rhs_lane));
   IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_accumulate(
-      context, source_op, plan, lhs_lane, rhs_lane, low_init,
+      context, source_op, plan, lhs_lane, rhs_lane, low_init, lane,
       /*accumulator_is_dot_local=*/plan->init_kind ==
           LOOM_AMDGPU_DOTF_INIT_ZERO,
       lane_type, &accumulators[0]));
@@ -349,8 +428,9 @@ static iree_status_t loom_amdgpu_dotf_emit_relaxed_forest(
     const uint32_t accumulator_index = lane % accumulator_count;
     IREE_RETURN_IF_ERROR(loom_amdgpu_dotf_emit_accumulate(
         context, source_op, plan, lhs_lane, rhs_lane,
-        accumulators[accumulator_index], /*accumulator_is_dot_local=*/true,
-        lane_type, &accumulators[accumulator_index]));
+        accumulators[accumulator_index], lane,
+        /*accumulator_is_dot_local=*/true, lane_type,
+        &accumulators[accumulator_index]));
   }
 
   return loom_amdgpu_dotf_emit_accumulator_sum(context, source_op, accumulators,

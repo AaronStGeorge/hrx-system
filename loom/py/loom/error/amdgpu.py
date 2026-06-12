@@ -521,6 +521,35 @@ ERR_AMDGPU_027 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_028: AMDGPU dot FMAC operand-form decision was recorded.
+ERR_AMDGPU_028 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=28,
+    severity=Severity.REMARK,
+    summary="AMDGPU dot FMAC operand-form decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' selected dot accumulation descriptor "
+        "'{descriptor_name}' for '{op_name}' in '@{function_name}' and "
+        "{decision} tied accumulator form at lane {lane_index} in descriptor "
+        "set '{descriptor_set_name}': accumulator '{accumulator_kind}', "
+        "reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("lane_index", ParamKind.U32),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("accumulator_kind", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded descriptor, lane, and accumulator fields to explain "
+        "why source-to-low selected or rejected tied FMAC accumulation"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -548,4 +577,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_025,
     ERR_AMDGPU_026,
     ERR_AMDGPU_027,
+    ERR_AMDGPU_028,
 )
