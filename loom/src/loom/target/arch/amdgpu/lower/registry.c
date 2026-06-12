@@ -404,6 +404,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_fmaf_mix_dispatch,
                              loom_amdgpu_fma_mix_plan_t,
                              loom_amdgpu_lower_scalar_fmaf_mix)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_packed_fma_dispatch,
+                               loom_amdgpu_packed_fma_plan_t,
+                               loom_amdgpu_select_vector_packed_fma_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_packed_fma_dispatch,
+                             loom_amdgpu_packed_fma_plan_t,
+                             loom_amdgpu_lower_vector_packed_fma)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_mulf_mix_dispatch,
                                loom_amdgpu_mulf_mix_plan_t,
                                loom_amdgpu_select_scalar_mulf_mix_plan)
@@ -609,7 +617,8 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
   *out_plan = loom_low_lower_plan_empty();
   if (!loom_vector_dotf_isa(source_op) && !loom_index_add_isa(source_op) &&
       !loom_index_cmp_isa(source_op) && !loom_scalar_fmaf_isa(source_op) &&
-      !loom_scalar_mulf_isa(source_op) && !loom_vector_mulf_isa(source_op)) {
+      !loom_vector_fmaf_isa(source_op) && !loom_scalar_mulf_isa(source_op) &&
+      !loom_vector_mulf_isa(source_op)) {
     return iree_ok_status();
   }
   return loom_amdgpu_select_plan_id(context, source_op, out_plan);
@@ -623,6 +632,12 @@ static void loom_amdgpu_mark_plan_storage_demands(
     loom_amdgpu_mark_fma_mix_plan_storage_demands(
         context, source_op,
         (const loom_amdgpu_fma_mix_plan_t*)plan.target_data);
+    return;
+  }
+  if (plan.id == LOOM_OP_VECTOR_FMAF) {
+    loom_amdgpu_mark_packed_fma_plan_storage_demands(
+        context, source_op,
+        (const loom_amdgpu_packed_fma_plan_t*)plan.target_data);
     return;
   }
   if (plan.id == LOOM_OP_SCALAR_MULF || plan.id == LOOM_OP_VECTOR_MULF) {

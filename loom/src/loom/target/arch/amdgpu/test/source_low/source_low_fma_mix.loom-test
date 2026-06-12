@@ -1,6 +1,42 @@
 // RUN: emit source-low diagnostics=all output=low
 
 amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @packed_f16_vector_fma(%a: vector<2xf16>, %b: vector<2xf16>, %c: vector<2xf16>) -> (vector<2xf16>) {
+  %result = vector.fmaf %a, %b, %c : vector<2xf16>
+  func.return %result : vector<2xf16>
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @packed_f16_vector_fma(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_pk_fma_f16 %a, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @packed_f16_vector4_fma(%a: vector<4xf16>, %b: vector<4xf16>, %c: vector<4xf16>) -> (vector<4xf16>) {
+  %result = vector.fmaf %a, %b, %c : vector<4xf16>
+  func.return %result : vector<4xf16>
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @packed_f16_vector4_fma(%a: reg<amdgpu.vgpr x2>, %b: reg<amdgpu.vgpr x2>, %c: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %9 = slice %a[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %10 = slice %b[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %11 = slice %c[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %12 = v_pk_fma_f16 %9, %10, %11
+  %13 = slice %a[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = slice %b[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %15 = slice %c[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %16 = v_pk_fma_f16 %13, %14, %15
+  %result = concat(%12, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @f32_fma_mix_extf_a(%a_half: f16, %b: f32, %c: f32) -> (f32) {
   %a = scalar.extf %a_half : f16 to f32
   %result = scalar.fmaf %a, %b, %c : f32

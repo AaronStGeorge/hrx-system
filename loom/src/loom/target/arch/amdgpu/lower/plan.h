@@ -128,6 +128,18 @@ typedef struct loom_amdgpu_fma_mix_plan_t {
   loom_amdgpu_fma_mix_source_kind_t source_kinds[3];
 } loom_amdgpu_fma_mix_plan_t;
 
+typedef struct loom_amdgpu_packed_fma_plan_t {
+  // Packed f16 vector values consumed by the selected descriptor in a, b, c
+  // order.
+  loom_value_id_t sources[3];
+  // Packed f16 vector result value.
+  loom_value_id_t result;
+  // Descriptor row selected for each packed f16 lane-pair packet.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Number of packed 32-bit register units in each source and result vector.
+  uint32_t register_count;
+} loom_amdgpu_packed_fma_plan_t;
+
 typedef struct loom_amdgpu_mulf_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b order.
   loom_value_id_t sources[2];
