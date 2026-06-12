@@ -10,6 +10,7 @@ load("//build_tools/amdgpu:cts.bzl", "iree_amdgpu_hal_cts_testdata")
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:iree_hal_cts_test_suite.bzl", "iree_hal_cts_test_suite")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -63,6 +64,34 @@ iree_amdgpu_hal_cts_testdata(
     ],
     tags = ["manual"],
     target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
+)
+
+iree_runtime_cc_library(
+    name = "asan_executable_test",
+    testonly = True,
+    srcs = ["asan_executable_test.cc"],
+    deps = [
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/hal/drivers/amdgpu:headers",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+    ],
+    alwayslink = True,
+)
+
+iree_runtime_cc_test(
+    name = "asan_executable_tests",
+    srcs = ["//runtime/src/iree/hal/cts/util:test_main.cc"],
+    args = ["--amdgpu_asan=true"],
+    deps = [
+        ":asan_executable_test",
+        ":backends",
+        ":testdata_amdgpu",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/hal/cts/util:registry",
+        "//runtime/src/iree/hal/cts/util:test_base",
+        "//runtime/src/iree/testing:gtest",
+    ],
 )
 
 iree_hal_cts_test_suite(

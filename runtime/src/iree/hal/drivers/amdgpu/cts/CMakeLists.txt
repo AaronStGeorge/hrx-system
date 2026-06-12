@@ -67,6 +67,48 @@ iree_amdgpu_hal_cts_testdata(
 endif()
 
 if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
+    asan_executable_test
+  SRCS
+    "asan_executable_test.cc"
+  DEPS
+    iree::hal
+    iree::hal::cts::util::test_base
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::headers
+  TESTONLY
+  ALWAYSLINK
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    asan_executable_tests
+  SRCS
+    "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/cts/util/test_main.cc"
+  DEPS
+    ::asan_executable_test
+    ::backends
+    ::testdata_amdgpu
+    iree::base::tooling::flags
+    iree::hal::cts::util::registry
+    iree::hal::cts::util::test_base
+    iree::testing::gtest
+  ARGS
+    "--amdgpu_asan=true"
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends

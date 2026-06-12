@@ -2396,9 +2396,9 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_executable_cache(
       iree_hal_amdgpu_logical_device_cast(base_device);
   return iree_hal_amdgpu_executable_cache_create(
       base_device, &logical_device->system->libhsa,
-      &logical_device->system->topology, &logical_device->profile_metadata,
-      identifier, iree_hal_device_host_allocator(base_device),
-      out_executable_cache);
+      &logical_device->system->topology, &logical_device->asan,
+      &logical_device->profile_metadata, identifier,
+      iree_hal_device_host_allocator(base_device), out_executable_cache);
 }
 
 static iree_status_t iree_hal_amdgpu_logical_device_import_file(
