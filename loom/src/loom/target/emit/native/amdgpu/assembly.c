@@ -1532,6 +1532,16 @@ static iree_status_t loom_amdgpu_read_descriptor_packet_route_flags(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_append_unsupported_read_write_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  iree_string_view_t key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU assembly descriptor '%.*s' has both read and write effects",
+      (int)key.size, key.data);
+}
+
 static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
     const loom_native_assembly_packet_context_t* context,
     loom_amdgpu_descriptor_packet_route_flags_t flags, bool* out_matched) {
@@ -1572,6 +1582,12 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_DATA_SHARE_FORMAT,
           .append = loom_amdgpu_append_memory_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
+          .append = loom_amdgpu_append_unsupported_read_write_packet,
       },
       {
           .required_flags =
@@ -1639,6 +1655,12 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
           .append = loom_amdgpu_append_memory_packet,
+      },
+      {
+          .required_flags =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_COUNTER_EFFECT |
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_TWO_IMMEDIATES,
+          .append = loom_amdgpu_append_waitcnt_packet,
       },
   };
   *out_matched = false;
@@ -2867,29 +2889,12 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
   if (matched) {
     return iree_ok_status();
   }
-  if (iree_all_bits_set(
-          route_flags,
-          LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
-              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT)) {
-    iree_string_view_t key = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU assembly descriptor '%.*s' has both read and write effects",
-        (int)key.size, key.data);
-  }
   bool uses_matrix_resource = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_uses_resource_kind(
       descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_MATRIX,
       &uses_matrix_resource));
   if (uses_matrix_resource) {
     return loom_amdgpu_append_matrix_packet(context);
-  }
-  if (iree_all_bits_set(
-          route_flags,
-          LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_COUNTER_EFFECT |
-              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_TWO_IMMEDIATES)) {
-    return loom_amdgpu_append_waitcnt_packet(context);
   }
   return loom_amdgpu_append_canonical_asm_form_packet(context);
 }
