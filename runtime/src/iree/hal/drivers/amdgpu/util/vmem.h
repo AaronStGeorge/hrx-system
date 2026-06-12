@@ -90,6 +90,28 @@ bool iree_hal_amdgpu_try_find_fine_global_memory_pool(
     const iree_hal_amdgpu_libhsa_t* libhsa, hsa_agent_t agent,
     hsa_amd_memory_pool_t* out_pool);
 
+// Translates a local AMDGPU VMM memory type to the HSA extension enum used by
+// hsa_amd_vmem_handle_create.
+iree_status_t iree_hal_amdgpu_vmem_translate_memory_type(
+    iree_hal_amdgpu_vmem_memory_type_t memory_type,
+    hsa_amd_memory_type_t* out_hsa_memory_type);
+
+// Queries the recommended HSA VMM allocation granule for |memory_pool|.
+iree_status_t iree_hal_amdgpu_vmem_query_alloc_granule(
+    const iree_hal_amdgpu_libhsa_t* libhsa, hsa_amd_memory_pool_t memory_pool,
+    iree_device_size_t* out_allocation_granule);
+
+// Builds HSA VMM access descriptors for |topology| and |access_mode|.
+//
+// |access_descs| must have capacity for |topology->all_agent_count| entries.
+// |out_access_desc_count| receives the initialized descriptor count.
+iree_status_t iree_hal_amdgpu_vmem_build_access_descs_for_topology(
+    const iree_hal_amdgpu_topology_t* topology, hsa_agent_t local_agent,
+    iree_hal_amdgpu_vmem_access_mode_t access_mode,
+    iree_host_size_t access_desc_capacity,
+    hsa_amd_memory_access_desc_t* access_descs,
+    iree_host_size_t* out_access_desc_count);
+
 //===----------------------------------------------------------------------===//
 // iree_hal_amdgpu_vmem_ringbuffer_t
 //===----------------------------------------------------------------------===//

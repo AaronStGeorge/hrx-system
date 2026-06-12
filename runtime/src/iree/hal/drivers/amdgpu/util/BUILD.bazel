@@ -342,6 +342,19 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "shadow_map",
+    srcs = ["shadow_map.c"],
+    hdrs = ["shadow_map.h"],
+    deps = [
+        ":libhsa",
+        ":vmem",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "block_pool",
     srcs = ["block_pool.c"],
     hdrs = ["block_pool.h"],
@@ -738,6 +751,17 @@ iree_runtime_cc_test(
         ":libhsa",
         ":topology",
         ":vmem",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "shadow_map_test",
+    srcs = ["shadow_map_test.cc"],
+    deps = [
+        ":shadow_map",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

@@ -455,6 +455,24 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    shadow_map
+  HDRS
+    "shadow_map.h"
+  SRCS
+    "shadow_map.c"
+  DEPS
+    ::libhsa
+    ::vmem
+    iree::base
+    iree::base::internal
+    iree::base::threading
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     block_pool
   HDRS
     "block_pool.h"
@@ -1086,6 +1104,26 @@ iree_cc_test(
     ::libhsa
     ::topology
     ::vmem
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    shadow_map_test
+  SRCS
+    "shadow_map_test.cc"
+  DEPS
+    ::shadow_map
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
