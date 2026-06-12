@@ -14,6 +14,8 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_FEEDBACK_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_FEEDBACK_H_
 
+#include <stdint.h>
+
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/ir/attribute.h"
@@ -75,6 +77,27 @@ iree_status_t loom_amdgpu_build_feedback_channel_header_values(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t channel_base, loom_location_id_t location,
     loom_amdgpu_feedback_channel_header_values_t* out_values);
+
+// Emits an AMDGPU message-send packet with the given target-defined message
+// immediate.
+iree_status_t loom_amdgpu_build_feedback_send_message(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t message, loom_location_id_t location);
+
+// Emits an AMDGPU message-send packet that returns a 32-bit scalar result.
+iree_status_t loom_amdgpu_build_feedback_send_message_rtn_b32(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t message, loom_location_id_t location, loom_value_id_t* out_value);
+
+// Emits an AMDGPU halt packet with the given target-defined reason immediate.
+iree_status_t loom_amdgpu_build_feedback_halt(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t reason, loom_location_id_t location);
+
+// Emits an AMDGPU trap packet with the given target-defined trap id.
+iree_status_t loom_amdgpu_build_feedback_trap(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t trap_id, loom_location_id_t location);
 
 #ifdef __cplusplus
 }  // extern "C"
