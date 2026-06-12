@@ -179,6 +179,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::codegen::low::allocation
+    loom::codegen::low::diagnostics
     loom::codegen::low::move_sequence
     loom::codegen::low::packet
     loom::codegen::low::packet_hazard_plan
@@ -187,6 +188,8 @@ loom_cc_library(
     loom::ops::low
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
+    loom::util::json
+    loom::util::stream
   PUBLIC
 )
 endif()

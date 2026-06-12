@@ -18,6 +18,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/planning/wait_packets.h"
@@ -91,6 +92,18 @@ typedef struct loom_amdgpu_vopd_pair_t {
   uint16_t op_x;
   // VOPD operation id encoded in the Y slot.
   uint16_t op_y;
+  // Destination VGPR encoded in the X slot.
+  uint16_t x_vdst;
+  // First explicit source VGPR encoded in the X slot.
+  uint16_t x_src0;
+  // Second explicit source VGPR encoded in the X slot.
+  uint16_t x_vsrc1;
+  // Destination VGPR encoded in the Y slot.
+  uint16_t y_vdst;
+  // First explicit source VGPR encoded in the Y slot.
+  uint16_t y_src0;
+  // Second explicit source VGPR encoded in the Y slot.
+  uint16_t y_vsrc1;
   // Pair-local payload and encoding flags.
   loom_amdgpu_vopd_pair_flags_t flags;
   // Shared literal payload when LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL is set.
@@ -150,6 +163,10 @@ iree_status_t loom_amdgpu_vopd_plan_verify_wait_insertions(
 // Returns the VOPD membership record for |packet_index|, or NULL.
 const loom_amdgpu_vopd_packet_t* loom_amdgpu_vopd_plan_packet_at(
     const loom_amdgpu_vopd_plan_t* plan, iree_host_size_t packet_index);
+
+// Appends a compact JSON representation of |plan| to |builder|.
+iree_status_t loom_amdgpu_vopd_plan_format_json(
+    const loom_amdgpu_vopd_plan_t* plan, iree_string_builder_t* builder);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -118,6 +118,19 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
+    "test_vopd_plan"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/vopd_plan.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
     "test_wait_plan"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_plan.loom-test"
