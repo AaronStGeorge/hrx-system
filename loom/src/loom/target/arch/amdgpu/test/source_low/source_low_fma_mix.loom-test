@@ -1,0 +1,45 @@
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f32_fma_mix_extf_a(%a_half: f16, %b: f32, %c: f32) -> (f32) {
+  %a = scalar.extf %a_half : f16 to f32
+  %result = scalar.fmaf %a, %b, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f32_fma_mix_extf_a(%a_half: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mix_f32_f16lo_f32_f32 %a_half, %b, %c
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
+func.def target(@gfx11_target) @f32_fma_mix_extf_b_c(%a: f32, %b_half: f16, %c_half: f16) -> (f32) {
+  %b = scalar.extf %b_half : f16 to f32
+  %c = scalar.extf %c_half : f16 to f32
+  %result = scalar.fmaf %a, %b, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@gfx11_target) abi(hal_kernel) @f32_fma_mix_extf_b_c(%a: reg<amdgpu.vgpr>, %b_half: reg<amdgpu.vgpr>, %c_half: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mix_f32_f32_f16lo_f16lo %a, %b_half, %c_half
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx942> @gfx942_target
+func.def target(@gfx942_target) @f32_mad_mix_extf_a(%a_half: f16, %b: f32, %c: f32) -> (f32) {
+  %a = scalar.extf %a_half : f16 to f32
+  %result = scalar.fmaf %a, %b, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@gfx942_target) abi(hal_kernel) @f32_mad_mix_extf_a(%a_half: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
+  %result = v_mad_mix_f32_f16lo_f32_f32 %a_half, %b, %c
+  return %result
+}

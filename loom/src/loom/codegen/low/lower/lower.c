@@ -395,6 +395,19 @@ static void loom_low_lower_mark_value_storage_required(
       LOOM_LOW_LOWER_VALUE_STORAGE_REQUIRED;
 }
 
+void loom_low_lower_require_source_value_storage(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id) {
+  loom_low_lower_mark_value_storage_required(context, source_value_id);
+}
+
+void loom_low_lower_require_source_operands_storage(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  const loom_value_id_t* operands = loom_op_const_operands(source_op);
+  for (uint16_t i = 0; i < source_op->operand_count; ++i) {
+    loom_low_lower_mark_value_storage_required(context, operands[i]);
+  }
+}
+
 static bool loom_low_lower_value_storage_required(
     const loom_low_lower_context_t* context, loom_value_id_t source_value_id) {
   const loom_value_ordinal_t source_ordinal =
@@ -593,11 +606,15 @@ static void loom_low_lower_mark_rule_storage_demands(
 static void loom_low_lower_mark_callback_plan_storage_demands(
     loom_low_lower_context_t* context,
     const loom_low_lower_selected_plan_t* selected_plan) {
-  const loom_op_t* source_op = selected_plan->source_op;
-  const loom_value_id_t* operands = loom_op_const_operands(source_op);
-  for (uint16_t i = 0; i < source_op->operand_count; ++i) {
-    loom_low_lower_mark_value_storage_required(context, operands[i]);
+  if (selected_plan->kind == LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK &&
+      context->policy->mark_plan_storage_demands.fn != NULL) {
+    context->policy->mark_plan_storage_demands.fn(
+        context->policy->mark_plan_storage_demands.user_data, context,
+        selected_plan->source_op, selected_plan->plan);
+    return;
   }
+  loom_low_lower_require_source_operands_storage(context,
+                                                 selected_plan->source_op);
 }
 
 static void loom_low_lower_mark_structural_storage_demands(

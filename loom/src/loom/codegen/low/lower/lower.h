@@ -422,6 +422,19 @@ typedef struct loom_low_lower_emit_op_callback_t {
   void* user_data;
 } loom_low_lower_emit_op_callback_t;
 
+typedef void (*loom_low_lower_mark_plan_storage_demands_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t plan);
+
+typedef struct loom_low_lower_mark_plan_storage_demands_callback_t {
+  // Optional callback invoked during demand analysis for one target-owned
+  // callback plan. Targets must mark every source SSA value that emission may
+  // look up through the low value map.
+  loom_low_lower_mark_plan_storage_demands_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_mark_plan_storage_demands_callback_t;
+
 typedef struct loom_low_lower_policy_t {
   // Stable policy name used in diagnostics and status messages.
   iree_string_view_t name;
@@ -478,6 +491,9 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_select_op_callback_t preselect_op;
   // Optional target-owned selector used before a target has table rules.
   loom_low_lower_select_op_callback_t select_op;
+  // Optional target-owned source storage demand marker for callback-selected
+  // plans. Missing preserves the conservative all-operands behavior.
+  loom_low_lower_mark_plan_storage_demands_callback_t mark_plan_storage_demands;
   // Optional target-owned emitter for plans selected by |select_op|.
   loom_low_lower_emit_op_callback_t emit_op;
 } loom_low_lower_policy_t;
@@ -704,6 +720,18 @@ iree_host_size_t loom_low_lower_context_selected_plan_count(
 // Returns one selected lowering plan view.
 loom_low_lower_selected_plan_view_t loom_low_lower_context_selected_plan_view(
     const loom_low_lower_context_t* context, iree_host_size_t index);
+
+// Requires low SSA storage for one source value during plan demand analysis.
+// Target-owned mark_plan_storage_demands callbacks use this for each source
+// value they may look up while emitting the selected callback plan.
+void loom_low_lower_require_source_value_storage(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id);
+
+// Requires low SSA storage for every operand of |source_op|. This is the
+// conservative callback-plan fallback used when a target does not provide exact
+// storage demands for a selected plan.
+void loom_low_lower_require_source_operands_storage(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
 
 // Allocates transient storage from the current lowering arena. The allocation
 // remains valid until the current loom_low_lower_function call returns.

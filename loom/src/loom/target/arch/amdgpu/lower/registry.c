@@ -32,6 +32,7 @@
 #include "loom/target/arch/amdgpu/contracts/view_lower_rules.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/abi.h"
+#include "loom/target/arch/amdgpu/lower/arithmetic.h"
 #include "loom/target/arch/amdgpu/lower/async.h"
 #include "loom/target/arch/amdgpu/lower/bitfield.h"
 #include "loom/target/arch/amdgpu/lower/bitpack.h"
@@ -395,6 +396,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bitfield_insert_dispatch,
                              loom_amdgpu_bitfield_insert_plan_t,
                              loom_amdgpu_lower_vector_bitfield_insert)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_fmaf_mix_dispatch,
+                               loom_amdgpu_fma_mix_plan_t,
+                               loom_amdgpu_select_scalar_fmaf_mix_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_fmaf_mix_dispatch,
+                             loom_amdgpu_fma_mix_plan_t,
+                             loom_amdgpu_lower_scalar_fmaf_mix)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_bitpack_dispatch,
                                loom_amdgpu_bitpack_plan_t,
                                loom_amdgpu_select_vector_bitpack_plan)
@@ -583,10 +592,23 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
   if (!loom_vector_dotf_isa(source_op) && !loom_index_add_isa(source_op) &&
-      !loom_index_cmp_isa(source_op)) {
+      !loom_index_cmp_isa(source_op) && !loom_scalar_fmaf_isa(source_op)) {
     return iree_ok_status();
   }
   return loom_amdgpu_select_plan_id(context, source_op, out_plan);
+}
+
+static void loom_amdgpu_mark_plan_storage_demands(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t plan) {
+  (void)user_data;
+  if (plan.id == LOOM_OP_SCALAR_FMAF) {
+    loom_amdgpu_mark_fma_mix_plan_storage_demands(
+        context, source_op,
+        (const loom_amdgpu_fma_mix_plan_t*)plan.target_data);
+    return;
+  }
+  loom_low_lower_require_source_operands_storage(context, source_op);
 }
 
 static iree_status_t loom_amdgpu_emit_op(void* user_data,
@@ -686,6 +708,8 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
         },
     .preselect_op = {.fn = loom_amdgpu_preselect_op, .user_data = NULL},
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
+    .mark_plan_storage_demands = {.fn = loom_amdgpu_mark_plan_storage_demands,
+                                  .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };
 

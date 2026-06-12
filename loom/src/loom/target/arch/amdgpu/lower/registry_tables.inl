@@ -73,6 +73,10 @@ static const loom_amdgpu_lower_dispatch_row_t
             LOOM_OP_SCALAR_CLAMPF, loom_amdgpu_clampf_plan_t,
             loom_amdgpu_select_scalar_clampf_dispatch,
             loom_amdgpu_emit_scalar_clampf_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_FMAF)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_SCALAR_FMAF, loom_amdgpu_fma_mix_plan_t,
+            loom_amdgpu_select_scalar_fmaf_mix_dispatch,
+            loom_amdgpu_emit_scalar_fmaf_mix_dispatch, NULL),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t

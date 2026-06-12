@@ -99,6 +99,26 @@ typedef struct loom_amdgpu_dotf_plan_t {
   loom_amdgpu_descriptor_ref_t tied_accumulate_descriptor_ref;
 } loom_amdgpu_dotf_plan_t;
 
+typedef enum loom_amdgpu_fma_mix_source_kind_e {
+  // Source operand is interpreted as an f32 lane.
+  LOOM_AMDGPU_FMA_MIX_SOURCE_F32 = 0,
+  // Source operand is interpreted as the low f16 lane in a 32-bit register.
+  LOOM_AMDGPU_FMA_MIX_SOURCE_F16LO = 1,
+  // Source operand is interpreted as the high f16 lane in a 32-bit register.
+  LOOM_AMDGPU_FMA_MIX_SOURCE_F16HI = 2,
+} loom_amdgpu_fma_mix_source_kind_t;
+
+typedef struct loom_amdgpu_fma_mix_plan_t {
+  // Source values consumed by the selected descriptor in a, b, c order.
+  loom_value_id_t sources[3];
+  // Scalar fmaf result value.
+  loom_value_id_t result;
+  // Descriptor row selected for the mixed-source fma/mad packet.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Descriptor source interpretation for each source value.
+  loom_amdgpu_fma_mix_source_kind_t source_kinds[3];
+} loom_amdgpu_fma_mix_plan_t;
+
 typedef struct loom_amdgpu_vector_bitcast_plan_t {
   // Source vector value being reinterpreted.
   loom_value_id_t source;
