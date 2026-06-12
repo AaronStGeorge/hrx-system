@@ -7,7 +7,7 @@ low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmac_pair(%acc0: reg<amdgpu.
 }
 
 // ----
-{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmac_pair","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":1,"packet_count":3,"pairs":[{"index":0,"reason":"dual_fmac_f32","block":0,"flags":0,"literal_u32":null,"x":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":0,"src0":1,"vsrc1":2},"y":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":3,"src0":4,"vsrc1":5}}],"packets":[{"index":0,"role":"first","pair":0},{"index":1,"role":"second","pair":0},{"index":2,"role":"none","pair":null}]}
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmac_pair","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":1,"rejection_count":0,"packet_count":3,"pairs":[{"index":0,"reason":"dual_fmac_f32","block":0,"flags":0,"literal_u32":null,"x":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":0,"src0":1,"vsrc1":2},"y":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":3,"src0":4,"vsrc1":5}}],"rejections":[],"packets":[{"index":0,"role":"first","pair":0},{"index":1,"role":"second","pair":0},{"index":2,"role":"none","pair":null}]}
 
 // ====
 
@@ -26,7 +26,7 @@ low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmamk_pair(%resource: reg<am
 }
 
 // ----
-{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmamk_pair","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":1,"packet_count":9,"pairs":[{"index":0,"reason":"dual_fmamk_f32","block":0,"flags":1,"literal_u32":1065353216,"x":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmamk_f32","op_id":2,"op":"fmamk_f32","vdst":5,"src0":0,"vsrc1":1},"y":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmamk_f32","op_id":2,"op":"fmamk_f32","vdst":6,"src0":2,"vsrc1":4}}],"packets":[{"index":0,"role":"first","pair":0},{"index":1,"role":"second","pair":0},{"index":2,"role":"none","pair":null},{"index":3,"role":"none","pair":null},{"index":4,"role":"none","pair":null},{"index":5,"role":"none","pair":null},{"index":6,"role":"none","pair":null},{"index":7,"role":"none","pair":null},{"index":8,"role":"none","pair":null}]}
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmamk_pair","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":1,"rejection_count":0,"packet_count":9,"pairs":[{"index":0,"reason":"dual_fmamk_f32","block":0,"flags":1,"literal_u32":1065353216,"x":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmamk_f32","op_id":2,"op":"fmamk_f32","vdst":5,"src0":0,"vsrc1":1},"y":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmamk_f32","op_id":2,"op":"fmamk_f32","vdst":6,"src0":2,"vsrc1":4}}],"rejections":[],"packets":[{"index":0,"role":"first","pair":0},{"index":1,"role":"second","pair":0},{"index":2,"role":"none","pair":null},{"index":3,"role":"none","pair":null},{"index":4,"role":"none","pair":null},{"index":5,"role":"none","pair":null},{"index":6,"role":"none","pair":null},{"index":7,"role":"none","pair":null},{"index":8,"role":"none","pair":null}]}
 
 // ====
 
@@ -45,4 +45,43 @@ low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmamk_literal_mismatch(%reso
 }
 
 // ----
-{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmamk_literal_mismatch","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":0,"packet_count":9,"pairs":[],"packets":[{"index":0,"role":"none","pair":null},{"index":1,"role":"none","pair":null},{"index":2,"role":"none","pair":null},{"index":3,"role":"none","pair":null},{"index":4,"role":"none","pair":null},{"index":5,"role":"none","pair":null},{"index":6,"role":"none","pair":null},{"index":7,"role":"none","pair":null},{"index":8,"role":"none","pair":null}]}
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmamk_literal_mismatch","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":0,"rejection_count":1,"packet_count":9,"pairs":[],"rejections":[{"index":0,"reason":"literal_mismatch","block":0,"first":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmamk_f32","op_id":2,"op":"fmamk_f32","vdst":5,"src0":0,"vsrc1":1,"flags":1,"literal_u32":1065353216},"second":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmamk_f32","op_id":2,"op":"fmamk_f32","vdst":6,"src0":2,"vsrc1":4,"flags":1,"literal_u32":1073741824}}],"packets":[{"index":0,"role":"none","pair":null},{"index":1,"role":"none","pair":null},{"index":2,"role":"none","pair":null},{"index":3,"role":"none","pair":null},{"index":4,"role":"none","pair":null},{"index":5,"role":"none","pair":null},{"index":6,"role":"none","pair":null},{"index":7,"role":"none","pair":null},{"index":8,"role":"none","pair":null}]}
+
+// ====
+
+// RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_opcode_mismatch
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_plan_opcode_mismatch(%acc: reg<amdgpu.vgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %next0 = v_fmac_f32 %acc, %lhs0, %rhs0
+  %next1 = v_fmaak_f32 %lhs1, %rhs1, 1065353216
+  return
+}
+
+// ----
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_opcode_mismatch","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":0,"rejection_count":1,"packet_count":3,"pairs":[],"rejections":[{"index":0,"reason":"component_opcode_mismatch","block":0,"first":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":0,"src0":1,"vsrc1":2,"flags":0,"literal_u32":null},"second":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmaak_f32","op_id":1,"op":"fmaak_f32","vdst":0,"src0":3,"vsrc1":4,"flags":1,"literal_u32":1065353216}}],"packets":[{"index":0,"role":"none","pair":null},{"index":1,"role":"none","pair":null},{"index":2,"role":"none","pair":null}]}
+
+// ====
+
+// RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_fmac_dependent_chain
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmac_dependent_chain(%acc: reg<amdgpu.vgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %next0 = v_fmac_f32 %acc, %lhs0, %rhs0
+  %next1 = v_fmac_f32 %next0, %lhs1, %rhs1
+  return
+}
+
+// ----
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmac_dependent_chain","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":0,"rejection_count":1,"packet_count":3,"pairs":[],"rejections":[{"index":0,"reason":"first_result_used_by_second","block":0,"first":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":0,"src0":1,"vsrc1":2,"flags":0,"literal_u32":null},"second":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":0,"src0":3,"vsrc1":4,"flags":0,"literal_u32":null}}],"packets":[{"index":0,"role":"none","pair":null},{"index":1,"role":"none","pair":null},{"index":2,"role":"none","pair":null}]}
+
+// ====
+
+// RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_fmac_register_constraints fixed=%acc1:physical_register:4:1 fixed=%lhs1:physical_register:5:1 fixed=%rhs1:physical_register:6:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmac_register_constraints(%acc0: reg<amdgpu.vgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %acc1: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %next0 = v_fmac_f32 %acc0, %lhs0, %rhs0
+  %next1 = v_fmac_f32 %acc1, %lhs1, %rhs1
+  return
+}
+
+// ----
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_fmac_register_constraints","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":0,"rejection_count":1,"packet_count":3,"pairs":[],"rejections":[{"index":0,"reason":"register_constraints","block":0,"first":{"packet":0,"node":0,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":0,"src0":1,"vsrc1":2,"flags":0,"literal_u32":null},"second":{"packet":1,"node":1,"descriptor":"amdgpu.v_fmac_f32","op_id":0,"op":"fmac_f32","vdst":4,"src0":5,"vsrc1":6,"flags":0,"literal_u32":null}}],"packets":[{"index":0,"role":"none","pair":null},{"index":1,"role":"none","pair":null},{"index":2,"role":"none","pair":null}]}
