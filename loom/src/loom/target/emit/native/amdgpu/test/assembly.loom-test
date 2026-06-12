@@ -74,6 +74,30 @@ low.func.def target(@gfx11_target) @gfx11_fma_mix_f16_lanes_native(%addr: reg<am
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_fma_mix_source2_literal waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_fma_mix_source2_literal(%a: reg<amdgpu.vgpr>, %b_half: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mix_f32_f32_f16lo_f32_src2_lit %a, %b_half, 0
+  return
+}
+
+// ----
+  v_fma_mix_f32_f32_f16lo_f32_src2_lit v0, v0, v1, 0
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_fma_mix_source2_literal_native waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_fma_mix_source2_literal_native(%a: reg<amdgpu.vgpr>, %b_half: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fma_mix_f32_f32_f16lo_f32_src2_lit %a, %b_half, 0
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_fma_mix_half_result_lanes waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_fma_mix_half_result_lanes(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

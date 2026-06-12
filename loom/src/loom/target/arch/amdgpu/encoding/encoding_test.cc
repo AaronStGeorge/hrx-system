@@ -221,6 +221,10 @@ TEST(AmdgpuEncodingTest, NamesDppFormats) {
 }
 
 TEST(AmdgpuEncodingTest, NamesGfx1250SupplementalFormats) {
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL),
+                             IREE_SV("vop3p_literal")));
   EXPECT_TRUE(iree_string_view_equal(
       loom_amdgpu_encoding_format_name(LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2),
       IREE_SV("vop3px2")));

@@ -203,6 +203,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("vop1_dpp16");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_SDWA:
       return IREE_SV("vop1_sdwa");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL:
+      return IREE_SV("vop3p_literal");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA:
       return IREE_SV("vop3p_mfma");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_LITERAL:
@@ -265,6 +267,7 @@ static bool loom_amdgpu_encoding_format_uses_vop_vgpr_msb_slots(
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_LITERAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST:

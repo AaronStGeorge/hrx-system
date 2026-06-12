@@ -133,6 +133,8 @@ typedef struct loom_amdgpu_mulf_mix_plan_t {
   loom_value_id_t result;
   // Descriptor row selected for the mixed-source fma/mad packet.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // True when the selected descriptor encodes source 2 as a literal zero.
+  bool addend_literal_zero;
   // Descriptor source interpretation for each multiplicand source value.
   loom_amdgpu_fma_mix_source_kind_t source_kinds[2];
   // Static f32 lane count produced by the multiply.

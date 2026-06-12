@@ -9,7 +9,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from loom.target.arch.amdgpu.descriptor_overlay import AmdgpuDescriptorOverlay
+from loom.target.arch.amdgpu.descriptor_overlay import (
+    AmdgpuDescriptorOverlay,
+    AmdgpuOperandPredefinedValueRef,
+)
 from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DS16_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
@@ -35,6 +38,7 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_DESCRIPTOR_CATEGORIES,
     AMDGPU_ENCODING_FORMAT_VOP1,
     AMDGPU_ENCODING_FORMAT_VOP2,
+    AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL,
     AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
     AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
     AmdgpuAtomicKind,
@@ -780,7 +784,9 @@ def _assert_mix_descriptor_family(
         descriptor_key_prefix, include_all_f32=include_all_f32
     )
     actual_keys = {
-        key for key in descriptors if key.startswith(f"{descriptor_key_prefix}.")
+        key
+        for key in descriptors
+        if key.startswith(f"{descriptor_key_prefix}.") and not key.endswith(".src2_lit")
     }
     assert actual_keys == expected_keys
     for descriptor_key in expected_keys:
@@ -856,6 +862,55 @@ def test_fma_mix_f32_half_lane_descriptors_pin_modifier_fields() -> None:
         )
         assert not any(
             key.startswith(f"{descriptor_key_prefix}.") for key in cdna4_descriptors
+        )
+
+
+def test_fma_mix_f32_source2_literal_forms_cover_full_f32_addends() -> None:
+    descriptor_sets = (
+        (_gfx11_core_overlays(), "OP_SEL", "OP_SEL_HI"),
+        (_gfx12_core_overlays(), "OPSEL", "OPSEL_HI"),
+        (_gfx1250_core_overlays(), "OPSEL", "OPSEL_HI"),
+    )
+    for descriptor_set, op_sel_field, op_sel_hi_field in descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for source0 in ("f32", "f16lo", "f16hi"):
+            for source1 in ("f32", "f16lo", "f16hi"):
+                if (source0, source1) == ("f32", "f32"):
+                    continue
+                descriptor_key = f"amdgpu.v_fma_mix_f32.{source0}_{source1}_f32"
+                literal_key = f"{descriptor_key}.src2_lit"
+                descriptor = descriptors[descriptor_key]
+                literal_descriptor = descriptors[literal_key]
+                assert tuple(
+                    form.replacement_descriptor for form in descriptor.operand_forms
+                ) == (literal_key,)
+                assert literal_descriptor.encoding_name == "ENC_VOP3P"
+                assert (
+                    literal_descriptor.encoding_format_id
+                    == AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL
+                )
+                assert tuple(
+                    operand.xml_field_name for operand in literal_descriptor.operands
+                ) == ("VDST", "SRC0", "SRC1")
+                assert tuple(
+                    immediate.field_name for immediate in literal_descriptor.immediates
+                ) == ("imm32",)
+                src2_field, src2_value = literal_descriptor.fixed_encoding_fields[2]
+                assert literal_descriptor.fixed_encoding_fields[0][0] == op_sel_field
+                assert literal_descriptor.fixed_encoding_fields[1][0] == op_sel_hi_field
+                assert src2_field == "SRC2"
+                assert isinstance(src2_value, AmdgpuOperandPredefinedValueRef)
+                assert src2_value.value_name == "SRC_LITERAL"
+
+        assert not any(
+            key.startswith("amdgpu.v_fma_mix_f32.") and key.endswith("_f16lo.src2_lit")
+            for key in descriptors
+        )
+        assert not any(
+            key.startswith("amdgpu.v_fma_mix_f32.") and key.endswith("_f16hi.src2_lit")
+            for key in descriptors
         )
 
 
