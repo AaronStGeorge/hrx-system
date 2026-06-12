@@ -305,6 +305,7 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
   // The constant argument is in args[1] for most predicates. For RANGE, lo is
   // in args[1] and hi is in args[2].
   int64_t constant = predicate->args[1];
+  uint32_t preserved_predicate_flags = facts->flags & LOOM_VALUE_FACT_NON_ZERO;
 
   switch ((loom_predicate_kind_t)predicate->kind) {
     case LOOM_PREDICATE_EQ:
@@ -315,7 +316,10 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
       // A not-equal predicate excludes one value. This lattice has intervals
       // rather than disjoint ranges, so there is no generally-sound tightening
       // unless another predicate has already excluded the value by range.
-      break;
+      if (constant == 0) {
+        facts->flags |= LOOM_VALUE_FACT_NON_ZERO;
+      }
+      return;
 
     case LOOM_PREDICATE_LT:
       // a < N → range_hi = min(range_hi, N - 1).
@@ -376,6 +380,7 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
   }
 
   loom_value_facts_recompute_flags(facts);
+  facts->flags |= preserved_predicate_flags;
 }
 
 //===----------------------------------------------------------------------===//

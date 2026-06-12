@@ -16,6 +16,39 @@ func.def @proven_assertion_folds(%n: index) -> (index) {
 
 // ====
 
+// A stronger checked alias proves a later weaker assertion, so only the first
+// executable boundary remains.
+func.def @weaker_dominated_assertion_folds(%n: index) -> (index) {
+  %strong = sanitizer.assert.value %n [range(%n, 1, 1024), ne(%n, 0), pow2(%n), mul(%n, 64)] : index
+  %weak = sanitizer.assert.value %strong [range(%strong, 0, 2048), ne(%strong, 0), mul(%strong, 8)] : index
+  func.return %weak : index
+}
+
+// ----
+func.def @weaker_dominated_assertion_folds(%n: index) -> (index) {
+  %strong = sanitizer.assert.value %n [range(%n, 1, 1024), ne(%n, 0), pow2(%n), mul(%n, 64)] : index
+  func.return %strong : index
+}
+
+// ====
+
+// A stronger dominated assertion is still a runtime assertion. It cannot be
+// folded into a weaker checked alias.
+func.def @stronger_dominated_assertion_survives(%n: index) -> (index) {
+  %weak = sanitizer.assert.value %n [range(%n, 0, 2048), mul(%n, 8)] : index
+  %strong = sanitizer.assert.value %weak [range(%weak, 1, 1024), ne(%weak, 0), pow2(%weak), mul(%weak, 64)] : index
+  func.return %strong : index
+}
+
+// ----
+func.def @stronger_dominated_assertion_survives(%n: index) -> (index) {
+  %weak = sanitizer.assert.value %n [range(%n, 0, 2048), mul(%n, 8)] : index
+  %strong = sanitizer.assert.value %weak [range(%weak, 1, 1024), ne(%weak, 0), pow2(%weak), mul(%weak, 64)] : index
+  func.return %strong : index
+}
+
+// ====
+
 // Exact result facts are allowed to flow through an unproven assertion, but the
 // assertion remains as the executable trap/report boundary.
 func.def @unproven_exact_assertion_survives(%n: index) -> (index, index) {

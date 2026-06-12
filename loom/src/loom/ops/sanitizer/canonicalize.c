@@ -85,6 +85,10 @@ static bool loom_sanitizer_predicate_is_proven(
           loom_value_facts_is_float(rhs_facts)) {
         return false;
       }
+      if (loom_value_facts_as_exact_i64(rhs_facts, &rhs_exact) &&
+          rhs_exact == 0 && loom_value_facts_is_non_zero(target_facts)) {
+        return true;
+      }
       return loom_sanitizer_ranges_are_disjoint(target_facts, rhs_facts);
     case LOOM_PREDICATE_LT:
       if (!loom_sanitizer_predicate_arg_facts(predicate, 1, rewriter, values,

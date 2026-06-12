@@ -396,6 +396,23 @@ TEST(FactsApplyPredicate, NeIsRepresentedButDoesNotTightenInterval) {
   EXPECT_TRUE(loom_value_facts_is_unknown(f));
 }
 
+TEST(FactsApplyPredicate, NeZeroSetsNonzeroWithoutTighteningInterval) {
+  loom_value_facts_t f = loom_value_facts_unknown();
+  loom_predicate_t ne_pred = make_predicate_1(LOOM_PREDICATE_NE, 0);
+  loom_value_facts_apply_predicate(&f, &ne_pred);
+  EXPECT_EQ(f.range_lo, INT64_MIN);
+  EXPECT_EQ(f.range_hi, INT64_MAX);
+  EXPECT_TRUE(loom_value_facts_is_non_zero(f));
+  EXPECT_FALSE(loom_value_facts_is_positive(f));
+
+  loom_predicate_t max_pred = make_predicate_1(LOOM_PREDICATE_MAX, 1024);
+  loom_value_facts_apply_predicate(&f, &max_pred);
+  EXPECT_EQ(f.range_lo, INT64_MIN);
+  EXPECT_EQ(f.range_hi, 1024);
+  EXPECT_TRUE(loom_value_facts_is_non_zero(f));
+  EXPECT_FALSE(loom_value_facts_is_positive(f));
+}
+
 TEST(FactsApplyPredicate, Ge) {
   loom_value_facts_t f = loom_value_facts_unknown();
   loom_predicate_t pred = make_predicate_1(LOOM_PREDICATE_GE, 10);

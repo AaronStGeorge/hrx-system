@@ -52,7 +52,8 @@ extern "C" {
 enum loom_value_fact_flag_bits_e {
   // The signed range lower bound is >= 0.
   LOOM_VALUE_FACT_NON_NEGATIVE = 1u << 0,
-  // The range does not include zero (lo > 0 or hi < 0).
+  // The value cannot be zero. This may be range-derived or asserted by a
+  // nonzero predicate.
   LOOM_VALUE_FACT_NON_ZERO = 1u << 1,
   // The signed range lower bound is > 0. Implies NON_NEGATIVE and
   // NON_ZERO.

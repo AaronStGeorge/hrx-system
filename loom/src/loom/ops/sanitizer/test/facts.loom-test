@@ -18,6 +18,49 @@ func.def @assert_refines_integer_facts(%n: index) -> (i64) {
 
 // ====
 
+// Predicate assertions refine the checked alias with nonzero, positive,
+// power-of-two, and divisibility facts where the fact lattice represents them.
+func.def @assert_refines_integer_predicate_facts(%n: index) -> (i1, i1, i1, i64) {
+  %checked = sanitizer.assert.value %n [ne(%n, 0), gt(%n, 0), pow2(%n), mul(%n, 64)] : index
+  %nonzero = test.fact_non_zero %checked : index -> i1
+  %positive = test.fact_positive %checked : index -> i1
+  %power_of_two = test.fact_power_of_two %checked : index -> i1
+  %divisor = test.fact_divisor %checked : index -> i64
+  func.return %nonzero, %positive, %power_of_two, %divisor : i1, i1, i1, i64
+}
+
+// ----
+func.def @assert_refines_integer_predicate_facts(%n: index) -> (i1, i1, i1, i64) {
+  %checked = sanitizer.assert.value %n [ne(%n, 0), gt(%n, 0), pow2(%n), mul(%n, 64)] : index
+  %nonzero = scalar.constant true : i1
+  %positive = scalar.constant true : i1
+  %power_of_two = scalar.constant true : i1
+  %divisor = scalar.constant 64 : i64
+  func.return %nonzero, %positive, %power_of_two, %divisor : i1, i1, i1, i64
+}
+
+// ====
+
+// Assertion facts attach to the checked result. The original SSA value remains
+// unknown, so speculation outside the checked path cannot observe the asserted
+// range.
+func.def @assert_does_not_rewrite_original_facts(%n: index) -> (i64, i64) {
+  %checked = sanitizer.assert.value %n [range(%n, 0, 15)] : index
+  %original_hi = test.fact_range_hi %n : index -> i64
+  %checked_hi = test.fact_range_hi %checked : index -> i64
+  func.return %original_hi, %checked_hi : i64, i64
+}
+
+// ----
+func.def @assert_does_not_rewrite_original_facts(%n: index) -> (i64, i64) {
+  %checked = sanitizer.assert.value %n [range(%n, 0, 15)] : index
+  %original_hi = scalar.constant 9223372036854775807 : i64
+  %checked_hi = scalar.constant 15 : i64
+  func.return %original_hi, %checked_hi : i64, i64
+}
+
+// ====
+
 // Exact relational operands can refine the checked result without inventing a
 // separate assume op.
 func.def @assert_uses_exact_relational_rhs(%n: index) -> (i64) {
