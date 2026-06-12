@@ -37,6 +37,22 @@ typedef struct loom_amdgpu_feedback_config_values_t {
   loom_value_id_t notify_signal;
 } loom_amdgpu_feedback_config_values_t;
 
+typedef struct loom_amdgpu_feedback_channel_header_values_t {
+  // Device-visible feedback channel header address loaded from the config.
+  loom_value_id_t address;
+  // Channel record byte length loaded from
+  // loom_amdgpu_feedback_channel_layout_e.
+  loom_value_id_t record_length;
+  // Channel ABI version loaded from loom_amdgpu_feedback_channel_layout_e.
+  loom_value_id_t abi_version;
+  // Channel flags loaded from loom_amdgpu_feedback_channel_layout_e.
+  loom_value_id_t flags;
+  // Device-visible feedback packet ring pointer loaded from the channel.
+  loom_value_id_t ring_base;
+  // Feedback packet ring capacity in bytes loaded from the channel.
+  loom_value_id_t ring_capacity;
+} loom_amdgpu_feedback_channel_header_values_t;
+
 // Emits target-low IR that materializes and scalar-loads common feedback config
 // fields.
 //
@@ -48,6 +64,17 @@ iree_status_t loom_amdgpu_build_feedback_config_values(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t config_symbol, loom_location_id_t location,
     loom_amdgpu_feedback_config_values_t* out_values);
+
+// Emits target-low IR that scalar-loads the stable feedback channel header
+// fields needed by packet producers.
+//
+// The volatile producer/consumer cursors intentionally are not loaded here:
+// reservation must use scoped atomic operations with the ordering required by
+// the runtime feedback ABI.
+iree_status_t loom_amdgpu_build_feedback_channel_header_values(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_location_id_t location,
+    loom_amdgpu_feedback_channel_header_values_t* out_values);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -203,4 +203,56 @@ TEST_F(AmdgpuFeedbackTest, LoadsCommonFeedbackConfigValues) {
       sgpr_x2_type, loom_module_value_type(module_, values.notify_signal)));
 }
 
+TEST_F(AmdgpuFeedbackTest, LoadsFeedbackChannelHeaderValues) {
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+
+  std::vector<loom_op_t*> ops = Ops();
+  ASSERT_EQ(ops.size(), 14u);
+  EXPECT_EQ(channel_values.address, config_values.channel_base);
+  ExpectLoadOp(ops[9], LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORD_OFFSET_ONLY,
+               channel_values.address,
+               LOOM_AMDGPU_FEEDBACK_CHANNEL_RECORD_LENGTH_OFFSET,
+               channel_values.record_length);
+  ExpectLoadOp(ops[10], LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORD_OFFSET_ONLY,
+               channel_values.address,
+               LOOM_AMDGPU_FEEDBACK_CHANNEL_ABI_VERSION_OFFSET,
+               channel_values.abi_version);
+  ExpectLoadOp(ops[11], LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORD_OFFSET_ONLY,
+               channel_values.address,
+               LOOM_AMDGPU_FEEDBACK_CHANNEL_FLAGS_OFFSET, channel_values.flags);
+  ExpectLoadOp(ops[12], LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX2_OFFSET_ONLY,
+               channel_values.address,
+               LOOM_AMDGPU_FEEDBACK_CHANNEL_RING_BASE_OFFSET,
+               channel_values.ring_base);
+  ExpectLoadOp(ops[13], LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX2_OFFSET_ONLY,
+               channel_values.address,
+               LOOM_AMDGPU_FEEDBACK_CHANNEL_RING_CAPACITY_OFFSET,
+               channel_values.ring_capacity);
+
+  loom_type_t sgpr_type = loom_low_register_type(
+      descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+  EXPECT_TRUE(loom_type_equal(
+      sgpr_type,
+      loom_module_value_type(module_, channel_values.record_length)));
+  EXPECT_TRUE(loom_type_equal(
+      sgpr_type, loom_module_value_type(module_, channel_values.abi_version)));
+  EXPECT_TRUE(loom_type_equal(
+      sgpr_type, loom_module_value_type(module_, channel_values.flags)));
+  loom_type_t sgpr_x2_type = loom_low_register_type(
+      descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+  EXPECT_TRUE(loom_type_equal(
+      sgpr_x2_type, loom_module_value_type(module_, channel_values.ring_base)));
+  EXPECT_TRUE(loom_type_equal(
+      sgpr_x2_type,
+      loom_module_value_type(module_, channel_values.ring_capacity)));
+}
+
 }  // namespace
