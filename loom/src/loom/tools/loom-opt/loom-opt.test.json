@@ -142,7 +142,17 @@
           "\"selected-sites\":1",
           "\"fallback-selected-sites\":1",
           "\"unresolved-sites\":0",
-          "\"rejected-sites\":0"
+          "\"rejected-sites\":0",
+          "\"category\":\"template-selection\"",
+          "\"outcome\":\"fallback_selected\"",
+          "\"function\":\"entry\"",
+          "\"selected_provider\":\"fallback\"",
+          "\"selected_priority\":1",
+          "\"highest_provider_priority\":10",
+          "\"provider_count\":2",
+          "\"target_applicable_count\":2",
+          "\"possible_count\":1",
+          "\"best_exact_count\":1"
         ]
       },
       "files": [

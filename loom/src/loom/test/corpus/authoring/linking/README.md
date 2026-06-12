@@ -164,6 +164,25 @@ loom-compile linked.loombc \
 failures should be investigated at the `select-templates` boundary before
 debugging lower-level target code.
 
+For a smaller provider-selection query, run `select-templates` through
+`loom-opt --pass-report=json` before artifact compilation. Each
+`template-selection` detail row names the enclosing function, contract,
+selected provider, effective target when known, candidate counts, and the
+selection outcome:
+
+```bash
+loom-opt linked.loom \
+  --pass=select-templates \
+  --pass-report=json \
+  --output=/tmp/selected.loom \
+  2>/tmp/pass-report.json
+
+jq '.invocations[]
+  | select(.pass == "select-templates")
+  | .details[]
+  | select(.category == "template-selection")' /tmp/pass-report.json
+```
+
 ## Authoring Pressure Points
 
 `func.call @symbol` names one exact helper. Use it for mechanical helpers whose

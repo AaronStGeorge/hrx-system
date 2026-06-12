@@ -28,6 +28,7 @@ loom_cc_library(
         "//loom/src/loom/ops/test",
         "//loom/src/loom/pass:environment",
         "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:report",
         "//loom/src/loom/pass:types",
         "//runtime/src/iree/base",
     ],

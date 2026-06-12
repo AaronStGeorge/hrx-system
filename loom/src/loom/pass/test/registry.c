@@ -11,6 +11,7 @@
 #include "loom/analysis/ownership_lifetime.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
+#include "loom/pass/report.h"
 
 static bool loom_test_pass_target_record_satisfies_requirement(
     const loom_pass_environment_capability_t* capability,
@@ -159,6 +160,17 @@ static iree_status_t loom_test_mark_changed_run(loom_pass_t* pass,
       loom_test_mark_changed_statistics(pass);
   ++statistics->invocations;
   ++statistics->synthetic_events;
+  const iree_string_view_t function_name =
+      loom_test_pass_function_name(module, function);
+  const loom_pass_report_detail_field_t fields[] = {
+      loom_pass_report_detail_string_field(IREE_SV("event"),
+                                           IREE_SV("synthetic-change")),
+      loom_pass_report_detail_string_field(IREE_SV("symbol"), function_name),
+      loom_pass_report_detail_uint64_field(IREE_SV("synthetic_event_count"),
+                                           (uint64_t)1),
+  };
+  IREE_RETURN_IF_ERROR(loom_pass_report_append_detail(
+      pass, IREE_SV("test.mark-changed"), fields, IREE_ARRAYSIZE(fields)));
   return iree_ok_status();
 }
 

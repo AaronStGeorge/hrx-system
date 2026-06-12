@@ -135,7 +135,7 @@ the selected provider boundary, and `legalize-math` should rewrite semantic
 SiLU before target-low emission.
 
 For pass-pipeline debugging outside the full artifact path, `loom-opt` can emit
-an aggregate pass report:
+a structured pass report:
 
 ```bash
 loom-opt --pass=select-templates --pass-report=json input.loom \
@@ -148,9 +148,32 @@ The `select-templates` report statistics include `apply-sites`,
 `ambiguous-sites`, and `materialization-blocked-sites`. That report answers the
 first triage question quickly: whether provider selection picked a lower
 priority fallback, failed before selection, or left unresolved applies because
-more predicate facts are needed. Full artifact runs should still use
-`loom-compile --dump-ir-*`, artifact manifests, and compile reports for target
-emission evidence.
+more predicate facts are needed.
+
+The same report includes one `template-selection` detail row per analyzed
+`func.apply` site when pass reporting is enabled. The row records the enclosing
+function, contract key, selected provider when present, effective target when
+known, candidate counts, and an outcome such as `selected`,
+`fallback_selected`, `target_mismatch`, `missing_facts`, or `ambiguous`.
+
+```bash
+loom-opt --pass=select-templates --pass-report=json input.loom \
+  --output=/tmp/selected.loom \
+  2>/tmp/pass-report.json
+
+jq '.invocations[]
+  | select(.pass == "select-templates")
+  | .details[]
+  | select(.category == "template-selection")' /tmp/pass-report.json
+
+jq '.invocations[]
+  | select(.pass == "select-templates")
+  | .details[]
+  | select(.outcome != "selected")' /tmp/pass-report.json
+```
+
+Full artifact runs should still use `loom-compile --dump-ir-*`, artifact
+manifests, and compile reports for target emission evidence.
 
 Standalone `loom-compile` emits the artifact, manifest, and compile report. To
 keep target-owned assembly/listing text with benchmark evidence, run

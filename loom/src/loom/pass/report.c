@@ -21,9 +21,28 @@ void loom_pass_report_initialize(iree_allocator_t allocator,
   };
 }
 
+static void loom_pass_report_free_detail_list(
+    loom_pass_report_t* report, loom_pass_report_detail_t* detail) {
+  while (detail) {
+    loom_pass_report_detail_t* next = detail->next;
+    for (uint16_t i = 0; i < detail->field_count; ++i) {
+      loom_pass_report_detail_field_t* field = &detail->fields[i];
+      iree_allocator_free(report->allocator, (void*)field->name.data);
+      if (field->value_kind == LOOM_PASS_REPORT_DETAIL_VALUE_STRING) {
+        iree_allocator_free(report->allocator, (void*)field->string_value.data);
+      }
+    }
+    iree_allocator_free(report->allocator, detail->fields);
+    iree_allocator_free(report->allocator, (void*)detail->category.data);
+    iree_allocator_free(report->allocator, detail);
+    detail = next;
+  }
+}
+
 void loom_pass_report_deinitialize(loom_pass_report_t* report) {
   for (iree_host_size_t i = 0; i < report->invocation_count; ++i) {
     iree_allocator_free(report->allocator, report->invocations[i].statistics);
+    loom_pass_report_free_detail_list(report, report->invocations[i].details);
   }
   iree_allocator_free(report->allocator, report->invocations);
   memset(report, 0, sizeof(*report));
@@ -105,8 +124,116 @@ iree_status_t loom_pass_report_append_invocation(
   };
   IREE_RETURN_IF_ERROR(loom_pass_report_copy_statistics(
       report, invoke->info, options->statistic_storage, &invocation));
+  invocation.details = options->detail_head;
+  invocation.detail_count = options->detail_count;
   report->invocations[report->invocation_count++] = invocation;
   return iree_ok_status();
+}
+
+static iree_status_t loom_pass_report_copy_string(
+    loom_pass_report_t* report, iree_string_view_t source,
+    iree_string_view_t* out_target) {
+  *out_target = iree_string_view_empty();
+  if (iree_string_view_is_empty(source)) {
+    return iree_ok_status();
+  }
+  void* data = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_clone(
+      report->allocator, iree_make_const_byte_span(source.data, source.size),
+      &data));
+  *out_target = iree_make_string_view((const char*)data, source.size);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_report_copy_detail_fields(
+    loom_pass_report_t* report, const loom_pass_report_detail_field_t* fields,
+    uint16_t field_count, loom_pass_report_detail_field_t** out_fields) {
+  *out_fields = NULL;
+  if (field_count == 0) {
+    return iree_ok_status();
+  }
+  loom_pass_report_detail_field_t* copied_fields = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+      report->allocator, field_count, sizeof(*copied_fields),
+      (void**)&copied_fields));
+  iree_status_t status = iree_ok_status();
+  uint16_t copied_count = 0;
+  for (uint16_t i = 0; i < field_count && iree_status_is_ok(status); ++i) {
+    copied_fields[i] = fields[i];
+    status = loom_pass_report_copy_string(report, fields[i].name,
+                                          &copied_fields[i].name);
+    if (!iree_status_is_ok(status)) break;
+    ++copied_count;
+    if (fields[i].value_kind == LOOM_PASS_REPORT_DETAIL_VALUE_STRING) {
+      status = loom_pass_report_copy_string(report, fields[i].string_value,
+                                            &copied_fields[i].string_value);
+    }
+  }
+  if (!iree_status_is_ok(status)) {
+    for (uint16_t i = 0; i < copied_count; ++i) {
+      iree_allocator_free(report->allocator, (void*)copied_fields[i].name.data);
+      if (copied_fields[i].value_kind == LOOM_PASS_REPORT_DETAIL_VALUE_STRING) {
+        iree_allocator_free(report->allocator,
+                            (void*)copied_fields[i].string_value.data);
+      }
+    }
+    iree_allocator_free(report->allocator, copied_fields);
+    return status;
+  }
+  *out_fields = copied_fields;
+  return iree_ok_status();
+}
+
+iree_status_t loom_pass_report_append_detail(
+    loom_pass_t* pass, iree_string_view_t category,
+    const loom_pass_report_detail_field_t* fields, uint16_t field_count) {
+  if (!loom_pass_report_is_enabled(pass)) {
+    return iree_ok_status();
+  }
+  if (field_count > 0 && !fields) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass report detail row requires fields when field_count is nonzero");
+  }
+
+  loom_pass_report_t* report = pass->report;
+  loom_pass_report_detail_t* detail = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(report->allocator, sizeof(*detail),
+                                             (void**)&detail));
+  memset(detail, 0, sizeof(*detail));
+
+  iree_status_t status =
+      loom_pass_report_copy_string(report, category, &detail->category);
+  if (iree_status_is_ok(status)) {
+    status = loom_pass_report_copy_detail_fields(report, fields, field_count,
+                                                 &detail->fields);
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_allocator_free(report->allocator, (void*)detail->category.data);
+    iree_allocator_free(report->allocator, detail);
+    return status;
+  }
+  detail->field_count = field_count;
+
+  if (pass->report_detail_tail) {
+    pass->report_detail_tail->next = detail;
+  } else {
+    pass->report_detail_head = detail;
+  }
+  pass->report_detail_tail = detail;
+  ++pass->report_detail_count;
+  return iree_ok_status();
+}
+
+void loom_pass_report_discard_pass_details(loom_pass_t* pass) {
+  if (!loom_pass_report_is_enabled(pass)) {
+    return;
+  }
+  loom_pass_report_t* report = pass->report;
+  loom_pass_report_free_detail_list(report, pass->report_detail_head);
+  pass->report_detail_head = NULL;
+  pass->report_detail_tail = NULL;
+  pass->report_detail_count = 0;
 }
 
 static iree_string_view_t loom_pass_report_kind_name(loom_pass_kind_t kind) {
@@ -139,6 +266,52 @@ static iree_string_view_t loom_pass_report_option_schema_kind_name(
     default:
       return IREE_SV("unknown");
   }
+}
+
+static iree_status_t loom_pass_report_format_detail_value_json(
+    const loom_pass_report_detail_field_t* field,
+    loom_output_stream_t* stream) {
+  switch (field->value_kind) {
+    case LOOM_PASS_REPORT_DETAIL_VALUE_STRING:
+      return loom_json_write_escaped_string(stream, field->string_value);
+    case LOOM_PASS_REPORT_DETAIL_VALUE_INT64:
+      return loom_output_stream_write_format(stream, "%" PRId64,
+                                             field->int64_value);
+    case LOOM_PASS_REPORT_DETAIL_VALUE_UINT64:
+      return loom_output_stream_write_format(stream, "%" PRIu64,
+                                             field->uint64_value);
+    case LOOM_PASS_REPORT_DETAIL_VALUE_BOOL:
+      return loom_output_stream_write_cstring(
+          stream, field->bool_value ? "true" : "false");
+    case LOOM_PASS_REPORT_DETAIL_VALUE_NONE:
+    default:
+      return loom_output_stream_write_cstring(stream, "null");
+  }
+}
+
+static iree_status_t loom_pass_report_format_details_json(
+    const loom_pass_report_invocation_t* invocation,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"details\":["));
+  const loom_pass_report_detail_t* detail = invocation->details;
+  for (iree_host_size_t i = 0; i < invocation->detail_count && detail;
+       ++i, detail = detail->next) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, i == 0 ? "{" : ",{"));
+    IREE_RETURN_IF_ERROR(loom_pass_report_write_json_string_field(
+        stream, "category", detail->category));
+    for (uint16_t j = 0; j < detail->field_count; ++j) {
+      const loom_pass_report_detail_field_t* field = &detail->fields[j];
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+      IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, field->name));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
+      IREE_RETURN_IF_ERROR(
+          loom_pass_report_format_detail_value_json(field, stream));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+  }
+  return loom_output_stream_write_cstring(stream, "]");
 }
 
 static iree_status_t loom_pass_report_format_option_schema_json(
@@ -288,7 +461,10 @@ iree_status_t loom_pass_report_format_json(const loom_pass_report_t* report,
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(stream, ":%" PRId64,
                                                            statistic->value));
     }
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}}"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+    IREE_RETURN_IF_ERROR(
+        loom_pass_report_format_details_json(invocation, stream));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n  ]\n}\n"));
   return iree_ok_status();
