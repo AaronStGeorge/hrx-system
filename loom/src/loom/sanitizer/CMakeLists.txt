@@ -11,6 +11,24 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    site_collection
+  HDRS
+    "site_collection.h"
+  SRCS
+    "site_collection.c"
+  DEPS
+    ::site_payload
+    iree::base
+    iree::base::internal::arena
+    loom::ir
+    loom::ops::op_defs
+    loom::ops::sanitizer
+    loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     site_payload
   HDRS
     "site_payload.h"
@@ -19,6 +37,22 @@ loom_cc_library(
   DEPS
     iree::base
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    site_collection_test
+  SRCS
+    "site_collection_test.cc"
+  DEPS
+    ::site_collection
+    ::site_payload
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::sanitizer
+    loom::ops::test
 )
 
 loom_cc_test(
