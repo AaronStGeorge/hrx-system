@@ -237,6 +237,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
+  loom_low_lower_module_state_t* module_state = NULL;
   loom_low_source_selection_list_t selection_list = {0};
   const loom_low_source_selection_options_t selection_options = {
       .policy_registry = policy_registry,
@@ -248,6 +249,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   };
   iree_status_t status = loom_low_select_source_symbols(
       module, &selection_options, &selection_arena, &selection_list);
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_low_lower_module_state_create(&selection_arena, &module_state);
+  }
   bool emitted_error_diagnostics = false;
   uint32_t declaration_count = 0;
   for (iree_host_size_t i = 0;
@@ -268,6 +273,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .max_errors = state ? state->max_errors : 20,
         .control_flow_lowering = state ? state->control_flow_lowering
                                        : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG,
+        .module_state = module_state,
     };
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_import_declaration(module, selection->func,
@@ -320,6 +326,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .max_errors = state ? state->max_errors : 20,
         .control_flow_lowering = state ? state->control_flow_lowering
                                        : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG,
+        .module_state = module_state,
         .report_allocator = source_low_report_allocator,
     };
     loom_low_lower_result_t lower_result = {0};
@@ -343,6 +350,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       ++function_count;
     }
     loom_low_lower_result_deinitialize(&lower_result);
+  }
+  if (iree_status_is_ok(status) && !emitted_error_diagnostics) {
+    status = loom_low_source_selection_finalize_policies(
+        module, &selection_list, module_state, &selection_arena);
   }
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);

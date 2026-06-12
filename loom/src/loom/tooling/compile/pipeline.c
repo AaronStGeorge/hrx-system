@@ -216,16 +216,6 @@ iree_status_t loom_compile_run_pipeline(
     loom_pass_trace_initialize(&trace_options, &trace);
     trace_ptr = &trace;
   }
-
-  loom_pass_trace_options_t trace_options = {0};
-  loom_pass_trace_t trace = {0};
-  loom_pass_trace_t* trace_ptr = NULL;
-  if (loom_pass_trace_options_is_enabled(options->trace_options)) {
-    trace_options = *options->trace_options;
-    trace_options.stage = loom_compile_pipeline_stage_name(options, pipeline);
-    loom_pass_trace_initialize(&trace_options, &trace);
-    trace_ptr = &trace;
-  }
   loom_pass_tool_run_options_t run_options = {
       .registry = pass_registry,
       .environment = loom_low_pass_environment_storage_initialize(

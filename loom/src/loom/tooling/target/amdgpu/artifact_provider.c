@@ -7,9 +7,11 @@
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
 
 #include "loom/target/arch/amdgpu/records/target_records.h"
+#include "loom/target/arch/amdgpu/runtime_requirements.h"
 #include "loom/target/arch/amdgpu/target_id/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/hal_kernel_library.h"
+#include "loom/target/emit/native/amdgpu/runtime_globals.h"
 #include "loom/tooling/execution/hal/runtime.h"
 
 typedef struct loom_amdgpu_hal_artifact_storage_t {
@@ -130,11 +132,31 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_target_key(
   return iree_ok_status();
 }
 
+static loom_amdgpu_runtime_global_flags_t
+loom_amdgpu_hal_artifact_provider_runtime_globals(
+    const loom_target_pipeline_options_t* target_pipeline_options) {
+  const loom_amdgpu_runtime_requirements_t requirements =
+      loom_amdgpu_runtime_requirements_from_target_pipeline_options(
+          target_pipeline_options);
+  loom_amdgpu_runtime_global_flags_t runtime_globals =
+      LOOM_AMDGPU_RUNTIME_GLOBAL_NONE;
+  if (iree_any_bit_set(requirements,
+                       LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK)) {
+    runtime_globals |= LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG;
+  }
+  if (iree_any_bit_set(requirements,
+                       LOOM_AMDGPU_RUNTIME_REQUIREMENT_ASAN_SHADOW)) {
+    runtime_globals |= LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG;
+  }
+  return runtime_globals;
+}
+
 static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
     const loom_run_hal_device_target_t* target,
     loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
+    const loom_target_pipeline_options_t* target_pipeline_options,
     loom_run_candidate_artifact_flags_t artifact_flags,
     const loom_run_candidate_artifact_manifest_options_t* artifact_manifest,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
@@ -162,6 +184,8 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
               .bundle = target->target_bundle,
               .data = target->data,
           },
+      .runtime_globals = loom_amdgpu_hal_artifact_provider_runtime_globals(
+          target_pipeline_options),
       .diagnostic_sink = diagnostic_sink,
       .source_resolver = source_resolver,
       .max_errors = max_errors,
