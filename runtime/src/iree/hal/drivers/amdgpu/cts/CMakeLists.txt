@@ -107,6 +107,7 @@ iree_amdgpu_hal_cts_testdata(
     "testdata/manual_asan_test.c"
   DEPS
     ::asanrtl_test_runtime_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
+  NO_INTERNALIZE
   TESTONLY
 )
 endif()

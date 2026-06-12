@@ -1884,6 +1884,7 @@ class BuildFileFunctions(object):
         internal_hdrs=[],
         copts=[],
         linkopts=[],
+        internalize=True,
         out=None,
         tags=None,
         target_compatible_with=None,
@@ -1902,6 +1903,9 @@ class BuildFileFunctions(object):
         linkopts_block = self._convert_string_list_block(
             "LINKOPTS", linkopts, sort=False
         )
+        no_internalize_block = self._convert_option_block(
+            "NO_INTERNALIZE", internalize is False
+        )
 
         self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
@@ -1915,6 +1919,7 @@ class BuildFileFunctions(object):
             f"{deps_block}"
             f"{copts_block}"
             f"{linkopts_block}"
+            f"{no_internalize_block}"
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
@@ -2015,6 +2020,7 @@ class BuildFileFunctions(object):
         target="amdgcn-amd-amdhsa",
         deps=None,
         internal_hdrs=None,
+        internalize=True,
         testonly=True,
         tags=None,
         target_compatible_with=None,
@@ -2044,6 +2050,9 @@ class BuildFileFunctions(object):
         hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
         srcs_block = self._convert_srcs_block(srcs)
         deps_block = self._convert_amdgpu_bitcode_deps_block(deps)
+        no_internalize_block = self._convert_option_block(
+            "NO_INTERNALIZE", internalize is False
+        )
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._emit_platform_guard_begin(target_compatible_with)
@@ -2059,6 +2068,7 @@ class BuildFileFunctions(object):
             f"{hdrs_block}"
             f"{srcs_block}"
             f"{deps_block}"
+            f"{no_internalize_block}"
             f"{testonly_block}"
             f")\n\n"
         )
@@ -2084,6 +2094,7 @@ class BuildFileFunctions(object):
         copts=None,
         linkopts=None,
         deps=None,
+        internalize=True,
         testonly=None,
         tags=None,
         target_compatible_with=None,
@@ -2106,6 +2117,9 @@ class BuildFileFunctions(object):
         linkopts_block = self._convert_string_list_block(
             "LINKOPTS", linkopts, sort=False
         )
+        no_internalize_block = self._convert_option_block(
+            "NO_INTERNALIZE", internalize is False
+        )
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._emit_platform_guard_begin(target_compatible_with)
@@ -2120,6 +2134,7 @@ class BuildFileFunctions(object):
             f"{deps_block}"
             f"{copts_block}"
             f"{linkopts_block}"
+            f"{no_internalize_block}"
             f"{testonly_block}"
             f")\n\n"
         )

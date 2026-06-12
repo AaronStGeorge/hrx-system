@@ -239,6 +239,7 @@ def iree_amdgpu_binary(
         internal_hdrs = [],
         copts = [],
         linkopts = [],
+        internalize = True,
         clang_tool = AMDGPU_CLANG_TOOL,
         link_tool = AMDGPU_LLVM_LINK_TOOL,
         lld_tool = AMDGPU_LLD_TOOL,
@@ -262,6 +263,9 @@ def iree_amdgpu_binary(
                        interface headers.
         copts: additional flags to pass to clang.
         linkopts: additional flags to pass to lld.
+        internalize: whether to internalize linked dependency symbols after lazy
+                     archive extraction. Disable when dependencies provide
+                     executable ABI symbols such as HAL globals.
         clang_tool: clang/amdclang executable target.
         link_tool: llvm-link executable target.
         lld_tool: lld executable target.
@@ -335,6 +339,7 @@ def iree_amdgpu_binary(
 
     link_out = "%s.bc" % (name)
     dep_locations = " ".join(["$(locations %s)" % (dep,) for dep in deps])
+    internalize_flag = "-internalize" if internalize else ""
     native.genrule(
         name = "link_%s" % (name),
         srcs = [srcs_out] + deps,
@@ -342,7 +347,7 @@ def iree_amdgpu_binary(
         cmd = " && ".join([
             " ".join([
                 "$(location %s)" % (link_tool),
-                "-internalize",
+                internalize_flag,
                 "-only-needed",
                 "$(location %s)" % (srcs_out),
                 dep_locations,

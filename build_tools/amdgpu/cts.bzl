@@ -99,6 +99,7 @@ def iree_amdgpu_hal_cts_testdata(
         target = "amdgcn-amd-amdhsa",
         deps = [],
         internal_hdrs = [],
+        internalize = True,
         testonly = True,
         tags = []):
     """Builds and registers AMDGPU HAL CTS executable testdata.
@@ -119,6 +120,8 @@ def iree_amdgpu_hal_cts_testdata(
         `{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}` placeholders to refer to the
         exact target or code-object target being generated.
       internal_hdrs: Headers that should invalidate device compilation.
+      internalize: whether to internalize linked dependency symbols after lazy
+        archive extraction.
       testonly: Whether generated targets are test-only.
       tags: Tags applied to generated device binaries and libraries.
     """
@@ -149,6 +152,7 @@ def iree_amdgpu_hal_cts_testdata(
                 srcs = [src],
                 deps = _target_deps(deps, exact_target, code_object_target),
                 internal_hdrs = internal_hdrs,
+                internalize = internalize,
                 out = binary_out,
                 testonly = testonly,
                 tags = tags,

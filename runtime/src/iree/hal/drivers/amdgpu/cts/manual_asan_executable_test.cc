@@ -6,16 +6,184 @@
 
 // AMDGPU ASAN manual hook CTS coverage.
 
+#include <array>
 #include <cstdint>
 
 #include "iree/hal/drivers/amdgpu/cts/asan_executable_test_util.h"
 
 namespace iree::hal::cts {
 
+namespace {
+
+enum ManualAsanHookSelector : uint32_t {
+  kManualAsanHookLoad1 = 1,
+  kManualAsanHookLoad2 = 2,
+  kManualAsanHookLoad4 = 3,
+  kManualAsanHookLoad8 = 4,
+  kManualAsanHookLoad16 = 5,
+  kManualAsanHookLoadN = 6,
+  kManualAsanHookStore1 = 7,
+  kManualAsanHookStore2 = 8,
+  kManualAsanHookStore4 = 9,
+  kManualAsanHookStore8 = 10,
+  kManualAsanHookStore16 = 11,
+  kManualAsanHookStoreN = 12,
+  kManualAsanHookLoad1NoAbort = 13,
+  kManualAsanHookLoad2NoAbort = 14,
+  kManualAsanHookLoad4NoAbort = 15,
+  kManualAsanHookLoad8NoAbort = 16,
+  kManualAsanHookLoad16NoAbort = 17,
+  kManualAsanHookLoadNNoAbort = 18,
+  kManualAsanHookStore1NoAbort = 19,
+  kManualAsanHookStore2NoAbort = 20,
+  kManualAsanHookStore4NoAbort = 21,
+  kManualAsanHookStore8NoAbort = 22,
+  kManualAsanHookStore16NoAbort = 23,
+  kManualAsanHookStoreNNoAbort = 24,
+  kManualAsanHookReportLoad1 = 25,
+  kManualAsanHookReportLoad2 = 26,
+  kManualAsanHookReportLoad4 = 27,
+  kManualAsanHookReportLoad8 = 28,
+  kManualAsanHookReportLoad16 = 29,
+  kManualAsanHookReportLoadN = 30,
+  kManualAsanHookReportStore1 = 31,
+  kManualAsanHookReportStore2 = 32,
+  kManualAsanHookReportStore4 = 33,
+  kManualAsanHookReportStore8 = 34,
+  kManualAsanHookReportStore16 = 35,
+  kManualAsanHookReportStoreN = 36,
+  kManualAsanHookReportLoad1NoAbort = 37,
+  kManualAsanHookReportLoad2NoAbort = 38,
+  kManualAsanHookReportLoad4NoAbort = 39,
+  kManualAsanHookReportLoad8NoAbort = 40,
+  kManualAsanHookReportLoad16NoAbort = 41,
+  kManualAsanHookReportLoadNNoAbort = 42,
+  kManualAsanHookReportStore1NoAbort = 43,
+  kManualAsanHookReportStore2NoAbort = 44,
+  kManualAsanHookReportStore4NoAbort = 45,
+  kManualAsanHookReportStore8NoAbort = 46,
+  kManualAsanHookReportStore16NoAbort = 47,
+  kManualAsanHookReportStoreNNoAbort = 48,
+};
+
+struct ManualAsanHookCase {
+  // Kernel selector for the hook call.
+  uint32_t selector;
+  // Human-readable hook name used in assertion messages.
+  const char* name;
+  // Expected HAL ASAN access kind.
+  iree_hal_device_asan_access_kind_t access_kind;
+  // Expected access length in bytes.
+  uint64_t access_length;
+};
+
+constexpr uint64_t kManualAsanDynamicAccessLength = 23;
+
+constexpr std::array<ManualAsanHookCase, 48> kManualAsanHookCases = {{
+    {kManualAsanHookLoad1, "__asan_load1",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 1},
+    {kManualAsanHookLoad2, "__asan_load2",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 2},
+    {kManualAsanHookLoad4, "__asan_load4",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 4},
+    {kManualAsanHookLoad8, "__asan_load8",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 8},
+    {kManualAsanHookLoad16, "__asan_load16",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 16},
+    {kManualAsanHookLoadN, "__asan_loadN",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, kManualAsanDynamicAccessLength},
+    {kManualAsanHookStore1, "__asan_store1",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 1},
+    {kManualAsanHookStore2, "__asan_store2",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 2},
+    {kManualAsanHookStore4, "__asan_store4",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 4},
+    {kManualAsanHookStore8, "__asan_store8",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 8},
+    {kManualAsanHookStore16, "__asan_store16",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 16},
+    {kManualAsanHookStoreN, "__asan_storeN",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, kManualAsanDynamicAccessLength},
+    {kManualAsanHookLoad1NoAbort, "__asan_load1_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 1},
+    {kManualAsanHookLoad2NoAbort, "__asan_load2_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 2},
+    {kManualAsanHookLoad4NoAbort, "__asan_load4_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 4},
+    {kManualAsanHookLoad8NoAbort, "__asan_load8_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 8},
+    {kManualAsanHookLoad16NoAbort, "__asan_load16_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 16},
+    {kManualAsanHookLoadNNoAbort, "__asan_loadN_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, kManualAsanDynamicAccessLength},
+    {kManualAsanHookStore1NoAbort, "__asan_store1_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 1},
+    {kManualAsanHookStore2NoAbort, "__asan_store2_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 2},
+    {kManualAsanHookStore4NoAbort, "__asan_store4_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 4},
+    {kManualAsanHookStore8NoAbort, "__asan_store8_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 8},
+    {kManualAsanHookStore16NoAbort, "__asan_store16_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 16},
+    {kManualAsanHookStoreNNoAbort, "__asan_storeN_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, kManualAsanDynamicAccessLength},
+    {kManualAsanHookReportLoad1, "__asan_report_load1",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 1},
+    {kManualAsanHookReportLoad2, "__asan_report_load2",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 2},
+    {kManualAsanHookReportLoad4, "__asan_report_load4",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 4},
+    {kManualAsanHookReportLoad8, "__asan_report_load8",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 8},
+    {kManualAsanHookReportLoad16, "__asan_report_load16",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 16},
+    {kManualAsanHookReportLoadN, "__asan_report_load_n",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, kManualAsanDynamicAccessLength},
+    {kManualAsanHookReportStore1, "__asan_report_store1",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 1},
+    {kManualAsanHookReportStore2, "__asan_report_store2",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 2},
+    {kManualAsanHookReportStore4, "__asan_report_store4",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 4},
+    {kManualAsanHookReportStore8, "__asan_report_store8",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 8},
+    {kManualAsanHookReportStore16, "__asan_report_store16",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 16},
+    {kManualAsanHookReportStoreN, "__asan_report_store_n",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, kManualAsanDynamicAccessLength},
+    {kManualAsanHookReportLoad1NoAbort, "__asan_report_load1_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 1},
+    {kManualAsanHookReportLoad2NoAbort, "__asan_report_load2_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 2},
+    {kManualAsanHookReportLoad4NoAbort, "__asan_report_load4_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 4},
+    {kManualAsanHookReportLoad8NoAbort, "__asan_report_load8_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 8},
+    {kManualAsanHookReportLoad16NoAbort, "__asan_report_load16_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, 16},
+    {kManualAsanHookReportLoadNNoAbort, "__asan_report_load_n_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_READ, kManualAsanDynamicAccessLength},
+    {kManualAsanHookReportStore1NoAbort, "__asan_report_store1_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 1},
+    {kManualAsanHookReportStore2NoAbort, "__asan_report_store2_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 2},
+    {kManualAsanHookReportStore4NoAbort, "__asan_report_store4_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 4},
+    {kManualAsanHookReportStore8NoAbort, "__asan_report_store8_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 8},
+    {kManualAsanHookReportStore16NoAbort, "__asan_report_store16_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, 16},
+    {kManualAsanHookReportStoreNNoAbort, "__asan_report_store_n_noabort",
+     IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE, kManualAsanDynamicAccessLength},
+}};
+
+}  // namespace
+
 class ManualAsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
 };
 
-TEST_P(ManualAsanExecutableTest, ReportsStore4HookThroughFeedback) {
+TEST_P(ManualAsanExecutableTest, ReportsCompatibleHooksThroughFeedback) {
   AsanCachedBackendDevice asan_device;
   iree_status_t status = asan_device.Initialize(GetParam());
   if (iree_status_is_unavailable(status)) {
@@ -64,27 +232,50 @@ TEST_P(ManualAsanExecutableTest, ReportsStore4HookThroughFeedback) {
       /*.values=*/binding_refs,
   };
 
-  SemaphoreList empty_wait;
-  SemaphoreList dispatch_signal(asan_device.device(), {0}, {1});
-  IREE_ASSERT_OK(iree_hal_device_queue_dispatch(
-      asan_device.device(), IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait,
-      dispatch_signal, executable, iree_hal_executable_function_from_index(0),
-      iree_hal_make_static_dispatch_config(1, 1, 1),
-      iree_const_byte_span_empty(), bindings, IREE_HAL_DISPATCH_FLAG_NONE));
-  IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
-      dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE));
+  for (const ManualAsanHookCase& hook_case : kManualAsanHookCases) {
+    asan_device.recorder()->Reset();
 
-  asan_device.recorder()->WaitForAsanReportCount(1);
-  EXPECT_EQ(asan_device.recorder()->asan_report_count(), 1u);
-  iree_hal_device_asan_report_t report = asan_device.recorder()->last_report();
-  EXPECT_EQ(report.record_length, sizeof(report));
-  EXPECT_EQ(report.abi_version, IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0);
-  EXPECT_EQ(report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE);
-  EXPECT_EQ(report.access_length, 4u);
-  EXPECT_EQ(report.site_id, 0x4153414E53544F34ull);
-  iree_hal_device_event_source_t source = asan_device.recorder()->last_source();
-  EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
-  EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
+    const uint32_t constant_data[] = {
+        hook_case.selector,
+        static_cast<uint32_t>(hook_case.access_length),
+    };
+    iree_const_byte_span_t constants =
+        iree_make_const_byte_span(constant_data, sizeof(constant_data));
+
+    SemaphoreList empty_wait;
+    SemaphoreList dispatch_signal(asan_device.device(), {0}, {1});
+    IREE_ASSERT_OK(iree_hal_device_queue_dispatch(
+        asan_device.device(), IREE_HAL_QUEUE_AFFINITY_ANY, empty_wait,
+        dispatch_signal, executable, iree_hal_executable_function_from_index(0),
+        iree_hal_make_static_dispatch_config(1, 1, 1), constants, bindings,
+        IREE_HAL_DISPATCH_FLAG_NONE))
+        << hook_case.name;
+    IREE_ASSERT_OK(iree_hal_semaphore_list_wait(
+        dispatch_signal, iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE))
+        << hook_case.name;
+
+    asan_device.recorder()->WaitForAsanReportCount(1);
+    EXPECT_EQ(asan_device.recorder()->asan_report_count(), 1u)
+        << hook_case.name;
+    iree_hal_device_asan_report_t report =
+        asan_device.recorder()->last_report();
+    EXPECT_EQ(report.record_length, sizeof(report)) << hook_case.name;
+    EXPECT_EQ(report.abi_version, IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0)
+        << hook_case.name;
+    EXPECT_EQ(report.access_kind, hook_case.access_kind) << hook_case.name;
+    EXPECT_NE(report.fault_address, 0u) << hook_case.name;
+    EXPECT_EQ(report.access_length, hook_case.access_length) << hook_case.name;
+    EXPECT_EQ(report.site_id, 0u) << hook_case.name;
+    EXPECT_NE(report.shadow_address, 0u) << hook_case.name;
+    EXPECT_EQ(report.shadow_value, 0u) << hook_case.name;
+
+    iree_hal_device_event_source_t source =
+        asan_device.recorder()->last_source();
+    EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")))
+        << hook_case.name;
+    EXPECT_NE(source.physical_device_ordinal, UINT32_MAX) << hook_case.name;
+  }
+
   IREE_EXPECT_OK(iree_hal_device_queue_flush(asan_device.device(),
                                              IREE_HAL_QUEUE_AFFINITY_ANY));
 }

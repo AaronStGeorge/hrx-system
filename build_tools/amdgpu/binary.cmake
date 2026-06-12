@@ -202,12 +202,15 @@ endfunction()
 #                compiled as translation units or exposed as interface headers.
 # COPTS: additional flags to pass to clang.
 # LINKOPTS: additional flags to pass to lld.
+# NO_INTERNALIZE: do not internalize linked dependency symbols after lazy
+#                 archive extraction. Use when dependencies provide executable
+#                 ABI symbols such as HAL globals.
 # MINIMIZE: apply post-link symbol-table minimization. Only valid for opaque
 #           code-object data blobs whose kernels are not looked up by name.
 function(iree_amdgpu_binary)
   cmake_parse_arguments(
     _RULE
-    "MINIMIZE"
+    "MINIMIZE;NO_INTERNALIZE"
     "NAME;OUT;TARGET;ARCH"
     "SRCS;DEPS;INTERNAL_HDRS;COPTS;LINKOPTS"
     ${ARGN}
@@ -280,13 +283,18 @@ function(iree_amdgpu_binary)
     ${_RULE_DEPS}
   )
 
+  set(_INTERNALIZE_ARGS)
+  if(NOT _RULE_NO_INTERNALIZE)
+    list(APPEND _INTERNALIZE_ARGS "-internalize")
+  endif()
+
   set(_LINKED_FILE "${_RULE_NAME}.bc")
   add_custom_command(
     OUTPUT
       ${_LINKED_FILE}
     COMMAND
       ${IREE_LLVM_LINK_BINARY}
-      "-internalize"
+      ${_INTERNALIZE_ARGS}
       "-only-needed"
       "${_SOURCE_BITCODE_FILE}"
       ${_BITCODE_DEP_PATHS}
@@ -504,11 +512,13 @@ endfunction()
 #              to the current binary directory.
 # OUTPUT_PATHS_OUT: Optional variable receiving absolute generated output paths.
 # TARGETS_OUT: Optional variable receiving generated CMake target names.
+# NO_INTERNALIZE: do not internalize linked dependency symbols after lazy
+#                 archive extraction.
 # MINIMIZE: apply post-link symbol-table minimization.
 function(iree_amdgpu_binary_variants)
   cmake_parse_arguments(
     _RULE
-    "MINIMIZE"
+    "MINIMIZE;NO_INTERNALIZE"
     "NAME;TARGET;BINARY_NAME_PREFIX;OUTPUTS_OUT;OUTPUT_PATHS_OUT;TARGETS_OUT"
     "TARGETS;SRCS;DEPS;INTERNAL_HDRS;COPTS;LINKOPTS"
     ${ARGN}
@@ -550,6 +560,10 @@ function(iree_amdgpu_binary_variants)
     if(_RULE_MINIMIZE)
       set(_MINIMIZE MINIMIZE)
     endif()
+    set(_NO_INTERNALIZE)
+    if(_RULE_NO_INTERNALIZE)
+      set(_NO_INTERNALIZE NO_INTERNALIZE)
+    endif()
     iree_amdgpu_binary(
       NAME
         "${_VARIANT_NAME}"
@@ -570,6 +584,7 @@ function(iree_amdgpu_binary_variants)
       LINKOPTS
         ${_RULE_LINKOPTS}
       ${_MINIMIZE}
+      ${_NO_INTERNALIZE}
     )
 
     list(APPEND _VARIANT_OUTPUTS "${_VARIANT_OUTPUT}")
