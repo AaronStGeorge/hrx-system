@@ -92,6 +92,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_lshlrev_b32.src0_16_low16",
     "amdgpu.v_lshlrev_b32.vop3_imm",
     "amdgpu.v_lshl_add_u32.shift_imm",
+    "amdgpu.v_bfe_u32.offset_0_width_16_low16",
     "amdgpu.v_ashrrev_i32",
     "amdgpu.v_ashrrev_i32.lit",
     "amdgpu.v_lshrrev_b32",

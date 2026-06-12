@@ -1215,13 +1215,12 @@ low.func.def target(@target) abi(hal_kernel) @bf16_strided_gather_dot2(%latent: 
   %35 = s_add_u32 %32, %31
   %36 = s_addc_u32 %33, %34
   %37 = concat(%35, %36) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %38 = global_load_u16_saddr %29, %37
+  %38 = global_load_d16_b16_saddr %29, %37
   %49 = concat(%35, %36) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %50 = global_load_u16_saddr %29, %49 {offset = 14}
-  %51 = v_and_b32_lit %38, 65535
-  %52 = v_and_b32_lit %50, 65535
-  %53 = v_lshlrev_b32_src0_inline %52, 16
-  %weight = v_or_b32 %51, %53
+  %50 = global_load_d16_b16_saddr %29, %49 {offset = 14}
+  %51 = v_bfe_u32_offset_0_width_16_low16 %38
+  %52 = v_lshlrev_b32_src0_16_low16 %50
+  %weight = v_or_b32 %51, %52
   %dot = v_dot2_f32_bf16 %latent, %weight, %accumulator
   return %dot
 }

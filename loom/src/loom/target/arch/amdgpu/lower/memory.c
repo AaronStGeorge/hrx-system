@@ -2210,6 +2210,24 @@ static bool loom_amdgpu_memory_low16_float_use_is_supported(
       loom_view_store_value(user_op) == value_id) {
     return true;
   }
+  if (loom_vector_from_elements_isa(user_op)) {
+    uint32_t payload_bit_count = 0;
+    uint32_t register_count = 0;
+    if (!loom_amdgpu_type_packed_16bit_float_storage(
+            loom_module_value_type(module,
+                                   loom_vector_from_elements_result(user_op)),
+            &payload_bit_count, &register_count) ||
+        payload_bit_count == 0 || register_count == 0) {
+      return false;
+    }
+    const loom_value_slice_t elements =
+        loom_vector_from_elements_elements(user_op);
+    for (iree_host_size_t i = 0; i < elements.count; ++i) {
+      if (loom_value_slice_get(elements, i) == value_id) {
+        return true;
+      }
+    }
+  }
   return false;
 }
 

@@ -1323,6 +1323,14 @@ def _v_bfe_width_immediate() -> Immediate:
     return replace(_source_inline_u32_immediate("width"), unsigned_max=32)
 
 
+def _v_bfe_low16_offset_immediate() -> Immediate:
+    return replace(
+        _v_bfe_offset_immediate(),
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        default_value=0,
+    )
+
+
 def _v_bfe_offset_width_inline_overlay(*, is_signed: bool) -> AmdgpuDescriptorOverlay:
     type_suffix = "i32" if is_signed else "u32"
     return AmdgpuDescriptorOverlay(
@@ -1347,6 +1355,38 @@ def _v_bfe_offset_width_inline_overlay(*, is_signed: bool) -> AmdgpuDescriptorOv
         immediates=(
             _v_bfe_offset_immediate(),
             _v_bfe_width_immediate(),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_bfe_u32_offset_0_width_16_low16_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_bfe_u32.offset_0_width_16_low16",
+        instruction_name="V_BFE_U32",
+        mnemonic="v_bfe_u32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="integer.bitfield.extract.u32.low16_to_full32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "SRC0",
+                _vgpr_operand("value", register_part=_REG_PART_VGPR_LOW16),
+                size_exception_reason=_D16_PARTIAL_REGISTER_SIZE_REASON,
+            ),
+        ),
+        asm_forms=_asm(
+            mnemonic="v_bfe_u32_offset_0_width_16_low16",
+            results=("dst",),
+            operands=("value",),
+            immediates=("offset", "width"),
+            named_immediates=True,
+        ),
+        immediate_fields=("SRC1", "SRC2"),
+        immediates=(
+            _v_bfe_low16_offset_immediate(),
+            _source_inline_u32_16_immediate("width"),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
@@ -1451,6 +1491,7 @@ def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_lshl_add_u32_shift_immediate_overlay(),
         _v_bfe_offset_width_inline_overlay(is_signed=False),
         _v_bfe_offset_width_inline_overlay(is_signed=True),
+        _v_bfe_u32_offset_0_width_16_low16_overlay(),
         _v_lshrrev_b32_overlay(),
         _v_lshrrev_b32_src0_inline_overlay(),
         _v_lshrrev_b32_literal_overlay(),
@@ -3033,6 +3074,7 @@ __all__ = (
     "_v_ashrrev_i32_src0_inline_overlay",
     "_v_bfe_offset_immediate",
     "_v_bfe_offset_width_inline_overlay",
+    "_v_bfe_u32_offset_0_width_16_low16_overlay",
     "_v_bfe_width_immediate",
     "_v_binary_f32_operand_forms",
     "_v_binary_literal_overlay",

@@ -522,6 +522,19 @@ low.func.def target(@gfx11_target) @gfx11_low16_shift_high(%value: reg<amdgpu.vg
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_low16_extract_full waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_low16_extract_full(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %extended = v_bfe_u32_offset_0_width_16_low16 %value
+  return
+}
+
+// ----
+  v_bfe_u32 v0, v0, 0, 16
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_lshl_add_shift_immediate waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_lshl_add_shift_immediate(%value: reg<amdgpu.sgpr>, %addend: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

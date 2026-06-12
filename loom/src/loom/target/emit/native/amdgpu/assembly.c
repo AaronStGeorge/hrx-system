@@ -634,25 +634,6 @@ static iree_status_t loom_amdgpu_lookup_canonical_asm_form(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_canonical_asm_form_mnemonic(
-    const loom_native_assembly_packet_context_t* context,
-    iree_string_view_t* out_mnemonic, bool* out_found) {
-  *out_mnemonic = iree_string_view_empty();
-  *out_found = false;
-  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
-  if (descriptor->canonical_asm_form_ordinal ==
-      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
-    return iree_ok_status();
-  }
-  const loom_low_asm_form_t* form = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_canonical_asm_form(context, &form));
-  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-      context->schedule->target.descriptor_set, form->mnemonic_string_offset,
-      out_mnemonic));
-  *out_found = true;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_append_descriptor_value_list(
     const loom_native_assembly_packet_context_t* context) {
   const loom_low_descriptor_set_t* descriptor_set =
@@ -2434,27 +2415,6 @@ static iree_status_t loom_amdgpu_try_append_descriptor_ref_packet(
   return iree_ok_status();
 }
 
-static bool loom_amdgpu_source0_immediate_asm_form(
-    iree_string_view_t canonical_mnemonic) {
-  const bool plain_literal =
-      iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_lit")) &&
-      !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src0_lit")) &&
-      !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src1_lit")) &&
-      !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src2_lit"));
-  return iree_string_view_ends_with(canonical_mnemonic,
-                                    IREE_SV("_src0_inline")) ||
-         iree_string_view_ends_with(canonical_mnemonic,
-                                    IREE_SV("_src0_16_low16")) ||
-         iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_vop3_imm")) ||
-         plain_literal;
-}
-
-static bool loom_amdgpu_offset_width_inline_asm_form(
-    iree_string_view_t canonical_mnemonic) {
-  return iree_string_view_ends_with(canonical_mnemonic,
-                                    IREE_SV("_offset_width_inline"));
-}
-
 typedef struct loom_amdgpu_assembly_packet_shape_t {
   // Diagnostic name used when the packet does not match this shape.
   const char* diagnostic_name;
@@ -2484,8 +2444,78 @@ static iree_status_t loom_amdgpu_validate_assembly_packet_shape(
       shape->diagnostic_name, (int)key.size, key.data);
 }
 
-typedef bool (*loom_amdgpu_asm_form_match_fn_t)(
-    iree_string_view_t canonical_mnemonic);
+typedef iree_status_t (*loom_amdgpu_asm_form_match_fn_t)(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t* form, iree_string_view_t canonical_mnemonic,
+    bool* out_matched);
+
+static iree_status_t loom_amdgpu_source0_immediate_asm_form(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t* form, iree_string_view_t canonical_mnemonic,
+    bool* out_matched) {
+  (void)context;
+  (void)form;
+  const bool plain_literal =
+      iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_lit")) &&
+      !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src0_lit")) &&
+      !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src1_lit")) &&
+      !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src2_lit"));
+  *out_matched =
+      iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src0_inline")) ||
+      iree_string_view_ends_with(canonical_mnemonic,
+                                 IREE_SV("_src0_16_low16")) ||
+      iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_vop3_imm")) ||
+      plain_literal;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_asm_form_immediate_name_equals(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t* form, uint16_t form_immediate_index,
+    iree_string_view_t expected_name, bool* out_equal) {
+  *out_equal = false;
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  if (form_immediate_index >= form->immediate_count) {
+    return iree_ok_status();
+  }
+  const uint32_t asm_immediate_index =
+      form->immediate_start + form_immediate_index;
+  if (asm_immediate_index >= descriptor_set->asm_immediate_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU asm-form immediate row is outside the descriptor set");
+  }
+  const loom_low_asm_immediate_t* asm_immediate =
+      &descriptor_set->asm_immediates[asm_immediate_index];
+  if (asm_immediate->name_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
+    return iree_ok_status();
+  }
+  iree_string_view_t name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+      descriptor_set, asm_immediate->name_string_offset, &name));
+  *out_equal = iree_string_view_equal(name, expected_name);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_offset_width_asm_form(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t* form, iree_string_view_t canonical_mnemonic,
+    bool* out_matched) {
+  (void)canonical_mnemonic;
+  *out_matched = false;
+  if (form->immediate_count != 2) {
+    return iree_ok_status();
+  }
+  bool has_offset = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_asm_form_immediate_name_equals(
+      context, form, 0, IREE_SV("offset"), &has_offset));
+  bool has_width = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_asm_form_immediate_name_equals(
+      context, form, 1, IREE_SV("width"), &has_width));
+  *out_matched = has_offset && has_width;
+  return iree_ok_status();
+}
 
 static const loom_amdgpu_assembly_packet_form_t kSource0ImmediatePacketForm = {
     .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_DESCRIPTOR,
@@ -2527,7 +2557,7 @@ static const loom_amdgpu_assembly_packet_shape_t kOffsetWidthInlinePacketShape =
 };
 
 typedef struct loom_amdgpu_asm_form_packet_rule_t {
-  // Predicate over a canonical asm-form mnemonic.
+  // Predicate over the canonical asm form.
   loom_amdgpu_asm_form_match_fn_t match;
   // Required packet shape for this native form.
   const loom_amdgpu_assembly_packet_shape_t* shape;
@@ -2537,7 +2567,8 @@ typedef struct loom_amdgpu_asm_form_packet_rule_t {
 
 static iree_status_t loom_amdgpu_try_append_asm_form_rule_packet(
     const loom_native_assembly_packet_context_t* context,
-    iree_string_view_t canonical_mnemonic, bool* out_matched) {
+    const loom_low_asm_form_t* form, iree_string_view_t canonical_mnemonic,
+    bool* out_matched) {
   static const loom_amdgpu_asm_form_packet_rule_t kRules[] = {
       {
           .match = loom_amdgpu_source0_immediate_asm_form,
@@ -2545,7 +2576,7 @@ static iree_status_t loom_amdgpu_try_append_asm_form_rule_packet(
           .form = &kSource0ImmediatePacketForm,
       },
       {
-          .match = loom_amdgpu_offset_width_inline_asm_form,
+          .match = loom_amdgpu_offset_width_asm_form,
           .shape = &kOffsetWidthInlinePacketShape,
           .form = &kOffsetWidthInlinePacketForm,
       },
@@ -2553,7 +2584,10 @@ static iree_status_t loom_amdgpu_try_append_asm_form_rule_packet(
   *out_matched = false;
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kRules); ++i) {
     const loom_amdgpu_asm_form_packet_rule_t* rule = &kRules[i];
-    if (!rule->match(canonical_mnemonic)) {
+    bool rule_matched = false;
+    IREE_RETURN_IF_ERROR(
+        rule->match(context, form, canonical_mnemonic, &rule_matched));
+    if (!rule_matched) {
       continue;
     }
     *out_matched = true;
@@ -2810,12 +2844,16 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
     return iree_ok_status();
   }
   iree_string_view_t canonical_mnemonic = iree_string_view_empty();
-  bool has_canonical_mnemonic = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_canonical_asm_form_mnemonic(
-      context, &canonical_mnemonic, &has_canonical_mnemonic));
-  if (has_canonical_mnemonic) {
+  if (descriptor->canonical_asm_form_ordinal !=
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    const loom_low_asm_form_t* canonical_form = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_lookup_canonical_asm_form(context, &canonical_form));
+    IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+        descriptor_set, canonical_form->mnemonic_string_offset,
+        &canonical_mnemonic));
     IREE_RETURN_IF_ERROR(loom_amdgpu_try_append_asm_form_rule_packet(
-        context, canonical_mnemonic, &matched));
+        context, canonical_form, canonical_mnemonic, &matched));
     if (matched) {
       return iree_ok_status();
     }
