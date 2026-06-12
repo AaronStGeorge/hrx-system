@@ -28,14 +28,15 @@ loom_cc_library(
     loom::ops::func_symbol_facts
     loom::ops::op_defs
     loom::ops::scalar
+    loom::ops::target
     loom::ops::vector
     loom::pass::pipeline
     loom::pass::registry
     loom::pass::types
     loom::rewrite::greedy
     loom::rewrite::rewriter
-    loom::target::function_contract
     loom::target::math_policy
+    loom::target::selection
   PUBLIC
 )
 

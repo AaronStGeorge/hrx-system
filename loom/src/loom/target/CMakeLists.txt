@@ -462,7 +462,9 @@ loom_cc_test(
     loom::ops::pass
     loom::ops::target
     loom::ops::test
+    loom::pass::environment
     loom::pass::verify
+    loom::target::selection
     loom::target::test::target_record_table
     loom::testing::module_ptr
 )

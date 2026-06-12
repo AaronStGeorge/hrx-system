@@ -158,10 +158,16 @@ typedef struct loom_target_pass_predicate_target_facts_t {
   const loom_func_symbol_facts_t* func;
   // Effective target record symbol selected for |func|.
   loom_symbol_ref_t target_ref;
-  // Target record op named by |func|.
+  // Target record op named by |target_ref|.
   const loom_op_t* target_op;
-  // Resolved function target bundle.
-  loom_target_bundle_storage_t bundle_storage;
+  // Target record facts named by |target_ref|.
+  const loom_target_symbol_facts_t* target;
+  // True after function contract resolution has run.
+  bool contract_resolved;
+  // True when |contract_storage| contains a valid function contract.
+  bool contract_valid;
+  // Function contract storage resolved from |func| and |target|.
+  loom_target_bundle_storage_t contract_storage;
 } loom_target_pass_predicate_target_facts_t;
 
 static iree_status_t loom_target_pass_predicate_resolve_facts(
@@ -202,73 +208,93 @@ static iree_status_t loom_target_pass_predicate_resolve_facts(
   IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup_ref(
       &fact_table, context->target_module, out_facts->target_ref,
       &target_base_facts));
-  const loom_target_symbol_facts_t* target =
-      loom_target_symbol_facts_cast(target_base_facts);
-  if (!target) {
+  out_facts->target = loom_target_symbol_facts_cast(target_base_facts);
+  if (!out_facts->target) {
     return iree_ok_status();
   }
   out_facts->target_op =
       context->target_module->symbols.entries[out_facts->target_ref.symbol_id]
           .defining_op;
 
-  bool contract_valid = false;
-  IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve_from_bundle(
-      context->target_module, out_facts->func, target->name,
-      &target->storage.bundle, (iree_diagnostic_emitter_t){0}, &contract_valid,
-      &out_facts->bundle_storage));
-  if (!contract_valid) {
-    return iree_ok_status();
-  }
-
   *out_valid = true;
   return iree_ok_status();
 }
 
-static bool loom_target_pass_predicate_match_attr(
+static iree_status_t loom_target_pass_predicate_resolve_contract(
     const loom_pass_predicate_evaluate_context_t* context,
-    const loom_target_pass_predicate_target_facts_t* facts,
-    iree_string_view_t name, iree_string_view_t expected) {
-  const loom_target_bundle_storage_t* storage = &facts->bundle_storage;
+    loom_target_pass_predicate_target_facts_t* facts) {
+  if (facts->contract_resolved) {
+    return iree_ok_status();
+  }
+  facts->contract_resolved = true;
+  return loom_target_function_contract_resolve_from_bundle(
+      context->target_module, facts->func, facts->target->name,
+      &facts->target->storage.bundle, (iree_diagnostic_emitter_t){0},
+      &facts->contract_valid, &facts->contract_storage);
+}
+
+static iree_status_t loom_target_pass_predicate_match_attr(
+    const loom_pass_predicate_evaluate_context_t* context,
+    loom_target_pass_predicate_target_facts_t* facts, iree_string_view_t name,
+    iree_string_view_t expected, bool* out_match) {
+  *out_match = false;
+  const loom_target_bundle_storage_t* storage = &facts->target->storage;
   if (iree_string_view_equal(name, IREE_SV("target"))) {
-    return loom_target_pass_predicate_symbol_matches(
+    *out_match = loom_target_pass_predicate_symbol_matches(
         loom_target_pass_predicate_symbol_name(context->target_module,
                                                facts->target_ref),
         expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("target_op"))) {
     if (facts->target_op == NULL) {
-      return false;
+      return iree_ok_status();
     }
-    return iree_string_view_equal(
+    *out_match = iree_string_view_equal(
         loom_op_name(context->target_module, facts->target_op), expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("bundle"))) {
-    return iree_string_view_equal(storage->bundle.name, expected);
+    *out_match = iree_string_view_equal(storage->bundle.name, expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("snapshot"))) {
-    return iree_string_view_equal(storage->snapshot.name, expected);
+    *out_match = iree_string_view_equal(storage->snapshot.name, expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("codegen"))) {
-    return iree_string_view_equal(
+    *out_match = iree_string_view_equal(
         loom_target_codegen_format_name(storage->snapshot.codegen_format),
         expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("artifact_format"))) {
-    return iree_string_view_equal(
+    *out_match = iree_string_view_equal(
         loom_target_artifact_format_name(storage->snapshot.artifact_format),
         expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("abi"))) {
-    return iree_string_view_equal(
-        loom_target_abi_kind_name(storage->export_plan.abi_kind), expected);
+    IREE_RETURN_IF_ERROR(
+        loom_target_pass_predicate_resolve_contract(context, facts));
+    if (!facts->contract_valid) {
+      return iree_ok_status();
+    }
+    *out_match = iree_string_view_equal(
+        loom_target_abi_kind_name(facts->contract_storage.export_plan.abi_kind),
+        expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("config"))) {
-    return iree_string_view_equal(storage->config.name, expected);
+    *out_match = iree_string_view_equal(storage->config.name, expected);
+    return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("contract"))) {
-    return iree_string_view_equal(storage->config.contract_set_key, expected);
+    *out_match =
+        iree_string_view_equal(storage->config.contract_set_key, expected);
+    return iree_ok_status();
   }
-  return false;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_target_pass_predicate_evaluate(
@@ -312,8 +338,13 @@ static iree_status_t loom_target_pass_predicate_evaluate(
       if (!iree_status_is_ok(status)) {
         break;
       }
-      if (!loom_target_pass_predicate_match_attr(context, &facts, name,
-                                                 expected)) {
+      bool attr_match = false;
+      status = loom_target_pass_predicate_match_attr(context, &facts, name,
+                                                     expected, &attr_match);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
+      if (!attr_match) {
         *out_match = false;
         break;
       }
