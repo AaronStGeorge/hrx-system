@@ -175,6 +175,25 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
+    low_verify
+  HDRS
+    "low_verify.h"
+  SRCS
+    "low_verify.c"
+  DEPS
+    ::error_defs
+    iree::base
+    loom::codegen::low::diagnostics
+    loom::codegen::low::verify
+    loom::error::error_defs
+    loom::target::arch::amdgpu::ops
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -182,6 +201,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::legalization
+    ::low_verify
     ::math_policy
     ::pass_registry
     ::target_info

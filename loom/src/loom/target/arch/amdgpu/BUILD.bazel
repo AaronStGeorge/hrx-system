@@ -200,12 +200,27 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "low_verify",
+    srcs = ["low_verify.c"],
+    hdrs = ["low_verify.h"],
+    deps = [
+        ":error_defs",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/target/arch/amdgpu/ops",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     visibility = _AMDGPU_PROVIDER_VISIBILITY,
     deps = [
         ":legalization",
+        ":low_verify",
         ":math_policy",
         ":pass_registry",
         ":target_info",

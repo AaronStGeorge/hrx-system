@@ -617,6 +617,38 @@ ERR_AMDGPU_030 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_031: AMDGPU FMA alias has compatibility-only semantics.
+ERR_AMDGPU_031 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=31,
+    severity=Severity.ERROR,
+    summary="AMDGPU FMA alias has compatibility-only semantics.",
+    message=(
+        "low function '@{function_name}' uses AMDGPU FMA alias "
+        "'{descriptor_name}' in descriptor set '{descriptor_set_name}', but "
+        "mnemonic '{alias_mnemonic}' has '{alias_semantics}' compatibility "
+        "semantics and is not an ordinary f32 FMA; use descriptor "
+        "'{replacement_descriptor_name}' with mnemonic "
+        "'{replacement_mnemonic}' instead: {decision}, reason '{reason}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("alias_mnemonic", ParamKind.STRING),
+        ErrorParam("alias_semantics", ParamKind.STRING),
+        ErrorParam("replacement_descriptor_name", ParamKind.STRING),
+        ErrorParam("replacement_mnemonic", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use ordinary v_fma_f32 or v_fmac_f32 descriptors for IEEE f32 FMA; "
+        "DX9-zero aliases are compatibility opcodes with different zero "
+        "semantics"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -647,4 +679,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_028,
     ERR_AMDGPU_029,
     ERR_AMDGPU_030,
+    ERR_AMDGPU_031,
 )
