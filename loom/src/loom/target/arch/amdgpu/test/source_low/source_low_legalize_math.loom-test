@@ -362,32 +362,22 @@ low.func.def target(@target) abi(hal_kernel) @scalar_erf_rational_source_low(%in
   %39 = low.op<amdgpu.v_min_f32.lit>(%38) {imm32 = 1082130432} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %40 = low.op<amdgpu.v_mul_f32>(%39, %39) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %41 = low.const<amdgpu.v_mov_b32> {imm32 = 2945834763} : reg<amdgpu.vgpr>
-  %42 = low.const<amdgpu.v_mov_b32> {imm32 = 854458350} : reg<amdgpu.vgpr>
-  %43 = low.op<amdgpu.v_fma_f32>(%41, %40, %42) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %44 = low.const<amdgpu.v_mov_b32> {imm32 = 3054305105} : reg<amdgpu.vgpr>
-  %45 = low.op<amdgpu.v_fma_f32>(%43, %40, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %46 = low.const<amdgpu.v_mov_b32> {imm32 = 3094266578} : reg<amdgpu.vgpr>
-  %47 = low.op<amdgpu.v_fma_f32>(%45, %40, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %48 = low.const<amdgpu.v_mov_b32> {imm32 = 3124800611} : reg<amdgpu.vgpr>
-  %49 = low.op<amdgpu.v_fma_f32>(%47, %40, %48) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %50 = low.const<amdgpu.v_mov_b32> {imm32 = 3141640694} : reg<amdgpu.vgpr>
-  %51 = low.op<amdgpu.v_fma_f32>(%49, %40, %50) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %52 = low.const<amdgpu.v_mov_b32> {imm32 = 3162758100} : reg<amdgpu.vgpr>
-  %53 = low.op<amdgpu.v_fma_f32>(%51, %40, %52) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %54 = low.const<amdgpu.v_mov_b32> {imm32 = 3077857485} : reg<amdgpu.vgpr>
-  %55 = low.const<amdgpu.v_mov_b32> {imm32 = 3110059305} : reg<amdgpu.vgpr>
-  %56 = low.op<amdgpu.v_fma_f32>(%54, %40, %55) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %57 = low.const<amdgpu.v_mov_b32> {imm32 = 3135017550} : reg<amdgpu.vgpr>
-  %58 = low.op<amdgpu.v_fma_f32>(%56, %40, %57) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %59 = low.const<amdgpu.v_mov_b32> {imm32 = 3153173496} : reg<amdgpu.vgpr>
-  %60 = low.op<amdgpu.v_fma_f32>(%58, %40, %59) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %61 = low.const<amdgpu.v_mov_b32> {imm32 = 3161044647} : reg<amdgpu.vgpr>
-  %62 = low.op<amdgpu.v_fma_f32>(%60, %40, %61) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %63 = low.op<amdgpu.v_mul_f32>(%39, %53) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %64 = low.op<amdgpu.v_rcp_f32>(%62) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %65 = low.op<amdgpu.v_mul_f32>(%63, %64) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %68 = low.op<amdgpu.v_max_f32.lit>(%65) {imm32 = 3212836864} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %result = low.op<amdgpu.v_min_f32.lit>(%68) {imm32 = 1065353216} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %42 = low.op<amdgpu.v_fmaak_f32>(%41, %40) {imm32 = 854458350} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %43 = low.op<amdgpu.v_fmaak_f32>(%42, %40) {imm32 = 3054305105} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %44 = low.op<amdgpu.v_fmaak_f32>(%43, %40) {imm32 = 3094266578} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %45 = low.op<amdgpu.v_fmaak_f32>(%44, %40) {imm32 = 3124800611} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %46 = low.op<amdgpu.v_fmaak_f32>(%45, %40) {imm32 = 3141640694} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %47 = low.op<amdgpu.v_fmaak_f32>(%46, %40) {imm32 = 3162758100} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %48 = low.const<amdgpu.v_mov_b32> {imm32 = 3077857485} : reg<amdgpu.vgpr>
+  %49 = low.op<amdgpu.v_fmaak_f32>(%48, %40) {imm32 = 3110059305} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %50 = low.op<amdgpu.v_fmaak_f32>(%49, %40) {imm32 = 3135017550} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %51 = low.op<amdgpu.v_fmaak_f32>(%50, %40) {imm32 = 3153173496} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %52 = low.op<amdgpu.v_fmaak_f32>(%51, %40) {imm32 = 3161044647} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %53 = low.op<amdgpu.v_mul_f32>(%39, %47) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %54 = low.op<amdgpu.v_rcp_f32>(%52) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %55 = low.op<amdgpu.v_mul_f32>(%53, %54) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %58 = low.op<amdgpu.v_max_f32.lit>(%55) {imm32 = 3212836864} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_min_f32.lit>(%58) {imm32 = 1065353216} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %result : reg<amdgpu.vgpr>
 }
 

@@ -58,6 +58,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_max_f32.lit",
     "amdgpu.v_max_f32.src0_inline",
     "amdgpu.v_fma_f32",
+    "amdgpu.v_fmaak_f32",
+    "amdgpu.v_fmamk_f32",
     "amdgpu.v_pk_fma_f32",
     "amdgpu.v_exp_f32",
     "amdgpu.v_log_f32",
@@ -1379,12 +1381,122 @@ def _f32_fma_rule(
     )
 
 
+def _f32_fmaak_literal_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    a_register_class: str,
+) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_fmaak_f32")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), type_pattern),
+            _register_class("a", a_register_class),
+            Guard.value_exact_f64(
+                "c",
+                diagnostic=_LITERAL_EXACT_F32_DIAGNOSTIC,
+            ),
+            Guard.value_materializable(
+                "b",
+                F32_VGPR_MATERIALIZER.name,
+                diagnostic=_F32_VGPR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "a": ValueRef.operand("a"),
+                    "b": _f32_vgpr_operand("b"),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": ValueProject.f64_as_f32_bits("c"),
+                },
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
+def _f32_fmamk_literal_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    literal_source: str,
+    multiply_source: str,
+    multiply_register_class: str,
+) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_fmamk_f32")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), type_pattern),
+            _register_class(multiply_source, multiply_register_class),
+            Guard.value_exact_f64(
+                literal_source,
+                diagnostic=_LITERAL_EXACT_F32_DIAGNOSTIC,
+            ),
+            Guard.value_materializable(
+                "c",
+                F32_VGPR_MATERIALIZER.name,
+                diagnostic=_F32_VGPR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "a": ValueRef.operand(multiply_source),
+                    "c": _f32_vgpr_operand("c"),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "imm32": ValueProject.f64_as_f32_bits(literal_source),
+                },
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
 def _f32_fma_rules(
     source_op: Op,
     type_pattern: TypePattern,
 ) -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     register_classes = ("amdgpu.sgpr", "amdgpu.vgpr")
+    for register_class in register_classes:
+        rules.append(
+            _f32_fmaak_literal_rule(
+                source_op,
+                type_pattern,
+                a_register_class=register_class,
+            )
+        )
+        rules.append(
+            _f32_fmamk_literal_rule(
+                source_op,
+                type_pattern,
+                literal_source="a",
+                multiply_source="b",
+                multiply_register_class=register_class,
+            )
+        )
+        rules.append(
+            _f32_fmamk_literal_rule(
+                source_op,
+                type_pattern,
+                literal_source="b",
+                multiply_source="a",
+                multiply_register_class=register_class,
+            )
+        )
     for a_register_class in register_classes:
         for b_register_class in register_classes:
             for c_register_class in register_classes:

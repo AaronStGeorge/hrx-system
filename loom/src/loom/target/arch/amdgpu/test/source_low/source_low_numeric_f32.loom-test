@@ -69,10 +69,40 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_fma() asm<amdgpu.rdn
   %lhs = global_load_b32_saddr %20, %lhs_view
   %rhs = global_load_b32_saddr %20, %rhs_view
   %bias = v_mov_b32 1056964608
-  %fma = v_fma_f32 %lhs, %rhs, %bias
+  %fma = v_fmaak_f32 %lhs, %rhs, 1056964608
   %result = v_sub_f32 %fma, %bias
   global_store_b32_saddr %20, %result, %output_view
   return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_fmamk_literal_multiply(%a: f32, %c: f32) -> (f32) {
+  %scale = scalar.constant 2.0 : f32
+  %result = scalar.fmaf %a, %scale, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_fmamk_literal_multiply(%a: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fmamk_f32 %a, %c, 1073741824
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_fmamk_literal_multiply_lhs(%b: f32, %c: f32) -> (f32) {
+  %scale = scalar.constant 2.0 : f32
+  %result = scalar.fmaf %scale, %b, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_fmamk_literal_multiply_lhs(%b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %result = v_fmamk_f32 %b, %c, 1073741824
+  return %result
 }
 
 // ====
@@ -179,8 +209,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %lane2 = v_and_b32_lit %difference, 2147483647
   %lhs3 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs3 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %bias = v_mov_b32 1056964608
-  %lane3 = v_fma_f32 %lhs3, %rhs3, %bias
+  %lane3 = v_fmaak_f32 %lhs3, %rhs3, 1056964608
   %result = concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   global_store_b128_saddr %36, %result, %output_view
   return
