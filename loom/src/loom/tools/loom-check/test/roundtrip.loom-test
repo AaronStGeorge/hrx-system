@@ -178,6 +178,12 @@ func.def @slice_tile(%tile: tile<64x64xf16>) -> (tile<16x16xf16>) {
 
 // ====
 
+// RUN: with-locations roundtrip
+
+%c = test.constant 42 : i32 loc(tagged<sanitizer_site, "01", "model.loom":5:6>)
+
+// ====
+
 // Canonical AttrDict printing sorts keys recursively and canonicalizes empty
 // optional dict attrs to absence.
 func.def @canonical_attr_dict(%x: f32) -> (f32) {

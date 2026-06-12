@@ -373,6 +373,15 @@ typedef enum loom_check_pass_output_kind_e {
   LOOM_CHECK_PASS_OUTPUT_COMPILE_REPORT = 1,
 } loom_check_pass_output_kind_t;
 
+static loom_text_print_flags_t loom_check_pass_print_flags(
+    const loom_check_case_t* test_case) {
+  loom_text_print_flags_t flags = LOOM_TEXT_PRINT_DEFAULT;
+  if (iree_all_bits_set(test_case->output_flags, LOOM_CHECK_OUTPUT_LOCATIONS)) {
+    flags |= LOOM_TEXT_PRINT_LOCATIONS;
+  }
+  return flags;
+}
+
 static iree_status_t loom_check_execute_pass_with_output(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -572,7 +581,7 @@ static iree_status_t loom_check_execute_pass_with_output(
     loom_low_descriptor_text_asm_environment_initialize(&low_registry.registry,
                                                         &low_asm_environment);
     const loom_text_print_options_t print_options = {
-        .flags = LOOM_TEXT_PRINT_DEFAULT,
+        .flags = loom_check_pass_print_flags(test_case),
         .low_asm_environment = low_asm_environment,
     };
     status = loom_text_print_module_to_builder_with_options(

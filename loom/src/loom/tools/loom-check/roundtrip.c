@@ -10,6 +10,15 @@
 #include "loom/ir/module.h"
 #include "loom/tools/loom-check/execute.h"
 
+static loom_text_print_flags_t loom_check_roundtrip_print_flags(
+    const loom_check_case_t* test_case) {
+  loom_text_print_flags_t flags = LOOM_TEXT_PRINT_DEFAULT;
+  if (iree_all_bits_set(test_case->output_flags, LOOM_CHECK_OUTPUT_LOCATIONS)) {
+    flags |= LOOM_TEXT_PRINT_LOCATIONS;
+  }
+  return flags;
+}
+
 iree_status_t loom_check_execute_roundtrip(
     const loom_check_case_t* test_case, iree_string_view_t filename,
     const loom_check_environment_t* environment, loom_context_t* context,
@@ -63,7 +72,7 @@ iree_status_t loom_check_execute_roundtrip(
   loom_low_descriptor_text_asm_environment_initialize(&low_registry.registry,
                                                       &low_asm_environment);
   const loom_text_print_options_t print_options = {
-      .flags = LOOM_TEXT_PRINT_DEFAULT,
+      .flags = loom_check_roundtrip_print_flags(test_case),
       .low_asm_environment = low_asm_environment,
   };
   iree_status_t print_status = loom_text_print_module_to_builder_with_options(

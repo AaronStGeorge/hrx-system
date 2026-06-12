@@ -85,6 +85,14 @@ TEST_F(CheckParseTest, ExplicitRoundtrip) {
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_ROUNDTRIP);
 }
 
+TEST_F(CheckParseTest, RoundtripWithLocations) {
+  IREE_ASSERT_OK(Parse("// RUN: with-locations roundtrip\nfunc.def @f() {}\n"));
+  ASSERT_EQ(file_.case_count, 1);
+  EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_ROUNDTRIP);
+  EXPECT_TRUE(iree_all_bits_set(file_.cases[0].output_flags,
+                                LOOM_CHECK_OUTPUT_LOCATIONS));
+}
+
 TEST_F(CheckParseTest, VerifyMode) {
   IREE_ASSERT_OK(Parse("// RUN: verify\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
@@ -97,6 +105,30 @@ TEST_F(CheckParseTest, PassMode) {
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_PASS);
   EXPECT_TRUE(iree_string_view_equal(file_.cases[0].pipeline,
                                      iree_make_cstring_view("dce,cse")));
+}
+
+TEST_F(CheckParseTest, PassWithLocations) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: with-locations pass dce,cse\nfunc.def @f() {}\n"));
+  ASSERT_EQ(file_.case_count, 1);
+  EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_PASS);
+  EXPECT_TRUE(iree_all_bits_set(file_.cases[0].output_flags,
+                                LOOM_CHECK_OUTPUT_LOCATIONS));
+  EXPECT_TRUE(iree_string_view_equal(file_.cases[0].pipeline,
+                                     iree_make_cstring_view("dce,cse")));
+}
+
+TEST_F(CheckParseTest, DuplicateRunModifierRejected) {
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Parse("// RUN: with-locations with-locations roundtrip\n"
+            "func.def @f() {}\n"));
+}
+
+TEST_F(CheckParseTest, RunModifierRequiresSupportedMode) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// RUN: with-locations verify\n"
+                              "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, FormatMode) {
@@ -1572,6 +1604,21 @@ TEST_F(CheckParseTest, FirstCasePassModeInherited) {
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_PASS);
   EXPECT_TRUE(iree_string_view_equal(file_.cases[1].pipeline,
                                      iree_make_cstring_view("dce")));
+}
+
+TEST_F(CheckParseTest, FirstCaseOutputFlagsInherited) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: with-locations pass dce\n"
+            "func.def @a() {}\n"
+            "// ====\n"
+            "func.def @b() {}\n"));
+  ASSERT_EQ(file_.case_count, 2);
+  EXPECT_TRUE(iree_all_bits_set(file_.default_output_flags,
+                                LOOM_CHECK_OUTPUT_LOCATIONS));
+  EXPECT_TRUE(iree_all_bits_set(file_.cases[0].output_flags,
+                                LOOM_CHECK_OUTPUT_LOCATIONS));
+  EXPECT_TRUE(iree_all_bits_set(file_.cases[1].output_flags,
+                                LOOM_CHECK_OUTPUT_LOCATIONS));
 }
 
 TEST_F(CheckParseTest, FirstCaseEmitModeInherited) {
