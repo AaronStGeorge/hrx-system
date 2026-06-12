@@ -290,6 +290,7 @@ loom_check_test_suite(
         "test/source_low/source_low_dot.loom-test",
         "test/source_low/source_low_dot_cdna3.loom-test",
         "test/source_low/source_low_dot_diagnostics.loom-test",
+        "test/source_low/source_low_fma_literal_diagnostics.loom-test",
         "test/source_low/source_low_fma_mix.loom-test",
         "test/source_low/source_low_index.loom-test",
         "test/source_low/source_low_index_amdgpu.loom-test",

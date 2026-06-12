@@ -585,6 +585,38 @@ ERR_AMDGPU_029 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_030: AMDGPU literal FMA operand-form decision was recorded.
+ERR_AMDGPU_030 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=30,
+    severity=Severity.REMARK,
+    summary="AMDGPU literal FMA operand-form decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' {decision} literal FMA descriptor "
+        "'{descriptor_name}' for '{op_name}' in '@{function_name}' using "
+        "{operand_form} source operand {source_operand_index} ({literal_role}) "
+        "constant form '{constant_form}' in descriptor set "
+        "'{descriptor_set_name}': reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("operand_form", ParamKind.STRING),
+        ErrorParam("source_operand_index", ParamKind.U32),
+        ErrorParam("literal_role", ParamKind.STRING),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("constant_form", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded descriptor, operand-form, and literal-role fields to "
+        "explain why source-to-low selected or rejected v_fmaak_f32 or "
+        "v_fmamk_f32"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -614,4 +646,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_027,
     ERR_AMDGPU_028,
     ERR_AMDGPU_029,
+    ERR_AMDGPU_030,
 )

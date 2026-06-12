@@ -8,16 +8,20 @@
 
 #include <stdint.h>
 
+#include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/lower/lower_rules.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/contracts/arithmetic_lower_rules.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/util/fact_table.h"
 
 #define LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT 3u
 
@@ -625,6 +629,181 @@ static iree_string_view_t loom_amdgpu_descriptor_set_key(
       descriptor_set, descriptor_set->key_string_offset);
   return iree_string_view_is_empty(descriptor_set_key) ? IREE_SV("<empty>")
                                                        : descriptor_set_key;
+}
+
+static bool loom_amdgpu_source_value_has_exact_f32_immediate(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id) {
+  if (fact_table == NULL) {
+    return false;
+  }
+  const loom_type_t type = loom_module_value_type(module, value_id);
+  loom_value_facts_t facts = loom_value_fact_table_lookup(fact_table, value_id);
+  if (loom_type_is_vector(type)) {
+    if (loom_type_element_type(type) != LOOM_SCALAR_TYPE_F32) {
+      return false;
+    }
+    loom_value_fact_uniform_element_t uniform = {0};
+    if (!loom_value_facts_query_uniform_element(&fact_table->context, facts,
+                                                &uniform)) {
+      return false;
+    }
+    facts = uniform.element;
+  } else if (loom_type_is_scalar(type)) {
+    if (loom_type_element_type(type) != LOOM_SCALAR_TYPE_F32) {
+      return false;
+    }
+  } else {
+    return false;
+  }
+  return loom_value_facts_is_exact(facts) && loom_value_facts_is_float(facts);
+}
+
+typedef struct loom_amdgpu_fmaf_literal_operand_form_t {
+  iree_string_view_t operand_form;
+  uint32_t source_operand_index;
+  iree_string_view_t literal_role;
+  iree_string_view_t descriptor_key;
+} loom_amdgpu_fmaf_literal_operand_form_t;
+
+static bool loom_amdgpu_fmaf_literal_operand_form(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_fmaf_literal_operand_form_t* out_form) {
+  *out_form = (loom_amdgpu_fmaf_literal_operand_form_t){0};
+
+  loom_value_id_t sources[3] = {
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+  };
+  if (loom_scalar_fmaf_isa(source_op)) {
+    sources[0] = loom_scalar_fmaf_a(source_op);
+    sources[1] = loom_scalar_fmaf_b(source_op);
+    sources[2] = loom_scalar_fmaf_c(source_op);
+  } else if (loom_vector_fmaf_isa(source_op)) {
+    sources[0] = loom_vector_fmaf_a(source_op);
+    sources[1] = loom_vector_fmaf_b(source_op);
+    sources[2] = loom_vector_fmaf_c(source_op);
+  } else {
+    return false;
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  if (loom_amdgpu_source_value_has_exact_f32_immediate(module, fact_table,
+                                                       sources[2])) {
+    *out_form = (loom_amdgpu_fmaf_literal_operand_form_t){
+        .operand_form = IREE_SV("fmaak"),
+        .source_operand_index = 2,
+        .literal_role = IREE_SV("addend"),
+        .descriptor_key = IREE_SV("amdgpu.v_fmaak_f32"),
+    };
+    return true;
+  }
+  if (loom_amdgpu_source_value_has_exact_f32_immediate(module, fact_table,
+                                                       sources[0])) {
+    *out_form = (loom_amdgpu_fmaf_literal_operand_form_t){
+        .operand_form = IREE_SV("fmamk"),
+        .source_operand_index = 0,
+        .literal_role = IREE_SV("multiply_lhs"),
+        .descriptor_key = IREE_SV("amdgpu.v_fmamk_f32"),
+    };
+    return true;
+  }
+  if (loom_amdgpu_source_value_has_exact_f32_immediate(module, fact_table,
+                                                       sources[1])) {
+    *out_form = (loom_amdgpu_fmaf_literal_operand_form_t){
+        .operand_form = IREE_SV("fmamk"),
+        .source_operand_index = 1,
+        .literal_role = IREE_SV("multiply_rhs"),
+        .descriptor_key = IREE_SV("amdgpu.v_fmamk_f32"),
+    };
+    return true;
+  }
+  return false;
+}
+
+static bool loom_amdgpu_descriptor_set_has_key(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
+  if (descriptor_set == NULL) {
+    return false;
+  }
+  return loom_low_descriptor_set_lookup_descriptor(descriptor_set, key) !=
+         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+}
+
+iree_status_t loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  if (!iree_any_bit_set(loom_low_lower_context_diagnostic_flags(context),
+                        LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM)) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_fmaf_literal_operand_form_t literal_form = {0};
+  if (!loom_amdgpu_fmaf_literal_operand_form(context, source_op,
+                                             &literal_form)) {
+    return iree_ok_status();
+  }
+
+  loom_low_lower_rule_selection_t selection = {0};
+  IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
+      context, &loom_amdgpu_arithmetic_lower_rule_set, source_op, &selection));
+  if (selection.rule == NULL) {
+    return iree_ok_status();
+  }
+
+  const loom_low_lower_descriptor_ref_t descriptor_ref =
+      loom_low_lower_rule_first_descriptor_ref(
+          &loom_amdgpu_arithmetic_lower_rule_set, selection.rule);
+  if (descriptor_ref == LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT_LT(descriptor_ref,
+                 loom_amdgpu_arithmetic_lower_rule_set.descriptor_ref_count);
+  const iree_string_view_t descriptor_name =
+      loom_amdgpu_arithmetic_lower_rule_set.descriptor_refs[descriptor_ref].key;
+  const bool selected_literal =
+      iree_string_view_equal(descriptor_name, IREE_SV("amdgpu.v_fmaak_f32")) ||
+      iree_string_view_equal(descriptor_name, IREE_SV("amdgpu.v_fmamk_f32"));
+  const bool selected_plain_fma =
+      iree_string_view_equal(descriptor_name, IREE_SV("amdgpu.v_fma_f32"));
+  if (!selected_literal && !selected_plain_fma) {
+    return iree_ok_status();
+  }
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  const iree_string_view_t descriptor_set_name =
+      loom_amdgpu_descriptor_set_key(descriptor_set);
+  const iree_string_view_t decision =
+      selected_literal ? IREE_SV("selected") : IREE_SV("rejected");
+  const iree_string_view_t reason =
+      selected_literal ? IREE_SV("literal_descriptor_selected")
+                       : (loom_amdgpu_descriptor_set_has_key(
+                              descriptor_set, literal_form.descriptor_key)
+                              ? IREE_SV("literal_operand_contract_unmatched")
+                              : IREE_SV("literal_descriptor_unavailable"));
+
+  loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_lower_context_target_key(context)),
+      loom_param_string(loom_low_lower_context_export_name(context)),
+      loom_param_string(loom_low_lower_context_config_key(context)),
+      loom_param_string(loom_low_lower_context_function_name(context)),
+      loom_param_string(loom_op_name(module, source_op)),
+      loom_param_string(descriptor_name),
+      loom_param_string(literal_form.operand_form),
+      loom_param_u32(literal_form.source_operand_index),
+      loom_param_string(literal_form.literal_role),
+      loom_param_string(descriptor_set_name),
+      loom_param_string(IREE_SV("exact_f32_literal")),
+      loom_param_string(decision),
+      loom_param_string(reason),
+  };
+  return loom_low_lower_emit_error_ref(context, source_op,
+                                       LOOM_ERR_AMDGPU_030_REF, params,
+                                       IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_amdgpu_emit_mulf_mix_operand_form_diagnostic(

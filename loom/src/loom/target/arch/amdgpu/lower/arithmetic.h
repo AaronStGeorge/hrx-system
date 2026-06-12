@@ -88,6 +88,10 @@ iree_status_t loom_amdgpu_lower_mulf_mix(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_mulf_mix_plan_t* plan);
 
+// Emits a source-to-low diagnostic explaining FMAAK/FMAMK literal selection.
+iree_status_t loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
+
 // Marks the exact source values consumed by a selected mixed FMA plan.
 void loom_amdgpu_mark_fma_mix_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
