@@ -40,10 +40,9 @@ kernel.def target(@target) @prefetch_workgroup_id() {
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @prefetch_workgroup_id() {
   %bounded_gid = low.live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %9 = low.const<amdgpu.s_mov_b32> {imm32 = 2} : reg<amdgpu.sgpr>
-  %10 = low.op<amdgpu.s_lshl_b32>(%bounded_gid, %9) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  %11 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  low.op<amdgpu.s_buffer_prefetch_data>(%11, %10) {count = 1, offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
+  %9 = low.op<amdgpu.s_lshl_b32.rhs_inline>(%bounded_gid) {imm32 = 2} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %10 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.s_buffer_prefetch_data>(%10, %9) {count = 1, offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
   low.return
 }
 

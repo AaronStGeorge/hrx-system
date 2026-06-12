@@ -145,6 +145,36 @@ def _s_mul_i32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
+        operand_forms=(
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.s_mul_i32.rhs_inline",
+                source_operand="rhs",
+            ),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_mul_i32_rhs_inline_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_mul_i32.rhs_inline",
+        instruction_name="S_MUL_I32",
+        mnemonic="s_mul_i32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="integer.mul.lo.i32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
+        ),
+        asm_forms=_asm(
+            mnemonic="s_mul_i32_rhs_inline",
+            results=("dst",),
+            operands=("lhs",),
+            immediates=("imm32",),
+        ),
+        immediate_fields=("SSRC1",),
+        immediates=(_SOURCE_INLINE_U32_IMMEDIATE,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -3078,6 +3108,7 @@ __all__ = (
     "_s_min_u32_overlay",
     "_s_mul_hi_u32_overlay",
     "_s_mul_i32_overlay",
+    "_s_mul_i32_rhs_inline_overlay",
     "_s_or_b32_overlay",
     "_s_or_b64_overlay",
     "_s_shift_u64_overlay",
