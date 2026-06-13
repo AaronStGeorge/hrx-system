@@ -142,6 +142,16 @@ bool loom_amdgpu_memory_access_plan_select(
     loom_low_source_memory_access_diagnostic_t* out_source_diagnostic,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
 
+// Selects a flat global address plan for instrumentation that needs the actual
+// application pointer rather than a memory packet for the source access.
+bool loom_amdgpu_memory_access_select_flat_global_address(
+    const loom_module_t* module,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_memory_operation_kind_t kind,
+    const loom_low_source_memory_access_plan_t* source, loom_type_t vector_type,
+    loom_amdgpu_memory_access_t* out_access,
+    loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
+
 // Selects target operand paths for dynamic source memory address terms.
 bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,

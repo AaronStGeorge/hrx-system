@@ -883,6 +883,35 @@ static void loom_low_lower_record_elided_hint_plan(
                });
 }
 
+static iree_status_t loom_low_lower_try_select_op_callback(
+    loom_low_lower_context_t* context,
+    loom_low_lower_select_op_callback_t callback, const loom_op_t* source_op,
+    bool* out_selected) {
+  *out_selected = false;
+  if (callback.fn == NULL) {
+    return iree_ok_status();
+  }
+
+  loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
+  IREE_RETURN_IF_ERROR(
+      callback.fn(callback.user_data, context, source_op, &plan));
+  if (loom_low_lower_plan_is_empty(plan)) {
+    return iree_ok_status();
+  }
+  loom_low_lower_record_selected_plan(
+      context, (loom_low_lower_selected_plan_t){
+                   .source_op = source_op,
+                   .kind = LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK,
+                   .rule_set_index = UINT16_MAX,
+                   .rule_index = UINT16_MAX,
+                   .rule_set = NULL,
+                   .rule = NULL,
+                   .plan = plan,
+               });
+  *out_selected = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_record_selected_rule_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     uint16_t rule_set_index, const loom_low_lower_rule_set_t* rule_set,
@@ -1451,35 +1480,6 @@ static iree_status_t loom_low_lower_record_report_row(
   }
   return loom_low_lower_report_row_list_append(&result->report_rows,
                                                result->report_allocator, &row);
-}
-
-static iree_status_t loom_low_lower_try_select_op_callback(
-    loom_low_lower_context_t* context,
-    loom_low_lower_select_op_callback_t callback, const loom_op_t* source_op,
-    bool* out_selected) {
-  *out_selected = false;
-  if (callback.fn == NULL) {
-    return iree_ok_status();
-  }
-
-  loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
-  IREE_RETURN_IF_ERROR(
-      callback.fn(callback.user_data, context, source_op, &plan));
-  if (loom_low_lower_plan_is_empty(plan)) {
-    return iree_ok_status();
-  }
-  loom_low_lower_record_selected_plan(
-      context, (loom_low_lower_selected_plan_t){
-                   .source_op = source_op,
-                   .kind = LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK,
-                   .rule_set_index = UINT16_MAX,
-                   .rule_index = UINT16_MAX,
-                   .rule_set = NULL,
-                   .rule = NULL,
-                   .plan = plan,
-               });
-  *out_selected = true;
-  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,

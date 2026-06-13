@@ -26,6 +26,7 @@ iree_py_library(
     "matrix.py"
     "memory.py"
     "reduce.py"
+    "sanitizer.py"
     "view.py"
   DEPS
     loom::py::loom::core
@@ -33,6 +34,7 @@ iree_py_library(
     loom::py::loom::dialect::config::config
     loom::py::loom::dialect::index::index
     loom::py::loom::dialect::kernel::kernel
+    loom::py::loom::dialect::sanitizer::sanitizer
     loom::py::loom::dialect::scalar::scalar
     loom::py::loom::dialect::vector::vector
     loom::py::loom::dialect::view::view

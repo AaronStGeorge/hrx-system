@@ -115,6 +115,7 @@ loom_cc_library(
     "memory_bank_conflict.h"
     "plan.h"
     "preamble.h"
+    "sanitizer.h"
     "sanitizer_access.h"
     "sanitizer_report.h"
     "signal.h"
@@ -164,6 +165,7 @@ loom_cc_library(
     "preamble.c"
     "prefetch.c"
     "registry.c"
+    "sanitizer.c"
     "sanitizer_access.c"
     "sanitizer_report.c"
     "signal.c"
@@ -201,6 +203,7 @@ loom_cc_library(
     loom::ops::kernel
     loom::ops::low
     loom::ops::op_defs
+    loom::ops::sanitizer
     loom::ops::scalar
     loom::ops::scf
     loom::ops::vector

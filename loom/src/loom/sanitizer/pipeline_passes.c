@@ -12,6 +12,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/sanitizer/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
@@ -26,14 +27,16 @@ typedef struct loom_sanitizer_insert_assertions_state_t {
   bool has_checks_option;
 } loom_sanitizer_insert_assertions_state_t;
 
-#define LOOM_SANITIZER_INSERT_ASSERTIONS_STATISTICS(V, statistics_type)      \
-  V(statistics_type, assume_ops_converted, "assume-ops-converted",           \
-    "Number of assume ops replaced with sanitizer assertions or aliases.")   \
-  V(statistics_type, value_assertions_inserted, "value-assertions-inserted", \
-    "Number of sanitizer.assert.value ops inserted.")                        \
-  V(statistics_type, predicates_elided, "predicates-elided",                 \
-    "Number of candidate predicates already proven before insertion.")       \
-  V(statistics_type, fastmath_ops_instrumented, "fastmath-ops-instrumented", \
+#define LOOM_SANITIZER_INSERT_ASSERTIONS_STATISTICS(V, statistics_type)        \
+  V(statistics_type, assume_ops_converted, "assume-ops-converted",             \
+    "Number of assume ops replaced with sanitizer assertions or aliases.")     \
+  V(statistics_type, access_assertions_inserted, "access-assertions-inserted", \
+    "Number of sanitizer.assert.access ops inserted.")                         \
+  V(statistics_type, value_assertions_inserted, "value-assertions-inserted",   \
+    "Number of sanitizer.assert.value ops inserted.")                          \
+  V(statistics_type, predicates_elided, "predicates-elided",                   \
+    "Number of candidate predicates already proven before insertion.")         \
+  V(statistics_type, fastmath_ops_instrumented, "fastmath-ops-instrumented",   \
     "Number of fast-math ops with input or result assertions inserted.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_sanitizer_insert_assertions_statistics,
@@ -587,6 +590,103 @@ static iree_status_t loom_sanitizer_build_value_assertion(
       predicate_count, result_types, values.count, site_location, out_op);
 }
 
+static bool loom_sanitizer_value_slices_equal(loom_value_slice_t lhs,
+                                              loom_value_slice_t rhs) {
+  if (lhs.count != rhs.count) {
+    return false;
+  }
+  for (uint16_t i = 0; i < lhs.count; ++i) {
+    if (lhs.values[i] != rhs.values[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_sanitizer_i64_arrays_equal(loom_attribute_t lhs,
+                                            loom_attribute_t rhs) {
+  if (lhs.kind != LOOM_ATTR_I64_ARRAY || rhs.kind != LOOM_ATTR_I64_ARRAY ||
+      lhs.count != rhs.count) {
+    return false;
+  }
+  for (uint16_t i = 0; i < lhs.count; ++i) {
+    if (lhs.i64_array[i] != rhs.i64_array[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_sanitizer_preceded_by_matching_access_assertion(
+    loom_op_t* op, loom_sanitizer_assert_access_kind_t kind,
+    loom_value_id_t view, loom_value_slice_t indices,
+    loom_attribute_t static_indices) {
+  loom_op_t* previous_op = op->prev_op;
+  if (!previous_op || !loom_sanitizer_assert_access_isa(previous_op) ||
+      loom_sanitizer_assert_access_kind(previous_op) != kind ||
+      loom_sanitizer_assert_access_view(previous_op) != view) {
+    return false;
+  }
+  return loom_sanitizer_value_slices_equal(
+             loom_sanitizer_assert_access_indices(previous_op), indices) &&
+         loom_sanitizer_i64_arrays_equal(
+             loom_sanitizer_assert_access_static_indices(previous_op),
+             static_indices);
+}
+
+static iree_status_t loom_sanitizer_build_access_assertion(
+    loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_sanitizer_assert_access_kind_t kind, loom_value_id_t view,
+    loom_value_slice_t indices, loom_attribute_t static_indices,
+    loom_location_id_t source_location, loom_op_t** out_op) {
+  loom_location_id_t site_location = LOOM_LOCATION_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_make_site_location(
+      module, source_location, LOOM_SANITIZER_ASSERTION_KIND_ACCESS,
+      LOOM_SANITIZER_CHECK_KIND_ACCESS_RANGE,
+      LOOM_SANITIZER_PROVENANCE_KIND_COMPILER_CONTRACT,
+      LOOM_SANITIZER_LANE_POLICY_SCALAR, LOOM_SANITIZER_LINEAGE_ROLE_ORIGINAL,
+      &site_location));
+  return loom_sanitizer_assert_access_build(
+      &rewriter->builder, kind, view, indices.values, indices.count,
+      static_indices.i64_array, static_indices.count, site_location, out_op);
+}
+
+static iree_status_t loom_sanitizer_try_instrument_access_op(
+    loom_pass_t* pass, loom_module_t* module, loom_rewriter_t* rewriter,
+    loom_op_t* op) {
+  loom_sanitizer_assert_access_kind_t kind = 0;
+  loom_value_id_t view = LOOM_VALUE_ID_INVALID;
+  loom_value_slice_t indices = {0};
+  loom_attribute_t static_indices = loom_attr_absent();
+  if (loom_view_load_isa(op)) {
+    kind = LOOM_SANITIZER_ASSERT_ACCESS_KIND_READ;
+    view = loom_view_load_view(op);
+    indices = loom_view_load_indices(op);
+    static_indices = loom_view_load_static_indices(op);
+  } else if (loom_view_store_isa(op)) {
+    kind = LOOM_SANITIZER_ASSERT_ACCESS_KIND_WRITE;
+    view = loom_view_store_view(op);
+    indices = loom_view_store_indices(op);
+    static_indices = loom_view_store_static_indices(op);
+  } else {
+    return iree_ok_status();
+  }
+  if (loom_sanitizer_preceded_by_matching_access_assertion(
+          op, kind, view, indices, static_indices)) {
+    return iree_ok_status();
+  }
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_op_t* assert_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_sanitizer_build_access_assertion(
+      module, rewriter, kind, view, indices, static_indices, op->location,
+      &assert_op));
+  (void)assert_op;
+  loom_sanitizer_insert_assertions_statistics_t* statistics =
+      loom_sanitizer_insert_assertions_statistics(pass);
+  ++statistics->access_assertions_inserted;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_sanitizer_filter_predicates(
     loom_module_t* module, loom_rewriter_t* rewriter, loom_value_slice_t values,
     loom_attribute_t predicates, loom_predicate_t** out_predicates,
@@ -994,7 +1094,11 @@ static iree_status_t loom_sanitizer_try_instrument_fastmath_op(
 iree_status_t loom_sanitizer_insert_assertions_run(loom_pass_t* pass,
                                                    loom_module_t* module,
                                                    loom_func_like_t function) {
-  if (!loom_sanitizer_checks_enabled(pass, LOOM_SANITIZER_CHECK_VALUE)) {
+  const bool access_checks_enabled =
+      loom_sanitizer_checks_enabled(pass, LOOM_SANITIZER_CHECK_ACCESS);
+  const bool value_checks_enabled =
+      loom_sanitizer_checks_enabled(pass, LOOM_SANITIZER_CHECK_VALUE);
+  if (!access_checks_enabled && !value_checks_enabled) {
     return iree_ok_status();
   }
   loom_region_t* body = loom_func_like_body(function);
@@ -1017,6 +1121,12 @@ iree_status_t loom_sanitizer_insert_assertions_run(loom_pass_t* pass,
     loom_op_t* op = loom_rewriter_pop(&rewriter);
     if (!op) break;
     if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) continue;
+    if (access_checks_enabled) {
+      status =
+          loom_sanitizer_try_instrument_access_op(pass, module, &rewriter, op);
+      if (!iree_status_is_ok(status)) continue;
+    }
+    if (!value_checks_enabled) continue;
     if (loom_scalar_assume_isa(op)) {
       status = loom_sanitizer_replace_assume(
           pass, module, &rewriter, op, loom_scalar_assume_values(op),

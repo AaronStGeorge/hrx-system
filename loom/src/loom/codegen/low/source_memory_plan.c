@@ -1712,17 +1712,39 @@ bool loom_low_source_memory_access_plan_build(
   const loom_type_t vector_type =
       loom_low_source_memory_access_payload_vector_type(module, source_op,
                                                         access, view_type);
-  const bool built = loom_low_source_memory_access_plan_from_components(
+  const bool built = loom_low_source_memory_access_plan_build_indexed(
       module, fact_table, operation_kind, view_value_id,
       loom_memory_access_dynamic_indices(access),
-      loom_memory_access_static_indices(access), view_type, vector_type,
-      cache_policy, out_plan, out_diagnostic);
+      loom_memory_access_static_indices(access), vector_type, cache_policy,
+      out_plan, out_diagnostic);
   if (built) {
     out_plan->vector_offset_kind =
         loom_low_source_memory_access_vector_offset_kind(
             fact_table, loom_memory_access_offsets(access));
   }
   return built;
+}
+
+bool loom_low_source_memory_access_plan_build_indexed(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_low_source_memory_operation_kind_t operation_kind,
+    loom_value_id_t view_value_id, loom_value_slice_t dynamic_indices,
+    loom_attribute_t static_indices, loom_type_t vector_type,
+    loom_vector_memory_cache_policy_t cache_policy,
+    loom_low_source_memory_access_plan_t* out_plan,
+    loom_low_source_memory_access_diagnostic_t* out_diagnostic) {
+  *out_plan = (loom_low_source_memory_access_plan_t){0};
+  *out_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};
+  if (view_value_id >= module->values.count) {
+    out_diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_SOURCE;
+    return false;
+  }
+  const loom_type_t view_type = loom_module_value_type(module, view_value_id);
+  return loom_low_source_memory_access_plan_from_components(
+      module, fact_table, operation_kind, view_value_id, dynamic_indices,
+      static_indices, view_type, vector_type, cache_policy, out_plan,
+      out_diagnostic);
 }
 
 bool loom_low_source_memory_access_plan_build_view(
@@ -1753,7 +1775,6 @@ bool loom_low_source_memory_access_plan_build_view(
   int64_t zero_indices[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {0};
   loom_attribute_t static_indices =
       loom_attr_i64_array(zero_indices, loom_type_rank(result_view_type));
-  loom_type_t access_view_type = result_view_type;
 
   loom_value_id_t projection_view_id = view_value_id;
   const loom_value_t* view_value = loom_module_value(module, view_value_id);
@@ -1770,16 +1791,14 @@ bool loom_low_source_memory_access_plan_build_view(
     const loom_op_t* defining_op = loom_value_def_op(projection_view);
     if (defining_op && loom_view_subview_isa(defining_op)) {
       access_view_id = loom_view_subview_source(defining_op);
-      access_view_type = loom_module_value_type(module, access_view_id);
       dynamic_indices = loom_view_subview_offsets(defining_op);
       static_indices = loom_view_subview_static_offsets(defining_op);
     }
   }
 
-  return loom_low_source_memory_access_plan_from_components(
+  return loom_low_source_memory_access_plan_build_indexed(
       module, fact_table, operation_kind, access_view_id, dynamic_indices,
-      static_indices, access_view_type, vector_type, cache_policy, out_plan,
-      out_diagnostic);
+      static_indices, vector_type, cache_policy, out_plan, out_diagnostic);
 }
 
 iree_string_view_t loom_low_source_memory_access_rejection_key(

@@ -826,6 +826,16 @@ iree_status_t loom_low_lower_allocate_plan_data(
     loom_low_lower_context_t* context, iree_host_size_t data_length,
     void** out_data);
 
+// Returns function-local target state for |key|, allocating zeroed storage on
+// first use.
+//
+// Keys must be target-owned static addresses. Reusing a key with a different
+// data length is an internal lowering error. The returned storage remains
+// valid until the current loom_low_lower_function call returns.
+iree_status_t loom_low_lower_get_or_allocate_target_state(
+    loom_low_lower_context_t* context, const void* key,
+    iree_host_size_t data_length, void** out_data);
+
 // Appends a low-only block to the low function being emitted.
 //
 // This is for target control packets that need a dispatch/restore block with no

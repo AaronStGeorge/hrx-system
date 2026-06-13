@@ -1,0 +1,49 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// AMDGPU lowering for generic Loom sanitizer assertions.
+
+#ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_SANITIZER_H_
+#define LOOM_TARGET_ARCH_AMDGPU_LOWER_SANITIZER_H_
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "iree/base/api.h"
+#include "loom/codegen/low/lower/lower.h"
+#include "loom/ir/ir.h"
+#include "loom/target/arch/amdgpu/lower/memory.h"
+#include "loom/target/arch/amdgpu/lower/sanitizer_report.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct loom_amdgpu_sanitizer_access_plan_t {
+  // Flat application address plan selected from the asserted view access.
+  loom_amdgpu_memory_access_t address;
+  // Runtime access kind reported when the assertion fails.
+  loom_amdgpu_sanitizer_access_kind_t report_access_kind;
+  // Number of application bytes covered by the assertion.
+  uint32_t access_size;
+} loom_amdgpu_sanitizer_access_plan_t;
+
+// Selects an AMDGPU shadow-check lowering for sanitizer.assert.access.
+iree_status_t loom_amdgpu_select_sanitizer_assert_access_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_sanitizer_access_plan_t* out_plan, bool* out_selected);
+
+// Lowers sanitizer.assert.access to a hot shadow check and cold report/trap
+// CFG.
+iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_sanitizer_access_plan_t* plan);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_TARGET_ARCH_AMDGPU_LOWER_SANITIZER_H_

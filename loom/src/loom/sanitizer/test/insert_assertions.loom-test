@@ -112,6 +112,40 @@ func.def @access_only_selection_leaves_value_ir_unchanged(%n: index) -> (index) 
 
 // ====
 
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_keeps_existing_scalar_view_assertions(%layout: encoding<layout>, %input: view<16xf32, %layout>, %i: index) -> (f32) {
+  sanitizer.assert.access<read> %input[%i] : view<16xf32, %layout>
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  func.return %value : f32
+}
+
+// ----
+func.def @access_only_keeps_existing_scalar_view_assertions(%layout: encoding<layout>, %input: view<16xf32, %layout>, %i: index) -> (f32) {
+  sanitizer.assert.access<read> %input[%i] : view<16xf32, %layout>
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  func.return %value : f32
+}
+
+// ====
+
+// RUN: pass sanitizer-insert-assertions{checks=access}
+func.def @access_only_instruments_scalar_view_memory(%layout: encoding<layout>, %input: view<16xf32, %layout>, %output: view<16xf32, %layout>, %i: index) {
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  view.store %value, %output[%i] : f32, view<16xf32, %layout>
+  func.return
+}
+
+// ----
+func.def @access_only_instruments_scalar_view_memory(%layout: encoding<layout>, %input: view<16xf32, %layout>, %output: view<16xf32, %layout>, %i: index) {
+  sanitizer.assert.access<read> %input[%i] : view<16xf32, %layout>
+  %value = view.load %input[%i] : view<16xf32, %layout> -> f32
+  sanitizer.assert.access<write> %output[%i] : view<16xf32, %layout>
+  view.store %value, %output[%i] : f32, view<16xf32, %layout>
+  func.return
+}
+
+// ====
+
 // RUN: with-locations pass sanitizer-insert-assertions{checks=value}
 
 // Inserted assertions carry compact sanitizer site payloads while keeping the

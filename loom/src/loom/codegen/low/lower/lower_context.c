@@ -290,6 +290,57 @@ iree_status_t loom_low_lower_allocate_plan_data(
                                                out_data);
 }
 
+iree_status_t loom_low_lower_get_or_allocate_target_state(
+    loom_low_lower_context_t* context, const void* key,
+    iree_host_size_t data_length, void** out_data) {
+  IREE_ASSERT(key != NULL);
+  IREE_ASSERT_GT(data_length, 0);
+  *out_data = NULL;
+  for (iree_host_size_t i = 0; i < context->lowering.target_state_record_count;
+       ++i) {
+    loom_low_lower_target_state_record_t* record =
+        &context->lowering.target_state_records[i];
+    if (record->key != key) continue;
+    if (record->data_length != data_length) {
+      return iree_make_status(
+          IREE_STATUS_INTERNAL,
+          "target lowering state key reused with a different size");
+    }
+    *out_data = record->data;
+    return iree_ok_status();
+  }
+
+  if (context->lowering.target_state_record_count ==
+      context->lowering.target_state_record_capacity) {
+    iree_host_size_t minimum_capacity = 0;
+    if (!iree_host_size_checked_add(context->lowering.target_state_record_count,
+                                    1, &minimum_capacity)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE, "capacity overflow");
+    }
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        &context->arena, context->lowering.target_state_record_count,
+        minimum_capacity, sizeof(*context->lowering.target_state_records),
+        &context->lowering.target_state_record_capacity,
+        (void**)&context->lowering.target_state_records));
+  }
+
+  void* data = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_allocate_scratch_array(context, 1, data_length, &data));
+  memset(data, 0, data_length);
+  const iree_host_size_t record_index =
+      context->lowering.target_state_record_count++;
+  loom_low_lower_target_state_record_t* record =
+      &context->lowering.target_state_records[record_index];
+  *record = (loom_low_lower_target_state_record_t){
+      .key = key,
+      .data_length = data_length,
+      .data = data,
+  };
+  *out_data = data;
+  return iree_ok_status();
+}
+
 static loom_region_t* loom_low_lower_context_low_body(
     const loom_low_lower_context_t* context) {
   if (loom_low_func_def_isa(context->low_func_op)) {

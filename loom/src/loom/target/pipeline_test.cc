@@ -111,7 +111,7 @@ class TargetPipelineTest : public ::testing::Test {
                                       loom_op_t* pipeline_op) {
     PipelineRunCounts counts = {};
     PipelineRunCountContext count_context = {
-        .module = module,
+        /*.module=*/module,
     };
     iree_arena_allocator_t arena;
     iree_arena_initialize(&block_pool_, &arena);
@@ -154,12 +154,13 @@ TEST_F(TargetPipelineTest, ZeroChecksBuildsNoSanitizerPassSlots) {
 TEST_F(TargetPipelineTest, EnabledChecksBuildSanitizerPassSlots) {
   ModulePtr module = AllocateModule(IREE_SV("pipeline"));
   const loom_target_pipeline_options_t options = {
-      .sanitizer =
-          {
-              .checks = LOOM_SANITIZER_CHECK_ACCESS |
-                        LOOM_SANITIZER_CHECK_VALUE |
-                        LOOM_SANITIZER_CHECK_OPERATION,
-          },
+      /*.source_to_low_max_errors=*/{},
+      /*.control_flow_lowering=*/{},
+      /*.sanitizer=*/
+      {
+          /*.checks=*/LOOM_SANITIZER_CHECK_ACCESS | LOOM_SANITIZER_CHECK_VALUE |
+              LOOM_SANITIZER_CHECK_OPERATION,
+      },
   };
 
   loom_op_t* pipeline_op = nullptr;
@@ -178,10 +179,12 @@ TEST_F(TargetPipelineTest, EnabledChecksBuildSanitizerPassSlots) {
 TEST_F(TargetPipelineTest, UnknownCheckBitsFailValidation) {
   ModulePtr module = AllocateModule(IREE_SV("pipeline"));
   const loom_target_pipeline_options_t options = {
-      .sanitizer =
-          {
-              .checks = 1ull << 63,
-          },
+      /*.source_to_low_max_errors=*/{},
+      /*.control_flow_lowering=*/{},
+      /*.sanitizer=*/
+      {
+          /*.checks=*/1ull << 63,
+      },
   };
 
   loom_op_t* pipeline_op = nullptr;

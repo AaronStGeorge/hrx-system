@@ -347,9 +347,7 @@ iree_status_t loom_low_lower_query_target_contract(
   *out_result = loom_target_contract_query_result_empty();
 
   if (options->contract_index == NULL ||
-      options->contract_index->case_count == 0 ||
-      (loom_low_lower_rule_set_list_is_empty(options->rule_sets) &&
-       options->descriptor_matrix.query == NULL)) {
+      options->contract_index->case_count == 0) {
     return iree_ok_status();
   }
 

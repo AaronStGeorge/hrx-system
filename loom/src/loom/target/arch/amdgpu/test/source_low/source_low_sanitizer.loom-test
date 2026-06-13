@@ -1,0 +1,214 @@
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @sanitizer_access_i32() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch(%input: buffer) {
+  %base = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_view = buffer.view %input_global[%base] : buffer -> view<1xi32, #dense>
+  sanitizer.assert.access<read> %input_view[0] : view<1xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @sanitizer_access_i32() {
+  %input_view = low.resource<hal_binding> {extent = 4, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %6 = low.slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %7 = low.slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %8 = low.op<amdgpu.v_mov_b32_copy>(%6) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %9 = low.op<amdgpu.v_mov_b32_copy>(%7) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %10 = low.concat(%8, %9) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %11 = low.op<amdgpu.s_getpc_b64>() : () -> reg<amdgpu.sgpr x2>
+  %12 = low.slice %11[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %13 = low.slice %11[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %14 = low.op<amdgpu.s_add_u32.rhs_symbol_rel32_lo>(%12) {byte_offset = 0, symbol = @iree_asan_config} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %15 = low.op<amdgpu.s_addc_u32.rhs_symbol_rel32_hi>(%13) {byte_offset = 0, symbol = @iree_asan_config} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %16 = low.concat(%14, %15) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %17 = low.op<amdgpu.s_load_dwordx2_offset_only>(%16) {offset = 16} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %18 = low.slice %17[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %19 = low.op<amdgpu.v_mov_b32_copy>(%18) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %20 = low.slice %17[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %21 = low.op<amdgpu.v_mov_b32_copy>(%20) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %25 = low.op<amdgpu.v_lshrrev_b32.lit>(%8) {imm32 = 3} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %26 = low.op<amdgpu.v_lshlrev_b32.lit>(%9) {imm32 = 29} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %27 = low.op<amdgpu.v_or_b32>(%25, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_lshrrev_b32.lit>(%9) {imm32 = 3} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %34, %35 = low.op<amdgpu.v_add_co_u32>(%19, %27) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %36, %37 = low.op<amdgpu.v_add_co_ci_u32>(%21, %28, %35) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %38 = low.concat(%34, %36) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %39 = low.op<amdgpu.global_load_u8>(%38) {glc = 1} : (reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr>
+  %41 = low.op<amdgpu.v_and_b32.lit>(%8) {imm32 = 7} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %42 = low.op<amdgpu.v_add_u32.lit>(%41) {imm32 = 3} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %43 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %44 = low.const<amdgpu.v_mov_b32> {imm32 = 128} : reg<amdgpu.vgpr>
+  %45 = low.op<amdgpu.v_cmp_ne_i32>(%39, %43) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %46 = low.op<amdgpu.v_cmp_uge_u32>(%39, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %47 = low.op<amdgpu.v_cmp_uge_u32>(%42, %39) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %48 = low.op<amdgpu.s_and_b64>(%45, %47) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %49 = low.op<amdgpu.s_or_b64>(%46, %48) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %50 = low.const<amdgpu.v_mov_b32> {imm32 = 3} : reg<amdgpu.vgpr>
+  %57, %58 = low.op<amdgpu.v_add_co_u32>(%8, %50) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %59, %60 = low.op<amdgpu.v_add_co_ci_u32>(%9, %43, %58) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %69 = low.op<amdgpu.v_lshrrev_b32.lit>(%57) {imm32 = 3} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %70 = low.op<amdgpu.v_lshlrev_b32.lit>(%59) {imm32 = 29} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %71 = low.op<amdgpu.v_or_b32>(%69, %70) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %72 = low.op<amdgpu.v_lshrrev_b32.lit>(%59) {imm32 = 3} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %78, %79 = low.op<amdgpu.v_add_co_u32>(%19, %71) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %80, %81 = low.op<amdgpu.v_add_co_ci_u32>(%21, %72, %79) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %82 = low.concat(%78, %80) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %83 = low.op<amdgpu.global_load_u8>(%82) {glc = 1} : (reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr>
+  %85 = low.op<amdgpu.v_and_b32.lit>(%57) {imm32 = 7} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %88 = low.op<amdgpu.v_cmp_ne_i32>(%83, %43) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %89 = low.op<amdgpu.v_cmp_uge_u32>(%83, %44) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %90 = low.op<amdgpu.v_cmp_uge_u32>(%85, %83) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %91 = low.op<amdgpu.s_and_b64>(%88, %90) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %92 = low.op<amdgpu.s_or_b64>(%89, %91) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %97 = low.op<amdgpu.v_cndmask_b32>(%34, %78, %92) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %98 = low.op<amdgpu.v_cndmask_b32>(%36, %80, %92) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %99 = low.concat(%97, %98) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %100 = low.op<amdgpu.v_cndmask_b32>(%39, %83, %92) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %101 = low.op<amdgpu.s_or_b64>(%49, %92) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %103 = low.concat(%100, %43) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %104 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %109 = low.const<amdgpu.s_mov_b32> {imm32 = 4} : reg<amdgpu.sgpr>
+  %113 = low.op<amdgpu.v_mov_b32_copy>(%109) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %115 = low.op<amdgpu.v_mov_b32_copy>(%104) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %116 = low.concat(%113, %115) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %117 = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
+  %121 = low.op<amdgpu.v_mov_b32_copy>(%117) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %124 = low.concat(%121, %115) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %253 = low.concat(%104, %104) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %254 = low.op<amdgpu.s_cmp_lg_u64>(%101, %253) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.scc>
+  low.cond_br %254, ^_bb2, ^_bb1 : reg<amdgpu.scc>
+^_bb1:
+  low.return
+^_bb2:
+  %255, %256 = low.op<amdgpu.s_and_saveexec_b64>(%101) : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>, reg<amdgpu.scc>
+  low.br ^_bb3
+^_bb3:
+  %133 = low.op<amdgpu.s_getpc_b64>() : () -> reg<amdgpu.sgpr x2>
+  %134 = low.slice %133[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %135 = low.slice %133[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %136 = low.op<amdgpu.s_add_u32.rhs_symbol_rel32_lo>(%134) {byte_offset = 0, symbol = @iree_feedback_config} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %137 = low.op<amdgpu.s_addc_u32.rhs_symbol_rel32_hi>(%135) {byte_offset = 0, symbol = @iree_feedback_config} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %138 = low.concat(%136, %137) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %139 = low.op<amdgpu.s_load_dword_offset_only>(%138) {offset = 8} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr>
+  %140 = low.op<amdgpu.s_load_dwordx2_offset_only>(%138) {offset = 16} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %141 = low.op<amdgpu.s_load_dwordx2_offset_only>(%138) {offset = 24} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %142 = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
+  %143 = low.op<amdgpu.s_and_b32>(%139, %142) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %144 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %145 = low.op<amdgpu.s_cmp_lg_i32>(%143, %144) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
+  low.cond_br %145, ^_bb4, ^_bb10 : reg<amdgpu.scc>
+^_bb4:
+  %149 = low.op<amdgpu.s_load_dwordx2_offset_only>(%140) {offset = 16} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %150 = low.op<amdgpu.s_load_dwordx2_offset_only>(%140) {offset = 24} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %154 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %155 = low.op<amdgpu.global_load_b64_saddr>(%154, %140) {glc = 1, offset = 40} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr x2>
+  %157 = low.op<amdgpu.global_load_b64_saddr>(%154, %140) {glc = 1, offset = 32} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.op<amdgpu.buffer_gl1_inv>() : ()
+  low.op<amdgpu.buffer_gl0_inv>() : ()
+  %158 = low.slice %150[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %159 = low.const<amdgpu.s_mov_b32> {imm32 = 128} : reg<amdgpu.sgpr>
+  %160 = low.op<amdgpu.s_sub_u32>(%158, %159) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %161 = low.slice %155[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %162 = low.slice %157[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %163 = low.op<amdgpu.v_sub_u32>(%161, %162) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %164 = low.op<amdgpu.v_mov_b32_copy>(%160) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %165 = low.op<amdgpu.v_cmp_ule_u32>(%163, %164) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %168 = low.concat(%144, %144) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %169 = low.op<amdgpu.s_cmp_lg_u64>(%165, %168) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.scc>
+  low.cond_br %169, ^_bb5, ^_bb9 : reg<amdgpu.scc>
+^_bb5:
+  %170 = low.const<amdgpu.v_mov_b32> {imm32 = 128} : reg<amdgpu.vgpr>
+  %174 = low.slice %155[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %177, %178 = low.op<amdgpu.v_add_co_u32>(%161, %170) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %179, %180 = low.op<amdgpu.v_add_co_ci_u32>(%174, %154, %178) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>
+  %181 = low.concat(%177, %179) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %183 = low.concat(%155, %181) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
+  %184 = low.op<amdgpu.global_atomic_cmpswap_b64_rtn_saddr>(%154, %183, %140) {offset = 40} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.op<amdgpu.buffer_gl1_inv>() : ()
+  low.op<amdgpu.buffer_gl0_inv>() : ()
+  %185 = low.slice %184[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %186 = low.slice %184[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %189 = low.op<amdgpu.v_cmp_eq_i32>(%186, %174) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %190 = low.op<amdgpu.v_cmp_eq_i32>(%185, %161) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %191 = low.op<amdgpu.s_and_b64>(%189, %190) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %194 = low.concat(%144, %144) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %195 = low.op<amdgpu.s_cmp_lg_u64>(%191, %194) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.scc>
+  low.cond_br %195, ^_bb6, ^_bb4 : reg<amdgpu.scc>
+^_bb6:
+  %198 = low.op<amdgpu.s_sub_u32>(%158, %142) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %200 = low.op<amdgpu.v_mov_b32_copy>(%198) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %201 = low.op<amdgpu.v_and_b32>(%161, %200) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.br ^_bb7(%155: reg<amdgpu.vgpr x2>, %201: reg<amdgpu.vgpr>, %191: reg<amdgpu.sgpr x2>)
+^_bb7(%151: reg<amdgpu.vgpr x2>, %152: reg<amdgpu.vgpr>, %153: reg<amdgpu.sgpr x2>):
+  %215 = low.concat(%144, %144) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %216 = low.op<amdgpu.s_cmp_lg_u64>(%153, %215) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.scc>
+  low.cond_br %216, ^_bb8, ^_bb10 : reg<amdgpu.scc>
+^_bb8:
+  %220 = low.concat(%154, %154) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %221 = low.const<amdgpu.v_mov_b32> {imm32 = 128} : reg<amdgpu.vgpr>
+  %222 = low.const<amdgpu.v_mov_b32> {imm32 = 65600} : reg<amdgpu.vgpr>
+  %223 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.global_store_b32_saddr>(%152, %221, %149) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %222, %149) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %223, %149) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %154, %149) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %151, %149) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  %225 = low.op<amdgpu.v_mov_b32_copy>(%104) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %228 = low.concat(%225, %225) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.global_store_b64_saddr>(%152, %228, %149) {offset = 24} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %225, %149) {offset = 32} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %43, %149) {offset = 36} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %154, %149) {offset = 40} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %154, %149) {offset = 44} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %220, %149) {offset = 48} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %220, %149) {offset = 56} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  %230 = low.const<amdgpu.v_mov_b32> {imm32 = 64} : reg<amdgpu.vgpr>
+  low.op<amdgpu.global_store_b32_saddr>(%152, %230, %149) {offset = 64} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %154, %149) {offset = 68} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %223, %149) {offset = 72} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b32_saddr>(%152, %154, %149) {offset = 76} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %10, %149) {offset = 80} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %116, %149) {offset = 88} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %124, %149) {offset = 96} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %99, %149) {offset = 104} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.global_store_b64_saddr>(%152, %103, %149) {offset = 112} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  %236 = low.concat(%154, %154) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.global_store_b64_saddr>(%152, %236, %149) {offset = 120} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
+  low.op<amdgpu.global_store_b32_saddr>(%152, %223, %149) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %238 = low.op<amdgpu.s_load_dwordx2_offset_only>(%141) {offset = 16} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x2>
+  %239 = low.op<amdgpu.s_load_dword_offset_only>(%141) {offset = 24} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr>
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
+  %243 = low.concat(%223, %154) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.global_atomic_add_u64_saddr>(%154, %243, %141) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  %245 = low.op<amdgpu.v_mov_b32_copy>(%239) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %247 = low.concat(%245, %154) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
+  low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
+  low.op<amdgpu.global_store_b64_saddr>(%154, %247, %238) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  %248 = low.const<amdgpu.s_mov_b32> {imm32 = 16777215} : reg<amdgpu.sgpr>
+  %249 = low.op<amdgpu.s_and_b32>(%239, %248) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %250 = low.op<amdgpu.s_mov_b32_m0>(%249) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.s_sendmsg>(%250) {message = 1} : (reg<amdgpu.m0>)
+  low.br ^_bb10
+^_bb9:
+  %203 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %205 = low.concat(%203, %154) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.global_atomic_add_u64_saddr>(%154, %205, %140) {offset = 48} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>)
+  %208 = low.concat(%154, %154) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %212 = low.concat(%144, %144) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb7(%208: reg<amdgpu.vgpr x2>, %154: reg<amdgpu.vgpr>, %212: reg<amdgpu.sgpr x2>)
+^_bb10:
+  low.op<amdgpu.s_trap>() {trapid = 256} : ()
+}

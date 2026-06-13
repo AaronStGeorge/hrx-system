@@ -85,6 +85,15 @@ typedef struct loom_low_lower_successor_interpositions_t {
   uint8_t low_dest_count;
 } loom_low_lower_successor_interpositions_t;
 
+typedef struct loom_low_lower_target_state_record_t {
+  // Target-owned static key identifying this function-local state object.
+  const void* key;
+  // Byte length of state storage.
+  iree_host_size_t data_length;
+  // Zero-initialized state storage allocated from the lowering arena.
+  void* data;
+} loom_low_lower_target_state_record_t;
+
 typedef struct loom_low_lowering_frame_t {
   // Active source-function value domain for dense per-value lowering state.
   loom_local_value_domain_t value_domain;
@@ -130,6 +139,12 @@ typedef struct loom_low_lowering_frame_t {
   loom_low_lower_rule_descriptor_map_t* rule_descriptor_maps;
   // Number of entries in rule_descriptor_maps.
   uint16_t rule_descriptor_map_count;
+  // Function-local target state records keyed by target-owned static storage.
+  loom_low_lower_target_state_record_t* target_state_records;
+  // Number of populated target_state_records entries.
+  iree_host_size_t target_state_record_count;
+  // Number of allocated target_state_records entries.
+  iree_host_size_t target_state_record_capacity;
 } loom_low_lowering_frame_t;
 
 static inline loom_value_ordinal_t loom_low_lowering_frame_value_ordinal(

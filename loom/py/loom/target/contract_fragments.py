@@ -102,6 +102,13 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
         aliases=("amdgpu_reduce",),
     ),
     ContractFragmentRegistration(
+        key="amdgpu.sanitizer",
+        module_name="loom.target.arch.amdgpu.contracts.sanitizer",
+        symbol_name="AMDGPU_SANITIZER_CONTRACT_FRAGMENT",
+        dialect_ops_symbol_name="AMDGPU_SANITIZER_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_sanitizer",),
+    ),
+    ContractFragmentRegistration(
         key="amdgpu.view",
         module_name="loom.target.arch.amdgpu.contracts.view",
         symbol_name="AMDGPU_VIEW_CONTRACT_FRAGMENT",

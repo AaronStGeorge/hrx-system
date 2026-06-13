@@ -34,6 +34,7 @@ loom_cc_library(
     loom::ops::index
     loom::ops::sanitizer
     loom::ops::scalar
+    loom::ops::view
     loom::pass::pipeline
     loom::pass::registry
     loom::pass::types

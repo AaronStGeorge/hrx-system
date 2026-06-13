@@ -175,6 +175,23 @@ loom_target_table_cc_library(
 )
 
 loom_target_table_cc_library(
+    name = "sanitizer",
+    args = ["--contract-fragment=amdgpu.sanitizer"],
+    generator = _AMDGPU_CONTRACT_FRAGMENT_GENERATOR,
+    deps = ["//loom/src/loom/target:contract"],
+)
+
+loom_target_table_cc_library(
+    name = "sanitizer_lower_rules",
+    args = ["--contract-fragment=amdgpu.sanitizer"],
+    generator = _AMDGPU_LOWER_RULE_GENERATOR,
+    deps = [
+        "//loom/src/loom/codegen/low/lower",
+        "//loom/src/loom/ops/sanitizer",
+    ],
+)
+
+loom_target_table_cc_library(
     name = "view",
     args = ["--contract-fragment=amdgpu.view"],
     generator = _AMDGPU_CONTRACT_FRAGMENT_GENERATOR,
@@ -211,6 +228,8 @@ loom_cc_library(
         "matrix.h",
         "reduce.h",
         "reduce_lower_rules.h",
+        "sanitizer.h",
+        "sanitizer_lower_rules.h",
         "view.h",
         "view_lower_rules.h",
     ],
@@ -232,6 +251,8 @@ loom_cc_library(
         ":matrix",
         ":reduce",
         ":reduce_lower_rules",
+        ":sanitizer",
+        ":sanitizer_lower_rules",
         ":view",
         ":view_lower_rules",
     ],
