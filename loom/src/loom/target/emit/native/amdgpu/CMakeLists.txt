@@ -519,13 +519,16 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::op_registry
+    loom::ops::sanitizer
+    loom::sanitizer::site_table
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::error_defs
-    loom::target::arch::amdgpu::ops
+    loom::target::arch::amdgpu::provider
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::target_info
     loom::target::emit::native::elf
     loom::testing::diagnostic_matchers
+    loom::tooling::compile::pipeline
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"

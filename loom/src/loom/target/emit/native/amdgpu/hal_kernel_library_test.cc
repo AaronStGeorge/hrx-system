@@ -17,14 +17,17 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/ops/sanitizer/ops.h"
+#include "loom/sanitizer/site_table.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
-#include "loom/target/arch/amdgpu/ops/registry.h"
+#include "loom/target/arch/amdgpu/provider.h"
 #include "loom/target/arch/amdgpu/records/target_records.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/runtime_globals.h"
 #include "loom/target/emit/native/elf.h"
 #include "loom/testing/diagnostic_matchers.h"
+#include "loom/tooling/compile/pipeline.h"
 
 namespace loom {
 namespace {
@@ -34,11 +37,14 @@ using ::loom::testing::DiagnosticCapture;
 using ::loom::testing::FindDiagnostic;
 using ::loom::testing::GetStringParam;
 
-iree_status_t InitializeAmdgpuContext(loom_context_t* context) {
+iree_status_t InitializeAmdgpuContext(
+    const loom_target_environment_t* target_environment,
+    loom_context_t* context) {
   loom_context_initialize(iree_allocator_system(), context);
   iree_status_t status = loom_op_registry_register_all_dialects(context);
   if (iree_status_is_ok(status)) {
-    status = loom_amdgpu_ops_register_dialect(context);
+    status =
+        loom_target_environment_register_context(target_environment, context);
   }
   if (iree_status_is_ok(status)) {
     status = loom_context_finalize(context);
@@ -250,12 +256,16 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(InitializeAmdgpuContext(&context_));
-    loom_amdgpu_low_descriptor_registry_initialize(&low_registry_);
+    IREE_ASSERT_OK(loom_target_environment_initialize(
+        &loom_amdgpu_target_provider_set, &target_environment_));
+    IREE_ASSERT_OK(InitializeAmdgpuContext(&target_environment_, &context_));
+    IREE_ASSERT_OK(loom_target_environment_initialize_low_descriptor_registry(
+        &target_environment_, &low_registry_));
   }
 
   void TearDown() override {
     loom_context_deinitialize(&context_);
+    loom_target_environment_deinitialize(&target_environment_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
@@ -332,6 +342,57 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
         "}\n";
     ASSERT_NO_FATAL_FAILURE(
         ParseSource(iree_make_cstring_view(kSource), out_module));
+  }
+
+  void ParseGfx11SourceSanitizerKernels(loom_module_t** out_module) {
+    static const char kSource[] =
+        "amdgpu.target<gfx1100> @gfx_target\n"
+        "kernel.def target(@gfx_target) @read_kernel() {\n"
+        "  %one = index.constant 1 : index\n"
+        "  %size = index.constant 64 : index\n"
+        "  kernel.launch.config workgroups(%one, %one, %one) "
+        "workgroup_size(%size, %one, %one) : index\n"
+        "} launch(%input: buffer) {\n"
+        "  %base = index.constant 0 : offset\n"
+        "  %input_global = buffer.assume.memory_space<global> %input : "
+        "buffer\n"
+        "  %input_view = buffer.view %input_global[%base] : buffer -> "
+        "view<1xi32, #dense>\n"
+        "  sanitizer.assert.access<read> %input_view[0] : "
+        "view<1xi32, #dense>\n"
+        "  kernel.return\n"
+        "}\n"
+        "kernel.def target(@gfx_target) @write_kernel() {\n"
+        "  %one = index.constant 1 : index\n"
+        "  %size = index.constant 64 : index\n"
+        "  kernel.launch.config workgroups(%one, %one, %one) "
+        "workgroup_size(%size, %one, %one) : index\n"
+        "} launch(%output: buffer) {\n"
+        "  %base = index.constant 0 : offset\n"
+        "  %output_global = buffer.assume.memory_space<global> %output : "
+        "buffer\n"
+        "  %output_view = buffer.view %output_global[%base] : buffer -> "
+        "view<1xi32, #dense>\n"
+        "  sanitizer.assert.access<write> %output_view[0] : "
+        "view<1xi32, #dense>\n"
+        "  kernel.return\n"
+        "}\n";
+    ASSERT_NO_FATAL_FAILURE(
+        ParseSource(iree_make_cstring_view(kSource), out_module));
+  }
+
+  void RunPreparedLowPipeline(loom_module_t* module,
+                              DiagnosticCapture* capture) {
+    loom_compile_pipeline_options_t options = {};
+    loom_compile_pipeline_options_initialize(&options);
+    options.target_environment = &target_environment_;
+    options.low_descriptor_registry = &low_registry_;
+    options.diagnostic_sink = capture->sink();
+    options.max_errors = 20;
+    loom_pass_run_result_t result = {};
+    IREE_ASSERT_OK(
+        loom_compile_run_pipeline(module, &options, &block_pool_, &result));
+    ASSERT_EQ(result.error_count, 0u) << DiagnosticSummary(*capture);
   }
 
   void ParseGfx942Kernel(loom_module_t** out_module) {
@@ -432,6 +493,7 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
   }
 
   iree_arena_block_pool_t block_pool_;
+  loom_target_environment_t target_environment_ = {};
   loom_context_t context_ = {};
   loom_target_low_descriptor_registry_t low_registry_ = {};
 };
@@ -1201,6 +1263,110 @@ TEST_F(AmdgpuHalKernelLibraryTest,
   EXPECT_EQ(LoadLeU32(hsaco, (size_t)text.offset + 8u), (uint32_t)site_delta);
   EXPECT_EQ(LoadLeU32(hsaco, (size_t)text.offset + 16u),
             (uint32_t)(site_delta >> 32));
+
+  loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                              iree_allocator_system());
+  loom_module_free(module);
+}
+
+TEST_F(AmdgpuHalKernelLibraryTest, EmitsSourceLoweredSanitizerSiteTableRodata) {
+  static constexpr char kSiteSymbolName[] = "loom_sanitizer_sites";
+  loom_module_t* module = nullptr;
+  ASSERT_NO_FATAL_FAILURE(ParseGfx11SourceSanitizerKernels(&module));
+
+  DiagnosticCapture capture;
+  ASSERT_NO_FATAL_FAILURE(RunPreparedLowPipeline(module, &capture));
+
+  loom_amdgpu_hal_kernel_library_t library = {};
+  loom_amdgpu_hal_kernel_library_options_t options = {
+      /*.processor=*/{},
+      /*.target_selection=*/{},
+      /*.runtime_globals=*/LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG |
+          LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
+      /*.data_symbols=*/{},
+      /*.data_symbol_count=*/{},
+      /*.diagnostic_sink=*/capture.sink(),
+      /*.source_resolver=*/{},
+      /*.max_errors=*/20,
+  };
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+      module, &options, iree_allocator_system(), &emitted, &library));
+
+  EXPECT_TRUE(emitted);
+  EXPECT_TRUE(capture.diagnostics.empty()) << DiagnosticSummary(capture);
+  ASSERT_NE(library.hsaco_data, nullptr);
+  const std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
+                          library.hsaco_data_length);
+
+  const std::vector<Section> sections = ReadSections(hsaco);
+  const Section& dynsym = FindSection(sections, ".dynsym");
+  const Section& dynstr = FindSection(sections, ".dynstr");
+  const Section& rodata = FindSection(sections, ".rodata");
+  const Section& data = FindSection(sections, ".data");
+  const DynamicSymbol site =
+      FindDynamicSymbol(hsaco, dynsym, dynstr, kSiteSymbolName);
+  const std::string asan_name =
+      StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_NAME);
+  const std::string feedback_name =
+      StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME);
+  const DynamicSymbol asan =
+      FindDynamicSymbol(hsaco, dynsym, dynstr, asan_name.c_str());
+  const DynamicSymbol feedback =
+      FindDynamicSymbol(hsaco, dynsym, dynstr, feedback_name.c_str());
+
+  EXPECT_EQ(site.info, 0x11u);
+  EXPECT_EQ(site.section_index, rodata.index);
+  EXPECT_EQ(site.value & 7u, 0u);
+  ASSERT_GE(site.value, rodata.address);
+  ASSERT_LE(site.value - rodata.address, rodata.size);
+  ASSERT_LE(site.size, hsaco.size());
+  const size_t site_file_offset =
+      (size_t)(rodata.offset + (site.value - rodata.address));
+  const size_t site_size = (size_t)site.size;
+  ASSERT_LE(site_file_offset + site_size, hsaco.size());
+  const std::string site_table = hsaco.substr(site_file_offset, site_size);
+
+  ASSERT_GE(site_table.size(),
+            LOOM_SANITIZER_SITE_TABLE_HEADER_LENGTH +
+                2u * LOOM_SANITIZER_SITE_TABLE_RECORD_LENGTH);
+  EXPECT_EQ(
+      LoadLeU32(site_table, LOOM_SANITIZER_SITE_TABLE_HEADER_MAGIC_OFFSET),
+      LOOM_SANITIZER_SITE_TABLE_MAGIC);
+  EXPECT_EQ(
+      (uint8_t)site_table[LOOM_SANITIZER_SITE_TABLE_HEADER_VERSION_OFFSET],
+      LOOM_SANITIZER_SITE_TABLE_VERSION);
+  EXPECT_EQ(LoadLeU16(site_table,
+                      LOOM_SANITIZER_SITE_TABLE_HEADER_RECORD_LENGTH_OFFSET),
+            LOOM_SANITIZER_SITE_TABLE_RECORD_LENGTH);
+  EXPECT_EQ(
+      LoadLeU32(site_table, LOOM_SANITIZER_SITE_TABLE_HEADER_ROW_COUNT_OFFSET),
+      2u);
+
+  const size_t record0 = LOOM_SANITIZER_SITE_TABLE_HEADER_LENGTH;
+  const size_t record1 = record0 + LOOM_SANITIZER_SITE_TABLE_RECORD_LENGTH;
+  EXPECT_EQ(
+      LoadLeU32(site_table,
+                record0 + LOOM_SANITIZER_SITE_TABLE_RECORD_SITE_ID_OFFSET),
+      0u);
+  EXPECT_EQ(
+      LoadLeU32(site_table,
+                record0 + LOOM_SANITIZER_SITE_TABLE_RECORD_OP_KIND_OFFSET),
+      LOOM_OP_SANITIZER_ASSERT_ACCESS);
+  EXPECT_EQ(
+      LoadLeU32(site_table,
+                record1 + LOOM_SANITIZER_SITE_TABLE_RECORD_SITE_ID_OFFSET),
+      1u);
+  EXPECT_EQ(
+      LoadLeU32(site_table,
+                record1 + LOOM_SANITIZER_SITE_TABLE_RECORD_OP_KIND_OFFSET),
+      LOOM_OP_SANITIZER_ASSERT_ACCESS);
+
+  EXPECT_EQ(asan.section_index, data.index);
+  EXPECT_EQ(asan.size, LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG_BYTE_LENGTH);
+  EXPECT_EQ(feedback.section_index, data.index);
+  EXPECT_EQ(feedback.size,
+            LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
 
   loom_amdgpu_hal_kernel_library_deinitialize(&library,
                                               iree_allocator_system());
