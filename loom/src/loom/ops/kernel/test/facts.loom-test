@@ -213,6 +213,78 @@ kernel.def @subgroup_mask_distribution_facts() {
 
 // ====
 
+kernel.def @lane_predicate_bitwise_facts() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch(%arg: i32, %limit: index) {
+  %lane = kernel.subgroup.lane.id : index
+  %lane_i32 = index.cast %lane : index to i32
+  %scalar_predicate = scalar.cmpi eq, %lane_i32, %arg : i32
+  %index_predicate = index.cmp slt, %lane, %limit : index
+  %both = scalar.andi %scalar_predicate, %index_predicate : i1
+  %either = scalar.ori %scalar_predicate, %index_predicate : i1
+  %one = scalar.xori %scalar_predicate, %index_predicate : i1
+  %scalar_is_predicate = test.fact_lane_predicate %scalar_predicate : i1 -> i1
+  %index_is_predicate = test.fact_lane_predicate %index_predicate : i1 -> i1
+  %both_is_predicate = test.fact_lane_predicate %both : i1 -> i1
+  %either_is_predicate = test.fact_lane_predicate %either : i1 -> i1
+  %one_is_predicate = test.fact_lane_predicate %one : i1 -> i1
+  %both_is_uniform = test.fact_uniform %both : i1 -> i1
+  %either_hi = test.fact_range_hi %either : i1 -> i64
+  test.use %scalar_is_predicate, %index_is_predicate, %both_is_predicate, %either_is_predicate, %one_is_predicate, %both_is_uniform, %either_hi : i1, i1, i1, i1, i1, i1, i64
+  kernel.return
+}
+
+// ----
+kernel.def @lane_predicate_bitwise_facts() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch(%arg: i32, %limit: index) {
+  %scalar_is_predicate = scalar.constant true : i1
+  %index_is_predicate = scalar.constant true : i1
+  %both_is_predicate = scalar.constant true : i1
+  %either_is_predicate = scalar.constant true : i1
+  %one_is_predicate = scalar.constant true : i1
+  %both_is_uniform = scalar.constant false : i1
+  %either_hi = scalar.constant 1 : i64
+  test.use %scalar_is_predicate, %index_is_predicate, %both_is_predicate, %either_is_predicate, %one_is_predicate, %both_is_uniform, %either_hi : i1, i1, i1, i1, i1, i1, i64
+  kernel.return
+}
+
+// ====
+
+kernel.def @lane_predicate_cmpf_facts() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch(%lhs: f32, %rhs: f32) {
+  %lane = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : index
+  %condition = index.cmp eq, %lane, %zero : index
+  %varying = scf.select %condition, %lhs, %rhs : f32
+  %predicate = scalar.cmpf olt, %varying, %lhs : f32
+  %predicate_is_lane = test.fact_lane_predicate %predicate : i1 -> i1
+  %predicate_is_uniform = test.fact_uniform %predicate : i1 -> i1
+  test.use %predicate_is_lane, %predicate_is_uniform : i1, i1
+  kernel.return
+}
+
+// ----
+kernel.def @lane_predicate_cmpf_facts() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch(%lhs: f32, %rhs: f32) {
+  %predicate_is_lane = scalar.constant true : i1
+  %predicate_is_uniform = scalar.constant false : i1
+  test.use %predicate_is_lane, %predicate_is_uniform : i1, i1
+  kernel.return
+}
+
+// ====
+
 kernel.def @default_hal_query_facts() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

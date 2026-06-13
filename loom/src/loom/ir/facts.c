@@ -502,15 +502,45 @@ static int64_t loom_value_facts_non_negative_bitwise_upper_bound(
   return (int64_t)((UINT64_C(1) << bit_count) - 1);
 }
 
+static void loom_value_facts_propagate_bitwise_flags(
+    const loom_value_facts_t* lhs, const loom_value_facts_t* rhs,
+    loom_value_facts_t* out) {
+  const bool preserves_subgroup_lane_mask =
+      (loom_value_facts_is_subgroup_lane_mask(*lhs) &&
+       loom_value_facts_is_subgroup_lane_mask(*rhs)) ||
+      (loom_value_facts_is_subgroup_lane_mask(*lhs) &&
+       loom_value_facts_is_zero(*rhs)) ||
+      (loom_value_facts_is_zero(*lhs) &&
+       loom_value_facts_is_subgroup_lane_mask(*rhs));
+  if (preserves_subgroup_lane_mask) {
+    loom_value_facts_mark_subgroup_lane_mask(out);
+  }
+
+  if (loom_value_facts_is_exact(*out)) {
+    loom_value_facts_mark_uniform(out);
+  } else if (loom_value_facts_is_lane_predicate(*lhs) ||
+             loom_value_facts_is_lane_predicate(*rhs) ||
+             loom_value_facts_is_lane_varying(*lhs) ||
+             loom_value_facts_is_lane_varying(*rhs)) {
+    loom_value_facts_mark_lane_varying(out);
+  } else if (loom_value_facts_is_uniform(*lhs) &&
+             loom_value_facts_is_uniform(*rhs)) {
+    loom_value_facts_mark_uniform(out);
+  }
+}
+
 void loom_value_facts_andi(const loom_value_facts_t* lhs,
                            const loom_value_facts_t* rhs,
                            loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
 
   // Exact folding.
   if (lhs_lo == lhs_hi && rhs_lo == rhs_hi) {
     *out = loom_value_facts_exact_i64(lhs_lo & rhs_lo);
+    loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
     return;
   }
   // If either operand is an exact mask, derive divisibility from its
@@ -521,10 +551,10 @@ void loom_value_facts_andi(const loom_value_facts_t* lhs,
   int64_t other_divisor = 1;
   if (rhs_lo == rhs_hi && rhs_lo != 0) {
     exact_mask = rhs_lo;
-    other_divisor = lhs->known_divisor;
+    other_divisor = lhs_facts.known_divisor;
   } else if (lhs_lo == lhs_hi && lhs_lo != 0) {
     exact_mask = lhs_lo;
-    other_divisor = rhs->known_divisor;
+    other_divisor = rhs_facts.known_divisor;
   }
   if (exact_mask != 0) {
     int64_t mask_divisor =
@@ -538,25 +568,32 @@ void loom_value_facts_andi(const loom_value_facts_t* lhs,
     } else {
       *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
     }
+    loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
     return;
   }
   // Both non-negative: result is non-negative with bounded range.
   if (lhs_lo >= 0 && rhs_lo >= 0) {
     *out = loom_value_facts_make(0, loom_min_i64(lhs_hi, rhs_hi), 1);
+    loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
     return;
   }
   *out = loom_value_facts_unknown();
+  loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
 }
 
 void loom_value_facts_ori(const loom_value_facts_t* lhs,
                           const loom_value_facts_t* rhs,
                           loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo;
+  int64_t rhs_hi = rhs_facts.range_hi;
 
   // Exact folding.
   if (lhs_lo == lhs_hi && rhs_lo == rhs_hi) {
     *out = loom_value_facts_exact_i64(lhs_lo | rhs_lo);
+    loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
     return;
   }
 
@@ -571,6 +608,7 @@ void loom_value_facts_ori(const loom_value_facts_t* lhs,
     int64_t lo = loom_max_i64(lhs_lo, rhs_lo);
     if (either_exact_nonzero && lo == 0) lo = 1;
     *out = loom_value_facts_make(lo, INT64_MAX, 1);
+    loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
     return;
   }
   // General case: if either operand is exact non-zero, the result
@@ -581,26 +619,32 @@ void loom_value_facts_ori(const loom_value_facts_t* lhs,
   } else {
     *out = loom_value_facts_unknown();
   }
+  loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
 }
 
 void loom_value_facts_xori(const loom_value_facts_t* lhs,
                            const loom_value_facts_t* rhs,
                            loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
 
   // Exact folding.
   if (lhs_lo == lhs_hi && rhs_lo == rhs_hi) {
     *out = loom_value_facts_exact_i64(lhs_lo ^ rhs_lo);
+    loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
     return;
   }
   if (lhs_lo >= 0 && rhs_lo >= 0) {
     *out = loom_value_facts_make(
         0, loom_value_facts_non_negative_bitwise_upper_bound(lhs_hi, rhs_hi),
         1);
+    loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
     return;
   }
   *out = loom_value_facts_unknown();
+  loom_value_facts_propagate_bitwise_flags(&lhs_facts, &rhs_facts, out);
 }
 
 //===----------------------------------------------------------------------===//

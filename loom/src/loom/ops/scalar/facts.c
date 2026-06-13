@@ -369,9 +369,58 @@ FLOAT_UNARY_FACTS(loom_scalar_truncf_facts, trunc)
 // Bitwise
 //===----------------------------------------------------------------------===//
 
-BINARY_FACTS(loom_scalar_andi_facts, loom_value_facts_andi)
-BINARY_FACTS(loom_scalar_ori_facts, loom_value_facts_ori)
-BINARY_FACTS(loom_scalar_xori_facts, loom_value_facts_xori)
+static bool loom_scalar_result_is_i1(const loom_module_t* module,
+                                     loom_value_id_t result_id) {
+  loom_type_t type = loom_module_value_type(module, result_id);
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+}
+
+static void loom_scalar_mark_i1_bitwise_distribution(
+    const loom_module_t* module, loom_value_id_t result_id,
+    loom_value_facts_t* facts) {
+  if (!loom_scalar_result_is_i1(module, result_id)) {
+    return;
+  }
+  *facts = loom_value_facts_clamp_domain(*facts, 0, 1);
+  if (loom_value_facts_is_lane_varying(*facts)) {
+    loom_value_facts_mark_lane_predicate(facts);
+  }
+}
+
+iree_status_t loom_scalar_andi_facts(loom_fact_context_t* context,
+                                     const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     const loom_value_facts_t* operand_facts,
+                                     loom_value_facts_t* result_facts) {
+  loom_value_facts_andi(&operand_facts[0], &operand_facts[1], &result_facts[0]);
+  loom_scalar_mark_i1_bitwise_distribution(module, loom_scalar_andi_result(op),
+                                           &result_facts[0]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_scalar_ori_facts(loom_fact_context_t* context,
+                                    const loom_module_t* module,
+                                    const loom_op_t* op,
+                                    const loom_value_facts_t* operand_facts,
+                                    loom_value_facts_t* result_facts) {
+  loom_value_facts_ori(&operand_facts[0], &operand_facts[1], &result_facts[0]);
+  loom_scalar_mark_i1_bitwise_distribution(module, loom_scalar_ori_result(op),
+                                           &result_facts[0]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_scalar_xori_facts(loom_fact_context_t* context,
+                                     const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     const loom_value_facts_t* operand_facts,
+                                     loom_value_facts_t* result_facts) {
+  loom_value_facts_xori(&operand_facts[0], &operand_facts[1], &result_facts[0]);
+  loom_scalar_mark_i1_bitwise_distribution(module, loom_scalar_xori_result(op),
+                                           &result_facts[0]);
+  return iree_ok_status();
+}
+
 iree_status_t loom_scalar_shli_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
                                      const loom_op_t* op,
@@ -439,6 +488,19 @@ BIT_COUNT_FACTS(loom_scalar_ctpopi_facts, loom_scalar_ctpopi_result,
 // Comparison
 //===----------------------------------------------------------------------===//
 
+static void loom_scalar_mark_compare_distribution(
+    const loom_value_facts_t* operand_facts, loom_value_facts_t* result_facts) {
+  if (loom_value_facts_is_lane_predicate(operand_facts[0]) ||
+      loom_value_facts_is_lane_predicate(operand_facts[1]) ||
+      loom_value_facts_is_lane_varying(operand_facts[0]) ||
+      loom_value_facts_is_lane_varying(operand_facts[1])) {
+    loom_value_facts_mark_lane_predicate(result_facts);
+  } else if (loom_value_facts_is_uniform(operand_facts[0]) &&
+             loom_value_facts_is_uniform(operand_facts[1])) {
+    loom_value_facts_mark_uniform(result_facts);
+  }
+}
+
 iree_status_t loom_scalar_cmpi_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
                                      const loom_op_t* op,
@@ -455,6 +517,7 @@ iree_status_t loom_scalar_cmpi_facts(loom_fact_context_t* context,
     return iree_ok_status();
   }
   result_facts[0] = loom_value_facts_make(0, 1, 1);
+  loom_scalar_mark_compare_distribution(operand_facts, &result_facts[0]);
   return iree_ok_status();
 }
 
@@ -483,6 +546,7 @@ iree_status_t loom_scalar_cmpf_facts(loom_fact_context_t* context,
     return iree_ok_status();
   }
   result_facts[0] = loom_value_facts_make(0, 1, 1);
+  loom_scalar_mark_compare_distribution(operand_facts, &result_facts[0]);
   return iree_ok_status();
 }
 
