@@ -17,6 +17,7 @@
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/materializers.h"
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
@@ -389,6 +390,7 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
   }
 
   *out_plan = (loom_amdgpu_vector_select_plan_t){
+      .payload_kind = LOOM_AMDGPU_SELECT_PAYLOAD_KIND_DATA,
       .condition_kind = condition_kind,
       .register_descriptor = select_descriptors.register_descriptor,
       .src0_inline_descriptor = select_descriptors.src0_inline_descriptor,
@@ -536,6 +538,125 @@ static iree_status_t loom_amdgpu_resolve_compare_descriptor_if_present(
       context, candidate->descriptor_ref, out_descriptor, out_present);
 }
 
+static iree_status_t loom_amdgpu_resolve_i1_mask_select_descriptors(
+    loom_low_lower_context_t* context, loom_amdgpu_vector_select_plan_t* plan,
+    bool* out_present) {
+  *out_present = false;
+  bool all_present = true;
+  bool scc_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_CSELECT_B32, &plan->scc_descriptor,
+      &scc_present));
+  all_present = all_present && scc_present;
+  bool exec_read_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
+      &plan->mask_exec_read_descriptor, &exec_read_present));
+  all_present = all_present && exec_read_present;
+  if (!all_present ||
+      plan->condition_kind == LOOM_AMDGPU_SELECT_CONDITION_KIND_SCC ||
+      plan->true_value == plan->false_value) {
+    *out_present = all_present;
+    return iree_ok_status();
+  }
+
+  if (plan->true_value == plan->condition) {
+    bool or_present = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+        context, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B64, &plan->mask_or_descriptor,
+        &or_present));
+    *out_present = or_present;
+    return iree_ok_status();
+  }
+
+  bool and_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64, &plan->mask_and_descriptor,
+      &and_present));
+  all_present = all_present && and_present;
+  if (!all_present || plan->false_value == plan->condition) {
+    *out_present = all_present;
+    return iree_ok_status();
+  }
+
+  bool xor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_XOR_B64, &plan->mask_xor_descriptor,
+      &xor_present));
+  all_present = all_present && xor_present;
+  bool or_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_S_OR_B64, &plan->mask_or_descriptor,
+      &or_present));
+  all_present = all_present && or_present;
+  *out_present = all_present;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_select_scf_select_i1_mask_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_select_plan_t* out_plan, bool* out_selected) {
+  *out_selected = false;
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t result = loom_scf_select_result(source_op);
+  const loom_value_id_t condition = loom_scf_select_condition(source_op);
+  const loom_value_id_t true_value = loom_scf_select_true_value(source_op);
+  const loom_value_id_t false_value = loom_scf_select_false_value(source_op);
+  if (!loom_amdgpu_type_is_i1(loom_module_value_type(module, condition)) ||
+      !loom_amdgpu_type_is_i1(loom_module_value_type(module, true_value)) ||
+      !loom_amdgpu_type_is_i1(loom_module_value_type(module, false_value))) {
+    return iree_ok_status();
+  }
+
+  loom_type_t result_low_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op, result,
+                                                   &result_low_type));
+  bool result_is_mask = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+      context, result_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
+      &result_is_mask));
+  if (!result_is_mask) {
+    return iree_ok_status();
+  }
+
+  loom_type_t condition_low_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op, condition,
+                                                &condition_low_type));
+  bool condition_is_scc = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+      context, condition_low_type, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1,
+      &condition_is_scc));
+  bool condition_is_mask = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+      context, condition_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
+      &condition_is_mask));
+  if (!condition_is_scc && !condition_is_mask) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_vector_select_plan_t plan = {
+      .payload_kind = LOOM_AMDGPU_SELECT_PAYLOAD_KIND_I1_MASK,
+      .condition_kind = condition_is_scc
+                            ? LOOM_AMDGPU_SELECT_CONDITION_KIND_SCC
+                            : LOOM_AMDGPU_SELECT_CONDITION_KIND_SCALAR_MASK,
+      .condition = condition,
+      .true_value = true_value,
+      .false_value = false_value,
+      .result = result,
+      .lane_count = 2,
+      .registers_per_condition_lane = 1,
+  };
+  bool descriptors_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_i1_mask_select_descriptors(
+      context, &plan, &descriptors_present));
+  if (!descriptors_present) {
+    return iree_ok_status();
+  }
+  *out_plan = plan;
+  *out_selected = true;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_select_scf_select_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_vector_select_plan_t* out_plan, bool* out_selected) {
@@ -544,6 +665,10 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_id_t result = loom_scf_select_result(source_op);
   const loom_type_t result_type = loom_module_value_type(module, result);
+  if (loom_amdgpu_type_is_i1(result_type)) {
+    return loom_amdgpu_select_scf_select_i1_mask_plan(context, source_op,
+                                                      out_plan, out_selected);
+  }
   uint32_t register_count = 0;
   bool allows_lane_immediates = false;
   if (!loom_amdgpu_select_payload_storage(result_type, &register_count,
@@ -586,6 +711,7 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
       return iree_ok_status();
     }
     *out_plan = (loom_amdgpu_vector_select_plan_t){
+        .payload_kind = LOOM_AMDGPU_SELECT_PAYLOAD_KIND_DATA,
         .condition_kind = LOOM_AMDGPU_SELECT_CONDITION_KIND_SCC,
         .scc_descriptor = scc_descriptor,
         .condition = condition,
@@ -624,6 +750,7 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
   }
 
   *out_plan = (loom_amdgpu_vector_select_plan_t){
+      .payload_kind = LOOM_AMDGPU_SELECT_PAYLOAD_KIND_DATA,
       .condition_kind = LOOM_AMDGPU_SELECT_CONDITION_KIND_SCALAR_MASK,
       .register_descriptor = select_descriptors.register_descriptor,
       .src0_inline_descriptor = select_descriptors.src0_inline_descriptor,
@@ -1440,9 +1567,132 @@ iree_status_t loom_amdgpu_lower_clampf(loom_low_lower_context_t* context,
                                    loom_low_concat_result(concat_op));
 }
 
+static iree_status_t loom_amdgpu_emit_i1_mask_binary(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_resolved_descriptor_t* descriptor, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t mask_type, loom_value_id_t* out_result) {
+  *out_result = LOOM_VALUE_ID_INVALID;
+  const loom_value_id_t operands[] = {lhs, rhs};
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, descriptor, operands, IREE_ARRAYSIZE(operands),
+      loom_named_attr_slice_empty(), &mask_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &op));
+  *out_result = loom_value_slice_get(loom_low_op_results(op), 0);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_lower_i1_mask_select(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_select_plan_t* plan) {
+  loom_type_t lane_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &lane_type));
+  loom_type_t mask_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_make_sgpr_range_type(context, 2, &mask_type));
+
+  loom_value_id_t low_condition = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, plan->condition, &low_condition));
+  loom_value_id_t low_true_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_native_i1_mask(
+      context, source_op, plan->true_value, &low_true_value));
+  loom_value_id_t low_false_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_native_i1_mask(
+      context, source_op, plan->false_value, &low_false_value));
+  if (plan->true_value == plan->false_value) {
+    return loom_low_lower_bind_value(context, plan->result, low_true_value);
+  }
+
+  if (plan->condition_kind == LOOM_AMDGPU_SELECT_CONDITION_KIND_SCC) {
+    loom_value_id_t lane_results[2] = {
+        LOOM_VALUE_ID_INVALID,
+        LOOM_VALUE_ID_INVALID,
+    };
+    for (uint32_t i = 0; i < IREE_ARRAYSIZE(lane_results); ++i) {
+      loom_value_id_t lane_true_value = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
+          context, source_op, low_true_value, IREE_ARRAYSIZE(lane_results), i,
+          lane_type, &lane_true_value));
+      loom_value_id_t lane_false_value = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
+          context, source_op, low_false_value, IREE_ARRAYSIZE(lane_results), i,
+          lane_type, &lane_false_value));
+      const loom_value_id_t operands[] = {
+          lane_true_value,
+          lane_false_value,
+          low_condition,
+      };
+      loom_op_t* select_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+          context, &plan->scc_descriptor, operands, IREE_ARRAYSIZE(operands),
+          loom_named_attr_slice_empty(), &lane_type, 1,
+          /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+          &select_op));
+      lane_results[i] = loom_value_slice_get(loom_low_op_results(select_op), 0);
+    }
+    loom_op_t* concat_op = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_low_concat_build(loom_low_lower_context_builder(context),
+                              lane_results, IREE_ARRAYSIZE(lane_results),
+                              mask_type, source_op->location, &concat_op));
+    return loom_low_lower_bind_value(context, plan->result,
+                                     loom_low_concat_result(concat_op));
+  }
+
+  IREE_ASSERT_EQ(plan->condition_kind,
+                 LOOM_AMDGPU_SELECT_CONDITION_KIND_SCALAR_MASK);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_native_i1_mask(
+      context, source_op, plan->condition, &low_condition));
+
+  if (plan->true_value == plan->condition) {
+    loom_value_id_t result_mask = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i1_mask_binary(
+        context, source_op, &plan->mask_or_descriptor, low_condition,
+        low_false_value, mask_type, &result_mask));
+    return loom_low_lower_bind_value(context, plan->result, result_mask);
+  }
+
+  loom_value_id_t true_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i1_mask_binary(
+      context, source_op, &plan->mask_and_descriptor, low_condition,
+      low_true_value, mask_type, &true_mask));
+  if (plan->false_value == plan->condition) {
+    return loom_low_lower_bind_value(context, plan->result, true_mask);
+  }
+
+  loom_op_t* exec_read_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->mask_exec_read_descriptor,
+      /*operands=*/NULL, /*operand_count=*/0, loom_named_attr_slice_empty(),
+      &mask_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
+      source_op->location, &exec_read_op));
+  const loom_value_id_t exec_mask =
+      loom_value_slice_get(loom_low_op_results(exec_read_op), 0);
+
+  loom_value_id_t inverse_condition = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i1_mask_binary(
+      context, source_op, &plan->mask_xor_descriptor, low_condition, exec_mask,
+      mask_type, &inverse_condition));
+  loom_value_id_t false_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i1_mask_binary(
+      context, source_op, &plan->mask_and_descriptor, inverse_condition,
+      low_false_value, mask_type, &false_mask));
+  loom_value_id_t result_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_i1_mask_binary(
+      context, source_op, &plan->mask_or_descriptor, true_mask, false_mask,
+      mask_type, &result_mask));
+  return loom_low_lower_bind_value(context, plan->result, result_mask);
+}
+
 iree_status_t loom_amdgpu_lower_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_select_plan_t* plan) {
+  if (plan->payload_kind == LOOM_AMDGPU_SELECT_PAYLOAD_KIND_I1_MASK) {
+    return loom_amdgpu_lower_i1_mask_select(context, source_op, plan);
+  }
+
   const uint32_t lane_count = plan->lane_count;
   IREE_ASSERT_GT(lane_count, 0);
   IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);

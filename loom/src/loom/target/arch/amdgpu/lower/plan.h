@@ -301,7 +301,15 @@ typedef enum loom_amdgpu_select_condition_kind_e {
   LOOM_AMDGPU_SELECT_CONDITION_KIND_VECTOR_MASK = 3,
 } loom_amdgpu_select_condition_kind_t;
 
+typedef enum loom_amdgpu_select_payload_kind_e {
+  LOOM_AMDGPU_SELECT_PAYLOAD_KIND_NONE = 0,
+  LOOM_AMDGPU_SELECT_PAYLOAD_KIND_DATA = 1,
+  LOOM_AMDGPU_SELECT_PAYLOAD_KIND_I1_MASK = 2,
+} loom_amdgpu_select_payload_kind_t;
+
 typedef struct loom_amdgpu_vector_select_plan_t {
+  // Selected representation of the true/false/result payload.
+  loom_amdgpu_select_payload_kind_t payload_kind;
   // Selected representation of the scalar or vector condition.
   loom_amdgpu_select_condition_kind_t condition_kind;
   // Descriptor row selected for SCC-controlled scalar selects.
@@ -320,6 +328,14 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   loom_low_lower_resolved_descriptor_t src0_literal_src1_inline_descriptor;
   // Optional descriptor row selected when true is literal and false is inline.
   loom_low_lower_resolved_descriptor_t src1_literal_src0_inline_descriptor;
+  // Descriptor row selected to read EXEC for i1 mask selection.
+  loom_low_lower_resolved_descriptor_t mask_exec_read_descriptor;
+  // Descriptor row selected to AND i1 mask payloads.
+  loom_low_lower_resolved_descriptor_t mask_and_descriptor;
+  // Descriptor row selected to OR i1 mask payloads.
+  loom_low_lower_resolved_descriptor_t mask_or_descriptor;
+  // Descriptor row selected to XOR i1 mask payloads.
+  loom_low_lower_resolved_descriptor_t mask_xor_descriptor;
   // Source condition selecting true lanes.
   loom_value_id_t condition;
   // Source vector used when the corresponding condition lane is true.
