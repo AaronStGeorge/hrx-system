@@ -76,6 +76,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_pk_mad_u16",
     "amdgpu.v_cvt_f32_i32",
     "amdgpu.v_cvt_f32_u32",
+    "amdgpu.v_cvt_i32_f32",
+    "amdgpu.v_cvt_u32_f32",
     "amdgpu.v_add_u32",
     "amdgpu.v_add_u32.lit",
     "amdgpu.v_sub_u32",
@@ -133,6 +135,7 @@ _VEC_I16_PACKED = Vector(
     maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I16_LANES",
 )
 _I8 = Scalar("i8")
+_I16 = Scalar("i16")
 _I32 = Scalar("i32")
 _F16 = Scalar("f16")
 _BF16 = Scalar("bf16")
@@ -192,6 +195,11 @@ _I8_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
     subject_name="i8",
     constraint_key="amdgpu.arithmetic.i8",
+)
+_I16_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="i16",
+    constraint_key="amdgpu.arithmetic.i16",
 )
 _F16_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
@@ -287,6 +295,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _I32_DIAGNOSTIC
     if type_pattern == _I8:
         return _I8_DIAGNOSTIC
+    if type_pattern == _I16:
+        return _I16_DIAGNOSTIC
     if type_pattern == _F16:
         return _F16_DIAGNOSTIC
     if type_pattern == _BF16:
@@ -2004,6 +2014,12 @@ def _rules() -> tuple[ContractCase, ...]:
             _cast_rule(
                 scalar_conversion.scalar_sitofp,
                 _I8,
+                _F32,
+                "amdgpu.v_cvt_f32_i32",
+            ),
+            _cast_rule(
+                scalar_conversion.scalar_sitofp,
+                _I16,
                 _F32,
                 "amdgpu.v_cvt_f32_i32",
             ),

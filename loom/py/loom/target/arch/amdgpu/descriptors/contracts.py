@@ -109,7 +109,9 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_cvt_f32_f16": _v_cvt_f32_f16_overlay,
     "amdgpu.v_cvt_f16_f32": _v_cvt_f16_f32_overlay,
     "amdgpu.v_cvt_f32_i32": _v_cvt_f32_i32_overlay,
+    "amdgpu.v_cvt_i32_f32": _v_cvt_i32_f32_overlay,
     "amdgpu.v_cvt_f32_u32": _v_cvt_f32_u32_overlay,
+    "amdgpu.v_cvt_u32_f32": _v_cvt_u32_f32_overlay,
     "amdgpu.v_dot2_f32_f16": _v_dot2_f32_f16_overlay,
     "amdgpu.v_dot2_f32_bf16": _v_dot2_f32_bf16_overlay,
     "amdgpu.v_dot4_i32_i8": lambda: _v_dot4_i32_i8_overlay(

@@ -619,7 +619,7 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
                                               loom_low_lower_plan_t* out_plan) {
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
-  if (loom_vector_insert_isa(source_op)) {
+  if (loom_amdgpu_value_plan_needs_preselection(source_op)) {
     return loom_amdgpu_preselect_value_plan(context, source_op, out_plan);
   }
   if (!loom_vector_dotf_isa(source_op) && !loom_index_add_isa(source_op) &&
@@ -775,8 +775,8 @@ const loom_target_low_legality_provider_t
         .name = IREE_SVL("amdgpu"),
         .builtin_dialect_bits =
             (1u << LOOM_DIALECT_INDEX) | (1u << LOOM_DIALECT_BUFFER) |
-            (1u << LOOM_DIALECT_VIEW) | (1u << LOOM_DIALECT_VECTOR) |
-            (1u << LOOM_DIALECT_KERNEL),
+            (1u << LOOM_DIALECT_SCALAR) | (1u << LOOM_DIALECT_VIEW) |
+            (1u << LOOM_DIALECT_VECTOR) | (1u << LOOM_DIALECT_KERNEL),
         .try_verify_op = loom_amdgpu_low_legality_try_verify_op,
 };
 

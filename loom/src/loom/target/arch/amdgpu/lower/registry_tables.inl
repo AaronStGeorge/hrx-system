@@ -61,10 +61,28 @@ static const loom_amdgpu_lower_dispatch_row_t
                                    loom_amdgpu_emit_value_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_TRUNCI)] = LOOM_AMDGPU_DIRECT_ROW(
             LOOM_OP_SCALAR_TRUNCI, loom_amdgpu_select_value_dispatch,
-            loom_amdgpu_emit_value_dispatch, NULL),
+            loom_amdgpu_emit_value_dispatch,
+            loom_amdgpu_low_legality_verify_scalar_conversion),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_EXTSI)] = LOOM_AMDGPU_DIRECT_ROW(
             LOOM_OP_SCALAR_EXTSI, loom_amdgpu_select_value_dispatch,
-            loom_amdgpu_emit_value_dispatch, NULL),
+            loom_amdgpu_emit_value_dispatch,
+            loom_amdgpu_low_legality_verify_scalar_conversion),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_EXTUI)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_SCALAR_EXTUI, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch,
+            loom_amdgpu_low_legality_verify_scalar_conversion),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_UITOFP)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_SCALAR_UITOFP, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch,
+            loom_amdgpu_low_legality_verify_scalar_conversion),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_FPTOSI)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_SCALAR_FPTOSI, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch,
+            loom_amdgpu_low_legality_verify_scalar_conversion),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_FPTOUI)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_SCALAR_FPTOUI, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch,
+            loom_amdgpu_low_legality_verify_scalar_conversion),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_CMPF)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_SCALAR_CMPF, loom_amdgpu_vector_compare_plan_t,
             loom_amdgpu_select_scalar_cmpf_dispatch,

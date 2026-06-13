@@ -28,6 +28,10 @@ iree_status_t loom_amdgpu_preselect_value_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan);
 
+// Returns true when value lowering may preselect |source_op| before generated
+// source-lowering contracts see it.
+bool loom_amdgpu_value_plan_needs_preselection(const loom_op_t* source_op);
+
 // Lowers a value-construction source op using its selected plan.
 iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
@@ -52,6 +56,12 @@ iree_status_t loom_amdgpu_low_legality_verify_offset_add(
 
 // Verifies AMDGPU low legality for full-width offset compare source ops.
 iree_status_t loom_amdgpu_low_legality_verify_offset_compare(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Verifies AMDGPU low legality for scalar conversions owned by value lowering.
+iree_status_t loom_amdgpu_low_legality_verify_scalar_conversion(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
