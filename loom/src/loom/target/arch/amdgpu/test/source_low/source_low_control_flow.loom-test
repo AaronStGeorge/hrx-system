@@ -1117,6 +1117,386 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_q6_nibble_i8_result(%
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @divergent_cfg_i1_true_false_constants_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %lane_condition, ^then, ^else
+^then:
+  cfg.br ^join(%true: i1)
+^else:
+  cfg.br ^join(%false: i1)
+^join(%selected_condition: i1):
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_cfg_i1_true_false_constants_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %true = s_mov_b64_exec_read
+  %24 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %24
+  %26, %27 = s_and_saveexec_b64 %lane_condition
+  low.cond_br %27, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb4(%true: reg<amdgpu.sgpr x2>)
+^else:
+  low.br ^_bb7
+^join(%selected_condition$16: reg<amdgpu.sgpr x2>):
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition$16
+  return %result
+^_bb4(%selected_condition$17: reg<amdgpu.sgpr x2>):
+  s_mov_b64_exec %26
+  %31 = s_and_b64 %26, %lane_condition
+  %32 = s_xor_b64_exec %31
+  low.cond_br %32, ^else, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %26
+  %28 = s_mov_b32 0
+  %29 = concat(%28, %28) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb4(%29: reg<amdgpu.sgpr x2>)
+^_bb6:
+  s_mov_b64_exec %26
+  low.br ^join(%selected_condition$17: reg<amdgpu.sgpr x2>)
+^_bb7:
+  s_mov_b64_exec %26
+  %30 = s_and_b64 %26, %lane_condition
+  low.br ^join(%30: reg<amdgpu.sgpr x2>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_cfg_i1_false_true_constants_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %lane_condition, ^then, ^else
+^then:
+  cfg.br ^join(%false: i1)
+^else:
+  cfg.br ^join(%true: i1)
+^join(%selected_condition: i1):
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_cfg_i1_false_true_constants_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %21 = s_mov_b32 0
+  %false = concat(%21, %21) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %24 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %24
+  %26, %27 = s_and_saveexec_b64 %lane_condition
+  low.cond_br %27, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb4(%false: reg<amdgpu.sgpr x2>)
+^else:
+  low.br ^_bb7
+^join(%selected_condition$16: reg<amdgpu.sgpr x2>):
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition$16
+  return %result
+^_bb4(%selected_condition$17: reg<amdgpu.sgpr x2>):
+  s_mov_b64_exec %26
+  %32 = s_and_b64 %26, %lane_condition
+  %33 = s_xor_b64_exec %32
+  low.cond_br %33, ^else, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %26
+  %28 = s_mov_b32 0
+  %29 = concat(%28, %28) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb4(%29: reg<amdgpu.sgpr x2>)
+^_bb6:
+  s_mov_b64_exec %26
+  low.br ^join(%selected_condition$17: reg<amdgpu.sgpr x2>)
+^_bb7:
+  s_mov_b64_exec %26
+  %30 = s_and_b64 %26, %lane_condition
+  %31 = s_xor_b64 %30, %26
+  low.br ^join(%31: reg<amdgpu.sgpr x2>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_cfg_i1_true_fallback_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %true = scalar.constant true : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %lane_condition, ^then, ^else
+^then:
+  cfg.br ^join(%true: i1)
+^else:
+  cfg.br ^join(%fallback_condition: i1)
+^join(%selected_condition: i1):
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_cfg_i1_true_fallback_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %fallback_condition: reg<amdgpu.sgpr x2>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %true = s_mov_b64_exec_read
+  %22 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %22
+  %24, %25 = s_and_saveexec_b64 %lane_condition
+  low.cond_br %25, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb4(%true: reg<amdgpu.sgpr x2>)
+^else:
+  low.br ^_bb7
+^join(%selected_condition$17: reg<amdgpu.sgpr x2>):
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition$17
+  return %result
+^_bb4(%selected_condition$18: reg<amdgpu.sgpr x2>):
+  s_mov_b64_exec %24
+  %32 = s_and_b64 %24, %lane_condition
+  %33 = s_xor_b64_exec %32
+  low.cond_br %33, ^else, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %24
+  %26 = s_mov_b32 0
+  %27 = concat(%26, %26) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb4(%27: reg<amdgpu.sgpr x2>)
+^_bb6:
+  s_mov_b64_exec %24
+  low.br ^join(%selected_condition$18: reg<amdgpu.sgpr x2>)
+^_bb7:
+  s_mov_b64_exec %24
+  %28 = s_and_b64 %24, %lane_condition
+  %29 = s_xor_b64 %28, %24
+  %30 = s_and_b64 %29, %fallback_condition
+  %31 = s_or_b64 %28, %30
+  low.br ^join(%31: reg<amdgpu.sgpr x2>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_cfg_i1_false_fallback_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %false = scalar.constant false : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %lane_condition, ^then, ^else
+^then:
+  cfg.br ^join(%false: i1)
+^else:
+  cfg.br ^join(%fallback_condition: i1)
+^join(%selected_condition: i1):
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_cfg_i1_false_fallback_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %fallback_condition: reg<amdgpu.sgpr x2>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %21 = s_mov_b32 0
+  %false = concat(%21, %21) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %24 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %24
+  %26, %27 = s_and_saveexec_b64 %lane_condition
+  low.cond_br %27, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb4(%false: reg<amdgpu.sgpr x2>)
+^else:
+  low.br ^_bb7
+^join(%selected_condition$17: reg<amdgpu.sgpr x2>):
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition$17
+  return %result
+^_bb4(%selected_condition$18: reg<amdgpu.sgpr x2>):
+  s_mov_b64_exec %26
+  %33 = s_and_b64 %26, %lane_condition
+  %34 = s_xor_b64_exec %33
+  low.cond_br %34, ^else, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %26
+  %28 = s_mov_b32 0
+  %29 = concat(%28, %28) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb4(%29: reg<amdgpu.sgpr x2>)
+^_bb6:
+  s_mov_b64_exec %26
+  low.br ^join(%selected_condition$18: reg<amdgpu.sgpr x2>)
+^_bb7:
+  s_mov_b64_exec %26
+  %30 = s_and_b64 %26, %lane_condition
+  %31 = s_xor_b64 %30, %26
+  %32 = s_and_b64 %31, %fallback_condition
+  low.br ^join(%32: reg<amdgpu.sgpr x2>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_cfg_i1_fallback_false_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %false = scalar.constant false : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %lane_condition, ^then, ^else
+^then:
+  cfg.br ^join(%fallback_condition: i1)
+^else:
+  cfg.br ^join(%false: i1)
+^join(%selected_condition: i1):
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_cfg_i1_fallback_false_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %fallback_condition: reg<amdgpu.sgpr x2>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %24 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %24
+  %26, %27 = s_and_saveexec_b64 %lane_condition
+  low.cond_br %27, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb4(%fallback_condition: reg<amdgpu.sgpr x2>)
+^else:
+  low.br ^_bb7
+^join(%selected_condition$17: reg<amdgpu.sgpr x2>):
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition$17
+  return %result
+^_bb4(%selected_condition$18: reg<amdgpu.sgpr x2>):
+  s_mov_b64_exec %26
+  %32 = s_and_b64 %26, %lane_condition
+  %33 = s_xor_b64_exec %32
+  low.cond_br %33, ^else, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %26
+  %28 = s_mov_b32 0
+  %29 = concat(%28, %28) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb4(%29: reg<amdgpu.sgpr x2>)
+^_bb6:
+  s_mov_b64_exec %26
+  low.br ^join(%selected_condition$18: reg<amdgpu.sgpr x2>)
+^_bb7:
+  s_mov_b64_exec %26
+  %30 = s_and_b64 %26, %lane_condition
+  %31 = s_and_b64 %30, %selected_condition$18
+  low.br ^join(%31: reg<amdgpu.sgpr x2>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_cfg_i1_fallback_true_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %true = scalar.constant true : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %lane_condition, ^then, ^else
+^then:
+  cfg.br ^join(%fallback_condition: i1)
+^else:
+  cfg.br ^join(%true: i1)
+^join(%selected_condition: i1):
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_cfg_i1_fallback_true_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %fallback_condition: reg<amdgpu.sgpr x2>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %22 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %22
+  %24, %25 = s_and_saveexec_b64 %lane_condition
+  low.cond_br %25, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb4(%fallback_condition: reg<amdgpu.sgpr x2>)
+^else:
+  low.br ^_bb7
+^join(%selected_condition$17: reg<amdgpu.sgpr x2>):
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition$17
+  return %result
+^_bb4(%selected_condition$18: reg<amdgpu.sgpr x2>):
+  s_mov_b64_exec %24
+  %32 = s_and_b64 %24, %lane_condition
+  %33 = s_xor_b64_exec %32
+  low.cond_br %33, ^else, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %24
+  %26 = s_mov_b32 0
+  %27 = concat(%26, %26) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  low.br ^_bb4(%27: reg<amdgpu.sgpr x2>)
+^_bb6:
+  s_mov_b64_exec %24
+  low.br ^join(%selected_condition$18: reg<amdgpu.sgpr x2>)
+^_bb7:
+  s_mov_b64_exec %24
+  %28 = s_and_b64 %24, %lane_condition
+  %29 = s_and_b64 %28, %selected_condition$18
+  %30 = s_xor_b64 %28, %24
+  %31 = s_or_b64 %29, %30
+  low.br ^join(%31: reg<amdgpu.sgpr x2>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_if_i1_true_false_constants_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %selected_condition = scf.if %lane_condition -> (i1) {
+    scf.yield %true : i1
+  } else {
+    scf.yield %false : i1
+  }
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_if_i1_true_false_constants_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %17
+  %result = v_cndmask_b32 %false_value, %true_value, %lane_condition
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @divergent_if_i1_false_true_constants_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %selected_condition = scf.if %lane_condition -> (i1) {
+    scf.yield %false : i1
+  } else {
+    scf.yield %true : i1
+  }
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_if_i1_false_true_constants_feeds_vgpr_select(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %22 = v_mov_b32_copy %limit
+  %lane_condition = v_cmp_lt_i32 %lane, %22
+  %24 = s_mov_b64_exec_read
+  %selected_condition = s_xor_b64 %lane_condition, %24
+  %result = v_cndmask_b32 %false_value, %true_value, %selected_condition
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @divergent_if_i1_yield_only_feeds_vgpr_select(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %lane_condition = scalar.cmpi slt, %lane, %limit : i32
