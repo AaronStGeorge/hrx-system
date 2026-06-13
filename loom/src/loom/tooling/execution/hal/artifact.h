@@ -88,6 +88,9 @@ typedef void (*loom_run_hal_deinitialize_device_target_fn_t)(
     const loom_run_hal_artifact_provider_t* provider,
     loom_run_hal_device_target_t* target, iree_allocator_t allocator);
 
+// Emits a loader-ready HAL artifact. Returning OK with |out_emitted| false is
+// reserved for product diagnostics emitted through |diagnostic_sink|; provider
+// contract failures return a non-OK status.
 typedef iree_status_t (*loom_run_hal_emit_artifact_fn_t)(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
     const loom_run_hal_device_target_t* target,

@@ -571,12 +571,10 @@ static iree_status_t loom_run_hal_testbench_apply_sample_constants(
 
 static void loom_run_hal_testbench_record_compile_rejection(
     loom_run_hal_testbench_actual_provider_t* provider,
-    iree_string_view_t stage, iree_string_view_t kind,
-    iree_string_view_t message) {
+    iree_string_view_t stage, iree_string_view_t kind) {
   provider->compile_rejected = true;
   provider->compile_failure_stage = stage;
   provider->compile_failure_kind = kind;
-  provider->compile_failure_message = message;
 }
 
 static iree_status_t loom_run_hal_testbench_forward_diagnostic(
@@ -730,16 +728,14 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
     if (provider->diagnostic_error_count != compile_error_count) {
       iree_status_free(status);
       loom_run_hal_testbench_record_compile_rejection(
-          provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"),
-          iree_string_view_empty());
+          provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"));
       return iree_ok_status();
     }
     return status;
   }
   if (provider->pass_result.error_count != 0) {
     loom_run_hal_testbench_record_compile_rejection(
-        provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"),
-        iree_string_view_empty());
+        provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"));
     return iree_ok_status();
   }
 
@@ -765,17 +761,22 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
     if (provider->diagnostic_error_count != emit_error_count) {
       iree_status_free(status);
       loom_run_hal_testbench_record_compile_rejection(
-          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"),
-          iree_string_view_empty());
+          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"));
       return iree_ok_status();
     }
     return status;
   }
   if (!provider->candidate.compiled) {
-    loom_run_hal_testbench_record_compile_rejection(
-        provider, IREE_SV("emit"), IREE_SV("no_executable"),
-        IREE_SV("HAL artifact provider did not emit an artifact"));
-    return iree_ok_status();
+    if (provider->diagnostic_error_count != emit_error_count) {
+      loom_run_hal_testbench_record_compile_rejection(
+          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"));
+      return iree_ok_status();
+    }
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "HAL artifact provider '%.*s' did not emit an artifact or diagnostics",
+        (int)provider->context->artifact_provider->name.size,
+        provider->context->artifact_provider->name.data);
   }
 
   IREE_RETURN_IF_ERROR(loom_run_hal_prepared_candidate_prepare(

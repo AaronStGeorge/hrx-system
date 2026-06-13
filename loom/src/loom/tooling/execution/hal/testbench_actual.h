@@ -167,10 +167,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   loom_pass_run_result_t pass_result;
   // Product stage that rejected the compile, when |compile_rejected| is true.
   iree_string_view_t compile_failure_stage;
-  // Product reason for |compile_rejected|.
+  // Stable diagnostic category for |compile_rejected|.
   iree_string_view_t compile_failure_kind;
-  // Human-facing failure message when no structured diagnostic exists.
-  iree_string_view_t compile_failure_message;
   // Number of error diagnostics observed while compiling this candidate.
   iree_host_size_t diagnostic_error_count;
   // Number of warning diagnostics observed while compiling this candidate.
