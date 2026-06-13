@@ -28,6 +28,51 @@ static int64_t loom_value_facts_exact_i64_divisor(int64_t value) {
   return (value != 0 && value != INT64_MIN) ? llabs(value) : 1;
 }
 
+static void loom_value_facts_propagate_unary_distribution(
+    loom_value_facts_t input, loom_value_facts_t* out) {
+  if (loom_value_facts_is_exact(*out)) {
+    loom_value_facts_mark_uniform(out);
+  } else if (loom_value_facts_is_lane_predicate(input) ||
+             loom_value_facts_is_lane_varying(input)) {
+    loom_value_facts_mark_lane_varying(out);
+  } else if (loom_value_facts_is_uniform(input)) {
+    loom_value_facts_mark_uniform(out);
+  }
+}
+
+static void loom_value_facts_propagate_binary_distribution(
+    loom_value_facts_t lhs, loom_value_facts_t rhs, loom_value_facts_t* out) {
+  if (loom_value_facts_is_exact(*out)) {
+    loom_value_facts_mark_uniform(out);
+  } else if (loom_value_facts_is_lane_predicate(lhs) ||
+             loom_value_facts_is_lane_predicate(rhs) ||
+             loom_value_facts_is_lane_varying(lhs) ||
+             loom_value_facts_is_lane_varying(rhs)) {
+    loom_value_facts_mark_lane_varying(out);
+  } else if (loom_value_facts_is_uniform(lhs) &&
+             loom_value_facts_is_uniform(rhs)) {
+    loom_value_facts_mark_uniform(out);
+  }
+}
+
+static void loom_value_facts_propagate_ternary_distribution(
+    loom_value_facts_t a, loom_value_facts_t b, loom_value_facts_t c,
+    loom_value_facts_t* out) {
+  if (loom_value_facts_is_exact(*out)) {
+    loom_value_facts_mark_uniform(out);
+  } else if (loom_value_facts_is_lane_predicate(a) ||
+             loom_value_facts_is_lane_predicate(b) ||
+             loom_value_facts_is_lane_predicate(c) ||
+             loom_value_facts_is_lane_varying(a) ||
+             loom_value_facts_is_lane_varying(b) ||
+             loom_value_facts_is_lane_varying(c)) {
+    loom_value_facts_mark_lane_varying(out);
+  } else if (loom_value_facts_is_uniform(a) && loom_value_facts_is_uniform(b) &&
+             loom_value_facts_is_uniform(c)) {
+    loom_value_facts_mark_uniform(out);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Constructors
 //===----------------------------------------------------------------------===//
@@ -223,10 +268,12 @@ void loom_value_facts_addi(const loom_value_facts_t* lhs,
                            const loom_value_facts_t* rhs,
                            loom_value_facts_t* out) {
   // Read inputs before writing output (output may alias one input).
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
-  int64_t rhs_divisor = rhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
+  int64_t rhs_divisor = rhs_facts.known_divisor;
 
   // Divisor is independent of range — always computable.
   int64_t divisor = loom_gcd_i64(lhs_divisor, rhs_divisor);
@@ -236,18 +283,22 @@ void loom_value_facts_addi(const loom_value_facts_t* lhs,
       !loom_checked_add_i64(lhs_hi, rhs_hi, &hi)) {
     // Range overflowed but divisor is still valid.
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_subi(const loom_value_facts_t* lhs,
                            const loom_value_facts_t* rhs,
                            loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
-  int64_t rhs_divisor = rhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
+  int64_t rhs_divisor = rhs_facts.known_divisor;
 
   int64_t divisor = loom_gcd_i64(lhs_divisor, rhs_divisor);
 
@@ -256,18 +307,22 @@ void loom_value_facts_subi(const loom_value_facts_t* lhs,
   if (!loom_checked_sub_i64(lhs_lo, rhs_hi, &lo) ||
       !loom_checked_sub_i64(lhs_hi, rhs_lo, &hi)) {
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_muli(const loom_value_facts_t* lhs,
                            const loom_value_facts_t* rhs,
                            loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
-  int64_t rhs_divisor = rhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
+  int64_t rhs_divisor = rhs_facts.known_divisor;
 
   // Divisibility: product of divisors, fallback to GCD on overflow.
   // Computed before range so it's available on range overflow.
@@ -283,6 +338,7 @@ void loom_value_facts_muli(const loom_value_facts_t* lhs,
       !loom_checked_mul_i64(lhs_hi, rhs_lo, &corners[2]) ||
       !loom_checked_mul_i64(lhs_hi, rhs_hi, &corners[3])) {
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   int64_t lo = corners[0], hi = corners[0];
@@ -292,14 +348,17 @@ void loom_value_facts_muli(const loom_value_facts_t* lhs,
   }
 
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_divui(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
 
   // Compute divisor first (independent of range sign).
   int64_t divisor = 1;
@@ -311,20 +370,24 @@ void loom_value_facts_divui(const loom_value_facts_t* lhs,
   // divisor provably positive (no division by zero).
   if (lhs_lo < 0 || rhs_lo <= 0) {
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // Smallest numerator / largest denominator gives lowest result.
   int64_t lo = lhs_lo / rhs_hi;
   int64_t hi = lhs_hi / rhs_lo;
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_divsi(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
 
   // Compute divisor first (independent of range sign).
   int64_t divisor = 1;
@@ -339,6 +402,7 @@ void loom_value_facts_divsi(const loom_value_facts_t* lhs,
   // If the divisor range includes zero, we cannot compute range.
   if (rhs_lo <= 0 && rhs_hi >= 0) {
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // Both operands non-negative: straightforward range.
@@ -346,52 +410,64 @@ void loom_value_facts_divsi(const loom_value_facts_t* lhs,
     int64_t lo = lhs_lo / rhs_hi;
     int64_t hi = lhs_hi / rhs_lo;
     *out = loom_value_facts_make(lo, hi, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // Mixed signs: conservatively unknown range, but divisor is valid.
   *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_remui(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
 
   // Requires non-negative operands and positive divisor.
   if (lhs_lo < 0 || rhs_lo <= 0) {
     *out = loom_value_facts_unknown();
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // Both exact: fold directly. Non-negative int64 facts are a subset of the
   // unsigned domain and the result remains representable as int64.
-  if (lhs->range_lo == lhs->range_hi && rhs_lo == rhs_hi) {
+  if (lhs_facts.range_lo == lhs_facts.range_hi && rhs_lo == rhs_hi) {
     *out = loom_value_facts_exact_i64(lhs_lo % rhs_lo);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // If exact divisor and numerator divisible: remainder is zero.
   if (rhs_lo == rhs_hi && lhs_divisor % rhs_lo == 0) {
     *out = loom_value_facts_exact_i64(0);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // Result is in [0, max_divisor - 1].
   *out = loom_value_facts_make(0, rhs_hi - 1, 1);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_remsi(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
 
   // Divisor range must not include zero.
   if (rhs_lo <= 0 && rhs_hi >= 0) {
     *out = loom_value_facts_unknown();
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // Both exact: fold directly.
-  if (lhs->range_lo == lhs->range_hi && rhs_lo == rhs_hi) {
-    *out = loom_value_facts_exact_i64(lhs->range_lo % rhs_lo);
+  if (lhs_facts.range_lo == lhs_facts.range_hi && rhs_lo == rhs_hi) {
+    *out = loom_value_facts_exact_i64(lhs_facts.range_lo % rhs_lo);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   // Result magnitude is bounded by |divisor| - 1.
@@ -404,6 +480,7 @@ void loom_value_facts_remsi(const loom_value_facts_t* lhs,
   // Signed remainder preserves the sign of the dividend. Conservative
   // bound: [-(abs_bound - 1), abs_bound - 1].
   *out = loom_value_facts_make(-(abs_bound - 1), abs_bound - 1, 1);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 //===----------------------------------------------------------------------===//
@@ -413,13 +490,16 @@ void loom_value_facts_remsi(const loom_value_facts_t* lhs,
 void loom_value_facts_shli(const loom_value_facts_t* lhs,
                            const loom_value_facts_t* rhs,
                            loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
 
   // Shift amount must be exact and in [0, 63].
   if (rhs_lo != rhs_hi || rhs_lo < 0 || rhs_lo > 63) {
     *out = loom_value_facts_unknown();
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   int64_t shift = rhs_lo;
@@ -435,21 +515,26 @@ void loom_value_facts_shli(const loom_value_facts_t* lhs,
   if (!loom_checked_mul_i64(lhs_lo, factor, &lo) ||
       !loom_checked_mul_i64(lhs_hi, factor, &hi)) {
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_shrui(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
 
   // Shift amount must be exact and in [0, 63].
   if (rhs_lo != rhs_hi || rhs_lo < 0 || rhs_lo > 63) {
     *out = loom_value_facts_unknown();
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   int64_t shift = rhs_lo;
@@ -461,23 +546,28 @@ void loom_value_facts_shrui(const loom_value_facts_t* lhs,
   // Range requires non-negative input for unsigned shift semantics.
   if (lhs_lo < 0) {
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   int64_t lo = lhs_lo >> shift;
   int64_t hi = lhs_hi >> shift;
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_shrsi(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
-  int64_t lhs_lo = lhs->range_lo, lhs_hi = lhs->range_hi;
-  int64_t rhs_lo = rhs->range_lo, rhs_hi = rhs->range_hi;
-  int64_t lhs_divisor = lhs->known_divisor;
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
+  int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
+  int64_t lhs_divisor = lhs_facts.known_divisor;
 
   // Shift amount must be exact and in [0, 63].
   if (rhs_lo != rhs_hi || rhs_lo < 0 || rhs_lo > 63) {
     *out = loom_value_facts_unknown();
+    loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
   int64_t shift = rhs_lo;
@@ -487,6 +577,7 @@ void loom_value_facts_shrsi(const loom_value_facts_t* lhs,
   int64_t factor = (int64_t)1 << shift;
   int64_t divisor = (lhs_divisor % factor == 0) ? lhs_divisor / factor : 1;
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 //===----------------------------------------------------------------------===//
@@ -654,40 +745,52 @@ void loom_value_facts_xori(const loom_value_facts_t* lhs,
 void loom_value_facts_minsi(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
   *out = loom_value_facts_make(
-      loom_min_i64(lhs->range_lo, rhs->range_lo),
-      loom_min_i64(lhs->range_hi, rhs->range_hi),
-      loom_gcd_i64(lhs->known_divisor, rhs->known_divisor));
+      loom_min_i64(lhs_facts.range_lo, rhs_facts.range_lo),
+      loom_min_i64(lhs_facts.range_hi, rhs_facts.range_hi),
+      loom_gcd_i64(lhs_facts.known_divisor, rhs_facts.known_divisor));
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_maxsi(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
   *out = loom_value_facts_make(
-      loom_max_i64(lhs->range_lo, rhs->range_lo),
-      loom_max_i64(lhs->range_hi, rhs->range_hi),
-      loom_gcd_i64(lhs->known_divisor, rhs->known_divisor));
+      loom_max_i64(lhs_facts.range_lo, rhs_facts.range_lo),
+      loom_max_i64(lhs_facts.range_hi, rhs_facts.range_hi),
+      loom_gcd_i64(lhs_facts.known_divisor, rhs_facts.known_divisor));
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_minui(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
   // For non-negative ranges, unsigned min == signed min.
-  if (lhs->range_lo >= 0 && rhs->range_lo >= 0) {
-    loom_value_facts_minsi(lhs, rhs, out);
+  if (lhs_facts.range_lo >= 0 && rhs_facts.range_lo >= 0) {
+    loom_value_facts_minsi(&lhs_facts, &rhs_facts, out);
     return;
   }
   *out = loom_value_facts_unknown();
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 void loom_value_facts_maxui(const loom_value_facts_t* lhs,
                             const loom_value_facts_t* rhs,
                             loom_value_facts_t* out) {
-  if (lhs->range_lo >= 0 && rhs->range_lo >= 0) {
-    loom_value_facts_maxsi(lhs, rhs, out);
+  const loom_value_facts_t lhs_facts = *lhs;
+  const loom_value_facts_t rhs_facts = *rhs;
+  if (lhs_facts.range_lo >= 0 && rhs_facts.range_lo >= 0) {
+    loom_value_facts_maxsi(&lhs_facts, &rhs_facts, out);
     return;
   }
   *out = loom_value_facts_unknown();
+  loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 
 //===----------------------------------------------------------------------===//
@@ -700,12 +803,15 @@ void loom_value_facts_fmai(const loom_value_facts_t* a,
                            loom_value_facts_t* out) {
   // fmai(a, b, c) computes a*b + c.
   // Read all inputs first (output may alias inputs).
-  int64_t a_lo = a->range_lo, a_hi = a->range_hi;
-  int64_t b_lo = b->range_lo, b_hi = b->range_hi;
-  int64_t c_lo = c->range_lo, c_hi = c->range_hi;
-  int64_t a_div = a->known_divisor;
-  int64_t b_div = b->known_divisor;
-  int64_t c_div = c->known_divisor;
+  const loom_value_facts_t a_facts = *a;
+  const loom_value_facts_t b_facts = *b;
+  const loom_value_facts_t c_facts = *c;
+  int64_t a_lo = a_facts.range_lo, a_hi = a_facts.range_hi;
+  int64_t b_lo = b_facts.range_lo, b_hi = b_facts.range_hi;
+  int64_t c_lo = c_facts.range_lo, c_hi = c_facts.range_hi;
+  int64_t a_div = a_facts.known_divisor;
+  int64_t b_div = b_facts.known_divisor;
+  int64_t c_div = c_facts.known_divisor;
 
   // Compute product divisibility: a_div * b_div with overflow check.
   int64_t product_divisor = 0;
@@ -724,6 +830,8 @@ void loom_value_facts_fmai(const loom_value_facts_t* a,
       !loom_checked_mul_i64(a_hi, b_hi, &products[3])) {
     // Product range overflowed but divisor is still valid.
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_ternary_distribution(a_facts, b_facts, c_facts,
+                                                    out);
     return;
   }
 
@@ -739,10 +847,14 @@ void loom_value_facts_fmai(const loom_value_facts_t* a,
   if (!loom_checked_add_i64(prod_lo, c_lo, &lo) ||
       !loom_checked_add_i64(prod_hi, c_hi, &hi)) {
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, divisor);
+    loom_value_facts_propagate_ternary_distribution(a_facts, b_facts, c_facts,
+                                                    out);
     return;
   }
 
   *out = loom_value_facts_make(lo, hi, divisor);
+  loom_value_facts_propagate_ternary_distribution(a_facts, b_facts, c_facts,
+                                                  out);
 }
 
 //===----------------------------------------------------------------------===//
@@ -751,8 +863,9 @@ void loom_value_facts_fmai(const loom_value_facts_t* a,
 
 void loom_value_facts_negi(const loom_value_facts_t* input,
                            loom_value_facts_t* out) {
-  int64_t in_lo = input->range_lo, in_hi = input->range_hi;
-  int64_t in_divisor = input->known_divisor;
+  const loom_value_facts_t input_facts = *input;
+  int64_t in_lo = input_facts.range_lo, in_hi = input_facts.range_hi;
+  int64_t in_divisor = input_facts.known_divisor;
 
   // Negation swaps and negates bounds: new_lo = -old_hi, new_hi = -old_lo.
   int64_t lo, hi;
@@ -760,19 +873,23 @@ void loom_value_facts_negi(const loom_value_facts_t* input,
       !loom_checked_sub_i64(0, in_lo, &hi)) {
     // Range overflowed but negation preserves divisibility.
     *out = loom_value_facts_make(INT64_MIN, INT64_MAX, in_divisor);
+    loom_value_facts_propagate_unary_distribution(input_facts, out);
     return;
   }
   *out = loom_value_facts_make(lo, hi, in_divisor);
+  loom_value_facts_propagate_unary_distribution(input_facts, out);
 }
 
 void loom_value_facts_absi(const loom_value_facts_t* input,
                            loom_value_facts_t* out) {
-  int64_t in_lo = input->range_lo, in_hi = input->range_hi;
-  int64_t in_divisor = input->known_divisor;
+  const loom_value_facts_t input_facts = *input;
+  int64_t in_lo = input_facts.range_lo, in_hi = input_facts.range_hi;
+  int64_t in_divisor = input_facts.known_divisor;
 
   // Already non-negative: abs is identity.
   if (in_lo >= 0) {
     *out = loom_value_facts_make(in_lo, in_hi, in_divisor);
+    loom_value_facts_propagate_unary_distribution(input_facts, out);
     return;
   }
   // Entirely non-positive: negate the range.
@@ -782,9 +899,11 @@ void loom_value_facts_absi(const loom_value_facts_t* input,
         !loom_checked_sub_i64(0, in_lo, &hi)) {
       // Overflow: abs preserves divisibility, result is non-negative.
       *out = loom_value_facts_make(0, INT64_MAX, in_divisor);
+      loom_value_facts_propagate_unary_distribution(input_facts, out);
       return;
     }
     *out = loom_value_facts_make(lo, hi, in_divisor);
+    loom_value_facts_propagate_unary_distribution(input_facts, out);
     return;
   }
   // Range spans zero: result is [0, max(|lo|, hi)].
@@ -792,9 +911,11 @@ void loom_value_facts_absi(const loom_value_facts_t* input,
   if (!loom_checked_sub_i64(0, in_lo, &neg_lo)) {
     // Overflow on negating lo: result is non-negative with known divisor.
     *out = loom_value_facts_make(0, INT64_MAX, in_divisor);
+    loom_value_facts_propagate_unary_distribution(input_facts, out);
     return;
   }
   *out = loom_value_facts_make(0, loom_max_i64(neg_lo, in_hi), in_divisor);
+  loom_value_facts_propagate_unary_distribution(input_facts, out);
 }
 
 //===----------------------------------------------------------------------===//

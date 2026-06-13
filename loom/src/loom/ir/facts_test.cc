@@ -518,7 +518,9 @@ TEST(AddiTransfer, Overflow) {
   loom_value_facts_t b = loom_value_facts_exact_i64(1);
   loom_value_facts_t out;
   loom_value_facts_addi(&a, &b, &out);
-  EXPECT_TRUE(loom_value_facts_is_unknown(out));
+  EXPECT_EQ(out.range_lo, INT64_MIN);
+  EXPECT_EQ(out.range_hi, INT64_MAX);
+  EXPECT_TRUE(loom_value_facts_is_uniform(out));
 }
 
 TEST(AddiTransfer, InPlaceAccumulation) {

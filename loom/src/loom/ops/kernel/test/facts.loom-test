@@ -12,6 +12,10 @@ kernel.def @fixed_workgroup_query_facts() {
   %subgroup_count = kernel.subgroup.count : index
   %byte_count = index.constant 4 : index
   %byte_offset = index.mul %tid_x, %byte_count : index
+  %tid_i32 = index.cast %tid_x : index to i32
+  %c4_i32 = scalar.constant 4 : i32
+  %scaled_i32 = scalar.muli %tid_i32, %c4_i32 : i32
+  %sum_i32 = scalar.addi %scaled_i32, %c4_i32 : i32
   %tid_hi = test.fact_range_hi %tid_x : index -> i64
   %size_lo = test.fact_range_lo %size_x : index -> i64
   %size_hi = test.fact_range_hi %size_x : index -> i64
@@ -23,7 +27,9 @@ kernel.def @fixed_workgroup_query_facts() {
   %subgroup_count_positive = test.fact_positive %subgroup_count : index -> i1
   %byte_offset_divisor = test.fact_divisor %byte_offset : index -> i64
   %byte_offset_hi = test.fact_range_hi %byte_offset : index -> i64
-  test.use %tid_hi, %size_lo, %size_hi, %size_divisor, %size_power_of_two, %lane_hi, %subgroup_count_lo, %subgroup_count_hi, %subgroup_count_positive, %byte_offset_divisor, %byte_offset_hi : i64, i64, i64, i64, i1, i64, i64, i64, i1, i64, i64
+  %byte_offset_is_varying = test.fact_lane_varying %byte_offset : index -> i1
+  %sum_i32_is_varying = test.fact_lane_varying %sum_i32 : i32 -> i1
+  test.use %tid_hi, %size_lo, %size_hi, %size_divisor, %size_power_of_two, %lane_hi, %subgroup_count_lo, %subgroup_count_hi, %subgroup_count_positive, %byte_offset_divisor, %byte_offset_hi, %byte_offset_is_varying, %sum_i32_is_varying : i64, i64, i64, i64, i1, i64, i64, i64, i1, i64, i64, i1, i1
   kernel.return
 }
 
@@ -45,7 +51,9 @@ kernel.def @fixed_workgroup_query_facts() {
   %subgroup_count_positive = scalar.constant true : i1
   %byte_offset_divisor = scalar.constant 4 : i64
   %byte_offset_hi = scalar.constant 252 : i64
-  test.use %tid_hi, %size_lo, %size_hi, %size_divisor, %size_power_of_two, %lane_hi, %subgroup_count_lo, %subgroup_count_hi, %subgroup_count_positive, %byte_offset_divisor, %byte_offset_hi : i64, i64, i64, i64, i1, i64, i64, i64, i1, i64, i64
+  %byte_offset_is_varying = scalar.constant true : i1
+  %sum_i32_is_varying = scalar.constant true : i1
+  test.use %tid_hi, %size_lo, %size_hi, %size_divisor, %size_power_of_two, %lane_hi, %subgroup_count_lo, %subgroup_count_hi, %subgroup_count_positive, %byte_offset_divisor, %byte_offset_hi, %byte_offset_is_varying, %sum_i32_is_varying : i64, i64, i64, i64, i1, i64, i64, i64, i1, i64, i64, i1, i1
   kernel.return
 }
 
@@ -96,7 +104,8 @@ kernel.def @dynamic_launch_config_facts_seed_body(%count: index) {
   %dispatch_hi = test.fact_range_hi %dispatch_id : index -> i64
   %linear_non_negative = test.fact_non_negative %linear : index -> i1
   %linear_hi = test.fact_range_hi %linear : index -> i64
-  test.use %bid_hi, %count_lo, %count_hi, %tid_hi, %dispatch_hi, %linear_non_negative, %linear_hi : i64, i64, i64, i64, i64, i1, i64
+  %linear_is_varying = test.fact_lane_varying %linear : index -> i1
+  test.use %bid_hi, %count_lo, %count_hi, %tid_hi, %dispatch_hi, %linear_non_negative, %linear_hi, %linear_is_varying : i64, i64, i64, i64, i64, i1, i64, i1
   kernel.return
 }
 
@@ -114,7 +123,8 @@ kernel.def @dynamic_launch_config_facts_seed_body(%count: index) {
   %dispatch_hi = scalar.constant 8191 : i64
   %linear_non_negative = scalar.constant true : i1
   %linear_hi = scalar.constant 8191 : i64
-  test.use %bid_hi, %count_lo, %count_hi, %tid_hi, %dispatch_hi, %linear_non_negative, %linear_hi : i64, i64, i64, i64, i64, i1, i64
+  %linear_is_varying = scalar.constant true : i1
+  test.use %bid_hi, %count_lo, %count_hi, %tid_hi, %dispatch_hi, %linear_non_negative, %linear_hi, %linear_is_varying : i64, i64, i64, i64, i64, i1, i64, i1
   kernel.return
 }
 
