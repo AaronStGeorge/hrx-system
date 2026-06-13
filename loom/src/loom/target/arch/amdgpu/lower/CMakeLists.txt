@@ -208,6 +208,7 @@ loom_cc_library(
     loom::ops::scf
     loom::ops::vector
     loom::ops::view
+    loom::sanitizer::site_collection
     loom::target::arch::amdgpu::asan_abi
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs

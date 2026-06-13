@@ -270,6 +270,11 @@ loom_low_lower_selected_plan_view_t loom_low_lower_context_selected_plan_view(
   };
 }
 
+iree_arena_allocator_t* loom_low_lower_context_scratch_arena(
+    loom_low_lower_context_t* context) {
+  return &context->arena;
+}
+
 iree_status_t loom_low_lower_allocate_scratch_array(
     loom_low_lower_context_t* context, iree_host_size_t count,
     iree_host_size_t element_size, void** out_ptr) {

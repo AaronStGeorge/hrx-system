@@ -15,6 +15,7 @@
 #include "iree/base/api.h"
 #include "loom/codegen/low/lower/lower.h"
 #include "loom/ir/ir.h"
+#include "loom/sanitizer/site_collection.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_report.h"
 
@@ -23,6 +24,8 @@ extern "C" {
 #endif
 
 typedef struct loom_amdgpu_sanitizer_access_plan_t {
+  // Dense sanitizer site ID assigned during source-to-low planning.
+  loom_sanitizer_site_id_t site_id;
   // Flat application address plan selected from the asserted view access.
   loom_amdgpu_memory_access_t address;
   // Runtime access kind reported when the assertion fails.

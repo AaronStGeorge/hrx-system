@@ -812,6 +812,12 @@ void loom_low_lower_require_source_value_storage(
 void loom_low_lower_require_source_operands_storage(
     loom_low_lower_context_t* context, const loom_op_t* source_op);
 
+// Returns the transient arena for the current lowering run. Storage allocated
+// from the arena remains valid until the current loom_low_lower_function call
+// returns.
+iree_arena_allocator_t* loom_low_lower_context_scratch_arena(
+    loom_low_lower_context_t* context);
+
 // Allocates transient storage from the current lowering arena. The allocation
 // remains valid until the current loom_low_lower_function call returns.
 iree_status_t loom_low_lower_allocate_scratch_array(

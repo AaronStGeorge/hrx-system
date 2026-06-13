@@ -87,6 +87,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    site_table
+  HDRS
+    "site_table.h"
+  SRCS
+    "site_table.c"
+  DEPS
+    ::site_collection
+    ::site_payload
+    iree::base
+    iree::base::core_headers
+    iree::base::internal::arena
+    loom::ir
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     site_collection_test
@@ -101,6 +118,23 @@ loom_cc_test(
     loom::ir
     loom::ops::sanitizer
     loom::ops::test
+)
+
+loom_cc_test(
+  NAME
+    site_table_test
+  SRCS
+    "site_table_test.cc"
+  DEPS
+    ::site_collection
+    ::site_payload
+    ::site_table
+    iree::base::core_headers
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::ir
+    loom::ops::sanitizer
 )
 
 loom_cc_test(
