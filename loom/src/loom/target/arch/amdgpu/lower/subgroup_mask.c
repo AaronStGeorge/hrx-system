@@ -119,7 +119,10 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_ballot_plan(
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_id_t predicate =
       loom_kernel_subgroup_vote_ballot_predicate(source_op);
-  if (!loom_amdgpu_module_value_is_native_i1_mask(module, predicate)) {
+  bool predicate_is_native_mask = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_context_value_is_native_i1_mask(
+      context, predicate, &predicate_is_native_mask));
+  if (!predicate_is_native_mask) {
     return iree_ok_status();
   }
 
@@ -162,10 +165,12 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_any_plan(
     return iree_ok_status();
   }
 
-  const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_id_t predicate =
       loom_kernel_subgroup_vote_any_predicate(source_op);
-  if (!loom_amdgpu_module_value_is_native_i1_mask(module, predicate)) {
+  bool predicate_is_native_mask = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_context_value_is_native_i1_mask(
+      context, predicate, &predicate_is_native_mask));
+  if (!predicate_is_native_mask) {
     return iree_ok_status();
   }
 
@@ -207,10 +212,12 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_vote_all_plan(
     return iree_ok_status();
   }
 
-  const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_id_t predicate =
       loom_kernel_subgroup_vote_all_predicate(source_op);
-  if (!loom_amdgpu_module_value_is_native_i1_mask(module, predicate)) {
+  bool predicate_is_native_mask = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_context_value_is_native_i1_mask(
+      context, predicate, &predicate_is_native_mask));
+  if (!predicate_is_native_mask) {
     return iree_ok_status();
   }
 

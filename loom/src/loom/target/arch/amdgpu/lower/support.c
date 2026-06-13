@@ -1444,24 +1444,7 @@ bool loom_amdgpu_source_value_prefers_vgpr(
   }
 }
 
-bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
-                                           loom_value_id_t source_value_id) {
-  return loom_amdgpu_source_value_prefers_vgpr(
-      module, /*fact_table=*/NULL, /*view_regions=*/NULL, source_value_id);
-}
-
-bool loom_amdgpu_value_prefers_vgpr(loom_low_lower_context_t* context,
-                                    loom_value_id_t source_value_id) {
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  if (loom_amdgpu_source_value_facts_prefer_vgpr(
-          module, loom_low_lower_context_fact_table(context),
-          source_value_id)) {
-    return true;
-  }
-  return loom_amdgpu_module_value_prefers_vgpr(module, source_value_id);
-}
-
-static iree_status_t loom_amdgpu_context_value_prefers_vgpr(
+iree_status_t loom_amdgpu_context_value_prefers_vgpr(
     loom_low_lower_context_t* context, loom_value_id_t source_value_id,
     bool* out_prefers_vgpr) {
   const loom_view_region_table_t* view_regions = NULL;
@@ -1474,13 +1457,7 @@ static iree_status_t loom_amdgpu_context_value_prefers_vgpr(
   return iree_ok_status();
 }
 
-bool loom_amdgpu_module_value_is_native_i1_mask(
-    const loom_module_t* module, loom_value_id_t source_value_id) {
-  return loom_amdgpu_source_value_is_native_i1_mask(
-      module, /*fact_table=*/NULL, /*view_regions=*/NULL, source_value_id);
-}
-
-static iree_status_t loom_amdgpu_context_value_is_native_i1_mask(
+iree_status_t loom_amdgpu_context_value_is_native_i1_mask(
     loom_low_lower_context_t* context, loom_value_id_t source_value_id,
     bool* out_is_native_mask) {
   const loom_view_region_table_t* view_regions = NULL;
