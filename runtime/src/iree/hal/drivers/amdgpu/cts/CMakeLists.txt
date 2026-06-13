@@ -67,23 +67,6 @@ iree_amdgpu_hal_cts_testdata(
 endif()
 
 if(IREE_HAL_DRIVER_AMDGPU)
-iree_amdgpu_library_variants(
-  NAME
-    asanrtl_test_runtime
-  TARGET
-    amdgcn-amd-amdhsa
-  TARGETS
-    ${IREE_HAL_AMDGPU_TARGETS}
-  INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
-  SRCS
-    "testdata/asanrtl_test_runtime.c"
-  TESTONLY
-)
-endif()
-
-if(IREE_HAL_DRIVER_AMDGPU)
 iree_amdgpu_hal_cts_testdata(
   NAME
     asan_testdata_amdgpu
@@ -106,7 +89,7 @@ iree_amdgpu_hal_cts_testdata(
     "testdata/manual_asan_noop_test.c"
     "testdata/manual_asan_test.c"
   DEPS
-    ::asanrtl_test_runtime_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
+    runtime::src::iree::hal::drivers::amdgpu::device::asanrtl_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
   NO_INTERNALIZE
   TESTONLY
 )

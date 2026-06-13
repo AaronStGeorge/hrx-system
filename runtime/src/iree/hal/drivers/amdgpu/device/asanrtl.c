@@ -8,6 +8,11 @@
 #include "iree/hal/drivers/amdgpu/abi/feedback.h"
 #include "iree/hal/drivers/amdgpu/device/support/asan.h"
 
+// Replacement AMDGPU ASAN runtime bitcode linked into checked device programs.
+// The HAL owns shadow memory, executable-global publication, and feedback
+// decoding; this artifact adapts clang/ROCm's `__asan_*` hook ABI to that HAL
+// contract.
+
 #if defined(__clang__)
 // The replacement ASAN runtime is linked as bitcode into instrumented programs.
 // Its ABI globals and helper functions must keep their exact layout and must

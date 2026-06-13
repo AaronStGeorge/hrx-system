@@ -42,6 +42,22 @@ add_custom_target(bitcode_hdrs
 )
 
 if(IREE_HAL_DRIVER_AMDGPU)
+iree_amdgpu_library_variants(
+  NAME
+    asanrtl
+  TARGET
+    amdgcn-amd-amdhsa
+  TARGETS
+    ${IREE_HAL_AMDGPU_TARGETS}
+  INTERNAL_HDRS
+    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "bitcode_hdrs.stamp"
+  SRCS
+    "asanrtl.c"
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     headers
