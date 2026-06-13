@@ -8,8 +8,8 @@
 
 #include <stdint.h>
 
-static const loom_target_snapshot_t kLlvmirObjectProjectionSnapshot = {
-    .name = IREE_SVL("llvmir-object-projection"),
+static const loom_target_snapshot_t kLlvmirGenericObjectSnapshot = {
+    .name = IREE_SVL("llvmir-generic-object"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LLVMIR,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
     .default_pointer_bitwidth = 64,
@@ -27,29 +27,30 @@ static const loom_target_snapshot_t kLlvmirObjectProjectionSnapshot = {
         },
 };
 
-static const loom_target_export_plan_t kLlvmirObjectProjectionExportPlan = {
-    .name = IREE_SVL("llvmir-object-projection"),
+static const loom_target_export_plan_t kLlvmirGenericObjectExportPlan = {
+    .name = IREE_SVL("llvmir-object-function"),
     .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
     .linkage = LOOM_TARGET_LINKAGE_DSO_LOCAL,
 };
 
-static const loom_target_config_t kLlvmirObjectProjectionConfig = {
-    .name = IREE_SVL("llvmir-object-projection"),
+static const loom_target_config_t kLlvmirGenericObjectConfig = {
+    .name = IREE_SVL("llvmir.generic.core"),
+    .contract_set_key = IREE_SVL("llvmir.generic.core"),
 };
 
-static const loom_target_bundle_t kLlvmirObjectProjectionBundle = {
-    .name = IREE_SVL("llvmir-object-projection"),
-    .snapshot = &kLlvmirObjectProjectionSnapshot,
-    .export_plan = &kLlvmirObjectProjectionExportPlan,
-    .config = &kLlvmirObjectProjectionConfig,
+static const loom_target_bundle_t kLlvmirGenericObjectBundle = {
+    .name = IREE_SVL("llvmir-generic-object"),
+    .snapshot = &kLlvmirGenericObjectSnapshot,
+    .export_plan = &kLlvmirGenericObjectExportPlan,
+    .config = &kLlvmirGenericObjectConfig,
 };
 
-static const loom_target_bundle_t* const kProjectionBundleValues[] = {
+static const loom_target_bundle_t* const kLlvmirTargetBundleValues[] = {
     NULL,
-    &kLlvmirObjectProjectionBundle,
+    &kLlvmirGenericObjectBundle,
 };
 
-const loom_target_bundle_table_t loom_llvmir_projection_target_bundles = {
-    .values = kProjectionBundleValues,
-    .count = IREE_ARRAYSIZE(kProjectionBundleValues),
+const loom_target_bundle_table_t loom_llvmir_target_bundles = {
+    .values = kLlvmirTargetBundleValues,
+    .count = IREE_ARRAYSIZE(kLlvmirTargetBundleValues),
 };

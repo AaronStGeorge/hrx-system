@@ -9,6 +9,10 @@ load(
     "loom_cc_library",
     "loom_cc_test",
 )
+load(
+    "//loom/build_tools/bazel:loom_check.bzl",
+    "loom_check_test_suite",
+)
 
 package(
     default_visibility = ["//visibility:private"],
@@ -17,8 +21,20 @@ package(
 )
 
 _LLVMIR_PROVIDER_VISIBILITY = [
+    "//loom/src/loom/target/arch/llvmir/check:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
 ]
+
+loom_cc_library(
+    name = "math_policy",
+    srcs = ["math_policy.c"],
+    hdrs = ["math_policy.h"],
+    textual_hdrs = ["math_policy_tables.inl"],
+    deps = [
+        "//loom/src/loom/target:math_policy",
+        "//runtime/src/iree/base",
+    ],
+)
 
 loom_cc_library(
     name = "provider",
@@ -26,8 +42,11 @@ loom_cc_library(
     hdrs = ["provider.h"],
     visibility = _LLVMIR_PROVIDER_VISIBILITY,
     deps = [
+        ":math_policy",
         "//loom/src/loom/ops/llvmir",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/llvmir/descriptors:low_registry",
+        "//loom/src/loom/target/arch/llvmir/lower",
         "//runtime/src/iree/base",
     ],
 )
@@ -41,10 +60,21 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/llvmir",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/llvmir/descriptors:low_registry",
+        "//loom/src/loom/target/arch/llvmir/lower",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
+)
+
+loom_check_test_suite(
+    name = "loom_check_file_test",
+    srcs = [
+        "test/source_low/source_low.loom-test",
+        "test/source_low/source_low_diagnostics.loom-test",
+    ],
+    test_name_prefix_to_strip = "test/source_low/",
 )

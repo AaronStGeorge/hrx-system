@@ -44,6 +44,13 @@ DESCRIPTOR_SET_REGISTRATIONS = (
         generates_checked_in_c=False,
     ),
     DescriptorSetRegistration(
+        key="llvmir.generic.core",
+        module_name="loom.target.arch.llvmir.descriptors",
+        symbol_name="LLVMIR_GENERIC_CORE_DESCRIPTOR_SET",
+        aliases=("llvmir_generic_core",),
+        generates_checked_in_c=False,
+    ),
+    DescriptorSetRegistration(
         key="wasm.core.simd128",
         module_name="loom.target.arch.wasm.descriptors",
         symbol_name="WASM_CORE_SIMD128_DESCRIPTOR_SET",

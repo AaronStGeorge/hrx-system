@@ -12,14 +12,34 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_LLVMIR)
 loom_cc_library(
   NAME
+    math_policy
+  HDRS
+    "math_policy.h"
+  TEXTUAL_HDRS
+    "math_policy_tables.inl"
+  SRCS
+    "math_policy.c"
+  DEPS
+    iree::base
+    loom::target::math_policy
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
   SRCS
     "provider.c"
   DEPS
+    ::math_policy
     iree::base
     loom::ops::llvmir
+    loom::target::arch::llvmir::descriptors::low_registry
+    loom::target::arch::llvmir::lower
     loom::target::provider
   PUBLIC
 )
@@ -40,10 +60,38 @@ loom_cc_test(
     loom::format::text::parser
     loom::ir
     loom::ops::llvmir
+    loom::target::arch::llvmir::descriptors::low_registry
+    loom::target::arch::llvmir::lower
     loom::target::provider
     loom::testing::module_ptr
   LABELS
     "iree-build-requirement=loom.target.arch.llvmir"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "source_low"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "source_low_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
 )
 endif()
 

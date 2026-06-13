@@ -58,7 +58,7 @@ TEST(LlvmirProviderTest, ParsesTargetRecordWithProviderRegisteredDialect) {
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
   loom_module_t* raw_module = nullptr;
   IREE_ASSERT_OK(loom_text_parse(
-      IREE_SV("llvmir.target<object> @direct_llvm_projection {\n"
+      IREE_SV("llvmir.target<object> @llvm_generic {\n"
               "  triple = \"loom-direct64-unknown-none\",\n"
               "  data_layout = \"e-p:64:64-i64:64-n8:16:32:64-S128\"\n"
               "}\n"),

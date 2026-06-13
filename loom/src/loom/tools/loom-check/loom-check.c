@@ -43,6 +43,9 @@
 #if LOOM_CHECK_HAVE_TARGET_IREE_VM
 #include "loom/target/arch/ireevm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_TARGET_IREE_VM
+#if LOOM_CHECK_HAVE_TARGET_LLVMIR
+#include "loom/target/arch/llvmir/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_TARGET_LLVMIR
 #if LOOM_CHECK_HAVE_EMIT_LLVMIR
 #include "loom/target/emit/llvmir/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_EMIT_LLVMIR
@@ -70,6 +73,9 @@ static const loom_check_provider_t* const kLoomCheckProviders[] = {
 #if LOOM_CHECK_HAVE_TARGET_IREE_VM
     &loom_ireevm_check_provider,
 #endif  // LOOM_CHECK_HAVE_TARGET_IREE_VM
+#if LOOM_CHECK_HAVE_TARGET_LLVMIR
+    &loom_llvmir_target_check_provider,
+#endif  // LOOM_CHECK_HAVE_TARGET_LLVMIR
 #if LOOM_CHECK_HAVE_EMIT_LLVMIR
     &loom_llvmir_check_provider,
 #endif  // LOOM_CHECK_HAVE_EMIT_LLVMIR

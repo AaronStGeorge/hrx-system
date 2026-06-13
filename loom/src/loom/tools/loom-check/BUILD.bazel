@@ -40,6 +40,20 @@ _TARGET_IREE_VM_CHECK_DEPS = iree_select({
     "//conditions:default": [],
 })
 
+_TARGET_LLVMIR_CHECK_COPTS = iree_select({
+    "//loom/config/target/arch:llvmir": [
+        "-DLOOM_CHECK_HAVE_TARGET_LLVMIR=1",
+    ],
+    "//conditions:default": [],
+})
+
+_TARGET_LLVMIR_CHECK_DEPS = iree_select({
+    "//loom/config/target/arch:llvmir": [
+        "//loom/src/loom/target/arch/llvmir/check:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
 _EMIT_LLVMIR_CHECK_COPTS = iree_select({
     "//loom/config/emit:llvmir": [
         "-DLOOM_CHECK_HAVE_EMIT_LLVMIR=1",
@@ -127,6 +141,7 @@ _TARGET_X86_CHECK_DEPS = iree_select({
 _LOOM_CHECK_PROVIDER_COPTS = (
     _EMIT_AMDGPU_CHECK_COPTS +
     _TARGET_IREE_VM_CHECK_COPTS +
+    _TARGET_LLVMIR_CHECK_COPTS +
     _EMIT_LLVMIR_CHECK_COPTS +
     _TARGET_SPIRV_CHECK_COPTS +
     _EMIT_SPIRV_CHECK_COPTS +
@@ -138,6 +153,7 @@ _LOOM_CHECK_PROVIDER_COPTS = (
 _LOOM_CHECK_PROVIDER_DEPS = (
     _EMIT_AMDGPU_CHECK_DEPS +
     _TARGET_IREE_VM_CHECK_DEPS +
+    _TARGET_LLVMIR_CHECK_DEPS +
     _EMIT_LLVMIR_CHECK_DEPS +
     _TARGET_SPIRV_CHECK_DEPS +
     _EMIT_SPIRV_CHECK_DEPS +

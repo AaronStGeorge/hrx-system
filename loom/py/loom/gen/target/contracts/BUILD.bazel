@@ -15,6 +15,7 @@ GENERATOR_VISIBILITY = [
     "//loom/py/loom/gen:__subpackages__",
     "//loom/src/loom/target/arch/amdgpu/contracts:__pkg__",
     "//loom/src/loom/target/arch/ireevm/contracts:__pkg__",
+    "//loom/src/loom/target/arch/llvmir/contracts:__pkg__",
     "//loom/src/loom/target/arch/spirv/contracts:__pkg__",
     "//loom/src/loom/target/arch/x86/contracts:__pkg__",
     "//loom/src/loom/target/emit/wasm/contracts:__pkg__",
@@ -137,6 +138,34 @@ iree_py_binary(
     deps = [
         ":lower_rule_shard",
         "//loom/py/loom/target/arch/ireevm/contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "llvmir_contract_fragment",
+    srcs = [
+        "__init__.py",
+        "contract_fragment.py",
+    ],
+    main = "contract_fragment.py",
+    visibility = GENERATOR_VISIBILITY,
+    deps = [
+        ":contract_fragment",
+        "//loom/py/loom/target/arch/llvmir:contracts",
+    ],
+)
+
+iree_py_binary(
+    name = "llvmir_lower_rule_shard",
+    srcs = [
+        "__init__.py",
+        "lower_rule_shard.py",
+    ],
+    main = "lower_rule_shard.py",
+    visibility = GENERATOR_VISIBILITY,
+    deps = [
+        ":lower_rule_shard",
+        "//loom/py/loom/target/arch/llvmir:contracts",
     ],
 )
 
