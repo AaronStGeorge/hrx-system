@@ -30,6 +30,7 @@ belong to `iree-benchmark-loom` flags or embedding APIs.
 | Logical indexing | The examples use index/view math for logical rows, blocks, lanes, byte positions, and dense tensor coordinates. |
 | Dynamic case parameters | `mlp_down_projection_residual_bf16.loom` names `rows` on a `check.param.choice` and threads it through shapes, launch geometry, and the kernel ABI. |
 | Benchmark slices | `mlp_down_projection_residual_bf16.loom` has an anonymous full sweep plus named decode/full rows with assignment dictionaries. |
+| HIP C++ porting motifs | `hip/README.md` maps HIP/CUDA kernel habits to Loom source spellings, proof commands, diagnostics, and report queries. |
 
 ## FFN q6/q8 Gate-Up SwiGLU
 
@@ -52,6 +53,12 @@ They carry gate/up accumulators as loop results and request local unrolling only
 where the q6_K trip counts are tiny and compile-time known. This keeps the
 logical reduction visible to analysis while still producing the expanded low
 code expected by the backend.
+
+The `hip/` cookbook is the fast path for users arriving from hand-written HIP
+C++, CUDA, or inline assembly. It is organized by source terms such as
+`#pragma unroll`, `threadIdx`, `global_load_b128`, and `restrict`, then points
+to the Loom spelling, the pass or lowering stage that consumes it, and the
+structured diagnostic/report query that proves what happened.
 
 The zero case is an execution smoke test: zero weights and activations make the
 expected tensor simple, while the dispatch still exercises unpack, dot, scale,
