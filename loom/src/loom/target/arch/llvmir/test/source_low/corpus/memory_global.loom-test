@@ -66,6 +66,185 @@ llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
+func.def target(@target) @global_load_i16_saddr(%input: buffer) -> (i16) {
+  %zero = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_view = buffer.view %input_global[%zero] : buffer -> view<1xi16, #dense>
+  %loaded = view.load %input_view[0] : view<1xi16, #dense> -> i16
+  func.return %loaded : i16
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @global_load_i16_saddr(%input_view: reg<llvmir.ptr>) -> (reg<llvmir.i16>) asm<llvmir.generic.core> {
+  %loaded = load.i16 %input_view, 0
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @global_store_i16_saddr(%output: buffer, %value: i16) {
+  %zero = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%zero] : buffer -> view<1xi16, #dense>
+  view.store %value, %output_view[0] : i16, view<1xi16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @global_store_i16_saddr(%output_view: reg<llvmir.ptr>, %value: reg<llvmir.i16>) asm<llvmir.generic.core> {
+  store.i16 %value, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @i8x2_buffer_load(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i8x2_buffer_load(%input_view: reg<llvmir.ptr>) -> (reg<llvmir.i8 x2>) asm<llvmir.generic.core> {
+  %loaded = load.v2i8 %input_view, 0
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @global_load_i8x2_saddr(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_view = buffer.view %input_global[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @global_load_i8x2_saddr(%input_view: reg<llvmir.ptr>) -> (reg<llvmir.i8 x2>) asm<llvmir.generic.core> {
+  %loaded = load.v2i8 %input_view, 0
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @global_store_i8x2_saddr(%output: buffer, %value: vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%zero] : buffer -> view<2xi8, #dense>
+  vector.store %value, %output_view[0] : vector<2xi8>, view<2xi8, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @global_store_i8x2_saddr(%output_view: reg<llvmir.ptr>, %value: reg<llvmir.i8 x2>) asm<llvmir.generic.core> {
+  store.v2i8 %value, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_load_i16(%input: buffer) -> (i16) {
+  %zero = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %input_view = buffer.view %input_descriptor[%zero] : buffer -> view<1xi16, #dense>
+  %loaded = view.load %input_view[0] : view<1xi16, #dense> -> i16
+  func.return %loaded : i16
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_load_i16(%input_view: reg<llvmir.ptr>) -> (reg<llvmir.i16>) asm<llvmir.generic.core> {
+  %loaded = load.i16 %input_view, 0
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_store_i16(%output: buffer, %value: i16) {
+  %zero = index.constant 0 : offset
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %output_view = buffer.view %output_descriptor[%zero] : buffer -> view<1xi16, #dense>
+  view.store %value, %output_view[0] : i16, view<1xi16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_store_i16(%output_view: reg<llvmir.ptr>, %value: reg<llvmir.i16>) asm<llvmir.generic.core> {
+  store.i16 %value, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_load_i8x2(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %input_view = buffer.view %input_descriptor[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_load_i8x2(%input_view: reg<llvmir.ptr>) -> (reg<llvmir.i8 x2>) asm<llvmir.generic.core> {
+  %loaded = load.v2i8 %input_view, 0
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_store_i8x2(%output: buffer, %value: vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %output_view = buffer.view %output_descriptor[%zero] : buffer -> view<2xi8, #dense>
+  vector.store %value, %output_view[0] : vector<2xi8>, view<2xi8, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_store_i8x2(%output_view: reg<llvmir.ptr>, %value: reg<llvmir.i8 x2>) asm<llvmir.generic.core> {
+  store.v2i8 %value, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
 func.def target(@target) @descriptor_b128_off_zero(%input: buffer) -> (vector<4xi32>) {
   %zero = index.constant 0 : offset
   %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer

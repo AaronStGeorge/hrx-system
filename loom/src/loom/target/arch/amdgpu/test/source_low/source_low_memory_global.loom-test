@@ -68,6 +68,208 @@ low.func.def target(@target) abi(hal_kernel) @global_store_i8_saddr(%value: reg<
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @global_load_i16_saddr(%input: buffer) -> (i16) {
+  %zero = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_view = buffer.view %input_global[%zero] : buffer -> view<1xi16, #dense>
+  %loaded = view.load %input_view[0] : view<1xi16, #dense> -> i16
+  func.return %loaded : i16
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_load_i16_saddr() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %8 = v_mov_b32 0
+  %loaded = global_load_i16_saddr %8, %input_view
+  return %loaded
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @global_store_i16_saddr(%output: buffer, %value: i16) {
+  %zero = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%zero] : buffer -> view<1xi16, #dense>
+  view.store %value, %output_view[0] : i16, view<1xi16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_store_i16_saddr(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %7 = v_mov_b32 0
+  global_store_short_saddr %7, %value, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i8x2_buffer_load(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i8x2_buffer_load() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %7 = v_mov_b32 0
+  %loaded = global_load_u16_saddr %7, %input_view
+  return %loaded
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @global_load_i8x2_saddr(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_view = buffer.view %input_global[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_load_i8x2_saddr() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %8 = v_mov_b32 0
+  %loaded = global_load_u16_saddr %8, %input_view
+  return %loaded
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @global_store_i8x2_saddr(%output: buffer, %value: vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%zero] : buffer -> view<2xi8, #dense>
+  vector.store %value, %output_view[0] : vector<2xi8>, view<2xi8, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_store_i8x2_saddr(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %7 = v_mov_b32 0
+  global_store_short_saddr %7, %value, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @descriptor_load_i16(%input: buffer) -> (i16) {
+  %zero = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %input_view = buffer.view %input_descriptor[%zero] : buffer -> view<1xi16, #dense>
+  %loaded = view.load %input_view[0] : view<1xi16, #dense> -> i16
+  func.return %loaded : i16
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @descriptor_load_i16() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %10 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %11 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %12 = s_mov_b32 65535
+  %13 = s_and_b32 %11, %12
+  %14 = concat(%10, %13) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %15 = s_mov_b32 2
+  %16 = s_mov_b32 822243328
+  %17 = concat(%14, %15, %16) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  %loaded = buffer_load_i16_off_zero %17
+  return %loaded
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @descriptor_store_i16(%output: buffer, %value: i16) {
+  %zero = index.constant 0 : offset
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %output_view = buffer.view %output_descriptor[%zero] : buffer -> view<1xi16, #dense>
+  view.store %value, %output_view[0] : i16, view<1xi16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @descriptor_store_i16(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %7 = v_mov_b32 0
+  %8 = s_mov_b32 0
+  %10 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %11 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %12 = s_mov_b32 65535
+  %13 = s_and_b32 %11, %12
+  %14 = concat(%10, %13) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %15 = s_mov_b32 2
+  %16 = s_mov_b32 822243328
+  %17 = concat(%14, %15, %16) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  buffer_store_short %value, %17, %7, %8
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @descriptor_load_i8x2(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %input_view = buffer.view %input_descriptor[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @descriptor_load_i8x2() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %10 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %11 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %12 = s_mov_b32 65535
+  %13 = s_and_b32 %11, %12
+  %14 = concat(%10, %13) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %15 = s_mov_b32 2
+  %16 = s_mov_b32 822243328
+  %17 = concat(%14, %15, %16) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  %loaded = buffer_load_u16_off_zero %17
+  return %loaded
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @descriptor_store_i8x2(%output: buffer, %value: vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %output_view = buffer.view %output_descriptor[%zero] : buffer -> view<2xi8, #dense>
+  vector.store %value, %output_view[0] : vector<2xi8>, view<2xi8, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @descriptor_store_i8x2(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2} : reg<amdgpu.sgpr x2>
+  %7 = v_mov_b32 0
+  %8 = s_mov_b32 0
+  %10 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %11 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %12 = s_mov_b32 65535
+  %13 = s_and_b32 %11, %12
+  %14 = concat(%10, %13) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %15 = s_mov_b32 2
+  %16 = s_mov_b32 822243328
+  %17 = concat(%14, %15, %16) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  buffer_store_short %value, %17, %7, %8
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @descriptor_b128_off_zero(%input: buffer) -> (vector<4xi32>) {
   %zero = index.constant 0 : offset
   %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer

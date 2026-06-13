@@ -733,6 +733,7 @@ typedef enum loom_amdgpu_memory_payload_register_class_e {
 typedef enum loom_amdgpu_memory_payload_format_e {
   LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_GENERIC = 0,
   LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT = 1,
+  LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER = 2,
 } loom_amdgpu_memory_payload_format_t;
 
 typedef enum loom_amdgpu_memory_scalar_offset_placement_e {

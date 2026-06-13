@@ -66,6 +66,8 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
   ((uint32_t)1u << 20)
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_LOW16_DESCRIPTOR_MISSING \
   ((uint32_t)1u << 21)
+#define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SIGNED_I16_REPAIR_DESCRIPTOR_MISSING \
+  ((uint32_t)1u << 22)
 
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.

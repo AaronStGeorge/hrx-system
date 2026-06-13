@@ -30,6 +30,95 @@ func.def @global_store_i8_saddr(%output: buffer, %value: i8) {
 
 // ====
 
+func.def @global_load_i16_saddr(%input: buffer) -> (i16) {
+  %zero = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_view = buffer.view %input_global[%zero] : buffer -> view<1xi16, #dense>
+  %loaded = view.load %input_view[0] : view<1xi16, #dense> -> i16
+  func.return %loaded : i16
+}
+
+// ====
+
+func.def @global_store_i16_saddr(%output: buffer, %value: i16) {
+  %zero = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%zero] : buffer -> view<1xi16, #dense>
+  view.store %value, %output_view[0] : i16, view<1xi16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @i8x2_buffer_load(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ====
+
+func.def @global_load_i8x2_saddr(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space<global> %input : buffer
+  %input_view = buffer.view %input_global[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ====
+
+func.def @global_store_i8x2_saddr(%output: buffer, %value: vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%zero] : buffer -> view<2xi8, #dense>
+  vector.store %value, %output_view[0] : vector<2xi8>, view<2xi8, #dense>
+  func.return
+}
+
+// ====
+
+func.def @descriptor_load_i16(%input: buffer) -> (i16) {
+  %zero = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %input_view = buffer.view %input_descriptor[%zero] : buffer -> view<1xi16, #dense>
+  %loaded = view.load %input_view[0] : view<1xi16, #dense> -> i16
+  func.return %loaded : i16
+}
+
+// ====
+
+func.def @descriptor_store_i16(%output: buffer, %value: i16) {
+  %zero = index.constant 0 : offset
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %output_view = buffer.view %output_descriptor[%zero] : buffer -> view<1xi16, #dense>
+  view.store %value, %output_view[0] : i16, view<1xi16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @descriptor_load_i8x2(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %input_view = buffer.view %input_descriptor[%zero] : buffer -> view<2xi8, #dense>
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ====
+
+func.def @descriptor_store_i8x2(%output: buffer, %value: vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %output_view = buffer.view %output_descriptor[%zero] : buffer -> view<2xi8, #dense>
+  vector.store %value, %output_view[0] : vector<2xi8>, view<2xi8, #dense>
+  func.return
+}
+
+// ====
+
 func.def @descriptor_b128_off_zero(%input: buffer) -> (vector<4xi32>) {
   %zero = index.constant 0 : offset
   %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
