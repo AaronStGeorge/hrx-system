@@ -21,11 +21,22 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "options_cli",
+    srcs = ["options_cli.c"],
+    hdrs = ["options_cli.h"],
+    deps = [
+        ":options",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "pipeline_passes",
     srcs = ["pipeline_passes.c"],
     hdrs = ["pipeline_passes.h"],
     deps = [
         ":options",
+        ":options_cli",
         ":site_payload",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/index",
@@ -75,6 +86,16 @@ loom_cc_test(
         "//loom/src/loom/ops/sanitizer",
         "//loom/src/loom/ops/test",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "options_cli_test",
+    srcs = ["options_cli_test.cc"],
+    deps = [
+        ":options_cli",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

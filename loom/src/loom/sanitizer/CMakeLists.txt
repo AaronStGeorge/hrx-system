@@ -21,6 +21,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    options_cli
+  HDRS
+    "options_cli.h"
+  SRCS
+    "options_cli.c"
+  DEPS
+    ::options
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     pipeline_passes
   HDRS
     "pipeline_passes.h"
@@ -28,6 +41,7 @@ loom_cc_library(
     "pipeline_passes.c"
   DEPS
     ::options
+    ::options_cli
     ::site_payload
     iree::base
     loom::ir
@@ -87,6 +101,17 @@ loom_cc_test(
     loom::ir
     loom::ops::sanitizer
     loom::ops::test
+)
+
+loom_cc_test(
+  NAME
+    options_cli_test
+  SRCS
+    "options_cli_test.cc"
+  DEPS
+    ::options_cli
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

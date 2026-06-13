@@ -380,7 +380,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/pass:environment",
-        "//loom/src/loom/sanitizer:options",
+        "//loom/src/loom/sanitizer:options_cli",
         "//runtime/src/iree/base",
     ],
 )

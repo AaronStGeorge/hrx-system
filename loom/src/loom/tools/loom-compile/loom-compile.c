@@ -18,6 +18,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/sanitizer/options_cli.h"
 #include "loom/target/artifact_manifest.h"
 #include "loom/target/entry_selection.h"
 #include "loom/tooling/cli/help.h"
@@ -125,6 +126,9 @@ IREE_FLAG(string, pipeline, "default",
           "disable pass execution, '@symbol' to run a module-local "
           "pass.pipeline, or a comma-separated pass list such as "
           "'canonicalize,cse'.");
+IREE_FLAG(string, sanitizer, "none",
+          "Sanitizer checks to insert in the default target pipeline: none, "
+          "all, or a '|'-separated set of access, value, and operation.");
 IREE_FLAG_LIST(
     string, config,
     "Compile-time config binding. Repeat as --config=key=value. Bindings not "
@@ -343,6 +347,13 @@ static iree_status_t loom_compile_report_options_initialize(
   IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_request(
       iree_make_cstring_view(FLAG_compile_report), out_options));
   return iree_ok_status();
+}
+
+static iree_status_t loom_compile_sanitizer_options_initialize(
+    loom_sanitizer_options_t* out_options) {
+  return loom_sanitizer_options_parse_checks(
+      iree_make_cstring_view(FLAG_sanitizer), IREE_SV("--sanitizer"),
+      out_options);
 }
 
 static iree_status_t loom_compile_make_artifact_manifest_path(
@@ -1186,6 +1197,10 @@ int main(int argc, char** argv) {
   if (hal_artifact_provider != NULL) {
     compile_options.target_pipeline_options =
         hal_artifact_provider->default_pipeline_options;
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_sanitizer_options_initialize(
+        &compile_options.target_pipeline_options.sanitizer);
   }
   if (iree_status_is_ok(status)) {
     compile_options.source_resolver =

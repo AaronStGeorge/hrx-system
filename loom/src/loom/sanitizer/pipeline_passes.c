@@ -18,6 +18,7 @@
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/sanitizer/options.h"
+#include "loom/sanitizer/options_cli.h"
 #include "loom/sanitizer/site_payload.h"
 
 typedef struct loom_sanitizer_insert_assertions_state_t {
@@ -64,81 +65,6 @@ const loom_pass_info_t* loom_sanitizer_insert_assertions_pass_info(void) {
   return &loom_sanitizer_insert_assertions_pass_info_storage;
 }
 
-static iree_status_t loom_sanitizer_parse_check_token(
-    iree_string_view_t token, loom_sanitizer_checks_t* inout_checks) {
-  token = iree_string_view_trim(token);
-  if (iree_string_view_is_empty(token)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "empty sanitizer check token");
-  }
-  if (iree_string_view_equal(token, IREE_SV("none"))) {
-    *inout_checks = 0;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(token, IREE_SV("all"))) {
-    *inout_checks = LOOM_SANITIZER_CHECKS_KNOWN;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(token, IREE_SV("access"))) {
-    *inout_checks |= LOOM_SANITIZER_CHECK_ACCESS;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(token, IREE_SV("value"))) {
-    *inout_checks |= LOOM_SANITIZER_CHECK_VALUE;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(token, IREE_SV("operation"))) {
-    *inout_checks |= LOOM_SANITIZER_CHECK_OPERATION;
-    return iree_ok_status();
-  }
-  return iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT,
-      "sanitizer-insert-assertions option 'checks' has unknown token '%.*s'",
-      (int)token.size, token.data);
-}
-
-static iree_status_t loom_sanitizer_parse_checks(
-    iree_string_view_t value, loom_sanitizer_checks_t* out_checks) {
-  value = iree_string_view_trim(value);
-  if (iree_string_view_is_empty(value)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "sanitizer-insert-assertions option 'checks' must be non-empty");
-  }
-  loom_sanitizer_checks_t checks = 0;
-  iree_string_view_t remaining = value;
-  while (!iree_string_view_is_empty(remaining)) {
-    iree_string_view_t token = iree_string_view_empty();
-    intptr_t separator_position =
-        iree_string_view_split(remaining, '|', &token, &remaining);
-    token = iree_string_view_trim(token);
-    if ((iree_string_view_equal(token, IREE_SV("none")) ||
-         iree_string_view_equal(token, IREE_SV("all"))) &&
-        (checks != 0 || separator_position >= 0)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "sanitizer-insert-assertions option 'checks' token '%.*s' cannot "
-          "be combined",
-          (int)token.size, token.data);
-    }
-    IREE_RETURN_IF_ERROR(loom_sanitizer_parse_check_token(token, &checks));
-    if (separator_position >= 0 &&
-        iree_string_view_is_empty(iree_string_view_trim(remaining))) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "sanitizer-insert-assertions option 'checks' has a trailing "
-          "separator");
-    }
-    if (separator_position < 0) break;
-  }
-  const loom_sanitizer_options_t options = {
-      .checks = checks,
-  };
-  IREE_RETURN_IF_ERROR(loom_sanitizer_options_validate(&options));
-  *out_checks = checks;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_sanitizer_insert_assertions_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   loom_sanitizer_insert_assertions_state_t* state =
@@ -149,7 +75,9 @@ static iree_status_t loom_sanitizer_insert_assertions_parse_option(
           IREE_STATUS_INVALID_ARGUMENT,
           "duplicate option 'checks' for pass 'sanitizer-insert-assertions'");
     }
-    IREE_RETURN_IF_ERROR(loom_sanitizer_parse_checks(value, &state->checks));
+    IREE_RETURN_IF_ERROR(loom_sanitizer_checks_parse(
+        value, IREE_SV("sanitizer-insert-assertions option 'checks'"),
+        &state->checks));
     state->has_checks_option = true;
     return iree_ok_status();
   }
@@ -172,8 +100,10 @@ iree_status_t loom_sanitizer_insert_assertions_create(
           &pass->decoded_options->options[i];
       if (!option->present) continue;
       if (iree_string_view_equal(option->schema->name, IREE_SV("checks"))) {
-        IREE_RETURN_IF_ERROR(
-            loom_sanitizer_parse_checks(option->string_value, &state->checks));
+        IREE_RETURN_IF_ERROR(loom_sanitizer_checks_parse(
+            option->string_value,
+            IREE_SV("sanitizer-insert-assertions option 'checks'"),
+            &state->checks));
         state->has_checks_option = true;
         continue;
       }

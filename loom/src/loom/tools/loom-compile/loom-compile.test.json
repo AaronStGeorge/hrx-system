@@ -152,13 +152,13 @@
       ]
     },
     {
-      "name": "dumps compile pipeline IR as JSONL",
+      "name": "enables sanitizer checks in default pipeline",
       "steps": [
         {
           "name": "write-source",
           "write": {
-            "path": "{tmp}/trace.loom",
-            "text": "ireevm.target<core> @vm_target\n\nfunc.def public target(@vm_target) @trace(%lhs: i32, %rhs: i32) -> (i32) {\n  %sum = scalar.addi %lhs, %rhs : i32\n  func.return %sum : i32\n}\n"
+            "path": "{tmp}/sanitizer.loom",
+            "text": "ireevm.target<core> @vm_target\n\nfunc.def public target(@vm_target) @sanitizer(%lhs: i32, %rhs: i32) -> (i32) {\n  %sum = scalar.addi %lhs, %rhs : i32\n  func.return %sum : i32\n}\n"
           }
         },
         {
@@ -166,9 +166,10 @@
           "run": {
             "tool": "loom-compile",
             "args": [
-              "{tmp}/trace.loom",
-              "--output={tmp}/trace.vmfb",
-              "--dump-ir-after-all",
+              "{tmp}/sanitizer.loom",
+              "--output={tmp}/sanitizer.vmfb",
+              "--sanitizer=access",
+              "--dump-ir-before=sanitizer-insert-assertions",
               "--dump-ir-format=jsonl",
               "--dump-ir-output=stderr"
             ]
@@ -176,15 +177,13 @@
           "stderr": {
             "contains": [
               "\"tool\":\"loom-compile\"",
-              "\"stage\":\"prepared-low\"",
-              "\"pipeline\":\"__loom_compile_default\"",
-              "\"point\":\"after\"",
-              "\"ir\":\""
+              "\"pass\":\"sanitizer-insert-assertions\"",
+              "\"point\":\"before\""
             ]
           },
           "files": [
             {
-              "path": "{tmp}/trace.vmfb",
+              "path": "{tmp}/sanitizer.vmfb",
               "non_empty": true
             }
           ]

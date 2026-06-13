@@ -418,7 +418,7 @@ loom_cc_library(
     loom::ir
     loom::pass::builder
     loom::pass::environment
-    loom::sanitizer::options
+    loom::sanitizer::options_cli
   PUBLIC
 )
 
