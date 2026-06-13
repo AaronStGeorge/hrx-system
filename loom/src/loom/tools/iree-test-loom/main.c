@@ -324,18 +324,74 @@ static iree_status_t iree_test_loom_write_report(
   return iree_ok_status();
 }
 
+static void iree_test_loom_print_agents_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## iree-test-loom\n"
+      "\n"
+      "`iree-test-loom` executes `check.case` records from ordinary Loom\n"
+      "modules and writes a structured `loom.test.v0` JSON report. Use it for\n"
+      "correctness before promoting the same cases to `check.benchmark` rows.\n"
+      "\n"
+      "### Common flows\n"
+      "\n"
+      "```shell\n"
+      "iree-test-loom module.loom\n"
+      "iree-test-loom module.loom --case=@case_q8_block_unroll_wg64\n"
+      "iree-test-loom module.loom --case=@sampled_choice --sample=1\n"
+      "iree-test-loom module.loom --max-samples-per-case=16\n"
+      "iree-test-loom module.loom --pipeline=@hal_actual_pipeline\n"
+      "```\n"
+      "\n"
+      "`--case=@name` selects one checked case; empty selection runs cases in\n"
+      "source order. `--sample=N` selects one planned sample for sampled "
+      "cases.\n"
+      "`--max-samples-per-case=N` bounds planning for generator-heavy cases.\n"
+      "\n"
+      "### Actual invocations\n"
+      "\n"
+      "A case can mix reference/oracle checks with HAL actual invocations. "
+      "Actual\n"
+      "invocations use the selected HAL artifact provider and execution "
+      "provider\n"
+      "linked into this binary. `--pipeline=default|none|@symbol|pass,list`\n"
+      "controls the HAL actual compile pipeline.\n"
+      "\n"
+      "### Report shape\n"
+      "\n"
+      "```shell\n"
+      "iree-test-loom module.loom --case=@smoke | jq '.failed_sample_count'\n"
+      "iree-test-loom module.loom | jq '.samples[] | {case, sample_ordinal, "
+      "passed}'\n"
+      "iree-test-loom module.loom | jq '.skipped_cases[]? | {case, provider}'\n"
+      "```\n"
+      "\n"
+      "The report carries `case_count`, `sample_count`, "
+      "`failed_sample_count`,\n"
+      "`skipped_case_count`, `samples`, and `skipped_cases`. A nonzero failed\n"
+      "sample count makes the process fail after the JSON report is "
+      "written.\n");
+}
+
 int iree_test_loom_main(int argc, char** argv,
                         const iree_test_loom_configuration_t* configuration) {
-  IREE_TRACE_APP_ENTER();
-  IREE_TRACE_ZONE_BEGIN(z0);
-
   iree_flags_set_usage(
       configuration->tool_name,
       "Executes check.case records from a normal Loom module.\n"
       "\n"
       "Usage:\n"
       "  iree-test-loom file.loom --case=@smoke\n"
-      "  cat module.loom | iree-test-loom -\n");
+      "  cat module.loom | iree-test-loom -\n"
+      "  iree-test-loom --agents_md\n");
+  for (int i = 1; i < argc; ++i) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
+      iree_test_loom_print_agents_markdown(stdout);
+      return 0;
+    }
+  }
+  IREE_TRACE_APP_ENTER();
+  IREE_TRACE_ZONE_BEGIN(z0);
+
   loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 

@@ -385,11 +385,68 @@ static iree_status_t iree_run_loom_make_unknown_backend_status(
   return status;
 }
 
+static void iree_run_loom_print_agents_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## iree-run-loom\n"
+      "\n"
+      "`iree-run-loom` compiles one Loom module and invokes one export. Use "
+      "it\n"
+      "for quick scalar VM checks, single-kernel HAL smoke tests, and "
+      "emit-only\n"
+      "artifact probes before moving a scenario into `check.case` or\n"
+      "`check.benchmark`.\n"
+      "\n"
+      "### VM flow\n"
+      "\n"
+      "```shell\n"
+      "iree-run-loom module.loom --backend=vm --function=branchy \\\n"
+      "  --input=0 --input=21 --expected-output=42\n"
+      "iree-run-loom module.loom --backend=vm --function=branchy \\\n"
+      "  --input=50 --input=8 --output=-\n"
+      "```\n"
+      "\n"
+      "VM inputs and outputs use IREE function I/O syntax. Empty `--function`\n"
+      "selects the single export when the module has exactly one runnable\n"
+      "export.\n"
+      "\n"
+      "### HAL flow\n"
+      "\n"
+      "```shell\n"
+      "iree-run-loom kernel.loom --backend=amdgpu --function=q8_kernel \\\n"
+      "  --binding=64xf32=0 --expected-binding=64xf32=0\n"
+      "iree-run-loom kernel.loom --backend=amdgpu --function=q8_kernel \\\n"
+      "  --workgroup-count=64,8,1 --constant=512 --binding=4096xf32=0\n"
+      "iree-run-loom kernel.loom --backend=amdgpu --emit-only \\\n"
+      "  --emit-target-artifact=kernel.hsaco "
+      "--emit-hal-executable=kernel.vmfb\n"
+      "iree-run-loom --backend=amdgpu --probe-hal\n"
+      "```\n"
+      "\n"
+      "`--binding` and `--expected-binding` use the same shape/type/value "
+      "syntax\n"
+      "as `iree-benchmark-executable`. `--workgroup-count` overrides a static\n"
+      "`kernel.launch.config` dispatch count when the test needs a different\n"
+      "grid. `--emit-only` is HAL-only and stops after producing artifacts.\n"
+      "\n"
+      "### Debugging\n"
+      "\n"
+      "```shell\n"
+      "iree-run-loom module.loom --compile-report=summary\n"
+      "iree-run-loom module.loom --pipeline=none\n"
+      "iree-run-loom module.loom --pipeline=@my_pipeline\n"
+      "```\n"
+      "\n"
+      "`--compile-report=summary|details` prints the same structured compile\n"
+      "report family as `loom-compile`. Use `iree-test-loom` once the "
+      "scenario\n"
+      "belongs in checked `check.case` coverage, and `iree-benchmark-loom` "
+      "once\n"
+      "the same case should produce benchmark evidence.\n");
+}
+
 int iree_run_loom_main(int argc, char** argv,
                        const iree_run_loom_configuration_t* configuration) {
-  IREE_TRACE_APP_ENTER();
-  IREE_TRACE_ZONE_BEGIN(z0);
-
   iree_flags_set_usage(
       configuration->tool_name,
       "Compiles a Loom module to a runtime artifact and executes the selected "
@@ -399,12 +456,22 @@ int iree_run_loom_main(int argc, char** argv,
       "  iree-run-loom [file.loom] --function=name --input=... "
       "--expected-output=...\n"
       "  cat module.loom | iree-run-loom - --function=name --input=...\n"
+      "  iree-run-loom --agents_md\n"
       "\n"
       "The 'vm' backend compiles VM-targeted functions into a real IREE VM "
       "bytecode archive and runs them with IREE function I/O syntax for "
       "--input, --output, and --expected-output. Native execution backends "
       "compile target-low kernels into runtime artifacts and dispatch them "
       "through their production runtime path.\n");
+  for (int i = 1; i < argc; ++i) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
+      iree_run_loom_print_agents_markdown(stdout);
+      return 0;
+    }
+  }
+  IREE_TRACE_APP_ENTER();
+  IREE_TRACE_ZONE_BEGIN(z0);
+
   loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 

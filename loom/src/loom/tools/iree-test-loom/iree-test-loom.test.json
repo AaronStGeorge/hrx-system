@@ -2,6 +2,25 @@
   "version": 1,
   "cases": [
     {
+      "name": "prints agent documentation",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": ["--agents_md"]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "## iree-test-loom",
+            "--case=@case_q8_block_unroll_wg64",
+            "--sample=1",
+            "--max-samples-per-case=16",
+            "loom.test.v0",
+            "failed_sample_count"
+          ]
+        }
+      }
+    },
+    {
       "name": "runs selected sampled case",
       "run": {
         "tool": "iree-test-loom",
