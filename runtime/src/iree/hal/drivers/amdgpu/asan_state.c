@@ -220,6 +220,10 @@ static iree_status_t iree_hal_amdgpu_asan_state_initialize_shadow_map(
       .application_window_base = application_coverage_base,
       .shadow_size = options->asan.shadow_size,
       .requested_slab_size = options->asan.shadow_slab_size,
+      .mapping_mode = options->asan.shadow_mode ==
+                              IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED
+                          ? IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_PREMAPPED
+                          : IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE,
       .initial_slab_value = IREE_HAL_AMDGPU_ASAN_SHADOW_HEAP_REDZONE,
       .access_desc_count = access_desc_count,
       .access_descs = access_descs,

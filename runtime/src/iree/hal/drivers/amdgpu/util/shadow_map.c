@@ -43,6 +43,15 @@ static iree_status_t iree_hal_amdgpu_shadow_map_validate_params(
                             (uint64_t)params->slab_size,
                             (uint64_t)params->shadow_size);
   }
+  switch (params->mapping_mode) {
+    case IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE:
+    case IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_PREMAPPED:
+      break;
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU shadow map mapping mode %u is invalid",
+                              (uint32_t)params->mapping_mode);
+  }
   if (IREE_UNLIKELY(params->shadow_size >
                     (IREE_DEVICE_SIZE_MAX >> params->shadow_scale_shift))) {
     return iree_make_status(
@@ -125,7 +134,7 @@ static iree_status_t iree_hal_amdgpu_shadow_map_hsa_reserve(
   *out_base_ptr = NULL;
   return iree_hsa_amd_vmem_address_reserve_align(
       IREE_LIBHSA(map->hsa.libhsa), out_base_ptr, reservation_size,
-      /*address=*/0, alignment, /*flags=*/0);
+      /*address=*/0, alignment, HSA_AMD_VMEM_ADDRESS_NO_REGISTER);
 }
 
 static void iree_hal_amdgpu_shadow_map_hsa_release_reservation(
@@ -140,6 +149,78 @@ static uint32_t iree_hal_amdgpu_shadow_map_fill_pattern(uint8_t value) {
          ((uint32_t)value << 8) | (uint32_t)value;
 }
 
+static bool iree_hal_amdgpu_shadow_map_hsa_has_alias_slabs(
+    const iree_hal_amdgpu_shadow_map_t* map) {
+  return map->hsa.alias_allocation_handle.handle != 0;
+}
+
+static iree_status_t iree_hal_amdgpu_shadow_map_hsa_map_alias_slab(
+    iree_hal_amdgpu_shadow_map_t* map, IREE_AMDGPU_DEVICE_PTR void* target_ptr,
+    iree_device_size_t slab_size) {
+  IREE_RETURN_IF_ERROR(iree_hsa_amd_vmem_map(
+      IREE_LIBHSA(map->hsa.libhsa), target_ptr, slab_size, /*offset=*/0,
+      map->hsa.alias_allocation_handle, /*flags=*/0));
+  return iree_hsa_amd_vmem_set_access(IREE_LIBHSA(map->hsa.libhsa), target_ptr,
+                                      slab_size, map->access_descs,
+                                      map->access_desc_count);
+}
+
+static void iree_hal_amdgpu_shadow_map_hsa_unmap_alias_slab(
+    iree_hal_amdgpu_shadow_map_t* map, IREE_AMDGPU_DEVICE_PTR void* target_ptr,
+    iree_device_size_t slab_size) {
+  iree_hal_amdgpu_hsa_cleanup_assert_success(
+      iree_hsa_amd_vmem_unmap_raw(map->hsa.libhsa, target_ptr, slab_size));
+}
+
+static iree_status_t iree_hal_amdgpu_shadow_map_hsa_premap_alias_slabs(
+    iree_hal_amdgpu_shadow_map_t* map) {
+  hsa_amd_vmem_alloc_handle_t allocation_handle = {0};
+  iree_status_t status = iree_hsa_amd_vmem_handle_create(
+      IREE_LIBHSA(map->hsa.libhsa), map->hsa.memory_pool, map->slab_size,
+      map->hsa.hsa_memory_type, /*flags=*/0, &allocation_handle);
+  if (!iree_status_is_ok(status)) return status;
+
+  map->hsa.alias_allocation_handle = allocation_handle;
+  const uint64_t slab_count = map->reservation_size / map->slab_size;
+  uint64_t mapped_count = 0;
+  for (; iree_status_is_ok(status) && mapped_count < slab_count;
+       ++mapped_count) {
+    IREE_AMDGPU_DEVICE_PTR void* target_ptr =
+        (uint8_t*)map->reservation_base_ptr + mapped_count * map->slab_size;
+    status = iree_hsa_amd_vmem_map(
+        IREE_LIBHSA(map->hsa.libhsa), target_ptr, map->slab_size,
+        /*offset=*/0, allocation_handle, /*flags=*/0);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hsa_amd_vmem_set_access(
+        IREE_LIBHSA(map->hsa.libhsa), map->reservation_base_ptr,
+        map->reservation_size, map->access_descs, map->access_desc_count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hsa_amd_memory_fill(
+        IREE_LIBHSA(map->hsa.libhsa), map->reservation_base_ptr,
+        iree_hal_amdgpu_shadow_map_fill_pattern(map->initial_slab_value),
+        map->slab_size / sizeof(uint32_t));
+  }
+
+  if (!iree_status_is_ok(status)) {
+    while (mapped_count > 0) {
+      --mapped_count;
+      IREE_AMDGPU_DEVICE_PTR void* target_ptr =
+          (uint8_t*)map->reservation_base_ptr + mapped_count * map->slab_size;
+      status = iree_status_join(
+          status, iree_hsa_amd_vmem_unmap(IREE_LIBHSA(map->hsa.libhsa),
+                                          target_ptr, map->slab_size));
+    }
+    status = iree_status_join(
+        status, iree_hsa_amd_vmem_handle_release(IREE_LIBHSA(map->hsa.libhsa),
+                                                 allocation_handle));
+    memset(&map->hsa.alias_allocation_handle, 0,
+           sizeof(map->hsa.alias_allocation_handle));
+  }
+  return status;
+}
+
 static iree_status_t iree_hal_amdgpu_shadow_map_hsa_map_slab(
     iree_hal_amdgpu_shadow_map_t* map, IREE_AMDGPU_DEVICE_PTR void* target_ptr,
     iree_device_size_t slab_size, iree_host_size_t access_desc_count,
@@ -152,6 +233,13 @@ static iree_status_t iree_hal_amdgpu_shadow_map_hsa_map_slab(
       IREE_LIBHSA(map->hsa.libhsa), map->hsa.memory_pool, slab_size,
       map->hsa.hsa_memory_type, /*flags=*/0, &allocation_handle);
 
+  bool alias_unmapped = false;
+  if (iree_status_is_ok(status) &&
+      iree_hal_amdgpu_shadow_map_hsa_has_alias_slabs(map)) {
+    status = iree_hsa_amd_vmem_unmap(IREE_LIBHSA(map->hsa.libhsa), target_ptr,
+                                     slab_size);
+    alias_unmapped = iree_status_is_ok(status);
+  }
   bool mapped = false;
   if (iree_status_is_ok(status)) {
     status = iree_hsa_amd_vmem_map(IREE_LIBHSA(map->hsa.libhsa), target_ptr,
@@ -184,6 +272,11 @@ static iree_status_t iree_hal_amdgpu_shadow_map_hsa_map_slab(
           status, iree_hsa_amd_vmem_handle_release(IREE_LIBHSA(map->hsa.libhsa),
                                                    allocation_handle));
     }
+    if (alias_unmapped) {
+      status = iree_status_join(
+          status, iree_hal_amdgpu_shadow_map_hsa_map_alias_slab(map, target_ptr,
+                                                                slab_size));
+    }
   }
   return status;
 }
@@ -205,6 +298,32 @@ static void iree_hal_amdgpu_shadow_map_unmap_slab(
   map->mapper.unmap_slab(map, slab->base_ptr, map->slab_size,
                          slab->allocation_handle);
   memset(slab, 0, sizeof(*slab));
+}
+
+static bool iree_hal_amdgpu_shadow_map_has_precise_slab(
+    const iree_hal_amdgpu_shadow_map_t* map, uint64_t slab_index) {
+  for (iree_host_size_t i = 0; i < map->slab_count; ++i) {
+    if (map->slabs[i].index == slab_index) return true;
+  }
+  return false;
+}
+
+static void iree_hal_amdgpu_shadow_map_hsa_unmap_alias_slabs(
+    iree_hal_amdgpu_shadow_map_t* map) {
+  if (!iree_hal_amdgpu_shadow_map_hsa_has_alias_slabs(map)) return;
+  const uint64_t slab_count = map->reservation_size / map->slab_size;
+  for (uint64_t i = 0; i < slab_count; ++i) {
+    if (iree_hal_amdgpu_shadow_map_has_precise_slab(map, i)) continue;
+    IREE_AMDGPU_DEVICE_PTR void* target_ptr =
+        (uint8_t*)map->reservation_base_ptr + i * map->slab_size;
+    iree_hal_amdgpu_shadow_map_hsa_unmap_alias_slab(map, target_ptr,
+                                                    map->slab_size);
+  }
+  iree_hal_amdgpu_hsa_cleanup_assert_success(
+      iree_hsa_amd_vmem_handle_release_raw(map->hsa.libhsa,
+                                           map->hsa.alias_allocation_handle));
+  memset(&map->hsa.alias_allocation_handle, 0,
+         sizeof(map->hsa.alias_allocation_handle));
 }
 
 static iree_status_t iree_hal_amdgpu_shadow_map_map_slab_locked(
@@ -243,6 +362,13 @@ static iree_status_t iree_hal_amdgpu_shadow_map_initialize_internal(
     iree_hal_amdgpu_shadow_map_t* out_map) {
   IREE_ASSERT_ARGUMENT(out_map);
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_shadow_map_validate_params(params));
+  if (params->mapping_mode ==
+          IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_PREMAPPED &&
+      !hsa_params) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU premapped shadow maps require the HSA VMM mapper");
+  }
 
   memset(out_map, 0, sizeof(*out_map));
   out_map->host_allocator = params->host_allocator;
@@ -252,6 +378,7 @@ static iree_status_t iree_hal_amdgpu_shadow_map_initialize_internal(
                                      << params->shadow_scale_shift;
   out_map->reservation_size = params->shadow_size;
   out_map->slab_size = params->slab_size;
+  out_map->mapping_mode = params->mapping_mode;
   out_map->initial_slab_value = params->initial_slab_value;
   out_map->mapper = params->mapper;
   if (hsa_params) {
@@ -280,6 +407,11 @@ static iree_status_t iree_hal_amdgpu_shadow_map_initialize_internal(
     status = out_map->mapper.reserve(out_map, out_map->reservation_size,
                                      out_map->slab_size,
                                      &out_map->reservation_base_ptr);
+  }
+  if (iree_status_is_ok(status) &&
+      out_map->mapping_mode ==
+          IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_PREMAPPED) {
+    status = iree_hal_amdgpu_shadow_map_hsa_premap_alias_slabs(out_map);
   }
   if (iree_status_is_ok(status)) {
     out_map->shadow_base =
@@ -341,6 +473,7 @@ iree_status_t iree_hal_amdgpu_shadow_map_initialize_hsa(
       .application_window_base = params->application_window_base,
       .shadow_size = params->shadow_size,
       .slab_size = slab_size,
+      .mapping_mode = params->mapping_mode,
       .initial_slab_value = params->initial_slab_value,
       .access_desc_count = params->access_desc_count,
       .access_descs = params->access_descs,
@@ -363,6 +496,7 @@ void iree_hal_amdgpu_shadow_map_deinitialize(
   if (!map || !map->initialized) return;
 
   iree_slim_mutex_lock(&map->mutex);
+  iree_hal_amdgpu_shadow_map_hsa_unmap_alias_slabs(map);
   for (iree_host_size_t i = 0; i < map->slab_count; ++i) {
     iree_hal_amdgpu_shadow_map_unmap_slab(map, &map->slabs[i]);
   }

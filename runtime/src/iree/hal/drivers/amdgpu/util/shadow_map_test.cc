@@ -131,6 +131,7 @@ static iree_hal_amdgpu_shadow_map_params_t DefaultParams(
       /*.application_window_base=*/0x200000ull,
       /*.shadow_size=*/1024,
       /*.slab_size=*/64,
+      /*.mapping_mode=*/IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE,
       /*.initial_slab_value=*/0,
       /*.access_desc_count=*/1,
       /*.access_descs=*/access_desc,
@@ -153,6 +154,7 @@ TEST(ShadowMapTest, InitializeComputesGeometry) {
       reinterpret_cast<IREE_AMDGPU_DEVICE_PTR void*>(mapper.reservation_base));
   EXPECT_EQ(map.reservation_size, 1024u);
   EXPECT_EQ(map.slab_size, 64u);
+  EXPECT_EQ(map.mapping_mode, IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE);
   EXPECT_EQ(map.initial_slab_value, 0u);
   EXPECT_EQ(map.application_window_size, 8192u);
   EXPECT_EQ(map.shadow_base,

@@ -178,6 +178,7 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
       IREE_HAL_AMDGPU_SHADOW_MAP_DEFAULT_SCALE_SHIFT;
   out_options->asan.report_policy =
       IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY;
+  out_options->asan.shadow_mode = IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE;
   out_options->asan.shadow_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE;
   out_options->asan.owned_application_size =
       IREE_HAL_AMDGPU_ASAN_DEFAULT_OWNED_APPLICATION_SIZE;
@@ -273,6 +274,15 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "invalid AMDGPU ASAN report policy value %u",
                                 (uint32_t)options->asan.report_policy);
+    }
+    switch (options->asan.shadow_mode) {
+      case IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE:
+      case IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED:
+        break;
+      default:
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "invalid AMDGPU ASAN shadow mode value %u",
+                                (uint32_t)options->asan.shadow_mode);
     }
     if (options->asan.shadow_scale_shift >
         IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT) {

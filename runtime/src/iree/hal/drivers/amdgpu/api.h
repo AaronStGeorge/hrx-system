@@ -101,6 +101,17 @@ typedef enum iree_hal_amdgpu_asan_report_policy_e {
   IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_FAIL_DEVICE = 1,
 } iree_hal_amdgpu_asan_report_policy_t;
 
+// Selects how ASAN shadow virtual address space is mapped.
+typedef enum iree_hal_amdgpu_asan_shadow_mode_e {
+  // Reserve shadow virtual address space and map physical shadow slabs only
+  // when allocation/import publication touches them.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE = 0,
+  // Premap every shadow slab to a shared poisoned physical slab, then replace
+  // aliases with precise writable slabs as allocation/import publication
+  // touches them.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED = 1,
+} iree_hal_amdgpu_asan_shadow_mode_t;
+
 // Parameters configuring an iree_hal_amdgpu_logical_device_t.
 // Must be initialized with iree_hal_amdgpu_logical_device_options_initialize
 // prior to use.
@@ -194,6 +205,9 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
 
     // Policy applied after a valid ASAN report is emitted.
     iree_hal_amdgpu_asan_report_policy_t report_policy;
+
+    // Shadow mapping policy used for the reserved shadow address space.
+    iree_hal_amdgpu_asan_shadow_mode_t shadow_mode;
 
     // Log2 application bytes represented by one shadow byte.
     uint32_t shadow_scale_shift;

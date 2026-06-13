@@ -87,6 +87,11 @@ IREE_FLAG(string, amdgpu_asan_report_policy, "report-only",
           "AMDGPU ASAN report policy: 'report-only' emits device events and "
           "keeps the logical device usable; 'fail-device' emits device events "
           "and then fails the logical device.");
+IREE_FLAG(string, amdgpu_asan_shadow_mode, "sparse",
+          "AMDGPU ASAN shadow mapping mode: 'sparse' maps precise shadow slabs "
+          "on demand; 'premapped' aliases a shared poisoned slab across the "
+          "full shadow reservation so arbitrary covered shadow reads report "
+          "instead of faulting.");
 IREE_FLAG(
     int64_t, amdgpu_asan_quarantine_size,
     IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE,
@@ -291,6 +296,16 @@ static iree_status_t iree_hal_amdgpu_driver_factory_try_create(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unrecognized ASAN report policy: '%s'",
                             FLAG_amdgpu_asan_report_policy);
+  }
+  if (strcmp(FLAG_amdgpu_asan_shadow_mode, "sparse") == 0) {
+    device_options->asan.shadow_mode = IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_SPARSE;
+  } else if (strcmp(FLAG_amdgpu_asan_shadow_mode, "premapped") == 0) {
+    device_options->asan.shadow_mode =
+        IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unrecognized ASAN shadow mode: '%s'",
+                            FLAG_amdgpu_asan_shadow_mode);
   }
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_flag_int64_to_device_size(
       "amdgpu_asan_quarantine_size", FLAG_amdgpu_asan_quarantine_size,

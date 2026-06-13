@@ -201,6 +201,8 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
             options.asan.shadow_size << options.asan.shadow_scale_shift);
   EXPECT_GE(shadow_map->slab_size, options.asan.shadow_slab_size);
   EXPECT_TRUE(iree_device_size_is_power_of_two(shadow_map->slab_size));
+  EXPECT_EQ(shadow_map->mapping_mode,
+            IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE);
   EXPECT_EQ(shadow_map->initial_slab_value, 0xFAu);
   EXPECT_EQ(shadow_map->slab_count, 0u);
   EXPECT_NE(asan_state->owned_application_base_ptr, nullptr);
@@ -813,6 +815,43 @@ TEST_F(AllocatorTest, AsanDeviceAllocationImportPublishesShadow) {
   EXPECT_TRUE(checked_neighbor);
 
   iree_hal_buffer_release(buffer);
+}
+
+TEST_F(AllocatorTest, AsanPremappedShadowModeCoversUnpublishedAddresses) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.shadow_mode = IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED;
+  options.asan.shadow_scale_shift = IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT;
+  options.asan.shadow_size = (iree_device_size_t)1ull << 40;
+  options.asan.quarantine_size = 0;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  iree_hal_amdgpu_asan_state_t* asan_state =
+      &test_device.logical_device()->asan;
+  iree_hal_amdgpu_shadow_map_t* shadow_map =
+      iree_hal_amdgpu_asan_state_shadow_map(asan_state);
+  ASSERT_NE(shadow_map, nullptr);
+  EXPECT_EQ(shadow_map->mapping_mode,
+            IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_PREMAPPED);
+  EXPECT_NE(shadow_map->hsa.alias_allocation_handle.handle, 0u);
+
+  iree_hal_amdgpu_shadow_map_range_t shadow_range;
+  constexpr uint64_t kUnpublishedApplicationAddress = 0x100000000ull;
+  IREE_ASSERT_OK(iree_hal_amdgpu_shadow_map_calculate_range(
+      shadow_map, kUnpublishedApplicationAddress, /*application_length=*/1,
+      &shadow_range));
+  ASSERT_EQ(shadow_range.shadow_length, 1u);
+
+  constexpr uint8_t kHeapRedzoneShadowValue = 0xFAu;
+  uint8_t shadow_byte = 0;
+  IREE_ASSERT_OK(iree_hsa_memory_copy(
+      IREE_LIBHSA(&libhsa_), &shadow_byte,
+      (void*)(uintptr_t)shadow_range.shadow_address, sizeof(shadow_byte)));
+  EXPECT_EQ(shadow_byte, kHeapRedzoneShadowValue);
 }
 
 TEST_F(AllocatorTest, DeviceAllocationExportReportsHsaPointer) {

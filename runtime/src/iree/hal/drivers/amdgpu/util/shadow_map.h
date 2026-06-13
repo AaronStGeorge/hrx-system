@@ -20,6 +20,13 @@ extern "C" {
 
 typedef struct iree_hal_amdgpu_shadow_map_t iree_hal_amdgpu_shadow_map_t;
 
+typedef enum iree_hal_amdgpu_shadow_map_mapping_mode_e {
+  // Shadow slabs are mapped only when explicitly requested.
+  IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE = 0,
+  // Every shadow slab is initially mapped to one shared physical slab.
+  IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_PREMAPPED = 1,
+} iree_hal_amdgpu_shadow_map_mapping_mode_t;
+
 typedef struct iree_hal_amdgpu_shadow_map_range_t {
   // Application address where the mapped range begins.
   uint64_t application_address;
@@ -89,6 +96,9 @@ typedef struct iree_hal_amdgpu_shadow_map_params_t {
   // Physical shadow slab size in bytes.
   iree_device_size_t slab_size;
 
+  // Shadow slab mapping policy.
+  iree_hal_amdgpu_shadow_map_mapping_mode_t mapping_mode;
+
   // Byte value written across each newly mapped physical shadow slab.
   uint8_t initial_slab_value;
 
@@ -126,6 +136,9 @@ typedef struct iree_hal_amdgpu_shadow_map_hsa_params_t {
 
   // Requested physical shadow slab size in bytes.
   iree_device_size_t requested_slab_size;
+
+  // Shadow slab mapping policy.
+  iree_hal_amdgpu_shadow_map_mapping_mode_t mapping_mode;
 
   // Byte value written across each newly mapped physical shadow slab.
   uint8_t initial_slab_value;
@@ -176,6 +189,9 @@ typedef struct iree_hal_amdgpu_shadow_map_t {
   // Physical shadow slab size in bytes.
   iree_device_size_t slab_size;
 
+  // Shadow slab mapping policy.
+  iree_hal_amdgpu_shadow_map_mapping_mode_t mapping_mode;
+
   // Byte value written across each newly mapped physical shadow slab.
   uint8_t initial_slab_value;
 
@@ -201,6 +217,9 @@ typedef struct iree_hal_amdgpu_shadow_map_t {
 
     // Translated HSA memory type for hsa_amd_vmem_handle_create.
     hsa_amd_memory_type_t hsa_memory_type;
+
+    // Shared physical slab aliased across the reservation in PREMAPPED mode.
+    hsa_amd_vmem_alloc_handle_t alias_allocation_handle;
   } hsa;
 
   // Guards slab table publication.
@@ -216,7 +235,7 @@ typedef struct iree_hal_amdgpu_shadow_map_t {
   iree_host_size_t slab_capacity;
 } iree_hal_amdgpu_shadow_map_t;
 
-// Initializes |out_map| for sparse shadow mapping.
+// Initializes |out_map| with a caller-provided shadow VMM mapper.
 iree_status_t iree_hal_amdgpu_shadow_map_initialize(
     const iree_hal_amdgpu_shadow_map_params_t* params,
     iree_hal_amdgpu_shadow_map_t* out_map);
