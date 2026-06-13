@@ -34,6 +34,7 @@ extern "C" {
 #endif
 
 typedef struct loom_low_lower_context_t loom_low_lower_context_t;
+typedef struct loom_low_lower_module_state_t loom_low_lower_module_state_t;
 typedef struct loom_low_lower_source_query_scope_t
     loom_low_lower_source_query_scope_t;
 typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
@@ -494,6 +495,32 @@ typedef struct loom_low_lower_plan_key_callback_t {
   void* user_data;
 } loom_low_lower_plan_key_callback_t;
 
+typedef iree_status_t (*loom_low_lower_finalize_function_fn_t)(
+    void* user_data, loom_low_lower_context_t* context);
+
+typedef struct loom_low_lower_finalize_function_callback_t {
+  // Optional callback invoked after a low function body emits successfully and
+  // before the source function is erased. Targets use this to commit
+  // function-local lowering discoveries into module-scope state.
+  loom_low_lower_finalize_function_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_finalize_function_callback_t;
+
+typedef iree_status_t (*loom_low_lower_finalize_module_fn_t)(
+    void* user_data, loom_module_t* module,
+    loom_low_lower_module_state_t* module_state,
+    iree_arena_allocator_t* scratch_arena);
+
+typedef struct loom_low_lower_finalize_module_callback_t {
+  // Optional callback invoked once after a source-to-low module pass has
+  // lowered all selected functions for this policy. Targets use this to
+  // materialize module-level side products derived from committed state.
+  loom_low_lower_finalize_module_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_finalize_module_callback_t;
+
 typedef struct loom_low_lower_policy_t {
   // Stable policy name used in diagnostics and status messages.
   iree_string_view_t name;
@@ -557,6 +584,10 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_plan_key_callback_t plan_key;
   // Optional target-owned emitter for plans selected by |select_op|.
   loom_low_lower_emit_op_callback_t emit_op;
+  // Optional target-owned function finalizer.
+  loom_low_lower_finalize_function_callback_t finalize_function;
+  // Optional target-owned module finalizer.
+  loom_low_lower_finalize_module_callback_t finalize_module;
 } loom_low_lower_policy_t;
 
 typedef struct loom_low_lower_policy_registry_entry_t {
@@ -627,6 +658,9 @@ typedef struct loom_low_lower_options_t {
   // Optional arena receiving production tables that must outlive lowering,
   // such as source-derived memory access summaries consumed by packetization.
   iree_arena_allocator_t* table_arena;
+  // Optional module-scope target state shared by all function lowerings in one
+  // source-to-low module pass.
+  loom_low_lower_module_state_t* module_state;
   // Optional allocator enabling production source-low report rows.
   iree_allocator_t report_allocator;
 } loom_low_lower_options_t;
@@ -682,6 +716,36 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
 
 // Releases report row storage owned by |result|.
 void loom_low_lower_result_deinitialize(loom_low_lower_result_t* result);
+
+// Creates a module-scope target-state container allocated from |arena|.
+//
+// Callers pass the returned state through every loom_low_lower_function call in
+// one source-to-low module pass and then invoke policy module finalizers before
+// releasing |arena|. Target-owned state stored here must be treated as
+// pass-local scratch until a module finalizer materializes durable IR.
+iree_status_t loom_low_lower_module_state_create(
+    iree_arena_allocator_t* arena,
+    loom_low_lower_module_state_t** out_module_state);
+
+// Returns module-scope target state for |key|, allocating zeroed storage on
+// first use.
+//
+// Keys must be target-owned static addresses. Reusing a key with a different
+// data length is an internal lowering error. The returned storage remains valid
+// until the arena passed to loom_low_lower_module_state_create is released.
+iree_status_t loom_low_lower_module_state_get_or_allocate(
+    loom_low_lower_module_state_t* module_state, const void* key,
+    iree_host_size_t data_length, void** out_data);
+
+// Allocates uninitialized pass-local module-state storage.
+iree_status_t loom_low_lower_module_state_allocate(
+    loom_low_lower_module_state_t* module_state, iree_host_size_t byte_length,
+    void** out_ptr);
+
+// Allocates an uninitialized pass-local module-state array.
+iree_status_t loom_low_lower_module_state_allocate_array(
+    loom_low_lower_module_state_t* module_state, iree_host_size_t count,
+    iree_host_size_t element_size, void** out_ptr);
 
 // Lowers one target-bound external function declaration into a low.func.decl.
 //
@@ -818,6 +882,11 @@ void loom_low_lower_require_source_operands_storage(
 iree_arena_allocator_t* loom_low_lower_context_scratch_arena(
     loom_low_lower_context_t* context);
 
+// Returns module-scope state shared by the active source-to-low module pass, or
+// NULL when the caller is lowering a standalone function.
+loom_low_lower_module_state_t* loom_low_lower_context_module_state(
+    loom_low_lower_context_t* context);
+
 // Allocates transient storage from the current lowering arena. The allocation
 // remains valid until the current loom_low_lower_function call returns.
 iree_status_t loom_low_lower_allocate_scratch_array(
@@ -839,6 +908,11 @@ iree_status_t loom_low_lower_allocate_plan_data(
 // data length is an internal lowering error. The returned storage remains
 // valid until the current loom_low_lower_function call returns.
 iree_status_t loom_low_lower_get_or_allocate_target_state(
+    loom_low_lower_context_t* context, const void* key,
+    iree_host_size_t data_length, void** out_data);
+
+// Returns module-scope target state from the active source-to-low module pass.
+iree_status_t loom_low_lower_get_or_allocate_module_target_state(
     loom_low_lower_context_t* context, const void* key,
     iree_host_size_t data_length, void** out_data);
 

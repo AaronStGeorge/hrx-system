@@ -3018,6 +3018,15 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
   return status;
 }
 
+static iree_status_t loom_low_lower_finalize_function(
+    loom_low_lower_context_t* context) {
+  if (context->policy->finalize_function.fn == NULL) {
+    return iree_ok_status();
+  }
+  return context->policy->finalize_function.fn(
+      context->policy->finalize_function.user_data, context);
+}
+
 iree_status_t loom_low_lower_function(loom_module_t* module,
                                       loom_func_like_t source_function,
                                       const loom_low_lower_options_t* options,
@@ -3041,6 +3050,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
       .options = options,
       .policy = options->policy,
       .result = out_result,
+      .module_state = options->module_state,
   };
   context.lowering.fact_table = options->fact_table;
   iree_arena_initialize(module->arena.block_pool, &context.arena);
@@ -3181,6 +3191,9 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     }
     if (iree_status_is_ok(status) && context.result->error_count == 0) {
       status = loom_low_lower_emit_body(&context, source_body);
+    }
+    if (iree_status_is_ok(status) && context.result->error_count == 0) {
+      status = loom_low_lower_finalize_function(&context);
     }
     if (iree_status_is_ok(status) && context.result->error_count != 0 &&
         context.low_func_op != NULL) {

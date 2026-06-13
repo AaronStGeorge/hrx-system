@@ -8,11 +8,14 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/module.h"
+#include "loom/ops/global/ops.h"
 #include "loom/ops/sanitizer/ops.h"
+#include "loom/sanitizer/site_table.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_access.h"
@@ -26,9 +29,29 @@ typedef struct loom_amdgpu_sanitizer_site_map_row_t {
   loom_sanitizer_site_id_t site_id;
 } loom_amdgpu_sanitizer_site_map_row_t;
 
+typedef struct loom_amdgpu_sanitizer_site_chunk_t {
+  // Next committed site-row chunk, or NULL for the final chunk.
+  struct loom_amdgpu_sanitizer_site_chunk_t* next;
+  // Rows copied from one successfully lowered source function.
+  loom_sanitizer_site_row_t* rows;
+  // Number of rows in rows.
+  iree_host_size_t row_count;
+} loom_amdgpu_sanitizer_site_chunk_t;
+
+typedef struct loom_amdgpu_sanitizer_module_state_t {
+  // First committed site-row chunk, or NULL when no sites were committed.
+  loom_amdgpu_sanitizer_site_chunk_t* site_chunk_head;
+  // Final committed site-row chunk, or NULL when no sites were committed.
+  loom_amdgpu_sanitizer_site_chunk_t* site_chunk_tail;
+  // Total number of committed site rows across all chunks.
+  iree_host_size_t site_row_count;
+} loom_amdgpu_sanitizer_module_state_t;
+
 typedef struct loom_amdgpu_sanitizer_lower_state_t {
   // True once the source function sanitizer site collection has been built.
   bool has_site_collection;
+  // First module-global site ID assigned to this function's collection.
+  loom_sanitizer_site_id_t site_id_base;
   // Function-local sanitizer site rows in report-site order.
   loom_sanitizer_site_collection_t site_collection;
   // Lookup rows sorted by borrowed source operation pointer.
@@ -56,6 +79,7 @@ typedef struct loom_amdgpu_sanitizer_lower_state_t {
 } loom_amdgpu_sanitizer_lower_state_t;
 
 static int loom_amdgpu_sanitizer_lower_state_key;
+static int loom_amdgpu_sanitizer_module_state_key;
 
 static int loom_amdgpu_sanitizer_site_map_compare(const void* lhs,
                                                   const void* rhs) {
@@ -99,6 +123,30 @@ static iree_status_t loom_amdgpu_sanitizer_lower_state(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_sanitizer_module_state_from_context(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_sanitizer_module_state_t** out_state) {
+  *out_state = NULL;
+  loom_amdgpu_sanitizer_module_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_get_or_allocate_module_target_state(
+      context, &loom_amdgpu_sanitizer_module_state_key, sizeof(*state),
+      (void**)&state));
+  *out_state = state;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_module_state_from_module_state(
+    loom_low_lower_module_state_t* module_state,
+    loom_amdgpu_sanitizer_module_state_t** out_state) {
+  *out_state = NULL;
+  loom_amdgpu_sanitizer_module_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_module_state_get_or_allocate(
+      module_state, &loom_amdgpu_sanitizer_module_state_key, sizeof(*state),
+      (void**)&state));
+  *out_state = state;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_sanitizer_ensure_config_symbols(
     loom_low_lower_context_t* context,
     loom_amdgpu_sanitizer_lower_state_t* state) {
@@ -119,11 +167,25 @@ static iree_status_t loom_amdgpu_sanitizer_ensure_site_collection(
     loom_amdgpu_sanitizer_lower_state_t* state) {
   if (state->has_site_collection) return iree_ok_status();
 
+  loom_amdgpu_sanitizer_module_state_t* module_state = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_module_state_from_context(context, &module_state));
+
   loom_module_t* module = loom_low_lower_context_module(context);
   IREE_RETURN_IF_ERROR(loom_sanitizer_site_collection_build_function(
       module, loom_low_lower_context_source_function(context),
       loom_low_lower_context_scratch_arena(context), &state->site_collection));
   const iree_host_size_t row_count = state->site_collection.row_count;
+  iree_host_size_t total_row_count = 0;
+  if (!iree_host_size_checked_add(module_state->site_row_count, row_count,
+                                  &total_row_count) ||
+      total_row_count > LOOM_SANITIZER_SITE_ID_INVALID) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "AMDGPU sanitizer site table exceeded max site id %u",
+        LOOM_SANITIZER_SITE_ID_INVALID - 1);
+  }
+  state->site_id_base = (loom_sanitizer_site_id_t)module_state->site_row_count;
   state->site_map_row_count = row_count;
   if (row_count != 0) {
     IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
@@ -132,8 +194,9 @@ static iree_status_t loom_amdgpu_sanitizer_ensure_site_collection(
     for (iree_host_size_t i = 0; i < row_count; ++i) {
       state->site_map_rows[i] = (loom_amdgpu_sanitizer_site_map_row_t){
           .op = state->site_collection.rows[i].op,
-          .site_id = state->site_collection.rows[i].site_id,
+          .site_id = (loom_sanitizer_site_id_t)(state->site_id_base + i),
       };
+      state->site_collection.rows[i].site_id = state->site_map_rows[i].site_id;
     }
     qsort(state->site_map_rows, row_count, sizeof(*state->site_map_rows),
           loom_amdgpu_sanitizer_site_map_compare);
@@ -148,6 +211,119 @@ static iree_status_t loom_amdgpu_sanitizer_ensure_site_collection(
 
   state->has_site_collection = true;
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_finalize_sanitizer_function(
+    loom_low_lower_context_t* context) {
+  loom_amdgpu_sanitizer_lower_state_t* function_state = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_lower_state(context, &function_state));
+  if (!function_state->has_site_collection ||
+      function_state->site_collection.row_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_sanitizer_module_state_t* module_state = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_module_state_from_context(context, &module_state));
+  if (module_state->site_row_count != function_state->site_id_base) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU sanitizer site rows committed out of order");
+  }
+
+  const iree_host_size_t row_count = function_state->site_collection.row_count;
+  loom_low_lower_module_state_t* lower_module_state =
+      loom_low_lower_context_module_state(context);
+  loom_amdgpu_sanitizer_site_chunk_t* chunk = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_module_state_allocate(
+      lower_module_state, sizeof(*chunk), (void**)&chunk));
+  memset(chunk, 0, sizeof(*chunk));
+  IREE_RETURN_IF_ERROR(loom_low_lower_module_state_allocate_array(
+      lower_module_state, row_count, sizeof(*chunk->rows),
+      (void**)&chunk->rows));
+  for (iree_host_size_t i = 0; i < row_count; ++i) {
+    chunk->rows[i] = function_state->site_collection.rows[i];
+    chunk->rows[i].op = NULL;
+  }
+  chunk->row_count = row_count;
+
+  if (module_state->site_chunk_tail != NULL) {
+    module_state->site_chunk_tail->next = chunk;
+  } else {
+    module_state->site_chunk_head = chunk;
+  }
+  module_state->site_chunk_tail = chunk;
+  module_state->site_row_count += row_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_flatten_site_rows(
+    const loom_amdgpu_sanitizer_module_state_t* module_state,
+    iree_arena_allocator_t* scratch_arena,
+    loom_sanitizer_site_collection_t* out_collection) {
+  *out_collection = (loom_sanitizer_site_collection_t){0};
+  const iree_host_size_t row_count = module_state->site_row_count;
+  out_collection->row_count = row_count;
+  if (row_count == 0) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      scratch_arena, row_count, sizeof(*out_collection->rows),
+      (void**)&out_collection->rows));
+  iree_host_size_t row_index = 0;
+  for (const loom_amdgpu_sanitizer_site_chunk_t* chunk =
+           module_state->site_chunk_head;
+       chunk != NULL; chunk = chunk->next) {
+    memcpy(out_collection->rows + row_index, chunk->rows,
+           chunk->row_count * sizeof(*out_collection->rows));
+    row_index += chunk->row_count;
+  }
+  if (row_index != row_count) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU sanitizer site chunk row count changed during finalization");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_emit_site_table_rodata(
+    loom_module_t* module, iree_const_byte_span_t site_table) {
+  loom_symbol_ref_t symbol_ref = loom_symbol_ref_null();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_get_or_create_symbol(
+      module, IREE_SV(LOOM_SANITIZER_SITE_TABLE_SYMBOL_NAME), &symbol_ref));
+  loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->defining_op != NULL) {
+    return iree_make_status(
+        IREE_STATUS_ALREADY_EXISTS,
+        "AMDGPU sanitizer site table symbol is already defined");
+  }
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  loom_op_t* rodata_op = NULL;
+  return loom_global_rodata_build(
+      &builder, LOOM_GLOBAL_RODATA_BUILD_FLAG_HAS_ALIGNMENT, symbol_ref,
+      site_table, 8, LOOM_LOCATION_UNKNOWN, &rodata_op);
+}
+
+iree_status_t loom_amdgpu_finalize_sanitizer_module(
+    loom_module_t* module, loom_low_lower_module_state_t* module_state,
+    iree_arena_allocator_t* scratch_arena) {
+  loom_amdgpu_sanitizer_module_state_t* sanitizer_state = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_module_state_from_module_state(
+      module_state, &sanitizer_state));
+  if (sanitizer_state->site_row_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_sanitizer_site_collection_t collection = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_flatten_site_rows(
+      sanitizer_state, scratch_arena, &collection));
+  iree_const_byte_span_t site_table = iree_const_byte_span_empty();
+  IREE_RETURN_IF_ERROR(loom_sanitizer_site_table_encode(
+      module, &collection, scratch_arena, &site_table));
+  return loom_amdgpu_sanitizer_emit_site_table_rodata(module, site_table);
 }
 
 static iree_status_t loom_amdgpu_sanitizer_site_id_for_op(

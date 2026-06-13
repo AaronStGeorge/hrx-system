@@ -199,6 +199,7 @@ loom_cc_library(
     loom::ops::cfg
     loom::ops::combining
     loom::ops::encoding
+    loom::ops::global
     loom::ops::index
     loom::ops::kernel
     loom::ops::low
@@ -209,6 +210,7 @@ loom_cc_library(
     loom::ops::vector
     loom::ops::view
     loom::sanitizer::site_collection
+    loom::sanitizer::site_table
     loom::target::arch::amdgpu::asan_abi
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs

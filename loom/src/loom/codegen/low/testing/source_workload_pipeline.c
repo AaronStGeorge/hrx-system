@@ -188,6 +188,11 @@ iree_status_t loom_low_source_workload_run_pipeline(
     loom_low_source_selection_list_t selection_list = {0};
     status = loom_low_select_source_funcs(module, &selection_options,
                                           &lowering_arena, &selection_list);
+    loom_low_lower_module_state_t* module_state = NULL;
+    if (iree_status_is_ok(status)) {
+      status =
+          loom_low_lower_module_state_create(&lowering_arena, &module_state);
+    }
     loom_op_t** lowered_funcs = NULL;
     if (iree_status_is_ok(status) && selection_list.count == 0) {
       status = iree_make_status(
@@ -219,6 +224,7 @@ iree_status_t loom_low_source_workload_run_pipeline(
           .policy = selection->policy,
           .fact_table = fact_table,
           .max_errors = 20,
+          .module_state = module_state,
       };
       loom_low_lower_result_t func_lower_result = {0};
       status = loom_low_lower_function(module, selection->func, &lower_options,
@@ -239,6 +245,10 @@ iree_status_t loom_low_source_workload_run_pipeline(
         lowered_funcs[i] = func_lower_result.low_func_op;
       }
       loom_low_lower_result_deinitialize(&func_lower_result);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_low_source_selection_finalize_policies(
+          module, &selection_list, module_state, &lowering_arena);
     }
     if (iree_status_is_ok(status)) {
       out_counters->lower_error_count = lower_result.error_count;

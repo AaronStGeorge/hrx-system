@@ -45,6 +45,16 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_sanitizer_access_plan_t* plan);
 
+// Commits sanitizer site rows discovered while lowering one function into the
+// module-scope AMDGPU sanitizer state.
+iree_status_t loom_amdgpu_finalize_sanitizer_function(
+    loom_low_lower_context_t* context);
+
+// Emits module-level sanitizer metadata required by lowered AMDGPU kernels.
+iree_status_t loom_amdgpu_finalize_sanitizer_module(
+    loom_module_t* module, loom_low_lower_module_state_t* module_state,
+    iree_arena_allocator_t* scratch_arena);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
