@@ -117,6 +117,13 @@ typedef struct loom_amdgpu_sanitizer_access_report_trap_island_t {
   loom_amdgpu_sanitizer_access_report_t report_args;
 } loom_amdgpu_sanitizer_access_report_trap_island_t;
 
+typedef struct loom_amdgpu_sanitizer_access_report_failure_branch_t {
+  // Per-site cold block that canonicalizes report values and enters the island.
+  loom_block_t* failure_block;
+  // Hot continuation block reached when the assertion predicate does not fail.
+  loom_block_t* continuation_block;
+} loom_amdgpu_sanitizer_access_report_failure_branch_t;
+
 // Emits the AMDGPU sanitizer access report payload into a reserved feedback
 // packet.
 //
@@ -172,6 +179,24 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_branch(
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location);
+
+// Splits the current hot block on |failure_scc| and routes failures to
+// |island|.
+//
+// |failure_scc| must be an SCC register value where nonzero means the assertion
+// failed. The current block receives no report operations, only the conditional
+// branch terminator. The false edge falls through to a newly-created
+// continuation block, while the true edge enters a per-site cold block that
+// materializes report arguments and branches to |island|. Leaves the builder
+// positioned at the continuation block.
+iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
+    loom_value_id_t failure_scc,
+    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_sanitizer_access_report_t* report,
+    loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch);
 
 #ifdef __cplusplus
 }  // extern "C"

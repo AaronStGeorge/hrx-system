@@ -286,9 +286,23 @@ static iree_status_t loom_amdgpu_sanitizer_require_register_class(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t value, uint32_t unit_count, uint16_t register_class,
     iree_string_view_t value_name) {
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_data_register(
-      builder, descriptor_set, value, unit_count, value_name));
+  if (value >= builder->module->values.count) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU sanitizer report value `%.*s` is an invalid low value",
+        (int)value_name.size, value_name.data);
+  }
   const loom_type_t type = loom_module_value_type(builder->module, value);
+  if (!loom_low_type_is_register(type) ||
+      loom_low_register_type_descriptor_set_stable_id(type) !=
+          descriptor_set->stable_id ||
+      loom_low_register_type_unit_count(type) != unit_count) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU sanitizer report value `%.*s` has an unsupported register "
+        "shape",
+        (int)value_name.size, value_name.data);
+  }
   if (loom_low_register_type_class_id(type) != register_class) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
@@ -383,20 +397,29 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_island(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_sanitizer_validate_access_report_for_island(
+    const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
+    const loom_amdgpu_sanitizer_access_report_t* report,
+    iree_string_view_t operation_name) {
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_validate_access_report(report, operation_name));
+  if (report->access_kind != island->access_kind ||
+      report->flags != island->flags) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU sanitizer access report does not match its island");
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_branch(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
     loom_location_id_t location) {
-  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_access_report(
-      report, IREE_SV("access report trap branch")));
-  if (report->access_kind != island->access_kind ||
-      report->flags != island->flags) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU sanitizer access report branch does not match its island");
-  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_access_report_for_island(
+      island, report, IREE_SV("access report trap branch")));
   if (builder->ip.before_op != NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU sanitizer report branch must be built at "
@@ -427,4 +450,45 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_branch(
   loom_op_t* branch_op = NULL;
   return loom_low_br_build(builder, island->entry_block, args,
                            IREE_ARRAYSIZE(args), location, &branch_op);
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_report_failure_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
+    loom_value_id_t failure_scc,
+    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_sanitizer_access_report_t* report,
+    loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_failure_branch_t* out_branch) {
+  IREE_ASSERT_ARGUMENT(out_branch);
+  *out_branch = (loom_amdgpu_sanitizer_access_report_failure_branch_t){0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_access_report_for_island(
+      island, report, IREE_SV("access report failure branch")));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_register_class(
+      builder, descriptor_set, failure_scc, 1, LOOM_AMDGPU_REG_CLASS_ID_SCC,
+      IREE_SV("failure_scc")));
+  if (builder->ip.before_op != NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU sanitizer failure branch must be built at "
+                            "the end of a low block");
+  }
+
+  loom_block_t* hot_block = builder->ip.block;
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_insert_block_after(
+      builder, hot_block, &branch.continuation_block));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_insert_block_after(
+      builder, branch.continuation_block, &branch.failure_block));
+  loom_op_t* cond_branch_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_cond_br_build(
+      builder, failure_scc, branch.failure_block, branch.continuation_block,
+      location, &cond_branch_op));
+
+  loom_builder_set_block(builder, branch.failure_block);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_report_trap_branch(
+      builder, descriptor_set, island, source, report, location));
+
+  loom_builder_set_block(builder, branch.continuation_block);
+  *out_branch = branch;
+  return iree_ok_status();
 }
