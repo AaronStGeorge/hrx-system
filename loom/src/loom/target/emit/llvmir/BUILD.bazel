@@ -91,6 +91,30 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "module_emitter",
+    srcs = ["module_emitter.c"],
+    hdrs = ["module_emitter.h"],
+    deps = [
+        ":core",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/llvmir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/llvmir/descriptors:descriptors_ids",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "test_target",
     srcs = ["test_target.c"],
     hdrs = ["test_target.h"],
@@ -356,6 +380,27 @@ loom_cc_test(
     deps = [
         ":core",
         ":test_modules",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "module_emitter_test",
+    srcs = ["module_emitter_test.cc"],
+    deps = [
+        ":core",
+        ":module_emitter",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target/arch/llvmir/descriptors:low_registry",
+        "//loom/src/loom/testing:diagnostic_matchers",
+        "//loom/src/loom/testing:module_ptr",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

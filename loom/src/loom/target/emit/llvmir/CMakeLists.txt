@@ -79,6 +79,35 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
+    module_emitter
+  HDRS
+    "module_emitter.h"
+  SRCS
+    "module_emitter.c"
+  DEPS
+    ::core
+    iree::base
+    iree::base::internal::arena
+    loom::analysis::symbol_facts
+    loom::codegen::low::diagnostics
+    loom::codegen::low::function
+    loom::codegen::low::target_binding
+    loom::error::emitter
+    loom::error::error_defs
+    loom::ir
+    loom::ops::llvmir
+    loom::ops::low
+    loom::target::arch::llvmir::descriptors::descriptors_ids
+    loom::target::low_descriptor_registry
+    loom::target::registers
+    loom::target::types
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+loom_cc_library(
+  NAME
     test_target
   HDRS
     "test_target.h"
@@ -537,6 +566,33 @@ loom_cc_test(
     ::test_modules
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
+    "iree-build-requirement=loom.emit.llvmir"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+loom_cc_test(
+  NAME
+    module_emitter_test
+  SRCS
+    "module_emitter_test.cc"
+  DEPS
+    ::core
+    ::module_emitter
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::text_asm
+    loom::error::error_defs
+    loom::format::text::parser
+    loom::ir
+    loom::ops::op_registry
+    loom::target::arch::llvmir::descriptors::low_registry
+    loom::testing::diagnostic_matchers
+    loom::testing::module_ptr
+    loom::util::stream
   LABELS
     "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"

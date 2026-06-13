@@ -892,6 +892,67 @@ ERR_TARGET_052 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_053: Target emitter has no low descriptor mapping.
+ERR_TARGET_053 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=53,
+    severity=Severity.ERROR,
+    summary="Target emitter has no low descriptor mapping.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' from set "
+        "'{descriptor_set_key}' has no emitter mapping for '{emitter_key}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+        ErrorParam("emitter_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select a descriptor supported by '{emitter_key}' or add an emitter "
+        "mapping for '{opcode}'"
+    ),
+)
+
+# ERR_TARGET_054: Target emitter cannot represent a low function shape.
+ERR_TARGET_054 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=54,
+    severity=Severity.ERROR,
+    summary="Target emitter cannot represent a low function shape.",
+    message=(
+        "low function '@{function_name}' cannot be emitted by "
+        "'{emitter_key}': {subject_kind} count is {actual_count}, expected "
+        "{expected_count}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("emitter_key", ParamKind.STRING),
+        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("actual_count", ParamKind.U32),
+        ErrorParam("expected_count", ParamKind.U32),
+    ),
+)
+
+# ERR_TARGET_055: Target emitter cannot represent a low descriptor set.
+ERR_TARGET_055 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=55,
+    severity=Severity.ERROR,
+    summary="Target emitter cannot represent a low descriptor set.",
+    message=(
+        "low function '@{function_name}' descriptor set "
+        "'{descriptor_set_key}' cannot be emitted by '{emitter_key}', "
+        "expected '{expected_descriptor_set_key}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+        ErrorParam("emitter_key", ParamKind.STRING),
+        ErrorParam("expected_descriptor_set_key", ParamKind.STRING),
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -937,4 +998,7 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_050,
     ERR_TARGET_051,
     ERR_TARGET_052,
+    ERR_TARGET_053,
+    ERR_TARGET_054,
+    ERR_TARGET_055,
 )
