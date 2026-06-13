@@ -262,6 +262,12 @@ typedef enum loom_amdgpu_table_index_kind_e {
   LOOM_AMDGPU_TABLE_INDEX_KIND_PACKED_I8 = 2,
 } loom_amdgpu_table_index_kind_t;
 
+typedef enum loom_amdgpu_table_lookup_strategy_e {
+  LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_NONE = 0,
+  LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_F32_LADDER = 1,
+  LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE = 2,
+} loom_amdgpu_table_lookup_strategy_t;
+
 typedef struct loom_amdgpu_table_lookup_plan_t {
   // Register table value selected by each index lane.
   loom_value_id_t table;
@@ -269,6 +275,8 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
   loom_value_id_t indices;
   // Result vector receiving selected table lanes.
   loom_value_id_t result;
+  // Selected lowering strategy.
+  loom_amdgpu_table_lookup_strategy_t strategy;
   // Descriptor row selected for index-lane equality comparisons.
   loom_low_lower_resolved_descriptor_t compare_register_descriptor;
   // Optional descriptor row selected when the compare rhs ordinal is inline.
@@ -277,6 +285,8 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
   loom_low_lower_resolved_descriptor_t select_register_descriptor;
   // Optional descriptor row selected when the true table lane is a literal.
   loom_low_lower_resolved_descriptor_t select_src1_literal_descriptor;
+  // Descriptor row selected for packed byte table permutation.
+  loom_low_lower_resolved_descriptor_t permute_descriptor;
   // Selected index payload representation.
   loom_amdgpu_table_index_kind_t index_kind;
   // Static number of table lanes.

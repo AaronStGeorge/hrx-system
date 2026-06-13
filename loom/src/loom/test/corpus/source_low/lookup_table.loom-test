@@ -39,3 +39,35 @@ func.def @f32_table_lookup_dynamic_grid(%grid: vector<3xf32>, %codes: vector<2xi
   %decoded = vector.table.lookup %grid[%codes] : vector<3xf32>, vector<2xi32> -> vector<2xf32>
   func.return %decoded : vector<2xf32>
 }
+
+// ====
+
+func.def @i8_table_lookup_fact_known_codes(%grid: vector<4xi8>) -> (vector<4xi8>) {
+  %c0 = scalar.constant 0 : i32
+  %c1 = scalar.constant 1 : i32
+  %c2 = scalar.constant 2 : i32
+  %c3 = scalar.constant 3 : i32
+  %wide_codes = vector.from_elements %c2, %c0, %c3, %c1 : vector<4xi32>
+  %codes = vector.bitpack<8> %wide_codes : vector<4xi32> -> vector<4xi8>
+  %decoded = vector.table.lookup %grid[%codes] : vector<4xi8>, vector<4xi8> -> vector<4xi8>
+  func.return %decoded : vector<4xi8>
+}
+
+// ====
+
+func.def @i8_table_lookup_constant_table() -> (vector<4xi8>) {
+  %g0 = scalar.constant -4 : i32
+  %g1 = scalar.constant -1 : i32
+  %g2 = scalar.constant 2 : i32
+  %g3 = scalar.constant 7 : i32
+  %wide_grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xi32>
+  %grid = vector.bitpack<8> %wide_grid : vector<4xi32> -> vector<4xi8>
+  %c0 = scalar.constant 0 : i32
+  %c1 = scalar.constant 1 : i32
+  %c2 = scalar.constant 2 : i32
+  %c3 = scalar.constant 3 : i32
+  %wide_codes = vector.from_elements %c3, %c2, %c1, %c0 : vector<4xi32>
+  %codes = vector.bitpack<8> %wide_codes : vector<4xi32> -> vector<4xi8>
+  %decoded = vector.table.lookup %grid[%codes] : vector<4xi8>, vector<4xi8> -> vector<4xi8>
+  func.return %decoded : vector<4xi8>
+}

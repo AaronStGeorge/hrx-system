@@ -17,25 +17,9 @@
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/util/fact_table.h"
 
-static bool loom_amdgpu_table_lookup_plan_from_op(
-    const loom_module_t* module, const loom_op_t* source_op,
+static bool loom_amdgpu_table_lookup_plan_f32_ladder(
+    loom_type_t table_type, loom_type_t indices_type, loom_type_t result_type,
     loom_amdgpu_table_lookup_plan_t* out_plan) {
-  *out_plan = (loom_amdgpu_table_lookup_plan_t){0};
-  if (!loom_vector_table_lookup_isa(source_op)) {
-    return false;
-  }
-
-  out_plan->table = loom_vector_table_lookup_table(source_op);
-  out_plan->indices = loom_vector_table_lookup_indices(source_op);
-  out_plan->result = loom_vector_table_lookup_result(source_op);
-
-  const loom_type_t table_type =
-      loom_module_value_type(module, out_plan->table);
-  const loom_type_t indices_type =
-      loom_module_value_type(module, out_plan->indices);
-  const loom_type_t result_type =
-      loom_module_value_type(module, out_plan->result);
-
   const uint32_t table_lane_count = loom_amdgpu_static_vector_lane_count(
       table_type, LOOM_SCALAR_TYPE_F32, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
   const uint32_t result_lane_count = loom_amdgpu_static_vector_lane_count(
@@ -65,9 +49,117 @@ static bool loom_amdgpu_table_lookup_plan_from_op(
     out_plan->index_register_count = index_register_count;
   }
 
+  out_plan->strategy = LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_F32_LADDER;
   out_plan->table_lane_count = table_lane_count;
   out_plan->result_lane_count = result_lane_count;
   return true;
+}
+
+static bool loom_amdgpu_table_lookup_index_lane_fits_u2(
+    loom_value_facts_t facts) {
+  return loom_value_facts_fit_unsigned_bit_count(facts, 2);
+}
+
+static bool loom_amdgpu_table_lookup_indices_fit_u2(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t indices,
+    uint32_t lane_count) {
+  if (fact_table == NULL) {
+    return false;
+  }
+
+  const loom_value_facts_t index_facts =
+      loom_value_fact_table_lookup(fact_table, indices);
+  loom_value_fact_uniform_element_t uniform = {0};
+  if (loom_value_facts_query_uniform_element(&fact_table->context, index_facts,
+                                             &uniform)) {
+    return loom_amdgpu_table_lookup_index_lane_fits_u2(uniform.element);
+  }
+
+  loom_value_fact_small_static_lanes_t lanes = {0};
+  if (loom_value_facts_query_small_static_lanes(&fact_table->context,
+                                                index_facts, &lanes)) {
+    if (lanes.count < lane_count) {
+      return false;
+    }
+    for (uint32_t i = 0; i < lane_count; ++i) {
+      if (!loom_amdgpu_table_lookup_index_lane_fits_u2(lanes.lanes[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return loom_amdgpu_table_lookup_index_lane_fits_u2(index_facts);
+}
+
+static bool loom_amdgpu_table_lookup_plan_packed_i8_permute(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t indices,
+    loom_type_t table_type, loom_type_t indices_type, loom_type_t result_type,
+    loom_amdgpu_table_lookup_plan_t* out_plan) {
+  const uint32_t table_lane_count =
+      loom_amdgpu_static_vector_lane_count(table_type, LOOM_SCALAR_TYPE_I8, 4);
+  const uint32_t result_lane_count =
+      loom_amdgpu_static_vector_lane_count(result_type, LOOM_SCALAR_TYPE_I8, 4);
+  if (table_lane_count != 4 || result_lane_count != 4) {
+    return false;
+  }
+
+  uint32_t table_payload_bit_count = 0;
+  uint32_t table_register_count = 0;
+  uint32_t result_payload_bit_count = 0;
+  uint32_t result_register_count = 0;
+  uint32_t index_payload_bit_count = 0;
+  uint32_t index_register_count = 0;
+  if (!loom_amdgpu_type_packed_integer_storage(
+          table_type, &table_payload_bit_count, &table_register_count) ||
+      !loom_amdgpu_type_packed_integer_storage(
+          result_type, &result_payload_bit_count, &result_register_count) ||
+      loom_amdgpu_static_vector_lane_count(indices_type, LOOM_SCALAR_TYPE_I8,
+                                           4) != result_lane_count ||
+      !loom_amdgpu_type_packed_integer_storage(
+          indices_type, &index_payload_bit_count, &index_register_count) ||
+      table_payload_bit_count != 32 || table_register_count != 1 ||
+      result_payload_bit_count != 32 || result_register_count != 1 ||
+      index_payload_bit_count != 32 || index_register_count != 1) {
+    return false;
+  }
+  if (!loom_amdgpu_table_lookup_indices_fit_u2(fact_table, indices,
+                                               result_lane_count)) {
+    return false;
+  }
+
+  out_plan->strategy = LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE;
+  out_plan->index_kind = LOOM_AMDGPU_TABLE_INDEX_KIND_PACKED_I8;
+  out_plan->table_lane_count = table_lane_count;
+  out_plan->result_lane_count = result_lane_count;
+  out_plan->index_register_count = index_register_count;
+  return true;
+}
+
+static bool loom_amdgpu_table_lookup_plan_from_op(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_op_t* source_op, loom_amdgpu_table_lookup_plan_t* out_plan) {
+  *out_plan = (loom_amdgpu_table_lookup_plan_t){0};
+  if (!loom_vector_table_lookup_isa(source_op)) {
+    return false;
+  }
+
+  out_plan->table = loom_vector_table_lookup_table(source_op);
+  out_plan->indices = loom_vector_table_lookup_indices(source_op);
+  out_plan->result = loom_vector_table_lookup_result(source_op);
+
+  const loom_type_t table_type =
+      loom_module_value_type(module, out_plan->table);
+  const loom_type_t indices_type =
+      loom_module_value_type(module, out_plan->indices);
+  const loom_type_t result_type =
+      loom_module_value_type(module, out_plan->result);
+
+  return loom_amdgpu_table_lookup_plan_f32_ladder(table_type, indices_type,
+                                                  result_type, out_plan) ||
+         loom_amdgpu_table_lookup_plan_packed_i8_permute(
+             fact_table, out_plan->indices, table_type, indices_type,
+             result_type, out_plan);
 }
 
 iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
@@ -75,7 +167,18 @@ iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
     loom_amdgpu_table_lookup_plan_t* out_plan, bool* out_selected) {
   *out_selected = false;
   if (!loom_amdgpu_table_lookup_plan_from_op(
-          loom_low_lower_context_module(context), source_op, out_plan)) {
+          loom_low_lower_context_module(context),
+          loom_low_lower_context_fact_table(context), source_op, out_plan)) {
+    return iree_ok_status();
+  }
+
+  if (out_plan->strategy ==
+      LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE) {
+    bool descriptor_present = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+        context, LOOM_AMDGPU_DESCRIPTOR_REF_V_PERM_B32,
+        &out_plan->permute_descriptor, &descriptor_present));
+    *out_selected = descriptor_present;
     return iree_ok_status();
   }
 
@@ -101,6 +204,31 @@ iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
 
   *out_selected = true;
   return iree_ok_status();
+}
+
+static bool loom_amdgpu_table_lookup_descriptor_present(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref) {
+  return descriptor_set != NULL &&
+         loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
+             LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+}
+
+static bool loom_amdgpu_table_lookup_plan_descriptors_present(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_table_lookup_plan_t* plan) {
+  switch (plan->strategy) {
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_F32_LADDER:
+      return loom_amdgpu_table_lookup_descriptor_present(
+                 descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32) &&
+             loom_amdgpu_table_lookup_descriptor_present(
+                 descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32);
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE:
+      return loom_amdgpu_table_lookup_descriptor_present(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_PERM_B32);
+    default:
+      return false;
+  }
 }
 
 static iree_status_t loom_amdgpu_table_lookup_slice_if_needed(
@@ -254,6 +382,24 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_lower_vector_table_lookup_packed_i8_permute(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_table,
+    loom_value_id_t low_indices) {
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
+                                                   plan->result, &result_type));
+  const loom_value_id_t operands[3] = {low_table, low_table, low_indices};
+  loom_op_t* permute_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->permute_descriptor, operands, IREE_ARRAYSIZE(operands),
+      loom_named_attr_slice_empty(), &result_type, 1, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, source_op->location, &permute_op));
+  return loom_low_lower_bind_value(
+      context, plan->result,
+      loom_value_slice_get(loom_low_op_results(permute_op), 0));
+}
+
 iree_status_t loom_amdgpu_lower_vector_table_lookup(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_table_lookup_plan_t* plan) {
@@ -263,6 +409,11 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
   loom_value_id_t low_indices = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->indices, &low_indices));
+
+  if (plan->strategy == LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE) {
+    return loom_amdgpu_lower_vector_table_lookup_packed_i8_permute(
+        context, source_op, plan, low_table, low_indices);
+  }
 
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
@@ -321,7 +472,11 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_table(
 
   const loom_module_t* module = loom_target_low_legality_module(context);
   loom_amdgpu_table_lookup_plan_t unused_plan = {0};
-  if (loom_amdgpu_table_lookup_plan_from_op(module, op, &unused_plan)) {
+  if (loom_amdgpu_table_lookup_plan_from_op(
+          module, loom_target_low_legality_fact_table(context), op,
+          &unused_plan) &&
+      loom_amdgpu_table_lookup_plan_descriptors_present(
+          loom_target_low_legality_descriptor_set(context), &unused_plan)) {
     return iree_ok_status();
   }
   return loom_amdgpu_low_legality_reject(context, op,

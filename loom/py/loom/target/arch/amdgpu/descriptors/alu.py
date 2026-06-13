@@ -1448,6 +1448,28 @@ def _v_bfi_b32_src0_literal_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_perm_b32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_perm_b32",
+        instruction_name="V_PERM_B32",
+        mnemonic="v_perm_b32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="integer.byte.permute.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("src0")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("src1")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("selectors")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("src0", "src1", "selectors"),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_lshrrev_b32_overlay() -> AmdgpuDescriptorOverlay:
     return _v_binary_u32_overlay(
         descriptor_key="amdgpu.v_lshrrev_b32",
@@ -1556,6 +1578,10 @@ def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_ashrrev_i32_src0_inline_overlay(),
         _v_ashrrev_i32_literal_overlay(),
     )
+
+
+def _integer_bitwise_permute_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (_v_perm_b32_overlay(),)
 
 
 def _v_add_f32_overlay() -> AmdgpuDescriptorOverlay:
@@ -3661,6 +3687,7 @@ def _v_mov_b32_sdwa_overlay() -> AmdgpuDescriptorOverlay:
 
 
 __all__ = (
+    "_integer_bitwise_permute_overlays",
     "_integer_bitwise_shift_overlays",
     "_s_add_u32_overlay",
     "_s_add_u32_rhs_inline_overlay",
@@ -3771,6 +3798,7 @@ __all__ = (
     "_v_pk_mad_u16_overlay",
     "_v_pk_mad_u16_literal_overlays",
     "_v_pk_ternary_overlay",
+    "_v_perm_b32_overlay",
     "_v_lshl_add_u32_shift_immediate_overlay",
     "_v_lshlrev_b32_literal_overlay",
     "_v_lshlrev_b32_overlay",
