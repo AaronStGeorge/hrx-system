@@ -115,6 +115,7 @@ loom_cc_library(
     "memory_bank_conflict.h"
     "plan.h"
     "preamble.h"
+    "sanitizer_access.h"
     "sanitizer_report.h"
     "signal.h"
     "structural.h"
@@ -163,6 +164,7 @@ loom_cc_library(
     "preamble.c"
     "prefetch.c"
     "registry.c"
+    "sanitizer_access.c"
     "sanitizer_report.c"
     "signal.c"
     "structural.c"
@@ -203,6 +205,7 @@ loom_cc_library(
     loom::ops::scf
     loom::ops::vector
     loom::ops::view
+    loom::target::arch::amdgpu::asan_abi
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::feedback_abi
@@ -295,6 +298,36 @@ loom_cc_test(
     loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::signal_abi
+    loom::target::registers
+    loom::verify
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    sanitizer_access_test
+  SRCS
+    "sanitizer_access_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::verify
+    loom::error::renderer
+    loom::ir
+    loom::ops::cache
+    loom::ops::low
+    loom::ops::op_defs
+    loom::ops::op_registry
+    loom::ops::target
+    loom::target::arch::amdgpu::asan_abi
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::feedback_abi
+    loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify
   LABELS

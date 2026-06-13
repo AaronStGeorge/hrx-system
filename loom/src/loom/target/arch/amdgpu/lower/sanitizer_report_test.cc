@@ -778,6 +778,120 @@ TEST_F(AmdgpuSanitizerReportTest, SplitsHotFailurePredicateToColdSiteBlock) {
                 LOOM_AMDGPU_SANITIZER_TRAP_ID);
 }
 
+TEST_F(AmdgpuSanitizerReportTest, NarrowsExecForMaskedColdSiteBlock) {
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &config_values));
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_channel_header_values(
+      &builder_, descriptor_set_, config_values.channel_base,
+      LOOM_LOCATION_UNKNOWN, &channel_values));
+  const loom_value_id_t failure_mask = channel_values.ring_capacity;
+
+  const loom_amdgpu_sanitizer_report_source_t source = {
+      /*.dispatch_ptr=*/config_values.notify_signal,
+      /*.workgroup_id_x=*/config_values.flags,
+      /*.workitem_id_x=*/channel_values.flags,
+  };
+  const loom_amdgpu_sanitizer_access_report_t report = {
+      /*.access_kind=*/LOOM_AMDGPU_SANITIZER_ACCESS_KIND_READ,
+      /*.flags=*/LOOM_AMDGPU_SANITIZER_REPORT_FLAG_NONE,
+      /*.fault_address=*/config_values.notify_signal,
+      /*.access_size=*/channel_values.ring_capacity,
+      /*.site_id=*/config_values.notify_signal,
+      /*.shadow_address=*/config_values.channel_base,
+      /*.shadow_value=*/config_values.address,
+  };
+
+  loom_amdgpu_sanitizer_access_report_trap_island_t island = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_access_report_trap_island(
+      &builder_, descriptor_set_, body_block_, config_symbol,
+      LOOM_AMDGPU_SANITIZER_ACCESS_KIND_READ,
+      LOOM_AMDGPU_SANITIZER_REPORT_FLAG_NONE, LOOM_LOCATION_UNKNOWN, &island));
+  loom_op_t* trap_return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/nullptr,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &trap_return_op));
+
+  loom_builder_set_block(&builder_, body_block_);
+  loom_amdgpu_sanitizer_access_report_failure_branch_t branch = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_sanitizer_access_report_failure_mask_branch(
+      &builder_, descriptor_set_, &island, failure_mask, &source, &report,
+      LOOM_LOCATION_UNKNOWN, &branch));
+  loom_op_t* continuation_return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/nullptr,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &continuation_return_op));
+
+  VerifyModuleOk();
+  VerifyLowModuleOk();
+
+  ASSERT_NE(branch.failure_block, nullptr);
+  ASSERT_NE(branch.continuation_block, nullptr);
+  loom_region_t* body = body_block_->parent_region;
+  ASSERT_EQ(loom_region_block(body, 1), branch.continuation_block);
+  ASSERT_EQ(loom_region_block(body, 2), branch.failure_block);
+
+  std::vector<loom_op_t*> hot_mask_compares = OpsForDescriptorRefInBlock(
+      body_block_, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64);
+  ASSERT_EQ(hot_mask_compares.size(), 1u);
+
+  const loom_op_t* hot_terminator = loom_block_const_last_op(body_block_);
+  ASSERT_TRUE(loom_low_cond_br_isa(hot_terminator));
+  EXPECT_EQ(loom_low_cond_br_condition(hot_terminator),
+            loom_low_op_results(hot_mask_compares[0]).values[0]);
+  EXPECT_EQ(loom_low_cond_br_true_dest(hot_terminator), branch.failure_block);
+  EXPECT_EQ(loom_low_cond_br_false_dest(hot_terminator),
+            branch.continuation_block);
+  ExpectRegisterType(loom_low_cond_br_condition(hot_terminator),
+                     LOOM_AMDGPU_REG_CLASS_ID_SCC, 1);
+  EXPECT_TRUE(OpsForDescriptorRefInBlock(
+                  body_block_, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64)
+                  .empty());
+
+  std::vector<loom_op_t*> saveexec_ops = OpsForDescriptorRefInBlock(
+      branch.failure_block, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64);
+  ASSERT_EQ(saveexec_ops.size(), 1u);
+  ASSERT_EQ(loom_low_op_operands(saveexec_ops[0]).count, 1u);
+  EXPECT_EQ(loom_low_op_operands(saveexec_ops[0]).values[0], failure_mask);
+  ASSERT_EQ(loom_low_op_results(saveexec_ops[0]).count, 2u);
+  ExpectRegisterType(loom_low_op_results(saveexec_ops[0]).values[0],
+                     LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
+  ExpectRegisterType(loom_low_op_results(saveexec_ops[0]).values[1],
+                     LOOM_AMDGPU_REG_CLASS_ID_SCC, 1);
+
+  const loom_op_t* failure_terminator =
+      loom_block_const_last_op(branch.failure_block);
+  ASSERT_TRUE(loom_low_br_isa(failure_terminator));
+  EXPECT_EQ(loom_low_br_dest(failure_terminator), island.entry_block);
+  ASSERT_EQ(loom_low_br_args(failure_terminator).count, 8u);
+  EXPECT_TRUE(OpsForDescriptorRefInBlock(
+                  branch.failure_block,
+                  LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR)
+                  .empty());
+  EXPECT_TRUE(OpsForDescriptorRefInBlock(
+                  branch.failure_block,
+                  LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR)
+                  .empty());
+  EXPECT_TRUE(OpsForDescriptorRefInBlock(branch.failure_block,
+                                         LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP)
+                  .empty());
+
+  std::vector<loom_op_t*> report_b32_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
+  std::vector<loom_op_t*> report_b64_stores =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
+  EXPECT_EQ(report_b32_stores.size(), 13u);
+  EXPECT_EQ(report_b64_stores.size(), 11u);
+  std::vector<loom_op_t*> trap_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP);
+  ASSERT_EQ(trap_ops.size(), 1u);
+  ExpectAttrI64(loom_low_op_attrs(trap_ops[0]), IREE_SV("trapid"),
+                LOOM_AMDGPU_SANITIZER_TRAP_ID);
+}
+
 TEST_F(AmdgpuSanitizerReportTest, RejectsInvalidReportMetadata) {
   loom_amdgpu_feedback_config_values_t config_values = {};
   loom_amdgpu_feedback_channel_header_values_t channel_values = {};

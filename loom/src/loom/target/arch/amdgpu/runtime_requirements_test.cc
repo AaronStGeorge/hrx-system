@@ -41,24 +41,16 @@ TEST(AmdgpuRuntimeRequirementsTest, DisabledSanitizersRequireNothing) {
 }
 
 TEST(AmdgpuRuntimeRequirementsTest, ValueSanitizerRequiresFeedbackOnly) {
-  const loom_target_pipeline_options_t options = {
-      .sanitizer =
-          {
-              .checks = LOOM_SANITIZER_CHECK_VALUE,
-          },
-  };
+  loom_target_pipeline_options_t options = {};
+  options.sanitizer.checks = LOOM_SANITIZER_CHECK_VALUE;
   EXPECT_EQ(
       loom_amdgpu_runtime_requirements_from_target_pipeline_options(&options),
       LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK);
 }
 
 TEST(AmdgpuRuntimeRequirementsTest, AccessSanitizerRequiresAsanShadow) {
-  const loom_target_pipeline_options_t options = {
-      .sanitizer =
-          {
-              .checks = LOOM_SANITIZER_CHECK_ACCESS,
-          },
-  };
+  loom_target_pipeline_options_t options = {};
+  options.sanitizer.checks = LOOM_SANITIZER_CHECK_ACCESS;
   EXPECT_EQ(
       loom_amdgpu_runtime_requirements_from_target_pipeline_options(&options),
       LOOM_AMDGPU_RUNTIME_REQUIREMENT_FEEDBACK |
