@@ -264,14 +264,15 @@ TEST(AmdgpuKernelHsacoTest, WritesDataSymbolsFromWriteOptions) {
       Contribution(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd"),
                    iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)));
   const loom_amdgpu_hsaco_data_symbol_t data_symbol = {
-      .name = IREE_SV("loom_runtime_slot"),
-      .byte_length = 16,
-      .alignment = 8,
-      .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+      /*.name=*/IREE_SV("loom_runtime_slot"),
+      /*.initial_contents=*/{},
+      /*.byte_length=*/16,
+      /*.alignment=*/8,
+      /*.flags=*/LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
   };
   const loom_amdgpu_kernel_hsaco_write_options_t write_options = {
-      .data_symbols = &data_symbol,
-      .data_symbol_count = 1,
+      /*.data_symbols=*/&data_symbol,
+      /*.data_symbol_count=*/1,
   };
 
   StreamPtr stream = CreateStream();

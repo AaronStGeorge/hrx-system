@@ -112,6 +112,17 @@ iree_status_t loom_amdgpu_build_feedback_config_values(
     loom_symbol_ref_t config_symbol, loom_location_id_t location,
     loom_amdgpu_feedback_config_values_t* out_values);
 
+// Emits target-low IR that tests whether feedback is enabled in config flags.
+//
+// |config_flags| must be an SGPR value loaded from
+// loom_amdgpu_feedback_config_layout_e. The returned SCC value is suitable for
+// low.cond_br. Producers should branch on this before dereferencing
+// |channel_base| or |notify_signal| from the runtime-published config.
+iree_status_t loom_amdgpu_build_feedback_config_enabled_scc(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t config_flags, loom_location_id_t location,
+    loom_value_id_t* out_scc);
+
 // Emits target-low IR that scalar-loads the stable feedback channel header
 // fields needed by packet producers.
 //
@@ -222,6 +233,16 @@ iree_status_t loom_amdgpu_build_feedback_reservation(
     loom_location_id_t location,
     loom_amdgpu_feedback_reservation_t* out_reservation);
 
+// Emits target-low IR that tests whether a reservation produced packet storage.
+//
+// |reservation_mask| must be the SGPRx2 mask returned by
+// loom_amdgpu_build_feedback_reservation. The returned SCC value is suitable
+// for low.cond_br.
+iree_status_t loom_amdgpu_build_feedback_reservation_succeeded_scc(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t reservation_mask, loom_location_id_t location,
+    loom_value_id_t* out_scc);
+
 // Emits target-low IR that initializes a reserved feedback packet header.
 //
 // |packet_address| must reference packet storage returned by reservation.
@@ -232,6 +253,40 @@ iree_status_t loom_amdgpu_build_feedback_packet_header(
     const loom_amdgpu_feedback_packet_address_t* packet_address,
     const loom_amdgpu_feedback_packet_header_t* header,
     loom_location_id_t location);
+
+// Emits target-low IR that stores one 32-bit value into a feedback packet.
+//
+// |packet_address| must reference reserved packet storage. |value| may be an
+// SGPR or VGPR low register and is copied to a VGPR if required by the selected
+// GLOBAL_STORE_* packet descriptor.
+iree_status_t loom_amdgpu_build_feedback_packet_store_b32(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    uint32_t byte_offset, loom_value_id_t value, loom_location_id_t location);
+
+// Emits target-low IR that stores one 64-bit value into a feedback packet.
+//
+// |packet_address| must reference reserved packet storage. |value| may be an
+// SGPRx2 or VGPRx2 low register and is copied to VGPRs if required by the
+// selected GLOBAL_STORE_* packet descriptor.
+iree_status_t loom_amdgpu_build_feedback_packet_store_b64(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    uint32_t byte_offset, loom_value_id_t value, loom_location_id_t location);
+
+// Emits target-low IR that stores one immediate 32-bit value into a feedback
+// packet.
+iree_status_t loom_amdgpu_build_feedback_packet_store_u32_constant(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    uint32_t byte_offset, uint32_t value, loom_location_id_t location);
+
+// Emits target-low IR that stores one immediate 64-bit value into a feedback
+// packet.
+iree_status_t loom_amdgpu_build_feedback_packet_store_u64_constant(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_feedback_packet_address_t* packet_address,
+    uint32_t byte_offset, uint64_t value, loom_location_id_t location);
 
 // Emits target-low IR that release-publishes a reserved feedback packet state.
 //

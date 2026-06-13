@@ -929,20 +929,20 @@ loom_amdgpu_metadata_kernel_t MinimalKernel(iree_string_view_t name,
                                             iree_string_view_t symbol,
                                             uint32_t wavefront_size) {
   return {
-      .name = name,
-      .descriptor_symbol = symbol,
-      .kernarg_segment_size = 0,
-      .kernarg_segment_alignment = 8,
-      .wavefront_size = wavefront_size,
-      .group_segment_fixed_size = 0,
-      .private_segment_fixed_size = 0,
-      .sgpr_count = 4,
-      .vgpr_count = 1,
-      .max_flat_workgroup_size = 64,
-      .required_workgroup_size = {.x = 64, .y = 1, .z = 1},
-      .has_required_workgroup_size = true,
-      .arguments = nullptr,
-      .argument_count = 0,
+      /*.name=*/name,
+      /*.descriptor_symbol=*/symbol,
+      /*.kernarg_segment_size=*/0,
+      /*.kernarg_segment_alignment=*/8,
+      /*.wavefront_size=*/wavefront_size,
+      /*.group_segment_fixed_size=*/0,
+      /*.private_segment_fixed_size=*/0,
+      /*.sgpr_count=*/4,
+      /*.vgpr_count=*/1,
+      /*.max_flat_workgroup_size=*/64,
+      /*.required_workgroup_size=*/{/*.x=*/64, /*.y=*/1, /*.z=*/1},
+      /*.has_required_workgroup_size=*/true,
+      /*.arguments=*/nullptr,
+      /*.argument_count=*/0,
   };
 }
 
@@ -955,33 +955,36 @@ iree_status_t EmitRuntimeGlobalKernelForAmdgpu(const AmdgpuHsaTarget& target,
 
   const uint8_t s_endpgm[] = {0x00, 0x00, 0x81, 0xbf};
   const loom_amdgpu_hsaco_kernel_t kernel = {
-      .metadata =
-          MinimalKernel(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd"),
-                        processor->default_wavefront_size),
-      .text = iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
+      /*.metadata=*/MinimalKernel(IREE_SV("loom_kernel"),
+                                  IREE_SV("loom_kernel.kd"),
+                                  processor->default_wavefront_size),
+      /*.descriptor_options=*/{},
+      /*.text=*/iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
   };
   const loom_amdgpu_hsaco_data_symbol_t data_symbols[] = {
       {
-          .name = IREE_SV(kAsanConfigGlobalName),
-          .byte_length = kAsanConfigByteLength,
-          .alignment = 8,
-          .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+          /*.name=*/IREE_SV(kAsanConfigGlobalName),
+          /*.initial_contents=*/{},
+          /*.byte_length=*/kAsanConfigByteLength,
+          /*.alignment=*/8,
+          /*.flags=*/LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
       },
       {
-          .name = IREE_SV(kFeedbackConfigGlobalName),
-          .byte_length = kFeedbackConfigByteLength,
-          .alignment = 8,
-          .flags = LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
+          /*.name=*/IREE_SV(kFeedbackConfigGlobalName),
+          /*.initial_contents=*/{},
+          /*.byte_length=*/kFeedbackConfigByteLength,
+          /*.alignment=*/8,
+          /*.flags=*/LOOM_AMDGPU_HSACO_DATA_SYMBOL_FLAG_WRITABLE,
       },
   };
   const std::string target_id = AmdhsaTargetIdForProcessor(processor);
   const loom_amdgpu_hsaco_file_t file = {
-      .target = iree_make_string_view(target_id.data(), target_id.size()),
-      .processor = processor->processor,
-      .kernels = &kernel,
-      .kernel_count = 1,
-      .data_symbols = data_symbols,
-      .data_symbol_count = IREE_ARRAYSIZE(data_symbols),
+      /*.target=*/iree_make_string_view(target_id.data(), target_id.size()),
+      /*.processor=*/processor->processor,
+      /*.kernels=*/&kernel,
+      /*.kernel_count=*/1,
+      /*.data_symbols=*/data_symbols,
+      /*.data_symbol_count=*/IREE_ARRAYSIZE(data_symbols),
   };
 
   StreamPtr stream = CreateStream();

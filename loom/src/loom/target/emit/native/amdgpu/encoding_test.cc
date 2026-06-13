@@ -119,8 +119,8 @@ class AmdgpuEncodingTest : public ::testing::Test {
   iree_status_t ParseSource(const std::string& source) {
     ResetModule();
     loom_text_parse_options_t parse_options = {
-        .diagnostic_sink = {loom_diagnostic_stderr_sink, nullptr},
-        .max_errors = 20,
+        /*.diagnostic_sink=*/{loom_diagnostic_stderr_sink, nullptr},
+        /*.max_errors=*/20,
     };
     loom_low_descriptor_text_asm_environment_initialize(
         &target_registry_.registry, &parse_options.low_asm_environment);
@@ -149,8 +149,11 @@ class AmdgpuEncodingTest : public ::testing::Test {
     }
 
     loom_low_verify_options_t verify_options = {
-        .descriptor_registry = &target_registry_.registry,
-        .max_errors = 20,
+        /*.descriptor_registry=*/&target_registry_.registry,
+        /*.target_selection=*/{},
+        /*.emitter=*/{},
+        /*.provider_list=*/{},
+        /*.max_errors=*/20,
     };
     loom_low_verify_result_t verify_result = {};
     loom_low_verify_scratch_t verify_scratch =
@@ -163,8 +166,11 @@ class AmdgpuEncodingTest : public ::testing::Test {
     }
 
     loom_low_emission_frame_options_t frame_options = {
-        .descriptor_registry = &target_registry_.registry,
-        .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+        /*.descriptor_registry=*/&target_registry_.registry,
+        /*.target_selection=*/{},
+        /*.memory_access_table=*/{},
+        /*.schedule_pressure_cliffs=*/{},
+        /*.schedule_strategy=*/LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
     };
     return loom_low_emission_frame_build(module_, low_function, &frame_options,
                                          arena, out_frame);
@@ -179,7 +185,7 @@ class AmdgpuEncodingTest : public ::testing::Test {
     IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
         &frame.schedule, &frame.allocation, arena, &packet_plan));
     const loom_amdgpu_encode_instruction_stream_options_t options = {
-        .packet_plan = &packet_plan,
+        /*.packet_plan=*/&packet_plan,
     };
     return loom_amdgpu_encode_instruction_stream_result_with_options(
         &frame.schedule, &frame.allocation, &options, out_stream, arena);

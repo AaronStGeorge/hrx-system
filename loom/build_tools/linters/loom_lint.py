@@ -8,7 +8,8 @@
 """Loom Python linting orchestrator.
 
 Runs code generators, ruff (lint + format), and mypy on the loom Python
-package. Used as a pre-commit hook and runnable standalone:
+package. Used by the `dev.py bazel precommit` Loom lint path and runnable
+standalone:
 
     python loom/build_tools/linters/loom_lint.py
 

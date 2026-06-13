@@ -129,16 +129,16 @@ std::vector<Section> ReadSections(const std::string& bytes) {
     const uint32_t name_offset = LoadLeU32(bytes, header_offset);
     EXPECT_LT(name_offset, section_name_size);
     sections.push_back({
-        .index = i,
-        .name =
-            ReadNullTerminatedString(bytes, section_name_offset + name_offset),
-        .type = LoadLeU32(bytes, header_offset + 4),
-        .flags = LoadLeU64(bytes, header_offset + 8),
-        .address = LoadLeU64(bytes, header_offset + 16),
-        .offset = LoadLeU64(bytes, header_offset + 24),
-        .size = LoadLeU64(bytes, header_offset + 32),
-        .link = LoadLeU32(bytes, header_offset + 40),
-        .entry_size = LoadLeU64(bytes, header_offset + 56),
+        /*.index=*/i,
+        /*.name=*/
+        ReadNullTerminatedString(bytes, section_name_offset + name_offset),
+        /*.type=*/LoadLeU32(bytes, header_offset + 4),
+        /*.flags=*/LoadLeU64(bytes, header_offset + 8),
+        /*.address=*/LoadLeU64(bytes, header_offset + 16),
+        /*.offset=*/LoadLeU64(bytes, header_offset + 24),
+        /*.size=*/LoadLeU64(bytes, header_offset + 32),
+        /*.link=*/LoadLeU32(bytes, header_offset + 40),
+        /*.entry_size=*/LoadLeU64(bytes, header_offset + 56),
     });
   }
   return sections;
@@ -182,13 +182,13 @@ DynamicSymbol FindDynamicSymbol(const std::string& bytes,
     const size_t offset = (size_t)dynamic_symbol_table.offset +
                           i * dynamic_symbol_table.entry_size;
     DynamicSymbol symbol = {
-        .index = i,
-        .name =
-            ReadNullTerminatedString(dynamic_strings, LoadLeU32(bytes, offset)),
-        .info = (uint8_t)bytes[offset + 4],
-        .section_index = LoadLeU16(bytes, offset + 6),
-        .value = LoadLeU64(bytes, offset + 8),
-        .size = LoadLeU64(bytes, offset + 16),
+        /*.index=*/i,
+        /*.name=*/
+        ReadNullTerminatedString(dynamic_strings, LoadLeU32(bytes, offset)),
+        /*.info=*/(uint8_t)bytes[offset + 4],
+        /*.section_index=*/LoadLeU16(bytes, offset + 6),
+        /*.value=*/LoadLeU64(bytes, offset + 8),
+        /*.size=*/LoadLeU64(bytes, offset + 16),
     };
     if (symbol.name == name) {
       return symbol;
@@ -380,6 +380,9 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
     loom_amdgpu_hal_kernel_library_options_t options = {
         /*.processor=*/processor,
         /*.target_selection=*/{},
+        /*.runtime_globals=*/{},
+        /*.data_symbols=*/{},
+        /*.data_symbol_count=*/{},
         /*.diagnostic_sink=*/capture->sink(),
         /*.source_resolver=*/{},
         /*.max_errors=*/20,
@@ -400,6 +403,9 @@ class AmdgpuHalKernelLibraryTest : public ::testing::Test {
     loom_amdgpu_hal_kernel_library_options_t options = {
         /*.processor=*/IREE_SV("gfx942"),
         /*.target_selection=*/{},
+        /*.runtime_globals=*/{},
+        /*.data_symbols=*/{},
+        /*.data_symbol_count=*/{},
         /*.diagnostic_sink=*/capture->sink(),
         /*.source_resolver=*/{},
         /*.max_errors=*/20,
@@ -536,6 +542,9 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsEveryLinkedSupportedProcessor) {
     loom_amdgpu_hal_kernel_library_options_t options = {
         /*.processor=*/{},
         /*.target_selection=*/{},
+        /*.runtime_globals=*/{},
+        /*.data_symbols=*/{},
+        /*.data_symbol_count=*/{},
         /*.diagnostic_sink=*/capture.sink(),
         /*.source_resolver=*/{},
         /*.max_errors=*/20,
@@ -582,6 +591,9 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsArgumentMetadataFromLowKernelAbi) {
   loom_amdgpu_hal_kernel_library_options_t options = {
       /*.processor=*/{},
       /*.target_selection=*/{},
+      /*.runtime_globals=*/{},
+      /*.data_symbols=*/{},
+      /*.data_symbol_count=*/{},
       /*.diagnostic_sink=*/capture.sink(),
       /*.source_resolver=*/{},
       /*.max_errors=*/20,
@@ -619,6 +631,9 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
   loom_amdgpu_hal_kernel_library_options_t options = {
       /*.processor=*/{},
       /*.target_selection=*/{},
+      /*.runtime_globals=*/{},
+      /*.data_symbols=*/{},
+      /*.data_symbol_count=*/{},
       /*.diagnostic_sink=*/capture.sink(),
       /*.source_resolver=*/{},
       /*.max_errors=*/20,
@@ -662,10 +677,15 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsRequestedRuntimeGlobals) {
   DiagnosticCapture capture;
   loom_amdgpu_hal_kernel_library_t library = {};
   loom_amdgpu_hal_kernel_library_options_t options = {
-      .runtime_globals = LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG |
-                         LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
-      .diagnostic_sink = capture.sink(),
-      .max_errors = 20,
+      /*.processor=*/{},
+      /*.target_selection=*/{},
+      /*.runtime_globals=*/LOOM_AMDGPU_RUNTIME_GLOBAL_ASAN_CONFIG |
+          LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
+      /*.data_symbols=*/{},
+      /*.data_symbol_count=*/{},
+      /*.diagnostic_sink=*/capture.sink(),
+      /*.source_resolver=*/{},
+      /*.max_errors=*/20,
   };
   bool emitted = false;
   IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
@@ -748,20 +768,23 @@ TEST_F(AmdgpuHalKernelLibraryTest,
       ParseSource(iree_make_cstring_view(kSource), &module));
 
   const loom_amdgpu_hsaco_data_symbol_t site_symbol = {
-      .name = IREE_SV(kSiteSymbolName),
-      .initial_contents =
-          iree_make_const_byte_span(kSiteRecords, sizeof(kSiteRecords)),
-      .byte_length = sizeof(kSiteRecords),
-      .alignment = 16,
+      /*.name=*/IREE_SV(kSiteSymbolName),
+      /*.initial_contents=*/
+      iree_make_const_byte_span(kSiteRecords, sizeof(kSiteRecords)),
+      /*.byte_length=*/sizeof(kSiteRecords),
+      /*.alignment=*/16,
   };
   DiagnosticCapture capture;
   loom_amdgpu_hal_kernel_library_t library = {};
   loom_amdgpu_hal_kernel_library_options_t options = {
-      .runtime_globals = LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
-      .data_symbols = &site_symbol,
-      .data_symbol_count = 1,
-      .diagnostic_sink = capture.sink(),
-      .max_errors = 20,
+      /*.processor=*/{},
+      /*.target_selection=*/{},
+      /*.runtime_globals=*/LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
+      /*.data_symbols=*/&site_symbol,
+      /*.data_symbol_count=*/1,
+      /*.diagnostic_sink=*/capture.sink(),
+      /*.source_resolver=*/{},
+      /*.max_errors=*/20,
   };
   bool emitted = false;
   IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(

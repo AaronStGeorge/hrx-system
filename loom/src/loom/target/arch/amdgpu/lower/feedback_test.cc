@@ -95,8 +95,8 @@ class AmdgpuFeedbackTest : public ::testing::Test {
     uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_CHECK_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
     return (loom_symbol_ref_t){
-        .module_id = 0,
-        .symbol_id = symbol_id,
+        /*.module_id=*/0,
+        /*.symbol_id=*/symbol_id,
     };
   }
 
@@ -252,8 +252,8 @@ class AmdgpuFeedbackTest : public ::testing::Test {
 
   void VerifyModuleOk() {
     loom_verify_options_t options = {
-        .sink = {loom_diagnostic_stderr_sink, NULL},
-        .max_errors = 20,
+        /*.sink=*/{loom_diagnostic_stderr_sink, NULL},
+        /*.max_errors=*/20,
     };
     loom_verify_result_t result = {};
     IREE_ASSERT_OK(loom_verify_module(module_, &options, &result));
@@ -262,9 +262,11 @@ class AmdgpuFeedbackTest : public ::testing::Test {
 
   void VerifyLowModuleOk() {
     loom_low_verify_options_t options = {
-        .descriptor_registry = &low_registry_.registry,
-        .emitter = {EmitDiagnosticToStderr, NULL},
-        .max_errors = 20,
+        /*.descriptor_registry=*/&low_registry_.registry,
+        /*.target_selection=*/{},
+        /*.emitter=*/{EmitDiagnosticToStderr, NULL},
+        /*.provider_list=*/{},
+        /*.max_errors=*/20,
     };
     loom_low_verify_scratch_t scratch =
         loom_low_verify_scratch_for_module(module_);
@@ -613,6 +615,37 @@ TEST_F(AmdgpuFeedbackTest, LoadsCommonFeedbackConfigValues) {
       sgpr_x2_type, loom_module_value_type(module_, values.channel_base)));
   EXPECT_TRUE(loom_type_equal(
       sgpr_x2_type, loom_module_value_type(module_, values.notify_signal)));
+}
+
+TEST_F(AmdgpuFeedbackTest, TestsFeedbackConfigEnabledFlag) {
+  loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
+  loom_amdgpu_feedback_config_values_t values = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
+      &builder_, descriptor_set_, config_symbol, LOOM_LOCATION_UNKNOWN,
+      &values));
+
+  loom_value_id_t enabled_scc = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_enabled_scc(
+      &builder_, descriptor_set_, values.flags, LOOM_LOCATION_UNKNOWN,
+      &enabled_scc));
+  ExpectRegisterType(enabled_scc, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1);
+
+  std::vector<loom_op_t*> and_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B32);
+  ASSERT_EQ(and_ops.size(), 1u);
+  EXPECT_EQ(loom_low_op_operands(and_ops[0]).values[0], values.flags);
+  std::vector<loom_op_t*> compare_ops =
+      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_I32);
+  ASSERT_EQ(compare_ops.size(), 1u);
+  EXPECT_EQ(loom_value_slice_get(loom_low_op_results(compare_ops[0]), 0),
+            enabled_scc);
+
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/NULL,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &return_op));
+  VerifyModuleOk();
+  VerifyLowModuleOk();
 }
 
 TEST_F(AmdgpuFeedbackTest, LoadsFeedbackChannelHeaderValues) {
@@ -1270,6 +1303,42 @@ TEST_F(AmdgpuFeedbackTest, BuildsReservationCfgWithHotFallthrough) {
   VerifyLowModuleOk();
 }
 
+TEST_F(AmdgpuFeedbackTest, TestsReservationSucceededMask) {
+  loom_amdgpu_feedback_config_values_t config_values = {};
+  loom_amdgpu_feedback_channel_header_values_t channel_values = {};
+  IREE_ASSERT_OK(BuildFeedbackChannelValues(&config_values, &channel_values));
+
+  const uint32_t packet_length =
+      (uint32_t)loom_amdgpu_feedback_packet_length(/*payload_length=*/64);
+  loom_amdgpu_feedback_reservation_t reservation = {};
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation(
+      &builder_, descriptor_set_, channel_values.address,
+      channel_values.ring_base, channel_values.ring_capacity, packet_length,
+      LOOM_LOCATION_UNKNOWN, &reservation));
+
+  loom_value_id_t reserved_scc = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_amdgpu_build_feedback_reservation_succeeded_scc(
+      &builder_, descriptor_set_, reservation.reserved_mask,
+      LOOM_LOCATION_UNKNOWN, &reserved_scc));
+  ExpectRegisterType(reserved_scc, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1);
+
+  loom_region_t* body = body_block_->parent_region;
+  ASSERT_EQ(body->block_count, 5u);
+  loom_block_t* continuation_block = loom_region_block(body, 3);
+  std::vector<loom_op_t*> compare_ops = OpsForDescriptorRefInBlock(
+      continuation_block, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64);
+  ASSERT_EQ(compare_ops.size(), 1u);
+  EXPECT_EQ(loom_value_slice_get(loom_low_op_results(compare_ops[0]), 0),
+            reserved_scc);
+
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_low_return_build(&builder_, /*values=*/NULL,
+                                       /*value_count=*/0, LOOM_LOCATION_UNKNOWN,
+                                       &return_op));
+  VerifyModuleOk();
+  VerifyLowModuleOk();
+}
+
 TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
   loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
   loom_amdgpu_feedback_config_values_t config_values = {};
@@ -1286,14 +1355,14 @@ TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
       LOOM_LOCATION_UNKNOWN, &packet_address));
 
   loom_amdgpu_feedback_packet_header_t header = {
-      .record_length = (uint32_t)loom_amdgpu_feedback_packet_length(
+      /*.record_length=*/(uint32_t)loom_amdgpu_feedback_packet_length(
           /*payload_length=*/64),
-      .kind = LOOM_AMDGPU_FEEDBACK_PACKET_KIND_ASAN,
-      .flags = LOOM_AMDGPU_FEEDBACK_PACKET_FLAG_ASYNC,
-      .sequence = channel_values.ring_capacity,
-      .source_dispatch_ptr = config_values.notify_signal,
-      .source_workgroup_id_x = config_values.flags,
-      .source_workitem_id_x = channel_values.flags,
+      /*.kind=*/LOOM_AMDGPU_FEEDBACK_PACKET_KIND_ASAN,
+      /*.flags=*/LOOM_AMDGPU_FEEDBACK_PACKET_FLAG_ASYNC,
+      /*.sequence=*/channel_values.ring_capacity,
+      /*.source_dispatch_ptr=*/config_values.notify_signal,
+      /*.source_workgroup_id_x=*/config_values.flags,
+      /*.source_workitem_id_x=*/channel_values.flags,
   };
   IREE_ASSERT_OK(loom_amdgpu_build_feedback_packet_header(
       &builder_, descriptor_set_, &packet_address, &header,

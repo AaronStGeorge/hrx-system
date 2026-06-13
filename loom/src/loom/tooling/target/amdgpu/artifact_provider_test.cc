@@ -228,15 +228,18 @@ TEST_F(AmdgpuHalArtifactProviderTest,
   ASSERT_NE(target_bundle, nullptr);
 
   const loom_run_hal_device_target_t target = {
-      .data = processor,
-      .target_bundle = target_bundle,
-      .target_key = processor->processor,
+      /*.data=*/processor,
+      /*.target_storage=*/{},
+      /*.target_bundle=*/target_bundle,
+      /*.target_key=*/processor->processor,
   };
   const loom_target_pipeline_options_t target_pipeline_options = {
-      .sanitizer =
-          {
-              .checks = LOOM_SANITIZER_CHECK_ACCESS,
-          },
+      /*.source_to_low_max_errors=*/{},
+      /*.control_flow_lowering=*/{},
+      /*.sanitizer=*/
+      {
+          /*.checks=*/LOOM_SANITIZER_CHECK_ACCESS,
+      },
   };
   loom_run_hal_artifact_t artifact = {};
   bool emitted = false;
@@ -246,7 +249,8 @@ TEST_F(AmdgpuHalArtifactProviderTest,
       /*source_resolver=*/(loom_source_resolver_t){0}, /*max_errors=*/20,
       &target_pipeline_options,
       /*artifact_flags=*/LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE,
-      /*report=*/nullptr, iree_allocator_system(), &emitted, &artifact));
+      /*artifact_manifest=*/nullptr, /*report=*/nullptr,
+      iree_allocator_system(), &emitted, &artifact));
 
   EXPECT_TRUE(emitted);
   ASSERT_NE(artifact.target_artifact_data.data, nullptr);

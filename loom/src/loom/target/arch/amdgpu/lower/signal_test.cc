@@ -68,8 +68,8 @@ class AmdgpuSignalTest : public ::testing::Test {
     uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_CHECK_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
     return (loom_symbol_ref_t){
-        .module_id = 0,
-        .symbol_id = symbol_id,
+        /*.module_id=*/0,
+        /*.symbol_id=*/symbol_id,
     };
   }
 
@@ -282,8 +282,8 @@ class AmdgpuSignalTest : public ::testing::Test {
     IREE_CHECK_OK(loom_amdgpu_build_data_symbol_address(
         &builder_, descriptor_set_,
         (loom_amdgpu_data_symbol_address_t){
-            .symbol = signal_symbol,
-            .byte_offset = 0,
+            /*.symbol=*/signal_symbol,
+            /*.byte_offset=*/0,
         },
         LOOM_LOCATION_UNKNOWN, &signal_address));
     return signal_address;
