@@ -16,6 +16,18 @@ Diagnostics and reports are the query interface. A useful recipe should leave a
 user one command away from structured feedback, not reading tea leaves between
 IR dumps.
 
+Command blocks are written in the short form used after adding built Loom tools
+to `PATH` and running from this directory. From the repository root, invoke the
+same tool through Bazel and pass root-relative recipe paths:
+
+```bash
+python dev.py bazel run //loom/src/loom/tools/loom-opt:loom-opt -- \
+  loom/src/loom/test/corpus/authoring/hip/q8_block_unroll.loom \
+  --pass=unroll-scf-for \
+  --pass-report=json \
+  --output=/tmp/q8-block-unrolled.loom
+```
+
 ## Recipe Index
 
 | Tags / HIP terms | Loom feature | Recipe |
