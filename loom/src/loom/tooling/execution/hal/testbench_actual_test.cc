@@ -13,6 +13,9 @@
 namespace loom {
 namespace {
 
+using ::iree::testing::status::StatusIs;
+using ::testing::HasSubstr;
+
 iree_vm_instance_t* hal_testbench_actual_test_vm_instance = nullptr;
 
 class HalTestbenchActualTest : public ::testing::Test {
@@ -28,6 +31,33 @@ class HalTestbenchActualTest : public ::testing::Test {
     hal_testbench_actual_test_vm_instance = nullptr;
   }
 };
+
+static const loom_run_hal_artifact_provider_t kFakeHalArtifactProvider = {
+    /*.name=*/IREE_SVL("fake-hal"),
+    /*.hal_driver_name=*/IREE_SVL("fake"),
+    /*.target_family_name=*/IREE_SVL("fake-target"),
+};
+
+TEST_F(HalTestbenchActualTest, RequiresExplicitDeviceWhenHalProviderExists) {
+  const loom_run_hal_artifact_provider_t* artifact_providers[] = {
+      &kFakeHalArtifactProvider,
+  };
+  loom_run_hal_artifact_provider_registry_t registry = {};
+  loom_run_hal_artifact_provider_registry_initialize_from_entries(
+      artifact_providers, IREE_ARRAYSIZE(artifact_providers), &registry);
+
+  loom_run_hal_testbench_context_t context = {};
+  loom_run_hal_testbench_context_initialize(&registry, iree_allocator_system(),
+                                            &context);
+
+  iree::Status status = iree::internal::ConsumeForTest(
+      loom_run_hal_testbench_context_ensure_runtime(&context));
+  EXPECT_THAT(status, StatusIs(iree::StatusCode::kInvalidArgument));
+  EXPECT_THAT(status.ToString(), HasSubstr("explicit --device= URI"));
+  EXPECT_THAT(status.ToString(), HasSubstr("fake-hal"));
+
+  loom_run_hal_testbench_context_deinitialize(&context);
+}
 
 TEST_F(HalTestbenchActualTest, ScalarInputsPackDispatchConstantWords) {
   iree_vm_variant_t inputs[] = {

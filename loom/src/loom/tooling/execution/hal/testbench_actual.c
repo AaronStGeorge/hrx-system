@@ -88,15 +88,21 @@ static iree_status_t loom_run_hal_testbench_context_select_artifact_provider(
         (int)driver_name.size, driver_name.data);
   }
 
-  if (registry->provider_count != 1) {
-    return iree_make_status(
+  iree_string_builder_t provider_names;
+  iree_string_builder_initialize(context->host_allocator, &provider_names);
+  iree_status_t status = loom_run_hal_artifact_provider_registry_format_names(
+      registry, &provider_names);
+  if (iree_status_is_ok(status)) {
+    const iree_string_view_t provider_names_view =
+        iree_string_builder_view(&provider_names);
+    status = iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "HAL actual invocations require --device= when %" PRIhsz
-        " HAL artifact providers are linked",
-        registry->provider_count);
+        "HAL actual invocations require an explicit --device= URI to select a "
+        "HAL driver; linked Loom HAL artifact providers: %.*s",
+        (int)provider_names_view.size, provider_names_view.data);
   }
-  context->artifact_provider = registry->providers[0];
-  return iree_ok_status();
+  iree_string_builder_deinitialize(&provider_names);
+  return status;
 }
 
 iree_status_t loom_run_hal_testbench_context_ensure_runtime(
