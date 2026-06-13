@@ -57,7 +57,7 @@ iree_status_t loom_bytecode_reader_emit_invalid_record_field(
     const loom_bytecode_reader_diagnostic_context_t* context,
     iree_string_view_t section_name, iree_string_view_t table_name,
     uint64_t record_index, iree_string_view_t field_name, uint64_t offset,
-    iree_string_view_t reason);
+    iree_string_view_t failure_code);
 
 // Emits ERR_BYTECODE_007 for an out-of-bounds or overlapping byte range.
 iree_status_t loom_bytecode_reader_emit_invalid_range(

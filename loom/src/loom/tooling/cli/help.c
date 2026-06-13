@@ -25,3 +25,8 @@ void loom_tooling_cli_set_default_help_filter(void) {
   iree_flags_set_help_filter(loom_tooling_cli_default_help_filter,
                              /*user_data=*/NULL);
 }
+
+bool loom_tooling_cli_is_agents_markdown_arg(const char* arg) {
+  return arg && iree_string_view_equal(iree_make_cstring_view(arg),
+                                       IREE_SV("--agents_md"));
+}

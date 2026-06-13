@@ -228,6 +228,43 @@ func.def @dynamic_unresolved_factor_rejected(%factor: index) {
 
 // ====
 
+func.def @bare_unroll_dynamic_lower_static_trip_count(%slot0: index) {
+  %slot = index.assume %slot0 [range(%slot0, 0, 7)] : index
+  %end = index.constant 16 : index
+  %step = index.constant 8 : index
+  scf.for %i = [%slot to %end step %step] unroll {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ----
+func.def @bare_unroll_dynamic_lower_static_trip_count(%slot0: index) {
+  %slot = index.assume %slot0 [range(%slot0, 0, 7)] : index
+  %end = index.constant 16 : index
+  %step = index.constant 8 : index
+  test.use %slot : index
+  %5 = index.constant 8 : index
+  %i_8 = index.add %slot, %5 : index
+  test.use %i_8 : index
+  func.return
+}
+
+// ====
+
+func.def @bare_unroll_range_dependent_dynamic_lower_rejected(%slot0: index) {
+  %slot = index.assume %slot0 [range(%slot0, 0, 8)] : index
+  %end = index.constant 16 : index
+  %step = index.constant 8 : index
+  // ERROR@+1: STRUCTURE/014 {attr_name="unroll", expected_constraint="static trip count independent of lower-bound range"}
+  scf.for %i = [%slot to %end step %step] unroll {
+    test.use %i : index
+  }
+  func.return
+}
+
+// ====
+
 func.def @bare_unroll_dynamic_trip_count_rejected(%end: index) {
   %start = index.constant 0 : index
   %step = index.constant 1 : index

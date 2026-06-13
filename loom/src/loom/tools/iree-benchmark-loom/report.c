@@ -1776,13 +1776,6 @@ static iree_status_t iree_benchmark_loom_append_compile_report_artifact_json(
         loom_output_stream_write_cstring(&stream, ",\"kind\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         &stream, provider->execution.compile_failure_kind));
-    if (!iree_string_view_is_empty(
-            provider->execution.compile_failure_message)) {
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(&stream, ",\"message\":"));
-      IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-          &stream, provider->execution.compile_failure_message));
-    }
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"diagnostic_error_count\":%" PRIhsz,
@@ -2125,13 +2118,6 @@ iree_status_t iree_benchmark_loom_append_compile_row(
         loom_output_stream_write_cstring(&stream, ",\"kind\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         &stream, provider->execution.compile_failure_kind));
-    if (!iree_string_view_is_empty(
-            provider->execution.compile_failure_message)) {
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(&stream, ",\"message\":"));
-      IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-          &stream, provider->execution.compile_failure_message));
-    }
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"diagnostic_error_count\":%" PRIhsz,

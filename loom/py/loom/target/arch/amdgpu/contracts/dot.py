@@ -84,174 +84,174 @@ _VGPR = "amdgpu.vgpr"
 _BF16_HIGH_MASK = 0xFFFF0000
 
 _KIND_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="kind",
+    subject_role="kind",
     subject_name="vector.dot",
     constraint_key="amdgpu.dot.kind",
 )
 _PACKED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.packed_dot",
     constraint_key="amdgpu.dot.packed_descriptor",
 )
 _DOT4I_MIXED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.v_dot4_i32_iu8",
     constraint_key="amdgpu.dot4i.mixed_descriptor",
 )
 _DOT8I4_MIXED_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.v_dot8_i32_iu4",
     constraint_key="amdgpu.dot8i4.mixed_descriptor",
 )
 _DOT2F_F16_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.v_dot2_f32_f16",
     constraint_key="amdgpu.dot2f.f16_descriptor",
 )
 _DOT2F_BF16_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.v_dot2_f32_bf16",
     constraint_key="amdgpu.dot2f.bf16_descriptor",
 )
 _DOT2F_BF16_FALLBACK_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.bf16_dot2f_fallback",
     constraint_key="amdgpu.dot2f.bf16_fallback_descriptors",
 )
 _DOT4F8_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.v_dot4_f32",
     constraint_key="amdgpu.dot4f8.descriptor",
 )
 _DOTF_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="descriptor",
+    subject_role="descriptor",
     subject_name="amdgpu.v_fma_f32",
     constraint_key="amdgpu.dotf.descriptor",
 )
 
 _DOTF_LHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="lhs",
     constraint_key="amdgpu.dotf.lhs_type",
 )
 _DOTF_RHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="rhs",
     constraint_key="amdgpu.dotf.rhs_type",
 )
 _DOTF_ACC_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="accumulator",
     constraint_key="amdgpu.dotf.accumulator_type",
 )
 _DOTF_RESULT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="result",
     constraint_key="amdgpu.dotf.result_type",
 )
 _RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
+    subject_role="register-class",
     subject_name="result",
     constraint_key="amdgpu.dotf.result_vgpr",
 )
 _PACKED_ACC_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
+    subject_role="register-class",
     subject_name="accumulator",
     constraint_key="amdgpu.packed_dot.accumulator_vgpr",
 )
 _PACKED_RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
+    subject_role="register-class",
     subject_name="result",
     constraint_key="amdgpu.packed_dot.result_vgpr",
 )
 _LHS_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
+    subject_role="register-class",
     subject_name="lhs",
     constraint_key="amdgpu.packed_dot.lhs_vgpr",
 )
 _RHS_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
+    subject_role="register-class",
     subject_name="rhs",
     constraint_key="amdgpu.packed_dot.rhs_vgpr",
 )
 
 _DOT4I_LHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="lhs",
     constraint_key="amdgpu.dot4i.lhs_type",
 )
 _DOT4I_RHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="rhs",
     constraint_key="amdgpu.dot4i.rhs_type",
 )
 _PACKED_I32_ACC_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="accumulator",
     constraint_key="amdgpu.packed_dot.i32_accumulator_type",
 )
 _PACKED_I32_RESULT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="result",
     constraint_key="amdgpu.packed_dot.i32_result_type",
 )
 _DOT8I4_LHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="lhs",
     constraint_key="amdgpu.dot8i4.lhs_type",
 )
 _DOT8I4_RHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="rhs",
     constraint_key="amdgpu.dot8i4.rhs_type",
 )
 _DOT2F_F16_LHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="lhs",
     constraint_key="amdgpu.dot2f.f16_lhs_type",
 )
 _DOT2F_F16_RHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="rhs",
     constraint_key="amdgpu.dot2f.f16_rhs_type",
 )
 _DOT2F_BF16_LHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="lhs",
     constraint_key="amdgpu.dot2f.bf16_lhs_type",
 )
 _DOT2F_BF16_RHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="rhs",
     constraint_key="amdgpu.dot2f.bf16_rhs_type",
 )
 _DOT2F_ACC_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="accumulator",
     constraint_key="amdgpu.dot2f.accumulator_type",
 )
 _DOT2F_RESULT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="result",
     constraint_key="amdgpu.dot2f.result_type",
 )
 _DOT4F8_LHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="lhs",
     constraint_key="amdgpu.dot4f8.lhs_type",
 )
 _DOT4F8_RHS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="rhs",
     constraint_key="amdgpu.dot4f8.rhs_type",
 )
 _DOT4F8_ACC_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="accumulator",
     constraint_key="amdgpu.dot4f8.accumulator_type",
 )
 _DOT4F8_RESULT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="result",
     constraint_key="amdgpu.dot4f8.result_type",
 )

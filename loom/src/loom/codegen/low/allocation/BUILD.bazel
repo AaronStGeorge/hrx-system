@@ -476,6 +476,7 @@ loom_cc_test(
     srcs = ["target_constraints_test.cc"],
     deps = [
         ":target_constraints",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/target/test:descriptors",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

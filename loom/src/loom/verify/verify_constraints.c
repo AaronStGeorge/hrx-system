@@ -1433,7 +1433,9 @@ static void loom_verify_relation_yield_match(
     const loom_error_def_t* error =
         loom_verify_constraint_error_or(constraint, LOOM_ERR_TYPE_009);
     loom_type_t expected_type =
-        loom_type_scalar(loom_type_element_type(result_type));
+        constraint->property == LOOM_PROPERTY_TYPE
+            ? result_type
+            : loom_type_scalar(loom_type_element_type(result_type));
     loom_diagnostic_param_t params[] = {
         loom_param_type(yield_type),
         loom_param_type(expected_type),

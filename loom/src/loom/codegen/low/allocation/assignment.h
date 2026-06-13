@@ -60,6 +60,10 @@ typedef struct loom_low_allocation_assignment_t {
 bool loom_low_allocation_location_kind_is_known(
     loom_low_allocation_location_kind_t location_kind);
 
+// Returns the stable diagnostic/JSON spelling for |location_kind|.
+iree_string_view_t loom_low_allocation_location_kind_name(
+    loom_low_allocation_location_kind_t location_kind);
+
 // Returns true when |location_kind| names target-visible register-like storage.
 bool loom_low_allocation_location_kind_is_register_like(
     loom_low_allocation_location_kind_t location_kind);

@@ -2,6 +2,25 @@
   "version": 1,
   "cases": [
     {
+      "name": "prints agent documentation",
+      "run": {
+        "tool": "iree-run-loom",
+        "args": ["--agents_md"]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "## iree-run-loom",
+            "--backend=vm",
+            "--backend=amdgpu",
+            "--binding=64xf32=0",
+            "--emit-target-artifact=kernel.hsaco",
+            "--compile-report=summary"
+          ]
+        }
+      }
+    },
+    {
       "name": "runs branchy true path",
       "steps": [
         {

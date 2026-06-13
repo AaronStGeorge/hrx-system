@@ -61,6 +61,73 @@ static bool loom_low_allocation_target_constraints_lookup_budget(
   return false;
 }
 
+static iree_string_view_t loom_low_allocation_target_constraints_reg_class_name(
+    const loom_low_allocation_target_constraints_t* constraints,
+    uint16_t reg_class_id) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      constraints->target->descriptor_set;
+  if (reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      reg_class_id >= descriptor_set->reg_class_count) {
+    return IREE_SV("<unknown>");
+  }
+  const loom_low_reg_class_t* reg_class =
+      loom_low_allocation_target_constraints_reg_class_at(descriptor_set,
+                                                          reg_class_id);
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        reg_class->name_string_offset);
+}
+
+static iree_status_t loom_low_allocation_target_constraints_emit(
+    loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
+  const loom_diagnostic_emission_t emission = {
+      .op = op ? op : constraints->function_op,
+      .error = error,
+      .params = params,
+      .param_count = param_count,
+  };
+  IREE_RETURN_IF_ERROR(iree_diagnostic_emit(constraints->emitter, &emission));
+  ++constraints->error_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_target_constraints_emit_unknown_budget(
+    loom_low_allocation_target_constraints_t* constraints,
+    iree_string_view_t register_class) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(register_class),
+      loom_param_string(constraints->target->descriptor_set_key),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, constraints->function_op, LOOM_ERR_BACKEND_023, params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_duplicate_budget(
+    loom_low_allocation_target_constraints_t* constraints,
+    iree_string_view_t register_class, uint16_t existing_reg_class_id) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(register_class),
+      loom_param_string(loom_low_allocation_target_constraints_reg_class_name(
+          constraints, existing_reg_class_id)),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, constraints->function_op, LOOM_ERR_BACKEND_024, params,
+      IREE_ARRAYSIZE(params));
+}
+
 iree_status_t loom_low_allocation_target_constraints_resolve_reg_class(
     const loom_low_allocation_target_constraints_t* constraints,
     loom_liveness_value_class_t value_class, uint16_t* out_reg_class_id,
@@ -177,13 +244,10 @@ static iree_status_t loom_low_allocation_target_constraints_resolve_budgets(
     bool found_reg_class = loom_low_descriptor_set_lookup_register_class(
         descriptor_set, budget->register_class, &reg_class_id, NULL);
     if (!found_reg_class) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "unknown low allocation budget register class '%.*s' for descriptor "
-          "set '%.*s'",
-          (int)budget->register_class.size, budget->register_class.data,
-          (int)constraints->target->descriptor_set_key.size,
-          constraints->target->descriptor_set_key.data);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_unknown_budget(
+              constraints, budget->register_class));
+      continue;
     }
     for (iree_host_size_t j = 0; j < constraints->budget_count; ++j) {
       if (!loom_low_allocation_storage_reg_classes_share(
@@ -191,10 +255,15 @@ static iree_status_t loom_low_allocation_target_constraints_resolve_budgets(
               reg_class_id)) {
         continue;
       }
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "duplicate low allocation budget register class '%.*s'",
-          (int)budget->register_class.size, budget->register_class.data);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_duplicate_budget(
+              constraints, budget->register_class,
+              constraints->budgets[j].descriptor_reg_class_id));
+      reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+      break;
+    }
+    if (reg_class_id == LOOM_LOW_REG_CLASS_NONE) {
+      continue;
     }
     constraints->budgets[constraints->budget_count++] =
         (loom_low_allocation_resolved_budget_t){
@@ -205,26 +274,89 @@ static iree_status_t loom_low_allocation_target_constraints_resolve_budgets(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_target_constraints_validate_range(
+static iree_status_t
+loom_low_allocation_target_constraints_emit_unsupported_location_kind(
+    loom_low_allocation_target_constraints_t* constraints,
+    loom_low_allocation_location_kind_t location_kind,
+    iree_string_view_t request_kind, const loom_op_t* diagnostic_op) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(request_kind),
+      loom_param_string(loom_low_allocation_location_kind_name(location_kind)),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, diagnostic_op, LOOM_ERR_BACKEND_027, params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_empty_location_range(
+    loom_low_allocation_target_constraints_t* constraints,
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
-    uint32_t location_count, iree_string_view_t subject) {
+    iree_string_view_t request_kind, const loom_op_t* diagnostic_op) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(request_kind),
+      loom_param_string(loom_low_allocation_location_kind_name(location_kind)),
+      loom_param_u32(location_base),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, diagnostic_op, LOOM_ERR_BACKEND_028, params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_location_range_overflow(
+    loom_low_allocation_target_constraints_t* constraints,
+    loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
+    uint32_t location_count, uint64_t location_end,
+    iree_string_view_t request_kind, const loom_op_t* diagnostic_op) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(request_kind),
+      loom_param_string(loom_low_allocation_location_kind_name(location_kind)),
+      loom_param_u32(location_base),
+      loom_param_u32(location_count),
+      loom_param_u64(location_end),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, diagnostic_op, LOOM_ERR_BACKEND_029, params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_low_allocation_target_constraints_validate_range(
+    loom_low_allocation_target_constraints_t* constraints,
+    loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
+    uint32_t location_count, iree_string_view_t request_kind,
+    const loom_op_t* diagnostic_op, bool* out_valid) {
+  *out_valid = false;
   if (!loom_low_allocation_location_kind_is_register_like(location_kind)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low allocation %.*s uses unsupported location kind %u",
-        (int)subject.size, subject.data, (unsigned)location_kind);
+    return loom_low_allocation_target_constraints_emit_unsupported_location_kind(
+        constraints, location_kind, request_kind, diagnostic_op);
   }
   if (location_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low allocation %.*s has an empty location range",
-                            (int)subject.size, subject.data);
+    return loom_low_allocation_target_constraints_emit_empty_location_range(
+        constraints, location_kind, location_base, request_kind, diagnostic_op);
   }
-  if ((uint64_t)location_base + location_count > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "low allocation %.*s location range exceeds uint32_t",
-        (int)subject.size, subject.data);
+  const uint64_t location_end = (uint64_t)location_base + location_count;
+  if (location_end > UINT32_MAX) {
+    return loom_low_allocation_target_constraints_emit_location_range_overflow(
+        constraints, location_kind, location_base, location_count, location_end,
+        request_kind, diagnostic_op);
   }
+  *out_valid = true;
   return iree_ok_status();
 }
 
@@ -244,8 +376,9 @@ bool loom_low_allocation_target_constraints_location_range_fits_capacity(
 static iree_status_t
 loom_low_allocation_target_constraints_emit_capacity_failure(
     loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
-    uint16_t reg_class_id, iree_string_view_t subject, uint32_t location_base,
-    uint32_t location_count, uint64_t location_end, uint32_t max_units) {
+    uint16_t reg_class_id, iree_string_view_t request_kind,
+    uint32_t location_base, uint32_t location_count, uint64_t location_end,
+    uint32_t max_units) {
   const loom_low_descriptor_set_t* descriptor_set =
       constraints->target->descriptor_set;
   const loom_low_reg_class_t* reg_class =
@@ -259,7 +392,7 @@ loom_low_allocation_target_constraints_emit_capacity_failure(
       loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
       loom_param_string(loom_low_diagnostic_function_name(
           constraints->module, constraints->function_op)),
-      loom_param_string(subject),
+      loom_param_string(request_kind),
       loom_param_string(register_class),
       loom_param_u32(location_base),
       loom_param_u32(location_count),
@@ -277,6 +410,29 @@ loom_low_allocation_target_constraints_emit_capacity_failure(
   return iree_ok_status();
 }
 
+static iree_status_t
+loom_low_allocation_target_constraints_emit_location_kind_mismatch(
+    loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
+    uint16_t reg_class_id, iree_string_view_t request_kind,
+    loom_low_allocation_location_kind_t location_kind,
+    loom_low_allocation_location_kind_t expected_location_kind) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(request_kind),
+      loom_param_string(loom_low_allocation_target_constraints_reg_class_name(
+          constraints, reg_class_id)),
+      loom_param_string(loom_low_allocation_location_kind_name(location_kind)),
+      loom_param_string(
+          loom_low_allocation_location_kind_name(expected_location_kind)),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, op, LOOM_ERR_BACKEND_030, params, IREE_ARRAYSIZE(params));
+}
+
 iree_status_t
 loom_low_allocation_target_constraints_validate_register_location_capacity(
     loom_low_allocation_target_constraints_t* constraints,
@@ -286,20 +442,22 @@ loom_low_allocation_target_constraints_validate_register_location_capacity(
   IREE_ASSERT_ARGUMENT(constraints);
   IREE_ASSERT_ARGUMENT(out_valid);
   *out_valid = false;
+  bool valid_range = false;
   IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_validate_range(
-      location_kind, location_base, location_count, subject));
+      constraints, location_kind, location_base, location_count, subject,
+      diagnostic_op, &valid_range));
+  if (!valid_range) {
+    return iree_ok_status();
+  }
 
   loom_low_allocation_class_capacity_t capacity = {0};
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_target_constraints_reg_class_capacity(
           constraints, reg_class_id, &capacity));
   if (location_kind != capacity.location_kind) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "low allocation %.*s location kind %u does not match register-class "
-        "location kind %u",
-        (int)subject.size, subject.data, (unsigned)location_kind,
-        (unsigned)capacity.location_kind);
+    return loom_low_allocation_target_constraints_emit_location_kind_mismatch(
+        constraints, diagnostic_op, reg_class_id, subject, location_kind,
+        capacity.location_kind);
   }
   const uint64_t location_end = (uint64_t)location_base + location_count;
   if (capacity.is_bounded && location_end > capacity.max_units) {
@@ -311,6 +469,76 @@ loom_low_allocation_target_constraints_validate_register_location_capacity(
   }
   *out_valid = true;
   return iree_ok_status();
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_missing_reserved_range_class(
+    loom_low_allocation_target_constraints_t* constraints,
+    iree_host_size_t reserved_range_index) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_u64(reserved_range_index),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, constraints->function_op, LOOM_ERR_BACKEND_025, params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_unknown_reserved_range_class(
+    loom_low_allocation_target_constraints_t* constraints,
+    iree_host_size_t reserved_range_index, iree_string_view_t register_class) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_u64(reserved_range_index),
+      loom_param_string(register_class),
+      loom_param_string(constraints->target->descriptor_set_key),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, constraints->function_op, LOOM_ERR_BACKEND_026, params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_reserved_range_overlap(
+    loom_low_allocation_target_constraints_t* constraints,
+    iree_host_size_t reserved_range_index,
+    const loom_low_allocation_reserved_range_t* reserved_range,
+    iree_host_size_t existing_reserved_range_index,
+    const loom_low_allocation_resolved_reserved_range_t* existing,
+    uint16_t reg_class_id) {
+  const uint64_t location_end =
+      (uint64_t)reserved_range->location_base + reserved_range->location_count;
+  const uint64_t existing_location_end =
+      (uint64_t)existing->location_base + existing->location_count;
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_u64(reserved_range_index),
+      loom_param_u64(existing_reserved_range_index),
+      loom_param_string(loom_low_allocation_target_constraints_reg_class_name(
+          constraints, reg_class_id)),
+      loom_param_u32(reserved_range->location_base),
+      loom_param_u32(reserved_range->location_count),
+      loom_param_u64(location_end),
+      loom_param_u32(existing->location_base),
+      loom_param_u32(existing->location_count),
+      loom_param_u64(existing_location_end),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, constraints->function_op, LOOM_ERR_BACKEND_031, params,
+      IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t
@@ -330,29 +558,26 @@ loom_low_allocation_target_constraints_resolve_reserved_ranges(
     const loom_low_allocation_reserved_range_t* reserved_range =
         &reserved_ranges[i];
     if (iree_string_view_is_empty(reserved_range->register_class)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low allocation reserved range %zu has no register class", i);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_missing_reserved_range_class(
+              constraints, i));
+      continue;
     }
     uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
     bool found_reg_class = loom_low_descriptor_set_lookup_register_class(
         descriptor_set, reserved_range->register_class, &reg_class_id, NULL);
     if (!found_reg_class) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "unknown low allocation reserved range register class '%.*s' for "
-          "descriptor set '%.*s'",
-          (int)reserved_range->register_class.size,
-          reserved_range->register_class.data,
-          (int)constraints->target->descriptor_set_key.size,
-          constraints->target->descriptor_set_key.data);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_unknown_reserved_range_class(
+              constraints, i, reserved_range->register_class));
+      continue;
     }
     bool valid_range = false;
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_target_constraints_validate_register_location_capacity(
             constraints, reg_class_id, reserved_range->location_kind,
             reserved_range->location_base, reserved_range->location_count,
-            IREE_SV("reserved range"), constraints->function_op, &valid_range));
+            IREE_SV("reserved_range"), constraints->function_op, &valid_range));
     if (!valid_range) {
       continue;
     }
@@ -368,10 +593,15 @@ loom_low_allocation_target_constraints_resolve_reserved_ranges(
       if (loom_low_allocation_target_constraints_location_range_overlaps(
               reserved_range->location_base, reserved_range->location_count,
               existing->location_base, existing->location_count)) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "low allocation reserved ranges %zu and %zu overlap", j, i);
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_target_constraints_emit_reserved_range_overlap(
+                constraints, i, reserved_range, j, existing, reg_class_id));
+        reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+        break;
       }
+    }
+    if (reg_class_id == LOOM_LOW_REG_CLASS_NONE) {
+      continue;
     }
     constraints->reserved_ranges[constraints->reserved_range_count++] =
         (loom_low_allocation_resolved_reserved_range_t){
@@ -419,6 +649,118 @@ iree_status_t loom_low_allocation_target_constraints_initialize(
       out_constraints, reserved_ranges, reserved_range_count, arena);
 }
 
+static iree_status_t
+loom_low_allocation_target_constraints_emit_invalid_fixed_value_id(
+    loom_low_allocation_target_constraints_t* constraints,
+    iree_host_size_t fixed_value_index, loom_value_id_t value_id) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_u64(fixed_value_index),
+      loom_param_u32(value_id),
+      loom_param_u64(constraints->module->values.count),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints, constraints->function_op, LOOM_ERR_BACKEND_032, params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_unallocatable_fixed_value(
+    loom_low_allocation_target_constraints_t* constraints,
+    loom_value_id_t value_id) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(constraints->module, value_id)),
+      loom_param_u32(value_id),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints,
+      loom_low_diagnostic_value_origin_op(constraints->module, value_id,
+                                          constraints->function_op),
+      LOOM_ERR_BACKEND_033, params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_fixed_value_unit_mismatch(
+    loom_low_allocation_target_constraints_t* constraints,
+    loom_value_id_t value_id, uint32_t required_unit_count,
+    uint32_t location_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(constraints->module, value_id)),
+      loom_param_u32(value_id),
+      loom_param_u32(required_unit_count),
+      loom_param_u32(location_count),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints,
+      loom_low_diagnostic_value_origin_op(constraints->module, value_id,
+                                          constraints->function_op),
+      LOOM_ERR_BACKEND_034, params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_fixed_value_misalignment(
+    loom_low_allocation_target_constraints_t* constraints,
+    loom_value_id_t value_id, uint32_t location_base,
+    uint32_t required_alignment) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(constraints->module, value_id)),
+      loom_param_u32(value_id),
+      loom_param_u32(location_base),
+      loom_param_u32(required_alignment),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints,
+      loom_low_diagnostic_value_origin_op(constraints->module, value_id,
+                                          constraints->function_op),
+      LOOM_ERR_BACKEND_035, params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t
+loom_low_allocation_target_constraints_emit_duplicate_fixed_value(
+    loom_low_allocation_target_constraints_t* constraints,
+    iree_host_size_t fixed_value_index,
+    iree_host_size_t existing_fixed_value_index, loom_value_id_t value_id) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_u64(fixed_value_index),
+      loom_param_u64(existing_fixed_value_index),
+      loom_param_string(
+          loom_low_diagnostic_value_name(constraints->module, value_id)),
+      loom_param_u32(value_id),
+  };
+  return loom_low_allocation_target_constraints_emit(
+      constraints,
+      loom_low_diagnostic_value_origin_op(constraints->module, value_id,
+                                          constraints->function_op),
+      LOOM_ERR_BACKEND_036, params, IREE_ARRAYSIZE(params));
+}
+
 iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
     loom_low_allocation_target_constraints_t* constraints,
     const loom_liveness_analysis_t* liveness,
@@ -438,10 +780,10 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
   for (iree_host_size_t i = 0; i < fixed_value_count; ++i) {
     const loom_low_allocation_fixed_value_t* fixed_value = &fixed_values[i];
     if (fixed_value->value_id >= constraints->module->values.count) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "low allocation fixed value %zu references out-of-range value %u", i,
-          (unsigned)fixed_value->value_id);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_invalid_fixed_value_id(
+              constraints, i, fixed_value->value_id));
+      continue;
     }
     const loom_value_ordinal_t value_ordinal =
         loom_local_value_domain_try_ordinal(value_domain,
@@ -452,28 +794,26 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
             : loom_liveness_interval_for_value_ordinal(liveness, value_ordinal);
     if (interval == NULL ||
         !loom_low_allocation_live_range_interval_is_allocatable(interval)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low allocation fixed value %u has no allocatable live interval",
-          (unsigned)fixed_value->value_id);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_unallocatable_fixed_value(
+              constraints, fixed_value->value_id));
+      continue;
     }
     if (fixed_value->location_count != interval->unit_count) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low allocation fixed value %u requires %u unit(s) but location has "
-          "%u",
-          (unsigned)fixed_value->value_id, interval->unit_count,
-          fixed_value->location_count);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_fixed_value_unit_mismatch(
+              constraints, fixed_value->value_id, interval->unit_count,
+              fixed_value->location_count));
+      continue;
     }
     const uint32_t alignment =
         loom_low_allocation_live_range_interval_alignment(interval);
     if (fixed_value->location_base % alignment != 0) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low allocation fixed value %u location base %u is not aligned to "
-          "%u",
-          (unsigned)fixed_value->value_id, fixed_value->location_base,
-          alignment);
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_target_constraints_emit_fixed_value_misalignment(
+              constraints, fixed_value->value_id, fixed_value->location_base,
+              alignment));
+      continue;
     }
 
     uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
@@ -485,7 +825,7 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
         loom_low_allocation_target_constraints_validate_register_location_capacity(
             constraints, reg_class_id, fixed_value->location_kind,
             fixed_value->location_base, fixed_value->location_count,
-            IREE_SV("fixed value"),
+            IREE_SV("fixed_value"),
             loom_low_diagnostic_value_origin_op(constraints->module,
                                                 fixed_value->value_id,
                                                 constraints->function_op),
@@ -493,12 +833,18 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
     if (!valid_range) {
       continue;
     }
+    bool duplicate_fixed_value = false;
     for (iree_host_size_t j = 0; j < i; ++j) {
       if (fixed_values[j].value_id == fixed_value->value_id) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "duplicate low allocation fixed value %u",
-                                (unsigned)fixed_value->value_id);
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_target_constraints_emit_duplicate_fixed_value(
+                constraints, i, j, fixed_value->value_id));
+        duplicate_fixed_value = true;
+        break;
       }
+    }
+    if (duplicate_fixed_value) {
+      continue;
     }
     constraints->fixed_values[constraints->fixed_value_count++] =
         (loom_low_allocation_resolved_fixed_value_t){
@@ -517,7 +863,7 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
 iree_status_t loom_low_allocation_target_constraints_emit_failure(
     loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
     loom_liveness_value_class_t value_class, uint32_t budget_units,
-    uint32_t peak_units, iree_string_view_t failure_kind) {
+    uint32_t peak_units, iree_string_view_t failure_code) {
   IREE_ASSERT_ARGUMENT(constraints);
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
@@ -529,7 +875,7 @@ iree_status_t loom_low_allocation_target_constraints_emit_failure(
           constraints->target->descriptor_set, value_class)),
       loom_param_u32(budget_units),
       loom_param_u32(peak_units),
-      loom_param_string(failure_kind),
+      loom_param_string(failure_code),
   };
   loom_diagnostic_emission_t emission = {
       .op = op ? op : constraints->function_op,

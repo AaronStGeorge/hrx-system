@@ -88,15 +88,21 @@ static iree_status_t loom_run_hal_testbench_context_select_artifact_provider(
         (int)driver_name.size, driver_name.data);
   }
 
-  if (registry->provider_count != 1) {
-    return iree_make_status(
+  iree_string_builder_t provider_names;
+  iree_string_builder_initialize(context->host_allocator, &provider_names);
+  iree_status_t status = loom_run_hal_artifact_provider_registry_format_names(
+      registry, &provider_names);
+  if (iree_status_is_ok(status)) {
+    const iree_string_view_t provider_names_view =
+        iree_string_builder_view(&provider_names);
+    status = iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "HAL actual invocations require --device= when %" PRIhsz
-        " HAL artifact providers are linked",
-        registry->provider_count);
+        "HAL actual invocations require an explicit --device= URI to select a "
+        "HAL driver; linked Loom HAL artifact providers: %.*s",
+        (int)provider_names_view.size, provider_names_view.data);
   }
-  context->artifact_provider = registry->providers[0];
-  return iree_ok_status();
+  iree_string_builder_deinitialize(&provider_names);
+  return status;
 }
 
 iree_status_t loom_run_hal_testbench_context_ensure_runtime(
@@ -115,7 +121,7 @@ iree_status_t loom_run_hal_testbench_context_ensure_runtime(
 
 static iree_status_t loom_run_hal_testbench_requirement_query_i64(
     void* user_data, const loom_module_t* module, loom_named_attr_slice_t attrs,
-    bool* out_satisfied, iree_string_view_t* out_reason) {
+    loom_testbench_requirement_provider_result_t* out_result) {
   loom_run_hal_testbench_context_t* context =
       (loom_run_hal_testbench_context_t*)user_data;
   iree_string_view_t category = iree_string_view_empty();
@@ -158,8 +164,16 @@ static iree_status_t loom_run_hal_testbench_requirement_query_i64(
   if (has_maximum) {
     satisfied = satisfied && value <= maximum;
   }
-  *out_satisfied = satisfied;
-  *out_reason = IREE_SV("HAL device i64 requirement was not satisfied");
+  *out_result = (loom_testbench_requirement_provider_result_t){
+      .state = satisfied
+                   ? LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_SATISFIED
+                   : LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNSATISFIED,
+      .provider_code = satisfied ? iree_string_view_empty()
+                                 : IREE_SV("predicate_unsatisfied"),
+      .display_message =
+          satisfied ? iree_string_view_empty()
+                    : IREE_SV("HAL device i64 requirement was not satisfied"),
+  };
   return iree_ok_status();
 }
 
@@ -565,12 +579,10 @@ static iree_status_t loom_run_hal_testbench_apply_sample_constants(
 
 static void loom_run_hal_testbench_record_compile_rejection(
     loom_run_hal_testbench_actual_provider_t* provider,
-    iree_string_view_t stage, iree_string_view_t kind,
-    iree_string_view_t message) {
+    iree_string_view_t stage, iree_string_view_t kind) {
   provider->compile_rejected = true;
   provider->compile_failure_stage = stage;
   provider->compile_failure_kind = kind;
-  provider->compile_failure_message = message;
 }
 
 static iree_status_t loom_run_hal_testbench_forward_diagnostic(
@@ -724,16 +736,14 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
     if (provider->diagnostic_error_count != compile_error_count) {
       iree_status_free(status);
       loom_run_hal_testbench_record_compile_rejection(
-          provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"),
-          iree_string_view_empty());
+          provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"));
       return iree_ok_status();
     }
     return status;
   }
   if (provider->pass_result.error_count != 0) {
     loom_run_hal_testbench_record_compile_rejection(
-        provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"),
-        iree_string_view_empty());
+        provider, IREE_SV("compile"), IREE_SV("pass_diagnostics"));
     return iree_ok_status();
   }
 
@@ -759,17 +769,22 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
     if (provider->diagnostic_error_count != emit_error_count) {
       iree_status_free(status);
       loom_run_hal_testbench_record_compile_rejection(
-          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"),
-          iree_string_view_empty());
+          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"));
       return iree_ok_status();
     }
     return status;
   }
   if (!provider->candidate.compiled) {
-    loom_run_hal_testbench_record_compile_rejection(
-        provider, IREE_SV("emit"), IREE_SV("no_executable"),
-        IREE_SV("HAL artifact provider did not emit an artifact"));
-    return iree_ok_status();
+    if (provider->diagnostic_error_count != emit_error_count) {
+      loom_run_hal_testbench_record_compile_rejection(
+          provider, IREE_SV("emit"), IREE_SV("emit_diagnostics"));
+      return iree_ok_status();
+    }
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "HAL artifact provider '%.*s' did not emit an artifact or diagnostics",
+        (int)provider->context->artifact_provider->name.size,
+        provider->context->artifact_provider->name.data);
   }
 
   IREE_RETURN_IF_ERROR(loom_run_hal_prepared_candidate_prepare(

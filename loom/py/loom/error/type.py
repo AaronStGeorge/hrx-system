@@ -215,14 +215,13 @@ ERR_TYPE_009 = ErrorDef(
     domain=ErrorDomain.TYPE,
     code=9,
     severity=Severity.ERROR,
-    summary="Yielded value type does not match result tile element type.",
-    message="yielded value has type {yield_type}, but result tile "
-    "element type is {result_element_type}",
+    summary="Yielded value type does not match expected result type.",
+    message="yielded value has type {yield_type}, but expected {expected_type}",
     params=(
         ErrorParam("yield_type", ParamKind.TYPE),
-        ErrorParam("result_element_type", ParamKind.TYPE),
+        ErrorParam("expected_type", ParamKind.TYPE),
     ),
-    fix_hint="Convert yielded value to type {result_element_type}",
+    fix_hint="Convert yielded value to type {expected_type}",
 )
 
 # ERR_TYPE_010: Malformed type payload.
@@ -231,11 +230,11 @@ ERR_TYPE_010 = ErrorDef(
     code=10,
     severity=Severity.ERROR,
     summary="Malformed type payload.",
-    message="'{field_name}' has malformed type {actual_type}: {reason}",
+    message=("'{field_name}' has malformed type {actual_type}: {malformation_code}"),
     params=(
         ErrorParam("field_name", ParamKind.STRING),
         ErrorParam("actual_type", ParamKind.TYPE),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("malformation_code", ParamKind.STRING),
     ),
     fix_hint="Construct a well-formed type before verification",
 )

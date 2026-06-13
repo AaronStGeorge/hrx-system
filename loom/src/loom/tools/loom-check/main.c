@@ -9,7 +9,6 @@
 #include "loom/tools/loom-check/main.h"
 
 #include <stdio.h>
-#include <string.h>
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -90,19 +89,15 @@ IREE_FLAG_CALLBACK(loom_check_parse_json_flag, loom_check_print_json_flag,
                    "Structured JSON output to stdout. Bare --json is the same\n"
                    "as --json=failures. Modes: failures, summary, all.");
 
-static bool loom_check_is_agents_markdown_arg(const char* arg) {
-  return strcmp(arg, "--agents_md") == 0;
-}
-
 static void loom_check_print_agents_markdown(FILE* stream) {
   fprintf(
       stream,
       "## loom-check\n"
       "\n"
       "`loom-check` is the Loom IR golden-test runner for `.loom-test` files.\n"
-      "Prefer checked-in Bazel test targets over direct tool invocations so "
-      "the\n"
-      "test environment matches CI.\n"
+      "Checked-in Bazel test targets are the stable unit because they "
+      "preserve\n"
+      "the CI test environment and carry the fixture path they own.\n"
       "\n"
       "### Verify tests\n"
       "\n"
@@ -123,14 +118,17 @@ static void loom_check_print_agents_markdown(FILE* stream) {
       "\n"
       "`iree-bazel-test` detects this flag and uses Bazel's standalone\n"
       "TestRunner strategy so update-capable tests can rewrite checked-in\n"
-      "fixture files. Do not replace this with lit, FileCheck, raw Bazel, or\n"
-      "one-off shell loops.\n"
+      "fixture files. After building a target, its generated executable can\n"
+      "also be run directly and will append the fixture path automatically:\n"
+      "\n"
+      "```shell\n"
+      "iree-bazel-build <loom-check-test-target>\n"
+      "bazel-bin/path/to/generated-test --update\n"
+      "```\n"
       "\n"
       "### Direct use\n"
       "\n"
-      "Direct runs are useful for local inspection, but Bazel remains the "
-      "update\n"
-      "path for checked-in tests:\n"
+      "Direct tool runs are useful when working with an explicit file path:\n"
       "\n"
       "```shell\n"
       "iree-bazel-run //loom/src/loom/tools/loom-check -- "
@@ -177,13 +175,14 @@ int loom_check_main(int argc, char** argv,
       "\n"
       "Update workflow:\n"
       "  Checked-in .loom-test expectations are updated through Bazel test\n"
-      "  targets, not ad hoc shell loops:\n"
+      "  targets so the test environment and fixture path stay attached:\n"
       "    iree-bazel-test --config=asan <loom-check-test-target> "
       "--test_arg=--update\n"
       "  The iree-bazel-test wrapper automatically uses Bazel's standalone\n"
       "  TestRunner strategy for --test_arg=--update so fixture files are\n"
-      "  writable. Direct --update runs are useful for local inspection, but\n"
-      "  the Bazel path is the normal project workflow.\n"
+      "  writable. After building a target, its generated executable can also\n"
+      "  be run directly and will append the fixture path automatically:\n"
+      "    bazel-bin/path/to/generated-test --update\n"
       "\n"
       "Modes (set via // RUN: directive, default is roundtrip):\n"
       "  roundtrip   Parse, print, compare against expected output.\n"
@@ -263,7 +262,7 @@ int loom_check_main(int argc, char** argv,
       "Exit code is 0 when all cases pass, 1 if any fail.\n");
 
   for (int i = 1; i < argc; ++i) {
-    if (loom_check_is_agents_markdown_arg(argv[i])) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
       loom_check_print_agents_markdown(stdout);
       return 0;
     }

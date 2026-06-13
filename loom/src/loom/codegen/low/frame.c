@@ -279,7 +279,7 @@ static iree_status_t loom_low_emission_frame_make_no_progress_status(
       function_name.data, frame->allocation.spill_plan_count);
 }
 
-static iree_string_view_t loom_low_emission_frame_failure_name(
+static iree_string_view_t loom_low_emission_frame_failure_code(
     loom_low_emission_frame_failure_t failure) {
   switch (failure) {
     case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ASSIGNMENTS:
@@ -306,7 +306,7 @@ static iree_status_t loom_low_emission_frame_emit_final_failure(
       loom_param_string(loom_low_diagnostic_config_key(&frame->target)),
       loom_param_string(
           loom_low_diagnostic_function_name(frame->module, frame->function_op)),
-      loom_param_string(loom_low_emission_frame_failure_name(failure)),
+      loom_param_string(loom_low_emission_frame_failure_code(failure)),
       loom_param_u64((uint64_t)iteration_count),
       loom_param_u64((uint64_t)iteration_limit),
       loom_param_u64((uint64_t)frame->allocation.spill_plan_count),

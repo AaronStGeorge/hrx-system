@@ -18,6 +18,9 @@ extern "C" {
 // registry.
 void loom_tooling_cli_set_default_help_filter(void);
 
+// Returns true when |arg| is the conventional agent-facing Markdown help flag.
+bool loom_tooling_cli_is_agents_markdown_arg(const char* arg);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

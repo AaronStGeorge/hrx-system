@@ -45,6 +45,7 @@ loom_cc_binary(
     iree::io::file_handle
     loom::codegen::low::text_asm
     loom::error::diagnostic
+    loom::format::text::printer
     loom::ir
     loom::ops::kernel
     loom::ops::op_defs

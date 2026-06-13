@@ -119,6 +119,15 @@ iree_status_t loom_check_source_resolver_for_case(
 iree_status_t loom_check_diagnostic_emitter_capture_emit(
     void* user_data, const loom_diagnostic_emission_t* emission);
 
+// Emits a structured diagnostic anchored to the first source line in
+// |test_case| that contains Loom IR. This is for request-level failures that
+// cannot be attached to an existing operation.
+iree_status_t loom_check_diagnostic_collector_emit_case_source(
+    loom_check_diagnostic_collector_t* collector,
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    loom_emitter_t emitter, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count);
+
 // Matches collected diagnostics against annotations, sets result->raw_outcome,
 // and builds failure detail/update edits when annotations do not match.
 iree_status_t loom_check_diagnostic_collector_finish(

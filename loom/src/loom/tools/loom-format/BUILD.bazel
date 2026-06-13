@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_binary", "loom_cc_library", "loom_cc_test")
 
 package(
@@ -47,6 +48,15 @@ loom_cc_binary(
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
     ],
+)
+
+iree_execution_test_suite(
+    name = "execution_test",
+    manifests = ["loom-format.test.json"],
+    tags = ["hostonly"],
+    tools = {
+        "loom-format": ":loom-format",
+    },
 )
 
 loom_cc_test(

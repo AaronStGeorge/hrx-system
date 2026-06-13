@@ -32,6 +32,7 @@ loom_cc_binary(
     loom::pass::tooling
     loom::target::configured::provider
     loom::target::math_policy
+    loom::target::pipeline
     loom::target::predicate
     loom::target::provider
     loom::tooling::cli::help

@@ -40,6 +40,31 @@ static iree_status_t loom_format_write_output(
       allocator);
 }
 
+static void loom_format_print_agents_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## loom-format\n"
+      "\n"
+      "`loom-format` converts Loom modules between text `.loom` and bytecode\n"
+      "`.loombc` encodings. Use it to prepackage provider libraries or to\n"
+      "round-trip a generated module before linking or compiling.\n"
+      "\n"
+      "### Common flows\n"
+      "\n"
+      "```shell\n"
+      "loom-format source.loom --from=text --to=bc --output=source.loombc\n"
+      "loom-format source.loombc --from=bc --to=text --output=source.loom\n"
+      "cat source.loom | loom-format --from=text --to=bc "
+      "--output=source.loombc\n"
+      "loom-format source.loom --from=auto --to=text\n"
+      "```\n"
+      "\n"
+      "`--from=auto` detects bytecode by the LOOM file magic and treats every\n"
+      "other input as text. `--to=text` prints canonical text IR. `--to=bc`\n"
+      "writes bytecode suitable for `loom-link --library=...` and\n"
+      "`loom-compile` input.\n");
+}
+
 int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-format",
@@ -50,12 +75,19 @@ int main(int argc, char** argv) {
       "[file]\n"
       "  cat module.loom | loom-format --from=text --to=bc "
       "--output=module.loombc\n"
+      "  loom-format --agents_md\n"
       "\n"
       "Input defaults to stdin when no file is provided. Output defaults to "
       "stdout.\n"
       "The auto input format detects bytecode by the LOOM file magic and "
       "treats\n"
       "all other input as text.\n");
+  for (int i = 1; i < argc; ++i) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
+      loom_format_print_agents_markdown(stdout);
+      return 0;
+    }
+  }
   loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 

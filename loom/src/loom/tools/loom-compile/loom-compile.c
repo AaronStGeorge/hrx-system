@@ -14,6 +14,7 @@
 #include "iree/io/file_contents.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
@@ -39,6 +40,44 @@
 #ifndef LOOM_COMPILE_HAVE_SPIRV_VULKAN
 #define LOOM_COMPILE_HAVE_SPIRV_VULKAN 0
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
+
+typedef struct loom_compile_diagnostic_sink_t {
+  // Parsed module used for full type rendering.
+  const loom_run_module_t* run_module;
+  // Printer context used to render target-owned register and storage types.
+  loom_low_descriptor_text_print_context_t type_print_context;
+} loom_compile_diagnostic_sink_t;
+
+static iree_status_t loom_compile_format_diagnostic_type(
+    loom_type_t type, void* user_data, loom_output_stream_t* stream) {
+  const loom_compile_diagnostic_sink_t* sink =
+      (const loom_compile_diagnostic_sink_t*)user_data;
+  const loom_module_t* module =
+      sink && sink->run_module ? sink->run_module->module : NULL;
+  if (sink && sink->type_print_context.options.low_asm_environment.vtable) {
+    return loom_text_print_type_with_options(type, module, stream,
+                                             &sink->type_print_context.options);
+  }
+  if (module) {
+    return loom_text_print_type(type, module, stream);
+  }
+  return loom_type_format_minimal(type, NULL, stream);
+}
+
+static iree_status_t loom_compile_diagnostic_sink(
+    void* user_data, const loom_diagnostic_t* diagnostic) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_file(stderr, &stream);
+  const loom_diagnostic_format_options_t format_options = {
+      .type_formatter =
+          {
+              .fn = loom_compile_format_diagnostic_type,
+              .user_data = user_data,
+          },
+  };
+  return loom_diagnostic_format_with_options(diagnostic, &format_options,
+                                             &stream);
+}
 
 #define LOOM_COMPILE_HAVE_ANY_PROVIDER                      \
   (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREE_VM || \
@@ -367,8 +406,15 @@ static iree_status_t loom_compile_run_pass_pipeline(
   }
   pipeline_options.low_descriptor_registry =
       loom_run_session_low_descriptor_registry(session);
+  loom_compile_diagnostic_sink_t diagnostic_sink = {
+      .run_module = run_module,
+  };
+  loom_low_descriptor_text_print_context_initialize(
+      &pipeline_options.low_descriptor_registry->registry,
+      &diagnostic_sink.type_print_context);
   pipeline_options.diagnostic_sink = (loom_diagnostic_sink_t){
-      .fn = loom_diagnostic_stderr_sink,
+      .fn = loom_compile_diagnostic_sink,
+      .user_data = &diagnostic_sink,
   };
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(run_module);
@@ -727,22 +773,94 @@ static iree_status_t loom_compile_require_hal_target_selection(
       (unsigned)unselected_root_count, unselected_root_count == 1 ? "" : "s");
 }
 
-int main(int argc, char** argv) {
-  IREE_TRACE_APP_ENTER();
-  IREE_TRACE_ZONE_BEGIN(z0);
+static void loom_compile_print_agents_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## loom-compile\n"
+      "\n"
+      "`loom-compile` turns Loom text or bytecode into runtime artifacts. It "
+      "is\n"
+      "the offline path for producing VM bytecode archives and target-native "
+      "HAL\n"
+      "artifacts such as AMDGPU HSACO sidecars.\n"
+      "\n"
+      "### Common flows\n"
+      "\n"
+      "```shell\n"
+      "loom-compile kernel.loom --backend=vm --output=kernel.vmfb\n"
+      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
+      "loom-compile kernel.loombc --backend=amdgpu --target=gfx1100 \\\n"
+      "  --artifact-manifest=summary --emit-artifact-manifest=kernel.json\n"
+      "loom-compile kernel.loom --backend=vm --pipeline=none\n"
+      "loom-compile kernel.loom --backend=vm --pipeline=@my_pipeline\n"
+      "```\n"
+      "\n"
+      "### Backend and target selection\n"
+      "\n"
+      "`--backend=vm` emits a VM bytecode archive. HAL/native backends such "
+      "as\n"
+      "`--backend=amdgpu` select a target provider and can emit a "
+      "target-native\n"
+      "artifact with `--emit-target-artifact=path`. Use `--target=gfx1100` or\n"
+      "another backend-owned target key when roots omit explicit "
+      "`target(...)`\n"
+      "attrs. A single invocation compiles one target configuration.\n"
+      "\n"
+      "### Config specialization\n"
+      "\n"
+      "`--config=key=value` and `--config-file=file.jsonc` bind `config.decl`\n"
+      "values before the compile pipeline. Use this for JIT shape, layout, "
+      "and\n"
+      "provider-selection parameters that should specialize the artifact.\n"
+      "\n"
+      "### Reports, manifests, and IR traces\n"
+      "\n"
+      "```shell\n"
+      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "  --compile-report=summary --compile-report-output=report.json \\\n"
+      "  --artifact-manifest=details --emit-artifact-manifest=manifest.json "
+      "\\\n"
+      "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
+      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "  --dump-ir-after-all --dump-ir-format=jsonl "
+      "--dump-ir-output=trace.jsonl\n"
+      "jq '.functions[] | {name, target, workgroup_size}' manifest.json\n"
+      "jq 'select(.stage == \"prepared-low\") | .pass' trace.jsonl\n"
+      "```\n"
+      "\n"
+      "`--compile-report=summary|details` records compiler-side facts and\n"
+      "status. `--artifact-manifest=summary|details|analysis` records the\n"
+      "artifact's functions, globals, targets, ABI metadata, and optional\n"
+      "analysis. `--dump-ir-*` captures intermediate IR with the same tracing\n"
+      "flags used by `loom-opt`.\n");
+}
 
+int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-compile",
       "Compiles a Loom module to a runtime artifact.\n"
       "\n"
       "Usage:\n"
       "  loom-compile [file.loom] --backend=vm --output=module.vmfb\n"
+      "  loom-compile --agents_md\n"
       "\n"
       "Repeat --config=key=value to materialize compile-time config symbols "
       "before the pass pipeline. Use --config-file=path for a JSON/JSONC "
       "object such as {\"model36\":{\"model\":{\"hidden_size\":4096}}}. "
       "Files and direct bindings share one config set and duplicate keys are "
-      "rejected.\n" LOOM_TOOLING_PASS_TRACE_USAGE);
+      "rejected.\n"
+      "Use --agents_md to print agent-facing workflow "
+      "guidance.\n" LOOM_TOOLING_PASS_TRACE_USAGE);
+  for (int i = 1; i < argc; ++i) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
+      loom_compile_print_agents_markdown(stdout);
+      return 0;
+    }
+  }
+  IREE_TRACE_APP_ENTER();
+  IREE_TRACE_ZONE_BEGIN(z0);
+
   loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 

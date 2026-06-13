@@ -134,97 +134,97 @@ _SOURCE_INLINE_F32_VALUES = (
 )
 
 _VEC_I32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="vector<i32>",
     constraint_key="amdgpu.arithmetic.vector_i32",
 )
 _VEC_F32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="vector<f32>",
     constraint_key="amdgpu.arithmetic.vector_f32",
 )
 _I32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="i32",
     constraint_key="amdgpu.arithmetic.i32",
 )
 _I8_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="i8",
     constraint_key="amdgpu.arithmetic.i8",
 )
 _F16_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="f16",
     constraint_key="amdgpu.arithmetic.f16",
 )
 _BF16_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="bf16",
     constraint_key="amdgpu.arithmetic.bf16",
 )
 _F32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="f32",
     constraint_key="amdgpu.arithmetic.f32",
 )
 _INDEX_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="type",
+    subject_role="type",
     subject_name="index",
     constraint_key="amdgpu.index.scalar",
 )
 _ADDRESS_U32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="address-width",
+    subject_role="address-width",
     subject_name="u32",
     constraint_key="amdgpu.address.u32",
 )
 _ADDRESS_U24_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="address-width",
+    subject_role="address-width",
     subject_name="u24",
     constraint_key="amdgpu.address.u24",
 )
 _ADDRESS_EXACT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="address-literal",
+    subject_role="address-literal",
     subject_name="i64",
     constraint_key="amdgpu.address.exact_i64",
 )
 _ADDRESS_POWER_OF_TWO_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="address-scale",
+    subject_role="address-scale",
     subject_name="i64",
     constraint_key="amdgpu.address.exact_power_of_two_i64",
 )
 _ADDRESS_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="materializer",
+    subject_role="materializer",
     subject_name="address-vgpr",
     constraint_key="amdgpu.address.vgpr_materializer",
 )
 _F32_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="materializer",
+    subject_role="materializer",
     subject_name="f32-vgpr",
     constraint_key="amdgpu.arithmetic.f32_vgpr_materializer",
 )
 _ADDRESS_SGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
+    subject_role="register-class",
     subject_name="sgpr",
     constraint_key="amdgpu.address.sgpr",
 )
 _RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
+    subject_role="register-class",
     subject_name="vgpr",
     constraint_key="amdgpu.arithmetic.result_vgpr",
 )
 _LITERAL_EXACT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="literal",
+    subject_role="literal",
     subject_name="i64",
     constraint_key="amdgpu.literal.exact_i64",
 )
 _LITERAL_EXACT_F32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="literal",
+    subject_role="literal",
     subject_name="f32",
     constraint_key="amdgpu.literal.exact_f32",
 )
 _LITERAL_I32_BITS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="literal-bits",
+    subject_role="literal-bits",
     subject_name="i32",
     constraint_key="amdgpu.literal.i32_bits",
 )

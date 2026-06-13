@@ -83,14 +83,14 @@ ERR_BYTECODE_006 = ErrorDef(
     summary="Invalid bytecode record field.",
     message="invalid field '{field_name}' in "
     "{section_name}/{table_name}[{record_index}] "
-    "at offset {offset}: {reason}",
+    "at offset {offset}: {failure_code}",
     params=(
         ErrorParam("section_name", ParamKind.STRING),
         ErrorParam("table_name", ParamKind.STRING),
         ErrorParam("record_index", ParamKind.U64),
         ErrorParam("field_name", ParamKind.STRING),
         ErrorParam("offset", ParamKind.U64),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
 )
 
@@ -116,10 +116,10 @@ ERR_BYTECODE_008 = ErrorDef(
     code=8,
     severity=Severity.ERROR,
     summary="Malformed varint.",
-    message="malformed varint at offset {offset}: {reason}",
+    message="malformed varint at offset {offset}: {failure_code}",
     params=(
         ErrorParam("offset", ParamKind.U64),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
 )
 
@@ -187,11 +187,11 @@ ERR_BYTECODE_013 = ErrorDef(
     code=13,
     severity=Severity.ERROR,
     summary="Invalid location record.",
-    message="invalid location record {location_id} at offset {offset}: {reason}",
+    message="invalid location record {location_id} at offset {offset}: {failure_code}",
     params=(
         ErrorParam("location_id", ParamKind.U64),
         ErrorParam("offset", ParamKind.U64),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
 )
 
@@ -201,11 +201,11 @@ ERR_BYTECODE_014 = ErrorDef(
     code=14,
     severity=Severity.ERROR,
     summary="Invalid encoding record.",
-    message="invalid encoding record {encoding_id} at offset {offset}: {reason}",
+    message="invalid encoding record {encoding_id} at offset {offset}: {failure_code}",
     params=(
         ErrorParam("encoding_id", ParamKind.U64),
         ErrorParam("offset", ParamKind.U64),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
 )
 
@@ -215,10 +215,10 @@ ERR_BYTECODE_015 = ErrorDef(
     code=15,
     severity=Severity.ERROR,
     summary="Invalid attribute payload.",
-    message="invalid attribute payload at offset {offset}: {reason}",
+    message="invalid attribute payload at offset {offset}: {failure_code}",
     params=(
         ErrorParam("offset", ParamKind.U64),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
 )
 
@@ -228,11 +228,13 @@ ERR_BYTECODE_016 = ErrorDef(
     code=16,
     severity=Severity.ERROR,
     summary="Invalid IR body.",
-    message="invalid IR body for symbol '{symbol_name}' at offset {offset}: {reason}",
+    message=(
+        "invalid IR body for symbol '{symbol_name}' at offset {offset}: {failure_code}"
+    ),
     params=(
         ErrorParam("symbol_name", ParamKind.STRING),
         ErrorParam("offset", ParamKind.U64),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
 )
 
@@ -243,11 +245,11 @@ ERR_BYTECODE_017 = ErrorDef(
     severity=Severity.ERROR,
     summary="Resource payload failure.",
     message="resource {resource_id} payload at offset {offset} "
-    "could not be read: {reason}",
+    "could not be read: {failure_code}",
     params=(
         ErrorParam("resource_id", ParamKind.U64),
         ErrorParam("offset", ParamKind.U64),
-        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("failure_code", ParamKind.STRING),
     ),
 )
 

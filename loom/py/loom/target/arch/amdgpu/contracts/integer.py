@@ -94,27 +94,27 @@ _DIRECT_LHS = ValueRef.operand("lhs")
 _DIRECT_RHS = ValueRef.operand("rhs")
 _RESULT = ValueRef.result("result")
 _ADDRESS_U32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="address-width",
+    subject_role="address-width",
     subject_name="u32",
     constraint_key="amdgpu.address.u32",
 )
 _I32_LITERAL_EXACT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="literal",
+    subject_role="literal",
     subject_name="i32",
     constraint_key="amdgpu.literal.exact_i64",
 )
 _I32_LITERAL_BITS_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="literal-bits",
+    subject_role="literal-bits",
     subject_name="i32",
     constraint_key="amdgpu.literal.i32_bits",
 )
 _SHIFT_AMOUNT_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="shift-amount",
+    subject_role="shift-amount",
     subject_name="u5",
     constraint_key="amdgpu.shift_amount.u5",
 )
 _POSITIVE_U32_DIVISOR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="divisor",
+    subject_role="divisor",
     subject_name="u32",
     constraint_key="amdgpu.divisor.positive_u32",
 )

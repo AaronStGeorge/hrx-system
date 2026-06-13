@@ -399,7 +399,7 @@ kernel.def target(@target) @index_add_result_width_rejected() {
 } launch() {
   %x = kernel.workitem.id<x> : index
   %base = index.constant 4294967000 : index
-  // ERROR@+1: TARGET/003 {subject_kind="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
+  // ERROR@+1: TARGET/003 {subject_role="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
   %sum = index.add %x, %base : index
   kernel.return
 }
@@ -423,7 +423,7 @@ kernel.def target(@target) @index_madd_result_width_rejected() {
   %x = kernel.workitem.id<x> : index
   %scale = index.constant 2 : index
   %base = index.constant 4294967000 : index
-  // ERROR@+1: TARGET/003 {subject_kind="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
+  // ERROR@+1: TARGET/003 {subject_role="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
   %sum = index.madd %x, %scale, %base : index
   kernel.return
 }

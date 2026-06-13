@@ -71,6 +71,7 @@ loom_cc_library(
     loom::codegen::low::allocation
     loom::codegen::low::allocation_json
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
     loom::codegen::low::frame
     loom::codegen::low::function
     loom::codegen::low::lower

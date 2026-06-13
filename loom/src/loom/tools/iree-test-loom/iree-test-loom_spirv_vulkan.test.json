@@ -54,7 +54,7 @@
         "contains": [
           "\"format\":\"loom.test.v0\"",
           {
-            "regex": "\"case\":\"dense_projection_tiled_u8_128_case\".*(\"passed\":true|\"reason\":\"Vulkan device does not expose requested cooperative matrix row\")"
+            "regex": "\"case\":\"dense_projection_tiled_u8_128_case\".*(\"passed\":true|\"code\":\"requirement_not_satisfied\",\"provider_code\":\"cooperative_matrix_row_unavailable\")"
           }
         ]
       }

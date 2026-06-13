@@ -69,7 +69,7 @@ _I32 = Scalar("i32")
 _F32 = Scalar("f32")
 
 _LITERAL_EXACT_F32_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="literal",
+    subject_role="literal",
     subject_name="f32",
     constraint_key="amdgpu.literal.exact_f32",
 )

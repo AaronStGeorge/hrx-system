@@ -123,6 +123,7 @@ loom_cc_binary(
 iree_execution_test_suite(
     name = "execution_test",
     data = [
+        "testdata/requirement_cases.loom",
         "testdata/scalar_cases.loom",
     ],
     manifests = ["iree-test-loom.test.json"],

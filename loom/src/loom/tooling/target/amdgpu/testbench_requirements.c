@@ -11,11 +11,15 @@
 
 static iree_status_t loom_amdgpu_hal_testbench_query_descriptor_set_requirement(
     void* user_data, const loom_module_t* module, loom_named_attr_slice_t attrs,
-    bool* out_satisfied, iree_string_view_t* out_reason) {
+    loom_testbench_requirement_provider_result_t* out_result) {
   loom_run_hal_testbench_context_t* context =
       (loom_run_hal_testbench_context_t*)user_data;
-  *out_satisfied = false;
-  *out_reason = IREE_SV("AMDGPU device does not use requested descriptor set");
+  *out_result = (loom_testbench_requirement_provider_result_t){
+      .state = LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNSATISFIED,
+      .provider_code = IREE_SV("descriptor_set_mismatch"),
+      .display_message =
+          IREE_SV("AMDGPU device does not use requested descriptor set"),
+  };
 
   iree_string_view_t required_descriptor_set = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_string_attr(
@@ -24,7 +28,12 @@ static iree_status_t loom_amdgpu_hal_testbench_query_descriptor_set_requirement(
   if (context->artifact_provider == NULL ||
       !iree_string_view_equal(context->artifact_provider->hal_driver_name,
                               IREE_SV("amdgpu"))) {
-    *out_reason = IREE_SV("AMDGPU requirement requires an AMDGPU HAL device");
+    *out_result = (loom_testbench_requirement_provider_result_t){
+        .state = LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNAVAILABLE,
+        .provider_code = IREE_SV("hal_driver_mismatch"),
+        .display_message =
+            IREE_SV("AMDGPU requirement requires an AMDGPU HAL device"),
+    };
     return iree_ok_status();
   }
   if (context->artifact_provider->select_device_target == NULL) {
@@ -39,9 +48,16 @@ static iree_status_t loom_amdgpu_hal_testbench_query_descriptor_set_requirement(
       &target));
   const loom_amdgpu_processor_info_t* processor =
       (const loom_amdgpu_processor_info_t*)target.data;
-  *out_satisfied =
+  const bool satisfied =
       processor != NULL && iree_string_view_equal(processor->descriptor_set_key,
                                                   required_descriptor_set);
+  out_result->state =
+      satisfied ? LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_SATISFIED
+                : LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNSATISFIED;
+  if (satisfied) {
+    out_result->provider_code = iree_string_view_empty();
+    out_result->display_message = iree_string_view_empty();
+  }
   if (context->artifact_provider->deinitialize_device_target != NULL) {
     context->artifact_provider->deinitialize_device_target(
         context->artifact_provider, &target, context->host_allocator);

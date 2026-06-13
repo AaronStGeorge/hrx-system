@@ -65,6 +65,30 @@ typedef enum loom_inline_plan_action_e {
   LOOM_INLINE_PLAN_ACTION_ERROR = 4,
 } loom_inline_plan_action_t;
 
+typedef enum loom_inline_blocker_e {
+  LOOM_INLINE_BLOCKER_NONE = 0,
+  LOOM_INLINE_BLOCKER_POLICY_CONFLICT = 1,
+  LOOM_INLINE_BLOCKER_REQUIRED_CYCLE = 2,
+  LOOM_INLINE_BLOCKER_CALL_NOT_CALL_LIKE = 3,
+  LOOM_INLINE_BLOCKER_CALL_NOT_OWNED_BY_SYMBOL = 4,
+  LOOM_INLINE_BLOCKER_INVALID_CALLEE_SYMBOL = 5,
+  LOOM_INLINE_BLOCKER_CALLEE_NOT_FUNCTION_LIKE = 6,
+  LOOM_INLINE_BLOCKER_FUNC_CALL_TARGET_NOT_FUNCTION_LIKE = 7,
+  LOOM_INLINE_BLOCKER_UNSUPPORTED_CALL_KIND = 8,
+  LOOM_INLINE_BLOCKER_NON_CALL_SHAPE = 9,
+  LOOM_INLINE_BLOCKER_CALLEE_MISSING_BODY = 10,
+  LOOM_INLINE_BLOCKER_CALLEE_BODY_NOT_SINGLE_BLOCK = 11,
+  LOOM_INLINE_BLOCKER_RECURSIVE_BODY = 12,
+  LOOM_INLINE_BLOCKER_CALLEE_BODY_MISSING_TERMINATOR = 13,
+  LOOM_INLINE_BLOCKER_CALLEE_BODY_MISSING_RETURN = 14,
+  LOOM_INLINE_BLOCKER_OPERAND_COUNT_MISMATCH = 15,
+  LOOM_INLINE_BLOCKER_INVALID_OPERAND_OR_ARGUMENT = 16,
+  LOOM_INLINE_BLOCKER_OPERAND_TYPE_MISMATCH = 17,
+  LOOM_INLINE_BLOCKER_RETURN_COUNT_MISMATCH = 18,
+  LOOM_INLINE_BLOCKER_INVALID_RETURN_OR_RESULT = 19,
+  LOOM_INLINE_BLOCKER_RESULT_TYPE_MISMATCH = 20,
+} loom_inline_blocker_t;
+
 typedef struct loom_inline_symbol_info_t {
   // Borrowed symbol table entry for this symbol id.
   const loom_symbol_t* symbol;
@@ -109,8 +133,8 @@ typedef struct loom_inline_plan_entry_t {
   uint8_t effective_temperature;
   // Planned action for this edge.
   loom_inline_plan_action_t action;
-  // Human-readable blocker reason for ACTION_ERROR.
-  iree_string_view_t blocker_reason;
+  // Stable blocker code for ACTION_ERROR.
+  loom_inline_blocker_t blocker;
   // Execution order ordinal assigned after SCC ordering.
   uint32_t execution_ordinal;
 } loom_inline_plan_entry_t;
@@ -183,13 +207,62 @@ static bool loom_inline_symbol_is_transferable(const loom_module_t* module,
   return true;
 }
 
+static iree_string_view_t loom_inline_blocker_code(
+    loom_inline_blocker_t blocker) {
+  switch (blocker) {
+    case LOOM_INLINE_BLOCKER_POLICY_CONFLICT:
+      return IREE_SV("policy_conflict");
+    case LOOM_INLINE_BLOCKER_REQUIRED_CYCLE:
+      return IREE_SV("required_cycle");
+    case LOOM_INLINE_BLOCKER_CALL_NOT_CALL_LIKE:
+      return IREE_SV("call_not_call_like");
+    case LOOM_INLINE_BLOCKER_CALL_NOT_OWNED_BY_SYMBOL:
+      return IREE_SV("call_not_owned_by_symbol");
+    case LOOM_INLINE_BLOCKER_INVALID_CALLEE_SYMBOL:
+      return IREE_SV("invalid_callee_symbol");
+    case LOOM_INLINE_BLOCKER_CALLEE_NOT_FUNCTION_LIKE:
+      return IREE_SV("callee_not_function_like");
+    case LOOM_INLINE_BLOCKER_FUNC_CALL_TARGET_NOT_FUNCTION_LIKE:
+      return IREE_SV("func_call_target_not_function_like");
+    case LOOM_INLINE_BLOCKER_UNSUPPORTED_CALL_KIND:
+      return IREE_SV("unsupported_call_kind");
+    case LOOM_INLINE_BLOCKER_NON_CALL_SHAPE:
+      return IREE_SV("non_call_shape");
+    case LOOM_INLINE_BLOCKER_CALLEE_MISSING_BODY:
+      return IREE_SV("callee_missing_body");
+    case LOOM_INLINE_BLOCKER_CALLEE_BODY_NOT_SINGLE_BLOCK:
+      return IREE_SV("callee_body_not_single_block");
+    case LOOM_INLINE_BLOCKER_RECURSIVE_BODY:
+      return IREE_SV("recursive_body");
+    case LOOM_INLINE_BLOCKER_CALLEE_BODY_MISSING_TERMINATOR:
+      return IREE_SV("callee_body_missing_terminator");
+    case LOOM_INLINE_BLOCKER_CALLEE_BODY_MISSING_RETURN:
+      return IREE_SV("callee_body_missing_return");
+    case LOOM_INLINE_BLOCKER_OPERAND_COUNT_MISMATCH:
+      return IREE_SV("operand_count_mismatch");
+    case LOOM_INLINE_BLOCKER_INVALID_OPERAND_OR_ARGUMENT:
+      return IREE_SV("invalid_operand_or_argument");
+    case LOOM_INLINE_BLOCKER_OPERAND_TYPE_MISMATCH:
+      return IREE_SV("operand_type_mismatch");
+    case LOOM_INLINE_BLOCKER_RETURN_COUNT_MISMATCH:
+      return IREE_SV("return_count_mismatch");
+    case LOOM_INLINE_BLOCKER_INVALID_RETURN_OR_RESULT:
+      return IREE_SV("invalid_return_or_result");
+    case LOOM_INLINE_BLOCKER_RESULT_TYPE_MISMATCH:
+      return IREE_SV("result_type_mismatch");
+    case LOOM_INLINE_BLOCKER_NONE:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 static void loom_inline_mark_blocker(loom_inline_plan_entry_t* entry,
-                                     iree_string_view_t reason) {
+                                     loom_inline_blocker_t blocker) {
   if (entry->action == LOOM_INLINE_PLAN_ACTION_ERROR) {
     return;
   }
   entry->action = LOOM_INLINE_PLAN_ACTION_ERROR;
-  entry->blocker_reason = reason;
+  entry->blocker = blocker;
 }
 
 static bool loom_inline_op_is_inside_region(const loom_op_t* op,
@@ -269,8 +342,7 @@ static void loom_inline_resolve_entry_policy(loom_inline_state_t* state,
 
   if ((callee_inline && call_noinline) || (callee_noinline && call_inline)) {
     entry->effective_policy = LOOM_FUNC_INLINE_POLICY_INLINE;
-    loom_inline_mark_blocker(
-        entry, IREE_SV("inline and noinline policies conflict on this edge"));
+    loom_inline_mark_blocker(entry, LOOM_INLINE_BLOCKER_POLICY_CONFLICT);
     return;
   }
 
@@ -420,8 +492,7 @@ static void loom_inline_mark_cycle_blockers(loom_inline_state_t* state) {
               component_index &&
           state->component_by_symbol[entry->target_symbol_id] ==
               component_index) {
-        loom_inline_mark_blocker(
-            entry, IREE_SV("required inline cycle in the call graph"));
+        loom_inline_mark_blocker(entry, LOOM_INLINE_BLOCKER_REQUIRED_CYCLE);
       }
     }
   }
@@ -431,64 +502,64 @@ static void loom_inline_mark_cycle_blockers(loom_inline_state_t* state) {
 // Preflight
 //===----------------------------------------------------------------------===//
 
-static iree_string_view_t loom_inline_validate_call_kind(
+static loom_inline_blocker_t loom_inline_validate_call_kind(
     const loom_inline_plan_entry_t* entry) {
   switch (loom_call_like_kind(entry->call)) {
     case LOOM_CALL_LIKE_KIND_SEMANTIC:
       if (loom_func_like_isa(entry->callee)) {
-        return iree_string_view_empty();
+        return LOOM_INLINE_BLOCKER_NONE;
       }
-      return IREE_SV("func.call target is not function-like");
+      return LOOM_INLINE_BLOCKER_FUNC_CALL_TARGET_NOT_FUNCTION_LIKE;
     default:
-      return IREE_SV("call kind is not supported by the func-stage inliner");
+      return LOOM_INLINE_BLOCKER_UNSUPPORTED_CALL_KIND;
   }
 }
 
-static iree_string_view_t loom_inline_validate_inline_body(
+static loom_inline_blocker_t loom_inline_validate_inline_body(
     const loom_module_t* module, const loom_inline_plan_entry_t* entry) {
   if (!loom_call_like_isa(entry->call)) {
-    return IREE_SV("call op does not implement CallLike");
+    return LOOM_INLINE_BLOCKER_CALL_NOT_CALL_LIKE;
   }
   if (entry->source_symbol_id >= module->symbols.count) {
-    return IREE_SV("call is not owned by a module symbol");
+    return LOOM_INLINE_BLOCKER_CALL_NOT_OWNED_BY_SYMBOL;
   }
   if (entry->target_symbol_id >= module->symbols.count) {
-    return IREE_SV("callee symbol reference is invalid");
+    return LOOM_INLINE_BLOCKER_INVALID_CALLEE_SYMBOL;
   }
   if (!loom_func_like_isa(entry->callee)) {
-    return IREE_SV("callee symbol does not define a function-like op");
+    return LOOM_INLINE_BLOCKER_CALLEE_NOT_FUNCTION_LIKE;
   }
-  iree_string_view_t call_kind_reason = loom_inline_validate_call_kind(entry);
-  if (call_kind_reason.size != 0) {
-    return call_kind_reason;
+  loom_inline_blocker_t call_kind_blocker =
+      loom_inline_validate_call_kind(entry);
+  if (call_kind_blocker != LOOM_INLINE_BLOCKER_NONE) {
+    return call_kind_blocker;
   }
 
   if (loom_call_like_operand_offset(entry->call) != 0 ||
       loom_call_like_result_offset(entry->call) != 0 ||
       entry->call_op->region_count != 0 ||
       entry->call_op->successor_count != 0) {
-    return IREE_SV(
-        "call-like op has non-call operands, results, regions, or successors");
+    return LOOM_INLINE_BLOCKER_NON_CALL_SHAPE;
   }
 
   loom_region_t* body = loom_func_like_body(entry->callee);
   if (!body) {
-    return IREE_SV("callee has no inlineable body");
+    return LOOM_INLINE_BLOCKER_CALLEE_MISSING_BODY;
   }
   if (body->block_count != 1) {
-    return IREE_SV("callee body is not a single-block region");
+    return LOOM_INLINE_BLOCKER_CALLEE_BODY_NOT_SINGLE_BLOCK;
   }
   if (loom_inline_op_is_inside_region(entry->call_op, body)) {
-    return IREE_SV("call is inside its own callee body");
+    return LOOM_INLINE_BLOCKER_RECURSIVE_BODY;
   }
 
   loom_block_t* entry_block = loom_region_entry_block(body);
   if (entry_block->op_count == 0) {
-    return IREE_SV("callee body has no terminator");
+    return LOOM_INLINE_BLOCKER_CALLEE_BODY_MISSING_TERMINATOR;
   }
   loom_op_t* return_op = loom_block_op(entry_block, entry_block->op_count - 1);
   if (!loom_func_return_isa(return_op)) {
-    return IREE_SV("callee body does not end with func.return");
+    return LOOM_INLINE_BLOCKER_CALLEE_BODY_MISSING_RETURN;
   }
 
   uint16_t arg_count = 0;
@@ -496,43 +567,41 @@ static iree_string_view_t loom_inline_validate_inline_body(
       loom_func_like_arg_ids(entry->callee, &arg_count);
   loom_value_slice_t call_operands = loom_call_like_operands(entry->call);
   if (arg_count != call_operands.count) {
-    return IREE_SV("call operand count does not match callee argument count");
+    return LOOM_INLINE_BLOCKER_OPERAND_COUNT_MISMATCH;
   }
   for (uint16_t i = 0; i < arg_count; ++i) {
     if (arg_ids[i] >= module->values.count ||
         call_operands.values[i] >= module->values.count) {
-      return IREE_SV("call operand or callee argument value is invalid");
+      return LOOM_INLINE_BLOCKER_INVALID_OPERAND_OR_ARGUMENT;
     }
     loom_type_t arg_type = loom_module_value_type(module, arg_ids[i]);
     loom_type_t operand_type =
         loom_module_value_type(module, call_operands.values[i]);
     if (!loom_type_equal(arg_type, operand_type)) {
-      return IREE_SV("call operand type does not match callee argument type");
+      return LOOM_INLINE_BLOCKER_OPERAND_TYPE_MISMATCH;
     }
   }
 
   loom_value_slice_t return_operands = loom_func_return_operands(return_op);
   loom_value_slice_t call_results = loom_call_like_results(entry->call);
   if (return_operands.count != call_results.count) {
-    return IREE_SV(
-        "func.return operand count does not match call result count");
+    return LOOM_INLINE_BLOCKER_RETURN_COUNT_MISMATCH;
   }
   for (uint16_t i = 0; i < call_results.count; ++i) {
     if (return_operands.values[i] >= module->values.count ||
         call_results.values[i] >= module->values.count) {
-      return IREE_SV("return operand or call result value is invalid");
+      return LOOM_INLINE_BLOCKER_INVALID_RETURN_OR_RESULT;
     }
     loom_type_t return_type =
         loom_module_value_type(module, return_operands.values[i]);
     loom_type_t result_type =
         loom_module_value_type(module, call_results.values[i]);
     if (!loom_type_equal(return_type, result_type)) {
-      return IREE_SV(
-          "func.return operand type does not match call result type");
+      return LOOM_INLINE_BLOCKER_RESULT_TYPE_MISMATCH;
     }
   }
 
-  return iree_string_view_empty();
+  return LOOM_INLINE_BLOCKER_NONE;
 }
 
 static void loom_inline_preflight_required_entries(loom_inline_state_t* state) {
@@ -541,10 +610,10 @@ static void loom_inline_preflight_required_entries(loom_inline_state_t* state) {
     if (entry->action != LOOM_INLINE_PLAN_ACTION_REQUIRED) {
       continue;
     }
-    iree_string_view_t reason =
+    loom_inline_blocker_t blocker =
         loom_inline_validate_inline_body(state->module, entry);
-    if (reason.size != 0) {
-      loom_inline_mark_blocker(entry, reason);
+    if (blocker != LOOM_INLINE_BLOCKER_NONE) {
+      loom_inline_mark_blocker(entry, blocker);
     }
   }
 }
@@ -560,7 +629,7 @@ static iree_status_t loom_inline_emit_blockers(loom_inline_state_t* state) {
         loom_param_string(state->pass->info->name),
         loom_param_string(
             loom_inline_symbol_name(state->module, entry->target_symbol_id)),
-        loom_param_string(entry->blocker_reason),
+        loom_param_string(loom_inline_blocker_code(entry->blocker)),
     };
     loom_diagnostic_related_op_t related_op = {
         .label = IREE_SV("callee definition"),

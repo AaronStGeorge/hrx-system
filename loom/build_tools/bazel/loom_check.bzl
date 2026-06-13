@@ -7,7 +7,6 @@
 """Macros for defining tests that run .loom-test files through loom-check."""
 
 load("//build_tools/bazel:cc_attrs.bzl", "cc_attrs")
-load("//build_tools/bazel:executable.bzl", "iree_executable_test")
 load(
     "//loom/requirements:package_policy.bzl",
     "apply_loom_test_policy",
@@ -15,11 +14,107 @@ load(
 
 _LOOM_CHECK_EXTENSION = ".loom-test"
 
+LoomCheckTestInfo = provider(
+    doc = "Metadata for a generated loom-check test wrapper.",
+    fields = {
+        "env": "Environment variables expanded against the wrapper runfiles.",
+        "fixture": "Checked fixture file appended by the wrapper.",
+        "output": "Executable test wrapper.",
+        "runner": "loom-check compatible runner label.",
+    },
+)
+
 def _loom_check_test_base_name(src):
     if not src.endswith(_LOOM_CHECK_EXTENSION):
         fail("loom_check_test source must use the .loom-test extension: %s" %
              src)
     return src[:-len(_LOOM_CHECK_EXTENSION)]
+
+def _loom_check_expand_env(ctx):
+    return {
+        key: ctx.expand_location(
+            value,
+            ctx.attr.data + [ctx.attr.runner, ctx.attr.src],
+        )
+        for key, value in ctx.attr.env.items()
+    }
+
+def _loom_check_wrapper_content(ctx):
+    return (
+        "#!/usr/bin/env bash\n" +
+        "set -euo pipefail\n" +
+        "RUNFILES=\"${{RUNFILES_DIR:-$0.runfiles}}\"\n" +
+        "exec \"${{RUNFILES}}/{workspace}/{runner}\" " +
+        "\"$@\" \"${{RUNFILES}}/{workspace}/{fixture}\"\n"
+    ).format(
+        workspace = ctx.workspace_name,
+        runner = ctx.executable.runner.short_path,
+        fixture = ctx.file.src.short_path,
+    )
+
+def _loom_check_test_impl(ctx):
+    output = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.write(
+        content = _loom_check_wrapper_content(ctx),
+        is_executable = True,
+        output = output,
+    )
+
+    runfiles = ctx.runfiles(
+        files = [
+            ctx.executable.runner,
+            ctx.file.src,
+        ] + ctx.files.data,
+    )
+    runfiles = runfiles.merge_all(
+        [ctx.attr.runner[DefaultInfo].default_runfiles] +
+        [target[DefaultInfo].default_runfiles for target in ctx.attr.data],
+    )
+    expanded_env = _loom_check_expand_env(ctx)
+    return [
+        DefaultInfo(
+            executable = output,
+            files = depset([output]),
+            runfiles = runfiles,
+        ),
+        LoomCheckTestInfo(
+            env = expanded_env,
+            fixture = ctx.file.src,
+            output = output,
+            runner = ctx.attr.runner.label,
+        ),
+        testing.TestEnvironment(expanded_env),
+    ]
+
+_loom_check_executable_test = rule(
+    implementation = _loom_check_test_impl,
+    attrs = {
+        "data": attr.label_list(
+            allow_files = True,
+            doc = "Runtime data dependencies available to loom-check.",
+        ),
+        "env": attr.string_dict(
+            doc = (
+                "Environment variables passed to loom-check. Values may use " +
+                "$(location) for src, runner, or data labels."
+            ),
+        ),
+        "runner": attr.label(
+            allow_files = True,
+            cfg = "target",
+            default = "//loom/src/loom/tools/loom-check:loom-check",
+            doc = "loom-check compatible runner binary.",
+            executable = True,
+        ),
+        "src": attr.label(
+            allow_single_file = [_LOOM_CHECK_EXTENSION],
+            doc = "Source .loom-test file appended by the wrapper.",
+            mandatory = True,
+        ),
+    },
+    doc = "Runs a single .loom-test file through a loom-check compatible runner.",
+    test = True,
+)
 
 def loom_check_test(
         name,
@@ -46,12 +141,12 @@ def loom_check_test(
     kwargs = apply_loom_test_policy(kwargs, name = name)
     policy_tags = kwargs.pop("tags", [])
     resource_group = kwargs.pop("resource_group", None)
-    iree_executable_test(
+    _loom_check_executable_test(
         name = name,
-        src = runner,
-        data = [src] + data,
-        args = ["$(rootpath %s)" % src],
+        src = src,
+        data = data,
         env = env,
+        runner = runner,
         size = size,
         tags = cc_attrs.with_resource_group_tags(
             tags + ["loom-check"] + policy_tags,

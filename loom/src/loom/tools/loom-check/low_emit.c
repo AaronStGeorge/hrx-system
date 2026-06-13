@@ -8,9 +8,13 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
+#include "loom/error/error_catalog.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/op_defs.h"
 #include "loom/tools/loom-check/diagnostics.h"
 
 iree_status_t loom_check_low_emit_parse_schedule_strategy(
@@ -188,26 +192,49 @@ iree_status_t loom_check_low_emit_parse_allocation_option(
 
 iree_status_t loom_check_low_emit_find_low_function_def(
     loom_module_t* module, iree_string_view_t symbol_name,
-    loom_op_t** out_low_function) {
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    loom_check_diagnostic_collector_t* diagnostic_collector,
+    iree_diagnostic_emitter_t emitter, loom_op_t** out_low_function) {
   *out_low_function = NULL;
   loom_string_id_t name_id = loom_module_lookup_string(module, symbol_name);
   if (name_id == LOOM_STRING_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "unknown low function '@%.*s'",
-                            (int)symbol_name.size, symbol_name.data);
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(symbol_name),
+    };
+    return loom_check_diagnostic_collector_emit_case_source(
+        diagnostic_collector, test_case, filename, LOOM_EMITTER_PASS,
+        LOOM_ERR_SYMBOL_002, params, IREE_ARRAYSIZE(params));
   }
   uint16_t symbol_id = loom_module_find_symbol(module, name_id);
   if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "unknown low function '@%.*s'",
-                            (int)symbol_name.size, symbol_name.data);
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(symbol_name),
+    };
+    return loom_check_diagnostic_collector_emit_case_source(
+        diagnostic_collector, test_case, filename, LOOM_EMITTER_PASS,
+        LOOM_ERR_SYMBOL_002, params, IREE_ARRAYSIZE(params));
   }
   const loom_symbol_t* symbol = &module->symbols.entries[symbol_id];
   if (!loom_low_function_def_isa(symbol->defining_op) ||
       !loom_low_function_body(symbol->defining_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "symbol '@%.*s' does not name a low function body",
-                            (int)symbol_name.size, symbol_name.data);
+    iree_string_view_t actual_kind = IREE_SV("<unknown>");
+    if (symbol->definition) {
+      actual_kind = loom_symbol_definition_descriptor_name(symbol->definition);
+    } else if (symbol->defining_op) {
+      actual_kind = loom_op_name(module, symbol->defining_op);
+    }
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(symbol_name),
+        loom_param_string(actual_kind),
+        loom_param_string(IREE_SV("low function body")),
+    };
+    const loom_diagnostic_emission_t emission = {
+        .op = symbol->defining_op,
+        .error = LOOM_ERR_SYMBOL_003,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(emitter, &emission);
   }
   *out_low_function = symbol->defining_op;
   return iree_ok_status();
@@ -215,7 +242,8 @@ iree_status_t loom_check_low_emit_find_low_function_def(
 
 static iree_status_t loom_check_low_emit_consider_fixed_value_match(
     const loom_module_t* module, loom_value_id_t value_id,
-    iree_string_view_t value_name, bool* found, loom_value_id_t* out_value_id) {
+    iree_string_view_t value_name, bool* found, bool* ambiguous,
+    loom_value_id_t* out_value_id, loom_value_id_t* out_ambiguous_value_id) {
   if (value_id >= module->values.count) {
     return iree_ok_status();
   }
@@ -238,9 +266,9 @@ static iree_status_t loom_check_low_emit_consider_fixed_value_match(
   }
 
   if (*found && *out_value_id != value_id) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "ambiguous low fixed allocation value '%%%.*s'",
-                            (int)value_name.size, value_name.data);
+    *ambiguous = true;
+    *out_ambiguous_value_id = value_id;
+    return iree_ok_status();
   }
   *found = true;
   *out_value_id = value_id;
@@ -249,14 +277,16 @@ static iree_status_t loom_check_low_emit_consider_fixed_value_match(
 
 static iree_status_t loom_check_low_emit_find_value_in_region(
     const loom_module_t* module, const loom_region_t* region,
-    iree_string_view_t value_name, bool* found, loom_value_id_t* out_value_id) {
+    iree_string_view_t value_name, bool* found, bool* ambiguous,
+    loom_value_id_t* out_value_id, loom_value_id_t* out_ambiguous_value_id) {
   for (iree_host_size_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
     for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
       IREE_RETURN_IF_ERROR(loom_check_low_emit_consider_fixed_value_match(
           module, loom_block_arg_id(block, arg_index), value_name, found,
-          out_value_id));
+          ambiguous, out_value_id, out_ambiguous_value_id));
+      if (*ambiguous) return iree_ok_status();
     }
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
@@ -264,43 +294,96 @@ static iree_status_t loom_check_low_emit_find_value_in_region(
       for (uint16_t result_index = 0; result_index < op->result_count;
            ++result_index) {
         IREE_RETURN_IF_ERROR(loom_check_low_emit_consider_fixed_value_match(
-            module, results[result_index], value_name, found, out_value_id));
+            module, results[result_index], value_name, found, ambiguous,
+            out_value_id, out_ambiguous_value_id));
+        if (*ambiguous) return iree_ok_status();
       }
       loom_region_t** regions = loom_op_regions(op);
       for (uint8_t region_index = 0; region_index < op->region_count;
            ++region_index) {
         IREE_RETURN_IF_ERROR(loom_check_low_emit_find_value_in_region(
-            module, regions[region_index], value_name, found, out_value_id));
+            module, regions[region_index], value_name, found, ambiguous,
+            out_value_id, out_ambiguous_value_id));
+        if (*ambiguous) return iree_ok_status();
       }
     }
   }
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_low_emit_emit_unresolved_fixed_value_selector(
+    const loom_module_t* module, const loom_op_t* low_function,
+    iree_string_view_t value_name, iree_diagnostic_emitter_t emitter) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(
+          loom_low_diagnostic_function_name(module, low_function)),
+      loom_param_string(value_name),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = low_function,
+      .error = LOOM_ERR_BACKEND_037,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(emitter, &emission);
+}
+
+static iree_status_t loom_check_low_emit_emit_ambiguous_fixed_value_selector(
+    const loom_module_t* module, const loom_op_t* low_function,
+    iree_string_view_t value_name, loom_value_id_t first_value_id,
+    loom_value_id_t second_value_id, iree_diagnostic_emitter_t emitter) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(
+          loom_low_diagnostic_function_name(module, low_function)),
+      loom_param_string(value_name),
+      loom_param_u32(first_value_id),
+      loom_param_u32(second_value_id),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = low_function,
+      .error = LOOM_ERR_BACKEND_038,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(emitter, &emission);
+}
+
 static iree_status_t loom_check_low_emit_find_value_in_low_function(
     const loom_module_t* module, const loom_op_t* low_function,
-    iree_string_view_t value_name, loom_value_id_t* out_value_id) {
+    iree_string_view_t value_name, iree_diagnostic_emitter_t emitter,
+    loom_value_id_t* out_value_id, bool* out_resolved) {
   *out_value_id = LOOM_VALUE_ID_INVALID;
+  *out_resolved = false;
   const loom_region_t* body = loom_low_function_const_body(low_function);
   bool found = false;
+  bool ambiguous = false;
+  loom_value_id_t ambiguous_value_id = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_value_in_region(
-      module, body, value_name, &found, out_value_id));
-  if (!found) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "unknown low fixed allocation value '%%%.*s'",
-                            (int)value_name.size, value_name.data);
+      module, body, value_name, &found, &ambiguous, out_value_id,
+      &ambiguous_value_id));
+  if (ambiguous) {
+    return loom_check_low_emit_emit_ambiguous_fixed_value_selector(
+        module, low_function, value_name, *out_value_id, ambiguous_value_id,
+        emitter);
   }
+  if (!found) {
+    return loom_check_low_emit_emit_unresolved_fixed_value_selector(
+        module, low_function, value_name, emitter);
+  }
+  *out_resolved = true;
   return iree_ok_status();
 }
 
 iree_status_t loom_check_low_emit_resolve_fixed_value_specs(
     loom_module_t* module, loom_op_t* low_function,
     const loom_check_low_emit_fixed_value_spec_t* fixed_specs,
-    iree_host_size_t fixed_spec_count,
+    iree_host_size_t fixed_spec_count, iree_diagnostic_emitter_t emitter,
     const loom_low_allocation_fixed_value_t** out_fixed_values,
-    iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena) {
+    iree_host_size_t* out_fixed_value_count, bool* out_resolved,
+    iree_arena_allocator_t* arena) {
   *out_fixed_values = NULL;
   *out_fixed_value_count = 0;
+  *out_resolved = true;
   if (fixed_spec_count == 0) {
     return iree_ok_status();
   }
@@ -316,14 +399,23 @@ iree_status_t loom_check_low_emit_resolve_fixed_value_specs(
       arena, fixed_spec_count, sizeof(*fixed_values), (void**)&fixed_values));
   for (iree_host_size_t i = 0; i < fixed_spec_count; ++i) {
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    bool value_resolved = false;
     IREE_RETURN_IF_ERROR(loom_check_low_emit_find_value_in_low_function(
-        module, low_function, fixed_specs[i].value_name, &value_id));
+        module, low_function, fixed_specs[i].value_name, emitter, &value_id,
+        &value_resolved));
+    if (!value_resolved) {
+      *out_resolved = false;
+      continue;
+    }
     fixed_values[i] = (loom_low_allocation_fixed_value_t){
         .value_id = value_id,
         .location_kind = fixed_specs[i].location_kind,
         .location_base = fixed_specs[i].location_base,
         .location_count = fixed_specs[i].location_count,
     };
+  }
+  if (!*out_resolved) {
+    return iree_ok_status();
   }
   *out_fixed_values = fixed_values;
   *out_fixed_value_count = fixed_spec_count;
@@ -341,15 +433,37 @@ iree_status_t loom_check_low_emit_packetize_function(
     const loom_low_storage_lease_provider_t* storage_lease_provider,
     const loom_low_emission_frame_spill_free_options_t* spill_free_options,
     loom_low_emission_frame_t* out_frame) {
+  loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
+      .diagnostic_collector = request->diagnostic_collector,
+      .module = request->module,
+      .source_resolver = request->source_resolver,
+      .emitter = LOOM_EMITTER_PASS,
+  };
+  iree_diagnostic_emitter_t emitter = {0};
+  if (request->diagnostic_collector != NULL) {
+    emitter = (iree_diagnostic_emitter_t){
+        .fn = loom_check_diagnostic_emitter_capture_emit,
+        .user_data = &diagnostic_capture,
+    };
+  }
   loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
-      request->module, function_symbol_name, &low_function));
+      request->module, function_symbol_name, request->test_case,
+      request->filename, request->diagnostic_collector, emitter,
+      &low_function));
+  if (!low_function) {
+    return iree_ok_status();
+  }
   const loom_low_allocation_fixed_value_t* fixed_values = NULL;
   iree_host_size_t fixed_value_count = 0;
+  bool fixed_values_resolved = false;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_resolve_fixed_value_specs(
       request->module, low_function, allocation_fixed_specs,
-      allocation_fixed_spec_count, &fixed_values, &fixed_value_count,
-      request->case_arena));
+      allocation_fixed_spec_count, emitter, &fixed_values, &fixed_value_count,
+      &fixed_values_resolved, request->case_arena));
+  if (!fixed_values_resolved) {
+    return iree_ok_status();
+  }
 
   loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &request->low_registry->registry,
@@ -360,18 +474,7 @@ iree_status_t loom_check_low_emit_packetize_function(
       .allocation_fixed_value_count = fixed_value_count,
       .storage_lease_provider = storage_lease_provider,
   };
-  loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
-      .diagnostic_collector = request->diagnostic_collector,
-      .module = request->module,
-      .source_resolver = request->source_resolver,
-      .emitter = LOOM_EMITTER_PASS,
-  };
-  if (request->diagnostic_collector != NULL) {
-    frame_options.emitter = (iree_diagnostic_emitter_t){
-        .fn = loom_check_diagnostic_emitter_capture_emit,
-        .user_data = &diagnostic_capture,
-    };
-  }
+  frame_options.emitter = emitter;
   *out_frame = (loom_low_emission_frame_t){0};
   if (spill_free_options != NULL) {
     return loom_low_emission_frame_build_spill_free(

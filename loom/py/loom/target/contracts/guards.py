@@ -72,14 +72,14 @@ class GuardDiagnostic:
     """Authored structured diagnostic for a guard failure."""
 
     ref: DiagnosticRef | None = None
-    subject_kind: str = ""
+    subject_role: str = ""
     subject_name: str = ""
     constraint_key: str = ""
 
     def __post_init__(self) -> None:
         if self.ref is not None:
             return
-        if not self.subject_kind:
+        if not self.subject_role:
             raise ValueError("guard diagnostic subject kind must be non-empty")
         if not self.subject_name:
             raise ValueError("guard diagnostic subject name must be non-empty")
@@ -90,7 +90,7 @@ class GuardDiagnostic:
             "ref",
             target_diagnostic(
                 ERR_TARGET_003,
-                string_param("subject_kind", self.subject_kind),
+                string_param("subject_role", self.subject_role),
                 string_param("subject_name", self.subject_name),
                 string_param("constraint_key", self.constraint_key),
             ),

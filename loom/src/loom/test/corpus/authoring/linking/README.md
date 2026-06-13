@@ -6,6 +6,18 @@ provider library, and the command line tools decide whether to link text,
 package bytecode, preserve checks, strip checks, or compile a selected target
 artifact.
 
+Command blocks use short tool names and paths relative to this directory. From
+the repository root, run the same tools through `dev.py` and pass root-relative
+paths:
+
+```bash
+python dev.py bazel run //loom/src/loom/tools/loom-link:loom-link -- \
+  loom/src/loom/test/corpus/authoring/linking/root.loom \
+  --library=loom/src/loom/test/corpus/authoring/linking/providers.loom \
+  --root=@scale_i32_buffer \
+  --print-plan
+```
+
 ## Files
 
 | File | Role |

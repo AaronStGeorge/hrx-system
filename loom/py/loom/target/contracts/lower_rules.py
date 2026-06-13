@@ -1898,27 +1898,27 @@ def _attr_diagnostic(field: str, attr_type: str) -> DiagnosticRef:
 
 
 def _named_constraint_diagnostic(
-    subject_kind: str,
+    subject_role: str,
     subject_name: str,
     constraint_key: str,
 ) -> DiagnosticRef:
     return target_diagnostic(
         ERR_TARGET_003,
-        string_param("subject_kind", subject_kind),
+        string_param("subject_role", subject_role),
         string_param("subject_name", subject_name),
         string_param("constraint_key", constraint_key),
     )
 
 
 def _count_constraint_diagnostic(
-    subject_kind: str,
+    subject_role: str,
     subject_name: str,
     constraint_key: str,
     expected_count: int,
 ) -> DiagnosticRef:
     return target_diagnostic(
         ERR_TARGET_004,
-        string_param("subject_kind", subject_kind),
+        string_param("subject_role", subject_role),
         string_param("subject_name", subject_name),
         string_param("constraint_key", constraint_key),
         u32_param("expected_count", expected_count),
@@ -1926,7 +1926,7 @@ def _count_constraint_diagnostic(
 
 
 def _range_constraint_diagnostic(
-    subject_kind: str,
+    subject_role: str,
     subject_name: str,
     constraint_key: str,
     minimum: int,
@@ -1934,7 +1934,7 @@ def _range_constraint_diagnostic(
 ) -> DiagnosticRef:
     return target_diagnostic(
         ERR_TARGET_005,
-        string_param("subject_kind", subject_kind),
+        string_param("subject_role", subject_role),
         string_param("subject_name", subject_name),
         string_param("constraint_key", constraint_key),
         i64_param("minimum", minimum),
@@ -1943,7 +1943,7 @@ def _range_constraint_diagnostic(
 
 
 def _element_range_constraint_diagnostic(
-    subject_kind: str,
+    subject_role: str,
     subject_name: str,
     constraint_key: str,
     element: int,
@@ -1952,7 +1952,7 @@ def _element_range_constraint_diagnostic(
 ) -> DiagnosticRef:
     return target_diagnostic(
         ERR_TARGET_006,
-        string_param("subject_kind", subject_kind),
+        string_param("subject_role", subject_role),
         string_param("subject_name", subject_name),
         u32_param("element", element),
         string_param("constraint_key", constraint_key),
@@ -1962,14 +1962,14 @@ def _element_range_constraint_diagnostic(
 
 
 def _relation_constraint_diagnostic(
-    subject_kind: str,
+    subject_role: str,
     subject_name: str,
     other_subject_name: str,
     constraint_key: str,
 ) -> DiagnosticRef:
     return target_diagnostic(
         ERR_TARGET_007,
-        string_param("subject_kind", subject_kind),
+        string_param("subject_role", subject_role),
         string_param("subject_name", subject_name),
         string_param("other_subject_name", other_subject_name),
         string_param("constraint_key", constraint_key),

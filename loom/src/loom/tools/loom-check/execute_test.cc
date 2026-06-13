@@ -1304,9 +1304,13 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsUnknownFunction) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("liveness-json"), std::string::npos);
-  EXPECT_NE(DetailString(result).find("NOT_FOUND"), std::string::npos)
-      << "detail: " << DetailString(result);
+  EXPECT_EQ(result.diagnostic_count, 1u);
+  const std::string diagnostic_json = DiagnosticJsonString(result);
+  EXPECT_NE(diagnostic_json.find("\"domain\":\"SYMBOL\""), std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"error_id\":\"ERR_SYMBOL_002\""),
+            std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"symbol_name\":\"missing\""),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

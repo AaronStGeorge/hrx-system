@@ -539,6 +539,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::error::error_defs
     loom::target::test::descriptors
 )
 

@@ -50,6 +50,17 @@ loom_cc_binary(
     loom::util::stream
 )
 
+iree_execution_test_suite(
+  NAME
+    execution_test
+  MANIFESTS
+    "loom-format.test.json"
+  TOOLS
+    "loom-format=::loom-format"
+  LABELS
+    "hostonly"
+)
+
 loom_cc_test(
   NAME
     convert_test

@@ -325,7 +325,7 @@ iree_benchmark_loom_write_profile_summary_decode_summary_json(
 static iree_status_t iree_benchmark_loom_write_profile_summary_status_json(
     const iree_benchmark_loom_benchmark_policy_t* policy,
     const iree_benchmark_loom_profile_summary_decode_summary_t* decode_summary,
-    iree_string_view_t status, iree_string_view_t reason,
+    iree_string_view_t status, iree_string_view_t code,
     iree_status_code_t error_code, iree_string_view_t error_message,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
@@ -335,7 +335,7 @@ static iree_status_t iree_benchmark_loom_write_profile_summary_status_json(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
       stream, &first_field, "status", status));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_field, "reason", reason));
+      stream, &first_field, "code", code));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
       stream, &first_field, "request"));
   IREE_RETURN_IF_ERROR(
@@ -393,7 +393,7 @@ iree_benchmark_loom_write_profile_counter_decode_summary_json(
 static iree_status_t iree_benchmark_loom_write_profile_counter_status_json(
     const iree_benchmark_loom_benchmark_policy_t* policy,
     const iree_benchmark_loom_profile_counter_decode_summary_t* decode_summary,
-    iree_string_view_t status, iree_string_view_t reason,
+    iree_string_view_t status, iree_string_view_t code,
     iree_status_code_t error_code, iree_string_view_t error_message,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
@@ -403,7 +403,7 @@ static iree_status_t iree_benchmark_loom_write_profile_counter_status_json(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
       stream, &first_field, "status", status));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      stream, &first_field, "reason", reason));
+      stream, &first_field, "code", code));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
       stream, &first_field, "request"));
   IREE_RETURN_IF_ERROR(
@@ -444,7 +444,7 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_status_row(
     const iree_benchmark_loom_benchmark_policy_t* policy,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
     const iree_benchmark_loom_profile_summary_decode_summary_t* decode_summary,
-    iree_string_view_t status, iree_string_view_t reason,
+    iree_string_view_t status, iree_string_view_t code,
     iree_status_code_t error_code, iree_string_view_t error_message,
     iree_string_builder_t* profile_output) {
   loom_output_stream_t stream;
@@ -457,7 +457,7 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_status_row(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"profile_summary\":"));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_summary_status_json(
-      policy, decode_summary, status, reason, error_code, error_message,
+      policy, decode_summary, status, code, error_code, error_message,
       &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
@@ -472,14 +472,14 @@ iree_benchmark_loom_append_profile_summary_status_from_error(
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
-    iree_string_view_t status, iree_string_view_t reason,
+    iree_string_view_t status, iree_string_view_t code,
     iree_status_t error_status, iree_string_builder_t* profile_output) {
   iree_benchmark_loom_status_json_error_t error = {0};
   iree_benchmark_loom_format_status_json_error(error_status, &error);
   iree_status_t append_status =
       iree_benchmark_loom_append_profile_summary_status_row(
           run, candidate, work_item_index, module, benchmark_plan, case_plan,
-          policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
+          policy, benchmark_result, /*decode_summary=*/NULL, status, code,
           error.code,
           iree_make_string_view(error.message, error.message_length),
           profile_output);
@@ -605,14 +605,14 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
         policy, benchmark_result, IREE_SV("raw_artifact_only"),
         IREE_SV("decode_summary_failed"), status, profile_output);
   }
-  const iree_string_view_t reason =
+  const iree_string_view_t code =
       decode_summary.summary_count == 0 &&
               decode_summary.device_summary_count == 0
           ? IREE_SV("decoded_empty_profile_summary")
           : IREE_SV("decoded_profile_summary");
   status = iree_benchmark_loom_append_profile_summary_status_row(
       run, candidate, work_item_index, module, benchmark_plan, case_plan,
-      policy, benchmark_result, &decode_summary, IREE_SV("decoded"), reason,
+      policy, benchmark_result, &decode_summary, IREE_SV("decoded"), code,
       IREE_STATUS_OK, iree_string_view_empty(), profile_output);
 
   iree_string_view_t remaining = iree_string_builder_view(&summary_rows);
@@ -640,7 +640,7 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_status_row(
     const iree_benchmark_loom_benchmark_policy_t* policy,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
     const iree_benchmark_loom_profile_counter_decode_summary_t* decode_summary,
-    iree_string_view_t status, iree_string_view_t reason,
+    iree_string_view_t status, iree_string_view_t code,
     iree_status_code_t error_code, iree_string_view_t error_message,
     iree_string_builder_t* profile_output) {
   loom_output_stream_t stream;
@@ -653,7 +653,7 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_status_row(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"counter\":"));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_counter_status_json(
-      policy, decode_summary, status, reason, error_code, error_message,
+      policy, decode_summary, status, code, error_code, error_message,
       &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
@@ -668,14 +668,14 @@ iree_benchmark_loom_append_profile_counter_status_from_error(
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
-    iree_string_view_t status, iree_string_view_t reason,
+    iree_string_view_t status, iree_string_view_t code,
     iree_status_t error_status, iree_string_builder_t* profile_output) {
   iree_benchmark_loom_status_json_error_t error = {0};
   iree_benchmark_loom_format_status_json_error(error_status, &error);
   iree_status_t append_status =
       iree_benchmark_loom_append_profile_counter_status_row(
           run, candidate, work_item_index, module, benchmark_plan, case_plan,
-          policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
+          policy, benchmark_result, /*decode_summary=*/NULL, status, code,
           error.code,
           iree_make_string_view(error.message, error.message_length),
           profile_output);
@@ -798,14 +798,14 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
         policy, benchmark_result, IREE_SV("raw_artifact_only"),
         IREE_SV("decode_summary_failed"), status, profile_output);
   }
-  const iree_string_view_t reason =
-      decode_summary.counter_count == 0 && decode_summary.group_count == 0 &&
-              decode_summary.sample_count == 0
-          ? IREE_SV("decoded_empty_counter_report")
-          : IREE_SV("decoded_counter_report");
+  const iree_string_view_t code = decode_summary.counter_count == 0 &&
+                                          decode_summary.group_count == 0 &&
+                                          decode_summary.sample_count == 0
+                                      ? IREE_SV("decoded_empty_counter_report")
+                                      : IREE_SV("decoded_counter_report");
   status = iree_benchmark_loom_append_profile_counter_status_row(
       run, candidate, work_item_index, module, benchmark_plan, case_plan,
-      policy, benchmark_result, &decode_summary, IREE_SV("decoded"), reason,
+      policy, benchmark_result, &decode_summary, IREE_SV("decoded"), code,
       IREE_STATUS_OK, iree_string_view_empty(), profile_output);
 
   iree_string_view_t remaining = iree_string_builder_view(&counter_rows);

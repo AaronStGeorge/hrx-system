@@ -19,6 +19,22 @@ bool loom_low_allocation_location_kind_is_known(
   }
 }
 
+iree_string_view_t loom_low_allocation_location_kind_name(
+    loom_low_allocation_location_kind_t location_kind) {
+  switch (location_kind) {
+    case LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED:
+      return IREE_SV("unassigned");
+    case LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER:
+      return IREE_SV("physical_register");
+    case LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID:
+      return IREE_SV("target_id");
+    case LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT:
+      return IREE_SV("spill_slot");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 bool loom_low_allocation_location_kind_is_register_like(
     loom_low_allocation_location_kind_t location_kind) {
   return location_kind == LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
