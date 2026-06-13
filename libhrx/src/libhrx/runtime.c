@@ -265,14 +265,42 @@ static const char* hrx_get_gpu_driver_name(void) {
   return (value && value[0]) ? value : "amdgpu";
 }
 
-static bool hrx_gpu_debug_enabled(void) {
-  const char* value = getenv("HRX_GPU_DEBUG");
+static bool hrx_getenv_enabled(const char* name) {
+  const char* value = getenv(name);
   return value && value[0] && strcmp(value, "0") != 0;
+}
+
+static bool hrx_gpu_debug_enabled(void) {
+  return hrx_getenv_enabled("HRX_GPU_DEBUG");
 }
 
 static const char* hrx_get_profile_file_path(void) {
   const char* value = getenv("HRX_PROFILE_FILE");
   return (value && value[0]) ? value : NULL;
+}
+
+#define HRX_HAL_DEVICE_PARAMETER_CAPACITY 1
+
+typedef struct hrx_hal_device_parameters_t {
+  // Count of populated parameter pairs in |pairs|.
+  iree_host_size_t count;
+  // Inline storage for HAL device creation parameters.
+  iree_string_pair_t pairs[HRX_HAL_DEVICE_PARAMETER_CAPACITY];
+} hrx_hal_device_parameters_t;
+
+static iree_status_t hrx_hal_device_parameters_from_environment(
+    hrx_hal_device_parameters_t* out_parameters) {
+  memset(out_parameters, 0, sizeof(*out_parameters));
+
+  const char* sanitizer = getenv("HRX_HAL_SANITIZER");
+  if (!sanitizer || !sanitizer[0]) return iree_ok_status();
+  if (strcmp(sanitizer, "asan") != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported HRX_HAL_SANITIZER '%s'", sanitizer);
+  }
+  out_parameters->pairs[out_parameters->count++] =
+      iree_make_cstring_pair("hal.sanitizer", "asan");
+  return iree_ok_status();
 }
 
 static iree_status_t hrx_profile_file_sink_create(
@@ -392,27 +420,21 @@ static void hrx_debug_print_iree_status(const char* label,
 #ifdef HRX_HAS_IREE_AMDGPU_DRIVER
 static hrx_status_t hrx_create_iree_amdgpu_driver(
     iree_allocator_t alloc, iree_hal_driver_t** out_driver) {
-  iree_status_t status = iree_hal_amdgpu_driver_module_register(
-      iree_hal_driver_registry_default());
-  if (iree_status_is_already_exists(status)) {
-    iree_status_ignore(status);
-    status = iree_ok_status();
+  *out_driver = NULL;
+  iree_hal_driver_registry_t* registry = NULL;
+  iree_status_t status = iree_hal_driver_registry_allocate(alloc, &registry);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_driver_module_register(registry);
   }
-  hrx_debug_print_iree_status("amdgpu driver module register", status);
-  if (!iree_status_is_ok(status)) {
-    return hrx_status_from_iree(status);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_driver_registry_try_create(
+        registry, iree_make_cstring_view("amdgpu"), alloc, out_driver);
   }
-
-  iree_hal_driver_t* driver = NULL;
-  status = iree_hal_driver_registry_try_create(
-      iree_hal_driver_registry_default(), iree_make_cstring_view("amdgpu"),
-      alloc, &driver);
+  iree_hal_driver_registry_free(registry);
   hrx_debug_print_iree_status("amdgpu driver create", status);
   if (!iree_status_is_ok(status)) {
     return hrx_status_from_iree(status);
   }
-
-  *out_driver = driver;
   return hrx_ok_status();
 }
 #endif
@@ -612,6 +634,15 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   int count =
       physical_count < HRX_MAX_DEVICES ? physical_count : HRX_MAX_DEVICES;
 
+  hrx_hal_device_parameters_t device_parameters;
+  iree_status = hrx_hal_device_parameters_from_environment(&device_parameters);
+  if (!iree_status_is_ok(iree_status)) {
+    iree_allocator_free(alloc, device_infos);
+    iree_hal_driver_release(driver);
+    hrx_release_shared_state();
+    return hrx_status_from_iree(iree_status);
+  }
+
   iree_hal_device_create_params_t create_params =
       iree_hal_device_create_params_default();
   create_params.proactor_pool = g_shared.proactor_pool;
@@ -638,8 +669,8 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
 
     iree_hal_device_t* hal_device = NULL;
     iree_status = iree_hal_driver_create_device_by_ordinal(
-        driver, info_index, /*param_count=*/0, /*params=*/NULL, &create_params,
-        alloc, &hal_device);
+        driver, info_index, device_parameters.count, device_parameters.pairs,
+        &create_params, alloc, &hal_device);
     hrx_debug_print_iree_status("create device by ordinal", iree_status);
     if (!iree_status_is_ok(iree_status)) {
       hrx_gpu_release_created_devices(created_count);

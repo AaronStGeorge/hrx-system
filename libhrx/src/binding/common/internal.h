@@ -298,8 +298,11 @@ typedef struct iree_hal_streaming_device_t {
   // Device capabilities.
   uint32_t compute_capability_major;
   uint32_t compute_capability_minor;
+  // Total HIP-visible memory reported for the device.
   iree_device_size_t total_memory;
+  // Approximate HIP-visible free memory tracked by the binding.
   iree_device_size_t free_memory;
+  // True when cooperative launches are supported by the device.
   bool supports_cooperative_launch;
 
   // GCN architecture name (e.g., "gfx942:sramecc+:xnack-").

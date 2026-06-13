@@ -197,11 +197,29 @@ IREE_API_EXPORT iree_status_t iree_hal_amdgpu_logical_device_options_parse(
   if (!params.count) return iree_ok_status();
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  const iree_string_pair_t* first_param = &params.pairs[0];
-  iree_status_t status = iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT,
-      "AMDGPU logical device options do not support key/value parameter '%.*s'",
-      (int)first_param->key.size, first_param->key.data);
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < params.count && iree_status_is_ok(status);
+       ++i) {
+    const iree_string_pair_t* param = &params.pairs[i];
+    if (iree_string_view_equal(param->key, IREE_SV("hal.sanitizer"))) {
+      if (iree_string_view_equal(param->value, IREE_SV("asan"))) {
+        options->asan.enabled = 1;
+      } else if (iree_string_view_equal(param->value, IREE_SV("none"))) {
+        options->asan.enabled = 0;
+      } else {
+        status = iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "unsupported AMDGPU logical device hal.sanitizer value '%.*s'",
+            (int)param->value.size, param->value.data);
+      }
+    } else {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU logical device options do not support key/value parameter "
+          "'%.*s'",
+          (int)param->key.size, param->key.data);
+    }
+  }
 
   IREE_TRACE_ZONE_END(z0);
   return status;
