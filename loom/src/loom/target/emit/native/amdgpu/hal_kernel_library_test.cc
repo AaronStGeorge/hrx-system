@@ -406,6 +406,11 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
   loom_module_t* module = nullptr;
   ASSERT_NO_FATAL_FAILURE(ParseGfx11MultiKernel(&module));
 
+  loom_target_artifact_manifest_collect_options_t artifact_manifest_options;
+  loom_target_artifact_manifest_collect_options_initialize(
+      &artifact_manifest_options);
+  artifact_manifest_options.mode = LOOM_TARGET_ARTIFACT_MANIFEST_MODE_SUMMARY;
+
   DiagnosticCapture capture;
   loom_amdgpu_hal_kernel_library_t library = {};
   loom_amdgpu_hal_kernel_library_options_t options = {
@@ -414,6 +419,11 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
       /*.diagnostic_sink=*/capture.sink(),
       /*.source_resolver=*/{},
       /*.max_errors=*/20,
+      /*.report=*/nullptr,
+      /*.capture_target_listing=*/false,
+      /*.artifact_name=*/{},
+      /*.artifact_manifest_identifier=*/{},
+      /*.artifact_manifest=*/artifact_manifest_options,
   };
   bool emitted = false;
   IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
@@ -426,6 +436,16 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsAllCompatibleKernels) {
                     library.hsaco_data_length);
   EXPECT_NE(hsaco.find("first_kernel.kd"), std::string::npos);
   EXPECT_NE(hsaco.find("second_kernel.kd"), std::string::npos);
+
+  ASSERT_NE(library.artifact_manifest.contents.data, nullptr);
+  std::string manifest(
+      reinterpret_cast<const char*>(library.artifact_manifest.contents.data),
+      library.artifact_manifest.contents.data_length);
+  size_t first_manifest_position = manifest.find("\"name\":\"first_kernel\"");
+  size_t second_manifest_position = manifest.find("\"name\":\"second_kernel\"");
+  ASSERT_NE(first_manifest_position, std::string::npos) << manifest;
+  ASSERT_NE(second_manifest_position, std::string::npos) << manifest;
+  EXPECT_LT(first_manifest_position, second_manifest_position) << manifest;
 
   loom_amdgpu_hal_kernel_library_deinitialize(&library,
                                               iree_allocator_system());
