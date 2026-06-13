@@ -608,6 +608,16 @@ static iree_status_t loom_amdgpu_feedback_materialize_vgpr_registers(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_build_feedback_vgpr_registers(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t source, uint32_t expected_unit_count,
+    loom_location_id_t location, loom_value_id_t* out_value) {
+  IREE_ASSERT_ARGUMENT(out_value);
+  return loom_amdgpu_feedback_materialize_vgpr_registers(
+      builder, descriptor_set, source, expected_unit_count, location,
+      out_value);
+}
+
 static iree_status_t loom_amdgpu_feedback_build_vgpr_u32_binary(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t lhs,

@@ -243,6 +243,17 @@ iree_status_t loom_amdgpu_build_feedback_reservation_succeeded_scc(
     loom_value_id_t reservation_mask, loom_location_id_t location,
     loom_value_id_t* out_scc);
 
+// Materializes |source| as a VGPR register range for packet stores or cold
+// feedback block arguments.
+//
+// The source may already be a VGPR value, or it may be an SGPR value copied
+// lane-wise into VGPRs. Values with any other register class or unit count fail
+// loudly because feedback producers cannot encode them in per-lane stores.
+iree_status_t loom_amdgpu_build_feedback_vgpr_registers(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t source, uint32_t expected_unit_count,
+    loom_location_id_t location, loom_value_id_t* out_value);
+
 // Emits target-low IR that initializes a reserved feedback packet header.
 //
 // |packet_address| must reference packet storage returned by reservation.

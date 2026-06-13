@@ -173,12 +173,16 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_payload(
       location);
 }
 
-iree_status_t loom_amdgpu_build_sanitizer_access_report_trap(
+static iree_status_t
+loom_amdgpu_sanitizer_build_access_report_trap_from_current_block(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t feedback_config_symbol,
     const loom_amdgpu_sanitizer_report_source_t* source,
     const loom_amdgpu_sanitizer_access_report_t* report,
-    loom_location_id_t location) {
+    loom_location_id_t location, loom_block_t** out_trap_block) {
+  if (out_trap_block != NULL) {
+    *out_trap_block = NULL;
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_access_report(
       report, IREE_SV("access report trap")));
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_source_values(
@@ -198,6 +202,9 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_trap(
   loom_block_t* trap_block = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_insert_block_after(
       builder, feedback_block, &trap_block));
+  if (out_trap_block != NULL) {
+    *out_trap_block = trap_block;
+  }
 
   loom_amdgpu_feedback_config_values_t config_values = {};
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_config_values(
@@ -262,4 +269,162 @@ iree_status_t loom_amdgpu_build_sanitizer_access_report_trap(
   loom_builder_set_block(builder, trap_block);
   return loom_amdgpu_build_control_packet_trap(
       builder, descriptor_set, LOOM_AMDGPU_SANITIZER_TRAP_ID, location);
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_report_trap(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_symbol_ref_t feedback_config_symbol,
+    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_sanitizer_access_report_t* report,
+    loom_location_id_t location) {
+  return loom_amdgpu_sanitizer_build_access_report_trap_from_current_block(
+      builder, descriptor_set, feedback_config_symbol, source, report, location,
+      /*out_trap_block=*/NULL);
+}
+
+static iree_status_t loom_amdgpu_sanitizer_require_register_class(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t value, uint32_t unit_count, uint16_t register_class,
+    iree_string_view_t value_name) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_data_register(
+      builder, descriptor_set, value, unit_count, value_name));
+  const loom_type_t type = loom_module_value_type(builder->module, value);
+  if (loom_low_register_type_class_id(type) != register_class) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU sanitizer report value `%.*s` has an unsupported register "
+        "class",
+        (int)value_name.size, value_name.data);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_sanitizer_define_register_block_arg(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_block_t* block, uint16_t register_class, uint32_t unit_count,
+    loom_value_id_t* out_value) {
+  *out_value = LOOM_VALUE_ID_INVALID;
+  loom_type_t type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_build_register_type(
+      descriptor_set, register_class, unit_count, &type));
+  return loom_builder_define_block_arg(builder, block, type, out_value);
+}
+
+static iree_status_t loom_amdgpu_sanitizer_define_access_report_island_args(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_block_t* entry_block, loom_amdgpu_sanitizer_access_kind_t access_kind,
+    loom_amdgpu_sanitizer_report_flags_t flags,
+    loom_amdgpu_sanitizer_access_report_trap_island_t* island) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
+      &island->source_args.dispatch_ptr));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1,
+      &island->source_args.workgroup_id_x));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1,
+      &island->source_args.workitem_id_x));
+  island->report_args.access_kind = access_kind;
+  island->report_args.flags = flags;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2,
+      &island->report_args.fault_address));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2,
+      &island->report_args.access_size));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2,
+      &island->report_args.site_id));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2,
+      &island->report_args.shadow_address));
+  return loom_amdgpu_sanitizer_define_register_block_arg(
+      builder, descriptor_set, entry_block, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 2,
+      &island->report_args.shadow_value);
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_island(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_block_t* after_block, loom_symbol_ref_t feedback_config_symbol,
+    loom_amdgpu_sanitizer_access_kind_t access_kind,
+    loom_amdgpu_sanitizer_report_flags_t flags, loom_location_id_t location,
+    loom_amdgpu_sanitizer_access_report_trap_island_t* out_island) {
+  IREE_ASSERT_ARGUMENT(out_island);
+  *out_island = (loom_amdgpu_sanitizer_access_report_trap_island_t){0};
+  const loom_amdgpu_sanitizer_access_report_t access_report = {
+      .access_kind = access_kind,
+      .flags = flags,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_access_report(
+      &access_report, IREE_SV("access report trap island")));
+  if (after_block->parent_region == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU sanitizer report island requires a low region block");
+  }
+
+  loom_amdgpu_sanitizer_access_report_trap_island_t island = {
+      .access_kind = access_kind,
+      .flags = flags,
+  };
+  IREE_RETURN_IF_ERROR(loom_region_insert_block(
+      builder->module, after_block->parent_region,
+      (uint16_t)(after_block->region_index + 1), &island.entry_block));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_define_access_report_island_args(
+      builder, descriptor_set, island.entry_block, access_kind, flags,
+      &island));
+  loom_builder_set_block(builder, island.entry_block);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_sanitizer_build_access_report_trap_from_current_block(
+          builder, descriptor_set, feedback_config_symbol, &island.source_args,
+          &island.report_args, location, &island.trap_block));
+
+  *out_island = island;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_build_sanitizer_access_report_trap_branch(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_sanitizer_access_report_trap_island_t* island,
+    const loom_amdgpu_sanitizer_report_source_t* source,
+    const loom_amdgpu_sanitizer_access_report_t* report,
+    loom_location_id_t location) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_validate_access_report(
+      report, IREE_SV("access report trap branch")));
+  if (report->access_kind != island->access_kind ||
+      report->flags != island->flags) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU sanitizer access report branch does not match its island");
+  }
+  if (builder->ip.before_op != NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU sanitizer report branch must be built at "
+                            "the end of a low block");
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_register_class(
+      builder, descriptor_set, source->dispatch_ptr, 2,
+      LOOM_AMDGPU_REG_CLASS_ID_SGPR, IREE_SV("dispatch_ptr")));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_require_register_class(
+      builder, descriptor_set, source->workgroup_id_x, 1,
+      LOOM_AMDGPU_REG_CLASS_ID_SGPR, IREE_SV("workgroup_id_x")));
+
+  loom_value_id_t args[8] = {0};
+  args[0] = source->dispatch_ptr;
+  args[1] = source->workgroup_id_x;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      builder, descriptor_set, source->workitem_id_x, 1, location, &args[2]));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      builder, descriptor_set, report->fault_address, 2, location, &args[3]));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      builder, descriptor_set, report->access_size, 2, location, &args[4]));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      builder, descriptor_set, report->site_id, 2, location, &args[5]));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      builder, descriptor_set, report->shadow_address, 2, location, &args[6]));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_vgpr_registers(
+      builder, descriptor_set, report->shadow_value, 2, location, &args[7]));
+  loom_op_t* branch_op = NULL;
+  return loom_low_br_build(builder, island->entry_block, args,
+                           IREE_ARRAYSIZE(args), location, &branch_op);
 }
