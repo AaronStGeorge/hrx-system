@@ -415,10 +415,13 @@ loom_cc_test(
     loom::codegen::low::text_asm
     loom::format::text::parser
     loom::ir
+    loom::ops::global
     loom::ops::low
     loom::ops::op_defs
     loom::ops::op_registry
+    loom::ops::sanitizer
     loom::sanitizer::options
+    loom::sanitizer::site_table
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::lower
     loom::target::arch::amdgpu::ops

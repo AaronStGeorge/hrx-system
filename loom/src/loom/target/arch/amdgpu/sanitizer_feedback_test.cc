@@ -28,10 +28,13 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/global/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/op_registry.h"
+#include "loom/ops/sanitizer/ops.h"
 #include "loom/sanitizer/options.h"
+#include "loom/sanitizer/site_table.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/feedback.h"
@@ -52,9 +55,15 @@ using ::loom::testing::ModulePtr;
 
 constexpr uint64_t kReportFaultAddress = UINT64_C(0x0123456789ABCDEF);
 constexpr uint64_t kReportAccessLength = 16;
-constexpr uint64_t kReportSiteId = UINT64_C(0xC0DEFACE);
+constexpr loom_sanitizer_site_id_t kReportSiteId = 0;
 constexpr uint64_t kReportShadowAddress = UINT64_C(0x0000056789ABCDEF);
 constexpr uint64_t kReportShadowValue = UINT64_C(0xF0);
+
+uint32_t LoadLeU32(const uint8_t* data, iree_host_size_t offset) {
+  return ((uint32_t)data[offset]) | ((uint32_t)data[offset + 1] << 8) |
+         ((uint32_t)data[offset + 2] << 16) |
+         ((uint32_t)data[offset + 3] << 24);
+}
 
 std::string StatusToStringAndFree(iree_status_t status) {
   iree_host_size_t length = 0;
@@ -360,6 +369,74 @@ iree_status_t BuildU32Attr(loom_builder_t* builder, iree_string_view_t name,
   return iree_ok_status();
 }
 
+iree_status_t AppendSingleSanitizerSiteTable(loom_module_t* module) {
+  loom_sanitizer_site_row_t row = {};
+  row.site_id = kReportSiteId;
+  row.op_kind = LOOM_OP_SANITIZER_ASSERT_ACCESS;
+  row.location = LOOM_LOCATION_UNKNOWN;
+  row.payload_location = LOOM_LOCATION_UNKNOWN;
+  row.source_location = LOOM_LOCATION_UNKNOWN;
+
+  loom_sanitizer_site_collection_t collection = {};
+  collection.rows = &row;
+  collection.row_count = 1;
+
+  iree_const_byte_span_t site_table = iree_const_byte_span_empty();
+  IREE_RETURN_IF_ERROR(loom_sanitizer_site_table_encode(
+      module, &collection, &module->arena, &site_table));
+
+  loom_symbol_ref_t symbol_ref = loom_symbol_ref_null();
+  IREE_RETURN_IF_ERROR(GetOrCreateModuleSymbol(
+      module, IREE_SV(LOOM_SANITIZER_SITE_TABLE_SYMBOL_NAME), &symbol_ref));
+  loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->defining_op != nullptr) {
+    return iree_make_status(
+        IREE_STATUS_ALREADY_EXISTS,
+        "test sanitizer site table symbol is already defined");
+  }
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  loom_op_t* rodata_op = nullptr;
+  return loom_global_rodata_build(
+      &builder, LOOM_GLOBAL_RODATA_BUILD_FLAG_HAS_ALIGNMENT, symbol_ref,
+      site_table, 8, LOOM_LOCATION_UNKNOWN, &rodata_op);
+}
+
+void ExpectSingleSanitizerSiteTable(loom_module_t* module) {
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(
+      module, IREE_SV(LOOM_SANITIZER_SITE_TABLE_SYMBOL_NAME), &name_id));
+  const uint16_t symbol_id = loom_module_find_symbol(module, name_id);
+  ASSERT_NE(symbol_id, LOOM_SYMBOL_ID_INVALID);
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_id];
+  ASSERT_NE(symbol->defining_op, nullptr);
+  ASSERT_TRUE(loom_global_rodata_isa(symbol->defining_op));
+
+  const iree_const_byte_span_t contents =
+      loom_global_rodata_contents(symbol->defining_op);
+  ASSERT_GE(contents.data_length, LOOM_SANITIZER_SITE_TABLE_HEADER_LENGTH +
+                                      LOOM_SANITIZER_SITE_TABLE_RECORD_LENGTH);
+  EXPECT_EQ(
+      LoadLeU32(contents.data, LOOM_SANITIZER_SITE_TABLE_HEADER_MAGIC_OFFSET),
+      LOOM_SANITIZER_SITE_TABLE_MAGIC);
+  EXPECT_EQ(contents.data[LOOM_SANITIZER_SITE_TABLE_HEADER_VERSION_OFFSET],
+            LOOM_SANITIZER_SITE_TABLE_VERSION);
+  EXPECT_EQ(LoadLeU32(contents.data,
+                      LOOM_SANITIZER_SITE_TABLE_HEADER_ROW_COUNT_OFFSET),
+            1u);
+
+  const uint8_t* record =
+      contents.data + LOOM_SANITIZER_SITE_TABLE_HEADER_LENGTH;
+  EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_SITE_ID_OFFSET),
+            kReportSiteId);
+  EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_OP_KIND_OFFSET),
+            LOOM_OP_SANITIZER_ASSERT_ACCESS);
+  EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_FLAGS_OFFSET),
+            0u);
+}
+
 iree_status_t BuildConstU32(loom_builder_t* builder,
                             const loom_low_descriptor_set_t* descriptor_set,
                             loom_amdgpu_descriptor_ref_t descriptor_ref,
@@ -427,21 +504,43 @@ iree_status_t BuildRegisterU64Constant(
   return iree_ok_status();
 }
 
-iree_status_t FindSingleKernelOp(loom_module_t* module, loom_op_t** out_op) {
+iree_status_t FindKernelOpByName(loom_module_t* module, iree_string_view_t name,
+                                 loom_op_t** out_op) {
   *out_op = nullptr;
   loom_block_t* module_block = loom_module_block(module);
   loom_op_t* op = nullptr;
   loom_block_for_each_op(module_block, op) {
     if (!loom_low_kernel_def_isa(op)) continue;
+    const loom_symbol_ref_t callee_ref = loom_low_kernel_def_callee(op);
+    if (callee_ref.module_id != 0 ||
+        callee_ref.symbol_id >= module->symbols.count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low.kernel.def has an invalid callee symbol");
+    }
+    const loom_symbol_t* symbol =
+        &module->symbols.entries[callee_ref.symbol_id];
+    if (symbol->name_id == LOOM_STRING_ID_INVALID ||
+        symbol->name_id >= module->strings.count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low.kernel.def callee symbol has an invalid name");
+    }
+    if (!iree_string_view_equal(module->strings.entries[symbol->name_id],
+                                name)) {
+      continue;
+    }
     if (*out_op != nullptr) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "expected exactly one low.kernel.def");
+      return iree_make_status(
+          IREE_STATUS_ALREADY_EXISTS,
+          "expected one low.kernel.def named '%.*s' but found more than one",
+          (int)name.size, name.data);
     }
     *out_op = op;
   }
   if (*out_op == nullptr) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "expected one low.kernel.def");
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "low.kernel.def named '%.*s' was not found",
+                            (int)name.size, name.data);
   }
   return iree_ok_status();
 }
@@ -539,9 +638,10 @@ iree_status_t BuildAsanReportPublishAndReturn(
 }
 
 iree_status_t AppendAsanReportProducer(
-    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set) {
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t kernel_name) {
   loom_op_t* kernel_op = nullptr;
-  IREE_RETURN_IF_ERROR(FindSingleKernelOp(module, &kernel_op));
+  IREE_RETURN_IF_ERROR(FindKernelOpByName(module, kernel_name, &kernel_op));
   loom_region_t* body = loom_low_kernel_def_body(kernel_op);
   loom_block_t* entry_block = loom_region_entry_block(body);
   if (entry_block->op_count != 1 ||
@@ -584,8 +684,8 @@ iree_status_t AppendAsanReportProducer(
       &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
       kReportAccessLength, location, &report.access_size));
   IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
-      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, kReportSiteId,
-      location, &report.site_id));
+      &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      (uint64_t)kReportSiteId, location, &report.site_id));
   IREE_RETURN_IF_ERROR(BuildRegisterU64Constant(
       &builder, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
       kReportShadowAddress, location, &report.shadow_address));
@@ -681,6 +781,10 @@ class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
     source += "> @gfx_target\n";
     source +=
         "low.kernel.def target(@gfx_target) workgroup_size(1, 1, 1) "
+        "@loom_idle_kernel() {\n"
+        "  low.return\n"
+        "}\n"
+        "low.kernel.def target(@gfx_target) workgroup_size(1, 1, 1) "
         "@loom_report_kernel() {\n"
         "  low.return\n"
         "}\n";
@@ -689,8 +793,9 @@ class AmdgpuHalSanitizerFeedbackTest : public ::testing::Test {
     IREE_RETURN_IF_ERROR(ParseModuleSource(
         iree_make_string_view(source.data(), source.size()),
         IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom"), &module));
-    IREE_RETURN_IF_ERROR(
-        AppendAsanReportProducer(module.get(), descriptor_set));
+    IREE_RETURN_IF_ERROR(AppendSingleSanitizerSiteTable(module.get()));
+    IREE_RETURN_IF_ERROR(AppendAsanReportProducer(
+        module.get(), descriptor_set, IREE_SV("loom_report_kernel")));
     *out_module = std::move(module);
     return iree_ok_status();
   }
@@ -879,6 +984,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
     GTEST_SKIP() << StatusToStringAndFree(status);
   }
   IREE_ASSERT_OK(status);
+  ASSERT_NO_FATAL_FAILURE(ExpectSingleSanitizerSiteTable(module.get()));
 
   const loom_target_pipeline_options_t target_pipeline_options = {
       /*.source_to_low_max_errors=*/{},
@@ -903,6 +1009,8 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   AmdgpuHalPreparedCandidate candidate;
   IREE_ASSERT_OK(loom_run_hal_prepared_candidate_prepare(
       runtime.runtime(), artifact.value(), candidate.value()));
+  ASSERT_EQ(iree_hal_executable_function_count(candidate.value()->executable),
+            2u);
 
   iree_vm_list_t* bindings = nullptr;
   IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(),
@@ -910,6 +1018,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
                                      &bindings));
   loom_run_hal_invocation_options_t options;
   loom_run_hal_invocation_options_initialize(&options);
+  options.function_name = IREE_SV("loom_report_kernel");
   status =
       loom_run_hal_dispatch(runtime.runtime()->device,
                             candidate.value()->executable, bindings, &options);
@@ -932,7 +1041,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   EXPECT_EQ(report.access_kind, IREE_HAL_DEVICE_ASAN_ACCESS_KIND_WRITE);
   EXPECT_EQ(report.fault_address, kReportFaultAddress);
   EXPECT_EQ(report.access_length, kReportAccessLength);
-  EXPECT_EQ(report.site_id, kReportSiteId);
+  EXPECT_EQ(report.site_id, (uint64_t)kReportSiteId);
   EXPECT_EQ(report.shadow_address, kReportShadowAddress);
   EXPECT_EQ(report.shadow_value, kReportShadowValue);
   EXPECT_EQ(report.workgroup_id[0], 0u);
