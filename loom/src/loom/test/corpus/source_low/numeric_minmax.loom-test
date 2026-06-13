@@ -167,6 +167,90 @@ func.def @scf_select_i1_false_condition(%values: vector<2xi32>, %limit: i32, %up
 
 // ====
 
+func.def @scf_select_i1_true_false_constants(%values: vector<2xi32>, %limit: i32, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
+  %selected_condition = scf.select %lane_condition, %true, %false : i1
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @scf_select_i1_false_true_constants(%values: vector<2xi32>, %limit: i32, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %false = scalar.constant false : i1
+  %true = scalar.constant true : i1
+  %selected_condition = scf.select %lane_condition, %false, %true : i1
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @scf_select_i1_true_payload(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %true = scalar.constant true : i1
+  %selected_condition = scf.select %lane_condition, %true, %fallback_condition : i1
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @scf_select_i1_false_payload(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %false = scalar.constant false : i1
+  %selected_condition = scf.select %lane_condition, %false, %fallback_condition : i1
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @scf_select_i1_true_fallback(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %true = scalar.constant true : i1
+  %selected_condition = scf.select %lane_condition, %fallback_condition, %true : i1
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @scf_select_i1_false_fallback(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %lane_condition = scalar.cmpi slt, %lane, %limit : i32
+  %false = scalar.constant false : i1
+  %selected_condition = scf.select %lane_condition, %fallback_condition, %false : i1
+  %result = scf.select %selected_condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @scf_select_i1_true_condition(%true_value: f32, %false_value: f32) -> (f32) {
+  %condition = scalar.constant true : i1
+  %result = scf.select %condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @scf_select_i1_false_condition_constant(%true_value: f32, %false_value: f32) -> (f32) {
+  %condition = scalar.constant false : i1
+  %result = scf.select %condition, %true_value, %false_value : f32
+  func.return %result : f32
+}
+
+// ====
+
 func.def @scf_select_i1_scc_condition(%lhs: i32, %rhs: i32, %alt: i32, %true_value: f32, %false_value: f32) -> (f32) {
   %zero = scalar.constant 0 : i32
   %condition = scalar.cmpi slt, %lhs, %rhs : i32

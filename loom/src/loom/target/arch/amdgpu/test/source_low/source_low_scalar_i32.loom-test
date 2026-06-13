@@ -44,6 +44,23 @@ low.func.def target(@target) abi(hal_kernel) @scalar_i32_compare_scc(%lhs: reg<a
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i1_constants_scc() -> (i1, i1) {
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
+  func.return %true, %false : i1, i1
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i1_constants_scc() -> (reg<amdgpu.scc>, reg<amdgpu.scc>) asm<amdgpu.rdna3.core> {
+  %6 = s_mov_b32 0
+  %true = s_cmp_eq_i32 %6, %6
+  %false = s_cmp_lg_i32 %6, %6
+  return %true, %false
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @scalar_i1_bitwise_scc(%lhs: i32, %rhs: i32) -> (i1) {
   %zero = scalar.constant 0 : i32
   %lhs_nonzero = scalar.cmpi ne, %lhs, %zero : i32

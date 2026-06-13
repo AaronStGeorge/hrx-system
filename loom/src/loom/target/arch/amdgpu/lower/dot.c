@@ -128,8 +128,7 @@ iree_status_t loom_amdgpu_select_vector_dotf_plan(
 
   uint32_t init_bit_pattern = 0;
   const loom_amdgpu_dotf_init_kind_t init_kind =
-      loom_amdgpu_module_value_as_f32_constant(module, init,
-                                               &init_bit_pattern) &&
+      loom_amdgpu_value_as_f32_constant(context, init, &init_bit_pattern) &&
               init_bit_pattern == 0
           ? LOOM_AMDGPU_DOTF_INIT_ZERO
           : LOOM_AMDGPU_DOTF_INIT_GENERIC;

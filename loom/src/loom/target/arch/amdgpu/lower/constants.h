@@ -9,6 +9,7 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_CONSTANTS_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_CONSTANTS_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "loom/codegen/low/lower/lower.h"
@@ -38,6 +39,14 @@ bool loom_amdgpu_module_value_as_f32_constant(const loom_module_t* module,
 bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
                                                        int64_t* out_value);
 
+// Extracts an exact signed 32-bit integer from value facts.
+bool loom_amdgpu_value_facts_as_exact_i32(loom_value_facts_t facts,
+                                          int64_t* out_value);
+
+// Extracts an exact f32 constant as a raw IEEE bit pattern from value facts.
+bool loom_amdgpu_value_facts_as_f32_bit_pattern(loom_value_facts_t facts,
+                                                uint32_t* out_bit_pattern);
+
 // Returns true when value is a non-zero power of two.
 bool loom_amdgpu_u32_is_power_of_two(uint32_t value);
 
@@ -64,6 +73,11 @@ uint32_t loom_amdgpu_attr_16bit_float_bit_pattern(loom_scalar_type_t type,
 bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
                                        loom_value_id_t value_id,
                                        int64_t* out_value);
+
+// Extracts a source scalar i1 exact constant from value facts.
+bool loom_amdgpu_value_as_i1_constant(loom_low_lower_context_t* context,
+                                      loom_value_id_t value_id,
+                                      bool* out_value);
 
 // Extracts a source scalar f32 constant as a raw IEEE bit pattern.
 bool loom_amdgpu_value_as_f32_constant(loom_low_lower_context_t* context,
