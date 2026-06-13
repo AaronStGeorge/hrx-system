@@ -9,7 +9,6 @@
 #include "loom/tools/loom-check/main.h"
 
 #include <stdio.h>
-#include <string.h>
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -89,10 +88,6 @@ IREE_FLAG_CALLBACK(loom_check_parse_json_flag, loom_check_print_json_flag,
                    &FLAG_json, json,
                    "Structured JSON output to stdout. Bare --json is the same\n"
                    "as --json=failures. Modes: failures, summary, all.");
-
-static bool loom_check_is_agents_markdown_arg(const char* arg) {
-  return strcmp(arg, "--agents_md") == 0;
-}
 
 static void loom_check_print_agents_markdown(FILE* stream) {
   fprintf(
@@ -267,7 +262,7 @@ int loom_check_main(int argc, char** argv,
       "Exit code is 0 when all cases pass, 1 if any fail.\n");
 
   for (int i = 1; i < argc; ++i) {
-    if (loom_check_is_agents_markdown_arg(argv[i])) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
       loom_check_print_agents_markdown(stdout);
       return 0;
     }

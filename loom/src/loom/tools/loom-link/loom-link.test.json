@@ -2,6 +2,25 @@
   "version": 1,
   "cases": [
     {
+      "name": "prints agent documentation",
+      "run": {
+        "tool": "loom-link",
+        "args": ["--agents_md"]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "## loom-link",
+            "--library=providers.loombc",
+            "--root=@entry",
+            "--print-plan",
+            "--list-symbols",
+            "--strip-check"
+          ]
+        }
+      }
+    },
+    {
       "name": "links text corpus into harness",
       "steps": [
         {

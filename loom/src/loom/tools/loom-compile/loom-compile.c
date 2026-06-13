@@ -773,22 +773,94 @@ static iree_status_t loom_compile_require_hal_target_selection(
       (unsigned)unselected_root_count, unselected_root_count == 1 ? "" : "s");
 }
 
-int main(int argc, char** argv) {
-  IREE_TRACE_APP_ENTER();
-  IREE_TRACE_ZONE_BEGIN(z0);
+static void loom_compile_print_agents_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## loom-compile\n"
+      "\n"
+      "`loom-compile` turns Loom text or bytecode into runtime artifacts. It "
+      "is\n"
+      "the offline path for producing VM bytecode archives and target-native "
+      "HAL\n"
+      "artifacts such as AMDGPU HSACO sidecars.\n"
+      "\n"
+      "### Common flows\n"
+      "\n"
+      "```shell\n"
+      "loom-compile kernel.loom --backend=vm --output=kernel.vmfb\n"
+      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
+      "loom-compile kernel.loombc --backend=amdgpu --target=gfx1100 \\\n"
+      "  --artifact-manifest=summary --emit-artifact-manifest=kernel.json\n"
+      "loom-compile kernel.loom --backend=vm --pipeline=none\n"
+      "loom-compile kernel.loom --backend=vm --pipeline=@my_pipeline\n"
+      "```\n"
+      "\n"
+      "### Backend and target selection\n"
+      "\n"
+      "`--backend=vm` emits a VM bytecode archive. HAL/native backends such "
+      "as\n"
+      "`--backend=amdgpu` select a target provider and can emit a "
+      "target-native\n"
+      "artifact with `--emit-target-artifact=path`. Use `--target=gfx1100` or\n"
+      "another backend-owned target key when roots omit explicit "
+      "`target(...)`\n"
+      "attrs. A single invocation compiles one target configuration.\n"
+      "\n"
+      "### Config specialization\n"
+      "\n"
+      "`--config=key=value` and `--config-file=file.jsonc` bind `config.decl`\n"
+      "values before the compile pipeline. Use this for JIT shape, layout, "
+      "and\n"
+      "provider-selection parameters that should specialize the artifact.\n"
+      "\n"
+      "### Reports, manifests, and IR traces\n"
+      "\n"
+      "```shell\n"
+      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "  --compile-report=summary --compile-report-output=report.json \\\n"
+      "  --artifact-manifest=details --emit-artifact-manifest=manifest.json "
+      "\\\n"
+      "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
+      "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
+      "  --dump-ir-after-all --dump-ir-format=jsonl "
+      "--dump-ir-output=trace.jsonl\n"
+      "jq '.functions[] | {name, target, workgroup_size}' manifest.json\n"
+      "jq 'select(.stage == \"prepared-low\") | .pass' trace.jsonl\n"
+      "```\n"
+      "\n"
+      "`--compile-report=summary|details` records compiler-side facts and\n"
+      "status. `--artifact-manifest=summary|details|analysis` records the\n"
+      "artifact's functions, globals, targets, ABI metadata, and optional\n"
+      "analysis. `--dump-ir-*` captures intermediate IR with the same tracing\n"
+      "flags used by `loom-opt`.\n");
+}
 
+int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-compile",
       "Compiles a Loom module to a runtime artifact.\n"
       "\n"
       "Usage:\n"
       "  loom-compile [file.loom] --backend=vm --output=module.vmfb\n"
+      "  loom-compile --agents_md\n"
       "\n"
       "Repeat --config=key=value to materialize compile-time config symbols "
       "before the pass pipeline. Use --config-file=path for a JSON/JSONC "
       "object such as {\"model36\":{\"model\":{\"hidden_size\":4096}}}. "
       "Files and direct bindings share one config set and duplicate keys are "
-      "rejected.\n" LOOM_TOOLING_PASS_TRACE_USAGE);
+      "rejected.\n"
+      "Use --agents_md to print agent-facing workflow "
+      "guidance.\n" LOOM_TOOLING_PASS_TRACE_USAGE);
+  for (int i = 1; i < argc; ++i) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
+      loom_compile_print_agents_markdown(stdout);
+      return 0;
+    }
+  }
+  IREE_TRACE_APP_ENTER();
+  IREE_TRACE_ZONE_BEGIN(z0);
+
   loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 

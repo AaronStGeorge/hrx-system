@@ -1184,6 +1184,63 @@ static iree_status_t loom_link_cli_print_config_schema(
   return status;
 }
 
+static void loom_link_cli_print_agents_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## loom-link\n"
+      "\n"
+      "`loom-link` combines Loom text and bytecode modules, applies config\n"
+      "bindings to materialized modules, and selects the symbols that should "
+      "be\n"
+      "kept for an archive or selective runtime artifact.\n"
+      "\n"
+      "### Common flows\n"
+      "\n"
+      "```shell\n"
+      "loom-link root.loom providers.loom --output=linked.loom\n"
+      "loom-link root.loom --library=providers.loombc --root=@entry \\\n"
+      "  --to=bc --output=entry.loombc\n"
+      "loom-link root.loom --library=providers.loom --root=@entry "
+      "--print-plan\n"
+      "loom-link library.loom --mode=archive --strip-check --to=bc \\\n"
+      "  --output=runtime-library.loombc\n"
+      "loom-link root.loom --print-config-schema\n"
+      "```\n"
+      "\n"
+      "### Inputs and libraries\n"
+      "\n"
+      "Positional inputs are primary modules. `--library=path` adds provider\n"
+      "modules searched after primary inputs. `--from=auto|text|bc` controls\n"
+      "input decoding and `--to=text|bc` controls output encoding.\n"
+      "\n"
+      "### Archive and selective linking\n"
+      "\n"
+      "`--mode=archive` preserves every non-stripped symbol in input order.\n"
+      "`--mode=link` or `--mode=selective` keeps explicit `--root=@symbol`\n"
+      "values, optional `--include-exported-roots`, and reachable "
+      "dependencies.\n"
+      "`--strip-check` removes `check.case` and `check.benchmark` records "
+      "from\n"
+      "runtime artifacts.\n"
+      "\n"
+      "### Provider debugging\n"
+      "\n"
+      "```shell\n"
+      "loom-link root.loom --library=providers.loom --list-symbols\n"
+      "loom-link root.loom --library=providers.loom --root=@entry "
+      "--print-plan\n"
+      "loom-link root.loom --library=providers.loom --root=@entry \\\n"
+      "  --config=model.hidden_size=4096 --require-resolved-config\n"
+      "```\n"
+      "\n"
+      "`--list-symbols` shows the indexed providers. `--print-plan` shows why\n"
+      "each symbol is live before streaming modules into the linker. Config\n"
+      "bindings are applied to each materialized input before dependency "
+      "walking,\n"
+      "so target and shape predicates can prune unreachable provider "
+      "templates.\n");
+}
+
 int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-link",
@@ -1194,6 +1251,7 @@ int main(int argc, char** argv) {
       "[--to=text|bc] [--output=file] [file...]\n"
       "  loom-link model.loom --library=kernels.loombc --root=@entry "
       "--to=bc --output=model.loombc\n"
+      "  loom-link --agents_md\n"
       "\n"
       "Input defaults to stdin only when no primary inputs or libraries are "
       "provided. Positional inputs are searched before --library inputs.\n"
@@ -1203,6 +1261,12 @@ int main(int argc, char** argv) {
       "dependencies.\n"
       "Use --strip-check to remove check.case and check.benchmark symbols from "
       "runtime artifacts.\n");
+  for (int i = 1; i < argc; ++i) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
+      loom_link_cli_print_agents_markdown(stdout);
+      return 0;
+    }
+  }
   loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 

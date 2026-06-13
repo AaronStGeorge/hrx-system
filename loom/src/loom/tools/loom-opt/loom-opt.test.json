@@ -2,6 +2,24 @@
   "version": 1,
   "cases": [
     {
+      "name": "prints agent documentation",
+      "run": {
+        "tool": "loom-opt",
+        "args": ["--agents_md"]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "## loom-opt",
+            "--pass-report=json",
+            "--diagnostic-format=json",
+            "--dump-ir-after-all",
+            "--pass-help=unroll-scf-for"
+          ]
+        }
+      }
+    },
+    {
       "name": "lists registered passes",
       "run": {
         "tool": "loom-opt",

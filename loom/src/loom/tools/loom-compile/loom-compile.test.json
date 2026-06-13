@@ -2,6 +2,25 @@
   "version": 1,
   "cases": [
     {
+      "name": "prints agent documentation",
+      "run": {
+        "tool": "loom-compile",
+        "args": ["--agents_md"]
+      },
+      "stdout": {
+        "contains": {
+          "unordered": [
+            "## loom-compile",
+            "--backend=amdgpu",
+            "--compile-report=summary",
+            "--artifact-manifest=summary",
+            "--emit-target-artifact=kernel.hsaco",
+            "--dump-ir-after-all"
+          ]
+        }
+      }
+    },
+    {
       "name": "compiles branchy module",
       "steps": [
         {

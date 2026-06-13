@@ -1124,6 +1124,63 @@ static iree_status_t loom_opt_print_pass_help(
                                                 "failed to flush stdout");
 }
 
+static void loom_opt_print_agents_markdown(FILE* stream) {
+  fprintf(
+      stream,
+      "## loom-opt\n"
+      "\n"
+      "`loom-opt` parses Loom IR, optionally materializes config values,\n"
+      "executes pass pipelines, and prints transformed Loom IR. Use it when\n"
+      "authoring `.loom` files, reducing a compiler issue, or checking what a\n"
+      "shared compile stage does before `loom-compile` emits an artifact.\n"
+      "\n"
+      "### Common flows\n"
+      "\n"
+      "```shell\n"
+      "loom-opt input.loom --pass=canonicalize --pass=cse --pass=dce\n"
+      "loom-opt input.loom --pipeline=source-low --output=source-low.loom\n"
+      "loom-opt input.loom --pipeline=prepared-low --output=prepared-low.loom\n"
+      "loom-opt input.loom --pipeline=@my_pipeline --config=shape.m=4096\n"
+      "loom-opt input.loom --print-config-schema\n"
+      "loom-opt --list-passes\n"
+      "loom-opt --pass-help=unroll-scf-for\n"
+      "```\n"
+      "\n"
+      "### Pass selection\n"
+      "\n"
+      "`--pass=<name>{key=value}` appends a pass to a shallow command-line\n"
+      "pipeline. Repeat it to build a pipeline. `--pipeline=source-low`,\n"
+      "`--pipeline=prepared-low`, and `--pipeline=default` run the shared\n"
+      "compile stages. `--pipeline=@symbol` runs an authored `pass.pipeline`\n"
+      "from the input module.\n"
+      "\n"
+      "### Config specialization\n"
+      "\n"
+      "`--config=key=value` and `--config-file=file.jsonc` bind `config.decl`\n"
+      "values before passes run. `--require-resolved-config` rejects final\n"
+      "output that still contains unresolved config declarations.\n"
+      "\n"
+      "### Diagnostics and reports\n"
+      "\n"
+      "```shell\n"
+      "loom-opt input.loom --pipeline=source-low --pass-report=json \\\n"
+      "  --diagnostic-format=json --output=/tmp/out.loom\n"
+      "loom-opt input.loom --pipeline=source-low --dump-ir-after-all \\\n"
+      "  --dump-ir-format=jsonl --dump-ir-output=/tmp/trace.jsonl\n"
+      "loom-opt input.loom --pass=unroll-scf-for --pass-report=json "
+      "2>report.json\n"
+      "jq '.passes[] | {pass, op, changed, details}' report.json\n"
+      "jq 'select(.pass == \"source-to-low\") | .ir' /tmp/trace.jsonl\n"
+      "```\n"
+      "\n"
+      "`--pass-report=json` is the structured channel for pass decisions and\n"
+      "per-pass facts. `--diagnostic-format=json` emits compiler diagnostics "
+      "as\n"
+      "JSONL. `--dump-ir-before*` and `--dump-ir-after*` capture intermediate "
+      "IR\n"
+      "for bisection; prefer `--dump-ir-format=jsonl` for agent ingestion.\n");
+}
+
 int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-opt",
@@ -1136,6 +1193,7 @@ int main(int argc, char** argv) {
       "  cat module.loom | loom-opt --pass=symbol-dce\n"
       "  loom-opt --list-passes\n"
       "  loom-opt --pass-help=canonicalize\n"
+      "  loom-opt --agents_md\n"
       "\n"
       "Input defaults to stdin when no file is provided. Output defaults to "
       "stdout.\n"
@@ -1156,6 +1214,12 @@ int main(int argc, char** argv) {
       "Use --diagnostic-format=json to print structured diagnostic JSONL to "
       "stderr.\n" LOOM_TOOLING_PASS_TRACE_USAGE
       "Use --pass-reproducer=file to capture a rerunnable failure file.\n");
+  for (int i = 1; i < argc; ++i) {
+    if (loom_tooling_cli_is_agents_markdown_arg(argv[i])) {
+      loom_opt_print_agents_markdown(stdout);
+      return 0;
+    }
+  }
   loom_tooling_cli_set_default_help_filter();
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
