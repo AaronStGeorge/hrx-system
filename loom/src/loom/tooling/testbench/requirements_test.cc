@@ -71,17 +71,39 @@ class RequirementsTest : public ::testing::Test {
   loom_context_t context_;
 };
 
-static iree_status_t QueryEnabled(void* user_data, const loom_module_t* module,
-                                  loom_named_attr_slice_t attrs,
-                                  bool* out_satisfied,
-                                  iree_string_view_t* out_reason) {
+static iree_status_t QueryEnabled(
+    void* user_data, const loom_module_t* module, loom_named_attr_slice_t attrs,
+    loom_testbench_requirement_provider_result_t* out_result) {
   (void)user_data;
   bool present = false;
   int64_t enabled = 0;
   IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_optional_i64_attr(
       module, attrs, IREE_SV("enabled"), &present, &enabled));
-  *out_satisfied = present && enabled != 0;
-  *out_reason = IREE_SV("fake requirement was disabled");
+  const bool enabled_predicate = present && enabled != 0;
+  *out_result = (loom_testbench_requirement_provider_result_t){
+      /*.state=*/
+      enabled_predicate ? LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_SATISFIED
+                        : LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNSATISFIED,
+      /*.provider_code=*/
+      enabled_predicate ? iree_string_view_empty() : IREE_SV("fake_disabled"),
+      /*.display_message=*/
+      enabled_predicate ? iree_string_view_empty()
+                        : IREE_SV("fake requirement was disabled"),
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t QueryUnavailable(
+    void* user_data, const loom_module_t* module, loom_named_attr_slice_t attrs,
+    loom_testbench_requirement_provider_result_t* out_result) {
+  (void)user_data;
+  (void)module;
+  (void)attrs;
+  *out_result = (loom_testbench_requirement_provider_result_t){
+      /*.state=*/LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNAVAILABLE,
+      /*.provider_code=*/IREE_SV("fake_runtime_unavailable"),
+      /*.display_message=*/IREE_SV("fake runtime unavailable"),
+  };
   return iree_ok_status();
 }
 
@@ -101,6 +123,11 @@ check.case @explicit_skip {
   check.skip_if<fake.enabled> {enabled = 1} reason("case is intentionally skipped")
   check.return
 }
+
+check.case @unavailable_requirement {
+  check.requires<fake.unavailable> {}
+  check.return
+}
 )");
   ASSERT_NE(module.get(), nullptr);
   loom_testbench_module_plan_t plan = PlanModule(module.get());
@@ -111,6 +138,11 @@ check.case @explicit_skip {
           /*.name=*/IREE_SV("fake.enabled"),
           /*.user_data=*/nullptr,
           /*.query=*/QueryEnabled,
+      },
+      {
+          /*.name=*/IREE_SV("fake.unavailable"),
+          /*.user_data=*/nullptr,
+          /*.query=*/QueryUnavailable,
       },
   };
   loom_testbench_requirement_provider_registry_t registry = {};
@@ -125,21 +157,46 @@ check.case @explicit_skip {
   IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
       module.get(), &plan.cases[1], &registry, &result));
   EXPECT_TRUE(result.skipped);
+  EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES);
+  EXPECT_EQ(result.code,
+            LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_REQUIREMENT_NOT_SATISFIED);
   EXPECT_TRUE(iree_string_view_equal(result.provider, IREE_SV("fake.enabled")));
-  EXPECT_TRUE(iree_string_view_equal(result.reason,
+  EXPECT_TRUE(
+      iree_string_view_equal(result.provider_code, IREE_SV("fake_disabled")));
+  EXPECT_TRUE(iree_string_view_equal(result.display_message,
                                      IREE_SV("fake requirement was disabled")));
 
   IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
       module.get(), &plan.cases[2], &registry, &result));
   EXPECT_TRUE(result.skipped);
-  EXPECT_TRUE(iree_string_view_equal(result.reason,
+  EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_SKIP_IF);
+  EXPECT_EQ(result.code,
+            LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_SKIP_PREDICATE_MATCHED);
+  EXPECT_TRUE(iree_string_view_is_empty(result.provider_code));
+  EXPECT_TRUE(iree_string_view_equal(result.display_message,
                                      IREE_SV("case is intentionally skipped")));
+
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
+      module.get(), &plan.cases[3], &registry, &result));
+  EXPECT_TRUE(result.skipped);
+  EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES);
+  EXPECT_EQ(result.code,
+            LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_UNAVAILABLE);
+  EXPECT_TRUE(
+      iree_string_view_equal(result.provider, IREE_SV("fake.unavailable")));
+  EXPECT_TRUE(iree_string_view_equal(result.provider_code,
+                                     IREE_SV("fake_runtime_unavailable")));
 }
 
-TEST_F(RequirementsTest, ReportsUnknownProviders) {
+TEST_F(RequirementsTest, ReportsUnknownProvidersAsSkippedEvidence) {
   ModulePtr module = ParseModule(R"(
-check.case @unknown {
+check.case @unknown_requires {
   check.requires<missing.provider> {}
+  check.return
+}
+
+check.case @unknown_skip_if {
+  check.skip_if<missing.provider> {} reason("human text")
   check.return
 }
 )");
@@ -151,9 +208,25 @@ check.case @unknown {
   loom_testbench_requirement_provider_registry_initialize(nullptr, 0,
                                                           &registry);
   loom_testbench_requirement_result_t result = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
-                        loom_testbench_evaluate_case_requirements(
-                            module.get(), &plan.cases[0], &registry, &result));
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
+      module.get(), &plan.cases[0], &registry, &result));
+  EXPECT_TRUE(result.skipped);
+  EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES);
+  EXPECT_EQ(result.code,
+            LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_NOT_REGISTERED);
+  EXPECT_TRUE(
+      iree_string_view_equal(result.provider, IREE_SV("missing.provider")));
+  EXPECT_TRUE(iree_string_view_is_empty(result.provider_code));
+  EXPECT_TRUE(iree_string_view_is_empty(result.display_message));
+
+  IREE_ASSERT_OK(loom_testbench_evaluate_case_requirements(
+      module.get(), &plan.cases[1], &registry, &result));
+  EXPECT_TRUE(result.skipped);
+  EXPECT_EQ(result.op_kind, LOOM_TESTBENCH_REQUIREMENT_OP_KIND_SKIP_IF);
+  EXPECT_EQ(result.code,
+            LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_NOT_REGISTERED);
+  EXPECT_TRUE(
+      iree_string_view_equal(result.display_message, IREE_SV("human text")));
 }
 
 }  // namespace

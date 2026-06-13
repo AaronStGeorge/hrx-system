@@ -81,6 +81,7 @@ iree_execution_test_suite(
   TOOLS
     "iree-test-loom=::iree-test-loom"
   DATA
+    "testdata/requirement_cases.loom"
     "testdata/scalar_cases.loom"
   LABELS
     "hostonly"

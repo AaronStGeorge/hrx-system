@@ -18,6 +18,38 @@ static iree_string_view_t loom_testbench_requirement_module_string(
   return module->strings.entries[string_id];
 }
 
+iree_string_view_t loom_testbench_requirement_op_kind_name(
+    loom_testbench_requirement_op_kind_t op_kind) {
+  switch (op_kind) {
+    case LOOM_TESTBENCH_REQUIREMENT_OP_KIND_NONE:
+      return IREE_SV("none");
+    case LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES:
+      return IREE_SV("requires");
+    case LOOM_TESTBENCH_REQUIREMENT_OP_KIND_SKIP_IF:
+      return IREE_SV("skip_if");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_testbench_requirement_skip_code_name(
+    loom_testbench_requirement_skip_code_t code) {
+  switch (code) {
+    case LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_NONE:
+      return IREE_SV("none");
+    case LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_NOT_REGISTERED:
+      return IREE_SV("provider_not_registered");
+    case LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_UNAVAILABLE:
+      return IREE_SV("provider_unavailable");
+    case LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_REQUIREMENT_NOT_SATISFIED:
+      return IREE_SV("requirement_not_satisfied");
+    case LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_SKIP_PREDICATE_MATCHED:
+      return IREE_SV("skip_predicate_matched");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 void loom_testbench_requirement_provider_registry_initialize(
     const loom_testbench_requirement_provider_t* providers,
     iree_host_size_t provider_count,
@@ -108,21 +140,22 @@ static iree_status_t loom_testbench_requirement_evaluate_provider(
     const loom_module_t* module,
     const loom_testbench_requirement_provider_registry_t* registry,
     iree_string_view_t provider_name, loom_named_attr_slice_t attrs,
-    bool* out_satisfied, iree_string_view_t* out_reason) {
+    loom_testbench_requirement_provider_result_t* out_provider_result) {
   const loom_testbench_requirement_provider_t* provider =
       loom_testbench_requirement_find_provider(registry, provider_name);
   if (!provider || provider->query == NULL) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "requirement provider '%.*s' is not registered",
-                            (int)provider_name.size, provider_name.data);
+    *out_provider_result = (loom_testbench_requirement_provider_result_t){
+        .state = LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_NOT_REGISTERED,
+    };
+    return iree_ok_status();
   }
-  return provider->query(provider->user_data, module, attrs, out_satisfied,
-                         out_reason);
+  return provider->query(provider->user_data, module, attrs,
+                         out_provider_result);
 }
 
-static iree_string_view_t loom_testbench_requirement_skip_reason(
+static iree_string_view_t loom_testbench_requirement_display_message(
     const loom_module_t* module, const loom_op_t* op,
-    iree_string_view_t provider_reason, iree_string_view_t fallback_reason) {
+    iree_string_view_t provider_display_message) {
   if (loom_check_skip_if_isa(op)) {
     loom_attribute_t reason_attr =
         loom_op_attrs(op)[loom_check_skip_if_reason_ATTR_INDEX];
@@ -131,10 +164,25 @@ static iree_string_view_t loom_testbench_requirement_skip_reason(
           module, loom_attr_as_string_id(reason_attr));
     }
   }
-  if (!iree_string_view_is_empty(provider_reason)) {
-    return provider_reason;
+  return provider_display_message;
+}
+
+static loom_testbench_requirement_skip_code_t
+loom_testbench_requirement_skip_code(
+    loom_testbench_requirement_op_kind_t op_kind,
+    const loom_testbench_requirement_provider_result_t* provider_result) {
+  if (provider_result->state ==
+      LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_NOT_REGISTERED) {
+    return LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_NOT_REGISTERED;
   }
-  return fallback_reason;
+  if (provider_result->state ==
+      LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNAVAILABLE) {
+    return LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_PROVIDER_UNAVAILABLE;
+  }
+  if (op_kind == LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES) {
+    return LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_REQUIREMENT_NOT_SATISFIED;
+  }
+  return LOOM_TESTBENCH_REQUIREMENT_SKIP_CODE_SKIP_PREDICATE_MATCHED;
 }
 
 static iree_status_t loom_testbench_requirement_evaluate_op(
@@ -143,11 +191,15 @@ static iree_status_t loom_testbench_requirement_evaluate_op(
     const loom_op_t* op, loom_testbench_requirement_result_t* result) {
   iree_string_view_t provider_name = iree_string_view_empty();
   loom_named_attr_slice_t attrs = loom_named_attr_slice_empty();
+  loom_testbench_requirement_op_kind_t op_kind =
+      LOOM_TESTBENCH_REQUIREMENT_OP_KIND_NONE;
   if (loom_check_requires_isa(op)) {
+    op_kind = LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES;
     provider_name = loom_testbench_requirement_module_string(
         module, loom_check_requires_provider(op));
     attrs = loom_check_requires_attrs(op);
   } else if (loom_check_skip_if_isa(op)) {
+    op_kind = LOOM_TESTBENCH_REQUIREMENT_OP_KIND_SKIP_IF;
     provider_name = loom_testbench_requirement_module_string(
         module, loom_check_skip_if_provider(op));
     attrs = loom_check_skip_if_attrs(op);
@@ -155,21 +207,40 @@ static iree_status_t loom_testbench_requirement_evaluate_op(
     return iree_ok_status();
   }
 
-  bool satisfied = false;
-  iree_string_view_t provider_reason = iree_string_view_empty();
+  loom_testbench_requirement_provider_result_t provider_result = {0};
   IREE_RETURN_IF_ERROR(loom_testbench_requirement_evaluate_provider(
-      module, registry, provider_name, attrs, &satisfied, &provider_reason));
+      module, registry, provider_name, attrs, &provider_result));
+  if (provider_result.state ==
+      LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNSPECIFIED) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "requirement provider '%.*s' returned no predicate state",
+        (int)provider_name.size, provider_name.data);
+  }
 
-  const bool should_skip = loom_check_requires_isa(op) ? !satisfied : satisfied;
+  const bool provider_available =
+      provider_result.state !=
+          LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNAVAILABLE &&
+      provider_result.state !=
+          LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_NOT_REGISTERED;
+  const bool predicate_satisfied =
+      provider_result.state ==
+      LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_SATISFIED;
+  const bool predicate_skip =
+      op_kind == LOOM_TESTBENCH_REQUIREMENT_OP_KIND_REQUIRES
+          ? !predicate_satisfied
+          : predicate_satisfied;
+  const bool should_skip = !provider_available || predicate_skip;
   if (should_skip) {
     *result = (loom_testbench_requirement_result_t){
         .skipped = true,
         .op = op,
+        .op_kind = op_kind,
+        .code = loom_testbench_requirement_skip_code(op_kind, &provider_result),
         .provider = provider_name,
-        .reason = loom_testbench_requirement_skip_reason(
-            module, op, provider_reason,
-            loom_check_requires_isa(op) ? IREE_SV("requirement not satisfied")
-                                        : IREE_SV("skip predicate matched")),
+        .provider_code = provider_result.provider_code,
+        .display_message = loom_testbench_requirement_display_message(
+            module, op, provider_result.display_message),
     };
   }
   return iree_ok_status();

@@ -121,7 +121,7 @@ iree_status_t loom_run_hal_testbench_context_ensure_runtime(
 
 static iree_status_t loom_run_hal_testbench_requirement_query_i64(
     void* user_data, const loom_module_t* module, loom_named_attr_slice_t attrs,
-    bool* out_satisfied, iree_string_view_t* out_reason) {
+    loom_testbench_requirement_provider_result_t* out_result) {
   loom_run_hal_testbench_context_t* context =
       (loom_run_hal_testbench_context_t*)user_data;
   iree_string_view_t category = iree_string_view_empty();
@@ -164,8 +164,16 @@ static iree_status_t loom_run_hal_testbench_requirement_query_i64(
   if (has_maximum) {
     satisfied = satisfied && value <= maximum;
   }
-  *out_satisfied = satisfied;
-  *out_reason = IREE_SV("HAL device i64 requirement was not satisfied");
+  *out_result = (loom_testbench_requirement_provider_result_t){
+      .state = satisfied
+                   ? LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_SATISFIED
+                   : LOOM_TESTBENCH_REQUIREMENT_PROVIDER_STATE_UNSATISFIED,
+      .provider_code = satisfied ? iree_string_view_empty()
+                                 : IREE_SV("predicate_unsatisfied"),
+      .display_message =
+          satisfied ? iree_string_view_empty()
+                    : IREE_SV("HAL device i64 requirement was not satisfied"),
+  };
   return iree_ok_status();
 }
 

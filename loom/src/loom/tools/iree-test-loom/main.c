@@ -116,10 +116,26 @@ static iree_status_t iree_test_loom_append_skipped_case(
       loom_output_stream_write_cstring(&stream, ",\"provider\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(&stream, requirement_result->provider));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"reason\":"));
-  IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(&stream, requirement_result->reason));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"op\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream,
+      loom_testbench_requirement_op_kind_name(requirement_result->op_kind)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"code\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream,
+      loom_testbench_requirement_skip_code_name(requirement_result->code)));
+  if (!iree_string_view_is_empty(requirement_result->provider_code)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"provider_code\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, requirement_result->provider_code));
+  }
+  if (!iree_string_view_is_empty(requirement_result->display_message)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"display_message\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, requirement_result->display_message));
+  }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   *inout_first_skipped_case = false;
   return iree_ok_status();
@@ -363,12 +379,16 @@ static void iree_test_loom_print_agents_markdown(FILE* stream) {
       "iree-test-loom module.loom --case=@smoke | jq '.failed_sample_count'\n"
       "iree-test-loom module.loom | jq '.samples[] | {case, sample_ordinal, "
       "passed}'\n"
-      "iree-test-loom module.loom | jq '.skipped_cases[]? | {case, provider}'\n"
+      "iree-test-loom module.loom | jq '.skipped_cases[]? | {case, provider, "
+      "op, code, provider_code}'\n"
       "```\n"
       "\n"
       "The report carries `case_count`, `sample_count`, "
       "`failed_sample_count`,\n"
-      "`skipped_case_count`, `samples`, and `skipped_cases`. A nonzero failed\n"
+      "`skipped_case_count`, `samples`, and `skipped_cases`. Skipped cases "
+      "use\n"
+      "stable `op` and `code` fields; `provider_code` is provider-defined and\n"
+      "`display_message` is human-facing only. A nonzero failed\n"
       "sample count makes the process fail after the JSON report is "
       "written.\n");
 }
