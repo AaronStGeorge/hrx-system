@@ -854,7 +854,8 @@ static iree_status_t iree_hal_task_device_queue_dealloca(
   if (placement.device == base_device &&
       iree_hal_local_transient_buffer_isa(buffer)) {
     // Native dealloca: decommit the transient buffer in the queue drain handler
-    // after all wait semaphores have been satisfied.
+    // after all wait semaphores have been satisfied and before signaling
+    // dealloca completion.
     return iree_hal_task_queue_submit_dealloca(
         queue, buffer, wait_semaphore_list, signal_semaphore_list);
   }

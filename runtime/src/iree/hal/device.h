@@ -637,8 +637,11 @@ IREE_API_EXPORT iree_status_t iree_hal_device_queue_alloca(
 // been reached. Once the storage is available for reuse the
 // |signal_semaphore_list| will be signaled. After all waits have been resolved
 // the contents of the buffer are immediately undefined even if the signal has
-// not yet occurred. If the buffer was not allocated asynchronously a barrier
-// will be inserted to preserve fence timelines.
+// not yet occurred. Queue implementations must perform target-visible release
+// effects such as decommit, sanitizer poisoning, or guard-page updates after
+// all waits are satisfied and before any signals are published. If the buffer
+// was not allocated asynchronously a barrier will be inserted to preserve fence
+// timelines.
 //
 // Deallocations will only be queue-ordered if the |buffer| was originally
 // allocated with iree_hal_device_queue_alloca. Any synchronous allocations will

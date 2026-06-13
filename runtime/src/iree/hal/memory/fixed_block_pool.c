@@ -162,9 +162,9 @@ static void iree_hal_fixed_block_pool_restore_rejected_blocks(
 }
 
 static bool iree_hal_fixed_block_pool_try_charge_reservation(
-    iree_hal_fixed_block_pool_t* pool, iree_device_size_t length) {
+    iree_hal_fixed_block_pool_t* pool, iree_device_size_t charged_length) {
   if (pool->budget_limit == 0) {
-    iree_atomic_fetch_add(&pool->bytes_reserved, (int64_t)length,
+    iree_atomic_fetch_add(&pool->bytes_reserved, (int64_t)charged_length,
                           iree_memory_order_relaxed);
     return true;
   }
@@ -172,10 +172,11 @@ static bool iree_hal_fixed_block_pool_try_charge_reservation(
       iree_atomic_load(&pool->bytes_reserved, iree_memory_order_relaxed);
   for (;;) {
     const iree_device_size_t current = (iree_device_size_t)expected;
-    if (current > pool->budget_limit || length > pool->budget_limit - current) {
+    if (current > pool->budget_limit ||
+        charged_length > pool->budget_limit - current) {
       return false;
     }
-    const int64_t desired = (int64_t)(current + length);
+    const int64_t desired = (int64_t)(current + charged_length);
     if (iree_atomic_compare_exchange_weak(&pool->bytes_reserved, &expected,
                                           desired, iree_memory_order_relaxed,
                                           iree_memory_order_relaxed)) {
@@ -185,8 +186,8 @@ static bool iree_hal_fixed_block_pool_try_charge_reservation(
 }
 
 static void iree_hal_fixed_block_pool_uncharge_reservation(
-    iree_hal_fixed_block_pool_t* pool, iree_device_size_t length) {
-  iree_atomic_fetch_add(&pool->bytes_reserved, -(int64_t)length,
+    iree_hal_fixed_block_pool_t* pool, iree_device_size_t charged_length) {
+  iree_atomic_fetch_add(&pool->bytes_reserved, -(int64_t)charged_length,
                         iree_memory_order_relaxed);
 }
 
@@ -204,13 +205,13 @@ static bool iree_hal_fixed_block_pool_can_wait_for_allocation(
 static iree_status_t iree_hal_fixed_block_pool_return_allocation(
     iree_hal_fixed_block_pool_t* pool,
     const iree_hal_memory_fixed_block_allocator_allocation_t* allocation,
-    iree_hal_pool_acquire_result_t result,
+    iree_device_size_t byte_length, iree_hal_pool_acquire_result_t result,
     iree_hal_pool_reservation_t* out_reservation,
     iree_hal_pool_acquire_info_t* out_info,
     iree_hal_pool_acquire_result_t* out_result) {
   memset(out_reservation, 0, sizeof(*out_reservation));
   out_reservation->offset = allocation->offset;
-  out_reservation->length = pool->block_size;
+  out_reservation->byte_length = byte_length;
   out_reservation->block_handle = allocation->block_index;
   out_reservation->slab_index = 0;
 
@@ -242,7 +243,7 @@ static iree_status_t iree_hal_fixed_block_pool_return_allocation(
   }
   iree_hal_memory_trace_alloc(
       &pool->trace, (uint8_t*)pool->slab.base_ptr + allocation->offset,
-      pool->block_size);
+      out_reservation->byte_length);
   *out_result = result;
   return iree_ok_status();
 }
@@ -445,7 +446,7 @@ static iree_status_t iree_hal_fixed_block_pool_acquire_reservation(
     }
     if (has_selected_allocation) {
       status = iree_hal_fixed_block_pool_return_allocation(
-          pool, &selected_allocation, selected_result, out_reservation,
+          pool, &selected_allocation, size, selected_result, out_reservation,
           out_info, out_result);
       if (!iree_status_is_ok(status)) {
         iree_hal_fixed_block_pool_uncharge_reservation(pool, pool->block_size);
@@ -484,7 +485,7 @@ static void iree_hal_fixed_block_pool_release_reservation(
       pool->block_allocator, (uint32_t)reservation->block_handle,
       death_frontier);
 
-  iree_hal_fixed_block_pool_uncharge_reservation(pool, reservation->length);
+  iree_hal_fixed_block_pool_uncharge_reservation(pool, pool->block_size);
   iree_atomic_fetch_add(&pool->reservation_count, -1,
                         iree_memory_order_relaxed);
   iree_atomic_fetch_add(&pool->release_count, 1, iree_memory_order_relaxed);
@@ -526,7 +527,7 @@ static iree_status_t iree_hal_fixed_block_pool_materialize_reservation(
   }
   iree_status_t status = iree_hal_slab_provider_wrap_buffer(
       pool->slab_provider, &pool->slab, reservation->offset,
-      reservation->length, params, release_callback, out_buffer);
+      reservation->byte_length, params, release_callback, out_buffer);
   if (!iree_status_is_ok(status) && state) {
     iree_allocator_free(pool->host_allocator, state);
   }
@@ -540,7 +541,7 @@ static void iree_hal_fixed_block_pool_query_capabilities(
       (const iree_hal_fixed_block_pool_t*)base_pool;
   out_capabilities->memory_type = pool->memory_type;
   out_capabilities->supported_usage = pool->supported_usage;
-  out_capabilities->min_allocation_size = pool->block_size;
+  out_capabilities->min_allocation_size = 1;
   out_capabilities->max_allocation_size = pool->block_size;
 }
 

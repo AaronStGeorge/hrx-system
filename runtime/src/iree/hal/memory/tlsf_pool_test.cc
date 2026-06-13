@@ -250,7 +250,7 @@ TEST_F(TLSFPoolTest, ReserveReleaseFresh) {
 
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   EXPECT_EQ(reservation.offset, 0u);
-  EXPECT_GE(reservation.length, 128u);
+  EXPECT_EQ(reservation.byte_length, 128u);
   EXPECT_NE(reservation.block_handle, 0u);
   EXPECT_EQ(reservation.slab_index, 0u);
   EXPECT_EQ(reserve_info.wait_frontier, nullptr);
@@ -654,6 +654,9 @@ TEST_F(TLSFPoolTest, WrapReservationCreatesBuffer) {
   IREE_ASSERT_OK(iree_hal_pool_materialize_reservation(
       pool_, params, &reservation,
       IREE_HAL_POOL_MATERIALIZE_FLAG_TRANSFER_RESERVATION_OWNERSHIP, &buffer));
+  ASSERT_NE(buffer, nullptr);
+  EXPECT_EQ(iree_hal_buffer_allocation_size(buffer), 128u);
+  EXPECT_EQ(iree_hal_buffer_byte_length(buffer), 128u);
 
   iree_hal_buffer_mapping_t mapping;
   IREE_ASSERT_OK(iree_hal_buffer_map_range(

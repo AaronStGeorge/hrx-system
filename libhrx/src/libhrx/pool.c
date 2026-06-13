@@ -107,7 +107,7 @@ static iree_status_t hrx_iree_exact_pool_acquire_reservation(
   iree_hal_buffer_t* buffer = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_allocator_allocate_buffer(
       pool->allocator, pool->params, size, &buffer));
-  out_reservation->length = iree_hal_buffer_byte_length(buffer);
+  out_reservation->byte_length = iree_hal_buffer_byte_length(buffer);
   out_reservation->block_handle = (uint64_t)(uintptr_t)buffer;
   *out_result = IREE_HAL_POOL_ACQUIRE_OK_FRESH;
   return iree_ok_status();

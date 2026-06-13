@@ -176,7 +176,7 @@ TEST_F(PassthroughPoolTest, ReserveRelease) {
       &reserve_info, &result));
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   EXPECT_EQ(reservation.offset, 0u);
-  EXPECT_GE(reservation.length, 4096u);
+  EXPECT_EQ(reservation.byte_length, 4096u);
   EXPECT_NE(reservation.block_handle, 0u);
   EXPECT_EQ(reserve_info.wait_frontier, nullptr);
   EXPECT_EQ(reserve_info.flags, IREE_HAL_POOL_ACQUIRE_FLAG_NONE);
@@ -245,7 +245,8 @@ TEST_F(PassthroughPoolTest, WrapReservationCreatesBuffer) {
       pool_, params, &reservation,
       IREE_HAL_POOL_MATERIALIZE_FLAG_TRANSFER_RESERVATION_OWNERSHIP, &buffer));
   ASSERT_NE(buffer, nullptr);
-  EXPECT_GE(iree_hal_buffer_allocation_size(buffer), 4096u);
+  EXPECT_EQ(iree_hal_buffer_allocation_size(buffer), 4096u);
+  EXPECT_EQ(iree_hal_buffer_byte_length(buffer), 4096u);
 
   // Releasing the buffer should release the reservation back to the pool.
   iree_hal_pool_stats_t stats;
@@ -437,7 +438,8 @@ TEST_F(PassthroughPoolTest, AllocateBuffer) {
   IREE_ASSERT_OK(iree_hal_pool_allocate_buffer(
       pool_, params, 2048, NULL, iree_make_timeout_ms(0), &buffer));
   ASSERT_NE(buffer, nullptr);
-  EXPECT_GE(iree_hal_buffer_allocation_size(buffer), 2048u);
+  EXPECT_EQ(iree_hal_buffer_allocation_size(buffer), 2048u);
+  EXPECT_EQ(iree_hal_buffer_byte_length(buffer), 2048u);
 
   iree_hal_pool_stats_t stats;
   iree_hal_pool_query_stats(pool_, &stats);

@@ -11,6 +11,7 @@
 #include "iree/async/proactor_platform.h"
 #include "iree/hal/api.h"
 #include "iree/hal/memory/cpu_slab_provider.h"
+#include "iree/hal/pool_set.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -213,7 +214,7 @@ TEST_F(FixedBlockPoolTest, ReserveReleaseFresh) {
 
   EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
   EXPECT_EQ(reservation.offset, 0u);
-  EXPECT_EQ(reservation.length, 256u);
+  EXPECT_EQ(reservation.byte_length, 128u);
   EXPECT_EQ(reservation.block_handle, 0u);
   EXPECT_EQ(reservation.slab_index, 0u);
   EXPECT_EQ(reserve_info.wait_frontier, nullptr);
@@ -402,6 +403,9 @@ TEST_F(FixedBlockPoolTest, WrapReservationCreatesBuffer) {
   IREE_ASSERT_OK(iree_hal_pool_materialize_reservation(
       pool_, params, &reservation,
       IREE_HAL_POOL_MATERIALIZE_FLAG_TRANSFER_RESERVATION_OWNERSHIP, &buffer));
+  ASSERT_NE(buffer, nullptr);
+  EXPECT_EQ(iree_hal_buffer_allocation_size(buffer), 128u);
+  EXPECT_EQ(iree_hal_buffer_byte_length(buffer), 128u);
 
   iree_hal_buffer_mapping_t mapping;
   IREE_ASSERT_OK(iree_hal_buffer_map_range(
@@ -421,6 +425,24 @@ TEST_F(FixedBlockPoolTest, WrapReservationCreatesBuffer) {
   iree_hal_pool_query_stats(pool_, &stats);
   EXPECT_EQ(stats.reservation_count, 0u);
   EXPECT_EQ(stats.release_count, 1u);
+}
+
+TEST_F(FixedBlockPoolTest, PoolSetRoutesByUserVisibleRange) {
+  iree_hal_pool_set_t pool_set;
+  IREE_ASSERT_OK(iree_hal_pool_set_initialize(/*initial_capacity=*/1,
+                                              allocator_, &pool_set));
+  IREE_ASSERT_OK(iree_hal_pool_set_register(&pool_set, 10, pool_));
+
+  iree_hal_buffer_params_t params = {0};
+  params.usage =
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_MAPPING_SCOPED;
+  params.type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL;
+  params.access = IREE_HAL_MEMORY_ACCESS_ALL;
+
+  EXPECT_EQ(pool_, iree_hal_pool_set_select(&pool_set, params, 128));
+  EXPECT_EQ(nullptr, iree_hal_pool_set_select(&pool_set, params, 257));
+
+  iree_hal_pool_set_deinitialize(&pool_set);
 }
 
 TEST_F(FixedBlockPoolTest, BorrowedMaterializationDoesNotReleaseReservation) {
@@ -517,7 +539,7 @@ TEST_F(FixedBlockPoolTest, QueryCapabilitiesAndBudget) {
                                 IREE_HAL_MEMORY_TYPE_HOST_LOCAL));
   EXPECT_TRUE(iree_all_bits_set(capabilities.supported_usage,
                                 IREE_HAL_BUFFER_USAGE_TRANSFER));
-  EXPECT_EQ(capabilities.min_allocation_size, 256u);
+  EXPECT_EQ(capabilities.min_allocation_size, 1u);
   EXPECT_EQ(capabilities.max_allocation_size, 256u);
 
   iree_hal_pool_release(pool_);

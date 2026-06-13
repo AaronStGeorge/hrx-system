@@ -656,7 +656,7 @@ static void iree_hal_sync_device_profile_record_memory_event(
     event.offset = reservation->offset;
     if (type != IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_QUEUE_ALLOCA &&
         type != IREE_HAL_PROFILE_MEMORY_EVENT_TYPE_QUEUE_DEALLOCA) {
-      event.length = reservation->length;
+      event.length = reservation->byte_length;
     }
   }
   iree_hal_sync_device_profile_populate_memory_event_pool_stats(pool, &event);

@@ -61,8 +61,8 @@ typedef struct iree_hal_passthrough_pool_reservation_state_t {
   // Slab acquired from the pool's provider for this reservation.
   iree_hal_slab_t slab;
 
-  // Logical byte length reserved from the slab.
-  iree_device_size_t reservation_length;
+  // Backing bytes charged to this reservation.
+  iree_device_size_t charged_length;
 
   // One reference for the live reservation token plus one reference for each
   // materialized buffer view. The slab is released when the last reference
@@ -112,7 +112,7 @@ static void iree_hal_passthrough_pool_reservation_state_release_reservation(
   iree_hal_memory_trace_free(&pool->trace, reservation_state->slab.base_ptr);
 
   iree_atomic_fetch_add(&pool->bytes_reserved,
-                        -(int64_t)reservation_state->reservation_length,
+                        -(int64_t)reservation_state->charged_length,
                         iree_memory_order_relaxed);
   iree_atomic_fetch_add(&pool->reservation_count, -1,
                         iree_memory_order_relaxed);
@@ -245,7 +245,7 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservation(
   }
   reservation_state->pool = base_pool;
   reservation_state->slab = slab;
-  reservation_state->reservation_length = slab.length;
+  reservation_state->charged_length = slab.length;
   iree_atomic_store(&reservation_state->reference_count, 1,
                     iree_memory_order_relaxed);
   iree_atomic_store(&reservation_state->reservation_released, 0,
@@ -253,7 +253,7 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservation(
 
   memset(out_reservation, 0, sizeof(*out_reservation));
   out_reservation->offset = 0;
-  out_reservation->length = slab.length;
+  out_reservation->byte_length = size;
   out_reservation->block_handle = (uint64_t)(uintptr_t)reservation_state;
 
   iree_atomic_fetch_add(&pool->bytes_reserved, (int64_t)slab.length,
@@ -263,7 +263,7 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservation(
   iree_atomic_fetch_add(&pool->reserve_count, 1, iree_memory_order_relaxed);
 
   iree_hal_memory_trace_alloc(&pool->trace, reservation_state->slab.base_ptr,
-                              reservation_state->reservation_length);
+                              out_reservation->byte_length);
 
   memset(out_info, 0, sizeof(*out_info));
   *out_result = IREE_HAL_POOL_ACQUIRE_OK_FRESH;
@@ -310,7 +310,7 @@ static iree_status_t iree_hal_passthrough_pool_materialize_reservation(
 
   iree_status_t status = iree_hal_slab_provider_wrap_buffer(
       pool->slab_provider, &reservation_state->slab, reservation->offset,
-      reservation->length, params, release_callback, out_buffer);
+      reservation->byte_length, params, release_callback, out_buffer);
   if (!iree_status_is_ok(status)) {
     iree_hal_passthrough_pool_reservation_state_release_reference(
         reservation_state);
