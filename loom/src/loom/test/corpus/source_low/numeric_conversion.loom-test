@@ -334,3 +334,13 @@ func.def @scalar_extsi_i32_store(%output: buffer, %input: i32) {
   view.store %converted, %output_view[0] : i64, view<1xi64, #dense>
   func.return
 }
+
+// ====
+
+func.def @scalar_extui_i32_store(%output: buffer, %input: i32) {
+  %base = index.constant 0 : offset
+  %output_view = buffer.view %output[%base] : buffer -> view<1xi64, #dense>
+  %converted = scalar.extui %input : i32 to i64
+  view.store %converted, %output_view[0] : i64, view<1xi64, #dense>
+  func.return
+}

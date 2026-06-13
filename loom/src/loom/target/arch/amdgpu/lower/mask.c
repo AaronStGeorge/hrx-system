@@ -1013,6 +1013,16 @@ static iree_status_t loom_amdgpu_emit_vector_select_immediate_lane(
   const bool true_is_exact = loom_amdgpu_source_lane_as_u32_bits(
       fact_table, plan->true_value, lane, &true_bits);
 
+  if (false_is_exact && true_is_exact && false_bits == true_bits) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_slice_source_lane_if_needed(
+        context, source_op, low_true_value, plan->lane_count, lane, lane_type,
+        out_result));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+        context, source_op, *out_result, out_result));
+    *out_emitted = true;
+    return iree_ok_status();
+  }
+
   if (plan->src0_literal_src1_inline_descriptor.descriptor != NULL &&
       false_is_exact && true_is_exact && true_bits <= 64) {
     loom_named_attr_t attrs[2] = {0};
@@ -1832,6 +1842,10 @@ iree_status_t loom_amdgpu_lower_select(
       IREE_RETURN_IF_ERROR(loom_amdgpu_slice_lane_if_needed(
           context, source_op, low_false_value, lane_count, i, lane_type,
           &lane_false_value));
+      if (lane_true_value == lane_false_value) {
+        lane_results[i] = lane_true_value;
+        continue;
+      }
       const loom_value_id_t operands[] = {
           lane_true_value,
           lane_false_value,
@@ -1896,6 +1910,10 @@ iree_status_t loom_amdgpu_lower_select(
         &lane_false_value));
     IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
         context, source_op, lane_false_value, &lane_false_value));
+    if (lane_false_value == lane_true_value) {
+      lane_results[i] = lane_true_value;
+      continue;
+    }
     const loom_value_id_t operands[] = {
         lane_false_value,
         lane_true_value,
