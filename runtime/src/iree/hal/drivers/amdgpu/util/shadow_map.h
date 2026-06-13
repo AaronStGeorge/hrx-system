@@ -89,6 +89,9 @@ typedef struct iree_hal_amdgpu_shadow_map_params_t {
   // Physical shadow slab size in bytes.
   iree_device_size_t slab_size;
 
+  // Byte value written across each newly mapped physical shadow slab.
+  uint8_t initial_slab_value;
+
   // Number of HSA VMM access descriptors in |access_descs|.
   iree_host_size_t access_desc_count;
 
@@ -123,6 +126,9 @@ typedef struct iree_hal_amdgpu_shadow_map_hsa_params_t {
 
   // Requested physical shadow slab size in bytes.
   iree_device_size_t requested_slab_size;
+
+  // Byte value written across each newly mapped physical shadow slab.
+  uint8_t initial_slab_value;
 
   // Number of HSA VMM access descriptors in |access_descs|.
   iree_host_size_t access_desc_count;
@@ -169,6 +175,9 @@ typedef struct iree_hal_amdgpu_shadow_map_t {
 
   // Physical shadow slab size in bytes.
   iree_device_size_t slab_size;
+
+  // Byte value written across each newly mapped physical shadow slab.
+  uint8_t initial_slab_value;
 
   // Number of HSA VMM access descriptors in |access_descs|.
   iree_host_size_t access_desc_count;

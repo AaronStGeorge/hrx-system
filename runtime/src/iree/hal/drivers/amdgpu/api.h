@@ -69,14 +69,19 @@ typedef enum iree_hal_amdgpu_pm4_command_buffer_publication_mode_e {
 
 // Device-visible virtual shadow reservation size used by ASAN by default.
 #define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE \
-  ((iree_device_size_t)1ull << 40)
+  ((iree_device_size_t)32ull << 40)
 
-// Preferred application address covered by the default ASAN shadow window.
+// HAL-owned application virtual address window size used by ASAN by default.
+#define IREE_HAL_AMDGPU_ASAN_DEFAULT_OWNED_APPLICATION_SIZE \
+  ((iree_device_size_t)8ull << 40)
+
+// Preferred base address for the ASAN-owned application allocation window.
 #define IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE \
   ((uint64_t)0x0000600000000000ull)
 
-// Maximum log2 application bytes representable by one shadow byte.
-#define IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT 8u
+// Maximum log2 application bytes representable by one shadow byte while
+// keeping poison magic values distinguishable from partial-granule lengths.
+#define IREE_HAL_AMDGPU_ASAN_MAX_SHADOW_SCALE_SHIFT 7u
 
 // Physical shadow slab size used by ASAN by default.
 #define IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE \
@@ -195,6 +200,9 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
 
     // Device-visible virtual shadow reservation size in bytes.
     iree_device_size_t shadow_size;
+
+    // HAL-owned application virtual address reservation size in bytes.
+    iree_device_size_t owned_application_size;
 
     // Physical shadow slab size in bytes.
     iree_device_size_t shadow_slab_size;

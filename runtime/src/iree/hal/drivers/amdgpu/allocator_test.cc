@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <array>
+#include <vector>
 
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/test_base.h"
@@ -195,15 +196,22 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   ASSERT_NE(shadow_map, nullptr);
   EXPECT_EQ(shadow_map->shadow_scale_shift, options.asan.shadow_scale_shift);
   EXPECT_EQ(shadow_map->reservation_size, options.asan.shadow_size);
-  EXPECT_NE(shadow_map->application_window_base, 0u);
-  EXPECT_EQ(shadow_map->application_window_base &
-                ((1ull << shadow_map->shadow_scale_shift) - 1),
-            0u);
+  EXPECT_EQ(shadow_map->application_window_base, 0u);
   EXPECT_EQ(shadow_map->application_window_size,
             options.asan.shadow_size << options.asan.shadow_scale_shift);
   EXPECT_GE(shadow_map->slab_size, options.asan.shadow_slab_size);
   EXPECT_TRUE(iree_device_size_is_power_of_two(shadow_map->slab_size));
+  EXPECT_EQ(shadow_map->initial_slab_value, 0xFAu);
   EXPECT_EQ(shadow_map->slab_count, 0u);
+  EXPECT_NE(asan_state->owned_application_base_ptr, nullptr);
+  EXPECT_EQ(asan_state->owned_application_size,
+            options.asan.owned_application_size);
+  ASSERT_NE(asan_state->application_free_ranges, nullptr);
+  EXPECT_EQ(
+      asan_state->application_free_ranges->address,
+      reinterpret_cast<uintptr_t>(asan_state->owned_application_base_ptr));
+  EXPECT_EQ(asan_state->application_free_ranges->length,
+            options.asan.owned_application_size);
 
   iree_hal_amdgpu_asan_config_t config;
   iree_hal_amdgpu_asan_state_populate_config(asan_state, &config);
@@ -719,6 +727,92 @@ TEST_F(AllocatorTest, DeviceAllocationImportWrapsHsaAllocation) {
 
   iree_hal_buffer_release(buffer);
   EXPECT_EQ(release_count, 1);
+}
+
+TEST_F(AllocatorTest, AsanDeviceAllocationImportPublishesShadow) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  hsa_amd_memory_pool_t memory_pool = {0};
+  IREE_ASSERT_OK(iree_hal_amdgpu_find_coarse_global_memory_pool(
+      &libhsa_, topology_.gpu_agents[0], &memory_pool));
+
+  constexpr iree_device_size_t kAllocationSize = 4096;
+  HsaAllocation allocation(&libhsa_);
+  IREE_ASSERT_OK(allocation.Allocate(memory_pool, kAllocationSize));
+
+  iree_hal_buffer_params_t params = {0};
+  params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
+  params.usage =
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_DISPATCH;
+  params.queue_affinity = 1ull;
+
+  iree_hal_external_buffer_t external_buffer = {};
+  external_buffer.type = IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION;
+  external_buffer.size = kAllocationSize;
+  external_buffer.handle.device_allocation.ptr =
+      (uint64_t)(uintptr_t)allocation.ptr();
+
+  iree_hal_buffer_t* buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_import_buffer(
+      test_device.allocator(), params, &external_buffer,
+      iree_hal_buffer_release_callback_null(), &buffer));
+  ASSERT_NE(buffer, nullptr);
+
+  iree_hal_amdgpu_asan_state_t* asan_state =
+      &test_device.logical_device()->asan;
+  iree_hal_amdgpu_shadow_map_t* shadow_map =
+      iree_hal_amdgpu_asan_state_shadow_map(asan_state);
+  ASSERT_NE(shadow_map, nullptr);
+
+  iree_hal_amdgpu_shadow_map_range_t shadow_range;
+  IREE_ASSERT_OK(iree_hal_amdgpu_shadow_map_calculate_range(
+      shadow_map, external_buffer.handle.device_allocation.ptr,
+      external_buffer.size, &shadow_range));
+  ASSERT_GT(shadow_range.shadow_length, 0u);
+
+  std::vector<uint8_t> shadow_bytes(shadow_range.shadow_length);
+  IREE_ASSERT_OK(iree_hsa_memory_copy(
+      IREE_LIBHSA(&libhsa_), shadow_bytes.data(),
+      (void*)(uintptr_t)shadow_range.shadow_address, shadow_bytes.size()));
+  for (uint8_t shadow_byte : shadow_bytes) {
+    EXPECT_EQ(shadow_byte, 0u);
+  }
+
+  constexpr uint8_t kHeapRedzoneShadowValue = 0xFAu;
+  bool checked_neighbor = false;
+  const iree_device_size_t slab_begin_offset =
+      shadow_range.first_slab_index * shadow_map->slab_size;
+  if (shadow_range.shadow_offset > slab_begin_offset) {
+    uint8_t previous_shadow_byte = 0;
+    IREE_ASSERT_OK(iree_hsa_memory_copy(
+        IREE_LIBHSA(&libhsa_), &previous_shadow_byte,
+        (void*)(uintptr_t)(shadow_range.shadow_address - 1),
+        sizeof(previous_shadow_byte)));
+    EXPECT_EQ(previous_shadow_byte, kHeapRedzoneShadowValue);
+    checked_neighbor = true;
+  }
+  const iree_device_size_t slab_end_offset =
+      slab_begin_offset + shadow_map->slab_size;
+  if (shadow_range.shadow_offset + shadow_range.shadow_length <
+      slab_end_offset) {
+    uint8_t next_shadow_byte = 0;
+    IREE_ASSERT_OK(
+        iree_hsa_memory_copy(IREE_LIBHSA(&libhsa_), &next_shadow_byte,
+                             (void*)(uintptr_t)(shadow_range.shadow_address +
+                                                shadow_range.shadow_length),
+                             sizeof(next_shadow_byte)));
+    EXPECT_EQ(next_shadow_byte, kHeapRedzoneShadowValue);
+    checked_neighbor = true;
+  }
+  EXPECT_TRUE(checked_neighbor);
+
+  iree_hal_buffer_release(buffer);
 }
 
 TEST_F(AllocatorTest, DeviceAllocationExportReportsHsaPointer) {

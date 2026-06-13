@@ -58,6 +58,8 @@ TEST(AmdgpuDriverOptionsTest, LogicalDeviceDefaultsDisableAsan) {
   EXPECT_EQ(options.asan.shadow_scale_shift,
             IREE_HAL_AMDGPU_SHADOW_MAP_DEFAULT_SCALE_SHIFT);
   EXPECT_EQ(options.asan.shadow_size, IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE);
+  EXPECT_EQ(options.asan.owned_application_size,
+            IREE_HAL_AMDGPU_ASAN_DEFAULT_OWNED_APPLICATION_SIZE);
   EXPECT_EQ(options.asan.shadow_slab_size,
             IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE);
   EXPECT_EQ(options.asan.quarantine_size,
@@ -211,6 +213,13 @@ TEST(AmdgpuDriverOptionsTest, RejectsInvalidAsanGeometryBeforeLoadingHsa) {
   iree_hal_amdgpu_logical_device_options_initialize(&options);
   options.asan.enabled = 1;
   options.asan.shadow_size = 1000;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        CreateDriverWithDefaultDeviceOptions(&options));
+
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.owned_application_size = 1000;
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         CreateDriverWithDefaultDeviceOptions(&options));

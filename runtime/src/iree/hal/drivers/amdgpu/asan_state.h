@@ -66,16 +66,16 @@ typedef struct iree_hal_amdgpu_asan_state_t {
   // Host allocator used for ASAN state-owned range nodes.
   iree_allocator_t host_allocator;
 
-  // Base pointer of the ASAN-covered application virtual address reservation.
-  IREE_AMDGPU_DEVICE_PTR void* application_reservation_base_ptr;
+  // Base pointer of the ASAN-owned application virtual address reservation.
+  IREE_AMDGPU_DEVICE_PTR void* owned_application_base_ptr;
 
-  // Size of the ASAN-covered application virtual address reservation.
-  iree_device_size_t application_reservation_size;
+  // Size of the ASAN-owned application virtual address reservation.
+  iree_device_size_t owned_application_size;
 
   // Guards application free-list mutation.
   iree_slim_mutex_t application_mutex;
 
-  // Sorted list of free application ranges within the ASAN-covered window.
+  // Sorted list of free ranges within the ASAN-owned application window.
   iree_hal_amdgpu_asan_application_range_t* application_free_ranges;
 
   // Guards quarantine FIFO mutation.
@@ -98,9 +98,10 @@ typedef struct iree_hal_amdgpu_asan_state_t {
 //
 // When ASAN is disabled this leaves |out_state| zeroed and returns OK. When
 // enabled the state reserves a device-visible application virtual address
-// window, reserves the corresponding shadow virtual address range, and
-// configures later physical shadow slab mappings to use the first physical
-// device's coarse-grained VRAM pool with shared topology access.
+// window for HAL-owned allocations, reserves the configured shadow virtual
+// address coverage, and configures later physical shadow slab mappings to use
+// the first physical device's coarse-grained VRAM pool with shared topology
+// access.
 iree_status_t iree_hal_amdgpu_asan_state_initialize(
     const iree_hal_amdgpu_logical_device_options_t* options,
     iree_hal_amdgpu_system_t* system, iree_host_size_t physical_device_count,
@@ -119,11 +120,11 @@ bool iree_hal_amdgpu_asan_state_is_enabled(
 iree_hal_amdgpu_shadow_map_t* iree_hal_amdgpu_asan_state_shadow_map(
     iree_hal_amdgpu_asan_state_t* state);
 
-// Ensures shadow slabs are mapped for the given device-visible application
-// byte range.
+// Ensures shadow slabs are mapped for the given device-visible application byte
+// range.
 //
 // When ASAN is disabled this is a no-op. When enabled the range must fit within
-// the configured application window; out-of-window allocations fail loudly
+// the configured application coverage; out-of-coverage ranges fail loudly
 // because instrumented kernels would otherwise fault when loading shadow bytes.
 iree_status_t iree_hal_amdgpu_asan_state_map_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
@@ -141,6 +142,15 @@ iree_status_t iree_hal_amdgpu_asan_state_publish_allocated_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t mapped_address,
     iree_device_size_t mapped_length, uint64_t accessible_address,
     iree_device_size_t accessible_length);
+
+// Marks an externally-owned device-visible application range addressable.
+//
+// Imported ranges may begin or end inside a shadow granule. The ASAN shadow
+// format can precisely encode partial tail granules, while a partial leading
+// granule is widened to addressable to avoid false positives for valid imports.
+iree_status_t iree_hal_amdgpu_asan_state_publish_imported_range(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
+    iree_device_size_t application_length);
 
 // Re-poisons a previously published mapped allocation before teardown.
 //
@@ -162,7 +172,7 @@ void iree_hal_amdgpu_asan_state_quarantine_entry(
     iree_device_size_t mapped_size,
     iree_hal_amdgpu_asan_quarantine_release_fn_t release_fn, void* user_data);
 
-// Assigns an application virtual address range from the ASAN-covered window.
+// Assigns an application virtual address range from the ASAN-owned window.
 //
 // The state owns the overall HSA VMM reservation. Callers must map physical HSA
 // VMM handles into the returned subrange before exposing it to kernels. The

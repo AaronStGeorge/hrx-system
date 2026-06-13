@@ -135,6 +135,11 @@ static void iree_hal_amdgpu_shadow_map_hsa_release_reservation(
       map->hsa.libhsa, base_ptr, reservation_size));
 }
 
+static uint32_t iree_hal_amdgpu_shadow_map_fill_pattern(uint8_t value) {
+  return ((uint32_t)value << 24) | ((uint32_t)value << 16) |
+         ((uint32_t)value << 8) | (uint32_t)value;
+}
+
 static iree_status_t iree_hal_amdgpu_shadow_map_hsa_map_slab(
     iree_hal_amdgpu_shadow_map_t* map, IREE_AMDGPU_DEVICE_PTR void* target_ptr,
     iree_device_size_t slab_size, iree_host_size_t access_desc_count,
@@ -160,9 +165,10 @@ static iree_status_t iree_hal_amdgpu_shadow_map_hsa_map_slab(
                                           access_desc_count);
   }
   if (iree_status_is_ok(status)) {
-    status =
-        iree_hsa_amd_memory_fill(IREE_LIBHSA(map->hsa.libhsa), target_ptr,
-                                 /*value=*/0, slab_size / sizeof(uint32_t));
+    status = iree_hsa_amd_memory_fill(
+        IREE_LIBHSA(map->hsa.libhsa), target_ptr,
+        iree_hal_amdgpu_shadow_map_fill_pattern(map->initial_slab_value),
+        slab_size / sizeof(uint32_t));
   }
 
   if (iree_status_is_ok(status)) {
@@ -246,6 +252,7 @@ static iree_status_t iree_hal_amdgpu_shadow_map_initialize_internal(
                                      << params->shadow_scale_shift;
   out_map->reservation_size = params->shadow_size;
   out_map->slab_size = params->slab_size;
+  out_map->initial_slab_value = params->initial_slab_value;
   out_map->mapper = params->mapper;
   if (hsa_params) {
     out_map->hsa.libhsa = hsa_params->libhsa;
@@ -334,6 +341,7 @@ iree_status_t iree_hal_amdgpu_shadow_map_initialize_hsa(
       .application_window_base = params->application_window_base,
       .shadow_size = params->shadow_size,
       .slab_size = slab_size,
+      .initial_slab_value = params->initial_slab_value,
       .access_desc_count = params->access_desc_count,
       .access_descs = params->access_descs,
       .mapper =

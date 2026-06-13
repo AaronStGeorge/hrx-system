@@ -179,6 +179,8 @@ IREE_API_EXPORT void iree_hal_amdgpu_logical_device_options_initialize(
   out_options->asan.report_policy =
       IREE_HAL_AMDGPU_ASAN_REPORT_POLICY_REPORT_ONLY;
   out_options->asan.shadow_size = IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SIZE;
+  out_options->asan.owned_application_size =
+      IREE_HAL_AMDGPU_ASAN_DEFAULT_OWNED_APPLICATION_SIZE;
   out_options->asan.shadow_slab_size =
       IREE_HAL_AMDGPU_ASAN_DEFAULT_SHADOW_SLAB_SIZE;
   out_options->asan.quarantine_size =
@@ -287,6 +289,14 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
                               " must be a non-zero power of two",
                               (uint64_t)options->asan.shadow_size);
     }
+    if (options->asan.owned_application_size == 0 ||
+        !iree_device_size_is_power_of_two(
+            options->asan.owned_application_size)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN owned application size %" PRIu64
+                              " must be a non-zero power of two",
+                              (uint64_t)options->asan.owned_application_size);
+    }
     if (options->asan.shadow_slab_size == 0 ||
         !iree_device_size_is_power_of_two(options->asan.shadow_slab_size)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -301,6 +311,37 @@ iree_status_t iree_hal_amdgpu_logical_device_options_verify_supported_features(
                               " must divide shadow size %" PRIu64,
                               (uint64_t)options->asan.shadow_slab_size,
                               (uint64_t)options->asan.shadow_size);
+    }
+    if (options->asan.shadow_size >
+        (IREE_DEVICE_SIZE_MAX >> options->asan.shadow_scale_shift)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU ASAN application coverage size "
+                              "overflows: shadow_size=%" PRIu64
+                              ", scale_shift=%u",
+                              (uint64_t)options->asan.shadow_size,
+                              options->asan.shadow_scale_shift);
+    }
+    const iree_device_size_t application_coverage_size =
+        options->asan.shadow_size << options->asan.shadow_scale_shift;
+    if (options->asan.owned_application_size > application_coverage_size) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU ASAN owned application size %" PRIu64
+                              " exceeds application coverage size %" PRIu64,
+                              (uint64_t)options->asan.owned_application_size,
+                              (uint64_t)application_coverage_size);
+    }
+    if (IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE >
+            UINT64_MAX - options->asan.owned_application_size ||
+        IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE +
+                options->asan.owned_application_size >
+            application_coverage_size) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU ASAN owned application window [0x%016" PRIx64 ", +%" PRIu64
+          ") is outside application coverage [0x%016" PRIx64 ", +%" PRIu64 ")",
+          IREE_HAL_AMDGPU_ASAN_PREFERRED_APPLICATION_WINDOW_BASE,
+          (uint64_t)options->asan.owned_application_size, (uint64_t)0,
+          (uint64_t)application_coverage_size);
     }
   }
   return iree_ok_status();

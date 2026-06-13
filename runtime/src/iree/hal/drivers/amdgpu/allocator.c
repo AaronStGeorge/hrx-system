@@ -1472,7 +1472,7 @@ static iree_status_t iree_hal_amdgpu_allocator_import_device_allocation(
       allocator, compat_params.queue_affinity, &access_agents));
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_access_allow_agent_list(
       allocator->libhsa, &access_agents, pointer_range.agent_base));
-  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_asan_state_map_range(
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_asan_state_publish_imported_range(
       &allocator->logical_device->asan,
       external_buffer->handle.device_allocation.ptr, external_buffer->size));
 
@@ -1642,7 +1642,7 @@ static iree_status_t iree_hal_amdgpu_allocator_import_buffer(
         &agent_ptr);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_asan_state_map_range(
+    status = iree_hal_amdgpu_asan_state_publish_imported_range(
         &allocator->logical_device->asan, (uint64_t)(uintptr_t)agent_ptr,
         external_buffer->size);
   }
