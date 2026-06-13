@@ -281,15 +281,20 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
+    loom::codegen::low::verify
+    loom::error::renderer
     loom::ir
     loom::ops::cache
     loom::ops::low
     loom::ops::op_defs
+    loom::ops::op_registry
+    loom::ops::target
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::signal_abi
     loom::target::registers
+    loom::verify
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )

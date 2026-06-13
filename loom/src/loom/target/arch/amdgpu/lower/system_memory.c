@@ -157,8 +157,7 @@ iree_status_t loom_amdgpu_system_memory_append_return_atomic_attrs(
     iree_host_size_t* inout_attr_count) {
   switch (loom_amdgpu_system_memory_cache_policy_encoding(descriptor_set)) {
     case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
-      return loom_amdgpu_system_memory_append_u32_attr(
-          builder, IREE_SV("glc"), 1, attrs, attr_capacity, inout_attr_count);
+      return iree_ok_status();
     case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
       return loom_amdgpu_system_memory_append_sc0_sc1_attrs(
           builder, attrs, attr_capacity, inout_attr_count);

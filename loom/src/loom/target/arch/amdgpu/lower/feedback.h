@@ -91,6 +91,15 @@ typedef struct loom_amdgpu_feedback_reservation_attempt_t {
   loom_value_id_t cas_succeeded;
 } loom_amdgpu_feedback_reservation_attempt_t;
 
+typedef struct loom_amdgpu_feedback_reservation_t {
+  // Packet storage address for the reserved ring slot.
+  loom_amdgpu_feedback_packet_address_t packet_address;
+  // Absolute ring byte position assigned by reservation.
+  loom_value_id_t sequence;
+  // Native execution mask identifying lanes with reserved packet storage.
+  loom_value_id_t reserved_mask;
+} loom_amdgpu_feedback_reservation_t;
+
 // Emits target-low IR that materializes and scalar-loads common feedback config
 // fields.
 //
@@ -188,6 +197,30 @@ iree_status_t loom_amdgpu_build_feedback_reservation_attempt(
     loom_value_id_t channel_base, loom_value_id_t reservation_head,
     uint32_t packet_length, loom_location_id_t location,
     loom_amdgpu_feedback_reservation_attempt_t* out_attempt);
+
+// Emits target-low CFG that reserves packet storage in the feedback ring.
+//
+// |channel_base| must be an SGPRx2 pointer to the device-visible feedback
+// channel header. |ring_base| and |ring_capacity| must be SGPRx2 fields loaded
+// from that channel. |packet_length| is the statically known total packet byte
+// length including header and padded payload.
+//
+// This helper emits from the current low block and leaves |builder| positioned
+// at a newly inserted continuation block. The returned values are block
+// arguments in that continuation. |reserved_mask| is non-zero on the reserved
+// path and zero on the dropped path; producers that must abort can branch on it
+// to choose between report+trap and trap-only paths.
+//
+// The HAL-created channel owns structural validation: capacity is a non-zero
+// power of two, fits in 32 bits, and is at least |packet_length|. The generated
+// device hot path only checks current availability with low 32-bit cursor
+// arithmetic so instrumentation minimally perturbs the original kernel.
+iree_status_t loom_amdgpu_build_feedback_reservation(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t channel_base, loom_value_id_t ring_base,
+    loom_value_id_t ring_capacity, uint32_t packet_length,
+    loom_location_id_t location,
+    loom_amdgpu_feedback_reservation_t* out_reservation);
 
 // Emits target-low IR that initializes a reserved feedback packet header.
 //

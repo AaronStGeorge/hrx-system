@@ -239,8 +239,7 @@ TEST_F(AmdgpuSystemMemoryTest, AppendsNoReturnAtomicAttrsByArchitecture) {
 
 TEST_F(AmdgpuSystemMemoryTest, AppendsReturnAtomicAttrsByArchitecture) {
   ExpectAppendedAttrs(IREE_SV("amdgpu.rdna3.core"),
-                      SystemMemoryAttrKind::kReturnAtomic,
-                      {{IREE_SV("glc"), 1}});
+                      SystemMemoryAttrKind::kReturnAtomic, {});
   ExpectAppendedAttrs(IREE_SV("amdgpu.cdna3.core"),
                       SystemMemoryAttrKind::kReturnAtomic,
                       {{IREE_SV("sc0"), 1}, {IREE_SV("sc1"), 1}});
