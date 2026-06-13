@@ -468,6 +468,7 @@ loom_cc_test(
     deps = [
         ":descriptor",
         ":metadata",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

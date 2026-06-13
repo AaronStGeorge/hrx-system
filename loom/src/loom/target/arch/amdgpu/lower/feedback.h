@@ -100,8 +100,8 @@ typedef struct loom_amdgpu_feedback_reservation_t {
   loom_value_id_t reserved_mask;
 } loom_amdgpu_feedback_reservation_t;
 
-// Emits target-low IR that materializes and scalar-loads common feedback config
-// fields.
+// Emits target-low IR that materializes and loads common feedback config
+// fields from host-visible system memory.
 //
 // The loaded fields are uniform across the dispatch and are emitted as SGPR
 // values. This helper does not emit control flow, reserve packet storage,
@@ -123,8 +123,8 @@ iree_status_t loom_amdgpu_build_feedback_config_enabled_scc(
     loom_value_id_t config_flags, loom_location_id_t location,
     loom_value_id_t* out_scc);
 
-// Emits target-low IR that scalar-loads the stable feedback channel header
-// fields needed by packet producers.
+// Emits target-low IR that loads the stable feedback channel header fields
+// needed by packet producers from host-visible system memory.
 //
 // The volatile producer/consumer cursors intentionally are not loaded here:
 // reservation must use scoped atomic operations with the ordering required by

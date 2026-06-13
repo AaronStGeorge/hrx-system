@@ -393,6 +393,46 @@ loom_cc_test(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU AND LOOM_TARGET_ARCH_AMDGPU)
+loom_cc_test(
+  NAME
+    sanitizer_feedback_test
+  SRCS
+    "sanitizer_feedback_test.cc"
+  DEPS
+    iree::async
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::internal::arena
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers::amdgpu::abi
+    iree::hal::drivers::amdgpu::buffer
+    iree::hal::drivers::amdgpu::registration
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::builder
+    loom::codegen::low::text_asm
+    loom::format::text::parser
+    loom::ir
+    loom::ops::low
+    loom::ops::op_defs
+    loom::ops::op_registry
+    loom::sanitizer::options
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::lower
+    loom::target::arch::amdgpu::ops
+    loom::target::arch::amdgpu::records::target_records
+    loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
+    loom::testing::module_ptr
+    loom::tooling::execution::hal::invocation
+    loom::tooling::target::amdgpu::artifact_provider
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+)
+endif()
+
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME

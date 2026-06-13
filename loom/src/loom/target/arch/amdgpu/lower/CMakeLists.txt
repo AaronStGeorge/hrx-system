@@ -408,6 +408,7 @@ loom_cc_test(
     loom::ops::op_defs
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::refs::target_refs
+    loom::target::registers
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
 )

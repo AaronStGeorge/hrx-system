@@ -53,6 +53,19 @@ std::string StringViewToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
 }
 
+bool SupportsWgpMode(const loom_amdgpu_processor_info_t* processor) {
+  switch (processor->kernel_descriptor_profile) {
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12:
+      return true;
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE:
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9:
+    case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125:
+      return false;
+  }
+  return false;
+}
+
 uint32_t LoadLeU32(const uint8_t* bytes, size_t offset) {
   return (uint32_t)bytes[offset] | ((uint32_t)bytes[offset + 1] << 8) |
          ((uint32_t)bytes[offset + 2] << 16) |
@@ -580,6 +593,271 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsEveryLinkedSupportedProcessor) {
     loom_module_free(module);
   }
   EXPECT_GE(linked_supported_count, 1u);
+}
+
+TEST_F(AmdgpuHalKernelLibraryTest, CapturesCompleteGfx11KernelDirectives) {
+  loom_module_t* module = nullptr;
+  ASSERT_NO_FATAL_FAILURE(ParseGfx11Kernel(&module));
+
+  DiagnosticCapture capture;
+  loom_amdgpu_hal_kernel_library_t library = {};
+  loom_amdgpu_hal_kernel_library_options_t options = {
+      /*.processor=*/{},
+      /*.target_selection=*/{},
+      /*.runtime_globals=*/{},
+      /*.data_symbols=*/{},
+      /*.data_symbol_count=*/{},
+      /*.diagnostic_sink=*/capture.sink(),
+      /*.source_resolver=*/{},
+      /*.max_errors=*/20,
+      /*.report=*/{},
+      /*.capture_target_listing=*/true,
+  };
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+      module, &options, iree_allocator_system(), &emitted, &library));
+
+  EXPECT_TRUE(emitted);
+  EXPECT_TRUE(capture.diagnostics.empty());
+  ASSERT_NE(library.target_listing_data, nullptr);
+  ASSERT_TRUE(iree_string_view_equal(library.target_listing_format,
+                                     IREE_SV("amdgpu-assembly")));
+  const std::string listing(library.target_listing_data,
+                            library.target_listing_data_length);
+  static constexpr const char* kExpectedDirectives[] = {
+      "  .amdhsa_user_sgpr_count 0\n",
+      "  .amdhsa_user_sgpr_dispatch_ptr 0\n",
+      "  .amdhsa_user_sgpr_queue_ptr 0\n",
+      "  .amdhsa_user_sgpr_kernarg_segment_ptr 0\n",
+      "  .amdhsa_user_sgpr_dispatch_id 0\n",
+      "  .amdhsa_user_sgpr_private_segment_size 0\n",
+      "  .amdhsa_wavefront_size32 1\n",
+      "  .amdhsa_uses_dynamic_stack 0\n",
+      "  .amdhsa_enable_private_segment 0\n",
+      "  .amdhsa_system_sgpr_workgroup_id_x 0\n",
+      "  .amdhsa_system_sgpr_workgroup_id_y 0\n",
+      "  .amdhsa_system_sgpr_workgroup_id_z 0\n",
+      "  .amdhsa_system_sgpr_workgroup_info 0\n",
+      "  .amdhsa_system_vgpr_workitem_id 0\n",
+      "  .amdhsa_next_free_vgpr 0\n",
+      "  .amdhsa_next_free_sgpr 0\n",
+      "  .amdhsa_reserve_vcc 0\n",
+      "  .amdhsa_float_round_mode_32 0\n",
+      "  .amdhsa_float_round_mode_16_64 0\n",
+      "  .amdhsa_float_denorm_mode_32 3\n",
+      "  .amdhsa_float_denorm_mode_16_64 3\n",
+      "  .amdhsa_dx10_clamp 1\n",
+      "  .amdhsa_ieee_mode 1\n",
+      "  .amdhsa_fp16_overflow 0\n",
+      "  .amdhsa_workgroup_processor_mode 1\n",
+      "  .amdhsa_memory_ordered 1\n",
+      "  .amdhsa_forward_progress 1\n",
+      "  .amdhsa_shared_vgpr_count 0\n",
+      "  .amdhsa_inst_pref_size 0\n",
+      "  .amdhsa_exception_fp_ieee_invalid_op 0\n",
+      "  .amdhsa_exception_fp_denorm_src 0\n",
+      "  .amdhsa_exception_fp_ieee_div_zero 0\n",
+      "  .amdhsa_exception_fp_ieee_overflow 0\n",
+      "  .amdhsa_exception_fp_ieee_underflow 0\n",
+      "  .amdhsa_exception_fp_ieee_inexact 0\n",
+      "  .amdhsa_exception_int_div_zero 0\n",
+  };
+  for (const char* directive : kExpectedDirectives) {
+    EXPECT_NE(listing.find(directive), std::string::npos) << directive;
+  }
+  EXPECT_EQ(listing.find(".amdhsa_user_sgpr_private_segment_buffer"),
+            std::string::npos);
+  EXPECT_EQ(listing.find(".amdhsa_user_sgpr_flat_scratch_init"),
+            std::string::npos);
+  EXPECT_EQ(listing.find(".amdhsa_reserve_flat_scratch"), std::string::npos);
+  EXPECT_EQ(
+      listing.find(".amdhsa_system_sgpr_private_segment_wavefront_offset"),
+      std::string::npos);
+
+  loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                              iree_allocator_system());
+  loom_module_free(module);
+}
+
+TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
+  static constexpr const char* kProcessors[] = {
+      "gfx942", "gfx950", "gfx1100", "gfx1170", "gfx1200", "gfx1250",
+  };
+  for (const char* processor_name : kProcessors) {
+    const loom_amdgpu_processor_info_t* processor =
+        loom_amdgpu_target_info_find_processor(
+            iree_make_cstring_view(processor_name));
+    ASSERT_NE(processor, nullptr) << processor_name;
+    bool hsaco_supported = false;
+    IREE_ASSERT_OK(loom_amdgpu_target_info_processor_supports_hsaco(
+        processor, &hsaco_supported));
+    if (!hsaco_supported || !IsProcessorDescriptorSetLinked(processor)) {
+      continue;
+    }
+
+    loom_module_t* module = nullptr;
+    ASSERT_NO_FATAL_FAILURE(ParseKernelForProcessor(processor, &module));
+
+    DiagnosticCapture capture;
+    loom_amdgpu_hal_kernel_library_t library = {};
+    loom_amdgpu_hal_kernel_library_options_t options = {
+        /*.processor=*/{},
+        /*.target_selection=*/{},
+        /*.runtime_globals=*/{},
+        /*.data_symbols=*/{},
+        /*.data_symbol_count=*/{},
+        /*.diagnostic_sink=*/capture.sink(),
+        /*.source_resolver=*/{},
+        /*.max_errors=*/20,
+        /*.report=*/{},
+        /*.capture_target_listing=*/true,
+    };
+    bool emitted = false;
+    IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+        module, &options, iree_allocator_system(), &emitted, &library))
+        << processor_name;
+
+    EXPECT_TRUE(emitted) << processor_name;
+    EXPECT_TRUE(capture.diagnostics.empty()) << processor_name;
+    ASSERT_NE(library.target_listing_data, nullptr) << processor_name;
+    const std::string listing(library.target_listing_data,
+                              library.target_listing_data_length);
+
+    if (processor->kernel_descriptor_has_architected_flat_scratch) {
+      EXPECT_NE(listing.find("  .amdhsa_enable_private_segment 0\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_user_sgpr_private_segment_buffer"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_user_sgpr_flat_scratch_init"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_reserve_flat_scratch"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_system_sgpr_private_segment_"
+                             "wavefront_offset"),
+                std::string::npos)
+          << processor_name;
+    } else {
+      EXPECT_NE(listing.find("  .amdhsa_user_sgpr_private_segment_buffer 0\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_user_sgpr_flat_scratch_init 0\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_reserve_flat_scratch 0\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_system_sgpr_private_segment_"
+                             "wavefront_offset 0\n"),
+                std::string::npos)
+          << processor_name;
+    }
+
+    if (processor->kernel_descriptor_has_accum_offset) {
+      EXPECT_NE(listing.find("  .amdhsa_accum_offset 4\n"), std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_tg_split 0\n"), std::string::npos)
+          << processor_name;
+    } else {
+      EXPECT_EQ(listing.find(".amdhsa_accum_offset"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_tg_split"), std::string::npos)
+          << processor_name;
+    }
+
+    if (processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode) {
+      EXPECT_NE(listing.find("  .amdhsa_dx10_clamp 1\n"), std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_ieee_mode 1\n"), std::string::npos)
+          << processor_name;
+    } else {
+      EXPECT_EQ(listing.find(".amdhsa_dx10_clamp"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_ieee_mode"), std::string::npos)
+          << processor_name;
+    }
+
+    if (SupportsWgpMode(processor)) {
+      EXPECT_NE(listing.find("  .amdhsa_workgroup_processor_mode 1\n"),
+                std::string::npos)
+          << processor_name;
+    } else {
+      EXPECT_EQ(listing.find(".amdhsa_workgroup_processor_mode"),
+                std::string::npos)
+          << processor_name;
+    }
+
+    if (processor->kernel_descriptor_uses_gfx10_sgpr_encoding) {
+      EXPECT_NE(listing.find("  .amdhsa_wavefront_size32 1\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_memory_ordered 1\n"), std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_forward_progress 1\n"),
+                std::string::npos)
+          << processor_name;
+    } else {
+      EXPECT_EQ(listing.find(".amdhsa_wavefront_size32"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_memory_ordered"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_forward_progress"), std::string::npos)
+          << processor_name;
+    }
+
+    if (processor->kernel_descriptor_profile ==
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11) {
+      EXPECT_NE(listing.find("  .amdhsa_shared_vgpr_count 0\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_inst_pref_size 0\n"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_round_robin_scheduling"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_named_barrier_count"), std::string::npos)
+          << processor_name;
+    } else if (processor->kernel_descriptor_profile ==
+               LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12) {
+      EXPECT_EQ(listing.find(".amdhsa_shared_vgpr_count"), std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_inst_pref_size 0\n"), std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_round_robin_scheduling 0\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_named_barrier_count"), std::string::npos)
+          << processor_name;
+    } else if (processor->kernel_descriptor_profile ==
+               LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125) {
+      EXPECT_EQ(listing.find(".amdhsa_shared_vgpr_count"), std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_inst_pref_size 0\n"), std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_round_robin_scheduling 0\n"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_NE(listing.find("  .amdhsa_named_barrier_count 0\n"),
+                std::string::npos)
+          << processor_name;
+    } else {
+      EXPECT_EQ(listing.find(".amdhsa_shared_vgpr_count"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_inst_pref_size"), std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_round_robin_scheduling"),
+                std::string::npos)
+          << processor_name;
+      EXPECT_EQ(listing.find(".amdhsa_named_barrier_count"), std::string::npos)
+          << processor_name;
+    }
+
+    loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                                iree_allocator_system());
+    loom_module_free(module);
+  }
 }
 
 TEST_F(AmdgpuHalKernelLibraryTest, EmitsArgumentMetadataFromLowKernelAbi) {

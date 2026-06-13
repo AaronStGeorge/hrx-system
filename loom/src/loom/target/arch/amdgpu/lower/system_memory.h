@@ -20,6 +20,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
+#include "loom/ir/types.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 #ifdef __cplusplus
@@ -27,6 +28,16 @@ extern "C" {
 #endif
 
 typedef struct loom_builder_t loom_builder_t;
+
+// Flags controlling system-memory loads.
+typedef uint32_t loom_amdgpu_system_memory_load_flags_t;
+
+enum loom_amdgpu_system_memory_load_flag_bits_e {
+  // No additional ordering is emitted after the load.
+  LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE = 0u,
+  // Emits acquire ordering after the vector-memory load.
+  LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_ACQUIRE = 1u << 0,
+};
 
 // Returns the vector-memory cache policy encoding for |descriptor_set|.
 loom_amdgpu_vector_memory_cache_policy_encoding_t
@@ -77,6 +88,31 @@ iree_status_t loom_amdgpu_system_memory_build_release_ordering(
 iree_status_t loom_amdgpu_system_memory_build_acquire_ordering(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_location_id_t location);
+
+// Emits target-low IR that loads a uniform 32-bit value from host-visible
+// system memory.
+//
+// |base_address| must be an SGPRx2 pointer. The helper emits a GLOBAL_LOAD
+// vector-memory packet with the target-specific system-memory cache policy and
+// then moves the uniform lane value back to an SGPR with V_READFIRSTLANE.
+iree_status_t loom_amdgpu_system_memory_build_uniform_load_b32(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t base_address, uint32_t byte_offset,
+    loom_amdgpu_system_memory_load_flags_t flags, loom_location_id_t location,
+    loom_value_id_t* out_value);
+
+// Emits target-low IR that loads a uniform 64-bit value from host-visible
+// system memory.
+//
+// |base_address| must be an SGPRx2 pointer. The helper emits a GLOBAL_LOAD
+// vector-memory packet with the target-specific system-memory cache policy,
+// extracts both 32-bit lanes, moves each lane to an SGPR with V_READFIRSTLANE,
+// and concatenates the pair into an SGPRx2 result.
+iree_status_t loom_amdgpu_system_memory_build_uniform_load_b64(
+    loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t base_address, uint32_t byte_offset,
+    loom_amdgpu_system_memory_load_flags_t flags, loom_location_id_t location,
+    loom_value_id_t* out_value);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -41,8 +41,8 @@ typedef struct loom_amdgpu_signal_values_t {
   loom_value_id_t event_id;
 } loom_amdgpu_signal_values_t;
 
-// Emits target-low IR that scalar-loads the signal fields needed for host
-// notification.
+// Emits target-low IR that loads the signal fields needed for host notification
+// from host-visible system memory.
 //
 // |signal_address| must be an SGPRx2 pointer to a device-visible
 // iree_amd_signal_t. The loaded values are uniform across the dispatch and are

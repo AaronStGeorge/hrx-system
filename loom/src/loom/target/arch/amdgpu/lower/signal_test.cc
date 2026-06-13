@@ -223,20 +223,91 @@ class AmdgpuSignalTest : public ::testing::Test {
         loom_type_equal(expected_type, loom_module_value_type(module_, value)));
   }
 
-  void ExpectLoadOp(const loom_op_t* op,
-                    loom_amdgpu_descriptor_ref_t descriptor_ref,
-                    loom_value_id_t expected_address,
-                    uint32_t expected_byte_offset,
-                    loom_value_id_t expected_result) const {
-    ExpectLowOpDescriptorRef(op, descriptor_ref);
-    ASSERT_EQ(loom_low_op_operands(op).count, 1u);
-    EXPECT_EQ(loom_low_op_operands(op).values[0], expected_address);
-    ASSERT_EQ(loom_low_op_attrs(op).count, 1u);
-    const loom_named_attr_t attr = loom_low_op_attrs(op).entries[0];
-    EXPECT_EQ(ToString(String(attr.name_id)), "offset");
-    EXPECT_EQ(loom_attr_as_i64(attr.value), expected_byte_offset);
+  const loom_op_t* DefiningOp(loom_value_id_t value) const {
+    const loom_value_t* ir_value = loom_module_value(module_, value);
+    if (ir_value == nullptr || loom_value_is_block_arg(ir_value)) {
+      return nullptr;
+    }
+    return loom_value_def_op(ir_value);
+  }
+
+  const loom_op_t* FindGlobalLoadSaddr(
+      loom_amdgpu_descriptor_ref_t descriptor_ref,
+      loom_value_id_t expected_base, uint32_t expected_byte_offset) const {
+    for (loom_op_t* op : OpsForDescriptorRef(descriptor_ref)) {
+      loom_value_slice_t operands = loom_low_op_operands(op);
+      if ((operands.count != 2 && operands.count != 3) ||
+          operands.values[1] != expected_base) {
+        continue;
+      }
+      loom_named_attr_slice_t attrs = loom_low_op_attrs(op);
+      for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+        if (iree_string_view_equal(String(attrs.entries[i].name_id),
+                                   IREE_SV("offset")) &&
+            loom_attr_as_i64(attrs.entries[i].value) == expected_byte_offset) {
+          return op;
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  void ExpectReadfirstlane(const loom_op_t* op, loom_value_id_t expected_source,
+                           loom_value_id_t expected_result) const {
+    ExpectLowOpDescriptorRef(op,
+                             LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32);
+    loom_value_slice_t operands = loom_low_op_operands(op);
+    ASSERT_EQ(operands.count, 1u);
+    EXPECT_EQ(operands.values[0], expected_source);
+    ASSERT_EQ(loom_low_op_results(op).count, 1u);
     EXPECT_EQ(loom_value_slice_get(loom_low_op_results(op), 0),
               expected_result);
+    ExpectRegisterType(expected_source, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1);
+    ExpectRegisterType(expected_result, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
+  }
+
+  void ExpectUniformGlobalLoadB32(loom_value_id_t base,
+                                  uint32_t expected_byte_offset,
+                                  loom_value_id_t expected_result) const {
+    const loom_op_t* load_op =
+        FindGlobalLoadSaddr(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR,
+                            base, expected_byte_offset);
+    ASSERT_NE(load_op, nullptr);
+    const loom_value_id_t vector_value =
+        loom_value_slice_get(loom_low_op_results(load_op), 0);
+    const loom_op_t* readfirstlane_op = DefiningOp(expected_result);
+    ASSERT_NE(readfirstlane_op, nullptr);
+    ExpectReadfirstlane(readfirstlane_op, vector_value, expected_result);
+  }
+
+  void ExpectUniformGlobalLoadB64(loom_value_id_t base,
+                                  uint32_t expected_byte_offset,
+                                  loom_value_id_t expected_result) const {
+    const loom_op_t* load_op =
+        FindGlobalLoadSaddr(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR,
+                            base, expected_byte_offset);
+    ASSERT_NE(load_op, nullptr);
+    const loom_value_id_t vector_value =
+        loom_value_slice_get(loom_low_op_results(load_op), 0);
+    const loom_op_t* concat_op = DefiningOp(expected_result);
+    ASSERT_NE(concat_op, nullptr);
+    ASSERT_TRUE(loom_low_concat_isa(concat_op));
+    loom_value_slice_t concat_sources = loom_low_concat_sources(concat_op);
+    ASSERT_EQ(concat_sources.count, 2u);
+    for (iree_host_size_t i = 0; i < concat_sources.count; ++i) {
+      const loom_op_t* readfirstlane_op = DefiningOp(concat_sources.values[i]);
+      ASSERT_NE(readfirstlane_op, nullptr);
+      const loom_value_id_t vector_lane =
+          loom_low_op_operands(readfirstlane_op).values[0];
+      const loom_op_t* slice_op = DefiningOp(vector_lane);
+      ASSERT_NE(slice_op, nullptr);
+      ASSERT_TRUE(loom_low_slice_isa(slice_op));
+      EXPECT_EQ(loom_low_slice_source(slice_op), vector_value);
+      EXPECT_EQ(loom_low_slice_offset(slice_op), (int64_t)i);
+      ExpectReadfirstlane(readfirstlane_op, vector_lane,
+                          concat_sources.values[i]);
+    }
+    ExpectRegisterType(expected_result, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2);
   }
 
   void ExpectGlobalStoreB64(const loom_op_t* op,
@@ -306,19 +377,11 @@ TEST_F(AmdgpuSignalTest, LoadsSignalNotificationValues) {
       &values));
 
   EXPECT_EQ(values.address, signal_address);
-  std::vector<loom_op_t*> x2_loads = OpsForDescriptorRef(
-      LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX2_OFFSET_ONLY);
-  ASSERT_EQ(x2_loads.size(), 1u);
-  ExpectLoadOp(x2_loads[0],
-               LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX2_OFFSET_ONLY,
-               signal_address, LOOM_AMDGPU_SIGNAL_EVENT_MAILBOX_PTR_OFFSET,
-               values.event_mailbox_ptr);
-  std::vector<loom_op_t*> b32_loads =
-      OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORD_OFFSET_ONLY);
-  ASSERT_EQ(b32_loads.size(), 1u);
-  ExpectLoadOp(
-      b32_loads[0], LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORD_OFFSET_ONLY,
-      signal_address, LOOM_AMDGPU_SIGNAL_EVENT_ID_OFFSET, values.event_id);
+  ExpectUniformGlobalLoadB64(signal_address,
+                             LOOM_AMDGPU_SIGNAL_EVENT_MAILBOX_PTR_OFFSET,
+                             values.event_mailbox_ptr);
+  ExpectUniformGlobalLoadB32(signal_address, LOOM_AMDGPU_SIGNAL_EVENT_ID_OFFSET,
+                             values.event_id);
 
   ExpectRegisterType(values.event_mailbox_ptr, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
                      2);
