@@ -146,6 +146,16 @@ func.def @scf_select_vgpr_i64(%values: vector<2xi32>, %limit: i32, %fallback: i3
 
 // ====
 
+func.def @scf_select_vector_extract_i64(%values: vector<2xi64>, %guards: vector<2xi32>, %limit: i32, %fallback: i64) -> (i64) {
+  %lane = vector.extract %guards[0] : vector<2xi32> -> i32
+  %extracted = vector.extract %values[0] : vector<2xi64> -> i64
+  %cond = scalar.cmpi slt, %lane, %limit : i32
+  %selected = scf.select %cond, %extracted, %fallback : i64
+  func.return %selected : i64
+}
+
+// ====
+
 func.def @scf_select_i1_mask_condition(%values: vector<2xi32>, %limit: i32, %fallback_condition: i1, %true_value: f32, %false_value: f32) -> (f32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %lane_condition = scalar.cmpi slt, %lane, %limit : i32
