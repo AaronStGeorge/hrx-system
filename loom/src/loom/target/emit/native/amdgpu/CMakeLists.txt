@@ -476,6 +476,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::ir
     loom::ops::func_symbol_facts
+    loom::ops::global
     loom::ops::low
     loom::ops::target
     loom::target::arch::amdgpu::error_defs

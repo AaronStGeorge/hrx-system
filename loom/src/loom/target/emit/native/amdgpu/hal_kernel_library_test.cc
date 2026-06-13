@@ -1114,6 +1114,99 @@ TEST_F(AmdgpuHalKernelLibraryTest,
   loom_module_free(module);
 }
 
+TEST_F(AmdgpuHalKernelLibraryTest,
+       EmitsGlobalRodataSymbolsAndRel32AddressMaterialization) {
+  static constexpr char kSiteSymbolName[] = "loom_sanitizer_sites";
+  static const uint8_t kSiteRecords[] = {
+      0x00, 0x02, 0x03, 0x02, 0x01, 0x01, 0x00, 0x00,
+      0x00, 0x01, 0x01, 0x06, 0x01, 0x01, 0x00, 0x00,
+  };
+  static const char kSource[] =
+      "global.rodata @loom_sanitizer_sites = "
+      "bytes(\"00020302010100000001010601010000\"), align 16\n"
+      "amdgpu.target<gfx1100> @gfx_target\n"
+      "low.kernel.def target(@gfx_target) workgroup_size(64, 1, 1) "
+      "@loom_kernel() {\n"
+      "  %pc = low.op<amdgpu.s_getpc_b64>() : () -> "
+      "reg<amdgpu.sgpr x2>\n"
+      "  %pc_lo = low.slice %pc[0] : reg<amdgpu.sgpr x2> -> "
+      "reg<amdgpu.sgpr>\n"
+      "  %pc_hi = low.slice %pc[1] : reg<amdgpu.sgpr x2> -> "
+      "reg<amdgpu.sgpr>\n"
+      "  %site_lo = low.op<amdgpu.s_add_u32.rhs_symbol_rel32_lo>(%pc_lo) "
+      "{symbol = @loom_sanitizer_sites, byte_offset = 8} : "
+      "(reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %site_hi = low.op<amdgpu.s_addc_u32.rhs_symbol_rel32_hi>(%pc_hi) "
+      "{symbol = @loom_sanitizer_sites, byte_offset = 8} : "
+      "(reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  low.return\n"
+      "}\n";
+  loom_module_t* module = nullptr;
+  ASSERT_NO_FATAL_FAILURE(
+      ParseSource(iree_make_cstring_view(kSource), &module));
+
+  DiagnosticCapture capture;
+  loom_amdgpu_hal_kernel_library_t library = {};
+  loom_amdgpu_hal_kernel_library_options_t options = {
+      /*.processor=*/{},
+      /*.target_selection=*/{},
+      /*.runtime_globals=*/LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG,
+      /*.data_symbols=*/{},
+      /*.data_symbol_count=*/{},
+      /*.diagnostic_sink=*/capture.sink(),
+      /*.source_resolver=*/{},
+      /*.max_errors=*/20,
+  };
+  bool emitted = false;
+  IREE_ASSERT_OK(loom_amdgpu_emit_hal_kernel_library(
+      module, &options, iree_allocator_system(), &emitted, &library));
+
+  EXPECT_TRUE(emitted);
+  EXPECT_TRUE(capture.diagnostics.empty());
+  ASSERT_NE(library.hsaco_data, nullptr);
+  const std::string hsaco(reinterpret_cast<const char*>(library.hsaco_data),
+                          library.hsaco_data_length);
+
+  const std::vector<Section> sections = ReadSections(hsaco);
+  const Section& dynsym = FindSection(sections, ".dynsym");
+  const Section& dynstr = FindSection(sections, ".dynstr");
+  const Section& rodata = FindSection(sections, ".rodata");
+  const Section& text = FindSection(sections, ".text");
+  const std::string feedback_name =
+      StringViewToString(LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_NAME);
+  const DynamicSymbol site =
+      FindDynamicSymbol(hsaco, dynsym, dynstr, kSiteSymbolName);
+  const DynamicSymbol feedback =
+      FindDynamicSymbol(hsaco, dynsym, dynstr, feedback_name.c_str());
+
+  EXPECT_EQ(site.info, 0x11u);
+  EXPECT_EQ(site.section_index, rodata.index);
+  EXPECT_EQ(site.size, sizeof(kSiteRecords));
+  ASSERT_GE(site.value, rodata.address);
+  ASSERT_LE(site.value - rodata.address, rodata.size);
+  const size_t site_file_offset =
+      (size_t)(rodata.offset + (site.value - rodata.address));
+  ASSERT_LE(site_file_offset + sizeof(kSiteRecords), hsaco.size());
+  EXPECT_EQ(hsaco.substr(site_file_offset, sizeof(kSiteRecords)),
+            std::string((const char*)kSiteRecords, sizeof(kSiteRecords)));
+
+  EXPECT_EQ(feedback.info, 0x11u);
+  EXPECT_NE(feedback.section_index, site.section_index);
+  EXPECT_EQ(feedback.size,
+            LOOM_AMDGPU_RUNTIME_GLOBAL_FEEDBACK_CONFIG_BYTE_LENGTH);
+
+  const uint64_t base_pc_address = text.address + 4u;
+  const uint64_t site_delta = site.value + 8u - base_pc_address;
+  ASSERT_LE(text.offset + 20u, hsaco.size());
+  EXPECT_EQ(LoadLeU32(hsaco, (size_t)text.offset + 8u), (uint32_t)site_delta);
+  EXPECT_EQ(LoadLeU32(hsaco, (size_t)text.offset + 16u),
+            (uint32_t)(site_delta >> 32));
+
+  loom_amdgpu_hal_kernel_library_deinitialize(&library,
+                                              iree_allocator_system());
+  loom_module_free(module);
+}
+
 TEST_F(AmdgpuHalKernelLibraryTest, DescriptorSetMismatchEmitsDiagnostic) {
   DiagnosticCapture capture;
   bool emitted = true;
