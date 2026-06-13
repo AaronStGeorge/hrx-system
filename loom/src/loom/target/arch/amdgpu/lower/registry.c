@@ -660,7 +660,8 @@ static void loom_amdgpu_mark_plan_storage_demands(
         (const loom_amdgpu_mulf_mix_plan_t*)plan.target_data);
     return;
   }
-  if (plan.id == LOOM_OP_VECTOR_INSERT) {
+  if (plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS ||
+      plan.id == LOOM_OP_VECTOR_SPLAT || plan.id == LOOM_OP_VECTOR_INSERT) {
     loom_amdgpu_mark_value_plan_storage_demands(context, source_op, plan);
     return;
   }

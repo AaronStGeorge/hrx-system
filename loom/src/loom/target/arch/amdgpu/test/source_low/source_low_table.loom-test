@@ -124,36 +124,18 @@ low.func.def target(@target) abi(hal_kernel) @f32_table_lookup_dynamic_grid(%gri
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @i8_table_lookup_fact_known_codes(%grid: vector<4xi8>) -> (vector<4xi8>) {
-  %c0 = scalar.constant 0 : i32
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %wide_codes = vector.from_elements %c2, %c0, %c3, %c1 : vector<4xi32>
-  %codes = vector.bitpack<8> %wide_codes : vector<4xi32> -> vector<4xi8>
+  %c0 = scalar.constant 0 : i8
+  %c1 = scalar.constant 1 : i8
+  %c2 = scalar.constant 2 : i8
+  %c3 = scalar.constant 3 : i8
+  %codes = vector.from_elements %c2, %c0, %c3, %c1 : vector<4xi8>
   %decoded = vector.table.lookup %grid[%codes] : vector<4xi8>, vector<4xi8> -> vector<4xi8>
   func.return %decoded : vector<4xi8>
 }
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @i8_table_lookup_fact_known_codes(%grid: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
-  %c0 = s_mov_b32 0
-  %c1 = s_mov_b32 1
-  %c2 = s_mov_b32 2
-  %c3 = s_mov_b32 3
-  %15 = v_mov_b32_copy %c2
-  %16 = v_mov_b32_copy %c0
-  %17 = v_mov_b32_copy %c3
-  %18 = v_mov_b32_copy %c1
-  %21 = v_and_b32_lit %15, 255
-  %23 = v_and_b32_lit %16, 255
-  %24 = v_lshlrev_b32_src0_inline %23, 8
-  %25 = v_or_b32 %21, %24
-  %27 = v_and_b32_lit %17, 255
-  %28 = v_lshlrev_b32_src0_inline %27, 16
-  %29 = v_or_b32 %25, %28
-  %31 = v_and_b32_lit %18, 255
-  %32 = v_lshlrev_b32_src0_inline %31, 24
-  %codes = v_or_b32 %29, %32
+  %codes = v_mov_b32 16973826
   %decoded = v_perm_b32 %grid, %grid, %codes
   return %decoded
 }
@@ -162,57 +144,24 @@ low.func.def target(@target) abi(hal_kernel) @i8_table_lookup_fact_known_codes(%
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @i8_table_lookup_constant_table() -> (vector<4xi8>) {
-  %g0 = scalar.constant -4 : i32
-  %g1 = scalar.constant -1 : i32
-  %g2 = scalar.constant 2 : i32
-  %g3 = scalar.constant 7 : i32
-  %wide_grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xi32>
-  %grid = vector.bitpack<8> %wide_grid : vector<4xi32> -> vector<4xi8>
-  %c0 = scalar.constant 0 : i32
-  %c1 = scalar.constant 1 : i32
-  %c2 = scalar.constant 2 : i32
-  %c3 = scalar.constant 3 : i32
-  %wide_codes = vector.from_elements %c3, %c2, %c1, %c0 : vector<4xi32>
-  %codes = vector.bitpack<8> %wide_codes : vector<4xi32> -> vector<4xi8>
+  %g0 = scalar.constant -4 : i8
+  %g1 = scalar.constant -1 : i8
+  %g2 = scalar.constant 2 : i8
+  %g3 = scalar.constant 7 : i8
+  %grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xi8>
+  %c0 = scalar.constant 0 : i8
+  %c1 = scalar.constant 1 : i8
+  %c2 = scalar.constant 2 : i8
+  %c3 = scalar.constant 3 : i8
+  %codes = vector.from_elements %c3, %c2, %c1, %c0 : vector<4xi8>
   %decoded = vector.table.lookup %grid[%codes] : vector<4xi8>, vector<4xi8> -> vector<4xi8>
   func.return %decoded : vector<4xi8>
 }
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @i8_table_lookup_constant_table() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
-  %g0 = s_mov_b32 4294967292
-  %g1 = s_mov_b32 4294967295
-  %g2 = s_mov_b32 2
-  %g3 = s_mov_b32 7
-  %19 = v_mov_b32_copy %g0
-  %20 = v_mov_b32_copy %g1
-  %21 = v_mov_b32_copy %g2
-  %22 = v_mov_b32_copy %g3
-  %25 = v_and_b32_lit %19, 255
-  %27 = v_and_b32_lit %20, 255
-  %28 = v_lshlrev_b32_src0_inline %27, 8
-  %29 = v_or_b32 %25, %28
-  %31 = v_and_b32_lit %21, 255
-  %32 = v_lshlrev_b32_src0_inline %31, 16
-  %33 = v_or_b32 %29, %32
-  %35 = v_and_b32_lit %22, 255
-  %36 = v_lshlrev_b32_src0_inline %35, 24
-  %grid = v_or_b32 %33, %36
-  %c0 = s_mov_b32 0
-  %c1 = s_mov_b32 1
-  %c3 = s_mov_b32 3
-  %41 = v_mov_b32_copy %c3
-  %43 = v_mov_b32_copy %c1
-  %44 = v_mov_b32_copy %c0
-  %47 = v_and_b32_lit %41, 255
-  %50 = v_lshlrev_b32_src0_inline %31, 8
-  %51 = v_or_b32 %47, %50
-  %53 = v_and_b32_lit %43, 255
-  %54 = v_lshlrev_b32_src0_inline %53, 16
-  %55 = v_or_b32 %51, %54
-  %57 = v_and_b32_lit %44, 255
-  %58 = v_lshlrev_b32_src0_inline %57, 24
-  %codes = v_or_b32 %55, %58
+  %grid = v_mov_b32 117637116
+  %codes = v_mov_b32 66051
   %decoded = v_perm_b32 %grid, %grid, %codes
   return %decoded
 }
