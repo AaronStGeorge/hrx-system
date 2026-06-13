@@ -105,6 +105,7 @@ loom_cc_library(
     loom::target::low_legality
     loom::target::low_packet_diagnostics
     loom::target::math_policy
+    loom::target::pipeline
     loom::target::predicate
     loom::target::types
     loom::tooling::compile::pipeline

@@ -1,0 +1,37 @@
+// RUN: emit llvmir-body
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
+low.func.def target(@target) abi(object_function) @first(%lhs: reg<llvmir.i32>, %rhs: reg<llvmir.i32>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %sum = add.i32 %lhs, %rhs
+  return %sum
+}
+
+low.func.def target(@target) abi(object_function) @second(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>, %bounded_i: reg<llvmir.i64>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %loaded = load.indexed.i32 %input_view, %bounded_i, 16, 4
+  store.indexed.i32 %loaded, %output_view, %bounded_i, 32, 4
+  return %loaded
+}
+
+// ----
+define dso_local i32 @first(i32 %lhs, i32 %rhs) {
+entry:
+  %sum = add i32 %lhs, %rhs
+  ret i32 %sum
+}
+
+define dso_local i32 @second(ptr %input_view, ptr %output_view, i64 %bounded_i) {
+entry:
+  %v7 = mul i64 %bounded_i, 4
+  %v9 = add i64 %v7, 16
+  %v10 = getelementptr i8, ptr %input_view, i64 %v9
+  %loaded = load i32, ptr %v10
+  %v13 = mul i64 %bounded_i, 4
+  %v15 = add i64 %v13, 32
+  %v16 = getelementptr i8, ptr %output_view, i64 %v15
+  store i32 %loaded, ptr %v16
+  ret i32 %loaded
+}

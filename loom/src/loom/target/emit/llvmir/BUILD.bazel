@@ -257,14 +257,11 @@ loom_cc_library(
     hdrs = ["check/loom_check.h"],
     deps = [
         ":core",
-        ":legality",
-        ":lower",
+        ":module_emitter",
         ":target_registry",
-        "//loom/src/loom/analysis:symbol_facts",
-        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/ops/target",
         "//loom/src/loom/target/tool:llvm",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/util:stream",
@@ -289,16 +286,10 @@ loom_cc_library(
 loom_check_test_suite(
     name = "file_test",
     srcs = [
+        "test/diagnostics.loom-test",
         "test/emit.loom-test",
-        "test/llvmir/cfg.loom-test",
-        "test/llvmir/intrinsics.loom-test",
-        "test/llvmir/lowering_errors.loom-test",
-        "test/llvmir/memory.loom-test",
-        "test/llvmir/packed_dot.loom-test",
-        "test/llvmir/scalar_index.loom-test",
-        "test/llvmir/target_projection.loom-test",
-        "test/llvmir/toolchain.loom-test",
-        "test/llvmir/vector_core.loom-test",
+        "test/target_low.loom-test",
+        "test/toolchain.loom-test",
     ],
 )
 

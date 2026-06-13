@@ -1370,6 +1370,88 @@ static iree_string_view_t loom_check_emit_source_low_pipeline(
              : IREE_SV("source-to-low{diagnostics=all}");
 }
 
+void loom_check_prepare_source_low_options_initialize(
+    loom_check_prepare_source_low_options_t* out_options) {
+  IREE_ASSERT_ARGUMENT(out_options);
+  *out_options = (loom_check_prepare_source_low_options_t){
+      .pipeline = IREE_SVL("default"),
+      .control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG,
+  };
+}
+
+iree_status_t loom_check_prepare_source_low_module(
+    loom_module_t* module,
+    const loom_check_prepare_source_low_options_t* options,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    const loom_check_environment_t* environment,
+    loom_source_resolver_t source_resolver,
+    loom_check_diagnostic_collector_t* diagnostic_collector,
+    iree_arena_block_pool_t* block_pool) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(low_registry);
+  IREE_ASSERT_ARGUMENT(environment);
+  IREE_ASSERT_ARGUMENT(diagnostic_collector);
+  IREE_ASSERT_ARGUMENT(block_pool);
+
+  const loom_target_entry_options_t entry_options = {
+      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
+                          .user_data = diagnostic_collector},
+      .source_resolver = source_resolver,
+      .max_errors = 20,
+  };
+  loom_verify_result_t verify_result = {0};
+  IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(module, &entry_options,
+                                                       20, &verify_result));
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
+
+  if (environment->target_environment == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "source-low emit requires a target environment");
+  }
+
+  loom_compile_pipeline_options_t compile_options = {0};
+  loom_compile_pipeline_options_initialize(&compile_options);
+  compile_options.pipeline = options->pipeline;
+  compile_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  compile_options.target_pipeline_options.control_flow_lowering =
+      options->control_flow_lowering;
+  compile_options.target_environment = environment->target_environment;
+  compile_options.low_descriptor_registry = low_registry;
+  compile_options.diagnostic_sink =
+      (loom_diagnostic_sink_t){.fn = loom_check_diagnostic_collector_sink,
+                               .user_data = diagnostic_collector};
+  compile_options.source_resolver = source_resolver;
+  compile_options.max_errors = 20;
+
+  loom_pass_run_result_t run_result = {0};
+  IREE_RETURN_IF_ERROR(loom_compile_run_pipeline(module, &compile_options,
+                                                 block_pool, &run_result));
+  if (run_result.error_count != 0 || diagnostic_collector->count != 0) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(module, &entry_options,
+                                                       20, &verify_result));
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
+
+  loom_target_entry_diagnostic_emitter_t verifier_emitter = {0};
+  loom_target_entry_diagnostic_emitter_initialize(
+      module, &entry_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
+  loom_low_verify_result_t low_verify_result = {0};
+  loom_low_verify_scratch_t low_verify_scratch =
+      loom_low_verify_scratch_for_module(module);
+  IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
+      module, low_registry, &verifier_emitter, loom_target_selection_empty(),
+      20, environment->low_verify_provider_list, &low_verify_scratch,
+      &low_verify_result));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_emit_write_source_low_pipeline_text(
     loom_module_t* source_module, const loom_check_emit_request_t* request,
     const loom_target_environment_t* target_environment,
@@ -1425,19 +1507,6 @@ static iree_status_t loom_check_emit_write_source_low_text(
     loom_source_resolver_t source_resolver,
     loom_check_diagnostic_collector_t* diagnostic_collector,
     iree_arena_block_pool_t* block_pool, loom_check_result_t* result) {
-  const loom_target_entry_options_t entry_options = {
-      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
-                          .user_data = diagnostic_collector},
-      .source_resolver = source_resolver,
-      .max_errors = 20,
-  };
-  loom_verify_result_t verify_result = {0};
-  IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(module, &entry_options,
-                                                       20, &verify_result));
-  if (verify_result.error_count != 0) {
-    return iree_ok_status();
-  }
-
   if (environment->target_environment == NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "source-low emit requires a target environment");
@@ -1450,34 +1519,30 @@ static iree_status_t loom_check_emit_write_source_low_text(
         module, request, environment->target_environment, block_pool, result);
   }
 
-  loom_compile_pipeline_options_t compile_options = {0};
-  loom_compile_pipeline_options_initialize(&compile_options);
-  compile_options.pipeline = loom_check_emit_source_low_pipeline(request);
-  compile_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
-  compile_options.target_pipeline_options.control_flow_lowering =
+  loom_check_prepare_source_low_options_t prepare_options = {0};
+  loom_check_prepare_source_low_options_initialize(&prepare_options);
+  prepare_options.pipeline = loom_check_emit_source_low_pipeline(request);
+  prepare_options.control_flow_lowering =
       request->source_low_control_flow_lowering;
-  compile_options.target_environment = environment->target_environment;
-  compile_options.low_descriptor_registry = low_registry;
-  compile_options.diagnostic_sink =
-      (loom_diagnostic_sink_t){.fn = loom_check_diagnostic_collector_sink,
-                               .user_data = diagnostic_collector};
-  compile_options.source_resolver = source_resolver;
-  compile_options.max_errors = 20;
-
-  loom_pass_run_result_t run_result = {0};
-  iree_status_t status = loom_compile_run_pipeline(module, &compile_options,
-                                                   block_pool, &run_result);
-  IREE_RETURN_IF_ERROR(status);
-  if (run_result.error_count != 0 || diagnostic_collector->count != 0) {
+  IREE_RETURN_IF_ERROR(loom_check_prepare_source_low_module(
+      module, &prepare_options, low_registry, environment, source_resolver,
+      diagnostic_collector, block_pool));
+  if (diagnostic_collector->count != 0) {
     return iree_ok_status();
   }
 
+  const loom_target_entry_options_t entry_options = {
+      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
+                          .user_data = diagnostic_collector},
+      .source_resolver = source_resolver,
+      .max_errors = 20,
+  };
   loom_target_entry_diagnostic_emitter_t pass_emitter = {0};
   loom_target_entry_diagnostic_emitter_initialize(
       module, &entry_options, LOOM_EMITTER_PASS, &pass_emitter);
   iree_string_view_t selected_descriptor_set_key = iree_string_view_empty();
   bool has_low_artifacts = false;
-  status = loom_check_emit_select_single_low_descriptor_set_key(
+  iree_status_t status = loom_check_emit_select_single_low_descriptor_set_key(
       module, &low_registry->registry, loom_target_entry_emitter(&pass_emitter),
       &selected_descriptor_set_key, &has_low_artifacts);
   IREE_RETURN_IF_ERROR(status);
@@ -1495,26 +1560,6 @@ static iree_status_t loom_check_emit_write_source_low_text(
     };
     return iree_diagnostic_emit(loom_target_entry_emitter(&pass_emitter),
                                 &emission);
-  }
-
-  IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(module, &entry_options,
-                                                       20, &verify_result));
-  if (verify_result.error_count != 0) {
-    return iree_ok_status();
-  }
-
-  loom_target_entry_diagnostic_emitter_t verifier_emitter = {0};
-  loom_target_entry_diagnostic_emitter_initialize(
-      module, &entry_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
-  loom_low_verify_result_t low_verify_result = {0};
-  loom_low_verify_scratch_t low_verify_scratch =
-      loom_low_verify_scratch_for_module(module);
-  IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
-      module, low_registry, &verifier_emitter, loom_target_selection_empty(),
-      20, environment->low_verify_provider_list, &low_verify_scratch,
-      &low_verify_result));
-  if (low_verify_result.error_count != 0) {
-    return iree_ok_status();
   }
 
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
@@ -1733,6 +1778,7 @@ iree_status_t loom_check_execute_emit(
         .low_registry = &low_registry,
         .diagnostic_collector = &diagnostic_collector,
         .case_arena = &diagnostic_arena,
+        .block_pool = block_pool,
         .host_allocator = allocator,
         .result = result,
     };

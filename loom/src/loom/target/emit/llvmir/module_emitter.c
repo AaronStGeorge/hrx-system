@@ -598,6 +598,22 @@ static iree_status_t loom_llvmir_emit_descriptor_set_diagnostic(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_emit_no_functions_diagnostic(
+    loom_llvmir_emit_module_state_t* state) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(LOOM_LLVMIR_LOW_EMITTER_KEY),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .error = LOOM_ERR_TARGET_011,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  IREE_RETURN_IF_ERROR(
+      iree_diagnostic_emit(state->diagnostic_emitter, &emission));
+  ++state->error_count;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_emit_lookup_value(
     loom_llvmir_emit_function_state_t* state, loom_value_id_t value_id,
     loom_llvmir_value_id_t* out_value_id) {
@@ -1398,9 +1414,7 @@ iree_status_t loom_llvmir_emit_low_module(
 
   if (iree_status_is_ok(status) && state.error_count == 0 &&
       state.function_count == 0) {
-    status = iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "LLVMIR low module has no selected low function definitions");
+    status = loom_llvmir_emit_no_functions_diagnostic(&state);
   }
   if (iree_status_is_ok(status) && state.error_count == 0) {
     *out_module = state.llvmir_module;

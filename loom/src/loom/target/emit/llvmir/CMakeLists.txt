@@ -280,16 +280,13 @@ loom_cc_library(
     "check/loom_check.c"
   DEPS
     ::core
-    ::legality
-    ::lower
+    ::module_emitter
     ::target_registry
     iree::base
     iree::io::stream
-    loom::analysis::symbol_facts
-    loom::error::error_defs
+    loom::codegen::low::function
     loom::ir
     loom::ops::llvmir
-    loom::ops::target
     loom::target::tool::llvm
     loom::tools::loom-check::execute
     loom::util::stream
@@ -318,6 +315,19 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
+    "test_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/diagnostics.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+iree_native_test(
+  NAME
     "test_emit"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
@@ -331,9 +341,9 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
-    "test_llvmir_cfg"
+    "test_target_low"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/cfg.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/target_low.loom-test"
   SRC
     loom::tools::loom-check::loom-check
   LABELS
@@ -344,100 +354,9 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
-    "test_llvmir_intrinsics"
+    "test_toolchain"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/intrinsics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_lowering_errors"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/lowering_errors.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_memory"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/memory.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_packed_dot"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/packed_dot.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_scalar_index"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/scalar_index.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_target_projection"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/target_projection.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_toolchain"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/toolchain.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_vector_core"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/vector_core.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/toolchain.loom-test"
   SRC
     loom::tools::loom-check::loom-check
   LABELS

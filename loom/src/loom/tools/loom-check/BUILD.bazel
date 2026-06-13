@@ -250,6 +250,7 @@ loom_cc_library(
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:low_packet_diagnostics",
         "//loom/src/loom/target:math_policy",
+        "//loom/src/loom/target:pipeline",
         "//loom/src/loom/target:predicate",
         "//loom/src/loom/target:types",
         "//loom/src/loom/tooling/compile:pipeline",
