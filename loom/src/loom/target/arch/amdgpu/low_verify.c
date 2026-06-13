@@ -55,11 +55,11 @@ static iree_status_t loom_amdgpu_low_emit_blocked_alias(
                                     packet->key_attr_index)),
       loom_param_string(state->target->descriptor_set_key),
       loom_param_string(alias->alias_mnemonic),
-      loom_param_string(IREE_SV("dx9_zero")),
+      loom_param_string(alias->alias_semantics),
       loom_param_string(alias->replacement_descriptor_name),
       loom_param_string(alias->replacement_mnemonic),
-      loom_param_string(IREE_SV("rejected")),
-      loom_param_string(IREE_SV("compatibility_zero_semantics")),
+      loom_param_string(alias->decision),
+      loom_param_string(alias->reason),
   };
   return loom_low_verify_context_emit(context, packet->op, LOOM_ERR_AMDGPU_031,
                                       params, IREE_ARRAYSIZE(params));

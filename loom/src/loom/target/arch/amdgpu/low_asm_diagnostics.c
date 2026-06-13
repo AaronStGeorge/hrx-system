@@ -44,13 +44,12 @@ static iree_status_t loom_amdgpu_low_asm_try_unknown_mnemonic(
   out_diagnostic->error = LOOM_ERR_AMDGPU_032;
   out_diagnostic->params[0] = loom_param_string(descriptor_set_name);
   out_diagnostic->params[1] = loom_param_string(alias->alias_mnemonic);
-  out_diagnostic->params[2] = loom_param_string(IREE_SV("dx9_zero"));
+  out_diagnostic->params[2] = loom_param_string(alias->alias_semantics);
   out_diagnostic->params[3] =
       loom_param_string(alias->replacement_descriptor_name);
   out_diagnostic->params[4] = loom_param_string(alias->replacement_mnemonic);
-  out_diagnostic->params[5] = loom_param_string(IREE_SV("rejected"));
-  out_diagnostic->params[6] =
-      loom_param_string(IREE_SV("compatibility_zero_semantics"));
+  out_diagnostic->params[5] = loom_param_string(alias->decision);
+  out_diagnostic->params[6] = loom_param_string(alias->reason);
   out_diagnostic->param_count = 7;
   return iree_ok_status();
 }

@@ -173,16 +173,17 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     low_aliases
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::low_aliases
+  SOURCE
+    "low_aliases.c"
   HDRS
     "low_aliases.h"
-  SRCS
-    "low_aliases.c"
   DEPS
     iree::base
-  PUBLIC
 )
 endif()
 

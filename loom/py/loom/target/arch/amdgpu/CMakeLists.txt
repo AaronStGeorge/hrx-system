@@ -49,6 +49,13 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    low_aliases
+  SRCS
+    "low_aliases.py"
+)
+
+iree_py_library(
+  NAME
     matrix_contracts
   SRCS
     "matrix_contracts.py"
@@ -106,9 +113,11 @@ iree_py_test(
   ARGS
     "loom.target.arch.amdgpu.descriptor_overlay_test"
     "loom.target.arch.amdgpu.descriptors_test"
+    "loom.target.arch.amdgpu.low_aliases_test"
   DEPS
     loom::py::loom::target::arch::amdgpu::descriptors
     loom::py::loom::target::arch::amdgpu::isa_xml
+    loom::py::loom::target::arch::amdgpu::low_aliases
     loom::py::loom::target::low_descriptors
   PACKAGE_DIRS
     "${PROJECT_SOURCE_DIR}/loom/py"

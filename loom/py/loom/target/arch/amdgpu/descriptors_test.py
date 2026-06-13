@@ -810,10 +810,6 @@ def test_scalar_domain_fma_descriptors_are_arch_specific() -> None:
         "amdgpu.s_fmac_f32",
         "amdgpu.s_fmac_f16",
     }
-    legacy_dx9_zero_keys = {
-        "amdgpu.v_fma_dx9_zero_f32",
-        "amdgpu.v_fmac_dx9_zero_f32",
-    }
 
     for descriptor_set in (
         _gfx940_core_overlays(),
@@ -834,19 +830,6 @@ def test_scalar_domain_fma_descriptors_are_arch_specific() -> None:
             descriptor.descriptor_key: descriptor for descriptor in descriptor_set
         }
         assert scalar_domain_keys <= descriptors.keys()
-
-    for descriptor_set in (
-        _gfx940_core_overlays(),
-        _gfx950_core_overlays(),
-        _gfx11_core_overlays(),
-        _gfx117x_core_overlays(),
-        _gfx12_core_overlays(),
-        _gfx1250_core_overlays(),
-    ):
-        descriptors = {
-            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
-        }
-        assert not legacy_dx9_zero_keys & descriptors.keys()
 
 
 def test_scalar_domain_fma_descriptors_pin_sgpr_contracts() -> None:

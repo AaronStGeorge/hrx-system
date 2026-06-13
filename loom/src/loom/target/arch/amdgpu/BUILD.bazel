@@ -199,10 +199,11 @@ loom_cc_library(
     ],
 )
 
-loom_cc_library(
+loom_generated_cc_library(
     name = "low_aliases",
-    srcs = ["low_aliases.c"],
     hdrs = ["low_aliases.h"],
+    generator = "//loom/py/loom/gen/target/arch/amdgpu:low_aliases",
+    source = "low_aliases.c",
     deps = ["//runtime/src/iree/base"],
 )
 

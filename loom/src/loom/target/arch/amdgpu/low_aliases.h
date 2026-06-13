@@ -20,10 +20,16 @@ typedef struct loom_amdgpu_low_blocked_alias_t {
   iree_string_view_t alias_name;
   // ISA mnemonic that carries the compatibility semantics.
   iree_string_view_t alias_mnemonic;
+  // Semantic class that makes the alias incompatible with ordinary authoring.
+  iree_string_view_t alias_semantics;
   // Stable descriptor key authors should use for ordinary FMA semantics.
   iree_string_view_t replacement_descriptor_name;
   // ISA mnemonic authors should use for ordinary FMA semantics.
   iree_string_view_t replacement_mnemonic;
+  // Diagnostic decision applied to the alias.
+  iree_string_view_t decision;
+  // Diagnostic reason for the decision.
+  iree_string_view_t reason;
 } loom_amdgpu_low_blocked_alias_t;
 
 // Returns the blocked alias matching |name|, or NULL when |name| is not an

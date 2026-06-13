@@ -33,6 +33,21 @@ iree_py_binary(
 )
 
 iree_py_binary(
+    name = "low_aliases",
+    srcs = [
+        "__init__.py",
+        "amdgpu_low_aliases.py",
+    ],
+    main = "amdgpu_low_aliases.py",
+    visibility = GENERATOR_VISIBILITY,
+    deps = [
+        "//loom/py/loom/gen/support",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:low_aliases",
+    ],
+)
+
+iree_py_binary(
     name = "target_info",
     srcs = [
         "__init__.py",
