@@ -1523,6 +1523,14 @@ class BytecodeReader:
                         f"(encoding table has {len(self._encodings)} entries)"
                     )
                 return self._encodings[encoding_id - 1], offset
+            case 11:  # BYTES
+                byte_length, offset = decode_varint(data, offset)
+                end_offset = offset + byte_length
+                if end_offset > len(data):
+                    raise BytecodeError(
+                        f"bytes attr length {byte_length} exceeds payload size"
+                    )
+                return data[offset:end_offset], end_offset
             case _:
                 raise BytecodeError(f"unknown attr value kind: {kind}")
 

@@ -1066,6 +1066,14 @@ class TestAttributeValues:
     def test_string_empty(self) -> None:
         assert self._roundtrip_attr("label", "") == ""
 
+    def test_bytes_empty(self) -> None:
+        assert self._roundtrip_attr("payload", b"") == b""
+
+    def test_bytes_payload(self) -> None:
+        assert (
+            self._roundtrip_attr("payload", b"\x00\x11\xfe\xff") == b"\x00\x11\xfe\xff"
+        )
+
     def test_bool_true(self) -> None:
         assert self._roundtrip_attr("flag", True) is True
 

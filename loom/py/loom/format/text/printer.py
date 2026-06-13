@@ -510,6 +510,10 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
         if not isinstance(value, _IR_TYPE_CLASSES):
             raise TypeError(f"type attribute value must be a Type: {value!r}")
         return print_type(cast(Type, value))
+    if attr_def is not None and attr_def.attr_type == "bytes":
+        if not isinstance(value, bytes | bytearray):
+            raise TypeError(f"bytes attribute value must be bytes: {value!r}")
+        return f'bytes("{bytes(value).hex()}")'
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -518,6 +522,8 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
         return _format_float(value)
     if isinstance(value, SymbolName):
         return "@" + str(value)
+    if isinstance(value, bytes | bytearray):
+        return f'bytes("{bytes(value).hex()}")'
     if isinstance(value, str):
         return _format_string_literal(value)
     if isinstance(value, list | tuple):
@@ -552,7 +558,7 @@ def _is_pipeline_printable_name(value: Any, *, allow_dot: bool) -> bool:
 
 
 def _is_pipeline_printable_attr_value(value: Any) -> bool:
-    if isinstance(value, bool | int | float | str):
+    if isinstance(value, bool | int | float | str | bytes | bytearray):
         return True
     if isinstance(value, list | tuple):
         return all(_is_pipeline_printable_attr_value(item) for item in value)

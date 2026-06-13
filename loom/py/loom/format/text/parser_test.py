@@ -835,16 +835,22 @@ class TestParseAttrDictOp:
     def test_with_attrs(self) -> None:
         module, scope = _setup_scope(("x", F32))
         op = _parse_op(
-            '%r = test.attrs %x {axis = 0, label = "foo"} : f32',
+            '%r = test.attrs %x {axis = 0, label = "foo", '
+            'payload = bytes("0011feFF")} : f32',
             module=module,
             scope=scope,
         )
         assert "dict" in op.attributes
         d = op.attributes["dict"]
         assert isinstance(d, CanonicalAttrDict)
-        assert list(d.items()) == [("axis", 0), ("label", "foo")]
+        assert list(d.items()) == [
+            ("axis", 0),
+            ("label", "foo"),
+            ("payload", b"\x00\x11\xfe\xff"),
+        ]
         assert d["axis"] == 0
         assert d["label"] == "foo"
+        assert d["payload"] == b"\x00\x11\xfe\xff"
 
     def test_empty_dict(self) -> None:
         module, scope = _setup_scope(("x", F32))

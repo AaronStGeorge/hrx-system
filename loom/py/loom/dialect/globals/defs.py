@@ -11,15 +11,16 @@ Four ops for module-level state:
 Top-level (module-level symbols):
   global.constant  — Immutable global (weights, parameters, constants).
   global.variable  — Mutable global (KV cache, running state).
+  global.rodata    — Read-only executable data payload.
 
 Body ops (inside function/template bodies):
   global.load      — Load value + dynamic dims/encoding from global.
   global.store     — Store value + dynamic dims/encoding to global.
 
-Global definitions are module-private today. If we need externally stored
-read-only blobs or target artifacts, model those as additional global-defining
-ops (for example `global.rodata`) instead of introducing a separate executable
-symbol object before the target pipeline proves one is necessary.
+Global definitions are module-private today. `global.rodata` is executable
+data, not a value global: it gives target emitters named bytes they can place
+in read-only artifact sections without making the payload loadable through
+`global.load`.
 """
 
 from loom.assembly import (
@@ -72,8 +73,8 @@ global_constant = Op(
         "structural constraints. Predicates constrain dynamic dimensions and "
         "are propagated to every load site as value facts. Non-scalar or "
         "computed initialization is modeled by global.store in initializer "
-        "functions; resource-backed rodata should become a dedicated "
-        "global-defining op instead of overloading inline attrs."
+        "functions; resource-backed artifact payloads belong in global.rodata "
+        "instead of overloading inline attrs."
     ),
     traits=[SYMBOL_DEFINE],
     symbol_def=SymbolDefinition(
@@ -166,6 +167,44 @@ global_variable = Op(
 )
 
 # ============================================================================
+# global.rodata — read-only executable data payload
+# ============================================================================
+
+global_rodata = Op(
+    "global.rodata",
+    group=global_ops,
+    doc=(
+        "Read-only executable data payload. This defines a named artifact "
+        "symbol containing uninterpreted bytes, optionally with a stronger "
+        "power-of-two byte alignment requirement. It is used for compiler-owned "
+        "tables and metadata such as sanitizer site records; user-visible value "
+        "globals remain global.constant/global.variable."
+    ),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="rodata",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef("contents", "bytes"),
+        AttrDef("alignment", "i64", optional=True),
+    ],
+    format=[
+        SymbolRef("symbol"),
+        EQUALS,
+        Attr("contents"),
+        OptionalGroup([COMMA, kw("align"), Attr("alignment")], anchor="alignment"),
+    ],
+    verify="loom_global_rodata_verify",
+    examples=[
+        'global.rodata @loom_sanitizer_sites = bytes("4c53495401000000"), align 8',
+    ],
+)
+
+# ============================================================================
 # global.load — load value + dynamic dims/encoding from global
 # ============================================================================
 
@@ -244,6 +283,7 @@ global_store = Op(
 ALL_GLOBAL_OPS: tuple[Op, ...] = (
     global_constant,
     global_variable,
+    global_rodata,
     global_load,
     global_store,
 )

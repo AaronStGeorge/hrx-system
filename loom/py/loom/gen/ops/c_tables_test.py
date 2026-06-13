@@ -30,6 +30,7 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_BYTES,
     ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64_ARRAY,
     ATTR_TYPE_PREDICATE_LIST,
@@ -703,6 +704,23 @@ def test_generate_builders_copy_predicate_list_attrs_into_builder_arena() -> Non
     assert 'IREE_SV("test.assume predicates")' in builders_c
     assert ("loom_attr_predicate_list(_predicates_storage, (uint16_t)predicates_count)") in builders_c
     assert "(loom_predicate_t*)predicates" not in builders_c
+
+
+def test_generate_builders_copy_bytes_attrs_into_builder_arena() -> None:
+    op = Op(
+        "test.rodata",
+        group=Dialect("test"),
+        attrs=[AttrDef("contents", ATTR_TYPE_BYTES)],
+        format=[Attr("contents")],
+    )
+
+    builders_c = generate_builders_c("test", [op])
+
+    assert "const uint8_t* _contents_storage = NULL;" in builders_c
+    assert "loom_builder_copy_bytes_attr_storage(" in builders_c
+    assert 'IREE_SV("test.rodata contents")' in builders_c
+    assert "loom_attr_bytes(_contents_storage, (uint32_t)contents.data_length)" in builders_c
+    assert "(const uint8_t*)contents.data" not in builders_c
 
 
 def test_generate_builders_preserve_named_operands_for_non_binary_shapes() -> None:

@@ -727,11 +727,12 @@ typedef enum loom_bytecode_section_kind_e {
 //
 // Attribute value_kind bytes are dense wire tags, not loom_attr_kind_t enum
 // values: 0=I64, 1=F64, 2=STRING, 3=BOOL, 4=ENUM, 5=I64_ARRAY, 6=SYMBOL,
-// 7=TYPE, 8=PREDICATE_LIST, 9=DICT, 10=ENCODING. ABSENT is never encoded as a
-// payload value. ENUM value_data is the raw uint8 case ordinal; bytecode
-// readers preserve it without consulting enum case tables so open enum attrs
-// can survive tools whose op tables do not yet name the ordinal. Closed enum
-// policy remains a verifier contract.
+// 7=TYPE, 8=PREDICATE_LIST, 9=DICT, 10=ENCODING, 11=BYTES. ABSENT is never
+// encoded as a payload value. ENUM value_data is the raw uint8 case ordinal;
+// bytecode readers preserve it without consulting enum case tables so open enum
+// attrs can survive tools whose op tables do not yet name the ordinal. Closed
+// enum policy remains a verifier contract. BYTES value_data is
+// [byte_length: varint] followed by that many uninterpreted bytes.
 //       [region_count: varint]
 //       For each region:
 //         (recursive: block_count, blocks...)

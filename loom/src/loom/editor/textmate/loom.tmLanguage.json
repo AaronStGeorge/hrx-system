@@ -137,7 +137,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(global)\\.(constant|variable|store|load)\\b",
+          "match": "\\b(global)\\.(constant|variable|rodata|store|load)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"
@@ -341,7 +341,7 @@
       "patterns": [
         {
           "name": "keyword.other.loom",
-          "match": "\\b(?:workgroup_size|abi_layout|allocation|workgroups|iter_args|artifact|expected|priority|schedule|default|dgroups|linkage|ordinal|actual|bounds|callee|config|device|export|extent|import|inputs|launch|layout|module|offset|public|reason|source|symbol|target|unroll|values|attrs|count|range|shape|using|value|where|atol|axes|base|case|else|from|host|into|mode|name|path|rtol|seed|step|abi|for|nan|as|do|to|x)\\b"
+          "match": "\\b(?:workgroup_size|abi_layout|allocation|workgroups|iter_args|artifact|expected|priority|schedule|default|dgroups|linkage|ordinal|actual|bounds|callee|config|device|export|extent|import|inputs|launch|layout|module|offset|public|reason|source|symbol|target|unroll|values|align|attrs|count|range|shape|using|value|where|atol|axes|base|case|else|from|host|into|mode|name|path|rtol|seed|step|abi|for|nan|as|do|to|x)\\b"
         },
         {
           "name": "constant.language.boolean.loom",

@@ -1009,6 +1009,21 @@ iree_status_t loom_print_attr(loom_output_stream_t* stream,
       }
       return loom_output_stream_write_char(stream, ']');
     }
+    case LOOM_ATTR_BYTES: {
+      static const char kHexDigits[] = "0123456789abcdef";
+      iree_const_byte_span_t bytes = loom_attr_as_bytes(*attr);
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "bytes(\""));
+      for (iree_host_size_t i = 0; i < bytes.data_length; ++i) {
+        char hex[2] = {
+            kHexDigits[bytes.data[i] >> 4],
+            kHexDigits[bytes.data[i] & 0x0F],
+        };
+        IREE_RETURN_IF_ERROR(loom_output_stream_write(
+            stream, iree_make_string_view(hex, IREE_ARRAYSIZE(hex))));
+      }
+      return loom_output_stream_write_cstring(stream, "\")");
+    }
     case LOOM_ATTR_TYPE:
       if (module && attr->type_id < module->types.count) {
         return loom_text_print_type(module->types.entries[attr->type_id],

@@ -214,6 +214,11 @@ def _parse_generic_attr_value_from_tokens(
         return float(tokenizer.next().text)
     if tokenizer.at(TokenKind.STRING):
         return tokenizer.next().text
+    if (
+        tokenizer.at(TokenKind.BARE_IDENT, "bytes")
+        and tokenizer.peek_n(1).kind == TokenKind.LPAREN
+    ):
+        return _parse_bytes_attr_value_from_tokens(tokenizer, filename)
     if tokenizer.at(TokenKind.BARE_IDENT):
         text = tokenizer.next().text
         special_float = _parse_special_float(text)
@@ -281,6 +286,29 @@ def _parse_generic_attr_value_from_tokens(
         f"expected attribute value, got {token.kind.name}",
         token.location,
         filename,
+    )
+
+
+def _parse_bytes_attr_value_from_tokens(tokenizer: Tokenizer, filename: str) -> bytes:
+    """Parse bytes("001122ff") as raw bytes."""
+    bytes_token = tokenizer.expect(TokenKind.BARE_IDENT, "bytes")
+    tokenizer.expect(TokenKind.LPAREN)
+    hex_text = tokenizer.expect(TokenKind.STRING).text
+    tokenizer.expect(TokenKind.RPAREN)
+    if len(hex_text) % 2 != 0:
+        raise ParseError(
+            "bytes attribute hex string must have even length",
+            bytes_token.location,
+            filename,
+        )
+    if not all(character in "0123456789abcdefABCDEF" for character in hex_text):
+        raise ParseError(
+            "bytes attribute hex string must contain only hexadecimal digits",
+            bytes_token.location,
+            filename,
+        )
+    return bytes(
+        int(hex_text[index : index + 2], 16) for index in range(0, len(hex_text), 2)
     )
 
 
@@ -2506,6 +2534,8 @@ class Parser:
                 return parsed_type
             case "i64_array":
                 return self._parse_i64_array()
+            case "bytes":
+                return _parse_bytes_attr_value_from_tokens(tok, tok._filename)
             case "encoding":
                 return _parse_static_encoding_from_tokens(
                     tok,

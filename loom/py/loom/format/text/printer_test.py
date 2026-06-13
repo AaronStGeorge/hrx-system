@@ -710,11 +710,16 @@ class TestPrintAttrDict:
             name="test.attrs",
             operands=[x],
             results=[r],
-            attributes={"dict": {"label": "foo", "axis": 0}},
+            attributes={
+                "dict": {"label": "foo", "axis": 0, "payload": b"\x00\x11\xfe\xff"}
+            },
         )
         assert isinstance(op.attributes["dict"], CanonicalAttrDict)
         text = _printer().print_operation(op, module)
-        assert text == '%r = test.attrs %x {axis = 0, label = "foo"} : f32'
+        assert (
+            text == '%r = test.attrs %x {axis = 0, label = "foo", '
+            'payload = bytes("0011feff")} : f32'
+        )
 
     def test_empty_dict(self) -> None:
         module, [x, r] = _module_with(("x", F32), ("r", F32))

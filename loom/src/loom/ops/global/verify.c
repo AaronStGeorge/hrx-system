@@ -9,6 +9,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/global/ops.h"
+#include "loom/util/math.h"
 
 static loom_type_t loom_global_symbol_type(const loom_module_t* module,
                                            const loom_symbol_t* symbol) {
@@ -262,6 +263,29 @@ static iree_status_t loom_global_verify_initializer(
         op, emitter, (loom_attr_kind_t)initializer.kind, expected_kind);
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_global_rodata_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  (void)module;
+  loom_attribute_t alignment =
+      loom_op_attrs(op)[loom_global_rodata_alignment_ATTR_INDEX];
+  if (loom_attr_is_absent(alignment)) {
+    return iree_ok_status();
+  }
+  int64_t value = loom_attr_as_i64(alignment);
+  if (loom_is_power_of_two_i64(value)) {
+    return iree_ok_status();
+  }
+
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("alignment")),
+      loom_param_i64(value),
+      loom_param_string(IREE_SV("positive power-of-two byte alignment")),
+  };
+  return loom_global_emit(emitter, op, LOOM_ERR_STRUCTURE_014, params,
+                          IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_global_constant_verify(const loom_module_t* module,

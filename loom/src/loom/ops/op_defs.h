@@ -1690,6 +1690,13 @@ loom_attribute_t loom_memory_access_atomic_scope(loom_memory_access_t access);
     return loom_attr_as_encoding_id(loom_op_attrs(op)[(index)]); \
   }
 
+// Defines a function that reads a byte payload attribute by index.
+#define LOOM_DEFINE_ATTR_BYTES(func_name, index)                        \
+  enum { func_name##_ATTR_INDEX = (index) };                            \
+  static inline iree_const_byte_span_t func_name(const loom_op_t* op) { \
+    return loom_attr_as_bytes(loom_op_attrs(op)[(index)]);              \
+  }
+
 // Defines a function that reads a type-table attribute by index.
 #define LOOM_DEFINE_ATTR_TYPE(func_name, index)                 \
   enum { func_name##_ATTR_INDEX = (index) };                    \
@@ -1897,6 +1904,12 @@ iree_status_t loom_builder_copy_predicate_list_attr_storage(
     loom_builder_t* builder, const loom_predicate_t* predicates,
     iree_host_size_t count, iree_string_view_t label,
     loom_predicate_t** out_storage);
+
+// Copies a byte attribute payload into the builder arena.
+iree_status_t loom_builder_copy_bytes_attr_storage(loom_builder_t* builder,
+                                                   iree_const_byte_span_t bytes,
+                                                   iree_string_view_t label,
+                                                   const uint8_t** out_storage);
 
 // Creates a one-block region and installs it into |op| at |region_index|.
 iree_status_t loom_builder_create_region(loom_builder_t* builder, loom_op_t* op,

@@ -850,6 +850,13 @@ class TestAttributeRoundTrips:
     def test_string_with_spaces(self) -> None:
         assert self._roundtrip_attr("v", "hello world") == "hello world"
 
+    # Bytes.
+    def test_bytes_empty(self) -> None:
+        assert self._roundtrip_attr("v", b"") == b""
+
+    def test_bytes_payload(self) -> None:
+        assert self._roundtrip_attr("v", b"\x00\x11\xfe\xff") == b"\x00\x11\xfe\xff"
+
     # Booleans.
     def test_bool_true(self) -> None:
         assert self._roundtrip_attr("v", True) is True

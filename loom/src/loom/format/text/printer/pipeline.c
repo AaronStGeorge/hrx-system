@@ -147,6 +147,8 @@ static bool loom_print_pipeline_attr_value_is_printable(
       return attr->string_id < ctx->module->strings.count;
     case LOOM_ATTR_I64_ARRAY:
       return attr->count == 0 || attr->i64_array != NULL;
+    case LOOM_ATTR_BYTES:
+      return attr->reserved_1 == 0 || attr->bytes != NULL;
     case LOOM_ATTR_SYMBOL: {
       if (attr->symbol.module_id != 0 ||
           attr->symbol.symbol_id >= ctx->module->symbols.count) {

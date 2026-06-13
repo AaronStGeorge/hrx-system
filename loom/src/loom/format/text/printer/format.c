@@ -106,6 +106,8 @@ static bool loom_print_optional_attr_present(const loom_op_vtable_t* vtable,
     case LOOM_ATTR_I64_ARRAY:
     case LOOM_ATTR_PREDICATE_LIST:
       return attr.count > 0;
+    case LOOM_ATTR_BYTES:
+      return attr.reserved_1 > 0;
     default:
       return true;
   }

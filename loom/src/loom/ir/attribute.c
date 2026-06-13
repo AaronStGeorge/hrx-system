@@ -121,6 +121,12 @@ static bool loom_attribute_equal_impl(const loom_attribute_t* a,
       if (a->predicate_list == b->predicate_list) return true;
       return memcmp(a->predicate_list, b->predicate_list,
                     (iree_host_size_t)a->count * sizeof(loom_predicate_t)) == 0;
+    case LOOM_ATTR_BYTES:
+      if (a->reserved_1 != b->reserved_1) return false;
+      if (a->reserved_1 == 0) return true;
+      if (a->bytes == NULL || b->bytes == NULL) return false;
+      if (a->bytes == b->bytes) return true;
+      return memcmp(a->bytes, b->bytes, a->reserved_1) == 0;
     case LOOM_ATTR_DICT:
       if (a->count != b->count) return false;
       if (a->dict_entries == b->dict_entries) return true;
@@ -161,6 +167,12 @@ static uint32_t loom_attribute_hash_impl(const loom_attribute_t* attr,
       hash = loom_hash_bytes(
           attr->predicate_list,
           (iree_host_size_t)attr->count * sizeof(loom_predicate_t), hash);
+      break;
+    case LOOM_ATTR_BYTES:
+      hash = loom_hash_bytes(&attr->reserved_1, sizeof(attr->reserved_1), hash);
+      if (attr->reserved_1 != 0 && attr->bytes != NULL) {
+        hash = loom_hash_bytes(attr->bytes, attr->reserved_1, hash);
+      }
       break;
     case LOOM_ATTR_DICT:
       if (depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
