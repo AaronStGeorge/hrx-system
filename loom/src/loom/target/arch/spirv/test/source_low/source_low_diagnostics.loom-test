@@ -2,6 +2,26 @@
 
 spirv.target<vulkan1_3> @target
 
+func.def target(@target) @unsupported_scalar_pow_math(%base: f32, %exponent: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.powf", phase_name="legalize-math", policy_name="spirv-math", math_op="powf", lane_domain="scalar", element_type="f32", constraint_key="math.op.native_arithmetic"}
+  %result = scalar.powf<afn> %base, %exponent : f32
+  func.return %result : f32
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @unsupported_vector_tanh_math(%input: vector<4xf32>) -> (vector<4xf32>) {
+  // ERROR@+1: LOWERING/036 {op_name="vector.tanhf", phase_name="legalize-math", policy_name="spirv-math", math_op="tanhf", lane_domain="vector", element_type="f32", constraint_key="math.scalar"}
+  %result = vector.tanhf<afn> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
 func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
   // ERROR@+1: TARGET/001 {op_name="scalar.ceildivui"}
   %quotient = scalar.ceildivui %lhs, %rhs : i32

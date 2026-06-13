@@ -2,6 +2,26 @@
 
 wasm.target<simd128> @target
 
+func.def target(@target) @scalar_powf_rejected_by_math_policy(%base: f32, %exponent: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.powf", phase_name="legalize-math", policy_name="wasm-math", math_op="powf", lane_domain="scalar", element_type="f32", constraint_key="math.op.supported"}
+  %result = scalar.powf<afn> %base, %exponent : f32
+  func.return %result : f32
+}
+
+// ====
+
+wasm.target<simd128> @target
+
+func.def target(@target) @scalar_tanhf_rejected_by_math_policy(%input: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.tanhf", phase_name="legalize-math", policy_name="wasm-math", math_op="tanhf", lane_domain="scalar", element_type="f32", constraint_key="math.op.supported"}
+  %result = scalar.tanhf<afn> %input : f32
+  func.return %result : f32
+}
+
+// ====
+
+wasm.target<simd128> @target
+
 func.def target(@target) @unsupported_vector_shape(%lhs: vector<8xi32>, %rhs: vector<8xi32>) -> (vector<8xi32>) {
   // ERROR@+1: WASM/001 {field_name="lhs", required_type="vector<4xi32>"}
   %sum = vector.addi %lhs, %rhs : vector<8xi32>
