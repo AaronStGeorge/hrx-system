@@ -7,9 +7,7 @@
 #include "loom/target/arch/amdgpu/lower/mask.h"
 
 #include <stdint.h>
-#include <string.h>
 
-#include "loom/ir/facts.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -36,71 +34,6 @@ loom_amdgpu_find_compare_descriptor_candidate(loom_op_kind_t op_kind,
     }
   }
   return NULL;
-}
-
-static bool loom_amdgpu_i64_value_as_u32_bits(int64_t value,
-                                              uint32_t* out_bits) {
-  if (value < INT32_MIN || value > UINT32_MAX) {
-    return false;
-  }
-  *out_bits = (uint32_t)value;
-  return true;
-}
-
-static bool loom_amdgpu_f64_value_as_f32_bits(double value,
-                                              uint32_t* out_bits) {
-  const float f32_value = (float)value;
-  memcpy(out_bits, &f32_value, sizeof(*out_bits));
-  return true;
-}
-
-static bool loom_amdgpu_value_facts_as_u32_bits(loom_value_facts_t facts,
-                                                uint32_t* out_bits) {
-  if (loom_value_facts_is_exact(facts) && loom_value_facts_is_float(facts)) {
-    return loom_amdgpu_f64_value_as_f32_bits(loom_value_facts_as_f64(facts),
-                                             out_bits);
-  }
-  int64_t value = 0;
-  return loom_value_facts_as_exact_i64(facts, &value) &&
-         loom_amdgpu_i64_value_as_u32_bits(value, out_bits);
-}
-
-static bool loom_amdgpu_source_lane_as_u32_bits(
-    const loom_value_fact_table_t* fact_table, loom_value_id_t source,
-    uint32_t lane, uint32_t* out_bits) {
-  *out_bits = 0;
-  if (fact_table == NULL) {
-    return false;
-  }
-
-  loom_value_facts_t facts = loom_value_fact_table_lookup(fact_table, source);
-  loom_value_fact_uniform_element_t uniform = {0};
-  if (loom_value_facts_query_uniform_element(&fact_table->context, facts,
-                                             &uniform)) {
-    return loom_amdgpu_value_facts_as_u32_bits(uniform.element, out_bits);
-  }
-
-  loom_value_fact_small_static_lanes_t lanes = {0};
-  if (loom_value_facts_query_small_static_lanes(&fact_table->context, facts,
-                                                &lanes)) {
-    return lane < lanes.count &&
-           loom_amdgpu_value_facts_as_u32_bits(lanes.lanes[lane], out_bits);
-  }
-
-  loom_value_fact_vector_iota_t iota = {0};
-  if (loom_value_facts_query_vector_iota(&fact_table->context, facts, &iota)) {
-    int64_t base = 0;
-    int64_t step = 0;
-    int64_t delta = 0;
-    int64_t value = 0;
-    return loom_value_facts_as_exact_i64(iota.base, &base) &&
-           loom_value_facts_as_exact_i64(iota.step, &step) &&
-           loom_checked_mul_i64((int64_t)lane, step, &delta) &&
-           loom_checked_add_i64(base, delta, &value) &&
-           loom_amdgpu_i64_value_as_u32_bits(value, out_bits);
-  }
-
-  return loom_amdgpu_value_facts_as_u32_bits(facts, out_bits);
 }
 
 typedef struct loom_amdgpu_select_descriptors_t {

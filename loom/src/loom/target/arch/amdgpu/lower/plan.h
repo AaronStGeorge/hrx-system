@@ -269,6 +269,14 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
   loom_value_id_t indices;
   // Result vector receiving selected table lanes.
   loom_value_id_t result;
+  // Descriptor row selected for index-lane equality comparisons.
+  loom_low_lower_resolved_descriptor_t compare_register_descriptor;
+  // Optional descriptor row selected when the compare rhs ordinal is inline.
+  loom_low_lower_resolved_descriptor_t compare_src1_inline_descriptor;
+  // Descriptor row selected for register-register table lane selects.
+  loom_low_lower_resolved_descriptor_t select_register_descriptor;
+  // Optional descriptor row selected when the true table lane is a literal.
+  loom_low_lower_resolved_descriptor_t select_src1_literal_descriptor;
   // Selected index payload representation.
   loom_amdgpu_table_index_kind_t index_kind;
   // Static number of table lanes.

@@ -10,10 +10,12 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/util/fact_table.h"
 
 static bool loom_amdgpu_table_lookup_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
@@ -71,8 +73,33 @@ static bool loom_amdgpu_table_lookup_plan_from_op(
 iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_table_lookup_plan_t* out_plan, bool* out_selected) {
-  *out_selected = loom_amdgpu_table_lookup_plan_from_op(
-      loom_low_lower_context_module(context), source_op, out_plan);
+  *out_selected = false;
+  if (!loom_amdgpu_table_lookup_plan_from_op(
+          loom_low_lower_context_module(context), source_op, out_plan)) {
+    return iree_ok_status();
+  }
+
+  bool compare_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32,
+      &out_plan->compare_register_descriptor, &compare_descriptor_present));
+  bool select_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
+      &out_plan->select_register_descriptor, &select_descriptor_present));
+  if (!compare_descriptor_present || !select_descriptor_present) {
+    return iree_ok_status();
+  }
+
+  bool optional_descriptor_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32_SRC1_INLINE,
+      &out_plan->compare_src1_inline_descriptor, &optional_descriptor_present));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_LIT,
+      &out_plan->select_src1_literal_descriptor, &optional_descriptor_present));
+
+  *out_selected = true;
   return iree_ok_status();
 }
 
@@ -172,25 +199,55 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
   *out_selected_lane = LOOM_VALUE_ID_INVALID;
   loom_value_id_t selected_lane = table_lanes[0];
   for (uint32_t i = 1; i < plan->table_lane_count; ++i) {
-    const loom_value_id_t compare_operands[] = {
-        index_lane,
-        ordinals[i],
-    };
+    loom_named_attr_t compare_attrs[1] = {0};
+    iree_host_size_t compare_attr_count = 0;
+    const loom_low_lower_resolved_descriptor_t* compare_descriptor =
+        &plan->compare_register_descriptor;
+    loom_value_id_t compare_operands[2] = {index_lane, ordinals[i]};
+    iree_host_size_t compare_operand_count = 2;
+    if (plan->compare_src1_inline_descriptor.descriptor != NULL && i <= 64) {
+      compare_descriptor = &plan->compare_src1_inline_descriptor;
+      compare_operand_count = 1;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(
+          context, IREE_SV("rhs"), i, compare_attrs,
+          IREE_ARRAYSIZE(compare_attrs), &compare_attr_count));
+    }
     loom_op_t* compare_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32,
-        compare_operands, IREE_ARRAYSIZE(compare_operands),
-        loom_make_named_attr_slice(NULL, 0), &mask_lane_type, 1, &compare_op));
-    const loom_value_id_t select_operands[] = {
+    IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+        context, compare_descriptor, compare_operands, compare_operand_count,
+        loom_make_named_attr_slice(compare_attrs, compare_attr_count),
+        &mask_lane_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
+        source_op->location, &compare_op));
+
+    loom_named_attr_t select_attrs[1] = {0};
+    iree_host_size_t select_attr_count = 0;
+    const loom_low_lower_resolved_descriptor_t* select_descriptor =
+        &plan->select_register_descriptor;
+    loom_value_id_t select_operands[3] = {
         selected_lane,
         table_lanes[i],
         loom_value_slice_get(loom_low_op_results(compare_op), 0),
     };
+    iree_host_size_t select_operand_count = 3;
+    const loom_value_fact_table_t* fact_table =
+        loom_low_lower_context_fact_table(context);
+    uint32_t table_bits = 0;
+    if (plan->select_src1_literal_descriptor.descriptor != NULL &&
+        loom_amdgpu_source_lane_as_u32_bits(fact_table, plan->table, i,
+                                            &table_bits)) {
+      select_descriptor = &plan->select_src1_literal_descriptor;
+      select_operands[1] = select_operands[2];
+      select_operand_count = 2;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(
+          context, IREE_SV("imm32"), table_bits, select_attrs,
+          IREE_ARRAYSIZE(select_attrs), &select_attr_count));
+    }
     loom_op_t* select_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
-        select_operands, IREE_ARRAYSIZE(select_operands),
-        loom_make_named_attr_slice(NULL, 0), &lane_type, 1, &select_op));
+    IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+        context, select_descriptor, select_operands, select_operand_count,
+        loom_make_named_attr_slice(select_attrs, select_attr_count), &lane_type,
+        1, /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+        &select_op));
     selected_lane = loom_value_slice_get(loom_low_op_results(select_op), 0);
   }
   *out_selected_lane = selected_lane;
@@ -214,10 +271,12 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
       loom_amdgpu_make_sgpr_range_type(context, 2, &mask_lane_type));
   loom_value_id_t table_lanes[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   loom_value_id_t ordinals[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES] = {0};
+  const bool use_ordinal_registers =
+      plan->compare_src1_inline_descriptor.descriptor == NULL;
   for (uint32_t i = 0; i < plan->table_lane_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_table_lookup_extract_table_lane(
         context, source_op, plan, low_table, i, lane_type, &table_lanes[i]));
-    if (i == 0) {
+    if (i == 0 || !use_ordinal_registers) {
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
