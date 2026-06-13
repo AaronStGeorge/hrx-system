@@ -135,17 +135,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "test_target",
-    srcs = ["test_target.c"],
-    hdrs = ["test_target.h"],
-    deps = [
-        ":target_env",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "llvmir",
     hdrs = ["intrinsics.h"],
     deps = [
@@ -189,88 +178,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "lower",
-    srcs = [
-        "lower/memory.c",
-        "lower/registry.c",
-        "lower/scalar.c",
-        "lower/target.c",
-        "lower/vector.c",
-    ],
-    hdrs = [
-        "lower.h",
-        "lower/internal.h",
-    ],
-    visibility = _LLVMIR_TARGET_VISIBILITY,
-    deps = [
-        ":core",
-        ":target_env",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ir:facts",
-        "//loom/src/loom/ops:cache",
-        "//loom/src/loom/ops:type_registry",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/cfg",
-        "//loom/src/loom/ops/encoding",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/scf",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/ops/view",
-        "//loom/src/loom/util:cfg_graph",
-        "//loom/src/loom/util:fact_table",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "legality",
-    srcs = ["legality.c"],
-    hdrs = ["legality.h"],
-    visibility = _LLVMIR_TARGET_VISIBILITY,
-    deps = [
-        ":target_env",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/cfg",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/scf",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/ops/view",
-        "//loom/src/loom/target:launch",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "target_registry",
-    srcs = ["target_registry.c"],
-    hdrs = ["target_registry.h"],
-    deps = [
-        ":legality",
-        ":lower",
-        ":target_presets",
-        ":test_target",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:legality",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:lower",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
-        "//loom/src/loom/target/emit/llvmir/x86:legality",
-        "//loom/src/loom/target/emit/llvmir/x86:lower",
-        "//loom/src/loom/target/emit/llvmir/x86:target_env",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "loom_check",
     testonly = True,
     srcs = ["check/loom_check.c"],
@@ -278,7 +185,7 @@ loom_cc_library(
     deps = [
         ":core",
         ":module_emitter",
-        ":target_registry",
+        ":target_env",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/llvmir",
@@ -310,17 +217,6 @@ loom_check_test_suite(
         "test/emit.loom-test",
         "test/target_low.loom-test",
         "test/toolchain.loom-test",
-    ],
-)
-
-loom_cc_test(
-    name = "target_registry_test",
-    srcs = ["target_registry_test.cc"],
-    deps = [
-        ":target_env",
-        ":target_registry",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -443,39 +339,6 @@ loom_cc_test(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/io:stream",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "lower_options_test",
-    srcs = ["lower_options_test.cc"],
-    tags = ["requires-filesystem"],
-    deps = [
-        ":lower",
-        ":test_target",
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "legality_test",
-    srcs = ["legality_test.cc"],
-    deps = [
-        ":legality",
-        ":test_target",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/scf",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/vector",
-        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

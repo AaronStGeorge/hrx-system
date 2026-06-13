@@ -12,7 +12,7 @@
 #include "loom/ops/llvmir/ops.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/module_emitter.h"
-#include "loom/target/emit/llvmir/target_registry.h"
+#include "loom/target/emit/llvmir/target_env.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/tool/llvm.h"
@@ -67,53 +67,6 @@ static iree_status_t loom_llvmir_loom_check_require_declared_requirement(
                                                          requirement, result);
 }
 
-static bool loom_llvmir_loom_check_case_has_llc_provider_requirement(
-    const loom_check_case_t* test_case,
-    const loom_llvmir_target_profile_provider_t* expected_provider) {
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
-  for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
-    const loom_llvmir_target_profile_provider_t* provider = NULL;
-    if (!loom_llvmir_target_registry_llc_requirement_provider(
-            &target_registry, test_case->requirements[i], &provider)) {
-      continue;
-    }
-    if (provider == expected_provider ||
-        iree_string_view_equal(provider->name, expected_provider->name)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static iree_status_t loom_llvmir_loom_check_fail_missing_llc_provider(
-    iree_string_view_t emit_target,
-    const loom_llvmir_target_profile_provider_t* provider,
-    loom_check_result_t* result) {
-  result->raw_outcome = LOOM_CHECK_FAIL;
-  result->final_outcome = LOOM_CHECK_FAIL;
-  return iree_string_builder_append_format(
-      &result->detail,
-      "RUN: emit %.*s requires '// REQUIRES: llc-%.*s'; external tool "
-      "dependencies must be declared even when they are available\n",
-      (int)emit_target.size, emit_target.data, (int)provider->name.size,
-      provider->name.data);
-}
-
-static iree_status_t loom_llvmir_loom_check_require_llc_provider(
-    const loom_check_case_t* test_case,
-    const loom_llvmir_target_profile_provider_t* provider,
-    loom_check_result_t* result, bool* out_continue_execution) {
-  if (iree_string_view_is_empty(provider->llc_target_name) ||
-      loom_llvmir_loom_check_case_has_llc_provider_requirement(test_case,
-                                                               provider)) {
-    return iree_ok_status();
-  }
-  *out_continue_execution = false;
-  return loom_llvmir_loom_check_fail_missing_llc_provider(
-      test_case->emit_target, provider, result);
-}
-
 static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
     const loom_check_emit_provider_t* provider,
     const loom_check_case_t* test_case, loom_check_result_t* result,
@@ -121,10 +74,10 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
   iree_string_view_t emit_target =
       iree_string_view_trim(test_case->emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
-  iree_string_view_t profile_name = iree_string_view_empty();
-  iree_string_view_split(emit_target, ' ', &target_name, &profile_name);
+  iree_string_view_t target_options = iree_string_view_empty();
+  iree_string_view_split(emit_target, ' ', &target_name, &target_options);
+  (void)target_options;
   target_name = iree_string_view_trim(target_name);
-  profile_name = iree_string_view_trim(profile_name);
 
   if (iree_string_view_equal(target_name, IREE_SV("llvmir-bitcode"))) {
     return loom_llvmir_loom_check_require_declared_requirement(
@@ -133,17 +86,6 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
   if (iree_string_view_equal(target_name, IREE_SV("llvmir-object"))) {
     IREE_RETURN_IF_ERROR(loom_llvmir_loom_check_require_declared_requirement(
         test_case, IREE_SV("llc"), result, out_continue_execution));
-    if (!*out_continue_execution) {
-      return iree_ok_status();
-    }
-    loom_llvmir_target_registry_t target_registry;
-    loom_llvmir_target_registry_initialize(&target_registry);
-    const loom_llvmir_target_profile_provider_t* profile_provider = NULL;
-    if (loom_llvmir_target_registry_lookup_profile_provider(
-            &target_registry, profile_name, NULL, &profile_provider)) {
-      IREE_RETURN_IF_ERROR(loom_llvmir_loom_check_require_llc_provider(
-          test_case, profile_provider, result, out_continue_execution));
-    }
   }
   return iree_ok_status();
 }
@@ -479,15 +421,11 @@ static iree_status_t loom_llvmir_loom_check_resolve_object_profile(
     return iree_ok_status();
   }
 
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
-  if (loom_llvmir_target_registry_lookup_profile(
-          &target_registry, request->target_options, out_profile)) {
-    return iree_ok_status();
-  }
-  return iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT, "unknown LLVMIR target profile '%.*s'",
-      (int)request->target_options.size, request->target_options.data);
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "llvmir-object requires target symbol such as "
+                          "@target, got '%.*s'",
+                          (int)request->target_options.size,
+                          request->target_options.data);
 }
 
 static bool loom_llvmir_loom_check_module_has_low_functions(
@@ -589,47 +527,15 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_append_names(
       "llvmir-object");
 }
 
-static char loom_llvmir_loom_check_ascii_lower(char value) {
-  return value >= 'A' && value <= 'Z' ? (char)(value + 'a' - 'A') : value;
-}
-
-static bool loom_llvmir_loom_check_string_contains_case_insensitive(
-    iree_string_view_t string, iree_string_view_t needle) {
-  if (iree_string_view_is_empty(needle)) {
-    return true;
-  }
-  if (needle.size > string.size) {
-    return false;
-  }
-  for (iree_host_size_t i = 0; i <= string.size - needle.size; ++i) {
-    bool matches = true;
-    for (iree_host_size_t j = 0; j < needle.size; ++j) {
-      if (loom_llvmir_loom_check_ascii_lower(string.data[i + j]) !=
-          loom_llvmir_loom_check_ascii_lower(needle.data[j])) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool loom_llvmir_loom_check_requirement_provider_matches(
     const loom_check_requirement_provider_t* provider,
     iree_string_view_t requirement) {
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
   return iree_string_view_equal(requirement, IREE_SV("llvm-as")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-dis")) ||
          iree_string_view_equal(requirement, IREE_SV("opt")) ||
          iree_string_view_equal(requirement, IREE_SV("llc")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-mc")) ||
-         iree_string_view_equal(requirement, IREE_SV("llvm-objdump")) ||
-         loom_llvmir_target_registry_llc_requirement_provider(
-             &target_registry, requirement, NULL);
+         iree_string_view_equal(requirement, IREE_SV("llvm-objdump"));
 }
 
 static iree_status_t loom_llvmir_loom_check_query_llvm_tool(
@@ -639,34 +545,6 @@ static iree_status_t loom_llvmir_loom_check_query_llvm_tool(
   loom_llvm_tool_output_t version_text = {0};
   iree_status_t status = loom_llvm_tool_query_version(&toolchain, tool_kind,
                                                       allocator, &version_text);
-  loom_llvm_tool_output_deinitialize(&version_text, allocator);
-  return status;
-}
-
-static iree_status_t loom_llvmir_loom_check_query_llc_provider(
-    iree_string_view_t requirement,
-    const loom_llvmir_target_profile_provider_t* provider,
-    iree_allocator_t allocator) {
-  loom_llvm_toolchain_t toolchain;
-  loom_llvm_toolchain_initialize_from_environment(&toolchain);
-  loom_llvm_tool_output_t version_text = {0};
-  iree_status_t status = loom_llvm_tool_query_version(
-      &toolchain, LOOM_LLVM_TOOL_LLC, allocator, &version_text);
-
-  if (iree_status_is_ok(status)) {
-    iree_string_view_t version =
-        iree_make_string_view(version_text.data, version_text.length);
-    if (!loom_llvmir_loom_check_string_contains_case_insensitive(
-            version, provider->llc_target_name) &&
-        !loom_llvmir_loom_check_string_contains_case_insensitive(
-            version, provider->name)) {
-      status =
-          iree_make_status(IREE_STATUS_UNAVAILABLE,
-                           "llc is available but does not report %.*s support",
-                           (int)requirement.size, requirement.data);
-    }
-  }
-
   loom_llvm_tool_output_deinitialize(&version_text, allocator);
   return status;
 }
@@ -699,14 +577,6 @@ static iree_status_t loom_llvmir_loom_check_requirement_provider_query(
     return loom_llvmir_loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_OBJDUMP,
                                                   allocator);
   }
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
-  const loom_llvmir_target_profile_provider_t* target_provider = NULL;
-  if (loom_llvmir_target_registry_llc_requirement_provider(
-          &target_registry, requirement, &target_provider)) {
-    return loom_llvmir_loom_check_query_llc_provider(
-        requirement, target_provider, allocator);
-  }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "unknown LLVMIR loom-check requirement '%.*s'",
                           (int)requirement.size, requirement.data);
@@ -715,23 +585,8 @@ static iree_status_t loom_llvmir_loom_check_requirement_provider_query(
 static iree_status_t loom_llvmir_loom_check_requirement_provider_append_names(
     const loom_check_requirement_provider_t* provider,
     iree_string_builder_t* builder) {
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-      builder, "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump"));
-
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
-  for (iree_host_size_t i = 0;
-       i < target_registry.profile_registry.provider_count; ++i) {
-    const loom_llvmir_target_profile_provider_t* profile_provider =
-        target_registry.profile_registry.providers[i];
-    if (iree_string_view_is_empty(profile_provider->llc_target_name)) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder, ", llc-%.*s", (int)profile_provider->name.size,
-        profile_provider->name.data));
-  }
-  return iree_ok_status();
+  return iree_string_builder_append_cstring(
+      builder, "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump");
 }
 
 const loom_check_emit_provider_t loom_llvmir_loom_check_emit_provider = {

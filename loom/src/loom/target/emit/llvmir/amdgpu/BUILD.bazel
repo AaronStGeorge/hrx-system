@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library")
 
 package(
     default_visibility = ["//visibility:private"],
@@ -26,31 +26,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "lower",
-    srcs = ["lower/registry.c"],
-    hdrs = ["lower.h"],
-    visibility = _LLVMIR_VISIBILITY,
-    deps = [
-        ":intrinsics",
-        "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/target/emit/llvmir:lower",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "legality",
-    srcs = ["legality.c"],
-    hdrs = ["legality.h"],
-    visibility = _LLVMIR_VISIBILITY,
-    deps = [
-        "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/target/emit/llvmir:legality",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "target_env",
     srcs = ["target_env.c"],
     hdrs = ["target_env.h"],
@@ -60,21 +35,5 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//loom/src/loom/target/emit/llvmir:target_presets",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "legality_test",
-    srcs = ["legality_test.cc"],
-    deps = [
-        ":legality",
-        ":target_env",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/llvmir",
-        "//loom/src/loom/target/emit/llvmir:legality",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )

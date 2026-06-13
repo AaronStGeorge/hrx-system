@@ -23,8 +23,8 @@ entry:
 
 // ====
 
-// RUN: emit llvmir-object x86_64-object
-// REQUIRES: llc, llc-x86
+// RUN: emit llvmir-object @target
+// REQUIRES: llc
 
 llvmir.target<object> @target {
   triple = "x86_64-unknown-linux-gnu",
@@ -37,4 +37,4 @@ func.def target(@target) @object_add(%lhs: i32, %rhs: i32) -> (i32) {
 }
 
 // ----
-object emitted: x86_64-object
+object emitted: target

@@ -125,11 +125,6 @@ APPROVED_STATEMENTS = [
         "IR remap snapshot records source-module mutation boundaries",
     ),
     ApprovedStatement(
-        "loom/src/loom/target/emit/llvmir/lower/registry.c",
-        re.compile(r"\bsource_module->values\.count\b"),
-        "LLVMIR lowering maintains explicit whole-module emission state",
-    ),
-    ApprovedStatement(
         "loom/src/loom/verify/verify.c",
         re.compile(r"\bmodule->values\.count\b"),
         "verifier masks over arbitrary user-provided IR",
@@ -420,7 +415,7 @@ def _run_self_tests() -> int:
     )
     ok &= _expect_spirv_self_test(
         "non-SPIR-V internal header is out of scope",
-        "loom/src/loom/target/emit/llvmir/lower/internal.h",
+        "runtime/src/iree/tooling/profile/internal.h",
         "",
         (),
     )

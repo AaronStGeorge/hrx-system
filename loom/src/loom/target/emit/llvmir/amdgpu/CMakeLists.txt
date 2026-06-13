@@ -27,39 +27,6 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
-    lower
-  HDRS
-    "lower.h"
-  SRCS
-    "lower/registry.c"
-  DEPS
-    ::intrinsics
-    iree::base
-    loom::ops::llvmir
-    loom::target::emit::llvmir::lower
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    legality
-  HDRS
-    "legality.h"
-  SRCS
-    "legality.c"
-  DEPS
-    iree::base
-    loom::ops::llvmir
-    loom::target::emit::llvmir::legality
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
     target_env
   HDRS
     "target_env.h"
@@ -71,28 +38,6 @@ loom_cc_library(
     loom::target::emit::llvmir::target_presets
     loom::target::types
   PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_test(
-  NAME
-    legality_test
-  SRCS
-    "legality_test.cc"
-  DEPS
-    ::legality
-    ::target_env
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::ir
-    loom::ops::func
-    loom::ops::llvmir
-    loom::target::emit::llvmir::legality
-  LABELS
-    "iree-build-requirement=loom.target.arch.llvmir"
-    "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 

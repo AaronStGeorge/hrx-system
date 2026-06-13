@@ -127,22 +127,6 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
-    test_target
-  HDRS
-    "test_target.h"
-  SRCS
-    "test_target.c"
-  DEPS
-    ::target_env
-    iree::base
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
     llvmir
   HDRS
     "intrinsics.h"
@@ -201,97 +185,6 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
-    lower
-  HDRS
-    "lower.h"
-    "lower/internal.h"
-  SRCS
-    "lower/memory.c"
-    "lower/registry.c"
-    "lower/scalar.c"
-    "lower/target.c"
-    "lower/vector.c"
-  DEPS
-    ::core
-    ::target_env
-    iree::base
-    iree::base::internal::arena
-    loom::ir
-    loom::ir::facts
-    loom::ops::buffer
-    loom::ops::cache
-    loom::ops::cfg
-    loom::ops::encoding
-    loom::ops::func
-    loom::ops::index
-    loom::ops::llvmir
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::type_registry
-    loom::ops::vector
-    loom::ops::view
-    loom::util::cfg_graph
-    loom::util::fact_table
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    legality
-  HDRS
-    "legality.h"
-  SRCS
-    "legality.c"
-  DEPS
-    ::target_env
-    iree::base
-    loom::ir
-    loom::ops::buffer
-    loom::ops::cfg
-    loom::ops::func
-    loom::ops::index
-    loom::ops::llvmir
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::target
-    loom::ops::vector
-    loom::ops::view
-    loom::target::launch
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    target_registry
-  HDRS
-    "target_registry.h"
-  SRCS
-    "target_registry.c"
-  DEPS
-    ::legality
-    ::lower
-    ::target_presets
-    ::test_target
-    iree::base
-    loom::target::emit::llvmir::amdgpu::legality
-    loom::target::emit::llvmir::amdgpu::lower
-    loom::target::emit::llvmir::amdgpu::target_env
-    loom::target::emit::llvmir::x86::legality
-    loom::target::emit::llvmir::x86::lower
-    loom::target::emit::llvmir::x86::target_env
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
     loom_check
   HDRS
     "check/loom_check.h"
@@ -300,7 +193,7 @@ loom_cc_library(
   DEPS
     ::core
     ::module_emitter
-    ::target_registry
+    ::target_env
     iree::base
     iree::io::stream
     loom::codegen::low::function
@@ -380,23 +273,6 @@ iree_native_test(
     loom::tools::loom-check::loom-check
   LABELS
     "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_test(
-  NAME
-    target_registry_test
-  SRCS
-    "target_registry_test.cc"
-  DEPS
-    ::target_env
-    ::target_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.llvmir"
-    "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
@@ -575,51 +451,6 @@ loom_cc_test(
     loom::util::stream
   LABELS
     "requires-filesystem"
-    "iree-build-requirement=loom.target.arch.llvmir"
-    "iree-build-requirement=loom.emit.llvmir"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_test(
-  NAME
-    lower_options_test
-  SRCS
-    "lower_options_test.cc"
-  DEPS
-    ::lower
-    ::test_target
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::ir
-  LABELS
-    "requires-filesystem"
-    "iree-build-requirement=loom.target.arch.llvmir"
-    "iree-build-requirement=loom.emit.llvmir"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_test(
-  NAME
-    legality_test
-  SRCS
-    "legality_test.cc"
-  DEPS
-    ::legality
-    ::test_target
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::ir
-    loom::ops::func
-    loom::ops::llvmir
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::target
-    loom::ops::vector
-  LABELS
     "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
