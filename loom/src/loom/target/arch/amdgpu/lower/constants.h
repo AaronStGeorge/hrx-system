@@ -55,8 +55,8 @@ bool loom_amdgpu_value_facts_as_u32_bits(loom_value_facts_t facts,
 
 // Extracts one exact scalar/vector lane value as a raw 32-bit payload.
 bool loom_amdgpu_source_lane_as_u32_bits(
-    const loom_value_fact_table_t* fact_table, loom_value_id_t source,
-    uint32_t lane, uint32_t* out_bits);
+    const loom_value_fact_table_t* fact_table, const loom_module_t* module,
+    loom_value_id_t source, uint32_t lane, uint32_t* out_bits);
 
 // Returns true when value is a non-zero power of two.
 bool loom_amdgpu_u32_is_power_of_two(uint32_t value);

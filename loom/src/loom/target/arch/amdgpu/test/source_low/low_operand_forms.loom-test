@@ -19,7 +19,21 @@ low.func.def target(@target) @wmma_zero_accumulator(%lhs: reg<amdgpu.vgpr x8>, %
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @select_equal_payloads(%value: reg<amdgpu.vgpr>, %mask: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) {
+  %selected = low.op<amdgpu.v_cndmask_b32>(%value, %value, %mask) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return %selected : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @select_equal_payloads(%value: reg<amdgpu.vgpr>, %mask: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) {
+  low.return %value : reg<amdgpu.vgpr>
+}
+
+// ====
 
 amdgpu.target<gfx1100> @target
 
@@ -39,8 +53,6 @@ low.func.def target(@target) @vop2_inline_add(%rhs: reg<amdgpu.vgpr>) -> (reg<am
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop2_inline_shift(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -58,8 +70,6 @@ low.func.def target(@target) @vop2_inline_shift(%value: reg<amdgpu.vgpr>) -> (re
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -79,8 +89,6 @@ low.func.def target(@target) @vop2_literal_fallback_add(%rhs: reg<amdgpu.vgpr>) 
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop2_f32_inline_add(%rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -98,8 +106,6 @@ low.func.def target(@target) @vop2_f32_inline_add(%rhs: reg<amdgpu.vgpr>) -> (re
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -119,8 +125,6 @@ low.func.def target(@target) @vop2_f32_literal_fallback_add(%rhs: reg<amdgpu.vgp
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop3_literal_mad(%a: reg<amdgpu.sgpr>, %addend: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -138,8 +142,6 @@ low.func.def target(@target) @vop3_literal_mad(%a: reg<amdgpu.sgpr>, %addend: re
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -159,8 +161,6 @@ low.func.def target(@target) @vop3p_fma_mix_src2_literal_zero(%a: reg<amdgpu.vgp
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop3p_packed_fma_source2_literal(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -178,8 +178,6 @@ low.func.def target(@target) @vop3p_packed_fma_source2_literal(%a: reg<amdgpu.vg
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -199,8 +197,6 @@ low.func.def target(@target) @vop3p_packed_mad_source1_literal(%a: reg<amdgpu.vg
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop3p_packed_mad_u16_source0_literal(%b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -218,8 +214,6 @@ low.func.def target(@target) @vop3p_packed_mad_u16_source0_literal(%b: reg<amdgp
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -239,8 +233,6 @@ low.func.def target(@target) @vop3_compare_inline(%value: reg<amdgpu.vgpr>) -> (
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop3_cndmask_false_inline(%true_value: reg<amdgpu.vgpr>, %mask: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) {
@@ -258,8 +250,6 @@ low.func.def target(@target) @vop3_cndmask_false_inline(%true_value: reg<amdgpu.
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -279,8 +269,6 @@ low.func.def target(@target) @vop3_cndmask_false_literal(%true_value: reg<amdgpu
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @sop2_rhs_inline_shift(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
@@ -298,8 +286,6 @@ low.func.def target(@target) @sop2_rhs_inline_shift(%value: reg<amdgpu.sgpr>) ->
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -319,8 +305,6 @@ low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @sop2_rhs_inline_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
@@ -338,8 +322,6 @@ low.func.def target(@target) @sop2_rhs_inline_mul(%value: reg<amdgpu.sgpr>) -> (
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -359,8 +341,6 @@ low.func.def target(@target) @s_load_dword_zero_soffset(%base: reg<amdgpu.sgpr x
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @s_load_dword_soffset_adds_to_offset(%base: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) {
@@ -378,8 +358,6 @@ low.func.def target(@target) @s_load_dword_soffset_adds_to_offset(%base: reg<amd
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -400,8 +378,6 @@ low.func.def target(@target) @buffer_load_dword_off_zero(%resource: reg<amdgpu.s
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @buffer_store_dword_off_zero(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>) {
@@ -420,8 +396,6 @@ low.func.def target(@target) @buffer_store_dword_off_zero(%value: reg<amdgpu.vgp
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -442,8 +416,6 @@ low.func.def target(@target) @buffer_load_b128_off_zero(%resource: reg<amdgpu.sg
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @buffer_store_b64_off_zero(%value: reg<amdgpu.vgpr x2>, %resource: reg<amdgpu.sgpr x4>) {
@@ -462,8 +434,6 @@ low.func.def target(@target) @buffer_store_b64_off_zero(%value: reg<amdgpu.vgpr 
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx950> @target
 

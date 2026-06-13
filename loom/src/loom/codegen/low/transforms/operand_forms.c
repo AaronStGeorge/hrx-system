@@ -20,7 +20,9 @@
 
 #define LOOM_LOW_SELECT_OPERAND_FORMS_STATISTICS(V, statistics_type) \
   V(statistics_type, forms_selected, "forms-selected",               \
-    "Number of low packets rewritten to descriptor operand forms.")
+    "Number of low packets rewritten to descriptor operand forms.")  \
+  V(statistics_type, packets_folded, "packets-folded",               \
+    "Number of descriptor-backed low packets folded away.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_low_select_operand_forms_statistics,
                             loom_low_select_operand_forms_statistics_t,
@@ -94,6 +96,123 @@ static bool loom_low_packet_has_operand_forms(
          packet->descriptor->operand_form_count != 0;
 }
 
+static bool loom_low_semantic_tag_has_token(iree_string_view_t semantic_tag,
+                                            iree_string_view_t token) {
+  if (semantic_tag.size == 0) {
+    return false;
+  }
+  iree_host_size_t start = 0;
+  while (start <= semantic_tag.size) {
+    iree_host_size_t end = iree_string_view_find_char(semantic_tag, '.', start);
+    if (end == IREE_STRING_VIEW_NPOS) {
+      end = semantic_tag.size;
+    }
+    if (iree_string_view_equal(
+            iree_make_string_view(semantic_tag.data + start, end - start),
+            token)) {
+      return true;
+    }
+    if (end == semantic_tag.size) {
+      break;
+    }
+    start = end + 1;
+  }
+  return false;
+}
+
+static bool loom_low_descriptor_is_select(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  const iree_string_view_t semantic_tag = loom_low_descriptor_set_string(
+      descriptor_set, descriptor->semantic_tag_string_offset);
+  return loom_low_semantic_tag_has_token(semantic_tag, IREE_SV("select"));
+}
+
+static bool loom_low_operand_field_is(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_t* operand, iree_string_view_t field_name) {
+  return iree_string_view_equal(
+      loom_low_descriptor_set_string(descriptor_set,
+                                     operand->field_name_string_offset),
+      field_name);
+}
+
+static bool loom_low_descriptor_packet_operand_indices_for_select(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t* out_true_operand_index,
+    uint16_t* out_false_operand_index) {
+  *out_true_operand_index = UINT16_MAX;
+  *out_false_operand_index = UINT16_MAX;
+  uint16_t packet_operand_index = 0;
+  for (uint16_t i = descriptor->result_count; i < descriptor->operand_count;
+       ++i) {
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[descriptor->operand_start + i];
+    if (!loom_low_operand_role_is_packet_operand(operand->role) ||
+        iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+      continue;
+    }
+    if (loom_low_operand_field_is(descriptor_set, operand,
+                                  IREE_SV("true_value"))) {
+      *out_true_operand_index = packet_operand_index;
+    } else if (loom_low_operand_field_is(descriptor_set, operand,
+                                         IREE_SV("false_value"))) {
+      *out_false_operand_index = packet_operand_index;
+    }
+    ++packet_operand_index;
+  }
+  return *out_true_operand_index != UINT16_MAX &&
+         *out_false_operand_index != UINT16_MAX;
+}
+
+static bool loom_low_values_have_same_type(loom_module_t* module,
+                                           loom_value_id_t lhs,
+                                           loom_value_id_t rhs) {
+  return loom_type_equal(loom_module_value_type(module, lhs),
+                         loom_module_value_type(module, rhs));
+}
+
+static iree_status_t loom_low_select_operand_forms_try_fold_select_packet(
+    loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
+    loom_op_t* op, const loom_low_descriptor_t* descriptor, bool* out_folded) {
+  *out_folded = false;
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->target->descriptor_set;
+  if (op->result_count != 1 || descriptor->result_count != 1 ||
+      descriptor->effect_count != 0 ||
+      !iree_all_bits_set(descriptor->flags,
+                         LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE) ||
+      !loom_low_descriptor_is_select(descriptor_set, descriptor)) {
+    return iree_ok_status();
+  }
+
+  uint16_t true_operand_index = UINT16_MAX;
+  uint16_t false_operand_index = UINT16_MAX;
+  if (!loom_low_descriptor_packet_operand_indices_for_select(
+          descriptor_set, descriptor, &true_operand_index,
+          &false_operand_index) ||
+      true_operand_index >= op->operand_count ||
+      false_operand_index >= op->operand_count) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t true_value = loom_op_operands(op)[true_operand_index];
+  const loom_value_id_t false_value = loom_op_operands(op)[false_operand_index];
+  if (true_value != false_value ||
+      !loom_low_values_have_same_type(state->module, loom_op_results(op)[0],
+                                      true_value)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_replace_all_uses_and_erase(rewriter, op, &true_value, 1));
+  state->changed = true;
+  *out_folded = true;
+  loom_pass_mark_changed(state->pass);
+  ++state->statistics->packets_folded;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_select_operand_forms_function_has_candidate(
     loom_module_t* module, loom_func_like_t function,
     const loom_low_resolved_target_t* target, bool* out_has_candidate) {
@@ -112,7 +231,11 @@ static iree_status_t loom_low_select_operand_forms_function_has_candidate(
       loom_low_resolved_descriptor_packet_t packet = {0};
       IREE_RETURN_IF_ERROR(
           loom_low_resolve_descriptor_packet(module, target, op, &packet));
-      if (loom_low_packet_has_operand_forms(&packet)) {
+      if (loom_low_packet_has_operand_forms(&packet) ||
+          (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_OP &&
+           packet.descriptor != NULL &&
+           loom_low_descriptor_is_select(target->descriptor_set,
+                                         packet.descriptor))) {
         *out_has_candidate = true;
         return iree_ok_status();
       }
@@ -426,6 +549,19 @@ static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
   IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
       state->module, state->target, op, &packet));
   if (!loom_low_packet_has_operand_forms(&packet)) {
+    if (packet.kind != LOOM_LOW_DESCRIPTOR_PACKET_OP ||
+        packet.descriptor == NULL) {
+      return iree_ok_status();
+    }
+    bool folded = false;
+    return loom_low_select_operand_forms_try_fold_select_packet(
+        state, rewriter, op, packet.descriptor, &folded);
+  }
+
+  bool folded = false;
+  IREE_RETURN_IF_ERROR(loom_low_select_operand_forms_try_fold_select_packet(
+      state, rewriter, op, packet.descriptor, &folded));
+  if (folded) {
     return iree_ok_status();
   }
 
@@ -477,8 +613,7 @@ static iree_status_t loom_low_select_operand_forms_function(
   IREE_RETURN_IF_ERROR(
       loom_low_resolve_function_target(module, low_func_op, descriptor_registry,
                                        target_selection, emitter, &target));
-  if (!target.descriptor_set ||
-      target.descriptor_set->operand_form_count == 0) {
+  if (!target.descriptor_set) {
     return iree_ok_status();
   }
 
@@ -490,11 +625,13 @@ static iree_status_t loom_low_select_operand_forms_function(
   }
 
   loom_value_fact_table_t* value_facts = NULL;
-  IREE_RETURN_IF_ERROR(loom_pass_value_facts_acquire(
-      pass, module,
-      loom_pass_value_fact_scope_function_for_target(
-          function, &target.bundle_storage.bundle),
-      &value_facts));
+  if (target.descriptor_set->operand_form_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_pass_value_facts_acquire(
+        pass, module,
+        loom_pass_value_fact_scope_function_for_target(
+            function, &target.bundle_storage.bundle),
+        &value_facts));
+  }
 
   loom_rewriter_t rewriter;
   IREE_RETURN_IF_ERROR(

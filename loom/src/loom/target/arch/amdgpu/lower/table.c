@@ -416,8 +416,9 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
         loom_low_lower_context_fact_table(context);
     uint32_t table_bits = 0;
     if (plan->select_src1_literal_descriptor.descriptor != NULL &&
-        loom_amdgpu_source_lane_as_u32_bits(fact_table, plan->table, i,
-                                            &table_bits)) {
+        loom_amdgpu_source_lane_as_u32_bits(
+            fact_table, loom_low_lower_context_module(context), plan->table, i,
+            &table_bits)) {
       select_descriptor = &plan->select_src1_literal_descriptor;
       select_operands[1] = select_operands[2];
       select_operand_count = 2;

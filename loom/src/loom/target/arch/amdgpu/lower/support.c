@@ -1977,14 +1977,36 @@ bool loom_amdgpu_value_facts_as_u32_bits(loom_value_facts_t facts,
 }
 
 bool loom_amdgpu_source_lane_as_u32_bits(
-    const loom_value_fact_table_t* fact_table, loom_value_id_t source,
-    uint32_t lane, uint32_t* out_bits) {
+    const loom_value_fact_table_t* fact_table, const loom_module_t* module,
+    loom_value_id_t source, uint32_t lane, uint32_t* out_bits) {
   *out_bits = 0;
-  if (fact_table == NULL) {
+  if (fact_table == NULL || module == NULL) {
     return false;
   }
 
   loom_value_facts_t facts = loom_value_fact_table_lookup(fact_table, source);
+  const loom_type_t source_type = loom_module_value_type(module, source);
+  const bool source_is_integer_scalar =
+      loom_type_is_scalar(source_type) &&
+      loom_scalar_type_is_integer(loom_type_element_type(source_type));
+  const int32_t source_bit_count =
+      source_is_integer_scalar
+          ? loom_scalar_type_bitwidth(loom_type_element_type(source_type))
+          : 0;
+  const uint32_t lane_offset = lane * 32u;
+  int64_t exact_value = 0;
+  if (source_is_integer_scalar && lane_offset < (uint32_t)source_bit_count &&
+      loom_value_facts_as_exact_i64(facts, &exact_value)) {
+    *out_bits = (uint32_t)((uint64_t)exact_value >> lane_offset);
+    return true;
+  }
+  // A non-negative scalar range contained in 32 bits has zero high lanes.
+  if (source_is_integer_scalar && lane_offset < (uint32_t)source_bit_count &&
+      facts.range_lo >= 0 && facts.range_hi <= UINT32_MAX && lane > 0) {
+    *out_bits = 0;
+    return true;
+  }
+
   loom_value_fact_uniform_element_t uniform = {0};
   if (loom_value_facts_query_uniform_element(&fact_table->context, facts,
                                              &uniform)) {

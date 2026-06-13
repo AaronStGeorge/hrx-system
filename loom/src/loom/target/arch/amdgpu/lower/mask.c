@@ -1006,12 +1006,13 @@ static iree_status_t loom_amdgpu_emit_vector_select_immediate_lane(
 
   const loom_value_fact_table_t* fact_table =
       loom_low_lower_context_fact_table(context);
+  const loom_module_t* module = loom_low_lower_context_module(context);
   uint32_t false_bits = 0;
   const bool false_is_exact = loom_amdgpu_source_lane_as_u32_bits(
-      fact_table, plan->false_value, lane, &false_bits);
+      fact_table, module, plan->false_value, lane, &false_bits);
   uint32_t true_bits = 0;
   const bool true_is_exact = loom_amdgpu_source_lane_as_u32_bits(
-      fact_table, plan->true_value, lane, &true_bits);
+      fact_table, module, plan->true_value, lane, &true_bits);
 
   if (false_is_exact && true_is_exact && false_bits == true_bits) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_slice_source_lane_if_needed(
@@ -1141,6 +1142,20 @@ static iree_status_t loom_amdgpu_emit_vector_select_immediate_lane(
   return iree_ok_status();
 }
 
+static bool loom_amdgpu_select_source_lanes_have_same_bits(
+    const loom_value_fact_table_t* fact_table, const loom_module_t* module,
+    const loom_amdgpu_vector_select_plan_t* plan, uint32_t lane) {
+  uint32_t false_bits = 0;
+  if (!loom_amdgpu_source_lane_as_u32_bits(
+          fact_table, module, plan->false_value, lane, &false_bits)) {
+    return false;
+  }
+  uint32_t true_bits = 0;
+  return loom_amdgpu_source_lane_as_u32_bits(
+             fact_table, module, plan->true_value, lane, &true_bits) &&
+         false_bits == true_bits;
+}
+
 static iree_status_t loom_amdgpu_emit_vector_compare_immediate_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_compare_plan_t* plan, loom_value_id_t low_lhs,
@@ -1152,9 +1167,10 @@ static iree_status_t loom_amdgpu_emit_vector_compare_immediate_lane(
 
   const loom_value_fact_table_t* fact_table =
       loom_low_lower_context_fact_table(context);
+  const loom_module_t* module = loom_low_lower_context_module(context);
   uint32_t rhs_bits = 0;
   if (plan->src1_inline_descriptor.descriptor != NULL &&
-      loom_amdgpu_source_lane_as_u32_bits(fact_table, plan->rhs, lane,
+      loom_amdgpu_source_lane_as_u32_bits(fact_table, module, plan->rhs, lane,
                                           &rhs_bits) &&
       rhs_bits <= 64) {
     loom_value_id_t lane_lhs = LOOM_VALUE_ID_INVALID;
@@ -1182,7 +1198,7 @@ static iree_status_t loom_amdgpu_emit_vector_compare_immediate_lane(
 
   uint32_t lhs_bits = 0;
   if (plan->src0_inline_descriptor.descriptor != NULL &&
-      loom_amdgpu_source_lane_as_u32_bits(fact_table, plan->lhs, lane,
+      loom_amdgpu_source_lane_as_u32_bits(fact_table, module, plan->lhs, lane,
                                           &lhs_bits) &&
       lhs_bits <= 64) {
     loom_value_id_t lane_rhs = LOOM_VALUE_ID_INVALID;
@@ -1364,9 +1380,10 @@ static iree_status_t loom_amdgpu_emit_clampf_select_lane(
   *out_value = LOOM_VALUE_ID_INVALID;
   const loom_value_fact_table_t* fact_table =
       loom_low_lower_context_fact_table(context);
+  const loom_module_t* module = loom_low_lower_context_module(context);
   uint32_t true_bits = 0;
   if (plan->select_src1_inline_descriptor.descriptor != NULL &&
-      loom_amdgpu_source_lane_as_u32_bits(fact_table, true_source, lane,
+      loom_amdgpu_source_lane_as_u32_bits(fact_table, module, true_source, lane,
                                           &true_bits) &&
       true_bits <= 64) {
     loom_named_attr_t attrs[1] = {0};
@@ -1411,14 +1428,15 @@ static iree_status_t loom_amdgpu_emit_clampf_number_bound_lane(
   *out_value = LOOM_VALUE_ID_INVALID;
   const loom_value_fact_table_t* fact_table =
       loom_low_lower_context_fact_table(context);
+  const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_low_lower_resolved_descriptor_t* literal_descriptor =
       bound_kind == LOOM_AMDGPU_CLAMPF_BOUND_LOWER
           ? &plan->lower_bound_literal_descriptor
           : &plan->upper_bound_literal_descriptor;
   uint32_t bound_bits = 0;
   if (literal_descriptor->descriptor != NULL &&
-      loom_amdgpu_source_lane_as_u32_bits(fact_table, bound_source, lane,
-                                          &bound_bits)) {
+      loom_amdgpu_source_lane_as_u32_bits(fact_table, module, bound_source,
+                                          lane, &bound_bits)) {
     return loom_amdgpu_emit_resolved_vgpr_binary_literal(
         context, source_op, literal_descriptor, value, bound_bits, lane_type,
         out_value);
@@ -1878,6 +1896,9 @@ iree_status_t loom_amdgpu_lower_select(
   loom_type_t mask_lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_make_sgpr_range_type(context, 2, &mask_lane_type));
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  const loom_module_t* module = loom_low_lower_context_module(context);
   loom_value_id_t lane_results[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     loom_value_id_t lane_condition = LOOM_VALUE_ID_INVALID;
@@ -1895,6 +1916,16 @@ iree_status_t loom_amdgpu_lower_select(
         context, source_op, plan, low_false_value, low_true_value,
         lane_condition, i, lane_type, &lane_results[i], &emitted_immediate));
     if (emitted_immediate) {
+      continue;
+    }
+
+    if (loom_amdgpu_select_source_lanes_have_same_bits(fact_table, module, plan,
+                                                       i)) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_slice_source_lane_if_needed(
+          context, source_op, low_true_value, lane_count, i, lane_type,
+          &lane_results[i]));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+          context, source_op, lane_results[i], &lane_results[i]));
       continue;
     }
 

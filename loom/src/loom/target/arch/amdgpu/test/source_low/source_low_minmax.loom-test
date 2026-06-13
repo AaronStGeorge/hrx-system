@@ -357,8 +357,7 @@ low.func.def target(@target) abi(hal_kernel) @scf_select_vgpr_extui_i64(%values:
   %19 = v_mov_b32_copy %limit
   %cond = v_cmp_lt_i32 %lane, %19
   %23 = v_cndmask_b32 %16, %lane, %cond
-  %26 = v_cndmask_b32 %14, %14, %cond
-  %selected = concat(%23, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %selected = concat(%23, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %selected
 }
 
