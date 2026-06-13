@@ -8,6 +8,7 @@
 
 #include "iree/base/alignment.h"
 #include "iree/base/internal/arena.h"
+#include "iree/base/string_view.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
@@ -173,6 +174,15 @@ kernel.def target(@target) @write_kernel() {
   EXPECT_EQ(LoadLeU32(contents.data,
                       LOOM_SANITIZER_SITE_TABLE_HEADER_ROW_COUNT_OFFSET),
             2u);
+  const uint32_t string_table_offset =
+      LoadLeU32(contents.data,
+                LOOM_SANITIZER_SITE_TABLE_HEADER_STRING_TABLE_OFFSET_OFFSET);
+  const uint32_t string_table_length =
+      LoadLeU32(contents.data,
+                LOOM_SANITIZER_SITE_TABLE_HEADER_STRING_TABLE_LENGTH_OFFSET);
+  ASSERT_GT(string_table_length, 0u);
+  ASSERT_LE((uint64_t)string_table_offset + string_table_length,
+            contents.data_length);
 
   const uint8_t* record0 =
       contents.data + LOOM_SANITIZER_SITE_TABLE_HEADER_LENGTH;
@@ -181,10 +191,40 @@ kernel.def target(@target) @write_kernel() {
             0u);
   EXPECT_EQ(LoadLeU32(record0, LOOM_SANITIZER_SITE_TABLE_RECORD_OP_KIND_OFFSET),
             LOOM_OP_SANITIZER_ASSERT_ACCESS);
+  EXPECT_EQ(LoadLeU32(record0, LOOM_SANITIZER_SITE_TABLE_RECORD_FLAGS_OFFSET),
+            LOOM_SANITIZER_SITE_TABLE_RECORD_HAS_SOURCE_LOCATION);
   EXPECT_EQ(LoadLeU32(record1, LOOM_SANITIZER_SITE_TABLE_RECORD_SITE_ID_OFFSET),
             1u);
   EXPECT_EQ(LoadLeU32(record1, LOOM_SANITIZER_SITE_TABLE_RECORD_OP_KIND_OFFSET),
             LOOM_OP_SANITIZER_ASSERT_ACCESS);
+  EXPECT_EQ(LoadLeU32(record1, LOOM_SANITIZER_SITE_TABLE_RECORD_FLAGS_OFFSET),
+            LOOM_SANITIZER_SITE_TABLE_RECORD_HAS_SOURCE_LOCATION);
+
+  const auto expect_parsed_source = [&](const uint8_t* record) {
+    EXPECT_EQ(
+        LoadLeU16(record, LOOM_SANITIZER_SITE_TABLE_RECORD_SOURCE_KIND_OFFSET),
+        LOOM_SANITIZER_SITE_TABLE_SOURCE_KIND_FILE);
+    const uint32_t source_name_offset = LoadLeU32(
+        record, LOOM_SANITIZER_SITE_TABLE_RECORD_SOURCE_NAME_OFFSET_OFFSET);
+    const uint32_t source_name_length = LoadLeU32(
+        record, LOOM_SANITIZER_SITE_TABLE_RECORD_SOURCE_NAME_LENGTH_OFFSET);
+    ASSERT_LE((uint64_t)source_name_offset + source_name_length,
+              string_table_length);
+    const iree_string_view_t source_name = iree_make_string_view(
+        (const char*)contents.data + string_table_offset + source_name_offset,
+        source_name_length);
+    EXPECT_TRUE(iree_string_view_equal(source_name,
+                                       IREE_SV("sanitizer_site_table.loom")));
+  };
+  expect_parsed_source(record0);
+  expect_parsed_source(record1);
+
+  const uint32_t record0_start_line =
+      LoadLeU32(record0, LOOM_SANITIZER_SITE_TABLE_RECORD_START_LINE_OFFSET);
+  const uint32_t record1_start_line =
+      LoadLeU32(record1, LOOM_SANITIZER_SITE_TABLE_RECORD_START_LINE_OFFSET);
+  EXPECT_NE(record0_start_line, 0u);
+  EXPECT_LT(record0_start_line, record1_start_line);
 }
 
 }  // namespace
