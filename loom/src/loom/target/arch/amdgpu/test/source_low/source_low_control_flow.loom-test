@@ -1077,6 +1077,46 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @workgroup_loop_bound_f32
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @divergent_if_q6_nibble_i8_result(%values: vector<2xi32>, %limit: i32) -> (i8) {
+  %code = vector.extract %values[0] : vector<2xi32> -> i32
+  %selector = vector.extract %values[1] : vector<2xi32> -> i32
+  %four = scalar.constant 4 : i32
+  %mask = scalar.constant 15 : i32
+  %high_shifted = scalar.shrui %code, %four : i32
+  %low_i32 = scalar.andi %code, %mask : i32
+  %high_i32 = scalar.andi %high_shifted, %mask : i32
+  %low = scalar.trunci %low_i32 : i32 to i8
+  %high = scalar.trunci %high_i32 : i32 to i8
+  %cond = scalar.cmpi slt, %selector, %limit : i32
+  %selected = scf.if %cond -> (i8) {
+    scf.yield %high : i8
+  } else {
+    scf.yield %low : i8
+  }
+  func.return %selected : i8
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_if_q6_nibble_i8_result(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %code = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %selector = slice %values[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %high_shifted = v_lshrrev_b32_lit %code, 4
+  %low_i32 = v_and_b32_lit %code, 15
+  %high_i32 = v_and_b32_lit %high_shifted, 15
+  %23 = v_lshlrev_b32_src0_inline %low_i32, 24
+  %low = v_ashrrev_i32_src0_inline %23, 24
+  %25 = v_lshlrev_b32_src0_inline %high_i32, 24
+  %high = v_ashrrev_i32_src0_inline %25, 24
+  %27 = v_mov_b32_copy %limit
+  %cond = v_cmp_lt_i32 %selector, %27
+  %selected = v_cndmask_b32 %low, %high, %cond
+  return %selected
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 kernel.def target(@target) @branch_local_buffer_vector_load() {
   %workgroup_count = index.constant 1 : index
   %workgroup_size = index.constant 64 : index

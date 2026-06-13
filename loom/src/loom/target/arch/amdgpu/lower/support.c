@@ -626,7 +626,9 @@ static bool loom_amdgpu_source_value_naturally_prefers_vgpr(
   const loom_type_t source_type =
       loom_module_value_type(module, source_value_id);
   loom_amdgpu_vector_storage_t vector_storage = {0};
-  return loom_amdgpu_type_is_f32(source_type) ||
+  return loom_amdgpu_type_is_i8(source_type) ||
+         loom_amdgpu_type_is_i16(source_type) ||
+         loom_amdgpu_type_is_f32(source_type) ||
          loom_amdgpu_type_is_f64(source_type) ||
          loom_amdgpu_type_is_16bit_float(source_type) ||
          (loom_amdgpu_type_vector_storage(source_type, &vector_storage) &&
