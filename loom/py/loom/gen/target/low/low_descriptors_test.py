@@ -337,6 +337,53 @@ def test_shared_source_emits_one_storage_table_with_multiple_views() -> None:
     assert ("const loom_low_descriptor_set_t* loom_test_low_extension_core_descriptor_set(void)") in source
 
 
+def test_shared_source_emits_prefix_view_local_asm_forms() -> None:
+    storage_descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                mnemonic="storage.add.i32",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+            ),
+        ),
+    )
+    view_descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                mnemonic="add.i32",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+            ),
+        ),
+    )
+    view = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        key="test.low.view.core",
+        function_name="loom_test_low_view_core_descriptor_set",
+        c_table_prefix="TestLowViewCore",
+        c_enum_prefix="TEST_LOW_VIEW_CORE",
+        descriptors=(view_descriptor,),
+    )
+    storage_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(storage_descriptor,),
+    )
+
+    source = generate_descriptor_set_shared_source(
+        storage_set,
+        (view, storage_set),
+    )
+
+    assert "storage.add.i32" in source
+    assert '"add.i32"' in source
+    assert "static const loom_low_descriptor_t kTestLowViewCoreDescriptors[]" in source
+    assert "static const loom_low_asm_form_t kTestLowViewCoreAsmForms[]" in source
+    assert ".descriptors = kTestLowViewCoreDescriptors," in source
+    assert ".asm_forms = kTestLowViewCoreAsmForms," in source
+
+
 def test_shared_source_emits_sibling_view_descriptor_surfaces() -> None:
     first_view = replace(
         TEST_LOW_CORE_DESCRIPTOR_SET,

@@ -95,9 +95,11 @@ def test_storage_generation_emits_current_public_views() -> None:
     assert "static const loom_low_descriptor_t kX86Avx512PackedDotCoreStorageDescriptors[]" in source
     assert "static const loom_low_descriptor_t kX86Avx512CoreDescriptors[]" in source
     assert "static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[]" in source
+    assert "static const loom_low_asm_form_t kX86AvxVnniCoreAsmForms[]" in source
     assert ".descriptors = kX86Avx512CoreDescriptors," in source
     assert ".descriptors = kX86PackedDotCoreDescriptors," in source
     assert ".descriptors = kX86Avx512PackedDotCoreStorageDescriptors," in source
+    assert ".asm_forms = kX86AvxVnniCoreAsmForms," in source
     assert ".asm_forms = kX86Avx512PackedDotCoreStorageAsmForms," in source
     assert ".descriptor_refs = kX86Avx512CoreDescriptorRefs," in source
     assert ".descriptor_refs = kX86PackedDotCoreDescriptorRefs," in source
