@@ -194,6 +194,14 @@ iree_status_t loom_amdgpu_emit_vgpr_shift(
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t shift,
     loom_value_id_t value, loom_type_t lane_type, loom_value_id_t* out_value);
 
+// Tries to emit |value << shift| + |addend| using the V_LSHL_ADD_U32
+// immediate-shift form. If the active descriptor set lacks the packet or the
+// shift is not encodable, returns with |out_selected| false and emits nothing.
+iree_status_t loom_amdgpu_try_emit_vgpr_lshl_add_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t value, loom_value_id_t addend, uint32_t shift,
+    loom_type_t lane_type, loom_value_id_t* out_value, bool* out_selected);
+
 // Emits a VGPR x2 value zero-extending the supplied one-unit low register.
 iree_status_t loom_amdgpu_emit_vgpr64_from_u32(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

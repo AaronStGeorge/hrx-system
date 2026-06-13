@@ -274,15 +274,36 @@ static iree_status_t loom_amdgpu_pack_i8_bits_into_register(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_bits, uint32_t register_lane, loom_type_t lane_type,
     loom_value_id_t* inout_packed) {
+  if (*inout_packed == LOOM_VALUE_ID_INVALID) {
+    loom_value_id_t shifted = low_bits;
+    if (register_lane != 0) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+          register_lane * 8u, low_bits, lane_type, &shifted));
+    }
+    *inout_packed = shifted;
+    return iree_ok_status();
+  }
+
+  if (register_lane != 0) {
+    loom_value_id_t packed = LOOM_VALUE_ID_INVALID;
+    bool selected_lshl_add = false;
+    // Packed bytes occupy disjoint bit ranges, so add and OR are equivalent
+    // after shifting the incoming low byte into its target lane.
+    IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_vgpr_lshl_add_u32(
+        context, source_op, low_bits, *inout_packed, register_lane * 8u,
+        lane_type, &packed, &selected_lshl_add));
+    if (selected_lshl_add) {
+      *inout_packed = packed;
+      return iree_ok_status();
+    }
+  }
+
   loom_value_id_t shifted = low_bits;
   if (register_lane != 0) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
         register_lane * 8u, low_bits, lane_type, &shifted));
-  }
-  if (*inout_packed == LOOM_VALUE_ID_INVALID) {
-    *inout_packed = shifted;
-    return iree_ok_status();
   }
   return loom_amdgpu_emit_vgpr_binary(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, *inout_packed,

@@ -91,14 +91,11 @@ func.def target(@target) @i32_to_u8x4_bitunpack_i8_result(%packed: vector<1xi32>
 low.func.def target(@target) abi(hal_kernel) @i32_to_u8x4_bitunpack_i8_result(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %5 = v_and_b32_lit %packed, 255
   %6 = v_bfe_u32_offset_width_inline %packed {offset = 8, width = 8}
-  %7 = v_lshlrev_b32_src0_inline %6, 8
-  %8 = v_or_b32 %5, %7
-  %9 = v_bfe_u32_offset_width_inline %packed {offset = 16, width = 8}
-  %10 = v_lshlrev_b32_src0_inline %9, 16
-  %11 = v_or_b32 %8, %10
-  %12 = v_bfe_u32_offset_width_inline %packed {offset = 24, width = 8}
-  %13 = v_lshlrev_b32_src0_inline %12, 24
-  %unpacked = v_or_b32 %11, %13
+  %7 = v_lshl_add_u32_shift_imm %6, %5, 8
+  %8 = v_bfe_u32_offset_width_inline %packed {offset = 16, width = 8}
+  %9 = v_lshl_add_u32_shift_imm %8, %7, 16
+  %10 = v_bfe_u32_offset_width_inline %packed {offset = 24, width = 8}
+  %unpacked = v_lshl_add_u32_shift_imm %10, %9, 24
   return %unpacked
 }
 
@@ -114,14 +111,11 @@ func.def target(@target) @i8x2_to_u4x4_bitunpack_i8_result(%packed: vector<2xi8>
 low.func.def target(@target) abi(hal_kernel) @i8x2_to_u4x4_bitunpack_i8_result(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %5 = v_and_b32_src0_inline %packed, 15
   %6 = v_bfe_u32_offset_width_inline %packed {offset = 4, width = 4}
-  %7 = v_lshlrev_b32_src0_inline %6, 8
-  %8 = v_or_b32 %5, %7
-  %9 = v_bfe_u32_offset_width_inline %packed {offset = 8, width = 4}
-  %10 = v_lshlrev_b32_src0_inline %9, 16
-  %11 = v_or_b32 %8, %10
-  %12 = v_bfe_u32_offset_width_inline %packed {offset = 12, width = 4}
-  %13 = v_lshlrev_b32_src0_inline %12, 24
-  %unpacked = v_or_b32 %11, %13
+  %7 = v_lshl_add_u32_shift_imm %6, %5, 8
+  %8 = v_bfe_u32_offset_width_inline %packed {offset = 8, width = 4}
+  %9 = v_lshl_add_u32_shift_imm %8, %7, 16
+  %10 = v_bfe_u32_offset_width_inline %packed {offset = 12, width = 4}
+  %unpacked = v_lshl_add_u32_shift_imm %10, %9, 24
   return %unpacked
 }
 
@@ -141,17 +135,14 @@ low.func.def target(@target) abi(hal_kernel) @i8x2_to_s4x4_bitunpack_i8_result(%
   %8 = v_lshlrev_b32_src0_inline %packed, 24
   %9 = v_ashrrev_i32_src0_inline %8, 28
   %10 = v_and_b32_lit %9, 255
-  %11 = v_lshlrev_b32_src0_inline %10, 8
-  %12 = v_or_b32 %7, %11
-  %13 = v_lshlrev_b32_src0_inline %packed, 20
-  %14 = v_ashrrev_i32_src0_inline %13, 28
-  %15 = v_and_b32_lit %14, 255
-  %16 = v_lshlrev_b32_src0_inline %15, 16
-  %17 = v_or_b32 %12, %16
-  %18 = v_lshlrev_b32_src0_inline %packed, 16
-  %19 = v_ashrrev_i32_src0_inline %18, 28
-  %20 = v_and_b32_lit %19, 255
-  %21 = v_lshlrev_b32_src0_inline %20, 24
-  %unpacked = v_or_b32 %17, %21
+  %11 = v_lshl_add_u32_shift_imm %10, %7, 8
+  %12 = v_lshlrev_b32_src0_inline %packed, 20
+  %13 = v_ashrrev_i32_src0_inline %12, 28
+  %14 = v_and_b32_lit %13, 255
+  %15 = v_lshl_add_u32_shift_imm %14, %11, 16
+  %16 = v_lshlrev_b32_src0_inline %packed, 16
+  %17 = v_ashrrev_i32_src0_inline %16, 28
+  %18 = v_and_b32_lit %17, 255
+  %unpacked = v_lshl_add_u32_shift_imm %18, %15, 24
   return %unpacked
 }
