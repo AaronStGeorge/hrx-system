@@ -439,7 +439,7 @@ kernel.def target(@target) @index_assume_nonexclusive_result_width_rejected() {
 } launch() {
   %x = kernel.workitem.id<x> : index
   %stride = index.constant 16777216 : index
-  // ERROR@+1: TARGET/003 {subject_kind="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
+  // ERROR@+1: TARGET/003 {subject_role="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
   %raw = index.mul %x, %stride : index
   %first = index.assume %raw [range(%raw, 0, 1073741823)] : index
   %second = index.assume %raw [range(%raw, 0, 1073741823)] : index

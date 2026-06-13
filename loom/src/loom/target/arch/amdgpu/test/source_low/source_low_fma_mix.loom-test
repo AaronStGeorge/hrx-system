@@ -174,7 +174,7 @@ low.func.def target(@gfx11_target) abi(hal_kernel) @packed_i16_vector4_fmai(%a: 
 
 amdgpu.target<gfx1100> @gfx11_target
 func.def target(@gfx11_target) @packed_i16_vector3_fmai_diagnostic(%a: vector<3xi16>, %b: vector<3xi16>, %c: vector<3xi16>) -> (vector<3xi16>) {
-  // ERROR@+1: TARGET/003 {subject_kind="lane-count", subject_name="vector<i16>", constraint_key="amdgpu.arithmetic.vector_i16_packed_even_lanes"}
+  // ERROR@+1: TARGET/003 {subject_role="lane-count", subject_name="vector<i16>", constraint_key="amdgpu.arithmetic.vector_i16_packed_even_lanes"}
   %result = vector.fmai %a, %b, %c : vector<3xi16>
   func.return %result : vector<3xi16>
 }
