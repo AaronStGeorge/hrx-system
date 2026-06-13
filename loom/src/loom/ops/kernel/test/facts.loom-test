@@ -295,6 +295,50 @@ kernel.def @lane_predicate_cmpf_facts() {
 
 // ====
 
+kernel.def @scalar_conversion_lane_distribution_facts() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %lane = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : index
+  %condition = index.cmp eq, %lane, %zero : index
+  %wide_a = scalar.constant 300 : i32
+  %wide_b = scalar.constant 4 : i32
+  %wide = scf.select %condition, %wide_a, %wide_b : i32
+  %narrow = scalar.trunci %wide : i32 to i8
+  %byte_a = scalar.constant -1 : i8
+  %byte_b = scalar.constant 1 : i8
+  %byte = scf.select %condition, %byte_a, %byte_b : i8
+  %extended = scalar.extui %byte : i8 to i32
+  %narrow_is_varying = test.fact_lane_varying %narrow : i8 -> i1
+  %narrow_lo = test.fact_range_lo %narrow : i8 -> i64
+  %narrow_hi = test.fact_range_hi %narrow : i8 -> i64
+  %extended_is_varying = test.fact_lane_varying %extended : i32 -> i1
+  %extended_lo = test.fact_range_lo %extended : i32 -> i64
+  %extended_hi = test.fact_range_hi %extended : i32 -> i64
+  test.use %narrow_is_varying, %narrow_lo, %narrow_hi, %extended_is_varying, %extended_lo, %extended_hi : i1, i64, i64, i1, i64, i64
+  kernel.return
+}
+
+// ----
+kernel.def @scalar_conversion_lane_distribution_facts() {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %narrow_is_varying = scalar.constant true : i1
+  %narrow_lo = scalar.constant -128 : i64
+  %narrow_hi = scalar.constant 127 : i64
+  %extended_is_varying = scalar.constant true : i1
+  %extended_lo = scalar.constant 0 : i64
+  %extended_hi = scalar.constant 255 : i64
+  test.use %narrow_is_varying, %narrow_lo, %narrow_hi, %extended_is_varying, %extended_lo, %extended_hi : i1, i64, i64, i1, i64, i64
+  kernel.return
+}
+
+// ====
+
 kernel.def @default_hal_query_facts() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

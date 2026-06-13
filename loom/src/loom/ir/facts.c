@@ -28,8 +28,8 @@ static int64_t loom_value_facts_exact_i64_divisor(int64_t value) {
   return (value != 0 && value != INT64_MIN) ? llabs(value) : 1;
 }
 
-static void loom_value_facts_propagate_unary_distribution(
-    loom_value_facts_t input, loom_value_facts_t* out) {
+void loom_value_facts_propagate_unary_distribution(loom_value_facts_t input,
+                                                   loom_value_facts_t* out) {
   if (loom_value_facts_is_exact(*out)) {
     loom_value_facts_mark_uniform(out);
   } else if (loom_value_facts_is_lane_predicate(input) ||
@@ -40,8 +40,9 @@ static void loom_value_facts_propagate_unary_distribution(
   }
 }
 
-static void loom_value_facts_propagate_binary_distribution(
-    loom_value_facts_t lhs, loom_value_facts_t rhs, loom_value_facts_t* out) {
+void loom_value_facts_propagate_binary_distribution(loom_value_facts_t lhs,
+                                                    loom_value_facts_t rhs,
+                                                    loom_value_facts_t* out) {
   if (loom_value_facts_is_exact(*out)) {
     loom_value_facts_mark_uniform(out);
   } else if (loom_value_facts_is_lane_predicate(lhs) ||
@@ -55,9 +56,10 @@ static void loom_value_facts_propagate_binary_distribution(
   }
 }
 
-static void loom_value_facts_propagate_ternary_distribution(
-    loom_value_facts_t a, loom_value_facts_t b, loom_value_facts_t c,
-    loom_value_facts_t* out) {
+void loom_value_facts_propagate_ternary_distribution(loom_value_facts_t a,
+                                                     loom_value_facts_t b,
+                                                     loom_value_facts_t c,
+                                                     loom_value_facts_t* out) {
   if (loom_value_facts_is_exact(*out)) {
     loom_value_facts_mark_uniform(out);
   } else if (loom_value_facts_is_lane_predicate(a) ||

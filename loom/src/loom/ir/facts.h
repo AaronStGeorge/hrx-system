@@ -271,6 +271,23 @@ static inline void loom_value_facts_mark_subgroup_lane_mask(
   facts->flags |= LOOM_VALUE_FACT_SUBGROUP_LANE_MASK;
 }
 
+// Applies the conservative execution-distribution transfer for a unary op. An
+// exact result is uniform; otherwise lane-varying inputs produce lane-varying
+// results and uniform inputs produce uniform results.
+void loom_value_facts_propagate_unary_distribution(loom_value_facts_t input,
+                                                   loom_value_facts_t* out);
+
+// Applies the conservative execution-distribution transfer for a binary op.
+void loom_value_facts_propagate_binary_distribution(loom_value_facts_t lhs,
+                                                    loom_value_facts_t rhs,
+                                                    loom_value_facts_t* out);
+
+// Applies the conservative execution-distribution transfer for a ternary op.
+void loom_value_facts_propagate_ternary_distribution(loom_value_facts_t a,
+                                                     loom_value_facts_t b,
+                                                     loom_value_facts_t c,
+                                                     loom_value_facts_t* out);
+
 // Returns true when the integer fact domain proves the value is exactly zero.
 static inline bool loom_value_facts_is_zero(loom_value_facts_t facts) {
   return !loom_value_facts_is_float(facts) && facts.range_lo == 0 &&

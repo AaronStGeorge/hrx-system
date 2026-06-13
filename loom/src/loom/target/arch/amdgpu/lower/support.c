@@ -1591,10 +1591,6 @@ bool loom_amdgpu_source_value_prefers_vgpr(
              loom_amdgpu_source_value_prefers_vgpr(
                  module, fact_table, view_regions,
                  loom_scalar_shrui_rhs(defining_op));
-    case LOOM_OP_SCALAR_TRUNCI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-          module, fact_table, view_regions,
-          loom_scalar_trunci_input(defining_op));
     default:
       return loom_amdgpu_type_is_f32(source_type) ||
              loom_amdgpu_type_is_vector_32bit_register_range(source_type);

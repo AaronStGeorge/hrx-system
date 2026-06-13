@@ -42,4 +42,15 @@ iree_native_test(
     "loom-check"
 )
 
+iree_native_test(
+  NAME
+    "conversioni"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/conversioni.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
