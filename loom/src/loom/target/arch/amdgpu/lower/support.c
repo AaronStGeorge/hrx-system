@@ -920,6 +920,30 @@ static bool loom_amdgpu_value_feeds_native_mask_merge_arg(
   return false;
 }
 
+static bool loom_amdgpu_block_arg_has_cfg_predecessor(const loom_block_t* block,
+                                                      uint16_t arg_index) {
+  const loom_region_t* region = block != NULL ? block->parent_region : NULL;
+  if (region == NULL || arg_index >= block->arg_count) {
+    return false;
+  }
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* predecessor =
+        loom_region_const_block(region, block_index);
+    if (predecessor == NULL || predecessor->op_count == 0) {
+      continue;
+    }
+    const loom_op_t* terminator = loom_block_const_last_op(predecessor);
+    if (!loom_cfg_br_isa(terminator) || loom_cfg_br_dest(terminator) != block) {
+      continue;
+    }
+    if (arg_index < loom_cfg_br_args(terminator).count) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_amdgpu_scf_select_use_needs_native_i1_mask(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t source_value_id) {
@@ -1010,15 +1034,125 @@ static bool loom_amdgpu_source_value_is_durable_i1_bool(
              loom_module_value_type(module, loom_scalar_cmpi_lhs(defining_op)));
 }
 
-bool loom_amdgpu_source_value_is_native_i1_mask(
+static bool loom_amdgpu_source_value_can_lower_as_scc_i1(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_view_region_table_t* view_regions,
-    loom_value_id_t source_value_id) {
-  if (source_value_id >= module->values.count ||
+    loom_value_id_t source_value_id, loom_value_id_t excluded_value_id) {
+  if (source_value_id == excluded_value_id ||
+      source_value_id >= module->values.count ||
       !loom_amdgpu_type_is_i1(
           loom_module_value_type(module, source_value_id))) {
     return false;
   }
+  const loom_value_id_t next_excluded_value_id =
+      excluded_value_id == LOOM_VALUE_ID_INVALID ? source_value_id
+                                                 : excluded_value_id;
+  if (loom_amdgpu_source_value_facts_are_native_i1_mask(module, fact_table,
+                                                        source_value_id)) {
+    return false;
+  }
+
+  const loom_value_t* value = loom_module_value(module, source_value_id);
+  if (loom_value_is_block_arg(value)) {
+    const loom_block_t* block = loom_value_def_block(value);
+    return !loom_amdgpu_block_arg_has_cfg_predecessor(
+        block, loom_value_def_index(value));
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (defining_op == NULL) {
+    return true;
+  }
+  if (loom_value_def_index(value) != 0) {
+    return false;
+  }
+
+  if (loom_traits_are_fact_identity(
+          loom_op_effective_traits(module, defining_op))) {
+    if (defining_op->operand_count == 0) {
+      return false;
+    }
+    const loom_value_id_t source_identity_value_id =
+        loom_op_const_operands(defining_op)[0];
+    return source_identity_value_id != source_value_id &&
+           loom_amdgpu_source_value_can_lower_as_scc_i1(
+               module, fact_table, view_regions, source_identity_value_id,
+               next_excluded_value_id);
+  }
+
+  if (loom_scalar_constant_isa(defining_op)) {
+    return true;
+  }
+
+  if (loom_scalar_cmpi_isa(defining_op)) {
+    return !loom_amdgpu_source_value_prefers_vgpr(
+               module, fact_table, view_regions,
+               loom_scalar_cmpi_lhs(defining_op)) &&
+           !loom_amdgpu_source_value_prefers_vgpr(
+               module, fact_table, view_regions,
+               loom_scalar_cmpi_rhs(defining_op));
+  }
+
+  if (loom_scalar_cmpf_isa(defining_op)) {
+    return !loom_amdgpu_source_value_prefers_vgpr(
+               module, fact_table, view_regions,
+               loom_scalar_cmpf_lhs(defining_op)) &&
+           !loom_amdgpu_source_value_prefers_vgpr(
+               module, fact_table, view_regions,
+               loom_scalar_cmpf_rhs(defining_op));
+  }
+
+  if (loom_index_cmp_isa(defining_op)) {
+    return !loom_amdgpu_source_value_prefers_vgpr(
+               module, fact_table, view_regions,
+               loom_index_cmp_lhs(defining_op)) &&
+           !loom_amdgpu_source_value_prefers_vgpr(
+               module, fact_table, view_regions,
+               loom_index_cmp_rhs(defining_op));
+  }
+
+  if (loom_scalar_andi_isa(defining_op)) {
+    return loom_amdgpu_source_value_can_lower_as_scc_i1(
+               module, fact_table, view_regions,
+               loom_scalar_andi_lhs(defining_op), next_excluded_value_id) &&
+           loom_amdgpu_source_value_can_lower_as_scc_i1(
+               module, fact_table, view_regions,
+               loom_scalar_andi_rhs(defining_op), next_excluded_value_id);
+  }
+
+  if (loom_scalar_ori_isa(defining_op)) {
+    return loom_amdgpu_source_value_can_lower_as_scc_i1(
+               module, fact_table, view_regions,
+               loom_scalar_ori_lhs(defining_op), next_excluded_value_id) &&
+           loom_amdgpu_source_value_can_lower_as_scc_i1(
+               module, fact_table, view_regions,
+               loom_scalar_ori_rhs(defining_op), next_excluded_value_id);
+  }
+
+  if (loom_scalar_xori_isa(defining_op)) {
+    return loom_amdgpu_source_value_can_lower_as_scc_i1(
+               module, fact_table, view_regions,
+               loom_scalar_xori_lhs(defining_op), next_excluded_value_id) &&
+           loom_amdgpu_source_value_can_lower_as_scc_i1(
+               module, fact_table, view_regions,
+               loom_scalar_xori_rhs(defining_op), next_excluded_value_id);
+  }
+
+  return false;
+}
+
+static bool loom_amdgpu_source_value_is_native_i1_mask_excluding(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id, loom_value_id_t excluded_value_id) {
+  if (source_value_id == excluded_value_id ||
+      source_value_id >= module->values.count ||
+      !loom_amdgpu_type_is_i1(
+          loom_module_value_type(module, source_value_id))) {
+    return false;
+  }
+  const loom_value_id_t next_excluded_value_id =
+      excluded_value_id == LOOM_VALUE_ID_INVALID ? source_value_id
+                                                 : excluded_value_id;
   if (loom_amdgpu_source_value_facts_are_native_i1_mask(module, fact_table,
                                                         source_value_id)) {
     return true;
@@ -1032,6 +1166,29 @@ bool loom_amdgpu_source_value_is_native_i1_mask(
   if (loom_amdgpu_vector_constructor_use_needs_native_i1_mask(
           module, source_value_id)) {
     return true;
+  }
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(value, use) {
+    if (loom_amdgpu_source_value_can_lower_as_scc_i1(
+            module, fact_table, view_regions, source_value_id,
+            next_excluded_value_id)) {
+      continue;
+    }
+    const loom_op_t* user_op = loom_use_user_op(*use);
+    const uint16_t operand_index = loom_use_operand_index(*use);
+    if (!loom_cfg_br_isa(user_op)) {
+      continue;
+    }
+    const loom_block_t* dest = loom_cfg_br_dest(user_op);
+    if (operand_index < dest->arg_count) {
+      const loom_value_id_t dest_arg = loom_block_arg_id(dest, operand_index);
+      if (dest_arg != source_value_id &&
+          loom_amdgpu_source_value_is_native_i1_mask_excluding(
+              module, fact_table, view_regions, dest_arg,
+              next_excluded_value_id)) {
+        return true;
+      }
+    }
   }
   if (loom_value_is_block_arg(value)) {
     return false;
@@ -1050,8 +1207,9 @@ bool loom_amdgpu_source_value_is_native_i1_mask(
     const loom_value_id_t source_identity_value_id =
         loom_op_const_operands(defining_op)[result_index];
     return source_identity_value_id != source_value_id &&
-           loom_amdgpu_source_value_is_native_i1_mask(
-               module, fact_table, view_regions, source_identity_value_id);
+           loom_amdgpu_source_value_is_native_i1_mask_excluding(
+               module, fact_table, view_regions, source_identity_value_id,
+               next_excluded_value_id);
   }
 
   if (loom_scalar_cmpi_isa(defining_op) && loom_value_def_index(value) == 0) {
@@ -1082,34 +1240,42 @@ bool loom_amdgpu_source_value_is_native_i1_mask(
   }
 
   if (loom_scalar_andi_isa(defining_op) && loom_value_def_index(value) == 0) {
-    return loom_amdgpu_source_value_is_native_i1_mask(
+    return loom_amdgpu_source_value_is_native_i1_mask_excluding(
                module, fact_table, view_regions,
-               loom_scalar_andi_lhs(defining_op)) ||
-           loom_amdgpu_source_value_is_native_i1_mask(
+               loom_scalar_andi_lhs(defining_op), next_excluded_value_id) ||
+           loom_amdgpu_source_value_is_native_i1_mask_excluding(
                module, fact_table, view_regions,
-               loom_scalar_andi_rhs(defining_op));
+               loom_scalar_andi_rhs(defining_op), next_excluded_value_id);
   }
 
   if (loom_scalar_ori_isa(defining_op) && loom_value_def_index(value) == 0) {
-    return loom_amdgpu_source_value_is_native_i1_mask(
+    return loom_amdgpu_source_value_is_native_i1_mask_excluding(
                module, fact_table, view_regions,
-               loom_scalar_ori_lhs(defining_op)) ||
-           loom_amdgpu_source_value_is_native_i1_mask(
+               loom_scalar_ori_lhs(defining_op), next_excluded_value_id) ||
+           loom_amdgpu_source_value_is_native_i1_mask_excluding(
                module, fact_table, view_regions,
-               loom_scalar_ori_rhs(defining_op));
+               loom_scalar_ori_rhs(defining_op), next_excluded_value_id);
   }
 
   if (loom_scalar_xori_isa(defining_op) && loom_value_def_index(value) == 0) {
-    return loom_amdgpu_source_value_is_native_i1_mask(
+    return loom_amdgpu_source_value_is_native_i1_mask_excluding(
                module, fact_table, view_regions,
-               loom_scalar_xori_lhs(defining_op)) ||
-           loom_amdgpu_source_value_is_native_i1_mask(
+               loom_scalar_xori_lhs(defining_op), next_excluded_value_id) ||
+           loom_amdgpu_source_value_is_native_i1_mask_excluding(
                module, fact_table, view_regions,
-               loom_scalar_xori_rhs(defining_op));
+               loom_scalar_xori_rhs(defining_op), next_excluded_value_id);
   }
 
   return loom_kernel_subgroup_shuffle_isa(defining_op) &&
          loom_value_def_index(value) == 1;
+}
+
+bool loom_amdgpu_source_value_is_native_i1_mask(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id) {
+  return loom_amdgpu_source_value_is_native_i1_mask_excluding(
+      module, fact_table, view_regions, source_value_id, LOOM_VALUE_ID_INVALID);
 }
 
 bool loom_amdgpu_source_value_is_uniform_subgroup_lane_mask(
