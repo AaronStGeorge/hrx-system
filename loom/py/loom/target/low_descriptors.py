@@ -202,6 +202,20 @@ class DescriptorFlag(CEnum):
     PSEUDO = "LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO"
 
 
+class DescriptorAsmSurface(Enum):
+    """Low-asm product surface promised by a descriptor row.
+
+    This is generator-only metadata. It classifies whether a descriptor is
+    directly authorable in low asm, intentionally structural/generated-only, or
+    otherwise outside the user-facing asm surface. The C descriptor table gets
+    the resulting canonical asm form rows, not this policy layer.
+    """
+
+    AUTHORABLE = "authorable"
+    STRUCTURAL = "structural"
+    GENERATED_ONLY = "generated_only"
+
+
 class OperandFormMatchKind(CEnum):
     ALL_EQUAL_I64 = "LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64"
     ALL_EQUAL_EXACT_I64 = "LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_EXACT_I64"
@@ -308,6 +322,7 @@ class AsmImmediate:
 @dataclass(frozen=True, slots=True)
 class AsmForm:
     mnemonic: str | None = None
+    native_assembly_mnemonic: str | None = None
     results: tuple[str, ...] = ()
     operands: tuple[str, ...] = ()
     immediates: tuple[AsmImmediate, ...] = ()
@@ -460,6 +475,8 @@ class Descriptor:
     immediates: tuple[Immediate, ...] = ()
     encoding_field_values: tuple[EncodingFieldValue, ...] = ()
     asm_forms: tuple[AsmForm, ...] = ()
+    asm_surface: DescriptorAsmSurface = DescriptorAsmSurface.AUTHORABLE
+    asm_surface_reason: str = ""
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()
     storage_leases: tuple[StorageLease, ...] = ()
@@ -493,6 +510,7 @@ class DescriptorSet:
     enum_domains: tuple[EnumDomain, ...] = ()
     categories: tuple[DescriptorCategory, ...] = ()
     default_category: DescriptorCategory | None = None
+    requires_explicit_asm_surface: bool = False
 
     def __post_init__(self) -> None:
         if (

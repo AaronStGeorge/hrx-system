@@ -1134,9 +1134,11 @@ def _v_dot4_i32_iu8_overlay(
             rhs_signed=rhs_signed,
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        # Native asm forms cannot yet spell the fixed NEG source selectors, so
-        # the target-low descriptor key remains the only unambiguous text form.
         asm_forms=(),
+        asm_surface=DescriptorAsmSurface.STRUCTURAL,
+        asm_surface_reason=(
+            "native asm forms cannot yet spell the fixed NEG source selectors"
+        ),
     )
 
 
@@ -1236,9 +1238,11 @@ def _v_dot8_i32_iu4_overlay(
             rhs_signed=rhs_signed,
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        # Native asm forms cannot yet spell the fixed NEG source selectors, so
-        # the target-low descriptor key remains the only unambiguous text form.
         asm_forms=(),
+        asm_surface=DescriptorAsmSurface.STRUCTURAL,
+        asm_surface_reason=(
+            "native asm forms cannot yet spell the fixed NEG source selectors"
+        ),
     )
 
 

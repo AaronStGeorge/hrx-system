@@ -423,6 +423,12 @@ static iree_status_t loom_low_verify_asm_form(
   IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
       descriptor_set, asm_form->mnemonic_string_offset, "asm_form.mnemonic",
       &mnemonic));
+  if (asm_form->native_assembly_mnemonic_string_offset !=
+      LOOM_LOW_STRING_OFFSET_NONE) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+        descriptor_set, asm_form->native_assembly_mnemonic_string_offset,
+        "asm_form.native_assembly_mnemonic", NULL));
+  }
   if (asm_form->descriptor_ordinal >= descriptor_set->descriptor_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "low asm form %" PRIu32
@@ -482,6 +488,12 @@ static iree_status_t loom_low_verify_asm_forms(
       IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
           descriptor_set, asm_form->mnemonic_string_offset, "asm_form.mnemonic",
           &mnemonic));
+      if (asm_form->native_assembly_mnemonic_string_offset !=
+          LOOM_LOW_STRING_OFFSET_NONE) {
+        IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+            descriptor_set, asm_form->native_assembly_mnemonic_string_offset,
+            "asm_form.native_assembly_mnemonic", NULL));
+      }
     } else {
       IREE_RETURN_IF_ERROR(
           loom_low_verify_asm_form(descriptor_set, i, &mnemonic));

@@ -293,6 +293,8 @@ void AddAsmForms(TestTables* tables) {
 
   tables->asm_forms[0].mnemonic_string_offset =
       TEST_STRING_OFFSET(mnemonic_add);
+  tables->asm_forms[0].native_assembly_mnemonic_string_offset =
+      LOOM_LOW_STRING_OFFSET_NONE;
   tables->asm_forms[0].descriptor_ordinal = 1;
   tables->asm_forms[0].result_operand_index_start = 0;
   tables->asm_forms[0].result_operand_index_count = 1;
@@ -303,6 +305,8 @@ void AddAsmForms(TestTables* tables) {
 
   tables->asm_forms[1].mnemonic_string_offset =
       TEST_STRING_OFFSET(mnemonic_const);
+  tables->asm_forms[1].native_assembly_mnemonic_string_offset =
+      LOOM_LOW_STRING_OFFSET_NONE;
   tables->asm_forms[1].descriptor_ordinal = 0;
   tables->asm_forms[1].result_operand_index_start = 3;
   tables->asm_forms[1].result_operand_index_count = 1;
@@ -1394,6 +1398,27 @@ TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {
   asm_form_ordinal =
       loom_low_descriptor_set_lookup_asm_form(&tables.set, IREE_SV("missing"));
   EXPECT_EQ(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
+}
+
+TEST(LowDescriptorsTest, AcceptsAsmFormNativeAssemblyMnemonic) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.asm_forms[0].native_assembly_mnemonic_string_offset =
+      TEST_STRING_OFFSET(mnemonic_const);
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsEmptyAsmFormNativeAssemblyMnemonic) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.asm_forms[0].native_assembly_mnemonic_string_offset =
+      TEST_STRING_OFFSET(empty);
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
 }
 
 TEST(LowDescriptorsTest, HidesSharedExtensionAsmFormsFromBaseView) {

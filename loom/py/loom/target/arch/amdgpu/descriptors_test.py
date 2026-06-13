@@ -1653,12 +1653,13 @@ def _assert_buffer_load_lds_overlay(
     global_width_bits: int,
     workgroup_width_bits: int,
     semantic_tag: str,
-    mnemonic: str,
+    native_mnemonic: str,
+    asm_mnemonic: str,
     implicit_data_format: str,
     off_zero: bool,
 ) -> None:
     assert descriptor.semantic_tag == semantic_tag
-    assert descriptor.mnemonic == mnemonic
+    assert descriptor.mnemonic == native_mnemonic
     assert descriptor.schedule_class == _SCHEDULE_VMEM_LOAD_LDS
     assert descriptor.effects == (
         Effect(
@@ -1702,6 +1703,17 @@ def _assert_buffer_load_lds_overlay(
         for operand in descriptor.implicit_operands
     )
     assert len(descriptor.operands) == (1 if off_zero else 3)
+    forms = descriptor.asm_forms
+    assert forms is not None
+    form = forms[0]
+    expected_form_mnemonic = f"{asm_mnemonic}_off_zero" if off_zero else asm_mnemonic
+    assert form.mnemonic == expected_form_mnemonic
+    assert form.native_assembly_mnemonic == native_mnemonic
+    assert form.results == ()
+    assert form.operands == (
+        ("resource", "m0") if off_zero else ("resource", "vaddr", "soffset", "m0")
+    )
+    assert form.immediates[0].name == "offset"
 
 
 def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
@@ -1954,7 +1966,8 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
                 global_width_bits=global_width_bits,
                 workgroup_width_bits=workgroup_width_bits,
                 semantic_tag=semantic_tag,
-                mnemonic=f"buffer_load_{suffix}",
+                native_mnemonic=f"buffer_load_{suffix}",
+                asm_mnemonic=f"buffer_load_lds_{suffix}",
                 implicit_data_format=implicit_data_format,
                 off_zero=False,
             )
@@ -1963,7 +1976,8 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
                 global_width_bits=global_width_bits,
                 workgroup_width_bits=workgroup_width_bits,
                 semantic_tag=semantic_tag,
-                mnemonic=f"buffer_load_{suffix}",
+                native_mnemonic=f"buffer_load_{suffix}",
+                asm_mnemonic=f"buffer_load_lds_{suffix}",
                 implicit_data_format=implicit_data_format,
                 off_zero=True,
             )
@@ -1981,7 +1995,8 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
             global_width_bits=width_bits,
             workgroup_width_bits=width_bits,
             semantic_tag=f"memory.global_to_workgroup.u{width_bits}",
-            mnemonic=f"buffer_load_{suffix}",
+            native_mnemonic=f"buffer_load_{suffix}",
+            asm_mnemonic=f"buffer_load_lds_{suffix}",
             implicit_data_format=f"FMT_NUM_B{width_bits}",
             off_zero=False,
         )
@@ -1990,7 +2005,8 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
             global_width_bits=width_bits,
             workgroup_width_bits=width_bits,
             semantic_tag=f"memory.global_to_workgroup.u{width_bits}",
-            mnemonic=f"buffer_load_{suffix}",
+            native_mnemonic=f"buffer_load_{suffix}",
+            asm_mnemonic=f"buffer_load_lds_{suffix}",
             implicit_data_format=f"FMT_NUM_B{width_bits}",
             off_zero=True,
         )
@@ -2302,7 +2318,13 @@ def test_vmem_narrow_load_descriptors_cover_active_xml_families() -> None:
                     memory_space=MemorySpace.GLOBAL,
                     implicit_data_format=implicit_data_format,
                 )
-                assert descriptors[buffer_load_off_zero_key].asm_forms == ()
+                off_zero_forms = descriptors[buffer_load_off_zero_key].asm_forms
+                assert off_zero_forms is not None
+                off_zero_form = off_zero_forms[0]
+                assert off_zero_form.mnemonic == f"buffer_load_{suffix}_off_zero"
+                assert off_zero_form.results == ("dst",)
+                assert off_zero_form.operands == ("resource",)
+                assert off_zero_form.immediates[0].name == "offset"
             else:
                 assert descriptors[buffer_load_key].operand_forms == ()
                 assert buffer_load_off_zero_key not in descriptors

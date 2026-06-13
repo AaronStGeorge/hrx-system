@@ -26,6 +26,7 @@ from loom.target.low_descriptors import (
     AsmForm,
     Constraint,
     Descriptor,
+    DescriptorAsmSurface,
     DescriptorFlag,
     DescriptorSet,
     Effect,
@@ -102,6 +103,27 @@ def _select_descriptors(spec: DescriptorSet, allowlist: DescriptorAllowlist | No
                     changed = True
 
     return [descriptor for descriptor in spec.descriptors if descriptor.key in selected]
+
+
+def _validate_descriptor_asm_surface(spec: DescriptorSet, selected_descriptors: Sequence[Descriptor]) -> None:
+    if not spec.requires_explicit_asm_surface:
+        return
+    for descriptor in selected_descriptors:
+        if descriptor.asm_surface is DescriptorAsmSurface.AUTHORABLE:
+            if descriptor.asm_surface_reason:
+                raise ValueError(f"descriptor set '{spec.key}' descriptor '{descriptor.key}' is authorable asm but has an asm surface reason")
+            if len(descriptor.asm_forms) != 1:
+                raise ValueError(f"descriptor set '{spec.key}' descriptor '{descriptor.key}' is authorable asm but does not declare exactly one canonical asm form; found {len(descriptor.asm_forms)}")
+            if DescriptorFlag.PSEUDO in descriptor.flags:
+                raise ValueError(f"descriptor set '{spec.key}' descriptor '{descriptor.key}' is pseudo but classified as authorable asm")
+            continue
+
+        if not descriptor.asm_surface_reason:
+            raise ValueError(f"descriptor set '{spec.key}' descriptor '{descriptor.key}' is {descriptor.asm_surface.value} asm but does not explain the non-authorable surface")
+        if descriptor.asm_forms:
+            raise ValueError(f"descriptor set '{spec.key}' descriptor '{descriptor.key}' is {descriptor.asm_surface.value} asm but still declares {len(descriptor.asm_forms)} asm form(s)")
+        if DescriptorFlag.PSEUDO in descriptor.flags and descriptor.asm_surface is not DescriptorAsmSurface.GENERATED_ONLY:
+            raise ValueError(f"descriptor set '{spec.key}' descriptor '{descriptor.key}' is pseudo but not classified as generated-only asm")
 
 
 def _index_descriptor_fields(
@@ -259,6 +281,19 @@ def _compile_asm_form(
     operand_indices, immediate_indices = _index_descriptor_fields(descriptor)
 
     mnemonic_label = string_pool.intern(f"asm_mnemonic_{descriptor.key}_{form_ordinal}", mnemonic)
+    native_assembly_mnemonic_label = None
+    native_assembly_mnemonic = asm_form.native_assembly_mnemonic
+    if native_assembly_mnemonic is not None:
+        if native_assembly_mnemonic == "":
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' has an empty native assembly mnemonic")
+        if native_assembly_mnemonic == mnemonic:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' repeats its low asm mnemonic as a native assembly override")
+        if len(native_assembly_mnemonic.encode()) > 255:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native assembly mnemonic '{native_assembly_mnemonic}' exceeds 255 bytes")
+        native_assembly_mnemonic_label = string_pool.intern(
+            f"asm_native_mnemonic_{descriptor.key}_{form_ordinal}",
+            native_assembly_mnemonic,
+        )
 
     result_indices = []
     for field_name in asm_form.results:
@@ -316,6 +351,8 @@ def _compile_asm_form(
         descriptor_ordinal=descriptor_ordinal,
         mnemonic_label=mnemonic_label,
         mnemonic=mnemonic,
+        native_assembly_mnemonic_label=native_assembly_mnemonic_label,
+        native_assembly_mnemonic=native_assembly_mnemonic,
         result_indices=tuple(result_indices),
         operand_indices=tuple(operand_order),
         immediates=tuple(immediate_order),
@@ -359,6 +396,7 @@ def compile_descriptor_set(
     selected_descriptors = _select_descriptors(spec, allowlist)
     if not selected_descriptors:
         raise ValueError(f"descriptor set '{spec.key}' selected no descriptors")
+    _validate_descriptor_asm_surface(spec, selected_descriptors)
     descriptor_ordinals = {descriptor.key: i for i, descriptor in enumerate(selected_descriptors)}
     for reg_class in spec.reg_classes:
         if reg_class.full_register_part_mask == 0:

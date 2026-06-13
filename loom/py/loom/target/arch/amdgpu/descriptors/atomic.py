@@ -14,6 +14,42 @@ from __future__ import annotations
 from .common import *
 
 
+def _flat_atomic_asm(
+    *,
+    mnemonic: str,
+    returns_old_value: bool,
+    implicit_m0: bool,
+    cache_fields: tuple[tuple[str, int], ...],
+) -> tuple[AsmForm, ...]:
+    operands: tuple[str, ...] = ("addr", "value")
+    if implicit_m0:
+        operands = (*operands, "m0")
+    return _asm(
+        mnemonic=f"{mnemonic}_rtn" if returns_old_value else mnemonic,
+        native_assembly_mnemonic=mnemonic if returns_old_value else None,
+        results=("dst",) if returns_old_value else (),
+        operands=operands,
+        immediates=_memory_asm_immediate_names(cache_fields),
+        named_immediates=True,
+    )
+
+
+def _buffer_atomic_asm(
+    *,
+    mnemonic: str,
+    returns_old_value: bool,
+    cache_fields: tuple[tuple[str, int], ...],
+) -> tuple[AsmForm, ...]:
+    return _asm(
+        mnemonic=f"{mnemonic}_rtn" if returns_old_value else mnemonic,
+        native_assembly_mnemonic=mnemonic if returns_old_value else None,
+        results=("dst",) if returns_old_value else (),
+        operands=("value", "resource", "vaddr", "soffset"),
+        immediates=_memory_asm_immediate_names(cache_fields),
+        named_immediates=True,
+    )
+
+
 def _global_atomic_overlay(
     *,
     descriptor_key: str,
@@ -579,7 +615,12 @@ def _flat_atomic_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=_generic_atomic_effects(32, counter_id=counter_id),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_flat_atomic_asm(
+            mnemonic=mnemonic,
+            returns_old_value=returns_old_value,
+            implicit_m0=implicit_m0,
+            cache_fields=cache_immediate_fields,
+        ),
     )
 
 
@@ -663,7 +704,12 @@ def _flat_atomic_cmpswap_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=_generic_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_flat_atomic_asm(
+            mnemonic="flat_atomic_cmpswap_b32",
+            returns_old_value=True,
+            implicit_m0=implicit_m0,
+            cache_fields=cache_immediate_fields,
+        ),
     )
 
 
@@ -859,7 +905,11 @@ def _buffer_atomic_overlay(
         effects=_global_atomic_effects(32, counter_id=counter_id),
         constraints=constraints,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_buffer_atomic_asm(
+            mnemonic=mnemonic,
+            returns_old_value=returns_old_value,
+            cache_fields=cache_immediate_fields,
+        ),
     )
 
 
@@ -928,7 +978,11 @@ def _buffer_atomic_cmpswap_overlay(
         effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
         constraints=_DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_buffer_atomic_asm(
+            mnemonic="buffer_atomic_cmpswap_b32",
+            returns_old_value=True,
+            cache_fields=cache_immediate_fields,
+        ),
     )
 
 

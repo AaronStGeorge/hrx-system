@@ -34,6 +34,8 @@ def _clone_asm_form_for_view(
         descriptor_ordinal=descriptor_ordinal,
         mnemonic_label=asm_form.mnemonic_label,
         mnemonic=asm_form.mnemonic,
+        native_assembly_mnemonic_label=asm_form.native_assembly_mnemonic_label,
+        native_assembly_mnemonic=asm_form.native_assembly_mnemonic,
         result_indices=asm_form.result_indices,
         operand_indices=asm_form.operand_indices,
         immediates=asm_form.immediates,

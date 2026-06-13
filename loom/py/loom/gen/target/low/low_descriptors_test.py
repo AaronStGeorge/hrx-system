@@ -23,6 +23,7 @@ from loom.target.low_descriptors import (
     AsmImmediate,
     Constraint,
     ConstraintKind,
+    DescriptorAsmSurface,
     DescriptorCategory,
     DescriptorFlag,
     EncodingFieldValue,
@@ -117,6 +118,138 @@ def test_descriptor_set_rejects_unknown_descriptor_category() -> None:
             categories=(DescriptorCategory("control"),),
             descriptors=(descriptor,),
         )
+
+
+def test_descriptor_set_requires_canonical_asm_for_authorable_surface() -> None:
+    descriptor = replace(TEST_LOW_ADD_I32_DESCRIPTOR, asm_forms=())
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor set 'test.low.core' descriptor 'test.add.i32' is authorable asm but does not declare exactly one canonical asm form; found 0"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_descriptor_set_rejects_authorable_surface_reason() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_surface_reason="temporary note that should not be in authorable policy",
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor set 'test.low.core' descriptor 'test.add.i32' is authorable asm but has an asm surface reason"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_descriptor_set_rejects_authorable_pseudo_surface() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+        flags=(DescriptorFlag.PSEUDO,),
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor set 'test.low.core' descriptor 'test.add.i32' is pseudo but classified as authorable asm"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_descriptor_set_requires_reason_for_non_authorable_surface() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(),
+        asm_surface=DescriptorAsmSurface.STRUCTURAL,
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor set 'test.low.core' descriptor 'test.add.i32' is structural asm but does not explain the non-authorable surface"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_descriptor_set_rejects_non_authorable_surface_with_asm_forms() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_surface=DescriptorAsmSurface.STRUCTURAL,
+        asm_surface_reason="represented by structural low asm syntax",
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor set 'test.low.core' descriptor 'test.add.i32' is structural asm but still declares 1 asm form(s)"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_descriptor_set_rejects_non_generated_only_pseudo_surface() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(),
+        asm_surface=DescriptorAsmSurface.STRUCTURAL,
+        asm_surface_reason="represented by structural low asm syntax",
+        encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+        flags=(DescriptorFlag.PSEUDO,),
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor set 'test.low.core' descriptor 'test.add.i32' is pseudo but not classified as generated-only asm"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_descriptor_set_accepts_explained_generated_only_pseudo_surface() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(),
+        asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
+        asm_surface_reason="lowering synthesizes this pseudo before packet selection",
+        encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+        flags=(DescriptorFlag.PSEUDO,),
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert ".canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE" in generated.source
 
 
 def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
@@ -473,6 +606,68 @@ def test_generator_rejects_empty_asm_form_mnemonic() -> None:
     with pytest.raises(
         ValueError,
         match=re.escape("descriptor 'test.add.i32' asm form specifies an empty mnemonic"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_emits_asm_form_native_assembly_mnemonic() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                mnemonic="test.add.i32_low",
+                native_assembly_mnemonic="test.add.i32",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert '"test.add.i32_low"' in generated.source
+    assert '"test.add.i32"' in generated.source
+    assert ".native_assembly_mnemonic_string_offset = " in generated.source
+    assert ".native_assembly_mnemonic_string_offset = LOOM_LOW_STRING_OFFSET_NONE" not in generated.source
+
+
+def test_generator_rejects_empty_asm_form_native_assembly_mnemonic() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                native_assembly_mnemonic="",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor 'test.add.i32' asm form 'test.add.i32' has an empty native assembly mnemonic"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_redundant_asm_form_native_assembly_mnemonic() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                native_assembly_mnemonic="test.add.i32",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor 'test.add.i32' asm form 'test.add.i32' repeats its low asm mnemonic as a native assembly override"),
     ):
         generate_descriptor_set(descriptor_set)
 

@@ -625,6 +625,20 @@ static iree_status_t loom_amdgpu_lookup_canonical_asm_form(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_asm_form_native_mnemonic(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t* form, iree_string_view_t* out_mnemonic) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  loom_bstring_table_offset_t string_offset = form->mnemonic_string_offset;
+  if (form->native_assembly_mnemonic_string_offset !=
+      LOOM_LOW_STRING_OFFSET_NONE) {
+    string_offset = form->native_assembly_mnemonic_string_offset;
+  }
+  return loom_native_assembly_descriptor_string(descriptor_set, string_offset,
+                                                out_mnemonic);
+}
+
 static iree_status_t loom_amdgpu_append_descriptor_value_list(
     const loom_native_assembly_packet_context_t* context) {
   const loom_low_descriptor_set_t* descriptor_set =
@@ -952,14 +966,12 @@ static iree_status_t loom_amdgpu_append_asm_form_immediates(
 
 static iree_status_t loom_amdgpu_append_canonical_asm_form_packet(
     const loom_native_assembly_packet_context_t* context) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   const loom_low_asm_form_t* form = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_canonical_asm_form(context, &form));
   iree_string_view_t mnemonic = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-      descriptor_set, form->mnemonic_string_offset, &mnemonic));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_asm_form_native_mnemonic(context, form, &mnemonic));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_string(context->builder, mnemonic));
   bool in_list = false;
@@ -1032,16 +1044,8 @@ static iree_status_t loom_amdgpu_append_memory_packet(
     const loom_low_asm_form_t* form = NULL;
     IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_canonical_asm_form(context, &form));
     iree_string_view_t mnemonic = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-        context->schedule->target.descriptor_set, form->mnemonic_string_offset,
-        &mnemonic));
-    // Fixed-SOFFSET SMEM forms use a unique low-asm mnemonic; native assembly
-    // still spells the ordinary ISA mnemonic.
-    if (iree_string_view_ends_with(mnemonic, IREE_SV("_offset_only"))) {
-      IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-          context->schedule->target.descriptor_set,
-          descriptor->mnemonic_string_offset, &mnemonic));
-    }
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_asm_form_native_mnemonic(context, form, &mnemonic));
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_string(context->builder, mnemonic));
     bool in_list = false;

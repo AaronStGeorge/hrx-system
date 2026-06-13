@@ -299,6 +299,7 @@ def _asm_form_row_lines(
     return [
         [
             f".mnemonic_string_offset = {pool.ref(asm_form.mnemonic_label)},",
+            f".native_assembly_mnemonic_string_offset = {c_spelling.optional_string_expr(pool, asm_form.native_assembly_mnemonic_label)},",
             f".descriptor_ordinal = {asm_form.descriptor_ordinal},",
             f".result_operand_index_start = {asm_form.result_index_start},",
             f".result_operand_index_count = {len(asm_form.result_indices)},",

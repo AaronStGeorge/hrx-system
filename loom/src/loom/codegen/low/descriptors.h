@@ -754,6 +754,8 @@ typedef struct loom_low_asm_immediate_t {
 typedef struct loom_low_asm_form_t {
   // String-table offset for the unqualified asm mnemonic.
   loom_bstring_table_offset_t mnemonic_string_offset;
+  // Optional string-table offset for the native assembly mnemonic.
+  loom_bstring_table_offset_t native_assembly_mnemonic_string_offset;
   // Descriptor ordinal selected by this asm form.
   uint32_t descriptor_ordinal;
   // First descriptor-local result operand index in asm_operand_indices.

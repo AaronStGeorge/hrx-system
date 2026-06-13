@@ -68,6 +68,7 @@ from loom.target.low_descriptors import (
     Constraint,
     ConstraintKind,
     Descriptor,
+    DescriptorAsmSurface,
     DescriptorCategory,
     DescriptorFlag,
     DescriptorSet,
@@ -365,6 +366,7 @@ def _amdgpu_core_descriptor_set(
         descriptors=descriptors,
         descriptor_set_ordinal=amdgpu_descriptor_set_ordinal(key),
         categories=categories,
+        requires_explicit_asm_surface=True,
     )
 
 
@@ -769,6 +771,7 @@ def _common_scalar_vector_memory_schedule_classes(
 def _asm(
     *,
     mnemonic: str | None = None,
+    native_assembly_mnemonic: str | None = None,
     results: tuple[str, ...] = (),
     operands: tuple[str, ...] = (),
     immediates: tuple[str, ...] = (),
@@ -777,6 +780,7 @@ def _asm(
     return (
         AsmForm(
             mnemonic=mnemonic,
+            native_assembly_mnemonic=native_assembly_mnemonic,
             results=results,
             operands=operands,
             immediates=tuple(
@@ -1791,6 +1795,8 @@ def _hal_buffer_descriptor_pseudos() -> tuple[Descriptor, ...]:
             schedule_class=_SCHEDULE_SALU,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
+            asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
+            asm_surface_reason="expanded by AMDGPU HAL buffer descriptor lowering",
         ),
         Descriptor(
             key="amdgpu.hal.buffer_descriptor.extent",
@@ -1805,6 +1811,8 @@ def _hal_buffer_descriptor_pseudos() -> tuple[Descriptor, ...]:
             schedule_class=_SCHEDULE_SALU,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
+            asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
+            asm_surface_reason="expanded by AMDGPU HAL buffer descriptor lowering",
         ),
     )
 
@@ -2402,6 +2410,7 @@ __all__ = (
     "Constraint",
     "ConstraintKind",
     "Descriptor",
+    "DescriptorAsmSurface",
     "DescriptorCategory",
     "DescriptorFlag",
     "DescriptorSet",
