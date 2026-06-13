@@ -101,6 +101,7 @@ loom_cc_library(
     hdrs = ["module_emitter.h"],
     deps = [
         ":core",
+        ":target_env",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:function",
@@ -110,6 +111,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/llvmir",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:launch",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target:types",

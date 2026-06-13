@@ -19,11 +19,14 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/llvmir/descriptors/descriptors.h"
 #include "loom/target/emit/llvmir/builder.h"
+#include "loom/target/emit/llvmir/target_env.h"
+#include "loom/target/launch.h"
 #include "loom/target/registers.h"
 
 #define LOOM_LLVMIR_LOW_EMITTER_KEY IREE_SV("llvmir.low")
 #define LOOM_LLVMIR_GENERIC_CORE_DESCRIPTOR_SET_KEY \
   IREE_SV("llvmir.generic.core")
+#define LOOM_LLVMIR_AMDGPU_TARGET_TRIPLE IREE_SVL("amdgcn-amd-amdhsa")
 
 typedef enum loom_llvmir_emit_core_type_e {
   LOOM_LLVMIR_EMIT_CORE_TYPE_I1 = 0,
@@ -68,6 +71,17 @@ typedef struct loom_llvmir_emit_memory_info_t {
   loom_llvmir_emit_memory_flags_t flags;
 } loom_llvmir_emit_memory_info_t;
 
+typedef struct loom_llvmir_emit_abi_projection_t {
+  // Target ABI family selected by the resolved export plan.
+  loom_target_abi_kind_t abi_kind;
+  // LLVM target triple that owns this ABI spelling.
+  iree_string_view_t target_triple;
+  // LLVM calling convention required for kernel entry points.
+  loom_llvmir_calling_convention_t kernel_calling_convention;
+  // LLVM metadata attachment name for fixed workgroup size.
+  iree_string_view_t required_workgroup_size_metadata_name;
+} loom_llvmir_emit_abi_projection_t;
+
 typedef struct loom_llvmir_emit_module_state_t {
   // Module containing the emitted low functions.
   loom_module_t* module;
@@ -100,6 +114,10 @@ typedef struct loom_llvmir_emit_function_state_t {
   const loom_region_t* body;
   // Resolved target record and descriptor set for |function_op|.
   const loom_low_resolved_target_t* target;
+  // Function-local target profile storage derived from |target|.
+  loom_llvmir_target_profile_storage_t target_profile_storage;
+  // Function-local LLVMIR target profile derived from |target_profile_storage|.
+  const loom_llvmir_target_profile_t* target_profile;
   // Function symbol name used in diagnostics.
   iree_string_view_t function_name;
   // Case/function scratch arena.
@@ -292,6 +310,17 @@ static const loom_llvmir_emit_memory_info_t kMemoryInfos[] = {
      LOOM_LLVMIR_EMIT_MEMORY_FLAG_LOAD | LOOM_LLVMIR_EMIT_MEMORY_FLAG_INDEXED},
     {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_STORE_INDEXED_V4F32,
      LOOM_LLVMIR_EMIT_CORE_TYPE_F32, 4, LOOM_LLVMIR_EMIT_MEMORY_FLAG_INDEXED},
+};
+
+static const loom_llvmir_emit_abi_projection_t kAbiProjections[] = {
+    {
+        .abi_kind = LOOM_TARGET_ABI_HAL_KERNEL,
+        .target_triple = LOOM_LLVMIR_AMDGPU_TARGET_TRIPLE,
+        .kernel_calling_convention =
+            LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL,
+        .required_workgroup_size_metadata_name =
+            IREE_SVL("reqd_work_group_size"),
+    },
 };
 
 static iree_string_view_t loom_llvmir_emit_string_or_empty(
@@ -574,6 +603,22 @@ static iree_status_t loom_llvmir_emit_type_for_low_value(
                                     out_type_id);
 }
 
+static bool loom_llvmir_emit_low_value_is_pointer_register(
+    loom_llvmir_emit_function_state_t* state, loom_value_id_t value_id) {
+  if (value_id >= state->module->values.count) return false;
+  const loom_type_t type = loom_module_value_type(state->module, value_id);
+  const loom_low_register_type_resolver_t resolver =
+      loom_low_register_type_resolver_for_descriptor_set(
+          state->target->descriptor_set);
+  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  if (!loom_low_register_type_resolver_try_resolve(&resolver, type,
+                                                   &reg_class_id, NULL)) {
+    return false;
+  }
+  return reg_class_id == LLVMIR_GENERIC_CORE_REG_CLASS_ID_PTR &&
+         loom_low_register_type_unit_count(type) == 1;
+}
+
 static iree_status_t loom_llvmir_emit_descriptor_set_diagnostic(
     loom_llvmir_emit_module_state_t* state, const loom_op_t* op,
     iree_string_view_t function_name,
@@ -596,6 +641,25 @@ static iree_status_t loom_llvmir_emit_descriptor_set_diagnostic(
       iree_diagnostic_emit(state->diagnostic_emitter, &emission));
   ++state->error_count;
   return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_emit_projection_diagnostic(
+    loom_llvmir_emit_function_state_t* state) {
+  const loom_target_bundle_storage_t* bundle_storage =
+      &state->target->bundle_storage;
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(state->target->target_name),
+      loom_param_string(bundle_storage->export_plan.name),
+      loom_param_string(bundle_storage->config.name),
+      loom_param_string(LOOM_LLVMIR_LOW_EMITTER_KEY),
+      loom_param_string(loom_target_codegen_format_name(
+          bundle_storage->snapshot.codegen_format)),
+      loom_param_string(
+          loom_target_abi_kind_name(bundle_storage->export_plan.abi_kind)),
+  };
+  return loom_llvmir_emit_diagnostic(state, state->function_op,
+                                     LOOM_ERR_TARGET_036, params,
+                                     IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_llvmir_emit_no_functions_diagnostic(
@@ -1192,35 +1256,52 @@ static iree_status_t loom_llvmir_emit_function_signature(
   const iree_string_view_t function_name =
       iree_string_view_is_empty(export_symbol) ? state->function_name
                                                : export_symbol;
-  const loom_llvmir_linkage_t linkage =
-      state->target->bundle_storage.export_plan.linkage ==
-              LOOM_TARGET_LINKAGE_DSO_LOCAL
-          ? LOOM_LLVMIR_LINKAGE_DSO_LOCAL
-          : LOOM_LLVMIR_LINKAGE_DEFAULT;
+  loom_llvmir_attr_group_id_t attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  loom_llvmir_calling_convention_t calling_convention =
+      LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT;
+  if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_add_kernel_attr_group(
+        state->llvmir_module, state->target_profile, &attr_group_id));
+    calling_convention = state->target_profile->kernel_calling_convention;
+  }
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
       state->llvmir_module,
       &(loom_llvmir_function_desc_t){
           .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
           .name = function_name,
           .return_type = return_type,
-          .linkage = linkage,
-          .calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
-          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+          .linkage = state->target_profile->exported_linkage,
+          .calling_convention = calling_convention,
+          .attr_group_id = attr_group_id,
       },
       &state->llvmir_function));
 
   for (uint16_t i = 0; i < entry_block->arg_count; ++i) {
     const loom_value_id_t arg_value = entry_block->arg_ids[i];
     loom_llvmir_value_id_t parameter = LOOM_LLVMIR_VALUE_ID_INVALID;
+    loom_llvmir_attr_t binding_attrs
+        [LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT] = {{0}};
+    iree_host_size_t binding_attr_count = 0;
+    if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL &&
+        loom_llvmir_emit_low_value_is_pointer_register(state, arg_value)) {
+      loom_llvmir_target_profile_kernel_binding_attrs(
+          state->target_profile, binding_attrs, &binding_attr_count);
+    }
     IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
         state->llvmir_function,
         &(loom_llvmir_parameter_desc_t){
             .type_id = arg_types[i],
             .name = loom_llvmir_emit_value_name(state->module, arg_value),
+            .attrs = binding_attrs,
+            .attr_count = binding_attr_count,
         },
         &parameter));
     IREE_RETURN_IF_ERROR(
         loom_llvmir_emit_define_value(state, arg_value, parameter));
+  }
+  if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_attach_kernel_metadata(
+        state->llvmir_function, state->target_profile));
   }
 
   return loom_llvmir_function_add_block(state->llvmir_function,
@@ -1262,31 +1343,127 @@ static iree_string_view_t loom_llvmir_emit_optional_string_attr(
   return loom_llvmir_emit_string_or_empty(module, loom_attr_as_string_id(attr));
 }
 
-static iree_status_t loom_llvmir_emit_prepare_module(
-    loom_llvmir_emit_module_state_t* state,
-    const loom_low_resolved_target_t* target, iree_allocator_t allocator) {
-  if (state->llvmir_module != NULL) return iree_ok_status();
+static const loom_llvmir_emit_abi_projection_t*
+loom_llvmir_emit_lookup_abi_projection(loom_target_abi_kind_t abi_kind,
+                                       iree_string_view_t target_triple) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAbiProjections); ++i) {
+    const loom_llvmir_emit_abi_projection_t* projection = &kAbiProjections[i];
+    if (projection->abi_kind == abi_kind &&
+        iree_string_view_equal(projection->target_triple, target_triple)) {
+      return projection;
+    }
+  }
+  return NULL;
+}
 
-  const loom_target_snapshot_t* snapshot = &target->bundle_storage.snapshot;
+static uint32_t loom_llvmir_emit_workgroup_size_dimension_count(
+    const loom_target_workgroup_size_t* size) {
+  return (size->x != 0 ? 1u : 0u) + (size->y != 0 ? 1u : 0u) +
+         (size->z != 0 ? 1u : 0u);
+}
+
+static iree_status_t loom_llvmir_emit_prepare_function_profile(
+    loom_llvmir_emit_function_state_t* state) {
+  const loom_target_snapshot_t* snapshot =
+      &state->target->bundle_storage.snapshot;
+  const loom_target_export_plan_t* export_plan =
+      &state->target->bundle_storage.export_plan;
   iree_string_view_t target_triple = iree_string_view_empty();
   iree_string_view_t data_layout = iree_string_view_empty();
-  if (target->target_op && loom_llvmir_target_isa(target->target_op)) {
+  iree_string_view_t target_cpu = iree_string_view_empty();
+  iree_string_view_t target_features = iree_string_view_empty();
+  if (state->target->target_op &&
+      loom_llvmir_target_isa(state->target->target_op)) {
     target_triple = loom_llvmir_emit_optional_string_attr(
-        state->module, target->target_op, loom_llvmir_target_triple_ATTR_INDEX);
+        state->module, state->target->target_op,
+        loom_llvmir_target_triple_ATTR_INDEX);
     data_layout = loom_llvmir_emit_optional_string_attr(
-        state->module, target->target_op,
+        state->module, state->target->target_op,
         loom_llvmir_target_data_layout_ATTR_INDEX);
+    target_cpu = loom_llvmir_emit_optional_string_attr(
+        state->module, state->target->target_op,
+        loom_llvmir_target_cpu_ATTR_INDEX);
+    target_features = loom_llvmir_emit_optional_string_attr(
+        state->module, state->target->target_op,
+        loom_llvmir_target_features_ATTR_INDEX);
   }
-  return loom_llvmir_module_allocate(
-      &(loom_llvmir_target_config_t){
-          .target_triple = target_triple,
-          .data_layout = data_layout,
-          .producer = IREE_SV("loom"),
-          .default_pointer_bitwidth = snapshot->default_pointer_bitwidth,
-          .index_bitwidth = snapshot->index_bitwidth,
-          .offset_bitwidth = snapshot->offset_bitwidth,
-      },
-      allocator, &state->llvmir_module);
+
+  loom_llvmir_calling_convention_t kernel_calling_convention =
+      LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT;
+  iree_string_view_t required_workgroup_size_metadata_name =
+      iree_string_view_empty();
+  switch (export_plan->abi_kind) {
+    case LOOM_TARGET_ABI_OBJECT_FUNCTION:
+      break;
+    case LOOM_TARGET_ABI_HAL_KERNEL: {
+      const loom_llvmir_emit_abi_projection_t* projection =
+          loom_llvmir_emit_lookup_abi_projection(export_plan->abi_kind,
+                                                 target_triple);
+      if (!projection) {
+        return loom_llvmir_emit_projection_diagnostic(state);
+      }
+      const loom_target_workgroup_size_t* required_workgroup_size =
+          &export_plan->hal_kernel.required_workgroup_size;
+      if (!loom_target_workgroup_size_is_concrete(required_workgroup_size)) {
+        return loom_llvmir_emit_shape_diagnostic(
+            state, state->function_op, IREE_SV("hal_kernel_workgroup_size"),
+            loom_llvmir_emit_workgroup_size_dimension_count(
+                required_workgroup_size),
+            3);
+      }
+      kernel_calling_convention = projection->kernel_calling_convention;
+      required_workgroup_size_metadata_name =
+          projection->required_workgroup_size_metadata_name;
+      break;
+    }
+    default:
+      return loom_llvmir_emit_projection_diagnostic(state);
+  }
+
+  const loom_llvmir_target_env_t projected_env = {
+      .name = snapshot->name,
+      .target_triple = target_triple,
+      .data_layout = data_layout,
+      .object_format = LOOM_LLVMIR_OBJECT_FORMAT_UNKNOWN,
+      .default_pointer_bitwidth = snapshot->default_pointer_bitwidth,
+      .index_bitwidth = snapshot->index_bitwidth,
+      .offset_bitwidth = snapshot->offset_bitwidth,
+      .address_spaces =
+          {
+              .generic = snapshot->memory_spaces.generic,
+              .global = snapshot->memory_spaces.global,
+              .local = snapshot->memory_spaces.workgroup,
+              .constant = snapshot->memory_spaces.constant,
+              .private_memory = snapshot->memory_spaces.private_memory,
+              .buffer_resource = snapshot->memory_spaces.descriptor,
+          },
+  };
+  const loom_llvmir_target_profile_t projected_profile = {
+      .name = export_plan->name,
+      .target_env = &projected_env,
+      .target_cpu = target_cpu,
+      .target_features = target_features,
+      .kernel_calling_convention = kernel_calling_convention,
+      .required_workgroup_size_metadata_name =
+          required_workgroup_size_metadata_name,
+  };
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
+      &state->target->bundle_storage.bundle, &projected_profile,
+      &state->target_profile_storage);
+  state->target_profile = &state->target_profile_storage.profile;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_emit_prepare_module(
+    loom_llvmir_emit_module_state_t* state,
+    const loom_llvmir_target_profile_t* profile, iree_allocator_t allocator) {
+  if (state->llvmir_module != NULL) return iree_ok_status();
+
+  loom_llvmir_target_config_t config = {0};
+  loom_llvmir_target_profile_module_config(profile, iree_string_view_empty(),
+                                           &config);
+  config.producer = IREE_SV("loom");
+  return loom_llvmir_module_allocate(&config, allocator, &state->llvmir_module);
 }
 
 static iree_status_t loom_llvmir_emit_low_function_into_module(
@@ -1315,8 +1492,6 @@ static iree_status_t loom_llvmir_emit_low_function_into_module(
                                           low_function_op),
         &target);
   }
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_emit_prepare_module(module_state, &target, allocator));
 
   loom_llvmir_emit_function_state_t function_state = {
       .module_state = module_state,
@@ -1327,8 +1502,13 @@ static iree_status_t loom_llvmir_emit_low_function_into_module(
       .function_name = loom_low_diagnostic_function_name(module_state->module,
                                                          low_function_op),
       .scratch_arena = module_state->scratch_arena,
-      .llvmir_module = module_state->llvmir_module,
   };
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_emit_prepare_function_profile(&function_state));
+  if (module_state->error_count != 0) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_prepare_module(
+      module_state, function_state.target_profile, allocator));
+  function_state.llvmir_module = module_state->llvmir_module;
   IREE_RETURN_IF_ERROR(loom_llvmir_emit_initialize_value_map(&function_state));
   IREE_RETURN_IF_ERROR(loom_llvmir_emit_function_body(&function_state));
   if (module_state->error_count == 0) {

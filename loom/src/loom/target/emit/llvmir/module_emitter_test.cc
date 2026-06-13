@@ -142,6 +142,122 @@ low.func.def target(@target) abi(object_function) @second(%input_view: reg<llvmi
   EXPECT_NE(text.find("store i32 %loaded"), std::string::npos) << text;
 }
 
+TEST_F(LlvmirModuleEmitterTest, EmitsAmdgpuHalKernelAbiFromLowKernelFacts) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  default_pointer_bitwidth = 64,
+  index_bitwidth = 32,
+  offset_bitwidth = 64,
+  max_workgroup_size_x = 1024,
+  max_workgroup_size_y = 1024,
+  max_workgroup_size_z = 1024,
+  max_flat_workgroup_size = 1024,
+  memory_space_generic = 0,
+  memory_space_global = 1,
+  memory_space_workgroup = 3,
+  memory_space_constant = 4,
+  memory_space_private = 5,
+  memory_space_host = 4294967295,
+  memory_space_descriptor = 7,
+  abi = hal_kernel,
+  linkage = default,
+  hal_buffer_resource_flags = 822243328,
+  contract_set_key = "llvmir.generic.core",
+  triple = "amdgcn-amd-amdhsa",
+  data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"
+}
+
+low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch(%input: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  return
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  ASSERT_NE(llvmir_module, nullptr);
+  EXPECT_TRUE(capture.emissions.empty());
+
+  std::string text;
+  IREE_ASSERT_OK(WriteText(llvmir_module.get(), &text));
+  EXPECT_NE(text.find("target triple = \"amdgcn-amd-amdhsa\""),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("define amdgpu_kernel void @dispatch(ptr inreg noundef "
+                      "%input) #0 !reqd_work_group_size !0"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("\"amdgpu-flat-work-group-size\"=\"1,1024\""),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("!0 = !{i32 128, i32 2, i32 1}\n"), std::string::npos)
+      << text;
+}
+
+TEST_F(LlvmirModuleEmitterTest, ReportsHalKernelWithoutWorkgroupSize) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  default_pointer_bitwidth = 64,
+  index_bitwidth = 32,
+  offset_bitwidth = 64,
+  max_flat_workgroup_size = 1024,
+  abi = hal_kernel,
+  contract_set_key = "llvmir.generic.core",
+  triple = "amdgcn-amd-amdhsa"
+}
+
+low.kernel.def target(@target) @dispatch() asm<llvmir.generic.core> {
+  return
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  EXPECT_EQ(llvmir_module, nullptr);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_TARGET_054);
+  ASSERT_EQ(emission.string_params.size(), 3u);
+  EXPECT_EQ(emission.string_params[0], "dispatch");
+  EXPECT_EQ(emission.string_params[1], "llvmir.low");
+  EXPECT_EQ(emission.string_params[2], "hal_kernel_workgroup_size");
+  ASSERT_EQ(emission.u32_params.size(), 2u);
+  EXPECT_EQ(emission.u32_params[0], 0u);
+  EXPECT_EQ(emission.u32_params[1], 3u);
+}
+
+TEST_F(LlvmirModuleEmitterTest, ReportsUnsupportedAbiProjection) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  abi = shader_entry_point,
+  contract_set_key = "llvmir.generic.core",
+  triple = "amdgcn-amd-amdhsa"
+}
+
+low.func.def target(@target) @dispatch() asm<llvmir.generic.core> {
+  return
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  EXPECT_EQ(llvmir_module, nullptr);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_TARGET_036);
+  ASSERT_EQ(emission.string_params.size(), 6u);
+  EXPECT_EQ(emission.string_params[0], "target");
+  EXPECT_EQ(emission.string_params[1], "dispatch");
+  EXPECT_EQ(emission.string_params[2], "target");
+  EXPECT_EQ(emission.string_params[3], "llvmir.low");
+  EXPECT_EQ(emission.string_params[4], "llvmir");
+  EXPECT_EQ(emission.string_params[5], "shader_entry_point");
+}
+
 TEST_F(LlvmirModuleEmitterTest, ReportsUnsupportedFunctionShapeAsDiagnostic) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {

@@ -86,6 +86,7 @@ loom_cc_library(
     "module_emitter.c"
   DEPS
     ::core
+    ::target_env
     iree::base
     iree::base::internal::arena
     loom::analysis::symbol_facts
@@ -98,6 +99,7 @@ loom_cc_library(
     loom::ops::llvmir
     loom::ops::low
     loom::target::arch::llvmir::descriptors::descriptors_ids
+    loom::target::launch
     loom::target::low_descriptor_registry
     loom::target::registers
     loom::target::types
