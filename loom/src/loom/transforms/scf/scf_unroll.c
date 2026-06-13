@@ -12,11 +12,13 @@
 #include "loom/error/emitter.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/attribute.h"
+#include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/pass/report.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
@@ -132,6 +134,8 @@ typedef struct loom_scf_unroll_context_t {
   loom_rewriter_t* rewriter;
   // Value facts for the current function snapshot.
   loom_value_fact_table_t* fact_table;
+  // True when the caller requested pass report detail rows.
+  bool reports_enabled;
 } loom_scf_unroll_context_t;
 
 typedef enum loom_scf_unroll_trip_count_state_e {
@@ -140,13 +144,62 @@ typedef enum loom_scf_unroll_trip_count_state_e {
   LOOM_SCF_UNROLL_TRIP_COUNT_NON_POSITIVE_STEP = 2,
   LOOM_SCF_UNROLL_TRIP_COUNT_OVERFLOW = 3,
   LOOM_SCF_UNROLL_TRIP_COUNT_TOO_LARGE = 4,
+  LOOM_SCF_UNROLL_TRIP_COUNT_RANGE_DEPENDENT = 5,
 } loom_scf_unroll_trip_count_state_t;
+
+typedef enum loom_scf_unroll_lower_bound_kind_e {
+  LOOM_SCF_UNROLL_LOWER_BOUND_STATIC = 0,
+  LOOM_SCF_UNROLL_LOWER_BOUND_DYNAMIC = 1,
+} loom_scf_unroll_lower_bound_kind_t;
+
+typedef struct loom_scf_unroll_trip_count_t {
+  // Number of iterations proven for the loop.
+  uint32_t count;
+  // Positive static step used between adjacent induction values.
+  int64_t step;
+  // Describes whether |lower_i64| or |lower_value| defines the first IV.
+  loom_scf_unroll_lower_bound_kind_t lower_kind;
+  // Static lower bound used when |lower_kind| is STATIC.
+  int64_t lower_i64;
+  // Dynamic lower bound value used when |lower_kind| is DYNAMIC.
+  loom_value_id_t lower_value;
+  // Inclusive lower-bound fact range minimum used for dynamic proof.
+  int64_t lower_range_min;
+  // Inclusive lower-bound fact range maximum used for dynamic proof.
+  int64_t lower_range_max;
+} loom_scf_unroll_trip_count_t;
 
 static bool loom_scf_unroll_exact_i64(const loom_value_fact_table_t* facts,
                                       loom_value_id_t value,
                                       int64_t* out_integer) {
   return loom_value_facts_as_exact_i64(
       loom_value_fact_table_lookup(facts, value), out_integer);
+}
+
+static loom_scf_unroll_trip_count_state_t
+loom_scf_unroll_compute_trip_count_i64(int64_t lower, int64_t upper,
+                                       int64_t step, uint32_t* out_trip_count) {
+  *out_trip_count = 0;
+  if (step <= 0) {
+    return LOOM_SCF_UNROLL_TRIP_COUNT_NON_POSITIVE_STEP;
+  }
+  if (upper <= lower) {
+    return LOOM_SCF_UNROLL_TRIP_COUNT_EXACT;
+  }
+
+  int64_t span = 0;
+  if ((lower > 0 && upper < INT64_MIN + lower) ||
+      (lower < 0 && upper > INT64_MAX + lower)) {
+    return LOOM_SCF_UNROLL_TRIP_COUNT_OVERFLOW;
+  }
+  span = upper - lower;
+  uint64_t trip_count = ((uint64_t)span + (uint64_t)step - 1) / (uint64_t)step;
+  if (trip_count > UINT32_MAX) {
+    return LOOM_SCF_UNROLL_TRIP_COUNT_TOO_LARGE;
+  }
+
+  *out_trip_count = (uint32_t)trip_count;
+  return LOOM_SCF_UNROLL_TRIP_COUNT_EXACT;
 }
 
 static iree_status_t loom_scf_unroll_emit_policy_error(
@@ -167,19 +220,22 @@ static iree_status_t loom_scf_unroll_emit_policy_error(
   return iree_diagnostic_emit(context->pass->diagnostic_emitter, &emission);
 }
 
-static loom_scf_unroll_trip_count_state_t loom_scf_unroll_static_trip_count(
+static loom_scf_unroll_trip_count_state_t loom_scf_unroll_resolve_trip_count(
     const loom_scf_unroll_context_t* context, loom_op_t* op,
-    uint32_t* out_trip_count, int64_t* out_lower, int64_t* out_step) {
-  *out_trip_count = 0;
-  *out_lower = 0;
-  *out_step = 0;
+    loom_scf_unroll_trip_count_t* out_trip_count) {
+  *out_trip_count = (loom_scf_unroll_trip_count_t){
+      .count = 0,
+      .step = 0,
+      .lower_kind = LOOM_SCF_UNROLL_LOWER_BOUND_STATIC,
+      .lower_i64 = 0,
+      .lower_value = LOOM_VALUE_ID_INVALID,
+      .lower_range_min = 0,
+      .lower_range_max = 0,
+  };
 
-  int64_t lower = 0;
   int64_t upper = 0;
   int64_t step = 0;
   if (!loom_scf_unroll_exact_i64(context->fact_table,
-                                 loom_scf_for_lower_bound(op), &lower) ||
-      !loom_scf_unroll_exact_i64(context->fact_table,
                                  loom_scf_for_upper_bound(op), &upper) ||
       !loom_scf_unroll_exact_i64(context->fact_table, loom_scf_for_step(op),
                                  &step)) {
@@ -188,27 +244,119 @@ static loom_scf_unroll_trip_count_state_t loom_scf_unroll_static_trip_count(
   if (step <= 0) {
     return LOOM_SCF_UNROLL_TRIP_COUNT_NON_POSITIVE_STEP;
   }
-  if (upper <= lower) {
-    *out_lower = lower;
-    *out_step = step;
+
+  loom_value_id_t lower_value = loom_scf_for_lower_bound(op);
+  loom_value_facts_t lower_facts =
+      loom_value_fact_table_lookup(context->fact_table, lower_value);
+  int64_t lower = 0;
+  if (loom_value_facts_as_exact_i64(lower_facts, &lower)) {
+    uint32_t trip_count = 0;
+    loom_scf_unroll_trip_count_state_t state =
+        loom_scf_unroll_compute_trip_count_i64(lower, upper, step, &trip_count);
+    if (state != LOOM_SCF_UNROLL_TRIP_COUNT_EXACT) return state;
+    *out_trip_count = (loom_scf_unroll_trip_count_t){
+        .count = trip_count,
+        .step = step,
+        .lower_kind = LOOM_SCF_UNROLL_LOWER_BOUND_STATIC,
+        .lower_i64 = lower,
+        .lower_value = LOOM_VALUE_ID_INVALID,
+        .lower_range_min = lower,
+        .lower_range_max = lower,
+    };
     return LOOM_SCF_UNROLL_TRIP_COUNT_EXACT;
   }
 
-  int64_t span = 0;
-  if ((lower > 0 && upper < INT64_MIN + lower) ||
-      (lower < 0 && upper > INT64_MAX + lower)) {
-    return LOOM_SCF_UNROLL_TRIP_COUNT_OVERFLOW;
-  }
-  span = upper - lower;
-  uint64_t trip_count = ((uint64_t)span + (uint64_t)step - 1) / (uint64_t)step;
-  if (trip_count > UINT32_MAX) {
-    return LOOM_SCF_UNROLL_TRIP_COUNT_TOO_LARGE;
+  if (loom_value_facts_is_float(lower_facts) ||
+      lower_facts.range_lo == INT64_MIN || lower_facts.range_hi == INT64_MAX) {
+    return LOOM_SCF_UNROLL_TRIP_COUNT_UNRESOLVED;
   }
 
-  *out_trip_count = (uint32_t)trip_count;
-  *out_lower = lower;
-  *out_step = step;
+  uint32_t lower_min_trip_count = 0;
+  loom_scf_unroll_trip_count_state_t lower_min_state =
+      loom_scf_unroll_compute_trip_count_i64(lower_facts.range_lo, upper, step,
+                                             &lower_min_trip_count);
+  if (lower_min_state != LOOM_SCF_UNROLL_TRIP_COUNT_EXACT) {
+    return lower_min_state;
+  }
+  uint32_t lower_max_trip_count = 0;
+  loom_scf_unroll_trip_count_state_t lower_max_state =
+      loom_scf_unroll_compute_trip_count_i64(lower_facts.range_hi, upper, step,
+                                             &lower_max_trip_count);
+  if (lower_max_state != LOOM_SCF_UNROLL_TRIP_COUNT_EXACT) {
+    return lower_max_state;
+  }
+  // With a positive step, trip count is monotonic in the lower bound; equal
+  // endpoint counts prove every value in the lower-bound range has that count.
+  if (lower_min_trip_count != lower_max_trip_count) {
+    return LOOM_SCF_UNROLL_TRIP_COUNT_RANGE_DEPENDENT;
+  }
+
+  *out_trip_count = (loom_scf_unroll_trip_count_t){
+      .count = lower_min_trip_count,
+      .step = step,
+      .lower_kind = LOOM_SCF_UNROLL_LOWER_BOUND_DYNAMIC,
+      .lower_i64 = 0,
+      .lower_value = lower_value,
+      .lower_range_min = lower_facts.range_lo,
+      .lower_range_max = lower_facts.range_hi,
+  };
   return LOOM_SCF_UNROLL_TRIP_COUNT_EXACT;
+}
+
+static iree_string_view_t loom_scf_unroll_lower_bound_kind_name(
+    loom_scf_unroll_lower_bound_kind_t kind) {
+  switch (kind) {
+    case LOOM_SCF_UNROLL_LOWER_BOUND_STATIC:
+      return IREE_SV("static");
+    case LOOM_SCF_UNROLL_LOWER_BOUND_DYNAMIC:
+      return IREE_SV("dynamic");
+  }
+  return IREE_SV("unknown");
+}
+
+static iree_status_t loom_scf_unroll_append_report_detail(
+    const loom_scf_unroll_context_t* context, loom_op_t* op,
+    iree_string_view_t policy, int64_t unroll_factor,
+    const loom_scf_unroll_trip_count_t* trip_count) {
+  if (!context->reports_enabled) {
+    return iree_ok_status();
+  }
+
+  loom_pass_report_detail_field_t fields[12];
+  uint16_t field_count = 0;
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("outcome"), IREE_SV("unrolled"));
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("op"), loom_op_name(context->module, op));
+  fields[field_count++] =
+      loom_pass_report_detail_string_field(IREE_SV("policy"), policy);
+  fields[field_count++] = loom_pass_report_detail_uint64_field(
+      IREE_SV("trip_count"), trip_count->count);
+  fields[field_count++] =
+      loom_pass_report_detail_int64_field(IREE_SV("step"), trip_count->step);
+  fields[field_count++] = loom_pass_report_detail_string_field(
+      IREE_SV("lower_bound_kind"),
+      loom_scf_unroll_lower_bound_kind_name(trip_count->lower_kind));
+  if (unroll_factor >= 0) {
+    fields[field_count++] = loom_pass_report_detail_int64_field(
+        IREE_SV("unroll_factor"), unroll_factor);
+  }
+  switch (trip_count->lower_kind) {
+    case LOOM_SCF_UNROLL_LOWER_BOUND_STATIC:
+      fields[field_count++] = loom_pass_report_detail_int64_field(
+          IREE_SV("lower"), trip_count->lower_i64);
+      break;
+    case LOOM_SCF_UNROLL_LOWER_BOUND_DYNAMIC:
+      fields[field_count++] = loom_pass_report_detail_uint64_field(
+          IREE_SV("lower_value_id"), trip_count->lower_value);
+      fields[field_count++] = loom_pass_report_detail_int64_field(
+          IREE_SV("lower_range_min"), trip_count->lower_range_min);
+      fields[field_count++] = loom_pass_report_detail_int64_field(
+          IREE_SV("lower_range_max"), trip_count->lower_range_max);
+      break;
+  }
+  return loom_pass_report_append_detail(context->pass, IREE_SV("scf-unroll"),
+                                        fields, field_count);
 }
 
 static iree_status_t loom_scf_unroll_emit_trip_count_error(
@@ -231,6 +379,10 @@ static iree_status_t loom_scf_unroll_emit_trip_count_error(
       return loom_scf_unroll_emit_policy_error(
           context, op, IREE_SV("unroll"), (int64_t)UINT32_MAX,
           IREE_SV("trip count representable as uint32"));
+    case LOOM_SCF_UNROLL_TRIP_COUNT_RANGE_DEPENDENT:
+      return loom_scf_unroll_emit_policy_error(
+          context, op, IREE_SV("unroll"), 0,
+          IREE_SV("static trip count independent of lower-bound range"));
     case LOOM_SCF_UNROLL_TRIP_COUNT_EXACT:
       return iree_ok_status();
   }
@@ -269,16 +421,50 @@ static bool loom_scf_unroll_shape_is_supported(loom_op_t* op,
 
 static iree_status_t loom_scf_unroll_build_iteration_index(
     loom_scf_unroll_context_t* context, loom_op_t* op,
-    loom_value_id_t induction_variable, int64_t lower, int64_t step,
-    uint32_t ordinal, loom_value_id_t* out_index) {
+    loom_value_id_t induction_variable,
+    const loom_scf_unroll_trip_count_t* trip_count, uint32_t ordinal,
+    loom_value_id_t* out_index) {
+  *out_index = LOOM_VALUE_ID_INVALID;
+
   int64_t scaled_step = 0;
-  int64_t iteration_value = 0;
-  if (!iree_checked_mul_i64((int64_t)ordinal, step, &scaled_step) ||
-      !iree_checked_add_i64(lower, scaled_step, &iteration_value)) {
-    *out_index = LOOM_VALUE_ID_INVALID;
+  if (!iree_checked_mul_i64((int64_t)ordinal, trip_count->step, &scaled_step)) {
     return iree_ok_status();
   }
 
+  if (trip_count->lower_kind == LOOM_SCF_UNROLL_LOWER_BOUND_DYNAMIC) {
+    if (scaled_step == 0) {
+      *out_index = trip_count->lower_value;
+      return iree_ok_status();
+    }
+    loom_op_t* offset_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_constant_build(
+        &context->rewriter->builder, loom_attr_i64(scaled_step),
+        loom_module_value_type(context->module, loom_scf_for_lower_bound(op)),
+        op->location, &offset_op));
+    loom_value_id_t offset = loom_index_constant_result(offset_op);
+    loom_op_t* add_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_add_build(
+        &context->rewriter->builder, trip_count->lower_value, offset,
+        loom_module_value_type(context->module, loom_scf_for_lower_bound(op)),
+        op->location, &add_op));
+    *out_index = loom_index_add_result(add_op);
+    char suffix[32] = {0};
+    int suffix_length =
+        iree_snprintf(suffix, sizeof(suffix), "%" PRId64, scaled_step);
+    if (suffix_length <= 0 ||
+        (iree_host_size_t)suffix_length >= sizeof(suffix)) {
+      return iree_ok_status();
+    }
+    return loom_rewriter_try_set_derived_value_name(
+        context->rewriter, induction_variable, *out_index,
+        iree_make_string_view(suffix, (iree_host_size_t)suffix_length));
+  }
+
+  int64_t iteration_value = 0;
+  if (!iree_checked_add_i64(trip_count->lower_i64, scaled_step,
+                            &iteration_value)) {
+    return iree_ok_status();
+  }
   loom_op_t* constant_op = NULL;
   IREE_RETURN_IF_ERROR(loom_index_constant_build(
       &context->rewriter->builder, loom_attr_i64(iteration_value),
@@ -528,20 +714,20 @@ static iree_status_t loom_scf_unroll_try_unroll(
     }
   }
 
-  uint32_t trip_count = 0;
-  int64_t lower = 0;
-  int64_t step = 0;
+  loom_scf_unroll_trip_count_t trip_count = {0};
   loom_scf_unroll_trip_count_state_t trip_count_state =
-      loom_scf_unroll_static_trip_count(context, op, &trip_count, &lower,
-                                        &step);
+      loom_scf_unroll_resolve_trip_count(context, op, &trip_count);
   if (trip_count_state != LOOM_SCF_UNROLL_TRIP_COUNT_EXACT) {
     return loom_scf_unroll_emit_trip_count_error(context, op, trip_count_state);
   }
-  if (has_unroll_factor && (uint32_t)unroll_factor != trip_count) {
+  if (has_unroll_factor && (uint32_t)unroll_factor != trip_count.count) {
     return loom_scf_unroll_emit_policy_error(
         context, op, IREE_SV("unroll_factor"), unroll_factor,
         IREE_SV("0, 1, or the exact full trip count"));
   }
+  IREE_RETURN_IF_ERROR(loom_scf_unroll_append_report_detail(
+      context, op, has_unroll_factor ? IREE_SV("factor") : IREE_SV("bare"),
+      has_unroll_factor ? unroll_factor : -1, &trip_count));
 
   loom_region_t* body = loom_scf_for_body(op);
   loom_block_t* body_block = loom_region_entry_block(body);
@@ -563,10 +749,10 @@ static iree_status_t loom_scf_unroll_try_unroll(
   }
 
   loom_value_id_t induction_variable = body_block->arg_ids[0];
-  for (uint32_t ordinal = 0; ordinal < trip_count; ++ordinal) {
+  for (uint32_t ordinal = 0; ordinal < trip_count.count; ++ordinal) {
     loom_value_id_t iteration_index = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_scf_unroll_build_iteration_index(
-        context, op, induction_variable, lower, step, ordinal,
+        context, op, induction_variable, &trip_count, ordinal,
         &iteration_index));
     if (iteration_index == LOOM_VALUE_ID_INVALID) {
       return loom_scf_unroll_emit_policy_error(
@@ -594,7 +780,7 @@ static iree_status_t loom_scf_unroll_try_unroll(
   }
 
   ++context->statistics->loops_unrolled;
-  context->statistics->iterations_materialized += trip_count;
+  context->statistics->iterations_materialized += trip_count.count;
   *out_changed = true;
   return iree_ok_status();
 }
@@ -648,6 +834,7 @@ iree_status_t loom_scf_unroll_run(loom_pass_t* pass, loom_module_t* module,
       .statistics = loom_scf_unroll_statistics(pass),
       .module = module,
       .rewriter = &rewriter,
+      .reports_enabled = loom_pass_report_is_enabled(pass),
   };
 
   iree_status_t status = iree_ok_status();

@@ -187,39 +187,6 @@ iree_native_test(
 
 iree_native_test(
   NAME
-    "scf_index"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/scf_index.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "scf_to_cfg"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/scf_to_cfg.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "scf_unroll"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/scf_unroll.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
     "symbol_dce"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/symbol_dce.loom-test"

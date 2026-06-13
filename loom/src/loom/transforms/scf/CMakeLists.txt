@@ -48,6 +48,7 @@ loom_cc_library(
     loom::ops::index
     loom::ops::op_defs
     loom::ops::scf
+    loom::pass::report
     loom::pass::types
     loom::pass::value_facts
     loom::rewrite::materialize
