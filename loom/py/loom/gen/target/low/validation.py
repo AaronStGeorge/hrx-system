@@ -8,11 +8,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     AsmForm,
     ConstraintKind,
     Descriptor,
+    DescriptorAsmSurface,
+    DescriptorFlag,
+    DescriptorSet,
     EnumDomain,
     EnumValue,
     Hazard,
@@ -50,6 +55,45 @@ def validate_u64(value: int, description: str) -> None:
 def validate_i64(value: int, description: str) -> None:
     if value < -(1 << 63) or value > (1 << 63) - 1:
         raise ValueError(f"{description} does not fit i64")
+
+
+def _descriptor_asm_surface_description(
+    surface_name: str,
+    spec: DescriptorSet,
+    descriptor: Descriptor,
+) -> str:
+    return f"{surface_name} '{spec.key}' descriptor '{descriptor.key}'"
+
+
+def validate_descriptor_asm_surface(
+    spec: DescriptorSet,
+    descriptors: Sequence[Descriptor],
+    *,
+    surface_name: str = "descriptor set",
+) -> None:
+    if not spec.requires_explicit_asm_surface:
+        return
+    for descriptor in descriptors:
+        description = _descriptor_asm_surface_description(
+            surface_name,
+            spec,
+            descriptor,
+        )
+        if descriptor.asm_surface is DescriptorAsmSurface.AUTHORABLE:
+            if descriptor.asm_surface_reason:
+                raise ValueError(f"{description} is authorable asm but has an asm surface reason")
+            if len(descriptor.asm_forms) != 1:
+                raise ValueError(f"{description} is authorable asm but does not declare exactly one canonical asm form; found {len(descriptor.asm_forms)}")
+            if DescriptorFlag.PSEUDO in descriptor.flags:
+                raise ValueError(f"{description} is pseudo but classified as authorable asm")
+            continue
+
+        if not descriptor.asm_surface_reason:
+            raise ValueError(f"{description} is {descriptor.asm_surface.value} asm but does not explain the non-authorable surface")
+        if descriptor.asm_forms:
+            raise ValueError(f"{description} is {descriptor.asm_surface.value} asm but still declares {len(descriptor.asm_forms)} asm form(s)")
+        if DescriptorFlag.PSEUDO in descriptor.flags and descriptor.asm_surface is not DescriptorAsmSurface.GENERATED_ONLY:
+            raise ValueError(f"{description} is pseudo but not classified as generated-only asm")
 
 
 def bit_mask(bit_count: int) -> int:

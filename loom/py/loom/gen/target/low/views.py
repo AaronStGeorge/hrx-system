@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 
-from loom.gen.target.low import compiler
+from loom.gen.target.low import compiler, validation
 from loom.gen.target.low.compiled import (
     CompiledAsmForm,
     CompiledDescriptorSet,
@@ -96,9 +96,19 @@ def _validate_view_descriptors_match_storage(
 ) -> None:
     for view_descriptor, storage_descriptor_ordinal in zip(view_spec.descriptors, descriptor_ordinals, strict=True):
         storage_descriptor = compiled.descriptors[storage_descriptor_ordinal]
-        if replace(view_descriptor, asm_forms=storage_descriptor.asm_forms) == storage_descriptor:
+        if (
+            replace(
+                view_descriptor,
+                asm_forms=storage_descriptor.asm_forms,
+                asm_surface=storage_descriptor.asm_surface,
+                asm_surface_reason=storage_descriptor.asm_surface_reason,
+            )
+            == storage_descriptor
+        ):
             continue
-        raise ValueError(f"descriptor set view '{view_spec.key}' descriptor '{view_descriptor.key}' differs from storage descriptor '{storage_descriptor.key}' outside of asm forms")
+        raise ValueError(
+            f"descriptor set view '{view_spec.key}' descriptor '{view_descriptor.key}' differs from storage descriptor '{storage_descriptor.key}' outside of asm forms or asm surface policy"
+        )
 
 
 def _view_asm_forms_match_storage(
@@ -160,6 +170,11 @@ def descriptor_set_view_for_spec(
             raise ValueError(f"descriptor set view '{view_spec.key}' selects descriptor '{descriptor.key}' that is not in storage set '{compiled.spec.key}'")
         descriptor_ordinals.append(descriptor_ordinal)
     descriptor_ordinal_tuple = tuple(descriptor_ordinals)
+    validation.validate_descriptor_asm_surface(
+        view_spec,
+        view_spec.descriptors,
+        surface_name="descriptor set view",
+    )
     _validate_view_descriptors_match_storage(
         compiled,
         view_spec,

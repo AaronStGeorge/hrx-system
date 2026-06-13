@@ -384,6 +384,62 @@ def test_shared_source_emits_prefix_view_local_asm_forms() -> None:
     assert ".asm_forms = kTestLowViewCoreAsmForms," in source
 
 
+def test_shared_source_requires_view_canonical_asm_for_authorable_surface() -> None:
+    view_descriptor = replace(TEST_LOW_ADD_I32_DESCRIPTOR, asm_forms=())
+    view = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        key="test.low.view.core",
+        function_name="loom_test_low_view_core_descriptor_set",
+        c_table_prefix="TestLowViewCore",
+        c_enum_prefix="TEST_LOW_VIEW_CORE",
+        descriptors=(view_descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+    storage_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(TEST_LOW_ADD_I32_DESCRIPTOR,),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor set view 'test.low.view.core' descriptor 'test.add.i32' is authorable asm but does not declare exactly one canonical asm form; found 0"),
+    ):
+        generate_descriptor_set_shared_source(
+            storage_set,
+            (view,),
+        )
+
+
+def test_shared_source_allows_view_local_non_authorable_surface() -> None:
+    view_descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(),
+        asm_surface=DescriptorAsmSurface.STRUCTURAL,
+        asm_surface_reason="printed by structural low asm syntax",
+    )
+    view = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        key="test.low.view.core",
+        function_name="loom_test_low_view_core_descriptor_set",
+        c_table_prefix="TestLowViewCore",
+        c_enum_prefix="TEST_LOW_VIEW_CORE",
+        descriptors=(view_descriptor,),
+        requires_explicit_asm_surface=True,
+    )
+    storage_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(TEST_LOW_ADD_I32_DESCRIPTOR,),
+    )
+
+    source = generate_descriptor_set_shared_source(
+        storage_set,
+        (view,),
+    )
+
+    assert "static const loom_low_descriptor_t kTestLowViewCoreDescriptors[]" in source
+    assert ".canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE" in source
+
+
 def test_shared_source_emits_sibling_view_descriptor_surfaces() -> None:
     first_view = replace(
         TEST_LOW_CORE_DESCRIPTOR_SET,
