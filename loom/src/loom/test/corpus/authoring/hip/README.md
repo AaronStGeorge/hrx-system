@@ -22,12 +22,84 @@ IR dumps.
 | --- | --- | --- |
 | `#pragma unroll`, `pragma-unroll`, `loop-expansion`, `for`, `q8`, `WG64` | `scf.for ... unroll`, `unroll-scf-for`, range-fact trip count inference | `q8_block_unroll.loom` |
 | `blockIdx`, `threadIdx`, `lane`, `warp`, `wavefront` | `kernel.workgroup.id`, `kernel.workitem.id`, `kernel.subgroup.*`, `index.assume` | `q8_block_unroll.loom` |
+| `threadIdx`, `lane_id`, `warp lane`, `wavefront lane`, `SGPR`, `VGPR`, `EXEC`, `scalarized`, `lane-varying`, `uniform`, `dot operand` | value distribution facts, `test.fact_uniform`, `test.fact_lane_varying`, `test.fact_lane_predicate` | `lane_distribution.loom` |
 | `__global__`, `restrict`, pointer casts, address arithmetic | `buffer.assume.memory_space`, `buffer.assume.noalias`, `buffer.view` | `q8_block_unroll.loom` |
 | `global_load_b32`, packed bytes, `q8`, bitfield, unpack | `vector.load`, `vector.bitunpacks<8>`, `scalar.extf`, `vector.dotf` | `q8_block_unroll.loom` |
 | `global_load_b32`, `global_load_b128`, `uint4`, adjacent scalar loads, coalescing | `vector.load -> vector<1xi32>` versus `vector.load -> vector<4xi32>` | `q8_load_width.loom` |
 | `q8`, `q4`, `u8`, `s8`, `u4`, `s4`, `v_dot4_i32_iu8`, `dp4a` | `vector.bitunpacku`, `vector.bitunpacks`, `vector.dot4i<u8s8>` | `q8_q4_signedness.loom` |
 | dynamic lower-bound unroll, missing facts | structured diagnostic, exact/range facts | `q8_hip_shaped_unroll_unresolved.loom` |
 | `#if __gfx*__`, template, macro, arch-specialization, fallback | `func.apply`, `func.template`, `target(@...)`, `priority(...)` | `target_provider_selection.loom` |
+
+## Lane Distribution
+
+Tags: `threadIdx`, `lane_id`, `warp lane`, `wavefront lane`, `SGPR`, `VGPR`,
+`EXEC`, `scalarized`, `lane-varying`, `uniform`, `dot operand`,
+`inline asm constraint`.
+
+HIP habit:
+
+```c++
+int element_index = blockIdx.x * blockDim.x + threadIdx.x;
+int lane = __builtin_amdgcn_mbcnt_lo(-1, 0);
+bool lane0 = lane == 0;
+int selected = lane0 ? lhs : rhs;
+int dot_operand = lane + lhs;
+```
+
+Loom spelling:
+
+```loom
+%block = kernel.workgroup.id<x> : index
+%thread = kernel.workitem.id<x> : index
+%element_index = index.madd %block, %workgroup_size, %thread : index
+%lane = kernel.subgroup.lane.id : index
+%is_lane_zero = index.cmp eq, %lane, %zero_index : index
+%selected = scf.select %is_lane_zero, %lhs, %rhs : i32
+%lane_i32 = index.cast %lane : index to i32
+%dot_operand = scalar.addi %lane_i32, %lhs : i32
+```
+
+The source-level contract is value distribution: `kernel.workitem.id` and
+`kernel.subgroup.lane.id` are lane-varying roots; `kernel.workgroup.id`,
+`kernel.workgroup.size`, constants, and scalar kernel arguments are uniform
+until mixed with lane-varying data. Arithmetic depending on a lane-varying value
+stays lane-varying. A lane-dependent `i1` is a lane predicate. Selecting between
+uniform values with a lane predicate produces lane-varying data.
+
+AMDGPU SGPR/VGPR placement is a target-lowering consequence, not a portable
+source type. For HIP ports, the actionable source question is whether the value
+that feeds an address, dot operand, or EXEC-controlled path still depends on a
+lane-varying root at the point where source transforms run.
+
+Proof command:
+
+```bash
+loom-opt lane_distribution.loom \
+  --pass=canonicalize \
+  --output=/tmp/lane-distribution.loom
+```
+
+Useful query:
+
+```bash
+rg 'is_(uniform|varying|lane)' /tmp/lane-distribution.loom
+```
+
+Expected signal:
+
+```loom
+%thread_is_varying = scalar.constant true : i1
+%element_is_varying = scalar.constant true : i1
+%predicate_is_lane = scalar.constant true : i1
+%selected_is_varying = scalar.constant true : i1
+%dot_operand_is_varying = scalar.constant true : i1
+```
+
+`test.fact_*` probes are an authoring/debug surface used in recipes and tests.
+Production kernels leave those probes out. When a target has a stronger
+hardware-specific requirement, such as rejecting an operand that target lowering
+would place in a scalar register, that belongs in structured diagnostics or
+reports at the target boundary.
 
 ## Q8 WG64 Local Unroll
 

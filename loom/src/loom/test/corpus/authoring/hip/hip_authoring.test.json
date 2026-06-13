@@ -2,6 +2,35 @@
   "version": 1,
   "cases": [
     {
+      "name": "proves hip lane distribution recipe",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "{srcdir}/lane_distribution.loom",
+          "--pass=canonicalize",
+          "--output={tmp}/lane_distribution.loom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/lane_distribution.loom",
+          "contains": [
+            "%block_is_uniform = scalar.constant true : i1",
+            "%block_is_varying = scalar.constant false : i1",
+            "%thread_is_varying = scalar.constant true : i1",
+            "%thread_is_uniform = scalar.constant false : i1",
+            "%element_is_varying = scalar.constant true : i1",
+            "%element_is_uniform = scalar.constant false : i1",
+            "%lane_is_varying = scalar.constant true : i1",
+            "%predicate_is_lane = scalar.constant true : i1",
+            "%selected_is_varying = scalar.constant true : i1",
+            "%dot_operand_is_varying = scalar.constant true : i1",
+            "%dot_operand_is_uniform = scalar.constant false : i1"
+          ]
+        }
+      ]
+    },
+    {
       "name": "plans q8 block unroll recipe",
       "run": {
         "tool": "iree-benchmark-loom",

@@ -14,6 +14,7 @@ package(
 )
 
 exports_files([
+    "lane_distribution.loom",
     "q8_block_unroll.loom",
     "q8_hip_shaped_unroll_unresolved.loom",
     "q8_load_width.loom",
@@ -28,6 +29,7 @@ _AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
 iree_execution_test_suite(
     name = "execution_test",
     data = [
+        "lane_distribution.loom",
         "q8_block_unroll.loom",
         "q8_hip_shaped_unroll_unresolved.loom",
         "q8_load_width.loom",

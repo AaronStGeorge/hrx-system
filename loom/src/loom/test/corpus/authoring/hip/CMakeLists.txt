@@ -19,6 +19,7 @@ iree_execution_test_suite(
     "iree-benchmark-loom=loom::tools::iree-benchmark-loom"
     "loom-opt=loom::tools::loom-opt"
   DATA
+    "lane_distribution.loom"
     "q8_block_unroll.loom"
     "q8_hip_shaped_unroll_unresolved.loom"
     "q8_load_width.loom"
