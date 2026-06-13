@@ -21,8 +21,10 @@ package(
 )
 
 _LLVMIR_PROVIDER_VISIBILITY = [
+    "//loom/binding/c/target/llvmir:__pkg__",
     "//loom/src/loom/target/arch/llvmir/check:__pkg__",
     "//loom/src/loom/target/configured:__pkg__",
+    "//loom/src/loom/tools/loom-compile:__pkg__",
 ]
 
 loom_cc_library(

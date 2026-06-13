@@ -182,6 +182,12 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(
             functions._convert_select_condition(
+                "//loom/config/target:llvmir_artifacts"
+            ),
+            "LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR",
+        )
+        self.assertEqual(
+            functions._convert_select_condition(
                 "//loom/config/target:spirv_vulkan_artifacts"
             ),
             "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN",

@@ -108,6 +108,25 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
+    artifact_emitter
+  HDRS
+    "artifact_emitter.h"
+  SRCS
+    "artifact_emitter.c"
+  DEPS
+    ::core
+    ::module_emitter
+    iree::base
+    iree::io::stream
+    loom::target::provider
+    loom::util::stream
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+loom_cc_library(
+  NAME
     test_target
   HDRS
     "test_target.h"

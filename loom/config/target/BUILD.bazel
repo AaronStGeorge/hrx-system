@@ -68,3 +68,11 @@ selects.config_setting_group(
         "//runtime/config/hal:driver_vulkan",
     ],
 )
+
+selects.config_setting_group(
+    name = "llvmir_artifacts",
+    match_all = [
+        "//loom/config/target/arch:llvmir",
+        "//loom/config/emit:llvmir",
+    ],
+)
