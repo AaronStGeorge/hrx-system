@@ -77,13 +77,14 @@ class LowAsmPrinterTest : public ::testing::Test {
     return module;
   }
 
-  std::string PrintModule(loom_module_t* module,
-                          iree_string_view_t descriptor_set_key) {
+  std::string PrintModule(
+      loom_module_t* module, iree_string_view_t descriptor_set_key,
+      loom_text_print_flags_t flags = LOOM_TEXT_PRINT_DEFAULT) {
     loom_text_low_asm_environment_t environment = {};
     loom_low_descriptor_text_asm_environment_initialize(
         &low_descriptor_registry_, &environment);
     loom_text_print_options_t options = {
-        /*.flags=*/LOOM_TEXT_PRINT_DEFAULT,
+        /*.flags=*/flags,
         /*.low_asm_environment=*/environment,
         /*.low_asm_descriptor_set_key=*/descriptor_set_key,
     };
@@ -101,16 +102,17 @@ class LowAsmPrinterTest : public ::testing::Test {
     return result;
   }
 
-  iree_status_t PrintModuleStatus(loom_module_t* module,
-                                  iree_string_view_t descriptor_set_key,
-                                  bool configure_environment) {
+  iree_status_t PrintModuleStatus(
+      loom_module_t* module, iree_string_view_t descriptor_set_key,
+      bool configure_environment,
+      loom_text_print_flags_t flags = LOOM_TEXT_PRINT_DEFAULT) {
     loom_text_low_asm_environment_t environment = {};
     if (configure_environment) {
       loom_low_descriptor_text_asm_environment_initialize(
           &low_descriptor_registry_, &environment);
     }
     loom_text_print_options_t options = {
-        /*.flags=*/LOOM_TEXT_PRINT_DEFAULT,
+        /*.flags=*/flags,
         /*.low_asm_environment=*/environment,
         /*.low_asm_descriptor_set_key=*/descriptor_set_key,
     };
@@ -183,6 +185,25 @@ TEST_F(LowAsmPrinterTest, PrintsStructuralIntrinsics) {
   loom_module_free(module);
 }
 
+TEST_F(LowAsmPrinterTest, PrintsCanonicalStructuralCall) {
+  const char* source =
+      "test.target<low_core> @test_target\n"
+      "\n"
+      "low.func.decl target(@test_target) @callee(%arg: reg<test.i32>) -> "
+      "(reg<test.i32>)\n"
+      "\n"
+      "low.func.def target(@test_target) @caller(%arg: reg<test.i32>) -> "
+      "(reg<test.i32>) asm<test.low.core> {\n"
+      "  %result = low.func.call @callee(%arg) : (reg<test.i32>) -> "
+      "(reg<test.i32>)\n"
+      "  return %result\n"
+      "}\n";
+  loom_module_t* module = ParseOk(source);
+  ASSERT_NE(module, nullptr);
+  EXPECT_EQ(PrintModule(module, IREE_SV("test.low.core")), source);
+  loom_module_free(module);
+}
+
 TEST_F(LowAsmPrinterTest, RejectsMissingPrintEnvironment) {
   loom_module_t* module = ParseOk(
       "test.low_asm_region asm<test.low.core> {\n"
@@ -205,6 +226,34 @@ TEST_F(LowAsmPrinterTest, RejectsDescriptorWithoutAsmFormInSelectedSet) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
                         PrintModuleStatus(module, IREE_SV("test.low.alt"),
                                           /*configure_environment=*/true));
+  loom_module_free(module);
+}
+
+TEST_F(LowAsmPrinterTest, RequiredOptionalLowAsmRejectsCanonicalFallback) {
+  const char* source =
+      "test.target<low_core> @test_target\n"
+      "\n"
+      "low.func.def target(@test_target) @add(%lhs: reg<test.i32>, "
+      "%rhs: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {\n"
+      "  %sum = test.add.i32 %lhs, %rhs\n"
+      "  return %sum\n"
+      "}\n";
+  loom_module_t* module = ParseOk(source);
+  ASSERT_NE(module, nullptr);
+  EXPECT_EQ(PrintModule(module, IREE_SV("test.low.alt")),
+            "test.target<low_core> @test_target\n"
+            "\n"
+            "low.func.def target(@test_target) @add(%lhs: reg<test.i32>, "
+            "%rhs: reg<test.i32>) -> (reg<test.i32>) {\n"
+            "  %sum = low.op<test.add.i32>(%lhs, %rhs) : "
+            "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"
+            "  low.return %sum : reg<test.i32>\n"
+            "}\n");
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        PrintModuleStatus(module, IREE_SV("test.low.alt"),
+                                          /*configure_environment=*/true,
+                                          LOOM_TEXT_PRINT_DEFAULT |
+                                              LOOM_TEXT_PRINT_REQUIRE_LOW_ASM));
   loom_module_free(module);
 }
 

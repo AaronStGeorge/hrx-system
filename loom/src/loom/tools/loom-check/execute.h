@@ -38,6 +38,7 @@
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/target/math_policy.h"
 #include "loom/target/pipeline.h"
+#include "loom/tooling/compile/pipeline.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
@@ -238,6 +239,8 @@ typedef struct loom_check_prepare_source_low_options_t {
   // Pass pipeline spelling. Empty or "default" runs the default source-to-low
   // pipeline; "none" is accepted for already-low focused tests.
   iree_string_view_t pipeline;
+  // Default pipeline used when |pipeline| is empty or "default".
+  loom_compile_default_pipeline_t default_pipeline;
   // Control-flow lowering shape used when building the default pipeline.
   loom_target_control_flow_lowering_t control_flow_lowering;
 } loom_check_prepare_source_low_options_t;

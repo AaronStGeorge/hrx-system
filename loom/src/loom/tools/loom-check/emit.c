@@ -1283,7 +1283,7 @@ static iree_status_t loom_check_emit_write_source_low_artifacts(
   loom_low_descriptor_text_asm_environment_initialize(descriptor_registry,
                                                       &low_asm_environment);
   const loom_text_print_options_t print_options = {
-      .flags = LOOM_TEXT_PRINT_DEFAULT,
+      .flags = LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_REQUIRE_LOW_ASM,
       .low_asm_environment = low_asm_environment,
       .low_asm_descriptor_set_key = descriptor_set_key,
   };
@@ -1385,6 +1385,7 @@ void loom_check_prepare_source_low_options_initialize(
   IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_check_prepare_source_low_options_t){
       .pipeline = IREE_SVL("default"),
+      .default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW,
       .control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG,
   };
 }
@@ -1425,7 +1426,7 @@ iree_status_t loom_check_prepare_source_low_module(
   loom_compile_pipeline_options_t compile_options = {0};
   loom_compile_pipeline_options_initialize(&compile_options);
   compile_options.pipeline = options->pipeline;
-  compile_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  compile_options.default_pipeline = options->default_pipeline;
   compile_options.target_pipeline_options.control_flow_lowering =
       options->control_flow_lowering;
   compile_options.target_environment = environment->target_environment;
@@ -1533,6 +1534,10 @@ static iree_status_t loom_check_emit_write_source_low_text(
   loom_check_prepare_source_low_options_t prepare_options = {0};
   loom_check_prepare_source_low_options_initialize(&prepare_options);
   prepare_options.pipeline = loom_check_emit_source_low_pipeline(request);
+  prepare_options.default_pipeline =
+      request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW
+          ? LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_ARTIFACTS
+          : LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
   prepare_options.control_flow_lowering =
       request->source_low_control_flow_lowering;
   IREE_RETURN_IF_ERROR(loom_check_prepare_source_low_module(

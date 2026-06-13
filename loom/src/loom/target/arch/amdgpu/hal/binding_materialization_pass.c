@@ -38,8 +38,22 @@ static const loom_pass_info_t
         .statistic_layout = &loom_amdgpu_hal_kernel_abi_statistics_layout,
 };
 
+static const loom_pass_info_t
+    loom_amdgpu_materialize_hal_buffer_descriptors_pass_info_storage = {
+        .name = IREE_SVL("amdgpu-materialize-hal-buffer-descriptors"),
+        .description =
+            IREE_SVL("Materialize AMDGPU HAL buffer descriptor pseudos."),
+        .kind = LOOM_PASS_FUNCTION,
+        .statistic_layout = &loom_amdgpu_hal_kernel_abi_statistics_layout,
+};
+
 const loom_pass_info_t* loom_amdgpu_materialize_hal_kernel_abi_pass_info(void) {
   return &loom_amdgpu_materialize_hal_kernel_abi_pass_info_storage;
+}
+
+const loom_pass_info_t*
+loom_amdgpu_materialize_hal_buffer_descriptors_pass_info(void) {
+  return &loom_amdgpu_materialize_hal_buffer_descriptors_pass_info_storage;
 }
 
 static bool loom_amdgpu_materialize_hal_kernel_abi_matches(
@@ -102,5 +116,43 @@ iree_status_t loom_amdgpu_materialize_hal_kernel_abi_run(
   if (loom_amdgpu_hal_binding_materialization_changed(&materialization)) {
     loom_pass_mark_changed(pass);
   }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_materialize_hal_buffer_descriptors_run(
+    loom_pass_t* pass, loom_module_t* module, loom_func_like_t function) {
+  if (!loom_low_function_def_isa(function.op)) {
+    return iree_ok_status();
+  }
+
+  const loom_low_pass_capability_t* low_capability =
+      loom_low_pass_capability_from_pass(pass);
+  const loom_low_descriptor_registry_t* descriptor_registry =
+      loom_low_pass_capability_descriptor_registry(low_capability);
+  const loom_target_pass_capability_t* target_capability =
+      loom_target_pass_capability_from_pass(pass);
+  const loom_target_selection_t target_selection =
+      loom_target_pass_capability_target_selection(target_capability);
+  loom_low_resolved_target_t target = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+      module, function.op, descriptor_registry, target_selection,
+      pass->diagnostic_emitter, &target));
+  if (!loom_amdgpu_materialize_hal_kernel_abi_matches(&target)) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t materialized_count = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_materialize_buffer_descriptors(
+      module, function.op, &target.bundle_storage.bundle, target.descriptor_set,
+      &materialized_count, pass->arena));
+  if (materialized_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_hal_kernel_abi_statistics_t* statistics =
+      loom_amdgpu_hal_kernel_abi_statistics(pass);
+  ++statistics->functions;
+  statistics->descriptors += materialized_count;
+  loom_pass_mark_changed(pass);
   return iree_ok_status();
 }

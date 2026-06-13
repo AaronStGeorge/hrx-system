@@ -35,9 +35,12 @@ typedef enum loom_compile_default_pipeline_e {
   // Build the shared source/kernel-to-target-low pipeline. This is useful for
   // debugging the target-low handoff before artifact preparation.
   LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW = 0,
+  // Build source/kernel-to-target-low plus target-owned cleanup needed by
+  // required low-asm artifact printing.
+  LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_ARTIFACTS = 1,
   // Build the full prepared target-low pipeline including target ABI/resource
   // materialization and packetization preparation.
-  LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW = 1,
+  LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW = 2,
 } loom_compile_default_pipeline_t;
 
 typedef struct loom_compile_pipeline_options_t {

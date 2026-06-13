@@ -367,12 +367,12 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else_exact_constant_p
   %29, %30 = s_and_saveexec_b64 %in_range
   low.cond_br %30, ^then, ^_bb5 : reg<amdgpu.scc>
 ^then:
-  low.br ^_bb4(%then_index: reg<amdgpu.vgpr>, %then_index: reg<amdgpu.vgpr>)
+  low.br ^_bb4(%then_index: reg<amdgpu.vgpr>)
 ^else:
   low.br ^_bb7
-^join(%selected_index$16: reg<amdgpu.vgpr>, %selected_token$17: reg<amdgpu.vgpr>):
-  return %selected_index$16, %selected_token$17
-^_bb4(%selected_index$18: reg<amdgpu.vgpr>, %selected_token$19: reg<amdgpu.vgpr>):
+^join(%selected_index$16: reg<amdgpu.vgpr>, %selected_token: reg<amdgpu.vgpr>):
+  return %selected_index$16, %selected_token
+^_bb4(%selected_index$18: reg<amdgpu.vgpr>):
   s_mov_b64_exec %29
   %34 = s_and_b64 %29, %in_range
   %35 = s_xor_b64_exec %34
@@ -380,14 +380,14 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else_exact_constant_p
 ^_bb5:
   s_mov_b64_exec %29
   %31 = v_mov_b32 0
-  low.br ^_bb4(%31: reg<amdgpu.vgpr>, %31: reg<amdgpu.vgpr>)
+  low.br ^_bb4(%31: reg<amdgpu.vgpr>)
 ^_bb6:
   s_mov_b64_exec %29
-  low.br ^join(%selected_index$18: reg<amdgpu.vgpr>, %selected_token$19: reg<amdgpu.vgpr>)
+  low.br ^join(%selected_index$18: reg<amdgpu.vgpr>, %selected_index$18: reg<amdgpu.vgpr>)
 ^_bb7:
   s_mov_b64_exec %29
   %32 = v_cndmask_b32 %else_index, %selected_index$18, %in_range
-  %33 = v_cndmask_b32 %else_token, %selected_token$19, %in_range
+  %33 = v_cndmask_b32 %else_token, %selected_index$18, %in_range
   low.br ^join(%32: reg<amdgpu.vgpr>, %33: reg<amdgpu.vgpr>)
 }
 

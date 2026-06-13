@@ -16,6 +16,8 @@ typedef struct loom_target_pipeline_build_context_t {
   loom_pass_environment_t pass_environment;
   // Caller-selected options for the pipeline.
   const loom_target_pipeline_options_t* options;
+  // True when source-low output is a required-asm artifact surface.
+  bool source_low_artifact_preparation;
 } loom_target_pipeline_build_context_t;
 
 typedef struct loom_target_pipeline_function_body_t {
@@ -221,6 +223,15 @@ static iree_status_t loom_target_pipeline_build_low_cleanup_body(
   return loom_target_pipeline_build_run(builder, IREE_SV("low-dce"));
 }
 
+static iree_status_t loom_target_pipeline_build_source_low_artifact_preparation(
+    loom_builder_t* builder, void* user_data) {
+  const loom_target_pipeline_build_context_t* context =
+      (const loom_target_pipeline_build_context_t*)user_data;
+  return loom_target_pipeline_contribute_phase(
+      builder, context,
+      LOOM_TARGET_PIPELINE_PHASE_SOURCE_LOW_ARTIFACT_PREPARATION);
+}
+
 static iree_status_t loom_target_pipeline_build_low_preparation(
     loom_builder_t* builder, void* user_data) {
   const loom_target_pipeline_build_context_t* context =
@@ -260,6 +271,14 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_source_to_low(builder, context->options));
+  if (context->source_low_artifact_preparation) {
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+        builder, loom_target_pipeline_build_low_cleanup_body, user_data,
+        &for_op));
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+        builder, loom_target_pipeline_build_source_low_artifact_preparation,
+        user_data, &for_op));
+  }
   return loom_target_pipeline_build_for_target_functions(
       builder, loom_target_pipeline_build_low_cleanup_body, user_data, &for_op);
 }
@@ -287,6 +306,28 @@ iree_status_t loom_target_pipeline_build_to_source_low(
       .target_environment = target_environment,
       .pass_environment = pass_environment,
       .options = options,
+  };
+  return loom_pass_ir_build_pipeline(pipeline_module, name,
+                                     LOOM_PASS_ANCHOR_MODULE,
+                                     loom_target_pipeline_build_source_low_body,
+                                     (void*)&context, out_pipeline_op);
+}
+
+iree_status_t loom_target_pipeline_build_to_source_low_artifacts(
+    loom_module_t* pipeline_module, iree_string_view_t name,
+    const loom_target_pipeline_options_t* options,
+    const loom_target_environment_t* target_environment,
+    loom_pass_environment_t pass_environment, loom_op_t** out_pipeline_op) {
+  IREE_ASSERT_ARGUMENT(pipeline_module);
+  IREE_ASSERT_ARGUMENT(target_environment);
+  IREE_ASSERT_ARGUMENT(out_pipeline_op);
+  *out_pipeline_op = NULL;
+
+  const loom_target_pipeline_build_context_t context = {
+      .target_environment = target_environment,
+      .pass_environment = pass_environment,
+      .options = options,
+      .source_low_artifact_preparation = true,
   };
   return loom_pass_ir_build_pipeline(pipeline_module, name,
                                      LOOM_PASS_ANCHOR_MODULE,

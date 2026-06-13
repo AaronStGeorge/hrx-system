@@ -1134,10 +1134,11 @@ def _v_dot4_i32_iu8_overlay(
             rhs_signed=rhs_signed,
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        asm_forms=(),
-        asm_surface=DescriptorAsmSurface.STRUCTURAL,
-        asm_surface_reason=(
-            "native asm forms cannot yet spell the fixed NEG source selectors"
+        asm_forms=_asm(
+            mnemonic=f"v_dot4_i32_iu8_{lhs_tag}{rhs_tag}",
+            native_assembly_mnemonic="v_dot4_i32_iu8",
+            results=("dst",),
+            operands=("lhs", "rhs", "acc"),
         ),
     )
 
@@ -1238,10 +1239,11 @@ def _v_dot8_i32_iu4_overlay(
             rhs_signed=rhs_signed,
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        asm_forms=(),
-        asm_surface=DescriptorAsmSurface.STRUCTURAL,
-        asm_surface_reason=(
-            "native asm forms cannot yet spell the fixed NEG source selectors"
+        asm_forms=_asm(
+            mnemonic=f"v_dot8_i32_iu4_{lhs_tag}{rhs_tag}",
+            native_assembly_mnemonic="v_dot8_i32_iu4",
+            results=("dst",),
+            operands=("lhs", "rhs", "acc"),
         ),
     )
 

@@ -64,6 +64,20 @@ iree_status_t loom_amdgpu_hal_binding_materialize(
     loom_amdgpu_hal_binding_materialization_result_t* out_result,
     iree_arena_allocator_t* scratch_arena);
 
+// Expands only amdgpu.hal.buffer_descriptor pseudos in |function_op|.
+//
+// This is the source-low artifact boundary for descriptors that are compiler
+// internals rather than authorable low asm. Unlike
+// loom_amdgpu_hal_binding_materialize, this does not materialize
+// low.resource<hal_binding> imports, direct entry arguments, or the kernarg
+// segment pointer.
+iree_status_t loom_amdgpu_hal_binding_materialize_buffer_descriptors(
+    loom_module_t* module, loom_op_t* function_op,
+    const loom_target_bundle_t* target_bundle,
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_host_size_t* out_materialized_count,
+    iree_arena_allocator_t* scratch_arena);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

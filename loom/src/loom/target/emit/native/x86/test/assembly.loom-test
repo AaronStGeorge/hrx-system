@@ -620,9 +620,9 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 x86.target<avx512_packed_dot> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %bf16_acc: reg<x86.zmm>, %bf16_lhs: reg<x86.zmm>, %bf16_rhs: reg<x86.zmm>, %i8_acc: reg<x86.zmm>, %i8_lhs: reg<x86.zmm>, %i8_rhs: reg<x86.zmm>) asm<x86.avx512_packed_dot.core> {
-  %bf16_dot = vdpbf16ps %bf16_acc, %bf16_lhs, %bf16_rhs
+  %bf16_dot = avx512_bf16.vdpbf16ps %bf16_acc, %bf16_lhs, %bf16_rhs
   vmovdqu32.store %bf16_dot, %base {disp32 = 0}
-  %i8_dot = vpdpbusd %i8_acc, %i8_lhs, %i8_rhs
+  %i8_dot = avx512_vnni.vpdpbusd %i8_acc, %i8_lhs, %i8_rhs
   vmovdqu32.store %i8_dot, %base {disp32 = 64}
   return
 }

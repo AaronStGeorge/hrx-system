@@ -26,8 +26,17 @@ extern "C" {
 // Returns static pass metadata for amdgpu-materialize-hal-kernel-abi.
 const loom_pass_info_t* loom_amdgpu_materialize_hal_kernel_abi_pass_info(void);
 
+// Returns static pass metadata for amdgpu-materialize-hal-buffer-descriptors.
+const loom_pass_info_t*
+loom_amdgpu_materialize_hal_buffer_descriptors_pass_info(void);
+
 // Runs AMDGPU HAL-kernel ABI materialization on one target-low function.
 iree_status_t loom_amdgpu_materialize_hal_kernel_abi_run(
+    loom_pass_t* pass, loom_module_t* module, loom_func_like_t function);
+
+// Runs AMDGPU HAL buffer descriptor pseudo expansion on one target-low
+// function.
+iree_status_t loom_amdgpu_materialize_hal_buffer_descriptors_run(
     loom_pass_t* pass, loom_module_t* module, loom_func_like_t function);
 
 #ifdef __cplusplus

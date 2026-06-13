@@ -779,20 +779,110 @@ loom_amdgpu_hal_binding_materialize_buffer_descriptor_pseudo(
                                                   1);
 }
 
+static iree_status_t
+loom_amdgpu_hal_binding_materialize_buffer_descriptors_with_types(
+    loom_rewriter_t* rewriter, loom_op_t* function_op,
+    const loom_target_bundle_t* target_bundle,
+    const loom_low_descriptor_set_t* descriptor_set, loom_type_t sgpr_type,
+    loom_type_t sgpr_x2_type, iree_host_size_t* out_materialized_count) {
+  *out_materialized_count = 0;
+  loom_region_t* body = loom_low_function_body(function_op);
+  if (body == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU HAL binding materialization reached a low function without a "
+        "body");
+  }
+  iree_status_t status = iree_ok_status();
+  const loom_low_descriptor_t* static_descriptor =
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR);
+  const loom_low_descriptor_t* dynamic_extent_descriptor =
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set,
+          LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR_EXTENT);
+  for (uint16_t block_index = 0;
+       iree_status_is_ok(status) && block_index < body->block_count;
+       ++block_index) {
+    loom_block_t* block = loom_region_block(body, block_index);
+    loom_op_t* op = block->first_op;
+    while (iree_status_is_ok(status) && op != NULL) {
+      loom_op_t* next_op = op->next_op;
+      if (loom_low_op_isa(op)) {
+        const loom_low_descriptor_t* descriptor =
+            loom_amdgpu_hal_binding_resolve_low_op_descriptor(
+                rewriter->module, descriptor_set, op);
+        if (descriptor == NULL || (descriptor != static_descriptor &&
+                                   descriptor != dynamic_extent_descriptor)) {
+          op = next_op;
+          continue;
+        }
+        status = loom_amdgpu_hal_binding_materialize_buffer_descriptor_pseudo(
+            rewriter, op, target_bundle, descriptor_set, descriptor, sgpr_type,
+            sgpr_x2_type);
+        if (iree_status_is_ok(status)) {
+          ++*out_materialized_count;
+        }
+      }
+      op = next_op;
+    }
+  }
+  return status;
+}
+
+iree_status_t loom_amdgpu_hal_binding_materialize_buffer_descriptors(
+    loom_module_t* module, loom_op_t* function_op,
+    const loom_target_bundle_t* target_bundle,
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_host_size_t* out_materialized_count,
+    iree_arena_allocator_t* scratch_arena) {
+  if (module == NULL || function_op == NULL || target_bundle == NULL ||
+      descriptor_set == NULL || out_materialized_count == NULL ||
+      scratch_arena == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL descriptor materialization requires a module, function, "
+        "target bundle, descriptor set, output count, and scratch arena");
+  }
+  *out_materialized_count = 0;
+  if (!loom_low_function_def_isa(function_op)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL descriptor materialization requires low.func.def or "
+        "low.kernel.def");
+  }
+
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_make_sgpr_type(
+      module, descriptor_set, 1, &sgpr_type));
+  loom_type_t sgpr_x2_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_make_sgpr_type(
+      module, descriptor_set, 2, &sgpr_x2_type));
+  loom_rewriter_t rewriter = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_initialize(&rewriter, module, scratch_arena));
+  iree_status_t status =
+      loom_amdgpu_hal_binding_materialize_buffer_descriptors_with_types(
+          &rewriter, function_op, target_bundle, descriptor_set, sgpr_type,
+          sgpr_x2_type, out_materialized_count);
+  loom_rewriter_deinitialize(&rewriter);
+  return status;
+}
+
 iree_status_t loom_amdgpu_hal_binding_materialize(
     loom_module_t* module, loom_op_t* function_op,
     const loom_target_bundle_t* target_bundle,
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_hal_binding_materialization_result_t* out_result,
     iree_arena_allocator_t* scratch_arena) {
-  *out_result = (loom_amdgpu_hal_binding_materialization_result_t){0};
   if (module == NULL || function_op == NULL || target_bundle == NULL ||
-      descriptor_set == NULL || scratch_arena == NULL) {
+      descriptor_set == NULL || out_result == NULL || scratch_arena == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HAL binding materialization requires a module, function, "
-        "target bundle, descriptor set, and scratch arena");
+        "target bundle, descriptor set, output result, and scratch arena");
   }
+  *out_result = (loom_amdgpu_hal_binding_materialization_result_t){0};
   if (!loom_low_function_def_isa(function_op)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -858,39 +948,10 @@ iree_status_t loom_amdgpu_hal_binding_materialize(
         &rewriter, &layout, kernarg_ptr, descriptor_set, sgpr_x2_type,
         sgpr_x4_type, &out_result->materialized_binding_count);
   }
-  for (uint16_t block_index = 0;
-       iree_status_is_ok(status) && block_index < body->block_count;
-       ++block_index) {
-    loom_block_t* block = loom_region_block(body, block_index);
-    loom_op_t* op = block->first_op;
-    while (iree_status_is_ok(status) && op != NULL) {
-      loom_op_t* next_op = op->next_op;
-      if (loom_low_op_isa(op)) {
-        const loom_low_descriptor_t* descriptor =
-            loom_amdgpu_hal_binding_resolve_low_op_descriptor(
-                module, descriptor_set, op);
-        const loom_low_descriptor_t* static_descriptor =
-            loom_amdgpu_descriptor_ref_descriptor(
-                descriptor_set,
-                LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR);
-        const loom_low_descriptor_t* dynamic_extent_descriptor =
-            loom_amdgpu_descriptor_ref_descriptor(
-                descriptor_set,
-                LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR_EXTENT);
-        if (descriptor == NULL || (descriptor != static_descriptor &&
-                                   descriptor != dynamic_extent_descriptor)) {
-          op = next_op;
-          continue;
-        }
-        status = loom_amdgpu_hal_binding_materialize_buffer_descriptor_pseudo(
-            &rewriter, op, target_bundle, descriptor_set, descriptor, sgpr_type,
-            sgpr_x2_type);
-        if (iree_status_is_ok(status)) {
-          ++out_result->materialized_descriptor_count;
-        }
-      }
-      op = next_op;
-    }
+  if (iree_status_is_ok(status)) {
+    status = loom_amdgpu_hal_binding_materialize_buffer_descriptors_with_types(
+        &rewriter, function_op, target_bundle, descriptor_set, sgpr_type,
+        sgpr_x2_type, &out_result->materialized_descriptor_count);
   }
 
   out_result->inserted_kernarg_segment_ptr_live_in = inserted_live_in;

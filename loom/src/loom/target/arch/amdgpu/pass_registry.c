@@ -24,6 +24,14 @@ static const loom_pass_requirement_def_t
 
 static const loom_pass_descriptor_t kAmdgpuPassDescriptors[] = {
     {
+        .key = IREE_SVL("amdgpu-materialize-hal-buffer-descriptors"),
+        .info = loom_amdgpu_materialize_hal_buffer_descriptors_pass_info,
+        .function_run = loom_amdgpu_materialize_hal_buffer_descriptors_run,
+        .requirement_defs = kAmdgpuMaterializeHalKernelAbiRequirements,
+        .requirement_count =
+            IREE_ARRAYSIZE(kAmdgpuMaterializeHalKernelAbiRequirements),
+    },
+    {
         .key = IREE_SVL("amdgpu-materialize-hal-kernel-abi"),
         .info = loom_amdgpu_materialize_hal_kernel_abi_pass_info,
         .function_run = loom_amdgpu_materialize_hal_kernel_abi_run,

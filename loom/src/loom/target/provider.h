@@ -212,10 +212,12 @@ typedef enum loom_target_pipeline_phase_e {
   LOOM_TARGET_PIPELINE_PHASE_SOURCE_NORMALIZATION = 0,
   // Source-to-target-low lowering.
   LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW = 1,
+  // Target-owned cleanup for human-facing source-low asm artifacts.
+  LOOM_TARGET_PIPELINE_PHASE_SOURCE_LOW_ARTIFACT_PREPARATION = 2,
   // Target ABI/resource materialization after source-to-low.
-  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION = 2,
+  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION = 3,
   // Target-low cleanup and operand-form preparation before emission.
-  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_PREPARATION = 3,
+  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_PREPARATION = 4,
   LOOM_TARGET_PIPELINE_PHASE_COUNT_,
 } loom_target_pipeline_phase_t;
 

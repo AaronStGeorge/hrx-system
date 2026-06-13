@@ -150,8 +150,13 @@ def _packed_dot_descriptor_data(
 
 def _packed_dot_target_descriptor(
     descriptor_data: PackedDotDescriptor,
+    *,
+    qualify_asm_mnemonic: bool = False,
 ) -> Descriptor:
-    descriptor = _packed_dot_descriptor(descriptor_data)
+    descriptor = _packed_dot_descriptor(
+        descriptor_data,
+        qualify_asm_mnemonic=qualify_asm_mnemonic,
+    )
     if descriptor_data.family not in _X86_VEX_PACKED_DOT_FAMILIES:
         return descriptor
     return replace(
@@ -174,6 +179,7 @@ def _descriptor_set(
     descriptor_data: Sequence[PackedDotDescriptor],
     vector_bit_widths: Sequence[int],
     allocatable_count: int,
+    qualify_asm_mnemonics: bool = False,
 ) -> DescriptorSet:
     return DescriptorSet(
         key=key,
@@ -193,7 +199,11 @@ def _descriptor_set(
         resources=_packed_dot_resources(),
         schedule_classes=_packed_dot_schedule_classes(vector_bit_widths),
         descriptors=tuple(
-            _packed_dot_target_descriptor(descriptor) for descriptor in descriptor_data
+            _packed_dot_target_descriptor(
+                descriptor,
+                qualify_asm_mnemonic=qualify_asm_mnemonics,
+            )
+            for descriptor in descriptor_data
         ),
     )
 
@@ -314,4 +324,5 @@ X86_PACKED_DOT_DESCRIPTOR_SET = _descriptor_set(
     descriptor_data=X86_PACKED_DOT_DESCRIPTORS,
     vector_bit_widths=(128, 256, 512),
     allocatable_count=32,
+    qualify_asm_mnemonics=True,
 )

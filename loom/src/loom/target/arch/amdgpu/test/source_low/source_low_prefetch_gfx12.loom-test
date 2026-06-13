@@ -11,12 +11,19 @@ func.def target(@target) @prefetch_static(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @prefetch_static() {
-  %input_view = low.resource<hal_binding> {extent = 272, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %4 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %5 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 272} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  low.op<amdgpu.s_buffer_prefetch_data>(%5, %4) {count = 1, offset = 32} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
-  low.return
+low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.rdna4.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 272} : reg<amdgpu.sgpr x2>
+  %4 = s_mov_b32 0
+  %6 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %7 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %8 = s_mov_b32 65535
+  %9 = s_and_b32 %7, %8
+  %10 = concat(%6, %9) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %11 = s_mov_b32 272
+  %12 = s_mov_b32 822243328
+  %13 = concat(%10, %11, %12) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  s_buffer_prefetch_data %13, %4 {offset = 32, count = 1}
+  return
 }
 
 // ====
@@ -37,13 +44,20 @@ kernel.def target(@target) @prefetch_workgroup_id() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @prefetch_workgroup_id() {
-  %bounded_gid = low.live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %9 = low.op<amdgpu.s_lshl_b32.rhs_inline>(%bounded_gid) {imm32 = 2} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  %10 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  low.op<amdgpu.s_buffer_prefetch_data>(%10, %9) {count = 1, offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @prefetch_workgroup_id() asm<amdgpu.rdna4.core> {
+  %bounded_gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %9 = s_lshl_b32_rhs_inline %bounded_gid, 2
+  %11 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %12 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %13 = s_mov_b32 65535
+  %14 = s_and_b32 %12, %13
+  %15 = concat(%11, %14) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %16 = s_mov_b32 256
+  %17 = s_mov_b32 822243328
+  %18 = concat(%15, %16, %17) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  s_buffer_prefetch_data %18, %9 {count = 1}
+  return
 }
 
 // ====
@@ -70,12 +84,19 @@ kernel.def target(@target) @prefetch_fixed_query_offset() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() {
-  %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %20 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %21 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  low.op<amdgpu.s_buffer_prefetch_data>(%21, %20) {count = 1, offset = 180} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
-  low.return
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() asm<amdgpu.rdna4.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %20 = s_mov_b32 0
+  %22 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %23 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %24 = s_mov_b32 65535
+  %25 = s_and_b32 %23, %24
+  %26 = concat(%22, %25) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %27 = s_mov_b32 256
+  %28 = s_mov_b32 822243328
+  %29 = concat(%26, %27, %28) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  s_buffer_prefetch_data %29, %20 {offset = 180, count = 1}
+  return
 }
 
 // ====
