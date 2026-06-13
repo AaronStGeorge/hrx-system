@@ -94,6 +94,10 @@ iree_string_view_t loom_target_math_op_name(loom_target_math_op_t math_op) {
       return IREE_SV("sinturnsf");
     case LOOM_TARGET_MATH_OP_COSTURNSF:
       return IREE_SV("costurnsf");
+    case LOOM_TARGET_MATH_OP_TANHF:
+      return IREE_SV("tanhf");
+    case LOOM_TARGET_MATH_OP_POWF:
+      return IREE_SV("powf");
     case LOOM_TARGET_MATH_OP_UNKNOWN:
       return IREE_SV("unknown");
   }
@@ -140,6 +144,10 @@ iree_string_view_t loom_target_math_recipe_name(
       return IREE_SV("sin-turns-f32");
     case LOOM_TARGET_MATH_RECIPE_COS_TURNS_F32:
       return IREE_SV("cos-turns-f32");
+    case LOOM_TARGET_MATH_RECIPE_TANH_LOGISTIC_F32:
+      return IREE_SV("tanh-logistic-f32");
+    case LOOM_TARGET_MATH_RECIPE_POW_LOG2_EXP2_F32:
+      return IREE_SV("pow-log2-exp2-f32");
     case LOOM_TARGET_MATH_RECIPE_UNKNOWN:
       return IREE_SV("unknown");
   }
