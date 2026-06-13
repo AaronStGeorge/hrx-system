@@ -62,15 +62,25 @@ typedef struct loom_amdgpu_bitpack_plan_t {
   uint32_t result_register_count;
 } loom_amdgpu_bitpack_plan_t;
 
+typedef enum loom_amdgpu_bitunpack_result_kind_e {
+  LOOM_AMDGPU_BITUNPACK_RESULT_KIND_NONE = 0,
+  LOOM_AMDGPU_BITUNPACK_RESULT_KIND_I32_LANES = 1,
+  LOOM_AMDGPU_BITUNPACK_RESULT_KIND_PACKED_I8 = 2,
+} loom_amdgpu_bitunpack_result_kind_t;
+
 typedef struct loom_amdgpu_bitunpack_plan_t {
   // Source vector value containing packed integer bitstream storage.
   loom_value_id_t source;
-  // Result vector value containing unpacked i32 lanes.
+  // Result vector value receiving unpacked lanes.
   loom_value_id_t result;
+  // Selected result payload representation.
+  loom_amdgpu_bitunpack_result_kind_t result_kind;
   // Number of bits unpacked into each result lane.
   uint32_t width;
   // Number of packed 32-bit source registers.
   uint32_t source_register_count;
+  // Number of packed 32-bit result registers.
+  uint32_t result_register_count;
   // Number of unpacked result lanes.
   uint32_t lane_count;
   // True when unpacked lanes are sign-extended.
@@ -266,6 +276,7 @@ typedef enum loom_amdgpu_table_lookup_strategy_e {
   LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_NONE = 0,
   LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_F32_LADDER = 1,
   LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE = 2,
+  LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE = 3,
 } loom_amdgpu_table_lookup_strategy_t;
 
 typedef struct loom_amdgpu_table_lookup_plan_t {
@@ -291,6 +302,8 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
   loom_amdgpu_table_index_kind_t index_kind;
   // Static number of table lanes.
   uint32_t table_lane_count;
+  // Number of 32-bit registers occupied by the table vector.
+  uint32_t table_register_count;
   // Static number of result lanes.
   uint32_t result_lane_count;
   // Number of 32-bit registers occupied by the index vector.

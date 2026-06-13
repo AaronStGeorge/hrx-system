@@ -55,14 +55,14 @@ static bool loom_amdgpu_table_lookup_plan_f32_ladder(
   return true;
 }
 
-static bool loom_amdgpu_table_lookup_index_lane_fits_u2(
-    loom_value_facts_t facts) {
-  return loom_value_facts_fit_unsigned_bit_count(facts, 2);
+static bool loom_amdgpu_table_lookup_index_lane_fits_unsigned_bit_count(
+    loom_value_facts_t facts, uint32_t bit_count) {
+  return loom_value_facts_fit_unsigned_bit_count(facts, bit_count);
 }
 
-static bool loom_amdgpu_table_lookup_indices_fit_u2(
+static bool loom_amdgpu_table_lookup_indices_fit_unsigned_bit_count(
     const loom_value_fact_table_t* fact_table, loom_value_id_t indices,
-    uint32_t lane_count) {
+    uint32_t lane_count, uint32_t bit_count) {
   if (fact_table == NULL) {
     return false;
   }
@@ -72,7 +72,8 @@ static bool loom_amdgpu_table_lookup_indices_fit_u2(
   loom_value_fact_uniform_element_t uniform = {0};
   if (loom_value_facts_query_uniform_element(&fact_table->context, index_facts,
                                              &uniform)) {
-    return loom_amdgpu_table_lookup_index_lane_fits_u2(uniform.element);
+    return loom_amdgpu_table_lookup_index_lane_fits_unsigned_bit_count(
+        uniform.element, bit_count);
   }
 
   loom_value_fact_small_static_lanes_t lanes = {0};
@@ -82,14 +83,16 @@ static bool loom_amdgpu_table_lookup_indices_fit_u2(
       return false;
     }
     for (uint32_t i = 0; i < lane_count; ++i) {
-      if (!loom_amdgpu_table_lookup_index_lane_fits_u2(lanes.lanes[i])) {
+      if (!loom_amdgpu_table_lookup_index_lane_fits_unsigned_bit_count(
+              lanes.lanes[i], bit_count)) {
         return false;
       }
     }
     return true;
   }
 
-  return loom_amdgpu_table_lookup_index_lane_fits_u2(index_facts);
+  return loom_amdgpu_table_lookup_index_lane_fits_unsigned_bit_count(
+      index_facts, bit_count);
 }
 
 static bool loom_amdgpu_table_lookup_plan_packed_i8_permute(
@@ -123,14 +126,60 @@ static bool loom_amdgpu_table_lookup_plan_packed_i8_permute(
       index_payload_bit_count != 32 || index_register_count != 1) {
     return false;
   }
-  if (!loom_amdgpu_table_lookup_indices_fit_u2(fact_table, indices,
-                                               result_lane_count)) {
+  if (!loom_amdgpu_table_lookup_indices_fit_unsigned_bit_count(
+          fact_table, indices, result_lane_count, 2)) {
     return false;
   }
 
   out_plan->strategy = LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE;
   out_plan->index_kind = LOOM_AMDGPU_TABLE_INDEX_KIND_PACKED_I8;
   out_plan->table_lane_count = table_lane_count;
+  out_plan->table_register_count = table_register_count;
+  out_plan->result_lane_count = result_lane_count;
+  out_plan->index_register_count = index_register_count;
+  return true;
+}
+
+static bool loom_amdgpu_table_lookup_plan_packed_i8_u4_permute(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t indices,
+    loom_type_t table_type, loom_type_t indices_type, loom_type_t result_type,
+    loom_amdgpu_table_lookup_plan_t* out_plan) {
+  const uint32_t table_lane_count =
+      loom_amdgpu_static_vector_lane_count(table_type, LOOM_SCALAR_TYPE_I8, 16);
+  const uint32_t result_lane_count =
+      loom_amdgpu_static_vector_lane_count(result_type, LOOM_SCALAR_TYPE_I8, 4);
+  if (table_lane_count != 16 || result_lane_count != 4) {
+    return false;
+  }
+
+  uint32_t table_payload_bit_count = 0;
+  uint32_t table_register_count = 0;
+  uint32_t result_payload_bit_count = 0;
+  uint32_t result_register_count = 0;
+  uint32_t index_payload_bit_count = 0;
+  uint32_t index_register_count = 0;
+  if (!loom_amdgpu_type_packed_integer_storage(
+          table_type, &table_payload_bit_count, &table_register_count) ||
+      !loom_amdgpu_type_packed_integer_storage(
+          result_type, &result_payload_bit_count, &result_register_count) ||
+      loom_amdgpu_static_vector_lane_count(indices_type, LOOM_SCALAR_TYPE_I8,
+                                           4) != result_lane_count ||
+      !loom_amdgpu_type_packed_integer_storage(
+          indices_type, &index_payload_bit_count, &index_register_count) ||
+      table_payload_bit_count != 128 || table_register_count != 4 ||
+      result_payload_bit_count != 32 || result_register_count != 1 ||
+      index_payload_bit_count != 32 || index_register_count != 1) {
+    return false;
+  }
+  if (!loom_amdgpu_table_lookup_indices_fit_unsigned_bit_count(
+          fact_table, indices, result_lane_count, 4)) {
+    return false;
+  }
+
+  out_plan->strategy = LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE;
+  out_plan->index_kind = LOOM_AMDGPU_TABLE_INDEX_KIND_PACKED_I8;
+  out_plan->table_lane_count = table_lane_count;
+  out_plan->table_register_count = table_register_count;
   out_plan->result_lane_count = result_lane_count;
   out_plan->index_register_count = index_register_count;
   return true;
@@ -159,6 +208,9 @@ static bool loom_amdgpu_table_lookup_plan_from_op(
                                                   result_type, out_plan) ||
          loom_amdgpu_table_lookup_plan_packed_i8_permute(
              fact_table, out_plan->indices, table_type, indices_type,
+             result_type, out_plan) ||
+         loom_amdgpu_table_lookup_plan_packed_i8_u4_permute(
+             fact_table, out_plan->indices, table_type, indices_type,
              result_type, out_plan);
 }
 
@@ -173,7 +225,9 @@ iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
   }
 
   if (out_plan->strategy ==
-      LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE) {
+          LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE ||
+      out_plan->strategy ==
+          LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE) {
     bool descriptor_present = false;
     IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
         context, LOOM_AMDGPU_DESCRIPTOR_REF_V_PERM_B32,
@@ -224,6 +278,7 @@ static bool loom_amdgpu_table_lookup_plan_descriptors_present(
              loom_amdgpu_table_lookup_descriptor_present(
                  descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32);
     case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE:
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE:
       return loom_amdgpu_table_lookup_descriptor_present(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_PERM_B32);
     default:
@@ -400,6 +455,81 @@ static iree_status_t loom_amdgpu_lower_vector_table_lookup_packed_i8_permute(
       loom_value_slice_get(loom_low_op_results(permute_op), 0));
 }
 
+static iree_status_t loom_amdgpu_lower_vector_table_lookup_packed_i8_u4_permute(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_table,
+    loom_value_id_t low_indices) {
+  loom_type_t lane_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
+  loom_value_id_t table_registers[4] = {0};
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(table_registers); ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_table_lookup_slice_if_needed(
+        context, source_op, low_table, plan->table_register_count, i, lane_type,
+        &table_registers[i]));
+  }
+
+  loom_value_id_t low_selector = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, low_indices,
+      UINT32_C(0x07070707), lane_type, &low_selector));
+
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
+                                                   plan->result, &result_type));
+  const loom_value_id_t low_lookup_operands[3] = {
+      table_registers[0],
+      table_registers[1],
+      low_selector,
+  };
+  loom_op_t* low_lookup_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->permute_descriptor, low_lookup_operands,
+      IREE_ARRAYSIZE(low_lookup_operands), loom_named_attr_slice_empty(),
+      &result_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
+      source_op->location, &low_lookup_op));
+
+  const loom_value_id_t high_lookup_operands[3] = {
+      table_registers[2],
+      table_registers[3],
+      low_selector,
+  };
+  loom_op_t* high_lookup_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->permute_descriptor, high_lookup_operands,
+      IREE_ARRAYSIZE(high_lookup_operands), loom_named_attr_slice_empty(),
+      &result_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
+      source_op->location, &high_lookup_op));
+
+  loom_value_id_t high_table_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, low_indices,
+      UINT32_C(0x08080808), lane_type, &high_table_bits));
+  loom_value_id_t high_table_selector_offset = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 1,
+      high_table_bits, lane_type, &high_table_selector_offset));
+  loom_value_id_t merge_selector = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32_LIT,
+      high_table_selector_offset, UINT32_C(0x03020100), lane_type,
+      &merge_selector));
+
+  const loom_value_id_t merge_operands[3] = {
+      loom_value_slice_get(loom_low_op_results(low_lookup_op), 0),
+      loom_value_slice_get(loom_low_op_results(high_lookup_op), 0),
+      merge_selector,
+  };
+  loom_op_t* merge_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
+      context, &plan->permute_descriptor, merge_operands,
+      IREE_ARRAYSIZE(merge_operands), loom_named_attr_slice_empty(),
+      &result_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
+      source_op->location, &merge_op));
+  return loom_low_lower_bind_value(
+      context, plan->result,
+      loom_value_slice_get(loom_low_op_results(merge_op), 0));
+}
+
 iree_status_t loom_amdgpu_lower_vector_table_lookup(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_table_lookup_plan_t* plan) {
@@ -412,6 +542,11 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
 
   if (plan->strategy == LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE) {
     return loom_amdgpu_lower_vector_table_lookup_packed_i8_permute(
+        context, source_op, plan, low_table, low_indices);
+  }
+  if (plan->strategy ==
+      LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE) {
+    return loom_amdgpu_lower_vector_table_lookup_packed_i8_u4_permute(
         context, source_op, plan, low_table, low_indices);
   }
 

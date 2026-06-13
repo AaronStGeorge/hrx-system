@@ -584,6 +584,25 @@ static loom_value_facts_t loom_vector_make_signed_raw_bit_facts(
       loom_vector_sign_extend_raw_bits(raw_bits, bitwidth));
 }
 
+static loom_value_facts_t loom_vector_make_unsigned_bit_width_range_facts(
+    int64_t bitwidth) {
+  if (bitwidth <= 0 || bitwidth > 63) {
+    return loom_value_facts_unknown();
+  }
+  const int64_t hi =
+      bitwidth == 63 ? INT64_MAX : (int64_t)((UINT64_C(1) << bitwidth) - 1u);
+  return loom_value_facts_make(0, hi, 1);
+}
+
+static loom_value_facts_t loom_vector_make_signed_bit_width_range_facts(
+    int64_t bitwidth) {
+  if (bitwidth <= 0 || bitwidth >= 64) {
+    return loom_value_facts_unknown();
+  }
+  const int64_t magnitude = (int64_t)(UINT64_C(1) << (bitwidth - 1));
+  return loom_value_facts_make(-magnitude, magnitude - 1, 1);
+}
+
 static loom_value_facts_t loom_vector_make_integer_raw_bit_facts(
     uint64_t raw_bits, loom_scalar_type_t element_type) {
   int32_t bitwidth = loom_scalar_type_bitwidth(element_type);
@@ -3304,6 +3323,9 @@ static iree_status_t loom_vector_bitunpack_facts(
   }
 
   loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  const loom_value_facts_t dynamic_lane_facts =
+      signed_unpack ? loom_vector_make_signed_bit_width_range_facts(width)
+                    : loom_vector_make_unsigned_bit_width_range_facts(width);
   for (iree_host_size_t lane = 0; lane < result_lane_count; ++lane) {
     uint64_t bit_position = 0;
     if ((uint64_t)lane > UINT64_MAX / (uint64_t)width) {
@@ -3314,9 +3336,8 @@ static iree_status_t loom_vector_bitunpack_facts(
     if (!loom_vector_read_logical_bitstream(
             context, operand_facts[0], source_type, storage_width, bit_position,
             (int32_t)width, &raw_bits)) {
-      return loom_vector_make_unknown_facts(result_facts);
-    }
-    if (signed_unpack) {
+      lanes[lane] = dynamic_lane_facts;
+    } else if (signed_unpack) {
       lanes[lane] =
           loom_vector_make_signed_raw_bit_facts(raw_bits, (int32_t)width);
     } else if (!loom_vector_make_unsigned_raw_bit_facts(

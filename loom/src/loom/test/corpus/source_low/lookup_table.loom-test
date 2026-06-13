@@ -68,3 +68,36 @@ func.def @i8_table_lookup_constant_table() -> (vector<4xi8>) {
   %decoded = vector.table.lookup %grid[%codes] : vector<4xi8>, vector<4xi8> -> vector<4xi8>
   func.return %decoded : vector<4xi8>
 }
+
+// ====
+
+func.def @i8_table_lookup_u4_dynamic_table(%grid: vector<16xi8>, %packed: vector<2xi8>) -> (vector<4xi8>) {
+  %codes = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
+  %decoded = vector.table.lookup %grid[%codes] : vector<16xi8>, vector<4xi8> -> vector<4xi8>
+  func.return %decoded : vector<4xi8>
+}
+
+// ====
+
+func.def @i8_table_lookup_u4_constant_table(%packed: vector<2xi8>) -> (vector<4xi8>) {
+  %g0 = scalar.constant 0 : i8
+  %g1 = scalar.constant -1 : i8
+  %g2 = scalar.constant 2 : i8
+  %g3 = scalar.constant -3 : i8
+  %g4 = scalar.constant 4 : i8
+  %g5 = scalar.constant -5 : i8
+  %g6 = scalar.constant 6 : i8
+  %g7 = scalar.constant -7 : i8
+  %g8 = scalar.constant 8 : i8
+  %g9 = scalar.constant -9 : i8
+  %g10 = scalar.constant 10 : i8
+  %g11 = scalar.constant -11 : i8
+  %g12 = scalar.constant 12 : i8
+  %g13 = scalar.constant -13 : i8
+  %g14 = scalar.constant 14 : i8
+  %g15 = scalar.constant -15 : i8
+  %grid = vector.from_elements %g0, %g1, %g2, %g3, %g4, %g5, %g6, %g7, %g8, %g9, %g10, %g11, %g12, %g13, %g14, %g15 : vector<16xi8>
+  %codes = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
+  %decoded = vector.table.lookup %grid[%codes] : vector<16xi8>, vector<4xi8> -> vector<4xi8>
+  func.return %decoded : vector<4xi8>
+}
