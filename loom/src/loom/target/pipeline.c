@@ -117,7 +117,7 @@ static iree_status_t loom_target_pipeline_build_for_target_functions(
 
 static iree_status_t loom_target_pipeline_build_source_to_low(
     loom_builder_t* builder, const loom_target_pipeline_options_t* options) {
-  loom_named_attr_t option_attrs[2] = {0};
+  loom_named_attr_t option_attrs[3] = {0};
   loom_named_attr_slice_t option_slice = loom_named_attr_slice_empty();
   iree_host_size_t option_count = 0;
   loom_target_control_flow_lowering_t control_flow_lowering =
@@ -138,6 +138,27 @@ static iree_status_t loom_target_pipeline_build_source_to_low(
         .name_id = option_name_id,
         .value = loom_attr_i64(options->source_to_low_max_errors),
     };
+  }
+  const loom_target_low_legality_diagnostic_flags_t diagnostic_flags =
+      options != NULL ? options->source_to_low_legality_diagnostic_flags : 0;
+  if (diagnostic_flags != 0) {
+    iree_string_view_t diagnostics_value = iree_string_view_empty();
+    switch (diagnostic_flags) {
+      case LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS:
+        diagnostics_value = IREE_SV("memory");
+        break;
+      case LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL:
+        diagnostics_value = IREE_SV("all");
+        break;
+      default:
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "unknown source-to-low legality diagnostic flags 0x%08X",
+            diagnostic_flags);
+    }
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
+        builder, IREE_SV("diagnostics"), diagnostics_value,
+        &option_attrs[option_count++]));
   }
   if (option_count != 0) {
     option_slice = loom_make_named_attr_slice(option_attrs, option_count);
@@ -283,6 +304,21 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       builder, loom_target_pipeline_build_low_cleanup_body, user_data, &for_op);
 }
 
+static iree_status_t
+loom_target_pipeline_build_source_low_diagnostic_artifacts_body(
+    loom_builder_t* builder, void* user_data) {
+  const loom_target_pipeline_build_context_t* context =
+      (const loom_target_pipeline_build_context_t*)user_data;
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_source_to_low(builder, context->options));
+  loom_op_t* for_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+      builder, loom_target_pipeline_build_source_low_artifact_preparation,
+      user_data, &for_op));
+  return loom_target_pipeline_build_for_target_functions(
+      builder, loom_target_pipeline_build_low_cleanup_body, user_data, &for_op);
+}
+
 static iree_status_t loom_target_pipeline_build_prepared_low_body(
     loom_builder_t* builder, void* user_data) {
   IREE_RETURN_IF_ERROR(
@@ -311,6 +347,27 @@ iree_status_t loom_target_pipeline_build_to_source_low(
                                      LOOM_PASS_ANCHOR_MODULE,
                                      loom_target_pipeline_build_source_low_body,
                                      (void*)&context, out_pipeline_op);
+}
+
+iree_status_t loom_target_pipeline_build_to_source_low_diagnostic_artifacts(
+    loom_module_t* pipeline_module, iree_string_view_t name,
+    const loom_target_pipeline_options_t* options,
+    const loom_target_environment_t* target_environment,
+    loom_pass_environment_t pass_environment, loom_op_t** out_pipeline_op) {
+  IREE_ASSERT_ARGUMENT(pipeline_module);
+  IREE_ASSERT_ARGUMENT(target_environment);
+  IREE_ASSERT_ARGUMENT(out_pipeline_op);
+  *out_pipeline_op = NULL;
+
+  const loom_target_pipeline_build_context_t context = {
+      .target_environment = target_environment,
+      .pass_environment = pass_environment,
+      .options = options,
+  };
+  return loom_pass_ir_build_pipeline(
+      pipeline_module, name, LOOM_PASS_ANCHOR_MODULE,
+      loom_target_pipeline_build_source_low_diagnostic_artifacts_body,
+      (void*)&context, out_pipeline_op);
 }
 
 iree_status_t loom_target_pipeline_build_to_source_low_artifacts(

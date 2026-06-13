@@ -12,6 +12,8 @@
 
 #include <stdint.h>
 
+#include "loom/target/low_legality.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,6 +28,9 @@ typedef enum loom_target_control_flow_lowering_e {
 typedef struct loom_target_pipeline_options_t {
   // Maximum source-to-low diagnostics. Zero uses source-to-low's default.
   uint32_t source_to_low_max_errors;
+  // Source-to-low legality diagnostics to emit while selecting target-low.
+  loom_target_low_legality_diagnostic_flags_t
+      source_to_low_legality_diagnostic_flags;
   // Control-flow shape selected for the source-to-low boundary.
   loom_target_control_flow_lowering_t control_flow_lowering;
 } loom_target_pipeline_options_t;

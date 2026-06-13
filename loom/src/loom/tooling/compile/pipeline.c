@@ -70,6 +70,11 @@ static iree_status_t loom_compile_build_default_pipeline(
           pipeline_module, IREE_SV("__loom_compile_default"),
           &options->target_pipeline_options, options->target_environment,
           pass_environment, out_pipeline_op);
+    case LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_DIAGNOSTIC_ARTIFACTS:
+      return loom_target_pipeline_build_to_source_low_diagnostic_artifacts(
+          pipeline_module, IREE_SV("__loom_compile_default"),
+          &options->target_pipeline_options, options->target_environment,
+          pass_environment, out_pipeline_op);
     case LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW:
       return loom_target_pipeline_build_to_prepared_low(
           pipeline_module, IREE_SV("__loom_compile_default"),
@@ -89,6 +94,8 @@ static iree_string_view_t loom_compile_default_pipeline_stage_name(
       return IREE_SV("source-low");
     case LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_ARTIFACTS:
       return IREE_SV("source-low-artifacts");
+    case LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_DIAGNOSTIC_ARTIFACTS:
+      return IREE_SV("source-low-diagnostic-artifacts");
     case LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW:
       return IREE_SV("prepared-low");
     default:

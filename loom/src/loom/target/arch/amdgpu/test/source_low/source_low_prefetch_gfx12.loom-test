@@ -86,16 +86,16 @@ kernel.def target(@target) @prefetch_fixed_query_offset() {
 // ----
 low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() asm<amdgpu.rdna4.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %20 = s_mov_b32 0
-  %22 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %23 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %24 = s_mov_b32 65535
-  %25 = s_and_b32 %23, %24
-  %26 = concat(%22, %25) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %27 = s_mov_b32 256
-  %28 = s_mov_b32 822243328
-  %29 = concat(%26, %27, %28) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
-  s_buffer_prefetch_data %29, %20 {offset = 180, count = 1}
+  %21 = s_mov_b32 0
+  %23 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %24 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %25 = s_mov_b32 65535
+  %26 = s_and_b32 %24, %25
+  %27 = concat(%23, %26) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %28 = s_mov_b32 256
+  %29 = s_mov_b32 822243328
+  %30 = concat(%27, %28, %29) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  s_buffer_prefetch_data %30, %21 {offset = 180, count = 1}
   return
 }
 
@@ -117,6 +117,6 @@ kernel.def target(@target) @prefetch_workitem_dropped() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @prefetch_workitem_dropped() {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @prefetch_workitem_dropped() asm<amdgpu.rdna4.core> {
   return
 }

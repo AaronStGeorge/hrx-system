@@ -779,7 +779,9 @@ static void loom_low_lower_analyze_storage_demands(
   for (iree_host_size_t i = context->lowering.selected_plan_count; i > 0; --i) {
     loom_low_lower_selected_plan_t* selected_plan =
         &context->lowering.selected_plans[i - 1];
-    if (loom_low_lower_selected_plan_storage_required(context, selected_plan)) {
+    if (!iree_any_bit_set(selected_plan->flags,
+                          LOOM_LOW_LOWER_SELECTED_PLAN_ELIDED) &&
+        loom_low_lower_selected_plan_storage_required(context, selected_plan)) {
       loom_low_lower_mark_selected_plan_storage_demands(context, selected_plan);
     }
   }

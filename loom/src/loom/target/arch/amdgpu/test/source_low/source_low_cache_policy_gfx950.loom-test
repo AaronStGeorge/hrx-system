@@ -22,9 +22,9 @@ kernel.def target(@target) @cache_device_non_temporal_load_store() {
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @cache_device_non_temporal_load_store() asm<amdgpu.cdna4.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %14 = v_mov_b32 0
-  %15 = s_mov_b32_m0_imm 0
-  %loaded = global_load_dwordx4_saddr %14, %input_view, %15 {nt = 1}
-  global_store_dwordx4_saddr %14, %loaded, %output_view, %15 {nt = 1}
+  %12 = v_mov_b32 0
+  %13 = s_mov_b32_m0_imm 0
+  %loaded = global_load_dwordx4_saddr %12, %input_view, %13 {nt = 1}
+  global_store_dwordx4_saddr %12, %loaded, %output_view, %13 {nt = 1}
   return
 }

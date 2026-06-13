@@ -1350,11 +1350,8 @@ static iree_status_t loom_check_emit_select_single_low_descriptor_set_key(
   return iree_ok_status();
 }
 
-static iree_string_view_t loom_check_emit_source_low_pipeline(
+static iree_string_view_t loom_check_emit_diagnostic_source_low_pipeline(
     const loom_check_emit_request_t* request) {
-  if (!request->has_source_low_diagnostics_option) {
-    return IREE_SV("default");
-  }
   const bool structured_control_flow =
       request->source_low_control_flow_lowering ==
       LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW;
@@ -1429,6 +1426,9 @@ iree_status_t loom_check_prepare_source_low_module(
   compile_options.default_pipeline = options->default_pipeline;
   compile_options.target_pipeline_options.control_flow_lowering =
       options->control_flow_lowering;
+  compile_options.target_pipeline_options
+      .source_to_low_legality_diagnostic_flags =
+      options->source_low_diagnostic_flags;
   compile_options.target_environment = environment->target_environment;
   compile_options.low_descriptor_registry = low_registry;
   compile_options.diagnostic_sink =
@@ -1533,13 +1533,24 @@ static iree_status_t loom_check_emit_write_source_low_text(
 
   loom_check_prepare_source_low_options_t prepare_options = {0};
   loom_check_prepare_source_low_options_initialize(&prepare_options);
-  prepare_options.pipeline = loom_check_emit_source_low_pipeline(request);
-  prepare_options.default_pipeline =
-      request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW
-          ? LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_ARTIFACTS
-          : LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  if (request->has_source_low_diagnostics_option &&
+      request->source_low_output != LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
+    prepare_options.pipeline =
+        loom_check_emit_diagnostic_source_low_pipeline(request);
+    prepare_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  } else {
+    prepare_options.pipeline = IREE_SV("default");
+    prepare_options.default_pipeline =
+        request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW
+            ? (request->has_source_low_diagnostics_option
+                   ? LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_DIAGNOSTIC_ARTIFACTS
+                   : LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_ARTIFACTS)
+            : LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  }
   prepare_options.control_flow_lowering =
       request->source_low_control_flow_lowering;
+  prepare_options.source_low_diagnostic_flags =
+      request->source_low_diagnostic_flags;
   IREE_RETURN_IF_ERROR(loom_check_prepare_source_low_module(
       module, &prepare_options, low_registry, environment, source_resolver,
       diagnostic_collector, block_pool));

@@ -241,6 +241,8 @@ typedef struct loom_check_prepare_source_low_options_t {
   iree_string_view_t pipeline;
   // Default pipeline used when |pipeline| is empty or "default".
   loom_compile_default_pipeline_t default_pipeline;
+  // Source-to-low legality diagnostics emitted while selecting target-low.
+  loom_target_low_legality_diagnostic_flags_t source_low_diagnostic_flags;
   // Control-flow lowering shape used when building the default pipeline.
   loom_target_control_flow_lowering_t control_flow_lowering;
 } loom_check_prepare_source_low_options_t;

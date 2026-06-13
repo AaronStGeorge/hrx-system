@@ -26,14 +26,11 @@ kernel.def target(@target) @lds_b32_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b32_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %bytes = s_mov_b32 256
   %15 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %scratch_view = storage_address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %one = v_mov_b32 1
   %18 = s_mov_b32_m0_imm 0
   ds_write_addtid_b32 %one, %18
-  %19 = s_mov_b32_m0_imm 0
-  %loaded = ds_read_addtid_b32 %19
+  %loaded = ds_read_addtid_b32 %18
   %21 = v_lshlrev_b32_src0_inline %tid, 2
   global_store_b32_saddr %21, %loaded, %output_view
   return
@@ -69,20 +66,13 @@ kernel.def target(@target) @lds_padded_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_padded_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %bytes = s_mov_b32 2048
   %16 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %scratch_view = storage_address %16 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %18 = v_mov_b32 1
-  %19 = v_mov_b32 1
-  %20 = v_mov_b32 1
-  %21 = v_mov_b32 1
-  %one = concat(%18, %19, %20, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %one = concat(%18, %18, %18, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   %23 = v_mov_b32 20
   %24 = v_mul_lo_u32 %tid, %23
   ds_write_b128 %24, %one
-  %25 = v_mov_b32 20
-  %26 = v_mul_lo_u32 %tid, %25
-  %loaded = ds_read_b128 %26
+  %loaded = ds_read_b128 %24
   %28 = v_lshlrev_b32_src0_inline %tid, 4
   global_store_b128_saddr %28, %loaded, %output_view
   return
@@ -118,18 +108,11 @@ kernel.def target(@target) @lds_read2_write2_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_read2_write2_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
-  %bytes = s_mov_b32 2048
   %16 = storage {byte_alignment = 16, byte_length = 2048} : low.storage<workgroup>
-  %scratch_view = storage_address %16 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %18 = v_mov_b32 1
-  %19 = v_mov_b32 1
-  %one = concat(%18, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %21 = v_lshlrev_b32_src0_inline %tid, 5
-  %22 = slice %one[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %23 = slice %one[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  ds_write2_b32 %21, %22, %23 {offset1 = 2}
-  %24 = v_lshlrev_b32_src0_inline %tid, 5
-  %loaded = ds_read2_b32 %24 {offset1 = 2}
+  ds_write2_b32 %21, %18, %18 {offset1 = 2}
+  %loaded = ds_read2_b32 %21 {offset1 = 2}
   %26 = v_lshlrev_b32_src0_inline %tid, 3
   global_store_b64_saddr %26, %loaded, %output_view
   return
@@ -164,20 +147,13 @@ kernel.def target(@target) @lds_conflict_risk_diagnostics() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_conflict_risk_diagnostics() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %bytes = s_mov_b32 1024
   %15 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
-  %scratch_view = storage_address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %17 = v_mov_b32 1
-  %18 = v_mov_b32 1
-  %19 = v_mov_b32 1
-  %20 = v_mov_b32 1
-  %one = concat(%17, %18, %19, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %one = concat(%17, %17, %17, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   %22 = v_lshlrev_b32_src0_inline %tid, 4
   ds_write_b128 %22, %one
-  %23 = v_lshlrev_b32_src0_inline %tid, 4
-  %loaded = ds_read_b128 %23
-  %25 = v_lshlrev_b32_src0_inline %tid, 4
-  global_store_b128_saddr %25, %loaded, %output_view
+  %loaded = ds_read_b128 %22
+  global_store_b128_saddr %22, %loaded, %output_view
   return
 }
 
@@ -334,38 +310,6 @@ kernel.def target(@target) @global_dynamic_offset_sum_flat() {
 
 // ----
 low.kernel.def target(@target) workgroup_size(64, 4, 1) @global_dynamic_offset_sum_flat() asm<amdgpu.rdna3.core> {
-  %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %x0 = v_and_b32_lit %packed_tid, 1023
-  %base_x = s_mov_b32 4294966000
-  %18 = v_mov_b32 4294966000
-  %x = v_add_u32 %x0, %18
-  %20 = v_lshrrev_b32_src0_inline %packed_tid, 10
-  %y0 = v_and_b32_lit %20, 1023
-  %base_y = s_mov_b32 2000
-  %23 = v_mov_b32 2000
-  %y = v_add_u32 %y0, %23
-  %25 = s_mov_b32 704
-  %26 = s_mov_b32 1
-  %27 = concat(%25, %26) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %28 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %29 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %30 = slice %27[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %31 = slice %27[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %32 = s_add_u32 %28, %30
-  %33 = s_addc_u32 %29, %31
-  %34 = concat(%32, %33) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %35 = v_mov_b32 0
-  %36 = slice %34[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %37 = slice %34[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %38, %39 = v_add_co_u32 %36, %x0
-  %40 = v_mov_b32_copy %37
-  %41, %42 = v_add_co_ci_u32 %40, %35, %39
-  %43 = v_mov_b32 0
-  %44, %45 = v_add_co_u32 %38, %y0
-  %46, %47 = v_add_co_ci_u32 %41, %43, %45
-  %48 = concat(%44, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %loaded = global_load_b32_vaddr %48
   return
 }
 

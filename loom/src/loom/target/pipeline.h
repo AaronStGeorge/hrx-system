@@ -49,6 +49,18 @@ iree_status_t loom_target_pipeline_build_to_source_low_artifacts(
     const loom_target_environment_t* target_environment,
     loom_pass_environment_t pass_environment, loom_op_t** out_pipeline_op);
 
+// Builds a module-root pipeline that runs the raw source-to-low diagnostic
+// boundary and then prepares successful low output for required low asm.
+//
+// This skips source normalization so diagnostic front doors can validate
+// rejected source ops exactly where source-to-low sees them, while still
+// running target artifact preparation and low cleanup for printable artifacts.
+iree_status_t loom_target_pipeline_build_to_source_low_diagnostic_artifacts(
+    loom_module_t* pipeline_module, iree_string_view_t name,
+    const loom_target_pipeline_options_t* options,
+    const loom_target_environment_t* target_environment,
+    loom_pass_environment_t pass_environment, loom_op_t** out_pipeline_op);
+
 // Builds a module-root pipeline that lowers source/kernel IR to prepared
 // target-low IR.
 //

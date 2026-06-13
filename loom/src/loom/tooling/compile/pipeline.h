@@ -38,9 +38,12 @@ typedef enum loom_compile_default_pipeline_e {
   // Build source/kernel-to-target-low plus target-owned cleanup needed by
   // required low-asm artifact printing.
   LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_ARTIFACTS = 1,
+  // Build raw diagnostic source-to-low plus artifact preparation and low
+  // cleanup needed by required low-asm artifact printing.
+  LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_DIAGNOSTIC_ARTIFACTS = 2,
   // Build the full prepared target-low pipeline including target ABI/resource
   // materialization and packetization preparation.
-  LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW = 2,
+  LOOM_COMPILE_DEFAULT_PIPELINE_PREPARED_LOW = 3,
 } loom_compile_default_pipeline_t;
 
 typedef struct loom_compile_pipeline_options_t {
