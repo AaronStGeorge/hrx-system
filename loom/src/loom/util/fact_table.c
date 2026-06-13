@@ -1131,12 +1131,6 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
   return iree_ok_status();
 }
 
-static bool loom_value_fact_table_has_entry(
-    const loom_value_fact_table_t* table, loom_value_id_t value_id) {
-  return value_id < table->capacity &&
-         table->entries[value_id].known_divisor != 0;
-}
-
 static iree_status_t loom_value_fact_table_clone_fact_array_between_tables(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     const loom_value_facts_t* source_facts, iree_host_size_t count,

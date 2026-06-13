@@ -698,6 +698,8 @@ enum loom_trait_bits_e {
   // site. Convergent ops may be memory-pure value transforms, but they cannot
   // be duplicated, removed, CSE'd, or moved to a different control predicate.
   LOOM_TRAIT_CONVERGENT = 1u << 21,
+  // Op fact inference defines target-independent result distribution facts.
+  LOOM_TRAIT_DISTRIBUTION_TRANSFER = 1u << 22,
 };
 typedef uint32_t loom_trait_flags_t;
 
@@ -764,6 +766,13 @@ static inline bool loom_traits_have_refinable_result_type_refs(
 // same ordinal while carrying stronger facts or static type information.
 static inline bool loom_traits_are_fact_identity(loom_trait_flags_t traits) {
   return (traits & LOOM_TRAIT_FACT_IDENTITY) != 0;
+}
+
+// Returns true when op fact inference defines uniform/lane-varying
+// distribution facts that targets may use for value placement.
+static inline bool loom_traits_have_distribution_transfer(
+    loom_trait_flags_t traits) {
+  return (traits & LOOM_TRAIT_DISTRIBUTION_TRANSFER) != 0;
 }
 
 // Returns true when result 0 aliases operand 0 and remaining operands carry

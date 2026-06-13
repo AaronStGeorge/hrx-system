@@ -119,6 +119,7 @@ TRAIT_MAP: dict[str, str] = {
     "RefinableResultTypeRefs": "LOOM_TRAIT_REFINABLE_RESULT_TYPE_REFS",
     "PoisonBoundary": "LOOM_TRAIT_POISON_BOUNDARY",
     "FactIdentity": "LOOM_TRAIT_FACT_IDENTITY",
+    "DistributionTransfer": "LOOM_TRAIT_DISTRIBUTION_TRANSFER",
     "ValueAlias": "LOOM_TRAIT_VALUE_ALIAS",
 }
 

@@ -8,6 +8,7 @@
 
 from loom.dialect.scalar import IntOverflowFlags, scalar_ops
 from loom.dsl import (
+    DISTRIBUTION_TRANSFER,
     INTEGER,
     Op,
     OpPhase,
@@ -29,6 +30,7 @@ scalar_andi = binary_op(
     doc="Bitwise AND.",
     commutative=True,
     facts="loom_scalar_andi_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_andi_canonicalize",
     examples=["%result = scalar.andi %lhs, %rhs : i32"],
 )
@@ -40,6 +42,7 @@ scalar_ori = binary_op(
     doc="Bitwise OR.",
     commutative=True,
     facts="loom_scalar_ori_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_ori_canonicalize",
     examples=["%result = scalar.ori %lhs, %rhs : i32"],
 )
@@ -51,6 +54,7 @@ scalar_xori = binary_op(
     doc="Bitwise XOR.",
     commutative=True,
     facts="loom_scalar_xori_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_xori_canonicalize",
     examples=["%result = scalar.xori %lhs, %rhs : i32"],
 )
@@ -67,6 +71,7 @@ scalar_shli = binary_op(
     doc="Left shift.",
     flags=("overflow", IntOverflowFlags),
     facts="loom_scalar_shli_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_shli_canonicalize",
     examples=["%result = scalar.shli %lhs, %rhs : i32"],
 )
@@ -77,6 +82,7 @@ scalar_shrsi = binary_op(
     type_constraint=INTEGER,
     doc="Arithmetic right shift (sign-extending).",
     facts="loom_scalar_shrsi_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_shrsi_canonicalize",
     examples=["%result = scalar.shrsi %lhs, %rhs : i32"],
 )
@@ -87,6 +93,7 @@ scalar_shrui = binary_op(
     type_constraint=INTEGER,
     doc="Logical right shift (zero-extending).",
     facts="loom_scalar_shrui_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_shrui_canonicalize",
     examples=["%result = scalar.shrui %lhs, %rhs : i32"],
 )

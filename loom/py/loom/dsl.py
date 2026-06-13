@@ -131,6 +131,9 @@ __all__ = [
     "SAFE_TO_SPECULATE",
     "REFINABLE_RESULT_TYPE_REFS",
     "POISON_BOUNDARY",
+    "FACT_IDENTITY",
+    "DISTRIBUTION_TRANSFER",
+    "VALUE_ALIAS",
     # Semantic phase/contract metadata.
     "OpPhase",
     "ContractFamily",
@@ -885,6 +888,11 @@ POISON_BOUNDARY = Trait("PoisonBoundary")
 # value identity. Source-to-low lowering aliases each result to the lowered
 # operand at the same ordinal.
 FACT_IDENTITY = Trait("FactIdentity")
+# Op fact inference defines target-independent uniform/lane-varying distribution
+# for its result when enough input distribution facts are available. Targets may
+# use those distribution facts for placement instead of rediscovering the same
+# property from producer structure.
+DISTRIBUTION_TRANSFER = Trait("DistributionTransfer")
 # Op attaches metadata or facts to operand 0 and produces one result that
 # aliases the same physical value. Extra operands are interpretation data and do
 # not force target-low storage.
@@ -4094,6 +4102,7 @@ def cast_op(
     from_constraint: TypeConstraint,
     to_constraint: TypeConstraint,
     doc: str,
+    traits: list[Trait] | None = None,
     **kwargs: Any,
 ) -> Op:
     """Declare a type-casting op: (input) -> result, different types.
@@ -4102,13 +4111,17 @@ def cast_op(
     """
     from loom.assembly import COLON, Ref, TypeOf, kw
 
+    op_traits = [PURE]
+    if traits:
+        op_traits.extend(traits)
+
     return Op(
         name=name,
         group=group,
         doc=doc,
         operands=[Operand("input", from_constraint)],
         results=[Result("result", to_constraint)],
-        traits=[PURE],
+        traits=op_traits,
         format=[
             Ref("input"),
             COLON,

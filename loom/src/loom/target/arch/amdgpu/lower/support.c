@@ -24,6 +24,7 @@
 #include "loom/target/arch/amdgpu/lower/materializers.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/util/fact_table.h"
 #include "loom/util/math.h"
 
 bool loom_amdgpu_type_is_i32(loom_type_t type) {
@@ -648,6 +649,50 @@ static bool loom_amdgpu_source_value_facts_prefer_vgpr(
   }
   return loom_value_facts_is_lane_varying(
       loom_value_fact_table_lookup(fact_table, source_value_id));
+}
+
+static bool loom_amdgpu_source_value_known_distribution_facts(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t source_value_id, loom_value_facts_t* out_facts) {
+  if (out_facts != NULL) {
+    *out_facts = loom_value_facts_unknown();
+  }
+  if (fact_table == NULL || source_value_id >= module->values.count ||
+      !loom_value_fact_table_has_entry(fact_table, source_value_id)) {
+    return false;
+  }
+  const loom_value_facts_t facts =
+      loom_value_fact_table_lookup(fact_table, source_value_id);
+  if ((facts.flags & LOOM_VALUE_FACT_DISTRIBUTION_MASK) == 0) {
+    return false;
+  }
+  if (out_facts != NULL) {
+    *out_facts = facts;
+  }
+  return true;
+}
+
+static bool loom_amdgpu_distribution_transfer_result_prefers_vgpr(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id, const loom_op_t* defining_op) {
+  loom_value_facts_t distribution_facts = loom_value_facts_unknown();
+  if (loom_amdgpu_source_value_known_distribution_facts(
+          module, fact_table, source_value_id, &distribution_facts)) {
+    return loom_value_facts_is_lane_varying(distribution_facts);
+  }
+
+  const loom_value_id_t* operands = loom_op_const_operands(defining_op);
+  for (uint16_t i = 0; i < defining_op->operand_count; ++i) {
+    const loom_value_id_t operand = operands[i];
+    if (loom_amdgpu_source_value_is_native_i1_mask(module, fact_table,
+                                                   view_regions, operand) ||
+        loom_amdgpu_source_value_prefers_vgpr(module, fact_table, view_regions,
+                                              operand)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static bool loom_amdgpu_source_value_facts_are_native_i1_mask(
@@ -1313,6 +1358,8 @@ bool loom_amdgpu_source_value_prefers_vgpr(
     return loom_amdgpu_source_value_naturally_prefers_vgpr(module,
                                                            source_value_id);
   }
+  const loom_trait_flags_t defining_op_traits =
+      loom_op_effective_traits(module, defining_op);
 
   if (loom_amdgpu_value_feeds_native_mask_merge_arg(module, value,
                                                     source_value_id)) {
@@ -1332,8 +1379,13 @@ bool loom_amdgpu_source_value_prefers_vgpr(
     return true;
   }
 
-  if (loom_traits_are_fact_identity(
-          loom_op_effective_traits(module, defining_op))) {
+  if (loom_value_def_index(value) == 0 &&
+      loom_traits_have_distribution_transfer(defining_op_traits)) {
+    return loom_amdgpu_distribution_transfer_result_prefers_vgpr(
+        module, fact_table, view_regions, source_value_id, defining_op);
+  }
+
+  if (loom_traits_are_fact_identity(defining_op_traits)) {
     const uint16_t result_index = loom_value_def_index(value);
     if (result_index >= defining_op->operand_count) {
       return false;
@@ -1372,110 +1424,6 @@ bool loom_amdgpu_source_value_prefers_vgpr(
              loom_amdgpu_type_vector_storage(source_type, &storage) &&
              storage.kind != LOOM_AMDGPU_VECTOR_STORAGE_KIND_I1_MASK;
     }
-    case LOOM_OP_INDEX_CAST:
-      return loom_amdgpu_source_value_prefers_vgpr(
-          module, fact_table, view_regions, loom_index_cast_input(defining_op));
-    case LOOM_OP_INDEX_ADD:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_add_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_add_rhs(defining_op));
-    case LOOM_OP_INDEX_SUB:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_sub_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_sub_rhs(defining_op));
-    case LOOM_OP_INDEX_MUL:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_mul_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_mul_rhs(defining_op));
-    case LOOM_OP_INDEX_DIV:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_div_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_div_rhs(defining_op));
-    case LOOM_OP_INDEX_REM:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_rem_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_rem_rhs(defining_op));
-    case LOOM_OP_INDEX_MIN:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_min_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_min_rhs(defining_op));
-    case LOOM_OP_INDEX_MAX:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_max_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_max_rhs(defining_op));
-    case LOOM_OP_INDEX_ANDI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_andi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_andi_rhs(defining_op));
-    case LOOM_OP_INDEX_ORI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_ori_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_ori_rhs(defining_op));
-    case LOOM_OP_INDEX_XORI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_xori_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_xori_rhs(defining_op));
-    case LOOM_OP_INDEX_SHLI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_shli_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_shli_rhs(defining_op));
-    case LOOM_OP_INDEX_SHRSI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_shrsi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_shrsi_rhs(defining_op));
-    case LOOM_OP_INDEX_SHRUI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_shrui_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_shrui_rhs(defining_op));
-    case LOOM_OP_INDEX_MADD:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_madd_a(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_madd_b(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_index_madd_c(defining_op));
     case LOOM_OP_VECTOR_EXTRACT:
       return loom_amdgpu_vector_extract_prefers_vgpr(module, fact_table,
                                                      view_regions, defining_op);
@@ -1490,107 +1438,6 @@ bool loom_amdgpu_source_value_prefers_vgpr(
     case LOOM_OP_VIEW_ATOMIC_CMPXCHG:
     case LOOM_OP_VIEW_ATOMIC_RMW:
       return true;
-    case LOOM_OP_SCF_SELECT:
-      return loom_amdgpu_source_value_is_native_i1_mask(
-                 module, fact_table, view_regions,
-                 loom_scf_select_condition(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scf_select_true_value(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scf_select_false_value(defining_op));
-    case LOOM_OP_SCALAR_ADDI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_addi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_addi_rhs(defining_op));
-    case LOOM_OP_SCALAR_SUBI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_subi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_subi_rhs(defining_op));
-    case LOOM_OP_SCALAR_MULI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_muli_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_muli_rhs(defining_op));
-    case LOOM_OP_SCALAR_MINSI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_minsi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_minsi_rhs(defining_op));
-    case LOOM_OP_SCALAR_MAXSI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_maxsi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_maxsi_rhs(defining_op));
-    case LOOM_OP_SCALAR_MINUI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_minui_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_minui_rhs(defining_op));
-    case LOOM_OP_SCALAR_MAXUI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_maxui_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_maxui_rhs(defining_op));
-    case LOOM_OP_SCALAR_ANDI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_andi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_andi_rhs(defining_op));
-    case LOOM_OP_SCALAR_ORI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_ori_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_ori_rhs(defining_op));
-    case LOOM_OP_SCALAR_XORI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_xori_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_xori_rhs(defining_op));
-    case LOOM_OP_SCALAR_SHLI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_shli_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_shli_rhs(defining_op));
-    case LOOM_OP_SCALAR_SHRSI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_shrsi_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_shrsi_rhs(defining_op));
-    case LOOM_OP_SCALAR_SHRUI:
-      return loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_shrui_lhs(defining_op)) ||
-             loom_amdgpu_source_value_prefers_vgpr(
-                 module, fact_table, view_regions,
-                 loom_scalar_shrui_rhs(defining_op));
     default:
       return loom_amdgpu_type_is_f32(source_type) ||
              loom_amdgpu_type_is_vector_32bit_register_range(source_type);

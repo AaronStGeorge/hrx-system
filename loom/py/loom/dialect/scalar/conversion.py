@@ -15,6 +15,7 @@ from loom.assembly import (
 from loom.dialect.scalar import scalar_ops
 from loom.dsl import (
     CONSTANT_LIKE,
+    DISTRIBUTION_TRANSFER,
     FLOAT,
     INTEGER,
     PURE,
@@ -113,6 +114,7 @@ scalar_extsi = cast_op(
     doc="Signed integer extension (sign-extend): e.g. i8 to i32.",
     canonicalize="loom_scalar_extsi_canonicalize",
     facts="loom_scalar_extsi_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%result = scalar.extsi %input : i8 to i32"],
 )
 scalar_extui = cast_op(
@@ -124,6 +126,7 @@ scalar_extui = cast_op(
     doc="Unsigned integer extension (zero-extend): e.g. i8 to i32.",
     canonicalize="loom_scalar_extui_canonicalize",
     facts="loom_scalar_extui_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%result = scalar.extui %input : i8 to i32"],
 )
 scalar_trunci = cast_op(
@@ -135,6 +138,7 @@ scalar_trunci = cast_op(
     doc="Integer truncation (narrow): e.g. i32 to i8.",
     canonicalize="loom_scalar_trunci_canonicalize",
     facts="loom_scalar_trunci_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%result = scalar.trunci %input : i32 to i8"],
 )
 
