@@ -31,6 +31,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/sanitizer/options.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/tooling/compile/pipeline.h"
@@ -151,6 +152,10 @@ typedef struct loom_check_emit_request_t {
   loom_target_control_flow_lowering_t source_low_control_flow_lowering;
   // True once a source-low control-flow option has been parsed.
   bool has_source_low_control_flow_option;
+  // Sanitizer checks requested for source-low target pipeline emission.
+  loom_sanitizer_options_t source_low_sanitizer_options;
+  // True once a source-low sanitizer option has been parsed.
+  bool has_source_low_sanitizer_option;
 } loom_check_emit_request_t;
 
 static iree_status_t loom_check_emit_parse_json_output_option(
@@ -255,6 +260,78 @@ static iree_status_t loom_check_emit_parse_low_allocation_options(
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_emit_parse_source_low_sanitizer_token(
+    iree_string_view_t token, loom_sanitizer_checks_t* inout_checks) {
+  if (iree_string_view_is_empty(token)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "empty source-low sanitizer token");
+  }
+  if (iree_string_view_equal(token, IREE_SV("none"))) {
+    *inout_checks = 0;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("all"))) {
+    *inout_checks = LOOM_SANITIZER_CHECKS_KNOWN;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("access"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_ACCESS;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("value"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_VALUE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(token, IREE_SV("operation"))) {
+    *inout_checks |= LOOM_SANITIZER_CHECK_OPERATION;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "source-low option 'sanitizer' has unknown token '%.*s'", (int)token.size,
+      token.data);
+}
+
+static iree_status_t loom_check_emit_parse_source_low_sanitizer(
+    iree_string_view_t value, loom_sanitizer_options_t* out_options) {
+  value = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source-low option 'sanitizer' must be non-empty");
+  }
+  loom_sanitizer_checks_t checks = 0;
+  iree_string_view_t remaining = value;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t token = iree_string_view_empty();
+    intptr_t separator_position =
+        iree_string_view_split(remaining, '|', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if ((iree_string_view_equal(token, IREE_SV("none")) ||
+         iree_string_view_equal(token, IREE_SV("all"))) &&
+        (checks != 0 || separator_position >= 0)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source-low option 'sanitizer' token '%.*s' cannot be combined",
+          (int)token.size, token.data);
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_check_emit_parse_source_low_sanitizer_token(token, &checks));
+    if (separator_position >= 0 &&
+        iree_string_view_is_empty(iree_string_view_trim(remaining))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source-low option 'sanitizer' has a trailing separator");
+    }
+    if (separator_position < 0) break;
+  }
+  const loom_sanitizer_options_t options = {
+      .checks = checks,
+  };
+  IREE_RETURN_IF_ERROR(loom_sanitizer_options_validate(&options));
+  *out_options = options;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_emit_parse_source_low_option(
     iree_string_view_t token, loom_check_emit_request_t* request) {
   iree_string_view_t name = iree_string_view_empty();
@@ -304,6 +381,16 @@ static iree_status_t loom_check_emit_parse_source_low_option(
           (int)value.size, value.data);
     }
     request->has_source_low_control_flow_option = true;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(name, IREE_SV("sanitizer"))) {
+    if (request->has_source_low_sanitizer_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate source-low option 'sanitizer'");
+    }
+    IREE_RETURN_IF_ERROR(loom_check_emit_parse_source_low_sanitizer(
+        value, &request->source_low_sanitizer_options));
+    request->has_source_low_sanitizer_option = true;
     return iree_ok_status();
   }
   if (!iree_string_view_equal(name, IREE_SV("output"))) {
@@ -641,6 +728,8 @@ static iree_status_t loom_check_emit_parse_request(
       .has_source_low_output_option = false,
       .source_low_control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG,
       .has_source_low_control_flow_option = false,
+      .source_low_sanitizer_options = {0},
+      .has_source_low_sanitizer_option = false,
   };
   iree_string_view_t target_name = iree_string_view_empty();
   iree_string_view_t target_options = iree_string_view_empty();
@@ -1445,6 +1534,7 @@ iree_status_t loom_check_prepare_source_low_module(
   compile_options.target_pipeline_options
       .source_to_low_legality_diagnostic_flags =
       options->source_low_diagnostic_flags;
+  compile_options.target_pipeline_options.sanitizer = options->sanitizer;
   compile_options.target_environment = environment->target_environment;
   compile_options.low_descriptor_registry = low_registry;
   compile_options.diagnostic_sink =
@@ -1496,6 +1586,7 @@ static iree_status_t loom_check_emit_write_source_low_pipeline_text(
   loom_op_t* pipeline_op = NULL;
   const loom_target_pipeline_options_t target_pipeline_options = {
       .control_flow_lowering = request->source_low_control_flow_lowering,
+      .sanitizer = request->source_low_sanitizer_options,
   };
   if (iree_status_is_ok(status)) {
     if (request->source_low_output ==
@@ -1547,6 +1638,15 @@ static iree_status_t loom_check_emit_write_source_low_text(
         module, request, environment->target_environment, block_pool, result);
   }
 
+  const bool sanitizer_enabled =
+      loom_sanitizer_options_is_enabled(&request->source_low_sanitizer_options);
+  if (sanitizer_enabled && request->has_source_low_diagnostics_option) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source-low option 'sanitizer' cannot be combined with "
+        "'diagnostics' for module or low output");
+  }
+
   loom_check_prepare_source_low_options_t prepare_options = {0};
   loom_check_prepare_source_low_options_initialize(&prepare_options);
   if (request->has_source_low_diagnostics_option &&
@@ -1567,6 +1667,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
       request->source_low_control_flow_lowering;
   prepare_options.source_low_diagnostic_flags =
       request->source_low_diagnostic_flags;
+  prepare_options.sanitizer = request->source_low_sanitizer_options;
   IREE_RETURN_IF_ERROR(loom_check_prepare_source_low_module(
       module, &prepare_options, low_registry, environment, source_resolver,
       diagnostic_collector, block_pool));

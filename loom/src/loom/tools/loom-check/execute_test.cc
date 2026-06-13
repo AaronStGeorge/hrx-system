@@ -276,6 +276,16 @@ class ExecuteTest : public ::testing::Test {
     return std::string(result.detail.buffer, result.detail.size);
   }
 
+  void ExpectFirstFailsWithDetail(const char* source,
+                                  const char* expected_detail) {
+    loom_check_result_t result;
+    IREE_ASSERT_OK(ExecuteFirst(source, &result));
+    EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+    EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+    EXPECT_NE(DetailString(result).find(expected_detail), std::string::npos);
+    loom_check_result_deinitialize(&result);
+  }
+
   std::string DiffJsonString(const loom_check_result_t& result) {
     return std::string(result.diff_hunk_json.buffer,
                        result.diff_hunk_json.size);
@@ -1210,6 +1220,51 @@ TEST_F(ExecuteTest, EmitSourceLowRejectsFunctionSelector) {
   EXPECT_NE(DetailString(result).find("does not accept a function symbol"),
             std::string::npos);
   loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitSourceLowParsesSanitizerOptions) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit source-low output=pipeline "
+                   "sanitizer=operation|value\n"
+                   "test.target<low_core> @test_target\n"
+                   "\n"
+                   "func.def target(@test_target) @f() {\n"
+                   "  func.return\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(ActualOutputString(result).find(
+                "sanitizer-insert-assertions(checks = \"value|operation\")"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+
+  ExpectFirstFailsWithDetail(
+      "// RUN: emit source-low output=pipeline sanitizer=bogus\n"
+      "func.def @f() {\n"
+      "  func.return\n"
+      "}\n",
+      "unknown token 'bogus'");
+  ExpectFirstFailsWithDetail(
+      "// RUN: emit source-low output=pipeline sanitizer=none|access\n"
+      "func.def @f() {\n"
+      "  func.return\n"
+      "}\n",
+      "token 'none' cannot be combined");
+  ExpectFirstFailsWithDetail(
+      "// RUN: emit source-low output=pipeline sanitizer=access|\n"
+      "func.def @f() {\n"
+      "  func.return\n"
+      "}\n",
+      "trailing separator");
+  ExpectFirstFailsWithDetail(
+      "// RUN: emit source-low output=pipeline sanitizer=access "
+      "sanitizer=value\n"
+      "func.def @f() {\n"
+      "  func.return\n"
+      "}\n",
+      "duplicate source-low option 'sanitizer'");
 }
 
 TEST_F(ExecuteTest, EmitSourceLowLowersEveryTargetedFunction) {

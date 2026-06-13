@@ -245,6 +245,8 @@ typedef struct loom_check_prepare_source_low_options_t {
   loom_target_low_legality_diagnostic_flags_t source_low_diagnostic_flags;
   // Control-flow lowering shape used when building the default pipeline.
   loom_target_control_flow_lowering_t control_flow_lowering;
+  // Sanitizer instrumentation checks enabled while preparing source-low IR.
+  loom_sanitizer_options_t sanitizer;
 } loom_check_prepare_source_low_options_t;
 
 // Returns true when |provider| owns emit targets named |target_name|.
