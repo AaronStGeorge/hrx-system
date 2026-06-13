@@ -42,6 +42,7 @@ loom_cc_library(
     loom::ops::cfg
     loom::ops::encoding
     loom::ops::func
+    loom::ops::index
     loom::ops::kernel
     loom::ops::low
     loom::ops::op_defs

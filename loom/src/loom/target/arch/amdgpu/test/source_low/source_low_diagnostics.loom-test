@@ -432,6 +432,24 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @index_madd_result_width_
 
 amdgpu.target<gfx1100> @target
 
+kernel.def target(@target) @index_assume_nonexclusive_result_width_rejected() {
+  %c1 = index.constant 1 : index
+  %c512 = index.constant 512 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c512, %c1, %c1) : index
+} launch() {
+  %x = kernel.workitem.id<x> : index
+  %stride = index.constant 16777216 : index
+  // ERROR@+1: TARGET/003 {subject_kind="address-width", subject_name="u32", constraint_key="amdgpu.address.u32"}
+  %raw = index.mul %x, %stride : index
+  %first = index.assume %raw [range(%raw, 0, 1073741823)] : index
+  %second = index.assume %raw [range(%raw, 0, 1073741823)] : index
+  kernel.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 kernel.def target(@target) @workgroup_count_dynamic_workgroup_size_rejected(%workgroups: index, %size: index) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%size, %c1, %c1) : index

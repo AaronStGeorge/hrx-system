@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/encoding/storage.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
 #include "loom/util/math.h"
@@ -753,6 +754,59 @@ static bool loom_low_lower_rule_integer_element_range_facts(
   return false;
 }
 
+static bool loom_low_lower_rule_result_index_assume_facts(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_value_facts_t* out_facts) {
+  *out_facts = loom_value_facts_unknown();
+  const loom_low_lower_value_ref_t* value_ref =
+      &rule_set->value_refs[value_ref_index];
+  if (value_ref->kind != LOOM_LOW_LOWER_VALUE_REF_RESULT) {
+    return false;
+  }
+
+  // A single-use identity assume is the only observable result contract.
+  // Borrowing its facts here keeps target guards strict for unassumed or
+  // multiply-used producers while allowing authored postconditions to prove a
+  // dynamic address calculation.
+  const loom_value_id_t source_value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  const loom_value_t* source_value =
+      loom_module_value(match_context->module, source_value_id);
+  if (!loom_value_has_single_use(source_value)) return false;
+
+  const loom_use_t use = loom_value_uses(source_value)[0];
+  const loom_op_t* user_op = loom_use_user_op(use);
+  if (!user_op || !loom_index_assume_isa(user_op)) return false;
+
+  const uint16_t operand_index = loom_use_operand_index(use);
+  loom_value_slice_t assumed_values = loom_index_assume_values(user_op);
+  loom_value_slice_t assumed_results = loom_index_assume_results(user_op);
+  if (operand_index >= assumed_values.count ||
+      operand_index >= assumed_results.count ||
+      assumed_values.values[operand_index] != source_value_id) {
+    return false;
+  }
+
+  return loom_low_lower_rule_integer_element_range_facts(
+      match_context->module, match_context->fact_table,
+      assumed_results.values[operand_index], out_facts);
+}
+
+static bool loom_low_lower_rule_value_integer_element_range_facts(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_value_facts_t* out_facts) {
+  if (loom_low_lower_rule_result_index_assume_facts(
+          match_context, rule_set, source_op, value_ref_index, out_facts)) {
+    return true;
+  }
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  return loom_low_lower_rule_integer_element_range_facts(
+      match_context->module, match_context->fact_table, value_id, out_facts);
+}
+
 static bool loom_low_lower_rule_float_immediate_facts(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, loom_value_facts_t* out_facts) {
@@ -820,11 +874,9 @@ static bool loom_low_lower_rule_value_facts_fit_bit_count(
   if (bit_count > UINT8_MAX) {
     return false;
   }
-  const loom_value_id_t value_id =
-      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
   loom_value_facts_t facts = loom_value_facts_unknown();
-  if (!loom_low_lower_rule_integer_element_range_facts(
-          match_context->module, match_context->fact_table, value_id, &facts)) {
+  if (!loom_low_lower_rule_value_integer_element_range_facts(
+          match_context, rule_set, source_op, value_ref_index, &facts)) {
     return false;
   }
   if (is_signed_domain) {
