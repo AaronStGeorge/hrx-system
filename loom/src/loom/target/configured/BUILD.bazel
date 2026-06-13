@@ -30,6 +30,12 @@ _CONFIGURED_TARGET_COPTS = (
         "//conditions:default": [],
     }) +
     iree_select({
+        "//loom/config/target/arch:llvmir": [
+            "-DLOOM_CONFIG_TARGET_HAVE_LLVMIR=1",
+        ],
+        "//conditions:default": [],
+    }) +
+    iree_select({
         "//loom/config/target/arch:spirv": [
             "-DLOOM_CONFIG_TARGET_HAVE_SPIRV=1",
         ],
@@ -59,6 +65,12 @@ _CONFIGURED_TARGET_DEPS = (
     iree_select({
         "//loom/config/target/arch:iree_vm": [
             "//loom/src/loom/target/arch/ireevm:provider",
+        ],
+        "//conditions:default": [],
+    }) +
+    iree_select({
+        "//loom/config/target/arch:llvmir": [
+            "//loom/src/loom/target/arch/llvmir:provider",
         ],
         "//conditions:default": [],
     }) +

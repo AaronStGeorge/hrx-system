@@ -26,6 +26,7 @@ load(
     "IMPORT_TILELANG",
     "TARGET_ARCH_AMDGPU",
     "TARGET_ARCH_IREE_VM",
+    "TARGET_ARCH_LLVMIR",
     "TARGET_ARCH_SPIRV",
     "TARGET_ARCH_WASM",
     "TARGET_ARCH_X86",
@@ -52,6 +53,10 @@ PACKAGE_POLICIES = [
         build_requirements = [TARGET_ARCH_IREE_VM],
     ),
     package_policy(
+        packages = ["loom/src/loom/target/arch/llvmir/..."],
+        build_requirements = [TARGET_ARCH_LLVMIR],
+    ),
+    package_policy(
         packages = ["loom/src/loom/target/arch/spirv/..."],
         build_requirements = [TARGET_ARCH_SPIRV],
     ),
@@ -69,7 +74,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/llvmir/..."],
-        build_requirements = [EMIT_LLVMIR],
+        build_requirements = [TARGET_ARCH_LLVMIR, EMIT_LLVMIR],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/amdgpu/..."],

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     core
@@ -43,7 +43,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     target_env
@@ -60,7 +60,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     target_presets
@@ -76,7 +76,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     test_target
@@ -92,7 +92,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     llvmir
@@ -110,7 +110,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     test_modules_core
@@ -129,7 +129,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     test_modules
@@ -150,7 +150,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     lower
@@ -188,7 +188,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     legality
@@ -216,7 +216,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     target_registry
@@ -241,7 +241,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     loom_check
@@ -269,7 +269,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     check_provider
@@ -286,7 +286,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_emit"
@@ -299,7 +299,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_cfg"
@@ -312,7 +312,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_intrinsics"
@@ -325,7 +325,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_lowering_errors"
@@ -338,7 +338,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_memory"
@@ -351,7 +351,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_packed_dot"
@@ -364,7 +364,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_scalar_index"
@@ -377,7 +377,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_target_projection"
@@ -390,7 +390,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_toolchain"
@@ -403,7 +403,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_llvmir_vector_core"
@@ -416,7 +416,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     target_registry_test
@@ -428,11 +428,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitcode_record_writer_test
@@ -444,11 +445,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitstream_writer_test
@@ -460,11 +462,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitcode_writer_test
@@ -478,11 +481,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitcode_writer_target_test
@@ -498,11 +502,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     text_writer_test
@@ -514,11 +519,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     text_writer_target_test
@@ -532,11 +538,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     target_env_test
@@ -552,11 +559,12 @@ loom_cc_test(
     loom::target::emit::llvmir::x86::target_env
     loom::util::stream
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     tool_test
@@ -573,11 +581,12 @@ loom_cc_test(
     loom::util::stream
   LABELS
     "requires-filesystem"
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     lower_options_test
@@ -592,11 +601,12 @@ loom_cc_test(
     loom::ir
   LABELS
     "requires-filesystem"
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     legality_test
@@ -616,11 +626,12 @@ loom_cc_test(
     loom::ops::target
     loom::ops::vector
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     verify_test
@@ -631,6 +642,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()

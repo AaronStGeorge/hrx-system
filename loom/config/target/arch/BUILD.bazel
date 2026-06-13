@@ -17,6 +17,7 @@ DEFAULT_ENABLED = []
 SUPPORTED_VALUES = [
     "amdgpu",
     "iree_vm",
+    "llvmir",
     "spirv",
     "wasm",
     "x86",
@@ -45,5 +46,16 @@ string_list_flag(
             ":explicit_" + value,
         ],
     )
-    for value in SUPPORTED_VALUES
+    for value in [
+        "amdgpu",
+        "iree_vm",
+        "spirv",
+        "wasm",
+        "x86",
+    ]
 ]
+
+selects.config_setting_group(
+    name = "llvmir",
+    match_any = [":explicit_llvmir"],
+)

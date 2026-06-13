@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     intrinsics
@@ -24,7 +24,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     lower
@@ -41,7 +41,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     legality
@@ -57,7 +57,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     target_env
@@ -74,7 +74,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     legality_test
@@ -91,6 +91,7 @@ loom_cc_test(
     loom::ops::llvmir
     loom::target::emit::llvmir::legality
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()

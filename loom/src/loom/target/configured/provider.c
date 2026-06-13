@@ -14,6 +14,9 @@
 #ifndef LOOM_CONFIG_TARGET_HAVE_IREE_VM
 #define LOOM_CONFIG_TARGET_HAVE_IREE_VM 0
 #endif  // LOOM_CONFIG_TARGET_HAVE_IREE_VM
+#ifndef LOOM_CONFIG_TARGET_HAVE_LLVMIR
+#define LOOM_CONFIG_TARGET_HAVE_LLVMIR 0
+#endif  // LOOM_CONFIG_TARGET_HAVE_LLVMIR
 #ifndef LOOM_CONFIG_TARGET_HAVE_SPIRV
 #define LOOM_CONFIG_TARGET_HAVE_SPIRV 0
 #endif  // LOOM_CONFIG_TARGET_HAVE_SPIRV
@@ -26,8 +29,8 @@
 
 #define LOOM_CONFIG_TARGET_HAVE_ANY_PROVIDER                            \
   (LOOM_CONFIG_TARGET_HAVE_AMDGPU || LOOM_CONFIG_TARGET_HAVE_IREE_VM || \
-   LOOM_CONFIG_TARGET_HAVE_SPIRV || LOOM_CONFIG_TARGET_HAVE_WASM ||     \
-   LOOM_CONFIG_TARGET_HAVE_X86)
+   LOOM_CONFIG_TARGET_HAVE_LLVMIR || LOOM_CONFIG_TARGET_HAVE_SPIRV ||   \
+   LOOM_CONFIG_TARGET_HAVE_WASM || LOOM_CONFIG_TARGET_HAVE_X86)
 
 #if LOOM_CONFIG_TARGET_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/provider.h"
@@ -35,6 +38,9 @@
 #if LOOM_CONFIG_TARGET_HAVE_IREE_VM
 #include "loom/target/arch/ireevm/provider.h"
 #endif  // LOOM_CONFIG_TARGET_HAVE_IREE_VM
+#if LOOM_CONFIG_TARGET_HAVE_LLVMIR
+#include "loom/target/arch/llvmir/provider.h"
+#endif  // LOOM_CONFIG_TARGET_HAVE_LLVMIR
 #if LOOM_CONFIG_TARGET_HAVE_SPIRV
 #include "loom/target/arch/spirv/provider.h"
 #endif  // LOOM_CONFIG_TARGET_HAVE_SPIRV
@@ -53,6 +59,9 @@ static const loom_target_provider_t* const kConfiguredTargetProviders[] = {
 #if LOOM_CONFIG_TARGET_HAVE_IREE_VM
     &loom_ireevm_target_provider,
 #endif  // LOOM_CONFIG_TARGET_HAVE_IREE_VM
+#if LOOM_CONFIG_TARGET_HAVE_LLVMIR
+    &loom_llvmir_target_provider,
+#endif  // LOOM_CONFIG_TARGET_HAVE_LLVMIR
 #if LOOM_CONFIG_TARGET_HAVE_SPIRV
     &loom_spirv_target_provider,
 #endif  // LOOM_CONFIG_TARGET_HAVE_SPIRV
