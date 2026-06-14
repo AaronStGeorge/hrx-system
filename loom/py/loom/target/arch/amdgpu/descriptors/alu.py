@@ -34,6 +34,14 @@ _SDWA_SOURCE_SEXT_IMMEDIATE = Immediate(
     unsigned_max=1,
 )
 
+_SOPK_I16_IMMEDIATE = Immediate(
+    "imm16",
+    ImmediateKind.SIGNED,
+    bit_width=16,
+    signed_min=-(2**15),
+    unsigned_max=(2**15) - 1,
+)
+
 
 def _sdwa_selector_immediate(field_name: str) -> Immediate:
     return Immediate(
@@ -60,6 +68,11 @@ def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
         implicit_operands=(_SCC_CLOBBER_OUTPUT,),
         operand_forms=(
             _literal_operand_form(
+                replacement_descriptor="amdgpu.s_addk_i32",
+                source_operand="rhs",
+                immediate_field="imm16",
+            ),
+            _literal_operand_form(
                 replacement_descriptor="amdgpu.s_add_u32.rhs_inline",
                 source_operand="rhs",
             ),
@@ -74,6 +87,20 @@ def _s_add_u32_rhs_inline_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="S_ADD_U32",
         mnemonic="s_add_u32",
         semantic_tag="integer.add.u32",
+    )
+
+
+def _s_addk_i32_overlay(
+    *,
+    instruction_name: str = "S_ADDK_I32",
+    mnemonic: str = "s_addk_i32",
+) -> AmdgpuDescriptorOverlay:
+    return _s_tied_sopk_i32_overlay(
+        descriptor_key="amdgpu.s_addk_i32",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        semantic_tag="integer.add.u32",
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
     )
 
 
@@ -147,6 +174,11 @@ def _s_mul_i32_overlay() -> AmdgpuDescriptorOverlay:
         ),
         operand_forms=(
             _literal_operand_form(
+                replacement_descriptor="amdgpu.s_mulk_i32",
+                source_operand="rhs",
+                immediate_field="imm16",
+            ),
+            _literal_operand_form(
                 replacement_descriptor="amdgpu.s_mul_i32.rhs_inline",
                 source_operand="rhs",
             ),
@@ -175,6 +207,57 @@ def _s_mul_i32_rhs_inline_overlay() -> AmdgpuDescriptorOverlay:
         ),
         immediate_fields=("SSRC1",),
         immediates=(_SOURCE_INLINE_U32_IMMEDIATE,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_mulk_i32_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_tied_sopk_i32_overlay(
+        descriptor_key="amdgpu.s_mulk_i32",
+        instruction_name="S_MULK_I32",
+        mnemonic="s_mulk_i32",
+        semantic_tag="integer.mul.lo.i32",
+    )
+
+
+def _s_tied_sopk_i32_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_SOPK",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay(
+                "SDST",
+                _sgpr_operand("lhs"),
+                role_exception_reason=(
+                    "the encoded scalar destination register is also the tied lhs input"
+                ),
+            ),
+        ),
+        implicit_operands=implicit_operands,
+        immediate_fields=("SIMM16",),
+        immediates=(_SOPK_I16_IMMEDIATE,),
+        asm_forms=_asm(
+            mnemonic=mnemonic,
+            results=("dst",),
+            operands=("lhs",),
+            immediates=("imm16",),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -3780,6 +3863,7 @@ __all__ = (
     "_integer_bitwise_shift_overlays",
     "_s_add_u32_overlay",
     "_s_add_u32_rhs_inline_overlay",
+    "_s_addk_i32_overlay",
     "_s_addc_u32_overlay",
     "_s_and_b32_overlay",
     "_s_and_b64_overlay",
@@ -3809,6 +3893,7 @@ __all__ = (
     "_s_mul_hi_u32_overlay",
     "_s_mul_i32_overlay",
     "_s_mul_i32_rhs_inline_overlay",
+    "_s_mulk_i32_overlay",
     "_s_or_b32_overlay",
     "_s_or_b64_overlay",
     "_s_shift_u64_overlay",

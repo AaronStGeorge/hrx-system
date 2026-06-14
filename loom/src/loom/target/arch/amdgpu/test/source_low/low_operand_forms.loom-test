@@ -289,7 +289,7 @@ low.func.def target(@target) @sop2_rhs_inline_shift(%value: reg<amdgpu.sgpr>) ->
 
 amdgpu.target<gfx1100> @target
 
-low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+low.func.def target(@target) @sopk_immediate_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
   %step = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
   %result = low.op<amdgpu.s_add_u32>(%position, %step) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
   low.return %result : reg<amdgpu.sgpr>
@@ -298,8 +298,8 @@ low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -
 // ----
 amdgpu.target<gfx1100> @target
 
-low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
-  %result = low.op<amdgpu.s_add_u32.rhs_inline>(%position) {imm32 = 3} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+low.func.def target(@target) @sopk_immediate_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+  %result = low.op<amdgpu.s_addk_i32>(%position) {imm16 = 3} : (reg<amdgpu.sgpr>) -> %position as reg<amdgpu.sgpr>
   low.return %result : reg<amdgpu.sgpr>
 }
 
@@ -327,7 +327,25 @@ low.func.def target(@target) @sop2_rhs_inline_add_cses_write_only_scc_state(%pos
 
 amdgpu.target<gfx1100> @target
 
-low.func.def target(@target) @sop2_rhs_inline_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+low.func.def target(@target) @sop2_rhs_inline_add_keeps_live_lhs(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %step = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.s_add_u32>(%position, %step) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %result, %position : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sop2_rhs_inline_add_keeps_live_lhs(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %result = low.op<amdgpu.s_add_u32.rhs_inline>(%position) {imm32 = 3} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %result, %position : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sopk_immediate_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
   %scale = low.const<amdgpu.s_mov_b32> {imm32 = 12} : reg<amdgpu.sgpr>
   %result = low.op<amdgpu.s_mul_i32>(%value, %scale) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
   low.return %result : reg<amdgpu.sgpr>
@@ -336,8 +354,8 @@ low.func.def target(@target) @sop2_rhs_inline_mul(%value: reg<amdgpu.sgpr>) -> (
 // ----
 amdgpu.target<gfx1100> @target
 
-low.func.def target(@target) @sop2_rhs_inline_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
-  %result = low.op<amdgpu.s_mul_i32.rhs_inline>(%value) {imm32 = 12} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+low.func.def target(@target) @sopk_immediate_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+  %result = low.op<amdgpu.s_mulk_i32>(%value) {imm16 = 12} : (reg<amdgpu.sgpr>) -> %value as reg<amdgpu.sgpr>
   low.return %result : reg<amdgpu.sgpr>
 }
 

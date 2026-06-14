@@ -303,6 +303,41 @@ static iree_status_t loom_low_descriptor_build_tied_results(
   return iree_ok_status();
 }
 
+static bool loom_low_select_operand_form_operand_has_single_use(
+    const loom_module_t* module, const loom_value_id_t* operands,
+    iree_host_size_t operand_count, uint16_t operand_index) {
+  IREE_ASSERT(operand_index < operand_count);
+  const loom_value_id_t value_id = operands[operand_index];
+  IREE_ASSERT(value_id < module->values.count);
+  return loom_value_has_single_use(loom_module_value(module, value_id));
+}
+
+static bool loom_low_select_operand_form_can_rewrite_destructive(
+    const loom_module_t* module,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* replacement_descriptor,
+    const loom_value_id_t* replacement_operands,
+    iree_host_size_t replacement_operand_count) {
+  for (uint16_t i = 0; i < replacement_descriptor->constraint_count; ++i) {
+    const loom_low_constraint_t* constraint =
+        &descriptor_set
+             ->constraints[replacement_descriptor->constraint_start + i];
+    if (constraint->kind != LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE) {
+      continue;
+    }
+    const uint16_t tied_packet_operand_index =
+        loom_low_descriptor_packet_operand_index(descriptor_set,
+                                                 replacement_descriptor,
+                                                 constraint->rhs_operand_index);
+    if (!loom_low_select_operand_form_operand_has_single_use(
+            module, replacement_operands, replacement_operand_count,
+            tied_packet_operand_index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool loom_low_enum_domain_contains_i64(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_enum_domain_t* domain, int64_t value) {
@@ -489,6 +524,12 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
               ->operand_form_operand_indices[form->operand_map_start + i];
       operands[i] = loom_op_operands(op)[source_packet_operand_index];
     }
+  }
+
+  if (!loom_low_select_operand_form_can_rewrite_destructive(
+          state->module, descriptor_set, replacement_descriptor, operands,
+          form->operand_map_count)) {
+    return iree_ok_status();
   }
 
   loom_type_t* result_types = NULL;
