@@ -41,4 +41,23 @@ loom_cc_library(
 )
 endif()
 
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+loom_cc_test(
+  NAME
+    target_env_test
+  SRCS
+    "target_env_test.cc"
+  DEPS
+    ::target_env
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::target::emit::llvmir::core
+    loom::target::emit::llvmir::target_env
+    loom::util::stream
+  LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
+    "iree-build-requirement=loom.emit.llvmir"
+)
+endif()
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

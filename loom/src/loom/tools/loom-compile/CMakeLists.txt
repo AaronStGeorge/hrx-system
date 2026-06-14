@@ -37,7 +37,9 @@ if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
 endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
   list(APPEND _loom_compile_platform_deps loom::target::arch::llvmir::provider)
+  list(APPEND _loom_compile_platform_deps loom::target::emit::llvmir::amdgpu::target_env)
   list(APPEND _loom_compile_platform_deps loom::target::emit::llvmir::artifact_emitter)
+  list(APPEND _loom_compile_platform_deps loom::target::emit::llvmir::x86::target_env)
 endif()
 loom_cc_binary(
   NAME

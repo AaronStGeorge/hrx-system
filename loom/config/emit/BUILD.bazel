@@ -10,8 +10,8 @@ load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 package(default_visibility = ["//visibility:public"])
 
 # Advanced artifact-family slices. Public //loom/config/target values imply the
-# production emitters required for that target. LLVMIR remains explicit because
-# it is a debug/developer artifact path, not part of production target support.
+# emitters required for that target. LLVMIR is included in the default build so
+# the oracle/development path stays exercised with the other target families.
 DEFAULT_ENABLED = []
 
 SUPPORTED_VALUES = [
@@ -48,12 +48,8 @@ string_list_flag(
     for value in [
         "amdgpu",
         "iree_vm",
+        "llvmir",
         "spirv",
         "wasm",
     ]
 ]
-
-selects.config_setting_group(
-    name = "llvmir",
-    match_any = [":explicit_llvmir"],
-)

@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// loom-check provider for LLVMIR emission tests.
+// loom-check provider composition for LLVMIR emission tests.
 
-#ifndef LOOM_TARGET_EMIT_LLVMIR_CHECK_PROVIDER_H_
-#define LOOM_TARGET_EMIT_LLVMIR_CHECK_PROVIDER_H_
+#ifndef LOOM_TOOLS_LOOM_CHECK_LLVMIR_PROVIDER_H_
+#define LOOM_TOOLS_LOOM_CHECK_LLVMIR_PROVIDER_H_
 
 #include "loom/tools/loom-check/provider.h"
 
@@ -22,4 +22,4 @@ extern const loom_check_provider_t loom_llvmir_check_provider;
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_LLVMIR_CHECK_PROVIDER_H_
+#endif  // LOOM_TOOLS_LOOM_CHECK_LLVMIR_PROVIDER_H_

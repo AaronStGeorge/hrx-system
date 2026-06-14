@@ -18,6 +18,7 @@
 #include "loom/ir/context.h"
 #include "loom/ops/op_registry.h"
 #include "loom/target/arch/llvmir/descriptors/low_registry.h"
+#include "loom/target/emit/llvmir/target_presets.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/testing/diagnostic_matchers.h"
@@ -33,6 +34,88 @@ using ::loom::testing::DiagnosticEmissionCapture;
 using ModulePtr = ::loom::testing::ModulePtr;
 using LlvmirModulePtr =
     std::unique_ptr<loom_llvmir_module_t, decltype(&loom_llvmir_module_free)>;
+
+static const loom_llvmir_target_env_t kTestKernelTargetEnv = {
+    /*.name=*/IREE_SVL("loom-kernel64-unknown-none"),
+    /*.target_triple=*/IREE_SVL("loom-kernel64-unknown-none"),
+    /*.data_layout=*/IREE_SVL("e-p:64:64-p1:64:64-i64:64-n8:16:32:64-S128"),
+    /*.object_format=*/LOOM_LLVMIR_OBJECT_FORMAT_ELF,
+    /*.default_pointer_bitwidth=*/64,
+    /*.index_bitwidth=*/64,
+    /*.offset_bitwidth=*/64,
+    /*.address_spaces=*/
+    {
+        /*.generic=*/0,
+        /*.global=*/1,
+        /*.local=*/3,
+        /*.constant=*/4,
+        /*.private_memory=*/5,
+        /*.buffer_resource=*/UINT32_MAX,
+    },
+};
+
+static const loom_llvmir_target_profile_t kTestKernelProfile = {
+    /*.name=*/IREE_SVL("loom-test-kernel"),
+    /*.target_env=*/&kTestKernelTargetEnv,
+    /*.kind=*/LOOM_LLVMIR_TARGET_PROFILE_KERNEL,
+    /*.target_cpu=*/{},
+    /*.target_features=*/{},
+    /*.x86_packed_dot_feature_bits=*/{},
+    /*.exported_linkage=*/LOOM_LLVMIR_LINKAGE_DEFAULT,
+    /*.kernel=*/
+    {
+        /*.calling_convention=*/{},
+        /*.required_workgroup_size_metadata_name=*/
+        IREE_SVL("loom_test_workgroup_size"),
+        /*.required_workgroup_size=*/{},
+        /*.flat_workgroup_size_min=*/1,
+        /*.flat_workgroup_size_max=*/1024,
+        /*.binding_resource_flags=*/{},
+        /*.flat_workgroup_size_attr_name=*/
+        IREE_SVL("loom-test-flat-work-group-size"),
+        /*.uniform_workgroup_size_attr_name=*/
+        IREE_SVL("loom-test-uniform-workgroup-size"),
+        /*.flags=*/LOOM_LLVMIR_KERNEL_PROFILE_FLAG_ALWAYSINLINE,
+        /*.binding_parameter_attrs=*/
+        {
+            {
+                /*.kind=*/LOOM_LLVMIR_ATTR_NOUNDEF,
+                /*.value=*/{},
+                /*.value2=*/{},
+                /*.type_id=*/LOOM_LLVMIR_TYPE_ID_INVALID,
+            },
+        },
+        /*.binding_parameter_attr_count=*/1,
+    },
+};
+
+static bool TestKernelProjectBundle(
+    const loom_llvmir_target_profile_projection_request_t* request,
+    const loom_llvmir_target_profile_t** out_profile) {
+  *out_profile = nullptr;
+  const loom_target_bundle_t* bundle = request->bundle;
+  if (!iree_string_view_equal(request->target_triple,
+                              kTestKernelTargetEnv.target_triple)) {
+    return false;
+  }
+  if (bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return false;
+  }
+  *out_profile = &kTestKernelProfile;
+  return true;
+}
+
+static const loom_llvmir_target_profile_t* const kTestKernelProfiles[] = {
+    &kTestKernelProfile,
+};
+
+static const loom_llvmir_target_profile_provider_t kTestKernelProvider = {
+    /*.name=*/IREE_SVL("loom-test-kernel"),
+    /*.profiles=*/kTestKernelProfiles,
+    /*.profile_count=*/IREE_ARRAYSIZE(kTestKernelProfiles),
+    /*.llc_target_name=*/{},
+    /*.project_bundle=*/TestKernelProjectBundle,
+};
 
 class LlvmirModuleEmitterTest : public ::testing::Test {
  protected:
@@ -73,9 +156,20 @@ class LlvmirModuleEmitterTest : public ::testing::Test {
     iree_arena_allocator_t scratch_arena;
     iree_arena_initialize(&block_pool_, &scratch_arena);
     loom_llvmir_module_t* raw_module = nullptr;
+    const loom_llvmir_target_profile_provider_t* providers[] = {
+        &kTestKernelProvider,
+    };
+    const loom_llvmir_target_profile_registry_t target_profile_registry = {
+        /*.default_profile=*/nullptr,
+        /*.providers=*/providers,
+        /*.provider_count=*/IREE_ARRAYSIZE(providers),
+    };
+    loom_llvmir_emit_low_module_options_t options = {};
+    loom_llvmir_emit_low_module_options_initialize(&options);
+    options.target_profile_registry = &target_profile_registry;
     iree_status_t status = loom_llvmir_emit_low_module(
         module, &low_registry_.registry, loom_target_selection_empty(),
-        capture->emitter(), &scratch_arena, nullptr, &raw_module,
+        capture->emitter(), &scratch_arena, &options, &raw_module,
         iree_allocator_system());
     if (iree_status_is_ok(status) && raw_module != nullptr) {
       out_module->reset(raw_module);
@@ -142,29 +236,10 @@ low.func.def target(@target) abi(object_function) @second(%input_view: reg<llvmi
   EXPECT_NE(text.find("store i32 %loaded"), std::string::npos) << text;
 }
 
-TEST_F(LlvmirModuleEmitterTest, EmitsAmdgpuHalKernelAbiFromLowKernelFacts) {
+TEST_F(LlvmirModuleEmitterTest, EmitsKernelAbiFromLowKernelFacts) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {
-  default_pointer_bitwidth = 64,
-  index_bitwidth = 32,
-  offset_bitwidth = 64,
-  max_workgroup_size_x = 1024,
-  max_workgroup_size_y = 1024,
-  max_workgroup_size_z = 1024,
-  max_flat_workgroup_size = 1024,
-  memory_space_generic = 0,
-  memory_space_global = 1,
-  memory_space_workgroup = 3,
-  memory_space_constant = 4,
-  memory_space_private = 5,
-  memory_space_host = 4294967295,
-  memory_space_descriptor = 7,
-  abi = hal_kernel,
-  linkage = default,
-  hal_buffer_resource_flags = 822243328,
-  contract_set_key = "llvmir.generic.core",
-  triple = "amdgcn-amd-amdhsa",
-  data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"
+  triple = "loom-kernel64-unknown-none"
 }
 
 low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch() asm<llvmir.generic.core> {
@@ -182,18 +257,21 @@ low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch() asm<llvmir.
 
   std::string text;
   IREE_ASSERT_OK(WriteText(llvmir_module.get(), &text));
-  EXPECT_NE(text.find("target triple = \"amdgcn-amd-amdhsa\""),
+  EXPECT_NE(text.find("target triple = \"loom-kernel64-unknown-none\""),
             std::string::npos)
       << text;
-  EXPECT_NE(text.find("define amdgpu_kernel void @dispatch(ptr addrspace(1) "
-                      "inreg noundef %input) #0 !reqd_work_group_size !0"),
+  EXPECT_NE(text.find("define void @dispatch(ptr addrspace(1) noundef %input) "
+                      "#0 !loom_test_workgroup_size !0"),
             std::string::npos)
       << text;
   EXPECT_NE(text.find("getelementptr i8, ptr addrspace(1) %input, i64 4"),
             std::string::npos)
       << text;
   EXPECT_NE(text.find("load i32, ptr addrspace(1)"), std::string::npos) << text;
-  EXPECT_NE(text.find("\"amdgpu-flat-work-group-size\"=\"1,1024\""),
+  EXPECT_NE(text.find("\"loom-test-flat-work-group-size\"=\"1,1024\""),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("\"loom-test-uniform-workgroup-size\""),
             std::string::npos)
       << text;
   EXPECT_NE(text.find("!0 = !{i32 128, i32 2, i32 1}\n"), std::string::npos)
@@ -203,13 +281,7 @@ low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch() asm<llvmir.
 TEST_F(LlvmirModuleEmitterTest, ReportsHalKernelWithoutWorkgroupSize) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {
-  default_pointer_bitwidth = 64,
-  index_bitwidth = 32,
-  offset_bitwidth = 64,
-  max_flat_workgroup_size = 1024,
-  abi = hal_kernel,
-  contract_set_key = "llvmir.generic.core",
-  triple = "amdgcn-amd-amdhsa"
+  triple = "loom-kernel64-unknown-none"
 }
 
 low.kernel.def target(@target) @dispatch() asm<llvmir.generic.core> {
@@ -237,14 +309,7 @@ low.kernel.def target(@target) @dispatch() asm<llvmir.generic.core> {
 TEST_F(LlvmirModuleEmitterTest, ReportsDirectHalKernelPointerArgument) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {
-  default_pointer_bitwidth = 64,
-  index_bitwidth = 32,
-  offset_bitwidth = 64,
-  max_flat_workgroup_size = 1024,
-  memory_space_global = 1,
-  abi = hal_kernel,
-  contract_set_key = "llvmir.generic.core",
-  triple = "amdgcn-amd-amdhsa"
+  triple = "loom-kernel64-unknown-none"
 }
 
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @dispatch(%input: reg<llvmir.ptr>) asm<llvmir.generic.core> {
@@ -274,7 +339,7 @@ TEST_F(LlvmirModuleEmitterTest, ReportsUnsupportedAbiProjection) {
 llvmir.target<object> @target {
   abi = shader_entry_point,
   contract_set_key = "llvmir.generic.core",
-  triple = "amdgcn-amd-amdhsa"
+  triple = "loom-kernel64-unknown-none"
 }
 
 low.func.def target(@target) @dispatch() asm<llvmir.generic.core> {

@@ -391,6 +391,36 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
     return tuple(descriptors)
 
 
+def _bitwise_descriptors() -> tuple[Descriptor, ...]:
+    descriptors: list[Descriptor] = []
+    for type_name in ("i1", "i32", "i64"):
+        descriptors.extend(
+            (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
+            for stem in ("and", "or", "xor")
+        )
+    for type_name in ("i32", "i64"):
+        descriptors.extend(
+            (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
+            for stem in ("shl", "lshr", "ashr")
+        )
+    for type_name, stems in (
+        ("i1", ("and", "or", "xor")),
+        ("i32", ("and", "or", "xor", "shl", "lshr", "ashr")),
+    ):
+        descriptors.extend(
+            (
+                _binary_descriptor(
+                    stem=stem,
+                    type_name=type_name,
+                    semantic_stem=stem,
+                    unit_count=4,
+                )
+            )
+            for stem in stems
+        )
+    return tuple(descriptors)
+
+
 def _compare_descriptors() -> tuple[Descriptor, ...]:
     descriptors: list[Descriptor] = []
     integer_predicates = (
@@ -546,6 +576,7 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
         _const_f_descriptor("f32", _F32_BITS_IMMEDIATE),
         _const_f_descriptor("f64", _F64_BITS_IMMEDIATE),
         *_arithmetic_descriptors(),
+        *_bitwise_descriptors(),
         *_compare_descriptors(),
         *_select_descriptors(),
         *_memory_descriptors(),

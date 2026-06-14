@@ -103,7 +103,9 @@ static iree_status_t loom_compile_diagnostic_sink(
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
 #if LOOM_COMPILE_HAVE_LLVMIR
 #include "loom/target/arch/llvmir/provider.h"
+#include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/artifact_emitter.h"
+#include "loom/target/emit/llvmir/x86/target_env.h"
 #endif  // LOOM_COMPILE_HAVE_LLVMIR
 
 IREE_FLAG(string, backend, "vm",
@@ -700,6 +702,19 @@ static iree_string_view_t loom_compile_target_artifact_identifier(
              : output_path;
 }
 
+#if LOOM_COMPILE_HAVE_LLVMIR
+static bool loom_compile_target_emitter_is_llvmir(
+    const loom_target_emitter_t* target_emitter) {
+  switch (target_emitter->target_artifact_format) {
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_TEXT:
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_BITCODE:
+      return true;
+    default:
+      return false;
+  }
+}
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
+
 static iree_status_t loom_compile_emit_target(
     const loom_run_execution_environment_t* environment,
     loom_run_session_t* session, const loom_target_emitter_t* target_emitter,
@@ -740,6 +755,26 @@ static iree_status_t loom_compile_emit_target(
   const iree_string_view_t output_path = iree_make_cstring_view(FLAG_output);
   const iree_string_view_t identifier =
       loom_compile_target_artifact_identifier(output_path, target_emitter);
+#if LOOM_COMPILE_HAVE_LLVMIR
+  const loom_llvmir_target_profile_provider_t*
+      llvmir_target_profile_providers[] = {
+          loom_llvmir_x86_target_profile_provider(),
+          loom_llvmir_amdgpu_target_profile_provider(),
+      };
+  const loom_llvmir_target_profile_registry_t llvmir_target_profile_registry = {
+      .providers = llvmir_target_profile_providers,
+      .provider_count = IREE_ARRAYSIZE(llvmir_target_profile_providers),
+  };
+  loom_llvmir_artifact_emitter_options_t llvmir_options = {0};
+  const void* option_chain = NULL;
+  if (loom_compile_target_emitter_is_llvmir(target_emitter)) {
+    loom_llvmir_artifact_emitter_options_initialize(&llvmir_options);
+    llvmir_options.target_profile_registry = &llvmir_target_profile_registry;
+    option_chain = &llvmir_options;
+  }
+#else
+  const void* option_chain = NULL;
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
   if (compile_options->report != NULL) {
     compile_options->report->artifact_kind =
         LOOM_TARGET_COMPILE_ARTIFACT_KIND_TARGET_ARTIFACT;
@@ -754,6 +789,7 @@ static iree_status_t loom_compile_emit_target(
           &loom_run_session_low_descriptor_registry(session)->registry,
       .module = run_module->module,
       .target_selection = loom_target_selection_empty(),
+      .option_chain = option_chain,
       .identifier = identifier,
       .compile_report = compile_options->report,
       .diagnostic_emitter = loom_target_entry_emitter(&diagnostic_emitter),

@@ -20,12 +20,12 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_LLVMIR_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check:__pkg__"]
-
 _LLVMIR_ARTIFACT_EMITTER_VISIBILITY = [
     "//loom/binding/c/target/llvmir:__pkg__",
     "//loom/src/loom/tools/loom-compile:__pkg__",
 ]
+
+_LLVMIR_LOOM_CHECK_VISIBILITY = ["//loom/src/loom/tools/loom-check:__pkg__"]
 
 _LLVMIR_TARGET_VISIBILITY = [
     "//loom/src/loom/target/emit/llvmir/amdgpu:__pkg__",
@@ -102,6 +102,7 @@ loom_cc_library(
     deps = [
         ":core",
         ":target_env",
+        ":target_presets",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:function",
@@ -129,6 +130,7 @@ loom_cc_library(
     deps = [
         ":core",
         ":module_emitter",
+        ":target_presets",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
@@ -137,25 +139,11 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "llvmir",
-    hdrs = ["intrinsics.h"],
-    deps = [
-        ":core",
-        ":target_env",
-        ":target_presets",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
-        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
-        "//loom/src/loom/target/emit/llvmir/x86:target_env",
-    ],
-)
-
-loom_cc_library(
     name = "test_modules_core",
     testonly = True,
     srcs = ["test_modules.c"],
     hdrs = ["test_modules.h"],
-    defines = ["LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS=0"],
+    defines = ["LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS=0"],
     deps = [
         ":core",
         ":target_env",
@@ -164,7 +152,7 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "test_modules",
+    name = "test_modules_target_scenarios",
     testonly = True,
     srcs = ["test_modules.c"],
     hdrs = ["test_modules.h"],
@@ -184,10 +172,12 @@ loom_cc_library(
     testonly = True,
     srcs = ["check/loom_check.c"],
     hdrs = ["check/loom_check.h"],
+    visibility = _LLVMIR_LOOM_CHECK_VISIBILITY,
     deps = [
         ":core",
         ":module_emitter",
         ":target_env",
+        ":target_presets",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/llvmir",
@@ -196,19 +186,6 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/io:stream",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    testonly = True,
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
-    visibility = _LLVMIR_CHECK_VISIBILITY,
-    deps = [
-        ":loom_check",
-        "//loom/src/loom/tools/loom-check:provider",
-        "//runtime/src/iree/base",
     ],
 )
 
@@ -264,7 +241,7 @@ loom_cc_test(
     deps = [
         ":core",
         ":target_env",
-        ":test_modules",
+        ":test_modules_target_scenarios",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -288,7 +265,7 @@ loom_cc_test(
     defines = ["LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS=1"],
     deps = [
         ":core",
-        ":test_modules",
+        ":test_modules_target_scenarios",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -300,6 +277,7 @@ loom_cc_test(
     deps = [
         ":core",
         ":module_emitter",
+        ":target_presets",
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
@@ -322,9 +300,7 @@ loom_cc_test(
         ":core",
         ":target_env",
         ":target_presets",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
         "//loom/src/loom/target/emit/llvmir/x86:target_env",
-        "//loom/src/loom/util:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -336,7 +312,7 @@ loom_cc_test(
     tags = ["requires-filesystem"],
     deps = [
         ":core",
-        ":test_modules",
+        ":test_modules_target_scenarios",
         "//loom/src/loom/target/tool:llvm",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/io:file_handle",

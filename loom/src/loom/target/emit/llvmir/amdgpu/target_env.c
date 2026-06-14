@@ -107,16 +107,34 @@ static const loom_target_bundle_t kAmdgpuHalBundle = {
 static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
     .name = IREE_SVL("amdgpu-hal"),
     .target_env = &kAmdgcnAmdAmdhsaTargetEnv,
-    .kind = LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL,
+    .kind = LOOM_LLVMIR_TARGET_PROFILE_KERNEL,
     .exported_linkage = LOOM_LLVMIR_LINKAGE_DEFAULT,
-    .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL,
-    .required_workgroup_size_metadata_name = IREE_SVL("reqd_work_group_size"),
-    .amdgpu_hal =
+    .kernel =
         {
+            .calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL,
+            .required_workgroup_size_metadata_name =
+                IREE_SVL("reqd_work_group_size"),
             .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
             .flat_workgroup_size_min = 1,
             .flat_workgroup_size_max = 1024,
-            .buffer_resource_flags = LOOM_AMDGPU_HAL_BUFFER_RESOURCE_FLAGS,
+            .binding_resource_flags = LOOM_AMDGPU_HAL_BUFFER_RESOURCE_FLAGS,
+            .flat_workgroup_size_attr_name =
+                IREE_SVL("amdgpu-flat-work-group-size"),
+            .uniform_workgroup_size_attr_name =
+                IREE_SVL("uniform-work-group-size"),
+            .flags = LOOM_LLVMIR_KERNEL_PROFILE_FLAG_ALWAYSINLINE,
+            .binding_parameter_attrs =
+                {
+                    {
+                        .kind = LOOM_LLVMIR_ATTR_INREG,
+                        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+                    },
+                    {
+                        .kind = LOOM_LLVMIR_ATTR_NOUNDEF,
+                        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+                    },
+                },
+            .binding_parameter_attr_count = 2,
         },
 };
 
@@ -125,22 +143,23 @@ static const loom_llvmir_target_profile_t* const kAmdgpuTargetProfiles[] = {
 };
 
 static bool loom_llvmir_amdgpu_project_bundle(
-    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_projection_request_t* request,
     const loom_llvmir_target_profile_t** out_profile) {
   *out_profile = NULL;
+  const loom_target_bundle_t* bundle = request->bundle;
+  if (!iree_string_view_is_empty(request->target_triple) &&
+      !iree_string_view_equal(request->target_triple,
+                              kAmdgcnAmdAmdhsaTargetEnv.target_triple)) {
+    return false;
+  }
   if (iree_string_view_equal(bundle->name, kAmdgpuHalProfile.name)) {
     *out_profile = &kAmdgpuHalProfile;
     return true;
   }
+  if (iree_string_view_is_empty(request->target_triple)) {
+    return false;
+  }
   if (bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
-    return false;
-  }
-  if (bundle->export_plan->hal_kernel.buffer_resource_flags !=
-      LOOM_AMDGPU_HAL_BUFFER_RESOURCE_FLAGS) {
-    return false;
-  }
-  if (bundle->snapshot->memory_spaces.descriptor !=
-      LOOM_LLVMIR_AMDGPU_BUFFER_RESOURCE_ADDRESS_SPACE) {
     return false;
   }
   *out_profile = &kAmdgpuHalProfile;

@@ -1,0 +1,60 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/vector_bitcast.loom-test
+// RUN: emit source-low output=low
+
+// XFAIL: llvmir source-low coverage gap
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @i32_to_i8x4_bitcast(%word: vector<1xi32>) -> (vector<4xi8>) {
+  %bytes = vector.bitcast %word : vector<1xi32> to vector<4xi8>
+  func.return %bytes : vector<4xi8>
+}
+
+// ====
+
+// XFAIL: llvmir source-low coverage gap
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @i32x2_to_i8x8_bitcast(%words: vector<2xi32>) -> (vector<8xi8>) {
+  %bytes = vector.bitcast %words : vector<2xi32> to vector<8xi8>
+  func.return %bytes : vector<8xi8>
+}
+
+// ====
+
+// XFAIL: llvmir source-low coverage gap
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @f32x2_to_i32x2_bitcast(%floats: vector<2xf32>) -> (vector<2xi32>) {
+  %bits = vector.bitcast %floats : vector<2xf32> to vector<2xi32>
+  func.return %bits : vector<2xi32>
+}
+
+// ====
+
+// XFAIL: llvmir source-low coverage gap
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @f16x2_to_i32_bitcast(%halves: vector<2xf16>) -> (vector<1xi32>) {
+  %bits = vector.bitcast %halves : vector<2xf16> to vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+
+// ====
+
+// XFAIL: llvmir source-low coverage gap
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @bf16x2_to_i32_bitcast(%halves: vector<2xbf16>) -> (vector<1xi32>) {
+  %bits = vector.bitcast %halves : vector<2xbf16> to vector<1xi32>
+  func.return %bits : vector<1xi32>
+}

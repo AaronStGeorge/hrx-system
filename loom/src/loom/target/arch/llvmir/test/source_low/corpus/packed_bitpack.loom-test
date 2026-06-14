@@ -1,0 +1,12 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/packed_bitpack.loom-test
+// RUN: emit source-low output=low
+
+// XFAIL: llvmir source-low coverage gap
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
+  %packed = vector.bitpack<8> %codes : vector<4xi32> -> vector<4xi8>
+  func.return %packed : vector<4xi8>
+}

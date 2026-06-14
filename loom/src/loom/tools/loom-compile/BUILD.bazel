@@ -78,6 +78,8 @@ _LLVMIR_COMPILE_DEPS = iree_select({
     "//loom/config/target:llvmir_artifacts": [
         "//loom/src/loom/target/arch/llvmir:provider",
         "//loom/src/loom/target/emit/llvmir:artifact_emitter",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
     ],
     "//conditions:default": [],
 })

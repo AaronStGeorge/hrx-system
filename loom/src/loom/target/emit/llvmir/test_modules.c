@@ -9,11 +9,11 @@
 #include "loom/target/emit/llvmir/llvmir.h"
 #include "loom/target/emit/llvmir/target_env.h"
 
-#ifndef LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
-#define LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS 1
+#ifndef LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
+#define LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS 1
 #endif
 
-#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
 #include "loom/target/emit/llvmir/amdgpu/intrinsics.h"
 #include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/x86/intrinsics.h"
@@ -55,7 +55,6 @@ static const loom_llvmir_target_profile_t kTestX86_64ObjectProfile = {
     .target_env = &kTestX86_64UnknownLinuxGnuTargetEnv,
     .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
     .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
-    .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
 };
 
 static const loom_llvmir_target_profile_t*
@@ -482,7 +481,7 @@ static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
   return iree_ok_status();
 }
 
-#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
 static iree_status_t loom_llvmir_test_populate_x86_intrinsics(
     loom_llvmir_module_t* module) {
   loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -528,7 +527,7 @@ static iree_status_t loom_llvmir_test_populate_x86_intrinsics(
   return iree_ok_status();
 }
 
-#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
 
 static iree_status_t loom_llvmir_test_populate_stack_alloca(
     loom_llvmir_module_t* module) {
@@ -1614,7 +1613,7 @@ static iree_status_t loom_llvmir_test_populate_inline_asm(
   return iree_ok_status();
 }
 
-#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
 static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
     loom_llvmir_module_t* module) {
   const loom_llvmir_target_profile_t* profile =
@@ -1659,7 +1658,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
           .name = IREE_SV("add_dispatch"),
           .return_type = void_type,
           .linkage = profile->exported_linkage,
-          .calling_convention = profile->kernel_calling_convention,
+          .calling_convention = profile->kernel.calling_convention,
           .attr_group_id = kernel_attr_group,
       },
       &kernel));
@@ -1716,7 +1715,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i64_type, resource_record_count, &records));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
-      module, i32_type, profile->amdgpu_hal.buffer_resource_flags, &flags));
+      module, i32_type, profile->kernel.binding_resource_flags, &flags));
 
   loom_llvmir_block_t* entry = NULL;
   IREE_RETURN_IF_ERROR(
@@ -1846,7 +1845,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   return iree_ok_status();
 }
 
-#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
 
 static const char kObjectVadd4Text[] =
     "source_filename = \"loom-object\"\n" TEST_X86_64_DATALAYOUT_TEXT
@@ -2193,7 +2192,7 @@ static iree_status_t loom_llvmir_test_module_target_config(
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
-#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
     case LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS: {
       const loom_llvmir_target_profile_t* profile =
           loom_llvmir_target_profile_amdgpu_hal();
@@ -2202,7 +2201,7 @@ static iree_status_t loom_llvmir_test_module_target_config(
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
-#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
@@ -2226,10 +2225,10 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_call_constants(module);
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
       return loom_llvmir_test_populate_builtin_intrinsics(module);
-#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
     case LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS:
       return loom_llvmir_test_populate_x86_intrinsics(module);
-#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA:
       return loom_llvmir_test_populate_stack_alloca(module);
     case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT:
@@ -2238,10 +2237,10 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_cfg_phi(module);
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
       return loom_llvmir_test_populate_inline_asm(module);
-#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
     case LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS:
       return loom_llvmir_test_populate_amdgpu_intrinsics(module);
-#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS
+#endif  // LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
       return loom_llvmir_test_populate_scalar_binop(module);
     case LOOM_LLVMIR_TEST_MODULE_VECTOR_ELEMENTS:

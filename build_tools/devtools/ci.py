@@ -264,7 +264,7 @@ def cmake_test_step(
     env: tuple[tuple[str, str], ...] = (),
     parallelism: int = 8,
 ) -> CiStep:
-    command = ["test", "--parallel", str(parallelism)]
+    command = ["test", "--parallel", str(parallelism), "--no-tests=error"]
     if regex:
         command.extend(["-R", regex])
     if exclude_regex:

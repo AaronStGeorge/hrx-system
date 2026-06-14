@@ -17,11 +17,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 LOOM_EXECUTE_SUBSTRATES = ("iree_hal", "iree_vm")
-LOOM_TARGETS = ("amdgpu", "iree_vm", "spirv", "wasm", "x86")
+LOOM_TARGETS = ("amdgpu", "iree_vm", "llvmir", "spirv", "wasm", "x86")
 LOOM_EMITTERS = ("amdgpu", "iree_vm", "llvmir", "spirv", "wasm")
 HOST_DRIVERS = ("local-sync", "local-task", "null")
 DEFAULT_LOOM_EXECUTE = LOOM_EXECUTE_SUBSTRATES
-DEFAULT_LOOM_TARGETS = ("amdgpu", "iree_vm", "spirv", "x86")
+DEFAULT_LOOM_TARGETS = ("amdgpu", "iree_vm", "llvmir", "spirv", "x86")
 
 SDK_DRIVER_PACKAGES = {
     "amdgpu": (
@@ -76,6 +76,7 @@ DRIVER_DEFINES = {
 LOOM_TARGET_DEFINES = {
     "LOOM_TARGET_AMDGPU": "amdgpu",
     "LOOM_TARGET_IREE_VM": "iree_vm",
+    "LOOM_TARGET_LLVMIR": "llvmir",
     "LOOM_TARGET_SPIRV": "spirv",
     "LOOM_TARGET_WASM": "wasm",
     "LOOM_TARGET_X86": "x86",

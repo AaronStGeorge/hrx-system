@@ -63,7 +63,7 @@ _EMIT_LLVMIR_CHECK_COPTS = iree_select({
 
 _EMIT_LLVMIR_CHECK_DEPS = iree_select({
     "//loom/config/emit:llvmir": [
-        "//loom/src/loom/target/emit/llvmir:check_provider",
+        ":llvmir_provider",
     ],
     "//conditions:default": [],
 })
@@ -459,6 +459,20 @@ loom_cc_library(
         ":main",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/tooling/context",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "llvmir_provider",
+    testonly = True,
+    srcs = ["llvmir_provider.c"],
+    hdrs = ["llvmir_provider.h"],
+    deps = [
+        ":provider",
+        "//loom/src/loom/target/emit/llvmir:loom_check",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//runtime/src/iree/base",
     ],
 )

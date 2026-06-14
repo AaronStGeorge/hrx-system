@@ -72,6 +72,474 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR)
 iree_native_test(
   NAME
+    "corpus_async_empty"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/async_empty.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_async_gather"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/async_gather.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_index_addressing"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/index_addressing.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_lookup_table"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/lookup_table.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_cache_policy_non_temporal"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_cache_policy_non_temporal.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_cache_policy_scopes"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_cache_policy_scopes.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_generic_atomic"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_generic_atomic.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_global"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_global.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_global_atomic"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_global_atomic.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_global_atomic_ordering"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_global_atomic_ordering.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_prefetch"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_prefetch.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_workgroup_atomic"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_workgroup_atomic.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_workgroup_b128"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_workgroup_b128.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_workgroup_indexed"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_workgroup_indexed.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_memory_workgroup_packed16"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/memory_workgroup_packed16.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_numeric_conversion"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/numeric_conversion.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_numeric_f32_memory"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/numeric_f32_memory.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_numeric_i32_memory"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/numeric_i32_memory.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_numeric_minmax"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/numeric_minmax.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_numeric_reduce"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/numeric_reduce.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_numeric_scalar_f32"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/numeric_scalar_f32.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_numeric_scalar_i32"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/numeric_scalar_i32.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_packed_bitfield"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/packed_bitfield.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_packed_bitpack"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/packed_bitpack.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_packed_bitunpack"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/packed_bitunpack.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_packed_dot_float8"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/packed_dot_float8.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_packed_dot_i4_mixed"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/packed_dot_i4_mixed.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_packed_dot_integer"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/packed_dot_integer.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_packed_dot_wide"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/packed_dot_wide.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_sync_barrier"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/sync_barrier.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_vector_bitcast"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/vector_bitcast.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_vector_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/vector_dot.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_vector_mask_select"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/vector_mask_select.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_vector_slice"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/vector_slice.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_vector_v16"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/vector_v16.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
+    "corpus_vector_v4"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/corpus/vector_v4.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR)
+iree_native_test(
+  NAME
     "source_low"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"

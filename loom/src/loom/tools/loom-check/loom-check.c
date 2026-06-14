@@ -47,7 +47,7 @@
 #include "loom/target/arch/llvmir/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_TARGET_LLVMIR
 #if LOOM_CHECK_HAVE_EMIT_LLVMIR
-#include "loom/target/emit/llvmir/check/provider.h"
+#include "loom/tools/loom-check/llvmir_provider.h"
 #endif  // LOOM_CHECK_HAVE_EMIT_LLVMIR
 #if LOOM_CHECK_HAVE_TARGET_SPIRV
 #include "loom/target/arch/spirv/check/provider.h"

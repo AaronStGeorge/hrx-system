@@ -26,6 +26,12 @@ typedef enum loom_llvmir_loom_check_emit_format_e {
   LOOM_LLVMIR_LOOM_CHECK_EMIT_OBJECT = 3,
 } loom_llvmir_loom_check_emit_format_t;
 
+typedef enum loom_llvmir_loom_check_disassembly_filter_flag_bits_e {
+  LOOM_LLVMIR_LOOM_CHECK_DISASSEMBLY_FILTER_NONE = 0u,
+  LOOM_LLVMIR_LOOM_CHECK_DISASSEMBLY_FILTER_SOURCE_FILENAME = 1u << 0,
+} loom_llvmir_loom_check_disassembly_filter_flag_bits_t;
+typedef uint8_t loom_llvmir_loom_check_disassembly_filter_flags_t;
+
 typedef struct loom_llvmir_loom_check_byte_buffer_t {
   // Allocated byte storage owned by this buffer.
   uint8_t* data;
@@ -67,7 +73,7 @@ static iree_status_t loom_llvmir_loom_check_require_declared_requirement(
                                                          requirement, result);
 }
 
-static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
+iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
     const loom_check_emit_provider_t* provider,
     const loom_check_case_t* test_case, loom_check_result_t* result,
     bool* out_continue_execution) {
@@ -90,7 +96,7 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_check_requirements(
   return iree_ok_status();
 }
 
-static bool loom_llvmir_loom_check_emit_provider_matches(
+bool loom_llvmir_loom_check_emit_provider_matches(
     const loom_check_emit_provider_t* provider,
     iree_string_view_t target_name) {
   return iree_string_view_equal(target_name, IREE_SV("llvmir")) ||
@@ -143,13 +149,20 @@ static iree_string_view_t loom_llvmir_loom_check_consume_line(
   return line;
 }
 
-static iree_status_t loom_llvmir_loom_check_strip_comments(
-    iree_string_view_t input, iree_string_builder_t* output) {
+static iree_status_t loom_llvmir_loom_check_filter_disassembly(
+    iree_string_view_t input,
+    loom_llvmir_loom_check_disassembly_filter_flags_t flags,
+    iree_string_builder_t* output) {
   iree_string_view_t remaining = input;
   while (!iree_string_view_is_empty(remaining)) {
     iree_string_view_t line = loom_llvmir_loom_check_consume_line(&remaining);
     iree_string_view_t trimmed = iree_string_view_trim(line);
     if (iree_string_view_starts_with(trimmed, IREE_SV(";"))) {
+      continue;
+    }
+    if (iree_any_bit_set(
+            flags, LOOM_LLVMIR_LOOM_CHECK_DISASSEMBLY_FILTER_SOURCE_FILENAME) &&
+        iree_string_view_starts_with(trimmed, IREE_SV("source_filename ="))) {
       continue;
     }
     IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, line));
@@ -284,9 +297,11 @@ static iree_status_t loom_llvmir_loom_check_write_bitcode_disassembly(
         allocator, &disassembly);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_llvmir_loom_check_strip_comments(
+    loom_llvmir_loom_check_disassembly_filter_flags_t filter_flags =
+        LOOM_LLVMIR_LOOM_CHECK_DISASSEMBLY_FILTER_SOURCE_FILENAME;
+    status = loom_llvmir_loom_check_filter_disassembly(
         iree_make_string_view(disassembly.data, disassembly.length),
-        &result->actual_output);
+        filter_flags, &result->actual_output);
   }
 
   loom_llvm_tool_output_deinitialize(&disassembly, allocator);
@@ -453,9 +468,11 @@ static iree_status_t loom_llvmir_loom_check_prepare_low_module(
       request->diagnostic_collector, request->block_pool);
 }
 
-static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
+iree_status_t loom_llvmir_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
+  const loom_llvmir_loom_check_emit_provider_t* llvmir_provider =
+      (const loom_llvmir_loom_check_emit_provider_t*)provider;
   loom_llvmir_loom_check_emit_format_t format;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_loom_check_parse_emit_format(request->target_name, &format));
@@ -479,22 +496,57 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
       .emitter = LOOM_EMITTER_PASS,
   };
   loom_llvmir_module_t* lowered_module = NULL;
-  iree_status_t status = loom_llvmir_emit_low_module(
-      request->module, &request->low_registry->registry,
-      loom_target_selection_empty(),
-      (iree_diagnostic_emitter_t){
-          .fn = loom_check_diagnostic_emitter_capture_emit,
-          .user_data = &diagnostic_capture,
-      },
-      request->case_arena, NULL, &lowered_module, request->host_allocator);
-  if (iree_status_is_ok(status) &&
-      (request->diagnostic_collector->count != 0 || lowered_module == NULL)) {
-    return iree_ok_status();
+  const loom_llvmir_target_profile_provider_t** target_profile_providers = NULL;
+  loom_llvmir_target_profile_registry_t target_profile_registry = {0};
+  iree_status_t status = iree_ok_status();
+  if (llvmir_provider->target_profile_provider_function_count != 0) {
+    const iree_host_size_t byte_length =
+        llvmir_provider->target_profile_provider_function_count *
+        sizeof(*target_profile_providers);
+    status = iree_allocator_malloc(request->host_allocator, byte_length,
+                                   (void**)&target_profile_providers);
   }
+  if (iree_status_is_ok(status) && target_profile_providers != NULL) {
+    for (iree_host_size_t i = 0;
+         i < llvmir_provider->target_profile_provider_function_count; ++i) {
+      target_profile_providers[i] =
+          llvmir_provider->target_profile_provider_functions[i]();
+      if (target_profile_providers[i] == NULL) {
+        status = iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "LLVMIR loom-check target profile provider returned null");
+        break;
+      }
+    }
+  }
+  if (iree_status_is_ok(status) && target_profile_providers != NULL) {
+    target_profile_registry = (loom_llvmir_target_profile_registry_t){
+        .providers = target_profile_providers,
+        .provider_count =
+            llvmir_provider->target_profile_provider_function_count,
+    };
+  }
+  loom_llvmir_emit_low_module_options_t options = {0};
+  loom_llvmir_emit_low_module_options_initialize(&options);
+  options.target_profile_registry =
+      target_profile_providers != NULL ? &target_profile_registry : NULL;
   if (iree_status_is_ok(status)) {
+    status = loom_llvmir_emit_low_module(
+        request->module, &request->low_registry->registry,
+        loom_target_selection_empty(),
+        (iree_diagnostic_emitter_t){
+            .fn = loom_check_diagnostic_emitter_capture_emit,
+            .user_data = &diagnostic_capture,
+        },
+        request->case_arena, &options, &lowered_module,
+        request->host_allocator);
+  }
+  const bool has_lowered_module =
+      request->diagnostic_collector->count == 0 && lowered_module != NULL;
+  if (iree_status_is_ok(status) && has_lowered_module) {
     status = loom_llvmir_verify_module(lowered_module);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && has_lowered_module) {
     switch (format) {
       case LOOM_LLVMIR_LOOM_CHECK_EMIT_TEXT:
         status =
@@ -515,10 +567,11 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
     }
   }
   loom_llvmir_module_free(lowered_module);
+  iree_allocator_free(request->host_allocator, target_profile_providers);
   return status;
 }
 
-static iree_status_t loom_llvmir_loom_check_emit_provider_append_names(
+iree_status_t loom_llvmir_loom_check_emit_provider_append_names(
     const loom_check_emit_provider_t* provider,
     iree_string_builder_t* builder) {
   return iree_string_builder_append_cstring(
@@ -588,15 +641,6 @@ static iree_status_t loom_llvmir_loom_check_requirement_provider_append_names(
   return iree_string_builder_append_cstring(
       builder, "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump");
 }
-
-const loom_check_emit_provider_t loom_llvmir_loom_check_emit_provider = {
-    .name = IREE_SVL("llvmir"),
-    .match = loom_llvmir_loom_check_emit_provider_matches,
-    .check_requirements =
-        loom_llvmir_loom_check_emit_provider_check_requirements,
-    .execute = loom_llvmir_loom_check_emit_provider_execute,
-    .append_names = loom_llvmir_loom_check_emit_provider_append_names,
-};
 
 const loom_check_requirement_provider_t
     loom_llvmir_loom_check_requirement_provider = {

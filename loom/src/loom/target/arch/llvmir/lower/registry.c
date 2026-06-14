@@ -11,7 +11,7 @@
 #include "loom/target/arch/llvmir/descriptors/descriptors.h"
 #include "loom/target/arch/llvmir/lower/lower.h"
 
-static iree_status_t loom_llvmir_make_hal_buffer_type(
+static iree_status_t loom_llvmir_make_hal_buffer_resource_source_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   loom_string_id_t hal_buffer_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -114,8 +114,8 @@ static iree_status_t loom_llvmir_map_type(void* user_data,
       context, source_op, IREE_SV("source"), source_type);
 }
 
-static uint32_t loom_llvmir_hal_binding_index(loom_low_lower_context_t* context,
-                                              uint16_t source_argument_index) {
+static uint32_t loom_llvmir_kernel_binding_resource_index(
+    loom_low_lower_context_t* context, uint16_t source_argument_index) {
   uint16_t argument_count = 0;
   const loom_value_id_t* argument_ids = loom_func_like_arg_ids(
       loom_low_lower_context_source_function(context), &argument_count);
@@ -144,14 +144,14 @@ static iree_status_t loom_llvmir_map_argument(
     IREE_RETURN_IF_ERROR(loom_low_lower_make_register_type(
         context, LLVMIR_GENERIC_CORE_REG_CLASS_ID_PTR, 1, &binding_type));
     loom_type_t resource_source_type = loom_type_none();
-    IREE_RETURN_IF_ERROR(
-        loom_llvmir_make_hal_buffer_type(context, &resource_source_type));
+    IREE_RETURN_IF_ERROR(loom_llvmir_make_hal_buffer_resource_source_type(
+        context, &resource_source_type));
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
         .abi_type = binding_type,
         .resource_import_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING,
-        .resource_index =
-            loom_llvmir_hal_binding_index(context, source_argument_index),
+        .resource_index = loom_llvmir_kernel_binding_resource_index(
+            context, source_argument_index),
         .resource_source_type = resource_source_type,
     };
     return iree_ok_status();

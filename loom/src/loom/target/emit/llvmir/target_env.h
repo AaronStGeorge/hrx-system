@@ -9,8 +9,7 @@
 // Target environments collect target/ABI state chosen by a target provider, not
 // by the generic LLVM IR module builder. This header owns the shared data model
 // and target-neutral helpers; concrete target profile presets live in opt-in
-// provider packages such as target/emit/llvmir/x86 and
-// target/emit/llvmir/amdgpu.
+// provider packages.
 
 #ifndef LOOM_TARGET_LLVMIR_TARGET_ENV_H_
 #define LOOM_TARGET_LLVMIR_TARGET_ENV_H_
@@ -31,8 +30,13 @@ typedef enum loom_llvmir_object_format_e {
 
 typedef enum loom_llvmir_target_profile_kind_e {
   LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT = 0,
-  LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL = 1,
+  LOOM_LLVMIR_TARGET_PROFILE_KERNEL = 1,
 } loom_llvmir_target_profile_kind_t;
+
+typedef enum loom_llvmir_kernel_profile_flag_bits_e {
+  LOOM_LLVMIR_KERNEL_PROFILE_FLAG_ALWAYSINLINE = 1u << 0,
+} loom_llvmir_kernel_profile_flag_bits_t;
+typedef uint32_t loom_llvmir_kernel_profile_flags_t;
 
 enum {
   LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT = 2,
@@ -83,7 +87,11 @@ typedef struct loom_llvmir_target_env_t {
   loom_llvmir_target_address_spaces_t address_spaces;
 } loom_llvmir_target_env_t;
 
-typedef struct loom_llvmir_amdgpu_hal_abi_t {
+typedef struct loom_llvmir_kernel_profile_t {
+  // LLVM calling convention required for the kernel entry point.
+  loom_llvmir_calling_convention_t calling_convention;
+  // Metadata attachment name for selected fixed workgroup size.
+  iree_string_view_t required_workgroup_size_metadata_name;
   // ABI-selected fixed workgroup size attached to each kernel entry point, or
   // zero when launch selection remains dynamic.
   loom_llvmir_workgroup_size_t required_workgroup_size;
@@ -91,9 +99,20 @@ typedef struct loom_llvmir_amdgpu_hal_abi_t {
   uint32_t flat_workgroup_size_min;
   // Upper flat workgroup size bound advertised to LLVM.
   uint32_t flat_workgroup_size_max;
-  // ABI-required raw buffer resource flags for global binding resources.
-  uint32_t buffer_resource_flags;
-} loom_llvmir_amdgpu_hal_abi_t;
+  // Target-specific flag word for descriptor-backed kernel binding resources.
+  uint32_t binding_resource_flags;
+  // Optional LLVM function-attribute key for the flat workgroup size range.
+  iree_string_view_t flat_workgroup_size_attr_name;
+  // Optional LLVM function-attribute key declaring uniform workgroup size.
+  iree_string_view_t uniform_workgroup_size_attr_name;
+  // Kernel entry attribute flags.
+  loom_llvmir_kernel_profile_flags_t flags;
+  // ABI-required attrs for descriptor-backed binding pointer parameters.
+  loom_llvmir_attr_t binding_parameter_attrs
+      [LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
+  // Number of valid entries in |binding_parameter_attrs|.
+  iree_host_size_t binding_parameter_attr_count;
+} loom_llvmir_kernel_profile_t;
 
 typedef struct loom_llvmir_target_profile_t {
   // Stable target profile name for diagnostics and tests.
@@ -111,12 +130,8 @@ typedef struct loom_llvmir_target_profile_t {
   uint64_t x86_packed_dot_feature_bits;
   // ABI-required linkage for exported object functions or kernel entry points.
   loom_llvmir_linkage_t exported_linkage;
-  // ABI-required calling convention for kernel entry points.
-  loom_llvmir_calling_convention_t kernel_calling_convention;
-  // Metadata attachment name for selected fixed workgroup size.
-  iree_string_view_t required_workgroup_size_metadata_name;
-  // AMDGPU HAL-specific ABI parameters.
-  loom_llvmir_amdgpu_hal_abi_t amdgpu_hal;
+  // Kernel entry-point projection parameters.
+  loom_llvmir_kernel_profile_t kernel;
 } loom_llvmir_target_profile_t;
 
 typedef struct loom_llvmir_target_profile_storage_t {

@@ -179,7 +179,7 @@ func.decl import("env") @do_work(%arg0: i32) -> (i32)
   EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do_work")));
 }
 
-TEST_F(FuncSymbolFactsTest, KernelDefFactsCarryExportContract) {
+TEST_F(FuncSymbolFactsTest, KernelDefFactsCarryExportAndAbiContract) {
   ModulePtr module = ParseModule(R"(
 test.target<low_core> @target
 
@@ -195,7 +195,8 @@ kernel.def target(@target) export("dispatch") linkage(dso_local) @kernel() {
       LookupFunc(module.get(), IREE_SV("kernel"));
   EXPECT_TRUE(iree_string_view_equal(facts->name, IREE_SV("kernel")));
   EXPECT_TRUE(loom_symbol_ref_is_valid(facts->target_symbol));
-  EXPECT_FALSE(facts->has_abi);
+  EXPECT_TRUE(facts->has_abi);
+  EXPECT_EQ(facts->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_EQ(facts->abi_attrs.count, 0u);
   EXPECT_TRUE(facts->exports);
   EXPECT_TRUE(
@@ -218,6 +219,8 @@ kernel.def target(@target) @kernel() {
 
   const loom_func_symbol_facts_t* facts =
       LookupFunc(module.get(), IREE_SV("kernel"));
+  EXPECT_TRUE(facts->has_abi);
+  EXPECT_EQ(facts->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_TRUE(facts->exports);
   EXPECT_TRUE(iree_string_view_is_empty(facts->export_symbol));
   EXPECT_FALSE(facts->has_export_linkage);
@@ -234,6 +237,8 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @kernel() {
 
   const loom_func_symbol_facts_t* facts =
       LookupFunc(module.get(), IREE_SV("kernel"));
+  EXPECT_TRUE(facts->has_abi);
+  EXPECT_EQ(facts->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_TRUE(facts->exports);
   EXPECT_TRUE(iree_string_view_is_empty(facts->export_symbol));
   EXPECT_FALSE(facts->has_export_linkage);

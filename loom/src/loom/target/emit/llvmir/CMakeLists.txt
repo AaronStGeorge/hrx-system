@@ -87,6 +87,7 @@ loom_cc_library(
   DEPS
     ::core
     ::target_env
+    ::target_presets
     iree::base
     iree::base::internal::arena
     loom::analysis::symbol_facts
@@ -118,28 +119,11 @@ loom_cc_library(
   DEPS
     ::core
     ::module_emitter
+    ::target_presets
     iree::base
     iree::io::stream
     loom::target::provider
     loom::util::stream
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    llvmir
-  HDRS
-    "intrinsics.h"
-  DEPS
-    ::core
-    ::target_env
-    ::target_presets
-    loom::target::emit::llvmir::amdgpu::intrinsics
-    loom::target::emit::llvmir::amdgpu::target_env
-    loom::target::emit::llvmir::x86::intrinsics
-    loom::target::emit::llvmir::x86::target_env
   PUBLIC
 )
 endif()
@@ -157,7 +141,7 @@ loom_cc_library(
     ::target_env
     iree::base
   DEFINES
-    "LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS=0"
+    "LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS=0"
   TESTONLY
   PUBLIC
 )
@@ -166,7 +150,7 @@ endif()
 if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
-    test_modules
+    test_modules_target_scenarios
   HDRS
     "test_modules.h"
   SRCS
@@ -196,6 +180,7 @@ loom_cc_library(
     ::core
     ::module_emitter
     ::target_env
+    ::target_presets
     iree::base
     iree::io::stream
     loom::codegen::low::function
@@ -204,23 +189,6 @@ loom_cc_library(
     loom::target::tool::llvm
     loom::tools::loom-check::execute
     loom::util::stream
-  TESTONLY
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    check_provider
-  HDRS
-    "check/provider.h"
-  SRCS
-    "check/provider.c"
-  DEPS
-    ::loom_check
-    iree::base
-    loom::tools::loom-check::provider
   TESTONLY
   PUBLIC
 )
@@ -342,7 +310,7 @@ loom_cc_test(
   DEPS
     ::core
     ::target_env
-    ::test_modules
+    ::test_modules_target_scenarios
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
@@ -379,7 +347,7 @@ loom_cc_test(
     "LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS=1"
   DEPS
     ::core
-    ::test_modules
+    ::test_modules_target_scenarios
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
@@ -397,6 +365,7 @@ loom_cc_test(
   DEPS
     ::core
     ::module_emitter
+    ::target_presets
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
@@ -427,9 +396,7 @@ loom_cc_test(
     ::target_presets
     iree::testing::gtest
     iree::testing::gtest_main
-    loom::target::emit::llvmir::amdgpu::target_env
     loom::target::emit::llvmir::x86::target_env
-    loom::util::stream
   LABELS
     "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
@@ -444,7 +411,7 @@ loom_cc_test(
     "tool_test.cc"
   DEPS
     ::core
-    ::test_modules
+    ::test_modules_target_scenarios
     iree::io::file_handle
     iree::io::stream
     iree::testing::gtest

@@ -348,6 +348,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    llvmir_provider
+  HDRS
+    "llvmir_provider.h"
+  SRCS
+    "llvmir_provider.c"
+  DEPS
+    ::provider
+    iree::base
+    loom::target::emit::llvmir::amdgpu::target_env
+    loom::target::emit::llvmir::loom_check
+    loom::target::emit::llvmir::x86::target_env
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     test_provider
   HDRS
     "test_provider.h"
@@ -423,7 +440,7 @@ if(LOOM_TARGET_ARCH_LLVMIR)
   list(APPEND _loom_check_platform_deps loom::target::arch::llvmir::check::check_provider)
 endif()
 if(LOOM_EMIT_LLVMIR)
-  list(APPEND _loom_check_platform_deps loom::target::emit::llvmir::check_provider)
+  list(APPEND _loom_check_platform_deps ::llvmir_provider)
 endif()
 if(LOOM_TARGET_ARCH_SPIRV)
   list(APPEND _loom_check_platform_deps loom::target::arch::spirv::check::check_provider)

@@ -16,7 +16,14 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-_LLVMIR_VISIBILITY = ["//loom/src/loom/target/emit/llvmir:__pkg__"]
+_LLVMIR_VISIBILITY = [
+    "//loom/src/loom/target/emit/llvmir:__pkg__",
+    "//loom/src/loom/tools/loom-compile:__pkg__",
+]
+
+_LLVMIR_TARGET_ENV_VISIBILITY = _LLVMIR_VISIBILITY + [
+    "//loom/src/loom/tools/loom-check:__pkg__",
+]
 
 loom_cc_library(
     name = "intrinsics",
@@ -41,7 +48,7 @@ loom_cc_library(
     srcs = ["target_env.c"],
     hdrs = ["target_env.h"],
     textual_hdrs = [":target_profiles.inl"],
-    visibility = _LLVMIR_VISIBILITY,
+    visibility = _LLVMIR_TARGET_ENV_VISIBILITY,
     deps = [
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/x86:feature_bits",

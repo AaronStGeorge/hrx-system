@@ -104,18 +104,17 @@ static const loom_target_bundle_t kX86_64PackedDotObjectBundle = {
 // These built-in profiles are fixture/default provider conveniences. Production
 // lowering should prefer derived profiles from the generic target bundles
 // above.
-#define LOOM_LLVMIR_X86_TARGET_PROFILE(                                        \
-    symbol_suffix, profile_descriptor_set_key, profile_debug_key,              \
-    profile_target_features, profile_feature_bits)                             \
-  static const loom_llvmir_target_profile_t                                    \
-      kX86##symbol_suffix##ObjectProfile = {                                   \
-          .name = IREE_SVL(profile_debug_key),                                 \
-          .target_env = &kX86_64UnknownLinuxGnuTargetEnv,                      \
-          .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,                      \
-          .target_features = IREE_SVL(profile_target_features),                \
-          .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,                   \
-          .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT, \
-          .x86_packed_dot_feature_bits = profile_feature_bits,                 \
+#define LOOM_LLVMIR_X86_TARGET_PROFILE(                           \
+    symbol_suffix, profile_descriptor_set_key, profile_debug_key, \
+    profile_target_features, profile_feature_bits)                \
+  static const loom_llvmir_target_profile_t                       \
+      kX86##symbol_suffix##ObjectProfile = {                      \
+          .name = IREE_SVL(profile_debug_key),                    \
+          .target_env = &kX86_64UnknownLinuxGnuTargetEnv,         \
+          .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,         \
+          .target_features = IREE_SVL(profile_target_features),   \
+          .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,      \
+          .x86_packed_dot_feature_bits = profile_feature_bits,    \
   };
 #include "loom/target/emit/llvmir/x86/target_profiles.inl"
 #undef LOOM_LLVMIR_X86_TARGET_PROFILE
@@ -163,9 +162,15 @@ static bool loom_llvmir_x86_profile_by_descriptor_set_key(
 }
 
 static bool loom_llvmir_x86_project_bundle(
-    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_projection_request_t* request,
     const loom_llvmir_target_profile_t** out_profile) {
   *out_profile = NULL;
+  const loom_target_bundle_t* bundle = request->bundle;
+  if (!iree_string_view_is_empty(request->target_triple) &&
+      !iree_string_view_equal(request->target_triple,
+                              kX86_64UnknownLinuxGnuTargetEnv.target_triple)) {
+    return false;
+  }
   if (loom_llvmir_x86_profile_by_name(bundle->name, out_profile)) {
     return true;
   }

@@ -15,6 +15,7 @@ package(default_visibility = ["//visibility:public"])
 DEFAULT_ENABLED = [
     "amdgpu",
     "iree_vm",
+    "llvmir",
     "spirv",
     "x86",
 ]
@@ -22,6 +23,7 @@ DEFAULT_ENABLED = [
 SUPPORTED_VALUES = [
     "amdgpu",
     "iree_vm",
+    "llvmir",
     "spirv",
     "wasm",
     "x86",

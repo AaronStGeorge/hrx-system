@@ -14,6 +14,7 @@ from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
+from loom.dialect.scalar import bitwise as scalar_bitwise
 from loom.dialect.scalar import comparison as scalar_comparison
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.scf import ALL_SCF_OPS
@@ -408,6 +409,43 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
     return tuple(rules)
 
 
+def _scalar_bitwise_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for type_pattern, suffix in ((_I1, "i1"), (_I32, "i32"), (_I64, "i64")):
+        for source_op, stem in (
+            (scalar_bitwise.scalar_andi, "and"),
+            (scalar_bitwise.scalar_ori, "or"),
+            (scalar_bitwise.scalar_xori, "xor"),
+        ):
+            rules.append(
+                _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+            )
+    for type_pattern, suffix in ((_I32, "i32"), (_I64, "i64")):
+        for source_op, stem in (
+            (scalar_bitwise.scalar_shli, "shl"),
+            (scalar_bitwise.scalar_shrui, "lshr"),
+            (scalar_bitwise.scalar_shrsi, "ashr"),
+        ):
+            rules.append(
+                _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+            )
+    return tuple(rules)
+
+
+def _index_bitwise_rules() -> tuple[DescriptorRule, ...]:
+    return tuple(
+        _binary_rule(source_op, _INDEX, f"llvmir.{stem}.i64")
+        for source_op, stem in (
+            (index.index_andi, "and"),
+            (index.index_ori, "or"),
+            (index.index_xori, "xor"),
+            (index.index_shli, "shl"),
+            (index.index_shrui, "lshr"),
+            (index.index_shrsi, "ashr"),
+        )
+    )
+
+
 def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for type_pattern, suffix, source_ops in (
@@ -427,6 +465,38 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
                 (vector.vector_addf, "add"),
                 (vector.vector_subf, "sub"),
                 (vector.vector_mulf, "mul"),
+            ),
+        ),
+    ):
+        for source_op, stem in source_ops:
+            rules.append(
+                _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+            )
+    return tuple(rules)
+
+
+def _vector_bitwise_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for type_pattern, suffix, source_ops in (
+        (
+            _V4I1,
+            "v4i1",
+            (
+                (vector.vector_andi, "and"),
+                (vector.vector_ori, "or"),
+                (vector.vector_xori, "xor"),
+            ),
+        ),
+        (
+            _V4I32,
+            "v4i32",
+            (
+                (vector.vector_andi, "and"),
+                (vector.vector_ori, "or"),
+                (vector.vector_xori, "xor"),
+                (vector.vector_shli, "shl"),
+                (vector.vector_shrui, "lshr"),
+                (vector.vector_shrsi, "ashr"),
             ),
         ),
     ):
@@ -550,12 +620,15 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         ),
         _buffer_view_rule(),
         *_scalar_arithmetic_rules(),
+        *_scalar_bitwise_rules(),
         _binary_rule(index.index_add, _INDEX, "llvmir.add.i64"),
         _binary_rule(index.index_sub, _INDEX, "llvmir.sub.i64"),
         _binary_rule(index.index_mul, _INDEX, "llvmir.mul.i64"),
+        *_index_bitwise_rules(),
         _binary_rule(index.index_add, _OFFSET, "llvmir.add.i64"),
         _binary_rule(index.index_sub, _OFFSET, "llvmir.sub.i64"),
         *_vector_arithmetic_rules(),
+        *_vector_bitwise_rules(),
         *_compare_rules(),
         *_select_rules(),
         *_memory_rules(),
