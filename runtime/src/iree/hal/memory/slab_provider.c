@@ -61,6 +61,102 @@ iree_status_t iree_hal_slab_provider_wrap_buffer(
                                        release_callback, out_buffer);
 }
 
+static iree_status_t iree_hal_slab_provider_validate_asan_range(
+    const iree_hal_slab_t* slab, iree_device_size_t backing_offset,
+    const iree_hal_asan_allocation_layout_t* layout) {
+  if (layout->backing_offset_alignment == 0 ||
+      !iree_device_size_is_power_of_two(layout->backing_offset_alignment)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "ASAN backing offset alignment must be a power of two and > 0");
+  }
+  if (layout->backing_length_alignment == 0 ||
+      !iree_device_size_is_power_of_two(layout->backing_length_alignment)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "ASAN backing length alignment must be a power of two and > 0");
+  }
+  if (!iree_device_size_has_alignment(backing_offset,
+                                      layout->backing_offset_alignment)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "ASAN backing offset %" PRIu64 " does not satisfy %" PRIu64
+        "-byte backing alignment",
+        (uint64_t)backing_offset, (uint64_t)layout->backing_offset_alignment);
+  }
+  if (layout->backing_length == 0 ||
+      !iree_device_size_has_alignment(layout->backing_length,
+                                      layout->backing_length_alignment)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "ASAN backing length %" PRIu64
+                            " does not satisfy %" PRIu64
+                            "-byte backing alignment",
+                            (uint64_t)layout->backing_length,
+                            (uint64_t)layout->backing_length_alignment);
+  }
+  if (layout->user_offset > layout->backing_length ||
+      layout->user_length > layout->backing_length - layout->user_offset) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "ASAN user range offset %" PRIu64 " with length %" PRIu64
+        " is outside backing length %" PRIu64,
+        (uint64_t)layout->user_offset, (uint64_t)layout->user_length,
+        (uint64_t)layout->backing_length);
+  }
+  if (backing_offset > slab->length ||
+      layout->backing_length > slab->length - backing_offset) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "ASAN backing range at offset %" PRIu64 " with length %" PRIu64
+        " is outside slab length %" PRIu64,
+        (uint64_t)backing_offset, (uint64_t)layout->backing_length,
+        (uint64_t)slab->length);
+  }
+  return iree_ok_status();
+}
+
+static bool iree_hal_slab_provider_asan_advice_flags_are_valid(
+    iree_hal_asan_range_advice_flags_t advice_flags) {
+  switch (advice_flags) {
+    case IREE_HAL_ASAN_RANGE_ADVICE_FLAG_ALLOCATED:
+    case IREE_HAL_ASAN_RANGE_ADVICE_FLAG_RELEASED:
+      return true;
+    default:
+      return false;
+  }
+}
+
+iree_status_t iree_hal_slab_provider_validate_asan_options(
+    const iree_hal_slab_provider_t* provider,
+    const iree_hal_asan_pool_options_t* options) {
+  IREE_ASSERT_ARGUMENT(provider);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_RETURN_IF_ERROR(iree_hal_asan_pool_options_validate(options));
+  if (!iree_hal_asan_pool_options_is_enabled(options)) {
+    return iree_ok_status();
+  }
+  return provider->vtable->validate_asan_options(provider, options);
+}
+
+iree_status_t iree_hal_slab_provider_advise_asan_range(
+    iree_hal_slab_provider_t* provider, const iree_hal_slab_t* slab,
+    iree_device_size_t backing_offset,
+    iree_hal_asan_range_advice_flags_t advice_flags,
+    const iree_hal_asan_allocation_layout_t* layout) {
+  IREE_ASSERT_ARGUMENT(provider);
+  IREE_ASSERT_ARGUMENT(slab);
+  IREE_ASSERT_ARGUMENT(layout);
+  if (!iree_hal_slab_provider_asan_advice_flags_are_valid(advice_flags)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported ASAN range advice flags 0x%x",
+                            advice_flags);
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_hal_slab_provider_validate_asan_range(slab, backing_offset, layout));
+  return provider->vtable->advise_asan_range(provider, slab, backing_offset,
+                                             advice_flags, layout);
+}
+
 void iree_hal_slab_provider_prefault(iree_hal_slab_provider_t* provider,
                                      iree_hal_slab_t* slab) {
   provider->vtable->prefault(provider, slab);
