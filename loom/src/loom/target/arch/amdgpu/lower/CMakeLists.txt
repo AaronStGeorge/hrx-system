@@ -108,7 +108,9 @@ loom_cc_library(
     ::kinds
     ::materializers
     iree::base
+    loom::analysis::condition_facts
     loom::analysis::contract_vector
+    loom::analysis::symbolic_expr
     loom::analysis::view_regions
     loom::codegen::low::descriptors
     loom::codegen::low::function

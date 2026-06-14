@@ -536,6 +536,9 @@ typedef enum loom_amdgpu_workgroup_reduce_publication_kind_e {
   // Every wave reloads the per-wave partials, redundantly reduces them within
   // the wave, and broadcasts the wave-local lane-zero result to its lanes.
   LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP = 1,
+  // One wave reduces LDS-published per-wave partials and leaves the result
+  // valid only for leader-guarded uses.
+  LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LEADER_WORKITEM = 2,
 } loom_amdgpu_workgroup_reduce_publication_kind_t;
 
 typedef struct loom_amdgpu_workgroup_reduce_plan_t {

@@ -42,7 +42,7 @@ static uint32_t loom_amdgpu_workgroup_size_dim(
   }
 }
 
-static bool loom_amdgpu_required_workgroup_size(
+bool loom_amdgpu_required_workgroup_size(
     const loom_module_t* module, loom_func_like_t function,
     const loom_target_bundle_t* bundle,
     loom_target_workgroup_size_t* out_size) {

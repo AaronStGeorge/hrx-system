@@ -677,6 +677,8 @@ static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_detail(
       return IREE_SV("amdgpu.workgroup_reduce.publication.lds");
     case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP:
       return IREE_SV("amdgpu.workgroup_reduce.publication.redundant_subgroup");
+    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LEADER_WORKITEM:
+      return IREE_SV("amdgpu.workgroup_reduce.publication.leader_workitem");
     default:
       return iree_string_view_empty();
   }

@@ -31,6 +31,12 @@ bool loom_amdgpu_source_lds_layout_lookup_root(
 iree_status_t loom_amdgpu_target_wavefront_size(
     const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size);
 
+// Returns the fixed per-dimension workgroup size required by the source
+// function or target ABI.
+bool loom_amdgpu_required_workgroup_size(
+    const loom_module_t* module, loom_func_like_t function,
+    const loom_target_bundle_t* bundle, loom_target_workgroup_size_t* out_size);
+
 // Returns the fixed flat workgroup size required by the source function or
 // target ABI.
 bool loom_amdgpu_required_flat_workgroup_size(
