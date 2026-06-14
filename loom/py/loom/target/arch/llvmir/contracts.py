@@ -681,6 +681,15 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             rules.append(
                 _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
             )
+        for source_op, predicate in (
+            (scalar_arithmetic.scalar_minsi, "slt"),
+            (scalar_arithmetic.scalar_maxsi, "sgt"),
+            (scalar_arithmetic.scalar_minui, "ult"),
+            (scalar_arithmetic.scalar_maxui, "ugt"),
+        ):
+            rules.append(
+                _scalar_minmax_rule(source_op, type_pattern, suffix, predicate)
+            )
     for type_pattern, suffix in ((_F32, "f32"), (_F64, "f64")):
         for source_op, stem in (
             (scalar_arithmetic.scalar_negf, "neg"),
@@ -708,6 +717,38 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             )
         )
     return tuple(rules)
+
+
+def _scalar_minmax_rule(
+    source_op: Op, type_pattern: TypePattern, suffix: str, predicate: str
+) -> DescriptorRule:
+    compare_descriptor = _descriptor(f"llvmir.cmp.{predicate}.{suffix}")
+    select_descriptor = _descriptor(f"llvmir.select.{suffix}")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=compare_descriptor,
+        guards=_typed_guards(("lhs", "rhs", "result"), type_pattern),
+        emit=(
+            _op_emit(
+                descriptor=compare_descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.temporary("take_lhs")},
+                result_types={"dst": _I1},
+            ),
+            _op_emit(
+                descriptor=select_descriptor,
+                operands={
+                    "condition": ValueRef.temporary("take_lhs"),
+                    "true_value": ValueRef.operand("lhs"),
+                    "false_value": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
 
 
 def _scalar_bitwise_rules() -> tuple[DescriptorRule, ...]:
