@@ -92,6 +92,30 @@ func.def @shli_compound_divisibility(%x: i32) -> (i64) {
 
 // ====
 
+// shli can move masked bits into the sign bit; facts must not prove the
+// shifted value non-negative or rewrite the following arithmetic shift.
+func.def @shli_sign_bit_preserves_arithmetic_shift(%x: i32) -> (i32, i1) {
+  %mask = scalar.constant 255 : i32
+  %low = scalar.andi %x, %mask : i32
+  %shift = scalar.constant 24 : i32
+  %shifted = scalar.shli %low, %shift : i32
+  %signed = scalar.shrsi %shifted, %shift : i32
+  %nn = test.fact_non_negative %shifted : i32 -> i1
+  func.return %signed, %nn : i32, i1
+}
+// ----
+func.def @shli_sign_bit_preserves_arithmetic_shift(%x: i32) -> (i32, i1) {
+  %mask = scalar.constant 255 : i32
+  %low = scalar.andi %x, %mask : i32
+  %shift = scalar.constant 24 : i32
+  %shifted = scalar.shli %low, %shift : i32
+  %signed = scalar.shrsi %shifted, %shift : i32
+  %nn = scalar.constant false : i1
+  func.return %signed, %nn : i32, i1
+}
+
+// ====
+
 // shrui by 3 of a value with divisor 16: divisor = 16/8 = 2.
 func.def @shrui_divisibility(%x: i32) -> (i64) {
   %c16 = scalar.constant 16 : i32

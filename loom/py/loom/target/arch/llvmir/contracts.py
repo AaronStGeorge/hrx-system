@@ -55,6 +55,8 @@ from loom.target.contracts import (
 from loom.target.low_descriptors import Descriptor
 
 _I1 = Scalar("i1")
+_I8 = Scalar("i8")
+_I16 = Scalar("i16")
 _I32 = Scalar("i32")
 _I64 = Scalar("i64")
 _F16 = Scalar("f16")
@@ -190,6 +192,10 @@ _BITCAST_RESHAPE_SPECS = (
     ("bf16", 2, "i32", 1),
 )
 
+_I8_MIN = -(2**7)
+_I8_MAX = (2**7) - 1
+_I16_MIN = -(2**15)
+_I16_MAX = (2**15) - 1
 _I32_MIN = -(2**31)
 _I32_MAX = (2**31) - 1
 
@@ -268,15 +274,34 @@ def _op_emit(
 
 
 def _const_i32_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
-    descriptor = _descriptor("llvmir.const.i32")
+    return _const_integer_rule(
+        source_op,
+        result_type,
+        "llvmir.const.i32",
+        minimum=_I32_MIN,
+        maximum=_I32_MAX,
+    )
+
+
+def _const_integer_rule(
+    source_op: Op,
+    result_type: TypePattern,
+    descriptor_key: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    guards = [
+        Guard.attr_kind("value", "i64", diagnostic=_I64_ATTR_DIAGNOSTIC),
+        Guard.value_type("result", result_type),
+    ]
+    if minimum is not None and maximum is not None:
+        guards.append(Guard.i64_range("value", minimum, maximum))
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
-        guards=(
-            Guard.attr_kind("value", "i64", diagnostic=_I64_ATTR_DIAGNOSTIC),
-            Guard.value_type("result", result_type),
-            Guard.i64_range("value", _I32_MIN, _I32_MAX),
-        ),
+        guards=tuple(guards),
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
@@ -285,27 +310,31 @@ def _const_i32_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
                 form=DescriptorEmitForm.CONST,
             ),
         ),
+    )
+
+
+def _const_i8_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
+    return _const_integer_rule(
+        source_op,
+        result_type,
+        "llvmir.const.i8",
+        minimum=_I8_MIN,
+        maximum=_I8_MAX,
+    )
+
+
+def _const_i16_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
+    return _const_integer_rule(
+        source_op,
+        result_type,
+        "llvmir.const.i16",
+        minimum=_I16_MIN,
+        maximum=_I16_MAX,
     )
 
 
 def _const_i64_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
-    descriptor = _descriptor("llvmir.const.i64")
-    return DescriptorRule(
-        source_op=source_op,
-        descriptor=descriptor,
-        guards=(
-            Guard.attr_kind("value", "i64", diagnostic=_I64_ATTR_DIAGNOSTIC),
-            Guard.value_type("result", result_type),
-        ),
-        emit=(
-            EmitDescriptorOp(
-                descriptor=descriptor,
-                results={"dst": ValueRef.result("result")},
-                immediates={"value": AttrProject.direct("value")},
-                form=DescriptorEmitForm.CONST,
-            ),
-        ),
-    )
+    return _const_integer_rule(source_op, result_type, "llvmir.const.i64")
 
 
 def _const_float_bits_project(element: str) -> ValueProject:
@@ -1064,7 +1093,13 @@ def _scalar_minmax_rule(
 
 def _scalar_bitwise_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
-    for type_pattern, suffix in ((_I1, "i1"), (_I32, "i32"), (_I64, "i64")):
+    for type_pattern, suffix in (
+        (_I1, "i1"),
+        (_I8, "i8"),
+        (_I16, "i16"),
+        (_I32, "i32"),
+        (_I64, "i64"),
+    ):
         for source_op, stem in (
             (scalar_bitwise.scalar_andi, "and"),
             (scalar_bitwise.scalar_ori, "or"),
@@ -1073,7 +1108,12 @@ def _scalar_bitwise_rules() -> tuple[DescriptorRule, ...]:
             rules.append(
                 _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
             )
-    for type_pattern, suffix in ((_I32, "i32"), (_I64, "i64")):
+    for type_pattern, suffix in (
+        (_I8, "i8"),
+        (_I16, "i16"),
+        (_I32, "i32"),
+        (_I64, "i64"),
+    ):
         for source_op, stem in (
             (scalar_bitwise.scalar_shli, "shl"),
             (scalar_bitwise.scalar_shrui, "lshr"),
@@ -1263,6 +1303,28 @@ def _vector_bitwise_rules() -> tuple[DescriptorRule, ...]:
                 (vector.vector_andi, "and"),
                 (vector.vector_ori, "or"),
                 (vector.vector_xori, "xor"),
+            ),
+        ),
+        (
+            "i8",
+            (
+                (vector.vector_andi, "and"),
+                (vector.vector_ori, "or"),
+                (vector.vector_xori, "xor"),
+                (vector.vector_shli, "shl"),
+                (vector.vector_shrui, "lshr"),
+                (vector.vector_shrsi, "ashr"),
+            ),
+        ),
+        (
+            "i16",
+            (
+                (vector.vector_andi, "and"),
+                (vector.vector_ori, "or"),
+                (vector.vector_xori, "xor"),
+                (vector.vector_shli, "shl"),
+                (vector.vector_shrui, "lshr"),
+                (vector.vector_shrsi, "ashr"),
             ),
         ),
         (
@@ -1627,7 +1689,12 @@ def _clampf_rules() -> tuple[DescriptorRule, ...]:
 def _vector_constant_rules() -> tuple[DescriptorRule, ...]:
     return (
         tuple(
-            _vector_const_i_rule("i32", lane_count, minimum=_I32_MIN, maximum=_I32_MAX)
+            _vector_const_i_rule(element, lane_count, minimum=minimum, maximum=maximum)
+            for element, minimum, maximum in (
+                ("i8", _I8_MIN, _I8_MAX),
+                ("i16", _I16_MIN, _I16_MAX),
+                ("i32", _I32_MIN, _I32_MAX),
+            )
             for lane_count in _VECTOR_LANE_COUNTS
         )
         + tuple(
@@ -1640,6 +1707,8 @@ def _vector_constant_rules() -> tuple[DescriptorRule, ...]:
             for lane_count in _VECTOR_LANE_COUNTS
         )
         + (
+            _const_i8_rule(vector.vector_constant, _vector_type("i8", 1)),
+            _const_i16_rule(vector.vector_constant, _vector_type("i16", 1)),
             _const_i32_rule(vector.vector_constant, _vector_type("i32", 1)),
             _const_i64_rule(vector.vector_constant, _vector_type("i64", 1)),
             _const_float_rule(
@@ -2111,6 +2180,8 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
     descriptor_set=LLVMIR_GENERIC_CORE_DESCRIPTOR_SET,
     public_header="loom/target/arch/llvmir/contracts/generic_core.h",
     cases=(
+        _const_i8_rule(scalar_conversion.scalar_constant, _I8),
+        _const_i16_rule(scalar_conversion.scalar_constant, _I16),
         _const_i32_rule(scalar_conversion.scalar_constant, _I32),
         _const_i64_rule(index.index_constant, _INDEX),
         _const_i64_rule(scalar_conversion.scalar_constant, _I64),

@@ -164,6 +164,7 @@ loom_cc_library(
     loom::ops::kernel
     loom::ops::scalar
     loom::ops::scf
+    loom::ops::vector
     loom::rewrite::rewriter
     loom::target::arch::amdgpu::target_info_defs
     loom::target::legalization

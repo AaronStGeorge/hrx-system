@@ -441,6 +441,8 @@ def _const_f_descriptor(
 
 def _constant_descriptors() -> tuple[Descriptor, ...]:
     return (
+        _const_i_descriptor("i8"),
+        _const_i_descriptor("i16"),
         _const_i_descriptor("i32"),
         _const_i_descriptor("i64"),
         _const_f_descriptor("f16", _F16_BITS_IMMEDIATE),
@@ -449,7 +451,7 @@ def _constant_descriptors() -> tuple[Descriptor, ...]:
         _const_f_descriptor("f64", _F64_BITS_IMMEDIATE),
         *(
             _const_i_descriptor(type_name, lane_count, vector=True)
-            for type_name in ("i32", "i64")
+            for type_name in ("i8", "i16", "i32", "i64")
             for lane_count in _VECTOR_LANE_COUNTS
         ),
         *(
@@ -842,18 +844,20 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
 
 def _bitwise_descriptors() -> tuple[Descriptor, ...]:
     descriptors: list[Descriptor] = []
-    for type_name in ("i1", "i32", "i64"):
+    for type_name in ("i1", "i8", "i16", "i32", "i64"):
         descriptors.extend(
             (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
             for stem in ("and", "or", "xor")
         )
-    for type_name in ("i32", "i64"):
+    for type_name in ("i8", "i16", "i32", "i64"):
         descriptors.extend(
             (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
             for stem in ("shl", "lshr", "ashr")
         )
     for type_name, stems in (
         ("i1", ("and", "or", "xor")),
+        ("i8", ("and", "or", "xor", "shl", "lshr", "ashr")),
+        ("i16", ("and", "or", "xor", "shl", "lshr", "ashr")),
         ("i32", ("and", "or", "xor", "shl", "lshr", "ashr")),
     ):
         descriptors.extend(

@@ -80,6 +80,25 @@ static iree_status_t loom_vector_legalize_reduce(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_legalize_descriptor(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_descriptor_to_scalar_rewrite_op(
+      context->pass, context->rewriter, op, &rewritten));
+  if (rewritten) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
+    };
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_legalize_mma(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -213,6 +232,30 @@ static const loom_target_legalizer_entry_t kVectorLegalizerEntries[] = {
     {
         .root_kind = LOOM_OP_VECTOR_REDUCE_AXES,
         .legalize = loom_vector_legalize_reduce_axes,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_BITFIELD_EXTRACTU,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_BITFIELD_EXTRACTS,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_BITFIELD_INSERT,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_BITPACK,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_BITUNPACKU,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_BITUNPACKS,
+        .legalize = loom_vector_legalize_descriptor,
     },
     {
         .root_kind = LOOM_OP_VECTOR_MMA,
