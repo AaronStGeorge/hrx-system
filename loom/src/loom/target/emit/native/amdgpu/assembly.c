@@ -2387,7 +2387,6 @@ static iree_status_t loom_amdgpu_source0_immediate_asm_form(
       !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src1_lit")) &&
       !iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src2_lit"));
   *out_matched =
-      iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_src0_inline")) ||
       iree_string_view_ends_with(canonical_mnemonic,
                                  IREE_SV("_src0_16_low16")) ||
       iree_string_view_ends_with(canonical_mnemonic, IREE_SV("_vop3_imm")) ||
@@ -2395,50 +2394,55 @@ static iree_status_t loom_amdgpu_source0_immediate_asm_form(
   return iree_ok_status();
 }
 
-typedef struct loom_amdgpu_source_literal_suffix_t {
+typedef struct loom_amdgpu_source_immediate_suffix_t {
   // Canonical low mnemonic suffix identifying the omitted source operand.
   const char* suffix;
   // Zero-based native source operand position occupied by the packet immediate.
-  uint8_t literal_source_index;
-} loom_amdgpu_source_literal_suffix_t;
+  uint8_t immediate_source_index;
+} loom_amdgpu_source_immediate_suffix_t;
 
-static bool loom_amdgpu_match_source_literal_asm_form(
+static bool loom_amdgpu_match_source_immediate_asm_form(
     iree_string_view_t canonical_mnemonic,
-    iree_string_view_t* out_base_mnemonic, uint8_t* out_literal_source_index) {
-  static const loom_amdgpu_source_literal_suffix_t kSourceLiteralSuffixes[] = {
-      {.suffix = "_src0_lit", .literal_source_index = 0},
-      {.suffix = "_src1_lit", .literal_source_index = 1},
-      {.suffix = "_src2_lit", .literal_source_index = 2},
-  };
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kSourceLiteralSuffixes);
+    iree_string_view_t* out_base_mnemonic,
+    uint8_t* out_immediate_source_index) {
+  static const loom_amdgpu_source_immediate_suffix_t
+      kSourceImmediateSuffixes[] = {
+          {.suffix = "_src0_lit", .immediate_source_index = 0},
+          {.suffix = "_src1_lit", .immediate_source_index = 1},
+          {.suffix = "_src2_lit", .immediate_source_index = 2},
+          {.suffix = "_src0_inline", .immediate_source_index = 0},
+          {.suffix = "_src1_inline", .immediate_source_index = 1},
+          {.suffix = "_src2_inline", .immediate_source_index = 2},
+      };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kSourceImmediateSuffixes);
        ++i) {
     iree_string_view_t base_mnemonic = canonical_mnemonic;
     if (iree_string_view_consume_suffix(
             &base_mnemonic,
-            iree_make_cstring_view(kSourceLiteralSuffixes[i].suffix))) {
+            iree_make_cstring_view(kSourceImmediateSuffixes[i].suffix))) {
       *out_base_mnemonic = base_mnemonic;
-      *out_literal_source_index =
-          kSourceLiteralSuffixes[i].literal_source_index;
+      *out_immediate_source_index =
+          kSourceImmediateSuffixes[i].immediate_source_index;
       return true;
     }
   }
   return false;
 }
 
-static iree_status_t loom_amdgpu_append_source_literal_asm_form_packet(
+static iree_status_t loom_amdgpu_append_source_immediate_asm_form_packet(
     const loom_native_assembly_packet_context_t* context,
-    iree_string_view_t base_mnemonic, uint8_t literal_source_index) {
+    iree_string_view_t base_mnemonic, uint8_t immediate_source_index) {
   const iree_host_size_t explicit_operand_count =
       loom_amdgpu_explicit_packet_operand_count(context);
   if (context->packet->descriptor->result_count != 1 ||
       explicit_operand_count == 0 ||
-      literal_source_index > explicit_operand_count ||
+      immediate_source_index > explicit_operand_count ||
       context->packet->descriptor->immediate_count != 1) {
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU assembly source-literal descriptor '%.*s' has unsupported "
+        "AMDGPU assembly source-immediate descriptor '%.*s' has unsupported "
         "shape",
         (int)key.size, key.data);
   }
@@ -2453,7 +2457,7 @@ static iree_status_t loom_amdgpu_append_source_literal_asm_form_packet(
   for (iree_host_size_t source_index = 0; source_index < source_count;
        ++source_index) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-    if (source_index == literal_source_index) {
+    if (source_index == immediate_source_index) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_append_packet_immediate_i64(context, 0));
     } else {
       IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, operand_index));
@@ -2495,12 +2499,12 @@ static iree_status_t loom_amdgpu_try_append_asm_form_rule_packet(
     const loom_low_asm_form_t* form, iree_string_view_t canonical_mnemonic,
     bool* out_matched) {
   iree_string_view_t base_mnemonic = iree_string_view_empty();
-  uint8_t literal_source_index = 0;
-  if (loom_amdgpu_match_source_literal_asm_form(
-          canonical_mnemonic, &base_mnemonic, &literal_source_index)) {
+  uint8_t immediate_source_index = 0;
+  if (loom_amdgpu_match_source_immediate_asm_form(
+          canonical_mnemonic, &base_mnemonic, &immediate_source_index)) {
     *out_matched = true;
-    return loom_amdgpu_append_source_literal_asm_form_packet(
-        context, base_mnemonic, literal_source_index);
+    return loom_amdgpu_append_source_immediate_asm_form_packet(
+        context, base_mnemonic, immediate_source_index);
   }
 
   static const loom_amdgpu_asm_form_packet_rule_t kRules[] = {

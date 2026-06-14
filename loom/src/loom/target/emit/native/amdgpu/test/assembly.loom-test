@@ -1318,6 +1318,33 @@ low.func.def target(@gfx942_target) @gfx942_sgpr_spill_reload_waits(%value: reg<
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_vop3_cmp_f32_inline_sources waits=none fixed=%below:physical_register:0:2 fixed=%above:physical_register:2:2
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vop3_cmp_f32_inline_sources(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %below = v_cmp_lt_f32_src1_inline %lhs {rhs = 1065353216}
+  %above = v_cmp_gt_f32_src0_inline %rhs {lhs = 3212836864}
+  return
+}
+
+// ----
+  v_cmp_lt_f32 s[0:1], v0, 1065353216
+  v_cmp_gt_f32 s[2:3], 3212836864, v1
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_vop3_cmp_f32_inline_sources_native waits=none fixed=%below:physical_register:0:2 fixed=%above:physical_register:2:2
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vop3_cmp_f32_inline_sources_native(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %below = v_cmp_lt_f32_src1_inline %lhs {rhs = 1065353216}
+  %above = v_cmp_gt_f32_src0_inline %rhs {lhs = 3212836864}
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_exec_mask_branch waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_exec_mask_branch(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
@@ -1400,7 +1427,7 @@ low.func.def target(@gfx11_target) @gfx11_mask_select_inline(%lhs: reg<amdgpu.vg
 
 // ----
   v_cmp_lt_i32 s[6:7], v0, v1
-  v_cndmask_b32_src1_inline v0, v2, s[6:7], true_value(3)
+  v_cndmask_b32 v0, v2, 3, s[6:7]
   buffer_store_dword v0, v3, s[0:3], s4 offen offset:0
   s_endpgm
 

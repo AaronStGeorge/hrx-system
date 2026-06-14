@@ -3387,13 +3387,14 @@ def _v_cmp_inline_operand_forms(descriptor_key: str) -> tuple[OperandForm, ...]:
     )
 
 
-def _v_cmp_32_source_overlay(
+def _v_cmp_source_inline_overlay(
     *,
     predicate: str,
     instruction_suffix: str,
     semantic_suffix: str,
     type_suffix: str,
     literal_source: str,
+    immediate: Immediate,
 ) -> AmdgpuDescriptorOverlay:
     source_fields = {
         "src0": ("SRC0", "lhs", _vgpr_const_operand("lhs")),
@@ -3429,7 +3430,7 @@ def _v_cmp_32_source_overlay(
             named_immediates=True,
         ),
         immediate_fields=(literal_field,),
-        immediates=(_source_inline_u32_immediate(literal_operand),),
+        immediates=(replace(immediate, field_name=literal_operand),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -3438,12 +3439,13 @@ def _v_cmp_i32_source_overlays(
     *, predicate: str, instruction_suffix: str, semantic_suffix: str
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return tuple(
-        _v_cmp_32_source_overlay(
+        _v_cmp_source_inline_overlay(
             predicate=predicate,
             instruction_suffix=instruction_suffix,
             semantic_suffix=semantic_suffix,
             type_suffix="i32",
             literal_source=literal_source,
+            immediate=_SOURCE_INLINE_U32_IMMEDIATE,
         )
         for literal_source in ("src0", "src1")
     )
@@ -3453,12 +3455,13 @@ def _v_cmp_u32_source_overlays(
     *, predicate: str, instruction_suffix: str, semantic_suffix: str
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return tuple(
-        _v_cmp_32_source_overlay(
+        _v_cmp_source_inline_overlay(
             predicate=predicate,
             instruction_suffix=instruction_suffix,
             semantic_suffix=semantic_suffix,
             type_suffix="u32",
             literal_source=literal_source,
+            immediate=_SOURCE_INLINE_U32_IMMEDIATE,
         )
         for literal_source in ("src0", "src1")
     )
@@ -3480,7 +3483,24 @@ def _v_cmp_f32_overlay(
             AmdgpuOperandOverlay("SRC0", _vgpr_const_operand("lhs")),
             AmdgpuOperandOverlay("SRC1", _vgpr_const_operand("rhs")),
         ),
+        operand_forms=_v_cmp_inline_operand_forms(f"amdgpu.v_cmp_{predicate}_f32"),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cmp_f32_source_overlays(
+    *, predicate: str, instruction_suffix: str, semantic_suffix: str
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _v_cmp_source_inline_overlay(
+            predicate=predicate,
+            instruction_suffix=instruction_suffix,
+            semantic_suffix=semantic_suffix,
+            type_suffix="f32",
+            literal_source=literal_source,
+            immediate=_SOURCE_INLINE_F32_IMMEDIATE,
+        )
+        for literal_source in ("src0", "src1")
     )
 
 
@@ -3549,43 +3569,85 @@ def _v_cmp_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cmp_f32_overlay(
             predicate="oeq", instruction_suffix="EQ", semantic_suffix="oeq"
         ),
+        *_v_cmp_f32_source_overlays(
+            predicate="oeq", instruction_suffix="EQ", semantic_suffix="oeq"
+        ),
         _v_cmp_f32_overlay(
+            predicate="ogt", instruction_suffix="GT", semantic_suffix="ogt"
+        ),
+        *_v_cmp_f32_source_overlays(
             predicate="ogt", instruction_suffix="GT", semantic_suffix="ogt"
         ),
         _v_cmp_f32_overlay(
             predicate="oge", instruction_suffix="GE", semantic_suffix="oge"
         ),
+        *_v_cmp_f32_source_overlays(
+            predicate="oge", instruction_suffix="GE", semantic_suffix="oge"
+        ),
         _v_cmp_f32_overlay(
+            predicate="olt", instruction_suffix="LT", semantic_suffix="olt"
+        ),
+        *_v_cmp_f32_source_overlays(
             predicate="olt", instruction_suffix="LT", semantic_suffix="olt"
         ),
         _v_cmp_f32_overlay(
             predicate="ole", instruction_suffix="LE", semantic_suffix="ole"
         ),
+        *_v_cmp_f32_source_overlays(
+            predicate="ole", instruction_suffix="LE", semantic_suffix="ole"
+        ),
         _v_cmp_f32_overlay(
+            predicate="one", instruction_suffix="LG", semantic_suffix="one"
+        ),
+        *_v_cmp_f32_source_overlays(
             predicate="one", instruction_suffix="LG", semantic_suffix="one"
         ),
         _v_cmp_f32_overlay(
             predicate="ord", instruction_suffix="O", semantic_suffix="ord"
         ),
+        *_v_cmp_f32_source_overlays(
+            predicate="ord", instruction_suffix="O", semantic_suffix="ord"
+        ),
         _v_cmp_f32_overlay(
+            predicate="ueq", instruction_suffix="NLG", semantic_suffix="ueq"
+        ),
+        *_v_cmp_f32_source_overlays(
             predicate="ueq", instruction_suffix="NLG", semantic_suffix="ueq"
         ),
         _v_cmp_f32_overlay(
             predicate="ugt", instruction_suffix="NLE", semantic_suffix="ugt"
         ),
+        *_v_cmp_f32_source_overlays(
+            predicate="ugt", instruction_suffix="NLE", semantic_suffix="ugt"
+        ),
         _v_cmp_f32_overlay(
+            predicate="uge", instruction_suffix="NLT", semantic_suffix="uge"
+        ),
+        *_v_cmp_f32_source_overlays(
             predicate="uge", instruction_suffix="NLT", semantic_suffix="uge"
         ),
         _v_cmp_f32_overlay(
             predicate="ult", instruction_suffix="NGE", semantic_suffix="ult"
         ),
+        *_v_cmp_f32_source_overlays(
+            predicate="ult", instruction_suffix="NGE", semantic_suffix="ult"
+        ),
         _v_cmp_f32_overlay(
+            predicate="ule", instruction_suffix="NGT", semantic_suffix="ule"
+        ),
+        *_v_cmp_f32_source_overlays(
             predicate="ule", instruction_suffix="NGT", semantic_suffix="ule"
         ),
         _v_cmp_f32_overlay(
             predicate="une", instruction_suffix="NEQ", semantic_suffix="une"
         ),
+        *_v_cmp_f32_source_overlays(
+            predicate="une", instruction_suffix="NEQ", semantic_suffix="une"
+        ),
         _v_cmp_f32_overlay(
+            predicate="uno", instruction_suffix="U", semantic_suffix="uno"
+        ),
+        *_v_cmp_f32_source_overlays(
             predicate="uno", instruction_suffix="U", semantic_suffix="uno"
         ),
     )
@@ -3987,12 +4049,13 @@ __all__ = (
     "_v_binary_src0_inline_f32_overlay",
     "_v_binary_src0_inline_overlay",
     "_v_binary_u32_overlay",
-    "_v_cmp_32_source_overlay",
     "_v_cmp_f32_overlay",
+    "_v_cmp_f32_source_overlays",
     "_v_cmp_i32_overlay",
     "_v_cmp_i32_source_overlays",
     "_v_cmp_inline_operand_forms",
     "_v_cmp_overlays",
+    "_v_cmp_source_inline_overlay",
     "_v_cmp_u32_overlay",
     "_v_cmp_u32_source_overlays",
     "_v_cndmask_b32_literal_inline_overlay",
