@@ -20,7 +20,6 @@ low.func.def target(@target) abi(object_function) @i32x16_arith(%lhs: reg<llvmir
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -34,6 +33,22 @@ func.def target(@target) @i32x16_minmax_logic(%lhs: vector<16xi32>, %rhs: vector
   %mixed = vector.xori %mask, %min_u : vector<16xi32>
   %result = vector.ori %mixed, %max_u : vector<16xi32>
   func.return %result : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_minmax_logic(%lhs: reg<llvmir.i32 x16>, %rhs: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %13 = cmp.slt.v16i32 %lhs, %rhs
+  %min_s = select.v16i32 %13, %lhs, %rhs
+  %15 = cmp.sgt.v16i32 %lhs, %rhs
+  %max_s = select.v16i32 %15, %lhs, %rhs
+  %17 = cmp.ult.v16i32 %lhs, %rhs
+  %min_u = select.v16i32 %17, %lhs, %rhs
+  %19 = cmp.ugt.v16i32 %lhs, %rhs
+  %max_u = select.v16i32 %19, %lhs, %rhs
+  %mask = and.v16i32 %min_s, %max_s
+  %mixed = xor.v16i32 %mask, %min_u
+  %result = or.v16i32 %mixed, %max_u
+  return %result
 }
 
 // ====
@@ -128,7 +143,6 @@ low.func.def target(@target) abi(object_function) @i32x16_mask_and_select(%lhs: 
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -139,6 +153,15 @@ func.def target(@target) @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32
   %product = vector.mulf %difference, %rhs : vector<16xf32>
   %fma = vector.fmaf %lhs, %rhs, %product : vector<16xf32>
   func.return %fma : vector<16xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_arith(%lhs: reg<llvmir.f32 x16>, %rhs: reg<llvmir.f32 x16>) -> (reg<llvmir.f32 x16>) asm<llvmir.generic.core> {
+  %sum = add.v16f32 %lhs, %rhs
+  %difference = sub.v16f32 %sum, %lhs
+  %product = mul.v16f32 %difference, %rhs
+  %fma = fma.v16f32 %lhs, %rhs, %product
+  return %fma
 }
 
 // ====
@@ -305,7 +328,6 @@ low.func.def target(@target) abi(object_function) @f32x16_index_add_memory(%inpu
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -319,4 +341,13 @@ func.def target(@target) @f32x16_index_madd_memory(%input: buffer, %output: buff
   %loaded = vector.load %input_view[%bounded_linear] : view<32xf32, #dense> -> vector<16xf32>
   vector.store %loaded, %output_view[%bounded_linear] : vector<16xf32>, view<32xf32, #dense>
   func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_index_madd_memory(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>, %row: reg<llvmir.i64>, %stride: reg<llvmir.i64>, %col: reg<llvmir.i64>) asm<llvmir.generic.core> {
+  %16 = mul.i64 %row, %stride
+  %bounded_linear = add.i64 %16, %col
+  %loaded = load.indexed.v16f32 %input_view, %bounded_linear, 0, 4
+  store.indexed.v16f32 %loaded, %output_view, %bounded_linear, 0, 4
+  return
 }

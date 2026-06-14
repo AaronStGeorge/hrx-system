@@ -1206,6 +1206,41 @@ def _index_minmax_rules() -> tuple[DescriptorRule, ...]:
     )
 
 
+def _vector_minmax_rule(
+    source_op: Op, lane_count: int, predicate: str
+) -> DescriptorRule:
+    value_type = _vector_type("i32", lane_count)
+    mask_type = _vector_type("i1", lane_count)
+    value_suffix = _vector_suffix("i32", lane_count)
+    compare_descriptor = _descriptor(f"llvmir.cmp.{predicate}.{value_suffix}")
+    select_descriptor = _descriptor(f"llvmir.select.{value_suffix}")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=compare_descriptor,
+        guards=_typed_guards(("lhs", "rhs", "result"), value_type),
+        emit=(
+            _op_emit(
+                descriptor=compare_descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.temporary("take_lhs")},
+                result_types={"dst": mask_type},
+            ),
+            _op_emit(
+                descriptor=select_descriptor,
+                operands={
+                    "condition": ValueRef.temporary("take_lhs"),
+                    "true_value": ValueRef.operand("lhs"),
+                    "false_value": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for element, source_ops in (
@@ -1249,6 +1284,14 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
                     source_instance_flags=element == "f32",
                 )
             )
+    for lane_count in _VECTOR_LANE_COUNTS:
+        for source_op, predicate in (
+            (vector.vector_minsi, "slt"),
+            (vector.vector_maxsi, "sgt"),
+            (vector.vector_minui, "ult"),
+            (vector.vector_maxui, "ugt"),
+        ):
+            rules.append(_vector_minmax_rule(source_op, lane_count, predicate))
     for source_op, stem in (
         (vector.vector_minnumf, "minnum"),
         (vector.vector_maxnumf, "maxnum"),
