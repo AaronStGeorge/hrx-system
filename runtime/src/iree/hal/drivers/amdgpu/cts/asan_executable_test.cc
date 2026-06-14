@@ -20,14 +20,6 @@ namespace iree::hal::cts {
 class AsanExecutableTest : public CtsTestBase<> {
  protected:
   void SetUp() override {
-    AsanExecutableFormatSupport format_support =
-        AsanCheckExecutableFormatSupport(GetParam());
-    if (format_support.kind == AsanExecutableFormatSupportKind::kSkip) {
-      GTEST_SKIP() << format_support.message;
-    }
-    ASSERT_EQ(format_support.kind, AsanExecutableFormatSupportKind::kSupported)
-        << format_support.message;
-
     CtsTestBase::SetUp();
     if (HasFatalFailure() || IsSkipped()) return;
 

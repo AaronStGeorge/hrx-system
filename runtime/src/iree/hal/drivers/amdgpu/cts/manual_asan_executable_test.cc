@@ -248,14 +248,6 @@ class ManualAsanExecutableTest : public ::testing::TestWithParam<BackendInfo> {
 };
 
 TEST_P(ManualAsanExecutableTest, ReportsCompatibleHooksThroughFeedback) {
-  AsanExecutableFormatSupport format_support =
-      AsanCheckExecutableFormatSupport(GetParam());
-  if (format_support.kind == AsanExecutableFormatSupportKind::kSkip) {
-    GTEST_SKIP() << format_support.message;
-  }
-  ASSERT_EQ(format_support.kind, AsanExecutableFormatSupportKind::kSupported)
-      << format_support.message;
-
   AsanCachedBackendDevice asan_device;
   iree_status_t status = asan_device.Initialize(GetParam());
   if (iree_status_is_unavailable(status)) {

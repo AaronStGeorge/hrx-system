@@ -130,15 +130,24 @@ iree_status_t iree_hal_amdgpu_asan_state_map_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
     iree_device_size_t application_length);
 
-// Marks an ASAN-owned mapped allocation with one addressable subrange.
+// Marks an application allocation with one addressable subrange.
 //
 // The entire mapped range beginning at |mapped_address| is first poisoned as a
 // heap redzone. |accessible_length| bytes beginning at |accessible_address|
 // are then marked addressable, with a final partial shadow byte when the
-// accessible length is not shadow-granule aligned. The mapped range must have
-// been assigned by
-// iree_hal_amdgpu_asan_state_reserve_application_range.
+// accessible length is not shadow-granule aligned. The mapped range must fit
+// inside the configured application coverage.
 iree_status_t iree_hal_amdgpu_asan_state_publish_allocated_range(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t mapped_address,
+    iree_device_size_t mapped_length, uint64_t accessible_address,
+    iree_device_size_t accessible_length);
+
+// Marks an application allocation after its shadow slabs are committed.
+//
+// This is the infallible companion used by ASAN slab-provider advice. It
+// assumes all validation and shadow-slab allocation happened on a prior
+// fallible setup path such as iree_hal_amdgpu_asan_state_map_range.
+void iree_hal_amdgpu_asan_state_publish_allocated_range_raw(
     iree_hal_amdgpu_asan_state_t* state, uint64_t mapped_address,
     iree_device_size_t mapped_length, uint64_t accessible_address,
     iree_device_size_t accessible_length);
@@ -152,7 +161,7 @@ iree_status_t iree_hal_amdgpu_asan_state_publish_imported_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
     iree_device_size_t application_length);
 
-// Re-poisons a previously published mapped allocation before teardown.
+// Re-poisons a previously published allocation before teardown.
 //
 // This performs no host allocations and asserts HSA shadow writes succeed.
 // |application_address| and |mapped_length| must match a range successfully

@@ -1488,6 +1488,16 @@ static void iree_hal_amdgpu_logical_device_translate_physical_options(
   out_options->default_pool.alignment = options->default_pool.alignment;
   out_options->default_pool.frontier_capacity =
       options->default_pool.frontier_capacity;
+  if (options->asan.enabled) {
+    out_options->default_pool.asan = (iree_hal_asan_pool_options_t){
+        .mode = IREE_HAL_ASAN_POOL_MODE_SHADOW,
+        .shadow_granule_size = (iree_device_size_t)1ull
+                               << options->asan.shadow_scale_shift,
+        .redzone_size = options->default_pool.alignment,
+        .backing_alignment = 0,
+        .quarantine_size = options->asan.quarantine_size,
+    };
+  }
   out_options->host_block_pool_initial_capacity =
       options->preallocate_pools ? 16 : 0;
   out_options->host_queue_count = topology->gpu_agent_queue_count;
@@ -1638,7 +1648,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_initialize_physical_devices(
         (iree_hal_device_t*)logical_device, logical_device->system, options,
         logical_device->proactor, host_ordinal,
         &logical_device->system->host_memory_pools[host_ordinal],
-        device_ordinal, host_allocator,
+        device_ordinal, &logical_device->asan, host_allocator,
         logical_device->physical_devices[device_ordinal]));
   }
   return iree_ok_status();

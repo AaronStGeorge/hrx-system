@@ -540,6 +540,62 @@ iree_status_t iree_hal_amdgpu_asan_state_publish_allocated_range(
   return iree_ok_status();
 }
 
+void iree_hal_amdgpu_asan_state_publish_allocated_range_raw(
+    iree_hal_amdgpu_asan_state_t* state, uint64_t mapped_address,
+    iree_device_size_t mapped_length, uint64_t accessible_address,
+    iree_device_size_t accessible_length) {
+  if (!mapped_length) return;
+  IREE_ASSERT(iree_hal_amdgpu_asan_state_is_enabled(state));
+  IREE_ASSERT(accessible_address >= mapped_address);
+  const iree_device_size_t accessible_offset =
+      accessible_address - mapped_address;
+  IREE_ASSERT(accessible_offset <= mapped_length);
+  IREE_ASSERT(accessible_length <= mapped_length - accessible_offset);
+
+  const iree_device_size_t shadow_granule =
+      (iree_device_size_t)1ull << state->shadow_map.shadow_scale_shift;
+  IREE_ASSERT((mapped_address & (shadow_granule - 1)) == 0);
+  IREE_ASSERT((mapped_length & (shadow_granule - 1)) == 0);
+  IREE_ASSERT((accessible_address & (shadow_granule - 1)) == 0);
+  IREE_ASSERT(mapped_address >= state->shadow_map.application_window_base);
+
+  const iree_device_size_t application_offset =
+      mapped_address - state->shadow_map.application_window_base;
+  IREE_ASSERT(application_offset <= state->shadow_map.application_window_size);
+  IREE_ASSERT(mapped_length <=
+              state->shadow_map.application_window_size - application_offset);
+
+  const iree_device_size_t shadow_offset =
+      application_offset >> state->shadow_map.shadow_scale_shift;
+  const iree_device_size_t shadow_length =
+      mapped_length >> state->shadow_map.shadow_scale_shift;
+  const uint64_t shadow_address =
+      (uint64_t)(uintptr_t)state->shadow_map.reservation_base_ptr +
+      shadow_offset;
+  iree_hal_amdgpu_asan_write_shadow_bytes_raw(
+      state, shadow_address, shadow_length,
+      IREE_HAL_AMDGPU_ASAN_SHADOW_HEAP_REDZONE);
+
+  const iree_device_size_t accessible_shadow_offset =
+      accessible_offset >> state->shadow_map.shadow_scale_shift;
+  const uint64_t accessible_shadow_address =
+      shadow_address + accessible_shadow_offset;
+  const iree_device_size_t full_accessible_shadow_length =
+      accessible_length >> state->shadow_map.shadow_scale_shift;
+  const uint8_t partial_accessible_length =
+      (uint8_t)(accessible_length & (shadow_granule - 1));
+  if (full_accessible_shadow_length > 0) {
+    iree_hal_amdgpu_asan_write_shadow_bytes_raw(
+        state, accessible_shadow_address, full_accessible_shadow_length,
+        IREE_HAL_AMDGPU_ASAN_SHADOW_ADDRESSABLE);
+  }
+  if (partial_accessible_length != 0) {
+    iree_hal_amdgpu_asan_write_shadow_bytes_raw(
+        state, accessible_shadow_address + full_accessible_shadow_length,
+        /*length=*/1, partial_accessible_length);
+  }
+}
+
 void iree_hal_amdgpu_asan_state_publish_released_range(
     iree_hal_amdgpu_asan_state_t* state, uint64_t application_address,
     iree_device_size_t mapped_length) {
