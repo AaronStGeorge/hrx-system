@@ -228,6 +228,14 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
   }
 }
 
+bool loom_amdgpu_encoding_table_has_format(
+    const loom_amdgpu_encoding_table_t* table, uint16_t encoding_format) {
+  if (table == NULL) {
+    return false;
+  }
+  return loom_amdgpu_encoding_find_format(table, encoding_format) != NULL;
+}
+
 bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id) {
   switch (field_id) {
     case LOOM_AMDGPU_ENCODING_FIELD_SRC0:
@@ -258,6 +266,20 @@ bool loom_amdgpu_sdwa_dst_selector_writes_subdword(uint32_t selector) {
     LOOM_AMDGPU_SDWA_SELECTOR_DWORD = 6,
   };
   return selector != LOOM_AMDGPU_SDWA_SELECTOR_DWORD;
+}
+
+uint8_t loom_amdgpu_vgpr_msb_slot_shift(loom_amdgpu_vgpr_msb_slot_t slot) {
+  static const uint8_t kSlotShifts[] = {
+      [LOOM_AMDGPU_VGPR_MSB_SLOT_NONE] = 0,
+      [LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0] = 0,
+      [LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1] = 2,
+      [LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2] = 4,
+      [LOOM_AMDGPU_VGPR_MSB_SLOT_DST] = 6,
+  };
+  if ((uint32_t)slot >= IREE_ARRAYSIZE(kSlotShifts)) {
+    return 0;
+  }
+  return kSlotShifts[slot];
 }
 
 static bool loom_amdgpu_encoding_format_uses_vop_vgpr_msb_slots(

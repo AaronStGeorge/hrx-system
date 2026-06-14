@@ -198,6 +198,19 @@ TEST(AmdgpuEncodingTest, Vop2U32VgprUsesLiteralForLargeU32) {
   EXPECT_EQ(packet.bit_count, 64u);
 }
 
+TEST(AmdgpuEncodingTest, ReportsGeneratedTableFormatSupport) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
+  EXPECT_TRUE(loom_amdgpu_encoding_table_has_format(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1));
+  EXPECT_TRUE(loom_amdgpu_encoding_table_has_format(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL));
+  EXPECT_FALSE(loom_amdgpu_encoding_table_has_format(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2));
+  EXPECT_FALSE(loom_amdgpu_encoding_table_has_format(
+      nullptr, LOOM_AMDGPU_ENCODING_FORMAT_VOP1));
+}
+
 TEST(AmdgpuEncodingTest, NamesVopdFormats) {
   EXPECT_TRUE(iree_string_view_equal(
       loom_amdgpu_encoding_format_name(LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY),
@@ -300,6 +313,18 @@ TEST(AmdgpuEncodingTest, LeavesUncontrolledFieldsWithoutVgprMsbSlot) {
       loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2,
                                          LOOM_AMDGPU_ENCODING_FIELD_SCALE_SRC0),
       LOOM_AMDGPU_VGPR_MSB_SLOT_NONE);
+}
+
+TEST(AmdgpuEncodingTest, MapsVgprMsbSlotsToModeShifts) {
+  EXPECT_EQ(loom_amdgpu_vgpr_msb_slot_shift(LOOM_AMDGPU_VGPR_MSB_SLOT_NONE),
+            0u);
+  EXPECT_EQ(loom_amdgpu_vgpr_msb_slot_shift(LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0),
+            0u);
+  EXPECT_EQ(loom_amdgpu_vgpr_msb_slot_shift(LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1),
+            2u);
+  EXPECT_EQ(loom_amdgpu_vgpr_msb_slot_shift(LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2),
+            4u);
+  EXPECT_EQ(loom_amdgpu_vgpr_msb_slot_shift(LOOM_AMDGPU_VGPR_MSB_SLOT_DST), 6u);
 }
 
 TEST(AmdgpuEncodingTest, PacksRdna3VMovB32Dpp16LaneControl) {

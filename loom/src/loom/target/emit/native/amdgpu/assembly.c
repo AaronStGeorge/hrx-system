@@ -1910,23 +1910,6 @@ typedef struct loom_amdgpu_assembly_move_state_t {
   uint32_t emitted_count;
 } loom_amdgpu_assembly_move_state_t;
 
-static uint8_t loom_amdgpu_vgpr_msb_slot_shift(
-    loom_amdgpu_vgpr_msb_slot_t slot) {
-  switch (slot) {
-    case LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0:
-      return 0;
-    case LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1:
-      return 2;
-    case LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2:
-      return 4;
-    case LOOM_AMDGPU_VGPR_MSB_SLOT_DST:
-      return 6;
-    case LOOM_AMDGPU_VGPR_MSB_SLOT_NONE:
-    default:
-      return 0;
-  }
-}
-
 static iree_status_t loom_amdgpu_vgpr_msb_insert_requirement(
     loom_amdgpu_vgpr_msb_slot_t slot, uint32_t bank, uint8_t* mask,
     uint8_t* value) {

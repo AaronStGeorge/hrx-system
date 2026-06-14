@@ -232,6 +232,9 @@ enum {
   LOOM_AMDGPU_VGPR_MSB_WINDOW_SIZE = 256,
 };
 
+// Returns the two-bit S_SET_VGPR_MSB mode shift for |slot|.
+uint8_t loom_amdgpu_vgpr_msb_slot_shift(loom_amdgpu_vgpr_msb_slot_t slot);
+
 typedef struct loom_amdgpu_encoding_vopdxy_fields_t {
   // X-slot VOPD operation id.
   uint16_t op_x;
@@ -253,6 +256,11 @@ typedef struct loom_amdgpu_encoding_vopdxy_fields_t {
 
 // Returns a short stable diagnostic name for |encoding_format|.
 iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format);
+
+// Returns true when |table| has a generated bit-layout row for
+// |encoding_format|.
+bool loom_amdgpu_encoding_table_has_format(
+    const loom_amdgpu_encoding_table_t* table, uint16_t encoding_format);
 
 // Returns true when |field_id| uses AMDGPU's unified scalar/vector source
 // register encoding, where VGPR operands are biased by 0x100.
