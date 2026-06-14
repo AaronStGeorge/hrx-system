@@ -70,6 +70,9 @@ typedef struct iree_hal_test_opaque_slab_provider_t {
   // Number of wrap_buffer calls received by the provider.
   iree_atomic_int32_t wrap_count;
 
+  // Number of ASAN advice calls received by the provider.
+  iree_atomic_int32_t asan_advice_count;
+
   // Number of allocated ASAN advice calls received by the provider.
   iree_atomic_int32_t asan_allocated_count;
 
@@ -81,6 +84,12 @@ typedef struct iree_hal_test_opaque_slab_provider_t {
 
   // Last ASAN layout received by the provider.
   iree_hal_asan_allocation_layout_t last_asan_layout;
+
+  // Sequence number of the last allocated ASAN advice call.
+  int32_t last_asan_allocated_sequence;
+
+  // Sequence number of the last released ASAN advice call.
+  int32_t last_asan_released_sequence;
 } iree_hal_test_opaque_slab_provider_t;
 
 extern const iree_hal_slab_provider_vtable_t
@@ -167,10 +176,16 @@ static void iree_hal_test_opaque_slab_provider_advise_asan_range(
   (void)slab;
   provider->last_asan_backing_offset = backing_offset;
   provider->last_asan_layout = *layout;
+  const int32_t advice_sequence =
+      iree_atomic_fetch_add(&provider->asan_advice_count, 1,
+                            iree_memory_order_relaxed) +
+      1;
   if (advice_flags == IREE_HAL_ASAN_RANGE_ADVICE_FLAG_ALLOCATED) {
+    provider->last_asan_allocated_sequence = advice_sequence;
     iree_atomic_fetch_add(&provider->asan_allocated_count, 1,
                           iree_memory_order_relaxed);
   } else if (advice_flags == IREE_HAL_ASAN_RANGE_ADVICE_FLAG_RELEASED) {
+    provider->last_asan_released_sequence = advice_sequence;
     iree_atomic_fetch_add(&provider->asan_released_count, 1,
                           iree_memory_order_relaxed);
   } else {
@@ -681,9 +696,28 @@ TEST(FixedBlockPool, ASANAdvisesBackingBlockAndExposesUserRange) {
   EXPECT_EQ(iree_atomic_load(&provider->asan_released_count,
                              iree_memory_order_relaxed),
             1);
+  const int32_t first_release_sequence = provider->last_asan_released_sequence;
+  EXPECT_LT(provider->last_asan_allocated_sequence, first_release_sequence);
   iree_hal_pool_query_stats(pool, &stats);
   EXPECT_EQ(stats.bytes_reserved, 0u);
   EXPECT_EQ(stats.reservation_count, 0u);
+
+  IREE_ASSERT_OK(iree_hal_pool_acquire_reservation(
+      pool, 13, 16, /*requester_frontier=*/NULL,
+      IREE_HAL_POOL_RESERVE_FLAG_NONE, &reservation, &reserve_info, &result));
+  EXPECT_EQ(result, IREE_HAL_POOL_ACQUIRE_OK_FRESH);
+  EXPECT_EQ(iree_atomic_load(&provider->asan_allocated_count,
+                             iree_memory_order_relaxed),
+            2);
+  EXPECT_LT(first_release_sequence, provider->last_asan_allocated_sequence);
+
+  iree_hal_pool_release_reservation(pool, &reservation,
+                                    /*death_frontier=*/NULL);
+  EXPECT_EQ(iree_atomic_load(&provider->asan_released_count,
+                             iree_memory_order_relaxed),
+            2);
+  EXPECT_LT(provider->last_asan_allocated_sequence,
+            provider->last_asan_released_sequence);
 
   iree_hal_pool_release(pool);
   iree_async_notification_release(notification);
