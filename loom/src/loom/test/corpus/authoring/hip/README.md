@@ -225,9 +225,10 @@ Loom spelling:
 The scalar path and vector path are both correct source shapes. They are not
 the same storage contract. Use scalar loads when each word is independent; use
 the vector load when the source pattern expects one wide load. Alignment,
-address-range, and alias facts still live next to the view root:
-`buffer.assume.memory_space<global>`, `buffer.assume.noalias`, `buffer.view`,
-and `index.assume ... [mul(...)]` for dynamic aligned offsets.
+address-range, and alias facts still live next to the view root. Kernel ABI
+buffers already carry global memory-space facts; spell `buffer.assume.noalias`,
+`buffer.view`, and `index.assume ... [mul(...)]` for dynamic aligned offsets
+when those facts are part of the source contract.
 
 Proof command:
 
@@ -489,10 +490,10 @@ range facts when later passes need bounded values.
 
 Tags: `__global__`, `restrict`, pointer cast, typed pointer, `reinterpret_cast`.
 
-Kernel ABI buffers start as `buffer`. State memory space and alias facts with
-`buffer.assume.memory_space<global>` and `buffer.assume.noalias`, then form
-typed views with `buffer.view`. A typed C++ pointer arithmetic expression maps
-to index/offset math plus a typed `view<...>`.
+Kernel ABI buffers start as `buffer` and already carry global memory-space
+facts. State alias facts with `buffer.assume.noalias` when the source contract
+has `restrict`, then form typed views with `buffer.view`. A typed C++ pointer
+arithmetic expression maps to index/offset math plus a typed `view<...>`.
 
 Tags: `global_load_b128`, vectorized load, coalescing, packed load.
 

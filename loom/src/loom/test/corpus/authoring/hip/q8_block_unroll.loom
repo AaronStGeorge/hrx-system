@@ -46,12 +46,10 @@ kernel.def @q8_block_unroll_wg64() {
   %block_step = index.div %workgroup_size, %eight : index
 
   // HIP concept: `const block_q8_0 *__restrict__`, `float *__restrict__`.
-  // Loom spelling: start with ABI `buffer`, state memory space/noalias facts,
-  // and form typed views at the point where pointer arithmetic becomes typed.
-  %src0_global = buffer.assume.memory_space<global> %src0 : buffer
-  %src1_global = buffer.assume.memory_space<global> %src1 : buffer
-  %dst_global = buffer.assume.memory_space<global> %dst : buffer
-  %src0_noalias, %src1_noalias, %dst_noalias = buffer.assume.noalias %src0_global, %src1_global, %dst_global : buffer, buffer, buffer
+  // Loom spelling: kernel ABI buffers already carry global memory-space facts.
+  // State the noalias fact from `__restrict__`, then form typed views at the
+  // point where pointer arithmetic becomes typed.
+  %src0_noalias, %src1_noalias, %dst_noalias = buffer.assume.noalias %src0, %src1, %dst : buffer, buffer, buffer
   %src0_f16_view = buffer.view %src0_noalias[%base] : buffer -> view<17408xf16, #dense>
   %src1_view = buffer.view %src1_noalias[%base] : buffer -> view<4096xf32, #dense>
   %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<512xf32, #dense>

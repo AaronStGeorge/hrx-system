@@ -15,13 +15,11 @@ kernel.def @q8_load_widths() {
 
   // HIP concept:
   //   const uint32_t *p = reinterpret_cast<const uint32_t *>(q8_bytes);
-  // Loom spelling: start from ABI `buffer`, state global/noalias facts, then
-  // make a typed i32 view. The byte-to-word reinterpretation lives here, not in
-  // a hidden backend coalescer.
-  %input_global = buffer.assume.memory_space<global> %input : buffer
-  %scalar_output_global = buffer.assume.memory_space<global> %scalar_output : buffer
-  %vector_output_global = buffer.assume.memory_space<global> %vector_output : buffer
-  %input_noalias, %scalar_output_noalias, %vector_output_noalias = buffer.assume.noalias %input_global, %scalar_output_global, %vector_output_global : buffer, buffer, buffer
+  // Loom spelling: kernel ABI buffers already carry global memory-space facts.
+  // State the noalias fact only if the source contract has it, then make a
+  // typed i32 view. The byte-to-word reinterpretation lives here, not in a
+  // hidden backend coalescer.
+  %input_noalias, %scalar_output_noalias, %vector_output_noalias = buffer.assume.noalias %input, %scalar_output, %vector_output : buffer, buffer, buffer
   %input_words = buffer.view %input_noalias[%base] : buffer -> view<4xi32, #dense>
   %scalar_words = buffer.view %scalar_output_noalias[%base] : buffer -> view<4xi32, #dense>
   %vector_words = buffer.view %vector_output_noalias[%base] : buffer -> view<4xi32, #dense>

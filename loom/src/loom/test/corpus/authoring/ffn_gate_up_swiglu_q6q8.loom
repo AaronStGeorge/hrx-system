@@ -152,11 +152,7 @@ kernel.def @ffn_gate_up_swiglu_q6q8() {
   %scale_lane_base0 = index.add %scale_hi_group, %lane_div4_in_16 : index
   %scale_lane_base = index.assume %scale_lane_base0 [range(%scale_lane_base0, 0, 11)] : index
 
-  %q8_global = buffer.assume.memory_space<global> %q8_input : buffer
-  %gate_global = buffer.assume.memory_space<global> %gate_weight : buffer
-  %up_global = buffer.assume.memory_space<global> %up_weight : buffer
-  %output_global = buffer.assume.memory_space<global> %output : buffer
-  %q8_noalias, %gate_noalias, %up_noalias, %output_noalias = buffer.assume.noalias %q8_global, %gate_global, %up_global, %output_global : buffer, buffer, buffer, buffer
+  %q8_noalias, %gate_noalias, %up_noalias, %output_noalias = buffer.assume.noalias %q8_input, %gate_weight, %up_weight, %output : buffer, buffer, buffer, buffer
   %q8_i32_view = buffer.view %q8_noalias[%base] : buffer -> view<31248xi32, #dense>
   %q8_f16_view = buffer.view %q8_noalias[%base] : buffer -> view<62496xf16, #dense>
   %gate_i8_view = buffer.view %gate_noalias[%base] : buffer -> view<55695360xi8, #dense>

@@ -288,10 +288,19 @@ symbol when target lowering reaches it. `hot` and `cold` are separate
 temperature hints for cost models or profile feedback; they are not substitutes
 for authored inline policy.
 
-Facts are source facts, not global flags. The examples use `index.assume`,
-function signatures, named shape dimensions, and `check.param.choice` samples to
-make dimensions and alignment available to passes. Module-level configuration
-is reserved for values that are genuinely shared by the module or library.
+Facts are source facts, not global flags. Put reusable facts at the boundary
+that owns them: `config.decl` and function/kernel signatures for shape choices,
+`kernel.launch.config` for launch topology, kernel ABI buffer arguments for
+global memory space, and checked samples for benchmark-specific values. Local
+assumes are for facts discovered inside the body, such as guarded row IDs,
+clamped values, or dynamic alignment proof. They should not reassert config
+declarations, launch dimensions, or kernel buffer memory space.
+
+Use `index` for logical coordinates, extents, and tensor/view indices. Use
+`offset` for byte offsets and byte strides. Views should carry real extents
+from the source contract; large sentinel shapes that only make proofs pass
+destroy bounds-checking and sanitizer value because the compiler can no longer
+see the real accessible range.
 
 `check.case` owns correctness policy for a workload. It creates inputs, calls
 the unit under test, and states expectations. `check.benchmark<@case>` selects

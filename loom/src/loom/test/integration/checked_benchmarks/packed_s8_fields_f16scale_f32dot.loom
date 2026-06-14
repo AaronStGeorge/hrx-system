@@ -16,11 +16,7 @@ kernel.def @packed_s8_fields_f16scale_f32dot() {
   %lane0 = kernel.workitem.id<x> : index
   %lane = index.assume %lane0 [range(%lane0, 0, 3)] : index
 
-  %fields_global = buffer.assume.memory_space<global> %packed_fields : buffer
-  %scales_global = buffer.assume.memory_space<global> %scales : buffer
-  %rhs_global = buffer.assume.memory_space<global> %rhs : buffer
-  %output_global = buffer.assume.memory_space<global> %output : buffer
-  %fields_noalias, %scales_noalias, %rhs_noalias, %output_noalias = buffer.assume.noalias %fields_global, %scales_global, %rhs_global, %output_global : buffer, buffer, buffer, buffer
+  %fields_noalias, %scales_noalias, %rhs_noalias, %output_noalias = buffer.assume.noalias %packed_fields, %scales, %rhs, %output : buffer, buffer, buffer, buffer
   %field_view = buffer.view %fields_noalias[%base] : buffer -> view<4xi32, #dense>
   %scale_view = buffer.view %scales_noalias[%base] : buffer -> view<4xf16, #dense>
   %rhs_view = buffer.view %rhs_noalias[%base] : buffer -> view<16xf32, #dense>
