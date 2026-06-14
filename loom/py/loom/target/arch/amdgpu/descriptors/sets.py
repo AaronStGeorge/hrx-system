@@ -34,146 +34,89 @@ _CDNA_DWORD_MEMORY_MNEMONIC_SUFFIXES = (
 _BYTE_MEMORY_INSTRUCTION_SUFFIXES = ("B32", "B64", "B96", "B128")
 _BYTE_MEMORY_MNEMONIC_SUFFIXES = ("b32", "b64", "b96", "b128")
 
+_RDNA4_VBUFFER_DWORD_WIDTH_OVERLAY_ROWS = (
+    (_buffer_load_dword_overlay, _buffer_load_dword_vaddr_offset_overlay),
+    (_buffer_load_64_overlay, _buffer_load_64_vaddr_offset_overlay),
+    (_buffer_load_96_overlay, _buffer_load_96_vaddr_offset_overlay),
+    (_buffer_load_128_overlay, _buffer_load_128_vaddr_offset_overlay),
+    (_buffer_store_dword_overlay, _buffer_store_dword_vaddr_offset_overlay),
+    (_buffer_store_64_overlay, _buffer_store_64_vaddr_offset_overlay),
+    (_buffer_store_96_overlay, _buffer_store_96_vaddr_offset_overlay),
+    (_buffer_store_128_overlay, _buffer_store_128_vaddr_offset_overlay),
+)
+
+_S_LOAD_DWORD_WIDTH_OVERLAY_ROWS = (
+    (_s_load_dword_overlay, "amdgpu.s_load_dword_offset_only", False),
+    (_s_load_dwordx2_overlay, "amdgpu.s_load_dwordx2_offset_only", False),
+    (_s_load_96_overlay, "amdgpu.s_load_b96_offset_only", True),
+    (_s_load_dwordx4_overlay, "amdgpu.s_load_dwordx4_offset_only", False),
+    (_s_load_dwordx8_overlay, "amdgpu.s_load_dwordx8_offset_only", False),
+    (_s_load_dwordx16_overlay, "amdgpu.s_load_dwordx16_offset_only", False),
+)
+
+_S_BUFFER_LOAD_WIDTH_OVERLAY_ROWS = (
+    (_s_buffer_load_dword_overlay, False),
+    (_s_buffer_load_64_overlay, False),
+    (_s_buffer_load_96_overlay, True),
+    (_s_buffer_load_128_overlay, False),
+    (_s_buffer_load_256_overlay, False),
+    (_s_buffer_load_512_overlay, False),
+)
+
+_CDNA_S_BUFFER_LOAD_WIDTH_OVERLAY_ROWS = (
+    (_s_buffer_load_dword_overlay, None, None, None),
+    (
+        _s_buffer_load_64_overlay,
+        "amdgpu.s_buffer_load_dwordx2",
+        "S_BUFFER_LOAD_DWORDX2",
+        "s_buffer_load_dwordx2",
+    ),
+    (
+        _s_buffer_load_128_overlay,
+        "amdgpu.s_buffer_load_dwordx4",
+        "S_BUFFER_LOAD_DWORDX4",
+        "s_buffer_load_dwordx4",
+    ),
+    (
+        _s_buffer_load_256_overlay,
+        "amdgpu.s_buffer_load_dwordx8",
+        "S_BUFFER_LOAD_DWORDX8",
+        "s_buffer_load_dwordx8",
+    ),
+    (
+        _s_buffer_load_512_overlay,
+        "amdgpu.s_buffer_load_dwordx16",
+        "S_BUFFER_LOAD_DWORDX16",
+        "s_buffer_load_dwordx16",
+    ),
+)
+
 
 def _rdna4_vbuffer_dword_width_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
-    return (
-        _buffer_load_dword_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_load_dword_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-        _buffer_load_64_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_load_64_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-        _buffer_load_96_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_load_96_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-        _buffer_load_128_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_load_128_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-        _buffer_store_dword_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_store_dword_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-        _buffer_store_64_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_store_64_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-        _buffer_store_96_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_store_96_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-        _buffer_store_128_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            off_zero_descriptor_key=None,
-        ),
-        _buffer_store_128_vaddr_offset_overlay(
-            encoding_name="ENC_VBUFFER",
-            resource_field_name="RSRC",
-            offset_field_name="IOFFSET",
-            offset_bit_width=24,
-            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
-            fixed_soffset=_VBUFFER_SOFFSET_NULL,
-            fixed_soffset_native_spelling="null",
-        ),
-    )
+    overlays: list[AmdgpuDescriptorOverlay] = []
+    for base_overlay, vaddr_offset_overlay in _RDNA4_VBUFFER_DWORD_WIDTH_OVERLAY_ROWS:
+        overlays.append(
+            base_overlay(
+                encoding_name="ENC_VBUFFER",
+                resource_field_name="RSRC",
+                offset_field_name="IOFFSET",
+                offset_bit_width=24,
+                cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+                off_zero_descriptor_key=None,
+            )
+        )
+        overlays.append(
+            vaddr_offset_overlay(
+                encoding_name="ENC_VBUFFER",
+                resource_field_name="RSRC",
+                offset_field_name="IOFFSET",
+                offset_bit_width=24,
+                cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+                fixed_soffset=_VBUFFER_SOFFSET_NULL,
+                fixed_soffset_native_spelling="null",
+            )
+        )
+    return tuple(overlays)
 
 
 def _s_load_dword_width_overlays(
@@ -183,43 +126,18 @@ def _s_load_dword_width_overlays(
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
     include_b96: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    return (
-        _s_load_dword_overlay(
+    return tuple(
+        overlay(
             offset_field_name,
             offset_bit_width=offset_bit_width,
             fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_load_dwordx2_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        *(
-            (
-                _s_load_96_overlay(
-                    offset_field_name,
-                    offset_bit_width=offset_bit_width,
-                    fixed_encoding_fields=fixed_encoding_fields,
-                ),
-            )
-            if include_b96
-            else ()
-        ),
-        _s_load_dwordx4_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_load_dwordx8_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_load_dwordx16_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
+        )
+        for (
+            overlay,
+            _offset_only_descriptor_key,
+            requires_b96,
+        ) in _S_LOAD_DWORD_WIDTH_OVERLAY_ROWS
+        if include_b96 or not requires_b96
     )
 
 
@@ -231,55 +149,20 @@ def _s_load_dword_offset_only_overlays(
     fixed_soffset: AmdgpuFixedEncodingValue,
     include_b96: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    return (
-        _s_load_dword_overlay(
+    return tuple(
+        overlay(
             offset_field_name,
             offset_bit_width=offset_bit_width,
             fixed_encoding_fields=fixed_encoding_fields,
-            descriptor_key="amdgpu.s_load_dword_offset_only",
+            descriptor_key=offset_only_descriptor_key,
             fixed_soffset=fixed_soffset,
-        ),
-        _s_load_dwordx2_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-            descriptor_key="amdgpu.s_load_dwordx2_offset_only",
-            fixed_soffset=fixed_soffset,
-        ),
-        *(
-            (
-                _s_load_96_overlay(
-                    offset_field_name,
-                    offset_bit_width=offset_bit_width,
-                    fixed_encoding_fields=fixed_encoding_fields,
-                    descriptor_key="amdgpu.s_load_b96_offset_only",
-                    fixed_soffset=fixed_soffset,
-                ),
-            )
-            if include_b96
-            else ()
-        ),
-        _s_load_dwordx4_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-            descriptor_key="amdgpu.s_load_dwordx4_offset_only",
-            fixed_soffset=fixed_soffset,
-        ),
-        _s_load_dwordx8_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-            descriptor_key="amdgpu.s_load_dwordx8_offset_only",
-            fixed_soffset=fixed_soffset,
-        ),
-        _s_load_dwordx16_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-            descriptor_key="amdgpu.s_load_dwordx16_offset_only",
-            fixed_soffset=fixed_soffset,
-        ),
+        )
+        for (
+            overlay,
+            offset_only_descriptor_key,
+            requires_b96,
+        ) in _S_LOAD_DWORD_WIDTH_OVERLAY_ROWS
+        if include_b96 or not requires_b96
     )
 
 
@@ -290,43 +173,17 @@ def _s_buffer_load_width_overlays(
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
     include_b96: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    return (
-        _s_buffer_load_dword_overlay(
-            offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_buffer_load_64_overlay(
+    return tuple(
+        overlay(
             offset_field_name=offset_field_name,
             offset_bit_width=offset_bit_width,
             fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        *(
-            (
-                _s_buffer_load_96_overlay(
-                    offset_field_name=offset_field_name,
-                    offset_bit_width=offset_bit_width,
-                    fixed_encoding_fields=fixed_encoding_fields,
-                ),
-            )
-            if include_b96
-            else ()
-        ),
-        _s_buffer_load_128_overlay(
-            offset_field_name=offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_buffer_load_256_overlay(
-            offset_field_name=offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_buffer_load_512_overlay(
-            offset_field_name=offset_field_name,
-            offset_bit_width=offset_bit_width,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
+        )
+        for (
+            overlay,
+            requires_b96,
+        ) in _S_BUFFER_LOAD_WIDTH_OVERLAY_ROWS
+        if include_b96 or not requires_b96
     )
 
 
@@ -334,33 +191,24 @@ def _cdna_s_buffer_load_width_overlays(
     *,
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...],
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    return (
-        _s_buffer_load_dword_overlay(fixed_encoding_fields=fixed_encoding_fields),
-        _s_buffer_load_64_overlay(
-            descriptor_key="amdgpu.s_buffer_load_dwordx2",
-            instruction_name="S_BUFFER_LOAD_DWORDX2",
-            mnemonic="s_buffer_load_dwordx2",
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_buffer_load_128_overlay(
-            descriptor_key="amdgpu.s_buffer_load_dwordx4",
-            instruction_name="S_BUFFER_LOAD_DWORDX4",
-            mnemonic="s_buffer_load_dwordx4",
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_buffer_load_256_overlay(
-            descriptor_key="amdgpu.s_buffer_load_dwordx8",
-            instruction_name="S_BUFFER_LOAD_DWORDX8",
-            mnemonic="s_buffer_load_dwordx8",
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _s_buffer_load_512_overlay(
-            descriptor_key="amdgpu.s_buffer_load_dwordx16",
-            instruction_name="S_BUFFER_LOAD_DWORDX16",
-            mnemonic="s_buffer_load_dwordx16",
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-    )
+    overlays: list[AmdgpuDescriptorOverlay] = []
+    for (
+        overlay,
+        descriptor_key,
+        instruction_name,
+        mnemonic,
+    ) in _CDNA_S_BUFFER_LOAD_WIDTH_OVERLAY_ROWS:
+        overlay_kwargs = {"fixed_encoding_fields": fixed_encoding_fields}
+        if descriptor_key is not None:
+            overlay_kwargs.update(
+                {
+                    "descriptor_key": descriptor_key,
+                    "instruction_name": instruction_name,
+                    "mnemonic": mnemonic,
+                }
+            )
+        overlays.append(overlay(**overlay_kwargs))
+    return tuple(overlays)
 
 
 def _cdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
