@@ -689,8 +689,10 @@ ERR_AMDGPU_033 = ErrorDef(
         "'{config_key}' rejected '{op_name}' in '@{function_name}': "
         "index cast from {source_type} to {result_type} has source range "
         "[{source_range_lo}, {source_range_hi}], which is not proven to fit "
-        "the {index_bitwidth}-bit target index domain; constraint "
-        "'{constraint_key}' is not satisfied"
+        "the {index_bitwidth}-bit target index domain "
+        "[{required_range_lo}, {required_range_hi}]; constraint "
+        "'{constraint_key}' is not satisfied; accepted proof sources are "
+        "{accepted_proof_sources}"
     ),
     params=(
         *_TARGET_CONTEXT_PARAMS,
@@ -699,11 +701,14 @@ ERR_AMDGPU_033 = ErrorDef(
         ErrorParam("source_range_lo", ParamKind.I64),
         ErrorParam("source_range_hi", ParamKind.I64),
         ErrorParam("index_bitwidth", ParamKind.U32),
+        ErrorParam("required_range_lo", ParamKind.I64),
+        ErrorParam("required_range_hi", ParamKind.I64),
         ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("accepted_proof_sources", ParamKind.STRING_LIST),
     ),
     fix_hint=(
-        "Prove the source integer range with scalar.assume before casting to "
-        "index, keep the value as a wider scalar, or use an offset path when "
+        "Guard or assume the integer source before the index cast so value "
+        "facts prove it fits the target index width; use an offset path when "
         "the value is a byte address"
     ),
 )

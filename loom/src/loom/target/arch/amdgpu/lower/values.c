@@ -1956,6 +1956,11 @@ static iree_status_t loom_amdgpu_emit_index_cast_range_diagnostic(
     loom_type_t source_type, loom_type_t result_type,
     loom_value_facts_t source_facts, uint32_t index_bitwidth) {
   loom_module_t* module = loom_low_lower_context_module(context);
+  static const iree_string_view_t accepted_proof_sources[] = {
+      IREE_SVL("scalar.cmpi/scf.if guard on the integer source"),
+      IREE_SVL("scalar.assume on the integer source before index.cast"),
+      IREE_SVL("config or kernel boundary facts on the integer source"),
+  };
   const loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_lower_context_target_key(context)),
       loom_param_string(loom_low_lower_context_export_name(context)),
@@ -1967,7 +1972,11 @@ static iree_status_t loom_amdgpu_emit_index_cast_range_diagnostic(
       loom_param_i64(source_facts.range_lo),
       loom_param_i64(source_facts.range_hi),
       loom_param_u32(index_bitwidth),
+      loom_param_i64(INT32_MIN),
+      loom_param_i64(INT32_MAX),
       loom_param_string(IREE_SV("index_cast.target_width_range")),
+      loom_param_string_list(accepted_proof_sources,
+                             IREE_ARRAYSIZE(accepted_proof_sources)),
   };
   return loom_low_lower_emit_error_ref(context, source_op,
                                        LOOM_ERR_AMDGPU_033_REF, params,
