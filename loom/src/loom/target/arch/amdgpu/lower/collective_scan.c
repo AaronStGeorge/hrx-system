@@ -1106,17 +1106,6 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_low_legality_verify_subgroup_descriptor(
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    loom_amdgpu_descriptor_ref_t descriptor_ref,
-    iree_string_view_t constraint_key) {
-  if (!loom_amdgpu_descriptor_set_has_ref(
-          loom_target_low_legality_descriptor_set(context), descriptor_ref)) {
-    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
-  }
-  return iree_ok_status();
-}
-
 iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
@@ -1223,65 +1212,63 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
     }
   }
 
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_target_low_legality_descriptor_set(context);
-  if (!loom_amdgpu_descriptor_set_has_ref(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
-  }
-  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
-                                          combine_descriptor_ref)) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("descriptor.scan_combine"));
-  }
-  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
-                                          guard_descriptor_ref)) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("descriptor.scan_guard"));
-  }
-  if (!loom_amdgpu_descriptor_set_has_ref(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32)) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("descriptor.v_cndmask_b32"));
-  }
+  const loom_amdgpu_low_legality_descriptor_requirement_t requirements[] = {
+      {
+          .constraint_key = IREE_SVL("descriptor.ds_bpermute_b32"),
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
+      },
+      {
+          .constraint_key = IREE_SVL("descriptor.scan_combine"),
+          .descriptor_ref = combine_descriptor_ref,
+      },
+      {
+          .constraint_key = IREE_SVL("descriptor.scan_guard"),
+          .descriptor_ref = guard_descriptor_ref,
+      },
+      {
+          .constraint_key = IREE_SVL("descriptor.v_cndmask_b32"),
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
+      },
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirements(
+      context, op, requirements, IREE_ARRAYSIZE(requirements)));
   if (flat_workgroup_size > wavefront_size) {
-    if (!loom_amdgpu_descriptor_set_has_ref(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("descriptor.v_cmp_ult_u32"));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
+        context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_ULT_U32,
+        IREE_SV("descriptor.v_cmp_ult_u32")));
+    if (has_partial_tail) {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_low_legality_verify_descriptor_requirement(
+              context, op, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32,
+              IREE_SV("descriptor.v_cmp_uge_u32")));
     }
-    if (has_partial_tail &&
-        !loom_amdgpu_descriptor_set_has_ref(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_UGE_U32)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("descriptor.v_cmp_uge_u32"));
-    }
-    if (!loom_amdgpu_descriptor_set_has_ref(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B32)) {
-      return loom_amdgpu_low_legality_reject(context, op,
-                                             IREE_SV("descriptor.ds_read_b32"));
-    }
-    if (!loom_amdgpu_descriptor_set_has_ref(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("descriptor.ds_write_b32"));
-    }
-    if (!loom_amdgpu_descriptor_set_has_ref(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER)) {
-      return loom_amdgpu_low_legality_reject(context, op,
-                                             IREE_SV("descriptor.s_barrier"));
-    }
-    if (!loom_amdgpu_descriptor_set_has_ref(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("descriptor.s_and_saveexec_b64"));
-    }
-    if (!loom_amdgpu_descriptor_set_has_ref(
-            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC)) {
-      return loom_amdgpu_low_legality_reject(
-          context, op, IREE_SV("descriptor.s_mov_b64_exec"));
-    }
+    static const loom_amdgpu_low_legality_descriptor_requirement_t
+        scratch_requirements[] = {
+            {
+                .constraint_key = IREE_SVL("descriptor.ds_read_b32"),
+                .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B32,
+            },
+            {
+                .constraint_key = IREE_SVL("descriptor.ds_write_b32"),
+                .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32,
+            },
+            {
+                .constraint_key = IREE_SVL("descriptor.s_barrier"),
+                .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER,
+            },
+            {
+                .constraint_key = IREE_SVL("descriptor.s_and_saveexec_b64"),
+                .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_SAVEEXEC_B64,
+            },
+            {
+                .constraint_key = IREE_SVL("descriptor.s_mov_b64_exec"),
+                .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC,
+            },
+        };
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_low_legality_verify_descriptor_requirements(
+            context, op, scratch_requirements,
+            IREE_ARRAYSIZE(scratch_requirements)));
   }
 
   return iree_ok_status();
@@ -1367,28 +1354,26 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
         context, op, IREE_SV("subgroup_scan.fixed_workgroup_wave_multiple"));
   }
 
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_target_low_legality_descriptor_set(context);
-  if (!loom_amdgpu_descriptor_set_has_ref(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32)) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
-  }
-  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
-                                          combine_descriptor_ref)) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("descriptor.scan_combine"));
-  }
-  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
-                                          guard_descriptor_ref)) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("descriptor.scan_guard"));
-  }
-  if (!loom_amdgpu_descriptor_set_has_ref(
-          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32)) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("descriptor.v_cndmask_b32"));
-  }
+  const loom_amdgpu_low_legality_descriptor_requirement_t requirements[] = {
+      {
+          .constraint_key = IREE_SVL("descriptor.ds_bpermute_b32"),
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
+      },
+      {
+          .constraint_key = IREE_SVL("descriptor.scan_combine"),
+          .descriptor_ref = combine_descriptor_ref,
+      },
+      {
+          .constraint_key = IREE_SVL("descriptor.scan_guard"),
+          .descriptor_ref = guard_descriptor_ref,
+      },
+      {
+          .constraint_key = IREE_SVL("descriptor.v_cndmask_b32"),
+          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
+      },
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirements(
+      context, op, requirements, IREE_ARRAYSIZE(requirements)));
 
   return iree_ok_status();
 }

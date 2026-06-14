@@ -20,6 +20,7 @@
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
+#include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/materializers.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
@@ -406,6 +407,29 @@ iree_status_t loom_amdgpu_low_legality_reject(
       loom_param_string(constraint_key);
   return loom_target_low_legality_emit_error_ref(
       context, op, LOOM_ERR_AMDGPU_023_REF, params, IREE_ARRAYSIZE(params));
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_descriptor_requirement(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    iree_string_view_t constraint_key) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          loom_target_low_legality_descriptor_set(context), descriptor_ref)) {
+    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_descriptor_requirements(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_amdgpu_low_legality_descriptor_requirement_t* requirements,
+    iree_host_size_t requirement_count) {
+  for (iree_host_size_t i = 0; i < requirement_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
+        context, op, requirements[i].descriptor_ref,
+        requirements[i].constraint_key));
+  }
+  return iree_ok_status();
 }
 
 bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,
