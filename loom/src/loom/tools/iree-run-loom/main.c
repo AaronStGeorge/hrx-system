@@ -13,6 +13,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
+#include "iree/tooling/value_io.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/tooling/cli/help.h"
@@ -77,62 +78,57 @@ typedef struct iree_run_loom_hal_flag_state_t {
   iree_host_size_t constant_count;
   // Binding specs in HAL binding ordinal order.
   iree_string_view_t binding_specs[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
-  // Calling-convention character for each binding spec.
-  char binding_cconv[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
   // Number of populated entries in |binding_specs|.
-  int32_t binding_count;
+  iree_host_size_t binding_count;
   // Expected binding specs in HAL binding ordinal order.
   iree_string_view_t
       expected_binding_specs[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
-  // Calling-convention character for each expected binding spec.
-  char expected_binding_cconv[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
   // Number of populated entries in |expected_binding_specs|.
-  int32_t expected_binding_count;
+  iree_host_size_t expected_binding_count;
 } iree_run_loom_hal_flag_state_t;
 
 static iree_run_loom_hal_flag_state_t iree_run_loom_hal_flags = {0};
 
-static iree_status_t iree_run_loom_parse_constant_flag(
+static iree_status_t iree_run_loom_parse_kernel_input_value_flag(
     iree_string_view_t flag_name, void* storage, iree_string_view_t value) {
   (void)flag_name;
   (void)storage;
-  if (iree_run_loom_hal_flags.constant_count >=
-      LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "too many HAL dispatch constants; maximum is %d",
-                            LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT);
-  }
-  uint32_t value_uint32 = 0;
-  if (!iree_string_view_atoi_uint32(value, &value_uint32)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "invalid HAL dispatch constant `%.*s`; expected "
-                            "uint32_t",
-                            (int)value.size, value.data);
-  }
-  iree_run_loom_hal_flags.constants[iree_run_loom_hal_flags.constant_count++] =
-      value_uint32;
+  iree_tooling_value_t parsed_value = {0};
+  IREE_RETURN_IF_ERROR(iree_tooling_value_spec_parse(value, &parsed_value));
+  iree_host_size_t word_count = 0;
+  IREE_RETURN_IF_ERROR(iree_tooling_value_write_abi_words(
+      &parsed_value,
+      LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT -
+          iree_run_loom_hal_flags.constant_count,
+      &iree_run_loom_hal_flags
+           .constants[iree_run_loom_hal_flags.constant_count],
+      &word_count));
+  iree_run_loom_hal_flags.constant_count += word_count;
   return iree_ok_status();
 }
 
-static void iree_run_loom_print_constant_flag(iree_string_view_t flag_name,
-                                              void* storage, FILE* file) {
+static void iree_run_loom_print_kernel_input_value_flag(
+    iree_string_view_t flag_name, void* storage, FILE* file) {
   (void)storage;
   if (iree_run_loom_hal_flags.constant_count == 0) {
-    fprintf(file, "# --%.*s=[integer value]\n", (int)flag_name.size,
-            flag_name.data);
+    fprintf(file, "# --%.*s=i32=0\n", (int)flag_name.size, flag_name.data);
     return;
   }
   for (iree_host_size_t i = 0; i < iree_run_loom_hal_flags.constant_count;
        ++i) {
-    fprintf(file, "--%.*s=%u\n", (int)flag_name.size, flag_name.data,
+    fprintf(file, "--%.*s=0x%08X\n", (int)flag_name.size, flag_name.data,
             iree_run_loom_hal_flags.constants[i]);
   }
 }
-IREE_FLAG_CALLBACK(iree_run_loom_parse_constant_flag,
-                   iree_run_loom_print_constant_flag, NULL, constant,
-                   "Appends a uint32_t HAL dispatch constant in ABI order.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_run_loom_parse_kernel_input_value_flag,
+    iree_run_loom_print_kernel_input_value_flag, NULL, kernel_input_value,
+    "kernel-input-value",
+    "Appends a scalar HAL kernel input in ABI order. Supported forms include "
+    "i32=..., u32=..., i64=..., u64=..., f32=..., f64=..., and bare 0x... "
+    "raw uint32 ABI words.");
 
-static iree_status_t iree_run_loom_parse_binding_flag(
+static iree_status_t iree_run_loom_parse_kernel_input_buffer_flag(
     iree_string_view_t flag_name, void* storage, iree_string_view_t value) {
   (void)flag_name;
   (void)storage;
@@ -142,32 +138,34 @@ static iree_status_t iree_run_loom_parse_binding_flag(
                             "too many HAL bindings; maximum is %d",
                             LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT);
   }
-  const int32_t index = iree_run_loom_hal_flags.binding_count++;
+  const iree_host_size_t index = iree_run_loom_hal_flags.binding_count++;
   iree_run_loom_hal_flags.binding_specs[index] = value;
-  iree_run_loom_hal_flags.binding_cconv[index] = 'r';
   return iree_ok_status();
 }
 
-static void iree_run_loom_print_binding_flag(iree_string_view_t flag_name,
-                                             void* storage, FILE* file) {
+static void iree_run_loom_print_kernel_input_buffer_flag(
+    iree_string_view_t flag_name, void* storage, FILE* file) {
   (void)storage;
   if (iree_run_loom_hal_flags.binding_count == 0) {
     fprintf(file, "# --%.*s=\"shapextype[=values]\"\n", (int)flag_name.size,
             flag_name.data);
     return;
   }
-  for (int32_t i = 0; i < iree_run_loom_hal_flags.binding_count; ++i) {
+  for (iree_host_size_t i = 0; i < iree_run_loom_hal_flags.binding_count; ++i) {
     iree_string_view_t binding_spec = iree_run_loom_hal_flags.binding_specs[i];
     fprintf(file, "--%.*s=\"%.*s\"\n", (int)flag_name.size, flag_name.data,
             (int)binding_spec.size, binding_spec.data);
   }
 }
-IREE_FLAG_CALLBACK(iree_run_loom_parse_binding_flag,
-                   iree_run_loom_print_binding_flag, NULL, binding,
-                   "Appends a HAL dispatch binding. Bindings use the same "
-                   "shape/type/data syntax as iree-benchmark-executable.");
+IREE_FLAG_CALLBACK_NAMED(
+    iree_run_loom_parse_kernel_input_buffer_flag,
+    iree_run_loom_print_kernel_input_buffer_flag, NULL, kernel_input_buffer,
+    "kernel-input-buffer",
+    "Appends a HAL kernel buffer binding. Bindings use the same "
+    "shape/type/data syntax as iree-benchmark-executable and may use '&' for "
+    "in-place storage buffers.");
 
-static iree_status_t iree_run_loom_parse_expected_binding_flag(
+static iree_status_t iree_run_loom_parse_expected_kernel_buffer_flag(
     iree_string_view_t flag_name, void* storage, iree_string_view_t value) {
   (void)flag_name;
   (void)storage;
@@ -177,13 +175,13 @@ static iree_status_t iree_run_loom_parse_expected_binding_flag(
                             "too many expected HAL bindings; maximum is %d",
                             LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT);
   }
-  const int32_t index = iree_run_loom_hal_flags.expected_binding_count++;
+  const iree_host_size_t index =
+      iree_run_loom_hal_flags.expected_binding_count++;
   iree_run_loom_hal_flags.expected_binding_specs[index] = value;
-  iree_run_loom_hal_flags.expected_binding_cconv[index] = 'r';
   return iree_ok_status();
 }
 
-static void iree_run_loom_print_expected_binding_flag(
+static void iree_run_loom_print_expected_kernel_buffer_flag(
     iree_string_view_t flag_name, void* storage, FILE* file) {
   (void)storage;
   if (iree_run_loom_hal_flags.expected_binding_count == 0) {
@@ -191,7 +189,8 @@ static void iree_run_loom_print_expected_binding_flag(
             flag_name.data);
     return;
   }
-  for (int32_t i = 0; i < iree_run_loom_hal_flags.expected_binding_count; ++i) {
+  for (iree_host_size_t i = 0;
+       i < iree_run_loom_hal_flags.expected_binding_count; ++i) {
     iree_string_view_t binding_spec =
         iree_run_loom_hal_flags.expected_binding_specs[i];
     fprintf(file, "--%.*s=\"%.*s\"\n", (int)flag_name.size, flag_name.data,
@@ -199,9 +198,9 @@ static void iree_run_loom_print_expected_binding_flag(
   }
 }
 IREE_FLAG_CALLBACK_NAMED(
-    iree_run_loom_parse_expected_binding_flag,
-    iree_run_loom_print_expected_binding_flag, NULL, expected_binding,
-    "expected-binding",
+    iree_run_loom_parse_expected_kernel_buffer_flag,
+    iree_run_loom_print_expected_kernel_buffer_flag, NULL,
+    expected_kernel_buffer, "expected-kernel-buffer",
     "Appends an expected HAL binding after dispatch. When present, one "
     "expected binding must be provided for every binding.");
 
@@ -309,12 +308,10 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
                sizeof(out_options->hal_constants[0]));
     out_options->hal_bindings = (loom_run_one_shot_binding_specs_t){
         .values = iree_run_loom_hal_flags.binding_specs,
-        .conventions = iree_run_loom_hal_flags.binding_cconv,
         .count = iree_run_loom_hal_flags.binding_count,
     };
     out_options->hal_expected_bindings = (loom_run_one_shot_binding_specs_t){
         .values = iree_run_loom_hal_flags.expected_binding_specs,
-        .conventions = iree_run_loom_hal_flags.expected_binding_cconv,
         .count = iree_run_loom_hal_flags.expected_binding_count,
     };
     out_options->hal_target_artifact_output_path = target_artifact_output_path;
