@@ -678,6 +678,36 @@ ERR_AMDGPU_032 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_033: AMDGPU index cast source range does not fit target index width.
+ERR_AMDGPU_033 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=33,
+    severity=Severity.ERROR,
+    summary="AMDGPU index cast source range does not fit target index width.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': "
+        "index cast from {source_type} to {result_type} has source range "
+        "[{source_range_lo}, {source_range_hi}], which is not proven to fit "
+        "the {index_bitwidth}-bit target index domain; constraint "
+        "'{constraint_key}' is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("source_type", ParamKind.TYPE),
+        ErrorParam("result_type", ParamKind.TYPE),
+        ErrorParam("source_range_lo", ParamKind.I64),
+        ErrorParam("source_range_hi", ParamKind.I64),
+        ErrorParam("index_bitwidth", ParamKind.U32),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Prove the source integer range with scalar.assume before casting to "
+        "index, keep the value as a wider scalar, or use an offset path when "
+        "the value is a byte address"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -710,4 +740,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_030,
     ERR_AMDGPU_031,
     ERR_AMDGPU_032,
+    ERR_AMDGPU_033,
 )
