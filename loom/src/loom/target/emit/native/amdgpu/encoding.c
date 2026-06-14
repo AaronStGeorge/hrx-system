@@ -1726,10 +1726,10 @@ static iree_status_t loom_amdgpu_encode_vopd_pair(
   loom_amdgpu_encoding_packet_t encoded_packet;
   if (iree_any_bit_set(pair->flags, LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL)) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_pack_vopdxy_literal(
-        &fields, pair->literal_u32, &encoded_packet));
+        state->encoding_table, &fields, pair->literal_u32, &encoded_packet));
   } else {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_encoding_pack_vopdxy(&fields, &encoded_packet));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_pack_vopdxy(
+        state->encoding_table, &fields, &encoded_packet));
   }
   return loom_amdgpu_append_encoding_packet(state, &encoded_packet);
 }

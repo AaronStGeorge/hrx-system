@@ -649,68 +649,81 @@ iree_status_t loom_amdgpu_encoding_pack_vop2_u32_vgpr(
       imm32, field_values, IREE_ARRAYSIZE(field_values), out_packet);
 }
 
-static iree_status_t loom_amdgpu_encoding_verify_vopdxy_field(
-    iree_string_view_t name, uint16_t value, uint16_t bit_count) {
-  if ((value >> bit_count) != 0) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU VOPDXY field %.*s value %" PRIu16
-                            " does not fit %" PRIu16 " bits",
-                            (int)name.size, name.data, value, bit_count);
-  }
-  return iree_ok_status();
-}
-
-iree_status_t loom_amdgpu_encoding_pack_vopdxy(
+static iree_status_t loom_amdgpu_encoding_pack_vopdxy_format(
+    const loom_amdgpu_encoding_table_t* table, uint16_t encoding_format,
     const loom_amdgpu_encoding_vopdxy_fields_t* fields,
-    loom_amdgpu_encoding_packet_t* out_packet) {
-  if (fields == NULL || out_packet == NULL) {
+    const uint32_t* literal_u32, loom_amdgpu_encoding_packet_t* out_packet) {
+  if (table == NULL || fields == NULL || out_packet == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU VOPDXY encoding requires fields and an "
-                            "output packet");
+                            "AMDGPU VOPDXY encoding requires a table, fields, "
+                            "and an output packet");
   }
-  *out_packet = (loom_amdgpu_encoding_packet_t){0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("op_x"), fields->op_x, 4));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("op_y"), fields->op_y, 5));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("src0_x"), fields->src0_x, 9));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("vsrc1_x"), fields->vsrc1_x, 8));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("vdst_x"), fields->vdst_x, 8));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("src0_y"), fields->src0_y, 9));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("vsrc1_y"), fields->vsrc1_y, 8));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
-      IREE_SV("vdst_y"), fields->vdst_y, 8));
   if (((fields->vdst_x ^ fields->vdst_y) & 1u) == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU VOPDXY destination registers must have "
                             "opposite parity");
   }
+  loom_amdgpu_encoding_field_value_t field_values[] = {
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRCX0,
+          .value = fields->src0_x,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VSRCX1,
+          .value = fields->vsrc1_x,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_OPY,
+          .value = fields->op_y,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_OPX,
+          .value = fields->op_x,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRCY0,
+          .value = fields->src0_y,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VSRCY1,
+          .value = fields->vsrc1_y,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDSTY,
+          // VOPD stores VDSTY[7:1]; the low bit is implied by VDSTX parity.
+          .value = fields->vdst_y & ~UINT16_C(1),
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDSTX,
+          .value = fields->vdst_x,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_LITERAL,
+          .value = literal_u32 ? *literal_u32 : 0,
+      },
+  };
+  const iree_host_size_t field_value_count =
+      literal_u32 ? IREE_ARRAYSIZE(field_values)
+                  : IREE_ARRAYSIZE(field_values) - 1;
+  return loom_amdgpu_encoding_pack(table, encoding_format,
+                                   LOOM_AMDGPU_ENCODING_OPCODE_NONE,
+                                   field_values, field_value_count, out_packet);
+}
 
-  const uint64_t encoded =
-      ((uint64_t)fields->src0_x << 0) | ((uint64_t)fields->vsrc1_x << 9) |
-      ((uint64_t)fields->op_y << 17) | ((uint64_t)fields->op_x << 22) |
-      (UINT64_C(0x32) << 26) | ((uint64_t)fields->src0_y << 32) |
-      ((uint64_t)fields->vsrc1_y << 41) |
-      ((uint64_t)(fields->vdst_y >> 1) << 49) |
-      ((uint64_t)fields->vdst_x << 56);
-  out_packet->words[0] = (uint32_t)encoded;
-  out_packet->words[1] = (uint32_t)(encoded >> 32);
-  out_packet->bit_count = 64;
-  out_packet->word_count = 2;
-  return iree_ok_status();
+iree_status_t loom_amdgpu_encoding_pack_vopdxy(
+    const loom_amdgpu_encoding_table_t* table,
+    const loom_amdgpu_encoding_vopdxy_fields_t* fields,
+    loom_amdgpu_encoding_packet_t* out_packet) {
+  return loom_amdgpu_encoding_pack_vopdxy_format(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY, fields, /*literal_u32=*/NULL,
+      out_packet);
 }
 
 iree_status_t loom_amdgpu_encoding_pack_vopdxy_literal(
+    const loom_amdgpu_encoding_table_t* table,
     const loom_amdgpu_encoding_vopdxy_fields_t* fields, uint32_t literal_u32,
     loom_amdgpu_encoding_packet_t* out_packet) {
-  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_pack_vopdxy(fields, out_packet));
-  out_packet->words[2] = literal_u32;
-  out_packet->bit_count = 96;
-  out_packet->word_count = 3;
-  return iree_ok_status();
+  return loom_amdgpu_encoding_pack_vopdxy_format(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY_LITERAL, fields, &literal_u32,
+      out_packet);
 }

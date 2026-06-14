@@ -225,6 +225,10 @@ TEST(AmdgpuEncodingTest, ReportsGeneratedTableFormatSupport) {
       table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1));
   EXPECT_TRUE(loom_amdgpu_encoding_table_has_format(
       table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL));
+  EXPECT_TRUE(loom_amdgpu_encoding_table_has_format(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY));
+  EXPECT_TRUE(loom_amdgpu_encoding_table_has_format(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY_LITERAL));
   EXPECT_FALSE(loom_amdgpu_encoding_table_has_format(
       table, LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2));
   EXPECT_FALSE(loom_amdgpu_encoding_table_has_format(
@@ -543,6 +547,8 @@ TEST(AmdgpuEncodingTest, PacksCdna4VMovB32SdwaSignedByteExtract) {
 }
 
 TEST(AmdgpuEncodingTest, PacksVopdxyDualFmacPair) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
   loom_amdgpu_encoding_vopdxy_fields_t fields = {};
   fields.op_x = 0;
@@ -553,7 +559,7 @@ TEST(AmdgpuEncodingTest, PacksVopdxyDualFmacPair) {
   fields.src0_y = 0x101;
   fields.vsrc1_y = 3;
   fields.vdst_y = 6;
-  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy(table, &fields, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0xc8000504));
@@ -578,7 +584,7 @@ TEST(AmdgpuEncodingTest, PacksVopdxyDualMovPair) {
   fields.src0_y = source_0;
   fields.vsrc1_y = 0;
   fields.vdst_y = 1;
-  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy(table, &fields, &packet));
   EXPECT_EQ(packet.word_count, 2u);
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0xca1000aa));
@@ -586,6 +592,8 @@ TEST(AmdgpuEncodingTest, PacksVopdxyDualMovPair) {
 }
 
 TEST(AmdgpuEncodingTest, PacksVopdxyLiteralDualFmaakPair) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
   loom_amdgpu_encoding_vopdxy_fields_t fields = {};
   fields.op_x = 1;
@@ -597,7 +605,7 @@ TEST(AmdgpuEncodingTest, PacksVopdxyLiteralDualFmaakPair) {
   fields.vsrc1_y = 5;
   fields.vdst_y = 3;
   IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy_literal(
-      &fields, UINT32_C(0x3f800000), &packet));
+      table, &fields, UINT32_C(0x3f800000), &packet));
   EXPECT_EQ(packet.word_count, 3u);
   EXPECT_EQ(packet.bit_count, 96u);
   EXPECT_EQ(packet.words[0], UINT32_C(0xc8420501));
@@ -606,6 +614,8 @@ TEST(AmdgpuEncodingTest, PacksVopdxyLiteralDualFmaakPair) {
 }
 
 TEST(AmdgpuEncodingTest, RejectsSameParityVopdxyDestinations) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
   loom_amdgpu_encoding_vopdxy_fields_t fields = {};
   fields.op_x = 0;
@@ -616,11 +626,14 @@ TEST(AmdgpuEncodingTest, RejectsSameParityVopdxyDestinations) {
   fields.src0_y = 0x101;
   fields.vsrc1_y = 3;
   fields.vdst_y = 7;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_amdgpu_encoding_pack_vopdxy(table, &fields, &packet));
 }
 
 TEST(AmdgpuEncodingTest, RejectsOutOfRangeVopdxyOp) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
   loom_amdgpu_encoding_packet_t packet = {};
   loom_amdgpu_encoding_vopdxy_fields_t fields = {};
   fields.op_x = 16;
@@ -631,8 +644,9 @@ TEST(AmdgpuEncodingTest, RejectsOutOfRangeVopdxyOp) {
   fields.src0_y = 0x101;
   fields.vsrc1_y = 3;
   fields.vdst_y = 6;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                        loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_amdgpu_encoding_pack_vopdxy(table, &fields, &packet));
 }
 
 TEST(AmdgpuEncodingTest, InlineF32SourceMapsBitPatternToSourceSelector) {
