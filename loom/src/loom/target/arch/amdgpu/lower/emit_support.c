@@ -525,6 +525,24 @@ iree_status_t loom_amdgpu_resolve_descriptor_ref_if_present(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_resolve_descriptor_refs_if_present(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_descriptor_resolution_t* resolutions,
+    iree_host_size_t resolution_count, bool* out_present) {
+  *out_present = false;
+  for (iree_host_size_t i = 0; i < resolution_count; ++i) {
+    bool present = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+        context, resolutions[i].descriptor_ref, resolutions[i].out_descriptor,
+        &present));
+    if (!present) {
+      return iree_ok_status();
+    }
+  }
+  *out_present = true;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_resolve_descriptor_ref(
     loom_low_lower_context_t* context,
     loom_amdgpu_descriptor_ref_t descriptor_ref,

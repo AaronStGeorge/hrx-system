@@ -69,6 +69,20 @@ iree_status_t loom_amdgpu_resolve_descriptor_ref_if_present(
     loom_amdgpu_descriptor_ref_t descriptor_ref,
     loom_low_lower_resolved_descriptor_t* out_descriptor, bool* out_present);
 
+typedef struct loom_amdgpu_descriptor_resolution_t {
+  // Descriptor ref to resolve against the active descriptor set.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Destination receiving the resolved descriptor when every row is present.
+  loom_low_lower_resolved_descriptor_t* out_descriptor;
+} loom_amdgpu_descriptor_resolution_t;
+
+// Resolves an ordered descriptor ref set, reporting |out_present| false when
+// the first missing descriptor ref is encountered.
+iree_status_t loom_amdgpu_resolve_descriptor_refs_if_present(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_descriptor_resolution_t* resolutions,
+    iree_host_size_t resolution_count, bool* out_present);
+
 // Resolves a required AMDGPU descriptor ref against the active descriptor set.
 iree_status_t loom_amdgpu_resolve_descriptor_ref(
     loom_low_lower_context_t* context,
