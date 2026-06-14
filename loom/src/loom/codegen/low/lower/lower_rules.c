@@ -406,18 +406,28 @@ static iree_status_t loom_low_lower_rule_materialize_source_memory_term(
     const loom_low_source_memory_dynamic_term_t* term,
     loom_value_id_t* out_value_id) {
   *out_value_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_EQ(term->stride_value_count, 0);
 
   loom_value_id_t index = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, term->index, &index));
+  loom_value_id_t accumulator = index;
+  for (uint8_t i = 0; i < term->stride_value_count; ++i) {
+    loom_value_id_t stride_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+        context, term->stride_values[i], &stride_value));
+    IREE_RETURN_IF_ERROR(loom_low_lower_rule_emit_i64_binary_op(
+        context, rule_set, source_memory->byte_offset_mul_i64_descriptor_ref,
+        IREE_SV("mul.i64"), accumulator, stride_value, source_op->location,
+        &accumulator));
+  }
+
   if (term->byte_stride == 1) {
-    *out_value_id = index;
+    *out_value_id = accumulator;
     return iree_ok_status();
   }
 
-  const loom_type_t index_type =
-      loom_module_value_type(loom_low_lower_context_module(context), index);
+  const loom_type_t index_type = loom_module_value_type(
+      loom_low_lower_context_module(context), accumulator);
   if (term->byte_shift != LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE) {
     loom_value_id_t shift = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_emit_i64_const(
@@ -425,7 +435,8 @@ static iree_status_t loom_low_lower_rule_materialize_source_memory_term(
         source_op->location, &shift));
     return loom_low_lower_rule_emit_i64_binary_op(
         context, rule_set, source_memory->byte_offset_shl_i64_descriptor_ref,
-        IREE_SV("shl.i64"), index, shift, source_op->location, out_value_id);
+        IREE_SV("shl.i64"), accumulator, shift, source_op->location,
+        out_value_id);
   }
 
   loom_value_id_t stride = LOOM_VALUE_ID_INVALID;
@@ -434,7 +445,8 @@ static iree_status_t loom_low_lower_rule_materialize_source_memory_term(
       source_op->location, &stride));
   return loom_low_lower_rule_emit_i64_binary_op(
       context, rule_set, source_memory->byte_offset_mul_i64_descriptor_ref,
-      IREE_SV("mul.i64"), index, stride, source_op->location, out_value_id);
+      IREE_SV("mul.i64"), accumulator, stride, source_op->location,
+      out_value_id);
 }
 
 static iree_status_t loom_low_lower_rule_materialize_source_memory_byte_offset(
@@ -1036,10 +1048,13 @@ static bool loom_low_lower_source_memory_dynamic_terms_match(
   const bool any_byte_stride = iree_any_bit_set(
       source_memory->flags,
       LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY);
+  const bool allow_dynamic_stride_values =
+      iree_any_bit_set(source_memory->flags,
+                       LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_STRIDE_VALUES);
   for (uint8_t i = 0; i < access->dynamic_term_count; ++i) {
     const loom_low_source_memory_dynamic_term_t* term =
         &access->dynamic_terms[i];
-    if (term->stride_value_count != 0) {
+    if (!allow_dynamic_stride_values && term->stride_value_count != 0) {
       return false;
     }
     if (!loom_low_lower_source_memory_dynamic_index_source_matches(

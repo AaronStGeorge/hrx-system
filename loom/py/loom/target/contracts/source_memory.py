@@ -93,6 +93,7 @@ class SourceMemoryConstraint:
         SourceMemoryDynamicIndexSource.NONE
     )
     dynamic_byte_stride: int | None = 0
+    allow_dynamic_stride_values: bool = False
     dynamic_offset_unsigned_bit_count: int = 0
     dynamic_offset_diagnostic: GuardDiagnostic | None = None
     cache_policy_build_flags: int = 0
@@ -116,6 +117,7 @@ class SourceMemoryConstraint:
             SourceMemoryDynamicIndexSource.NONE
         ),
         dynamic_byte_stride: int | None = 0,
+        allow_dynamic_stride_values: bool = False,
         dynamic_offset_unsigned_bit_count: int = 0,
         dynamic_offset_diagnostic: GuardDiagnostic | None = None,
         cache_policy_build_flags: int = 0,
@@ -138,6 +140,11 @@ class SourceMemoryConstraint:
         object.__setattr__(self, "dynamic_term_count", dynamic_term_count)
         object.__setattr__(self, "dynamic_index_source", dynamic_index_source)
         object.__setattr__(self, "dynamic_byte_stride", dynamic_byte_stride)
+        object.__setattr__(
+            self,
+            "allow_dynamic_stride_values",
+            allow_dynamic_stride_values,
+        )
         object.__setattr__(
             self,
             "dynamic_offset_unsigned_bit_count",
@@ -207,6 +214,13 @@ class SourceMemoryConstraint:
             raise ValueError("dynamic source memory needs an index source")
         elif self.dynamic_byte_stride == 0:
             raise ValueError("dynamic source memory stride must be non-zero")
+        if self.allow_dynamic_stride_values and (
+            dynamic_term_count is None or dynamic_term_count == 0
+        ):
+            raise ValueError(
+                "dynamic source memory stride values require a fixed nonzero "
+                "dynamic term count"
+            )
         if self.dynamic_byte_stride is not None and not (
             _I64_MIN <= self.dynamic_byte_stride <= _I64_MAX
         ):

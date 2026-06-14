@@ -353,6 +353,9 @@ typedef uint16_t loom_low_lower_source_memory_flags_t;
 // Accept any byte stride for selected dynamic source-memory terms.
 #define LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY \
   ((uint16_t)1u << 0)
+// Accept selected dynamic source-memory terms with dynamic stride values.
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_STRIDE_VALUES \
+  ((uint16_t)1u << 1)
 
 typedef struct loom_low_lower_source_memory_t {
   // Bitfield of source-memory row option bits.

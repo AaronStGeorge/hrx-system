@@ -559,6 +559,7 @@ def _source_memory_constraint(
     dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
+    allow_dynamic_stride_values: bool = False,
 ) -> SourceMemoryConstraint:
     if dynamic_term_count == 0:
         dynamic_index_source = SourceMemoryDynamicIndexSource.NONE
@@ -586,6 +587,7 @@ def _source_memory_constraint(
         dynamic_term_count=dynamic_term_count,
         dynamic_index_source=dynamic_index_source,
         dynamic_byte_stride=dynamic_byte_stride,
+        allow_dynamic_stride_values=allow_dynamic_stride_values,
         diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
     )
 
@@ -615,9 +617,16 @@ def _view_load_rule(
     dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
+    materialize_byte_offset: bool | None = None,
+    allow_dynamic_stride_values: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
-    materialize_byte_offset = dynamic_term_count > 1
+    if materialize_byte_offset is None:
+        materialize_byte_offset = dynamic_term_count > 1 or (
+            dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+        )
+    if allow_dynamic_stride_values and not materialize_byte_offset:
+        raise ValueError("dynamic stride values require byte-offset materialization")
     operands = {"ptr": ValueRef.operand(view_field)}
     if dynamic_term_count != 0:
         if materialize_byte_offset:
@@ -647,6 +656,7 @@ def _view_load_rule(
                     dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
+                    allow_dynamic_stride_values=allow_dynamic_stride_values,
                 ),
                 source_memory_byte_offset_materializer=(
                     _source_memory_byte_offset_materializer()
@@ -668,9 +678,16 @@ def _view_store_rule(
     dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
+    materialize_byte_offset: bool | None = None,
+    allow_dynamic_stride_values: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
-    materialize_byte_offset = dynamic_term_count > 1
+    if materialize_byte_offset is None:
+        materialize_byte_offset = dynamic_term_count > 1 or (
+            dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+        )
+    if allow_dynamic_stride_values and not materialize_byte_offset:
+        raise ValueError("dynamic stride values require byte-offset materialization")
     operands = {
         "value": ValueRef.operand("value"),
         "ptr": ValueRef.operand(view_field),
@@ -702,6 +719,7 @@ def _view_store_rule(
                     dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
+                    allow_dynamic_stride_values=allow_dynamic_stride_values,
                 ),
                 source_memory_byte_offset_materializer=(
                     _source_memory_byte_offset_materializer()
@@ -711,6 +729,96 @@ def _view_store_rule(
             ),
         ),
     )
+
+
+def _view_load_rule_variants(
+    source_op: Op,
+    view_field: str,
+    result_type: TypePattern,
+    descriptor_key: str,
+    *,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
+    element_byte_count: int,
+    vector_lane_count: int = 1,
+) -> tuple[DescriptorRule, ...]:
+    materializes_byte_offset = dynamic_term_count > 1 or (
+        dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+    )
+    rules = [
+        _view_load_rule(
+            source_op,
+            view_field,
+            result_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            vector_lane_count=vector_lane_count,
+            allow_dynamic_stride_values=materializes_byte_offset,
+        )
+    ]
+    if dynamic_term_count == 1 and not materializes_byte_offset:
+        rules.append(
+            _view_load_rule(
+                source_op,
+                view_field,
+                result_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                vector_lane_count=vector_lane_count,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+            )
+        )
+    return tuple(rules)
+
+
+def _view_store_rule_variants(
+    source_op: Op,
+    view_field: str,
+    value_type: TypePattern,
+    descriptor_key: str,
+    *,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
+    element_byte_count: int,
+    vector_lane_count: int = 1,
+) -> tuple[DescriptorRule, ...]:
+    materializes_byte_offset = dynamic_term_count > 1 or (
+        dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+    )
+    rules = [
+        _view_store_rule(
+            source_op,
+            view_field,
+            value_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            vector_lane_count=vector_lane_count,
+            allow_dynamic_stride_values=materializes_byte_offset,
+        )
+    ]
+    if dynamic_term_count == 1 and not materializes_byte_offset:
+        rules.append(
+            _view_store_rule(
+                source_op,
+                view_field,
+                value_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                vector_lane_count=vector_lane_count,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+            )
+        )
+    return tuple(rules)
 
 
 def _memory_descriptor_key(operation: str, suffix: str, *, dynamic: bool) -> str:
@@ -1671,10 +1779,11 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
             (1, 0),
             (1, 1),
             (1, 2),
+            (2, 1),
             (2, 2),
         ):
-            rules.append(
-                _view_load_rule(
+            rules.extend(
+                _view_load_rule_variants(
                     view.view_load,
                     "view",
                     Scalar(element),
@@ -1686,8 +1795,8 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     element_byte_count=element_byte_count,
                 )
             )
-            rules.append(
-                _view_store_rule(
+            rules.extend(
+                _view_store_rule_variants(
                     view.view_store,
                     "view",
                     Scalar(element),
@@ -1702,8 +1811,8 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
             for lane_count in _VECTOR_LANE_COUNTS:
                 vector_type = _vector_type(element, lane_count)
                 vector_suffix = _vector_suffix(element, lane_count)
-                rules.append(
-                    _view_load_rule(
+                rules.extend(
+                    _view_load_rule_variants(
                         vector.vector_load,
                         "view",
                         vector_type,
@@ -1716,8 +1825,8 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                         vector_lane_count=lane_count,
                     )
                 )
-                rules.append(
-                    _view_store_rule(
+                rules.extend(
+                    _view_store_rule_variants(
                         vector.vector_store,
                         "view",
                         vector_type,
@@ -1731,8 +1840,8 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     )
                 )
             vector_type = _vector_type(element, 1)
-            rules.append(
-                _view_load_rule(
+            rules.extend(
+                _view_load_rule_variants(
                     vector.vector_load,
                     "view",
                     vector_type,
@@ -1744,8 +1853,8 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     element_byte_count=element_byte_count,
                 )
             )
-            rules.append(
-                _view_store_rule(
+            rules.extend(
+                _view_store_rule_variants(
                     vector.vector_store,
                     "view",
                     vector_type,

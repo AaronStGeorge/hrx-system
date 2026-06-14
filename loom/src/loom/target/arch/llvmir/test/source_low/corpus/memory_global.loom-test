@@ -275,7 +275,6 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_zero_workgroup_sadd
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -294,6 +293,22 @@ kernel.def target(@target) @i32_dynamic_leading_dim_global_saddr() {
   %zero = scalar.constant 0 : i32
   view.store %zero, %output_view[%workgroup, %column, 0] : i32, view<2x[%columns]x8xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @i32_dynamic_leading_dim_global_saddr(%columns_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %workgroup = kernel.workgroup_id.x
+  %column = kernel.workitem_id.x
+  %columns = sext.i32.i64 %columns_i32
+  %zero = const.i32 0
+  %18 = mul.i64 %workgroup, %columns
+  %19 = const.i64 5
+  %20 = shl.i64 %18, %19
+  %22 = shl.i64 %column, %19
+  %23 = add.i64 %20, %22
+  store.indexed.i32 %zero, %output_view, %23, 0, 1
+  return
 }
 
 // ====
@@ -1033,7 +1048,6 @@ func.def target(@target) @bf16_strided_gather_dot2(%latent: vector<2xbf16>, %wei
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -1052,6 +1066,18 @@ kernel.def target(@target) @i32_dynamic_flat_store() {
   %loaded = view.load %input_view[%start] : view<1xi32, #dense> -> i32
   view.store %loaded, %output_view[%row, %start] : i32, view<[%row_count]x128xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_dynamic_flat_store(%row_count_i32: reg<llvmir.i32>, %row_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %row = sext.i32.i64 %row_i32
+  %loaded = load.i32 %input_view, 0
+  %21 = const.i64 9
+  %22 = shl.i64 %row, %21
+  store.indexed.i32 %loaded, %output_view, %22, 0, 1
+  return
 }
 
 // ====

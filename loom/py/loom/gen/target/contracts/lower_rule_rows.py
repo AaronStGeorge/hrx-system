@@ -82,6 +82,8 @@ def source_memory_row(
     flags: list[str] = []
     if constraint.dynamic_byte_stride is None:
         flags.append("LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY")
+    if constraint.allow_dynamic_stride_values:
+        flags.append("LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_STRIDE_VALUES")
     if flags:
         _append_field(fields, "flags", " | ".join(flags))
     _append_field(
