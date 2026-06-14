@@ -288,7 +288,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16_scalar_roundtri
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -313,4 +312,27 @@ kernel.def target(@target) @lds_f16_strided_scalar_roundtrip() {
   %roundtrip = view.load %scratch_view[%row, %col] : view<16x16xf16, %rhs_layout> -> f16
   view.store %roundtrip, %output_view[%row, %col] : f16, view<16x16xf16, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar_roundtrip() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %row = kernel.workitem_id.x
+  %col = kernel.workitem_id.y
+  %bytes = const.i64 512
+  %scratch_view = alloca.workgroup.i8 %bytes, 2
+  %30 = const.i64 16
+  %31 = mul.i64 %row, %30
+  %32 = add.i64 %31, %col
+  %loaded = load.indexed.f16 %input_view, %32, 0, 2
+  %34 = const.i64 1
+  %35 = shl.i64 %row, %34
+  %36 = const.i64 5
+  %37 = shl.i64 %col, %36
+  %38 = add.i64 %35, %37
+  store.indexed.f16 %loaded, %scratch_view, %38, 0, 1
+  %roundtrip = load.indexed.f16 %scratch_view, %38, 0, 1
+  store.indexed.f16 %roundtrip, %output_view, %32, 0, 2
+  return
 }

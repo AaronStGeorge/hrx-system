@@ -1120,8 +1120,9 @@ static bool loom_low_lower_source_memory_matches(
           source_memory->memory_space_mask, access.memory_space) ||
       access.element_byte_count != source_memory->element_byte_count ||
       access.vector_lane_count != source_memory->vector_lane_count ||
-      access.vector_lane_byte_stride !=
-          source_memory->vector_lane_byte_stride ||
+      (source_memory->vector_lane_count > 1 &&
+       access.vector_lane_byte_stride !=
+           source_memory->vector_lane_byte_stride) ||
       access.static_byte_offset < source_memory->static_byte_offset_minimum ||
       access.static_byte_offset > source_memory->static_byte_offset_maximum ||
       (source_memory->minimum_alignment != 0 &&
