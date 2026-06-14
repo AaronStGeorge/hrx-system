@@ -72,6 +72,8 @@ const loom_low_descriptor_set_t* AliasDescriptorSet() {
       /*.asm_operand_index_count=*/{},
       /*.asm_immediates=*/{},
       /*.asm_immediate_count=*/{},
+      /*.native_asm_values=*/{},
+      /*.native_asm_value_count=*/{},
       /*.operands=*/{},
       /*.operand_count=*/{},
       /*.immediates=*/{},

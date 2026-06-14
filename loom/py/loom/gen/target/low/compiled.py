@@ -23,6 +23,7 @@ from loom.target.low_descriptors import (
     Immediate,
     ImmediateEncodingSlice,
     IssueUse,
+    NativeAsmValueKind,
     Operand,
     OperandFormImmediateAction,
     OperandFormMatchKind,
@@ -93,6 +94,7 @@ class CompiledDescriptorSet:
     asm_forms: list[CompiledAsmForm]
     asm_operand_indices: list[int]
     asm_immediates: list[CompiledAsmImmediate]
+    native_asm_values: list[CompiledNativeAsmValue]
     schedule_rows: list[dict[str, int]]
     enum_domain_rows: list[dict[str, int]]
 
@@ -122,6 +124,15 @@ class CompiledAsmImmediate:
     name: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class CompiledNativeAsmValue:
+    kind: NativeAsmValueKind
+    index: int
+    bit_width: int
+    literal_label: str | None
+    literal: str | None
+
+
 @dataclass(slots=True)
 class CompiledAsmForm:
     descriptor_ordinal: int
@@ -132,9 +143,11 @@ class CompiledAsmForm:
     result_indices: tuple[int, ...]
     operand_indices: tuple[int, ...]
     immediates: tuple[CompiledAsmImmediate, ...]
+    native_assembly_values: tuple[CompiledNativeAsmValue, ...]
     result_index_start: int = 0
     operand_index_start: int = 0
     immediate_start: int = 0
+    native_assembly_value_start: int = 0
 
 
 @dataclass(frozen=True, slots=True)

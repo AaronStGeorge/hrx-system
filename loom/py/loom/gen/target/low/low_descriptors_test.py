@@ -35,6 +35,8 @@ from loom.target.low_descriptors import (
     ImmediateEncodingSlice,
     ImmediateFlag,
     ImmediateKind,
+    NativeAsmValue,
+    NativeAsmValueKind,
     OperandAddressMapKind,
     OperandFlag,
     OperandForm,
@@ -733,6 +735,76 @@ def test_generator_emits_asm_form_native_assembly_mnemonic() -> None:
     assert '"test.add.i32"' in generated.source
     assert ".native_assembly_mnemonic_string_offset = " in generated.source
     assert ".native_assembly_mnemonic_string_offset = LOOM_LOW_STRING_OFFSET_NONE" not in generated.source
+
+
+def test_generator_emits_asm_form_native_assembly_values() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                mnemonic="test.add.i32.native",
+                native_assembly_mnemonic="test.add.i32",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+                native_assembly_values=(
+                    NativeAsmValue(NativeAsmValueKind.RESULT, field_name="dst"),
+                    NativeAsmValue(NativeAsmValueKind.OPERAND, field_name="lhs"),
+                    NativeAsmValue(NativeAsmValueKind.LITERAL, literal="literal"),
+                    NativeAsmValue(NativeAsmValueKind.OPERAND, field_name="rhs"),
+                ),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert "static const loom_low_native_asm_value_t kTestLowCoreNativeAsmValues[]" in generated.source
+    assert ".native_assembly_value_count = 4," in generated.source
+    assert ".native_asm_values = kTestLowCoreNativeAsmValues," in generated.source
+    assert "LOOM_LOW_NATIVE_ASM_VALUE_KIND_RESULT" in generated.source
+    assert "LOOM_LOW_NATIVE_ASM_VALUE_KIND_LITERAL" in generated.source
+    assert '"literal"' in generated.source
+
+
+def test_generator_rejects_native_asm_form_unknown_operand_field() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                results=("dst",),
+                operands=("lhs", "rhs"),
+                native_assembly_values=(NativeAsmValue(NativeAsmValueKind.OPERAND, field_name="missing"),),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor 'test.add.i32' asm form 'test.add.i32' native operand references unknown operand field 'missing'"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_native_asm_form_unknown_immediate_field() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        asm_forms=(
+            AsmForm(
+                results=("dst",),
+                operands=("lhs", "rhs"),
+                native_assembly_values=(NativeAsmValue(NativeAsmValueKind.IMMEDIATE_I64, field_name="missing"),),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor 'test.add.i32' asm form 'test.add.i32' native immediate references unknown immediate field 'missing'"),
+    ):
+        generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_empty_asm_form_native_assembly_mnemonic() -> None:

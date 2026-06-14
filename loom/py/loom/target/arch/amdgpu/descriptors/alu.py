@@ -1512,10 +1512,17 @@ def _v_bfe_offset_width_inline_overlay(*, is_signed: bool) -> AmdgpuDescriptorOv
         ),
         asm_forms=_asm(
             mnemonic=f"v_bfe_{type_suffix}_offset_width_inline",
+            native_assembly_mnemonic=f"v_bfe_{type_suffix}",
             results=("dst",),
             operands=("value",),
             immediates=("offset", "width"),
             named_immediates=True,
+            native_assembly_values=(
+                _native_result("dst"),
+                _native_operand("value"),
+                _native_i64_immediate("offset"),
+                _native_i64_immediate("width"),
+            ),
         ),
         immediate_fields=("SRC1", "SRC2"),
         immediates=(

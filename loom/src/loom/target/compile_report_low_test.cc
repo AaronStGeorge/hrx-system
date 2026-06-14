@@ -87,6 +87,8 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
       /*.asm_operand_index_count=*/{},
       /*.asm_immediates=*/{},
       /*.asm_immediate_count=*/{},
+      /*.native_asm_values=*/{},
+      /*.native_asm_value_count=*/{},
       /*.operands=*/{},
       /*.operand_count=*/{},
       /*.immediates=*/{},

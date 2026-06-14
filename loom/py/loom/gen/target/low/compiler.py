@@ -16,6 +16,7 @@ from loom.gen.target.low.compiled import (
     CompiledAsmForm,
     CompiledAsmImmediate,
     CompiledDescriptorSet,
+    CompiledNativeAsmValue,
     CompiledOperandForm,
     CompiledOperandFormMatch,
     DescriptorAllowlist,
@@ -36,6 +37,8 @@ from loom.target.low_descriptors import (
     ImmediateEncodingSlice,
     ImmediateKind,
     IssueUse,
+    NativeAsmValue,
+    NativeAsmValueKind,
     Operand,
     OperandForm,
     OperandFormImmediateAction,
@@ -334,6 +337,22 @@ def _compile_asm_form(
             )
         )
 
+    native_assembly_values = []
+    for value_ordinal, value in enumerate(asm_form.native_assembly_values):
+        native_assembly_values.append(
+            _compile_native_asm_value(
+                string_pool,
+                descriptor,
+                mnemonic,
+                operand_indices,
+                immediate_indices,
+                packet_operand_roles,
+                scoped_label,
+                value,
+                value_ordinal,
+            )
+        )
+
     return CompiledAsmForm(
         descriptor_ordinal=descriptor_ordinal,
         mnemonic_label=mnemonic_label,
@@ -343,7 +362,115 @@ def _compile_asm_form(
         result_indices=tuple(result_indices),
         operand_indices=tuple(operand_order),
         immediates=tuple(immediate_order),
+        native_assembly_values=tuple(native_assembly_values),
     )
+
+
+def _compile_native_asm_value(
+    string_pool: CStringPool,
+    descriptor: Descriptor,
+    mnemonic: str,
+    operand_indices: dict[str, int],
+    immediate_indices: dict[str, int],
+    packet_operand_roles: set[OperandRole],
+    scoped_label: Callable[..., str],
+    value: NativeAsmValue,
+    value_ordinal: int,
+) -> CompiledNativeAsmValue:
+    kind = value.kind
+    field_name = value.field_name
+    literal = value.literal
+    bit_width = value.bit_width
+
+    def require_field_name() -> str:
+        if field_name is None or field_name == "":
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native value {value_ordinal} must name a descriptor field")
+        return field_name
+
+    def reject_literal_and_bit_width() -> None:
+        if literal is not None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native value {value_ordinal} unexpectedly specifies a literal")
+        if bit_width != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native value {value_ordinal} unexpectedly specifies a bit width")
+
+    if kind is NativeAsmValueKind.LITERAL:
+        if field_name is not None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native literal value {value_ordinal} unexpectedly names field '{field_name}'")
+        if literal is None or literal == "":
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native literal value {value_ordinal} has no spelling")
+        if len(literal.encode()) > 255:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native literal value {value_ordinal} exceeds 255 bytes")
+        if bit_width != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native literal value {value_ordinal} unexpectedly specifies a bit width")
+        return CompiledNativeAsmValue(
+            kind=kind,
+            index=0,
+            bit_width=0,
+            literal_label=string_pool.intern(
+                scoped_label("asm_native_value", str(value_ordinal)),
+                literal,
+            ),
+            literal=literal,
+        )
+
+    if kind is NativeAsmValueKind.RESULT:
+        reject_literal_and_bit_width()
+        name = require_field_name()
+        operand_index = operand_indices.get(name)
+        if operand_index is None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native result references unknown operand field '{name}'")
+        operand = descriptor.operands[operand_index]
+        if operand.role is not OperandRole.RESULT:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native result field '{name}' names a non-result operand")
+        return CompiledNativeAsmValue(
+            kind=kind,
+            index=operand_index,
+            bit_width=0,
+            literal_label=None,
+            literal=None,
+        )
+
+    if kind is NativeAsmValueKind.OPERAND:
+        reject_literal_and_bit_width()
+        name = require_field_name()
+        operand_index = operand_indices.get(name)
+        if operand_index is None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native operand references unknown operand field '{name}'")
+        operand = descriptor.operands[operand_index]
+        if operand.role not in packet_operand_roles:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native operand field '{name}' does not name an explicit packet operand")
+        return CompiledNativeAsmValue(
+            kind=kind,
+            index=operand_index,
+            bit_width=0,
+            literal_label=None,
+            literal=None,
+        )
+
+    if kind in (
+        NativeAsmValueKind.IMMEDIATE_I64,
+        NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX,
+    ):
+        if literal is not None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native immediate value {value_ordinal} unexpectedly specifies a literal")
+        name = require_field_name()
+        immediate_index = immediate_indices.get(name)
+        if immediate_index is None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native immediate references unknown immediate field '{name}'")
+        if kind is NativeAsmValueKind.IMMEDIATE_I64:
+            if bit_width != 0:
+                raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native i64 immediate '{name}' unexpectedly specifies a bit width")
+        elif bit_width <= 0 or bit_width > 32:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native unsigned-hex immediate '{name}' bit width must be in [1, 32]")
+        return CompiledNativeAsmValue(
+            kind=kind,
+            index=immediate_index,
+            bit_width=bit_width,
+            literal_label=None,
+            literal=None,
+        )
+
+    raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native value {value_ordinal} has unsupported kind {kind!r}")
 
 
 def _compile_asm_forms(
@@ -392,6 +519,7 @@ def append_asm_form_table_spans(
     asm_forms: Sequence[CompiledAsmForm],
     asm_operand_indices: list[int],
     asm_immediates: list[CompiledAsmImmediate],
+    native_asm_values: list[CompiledNativeAsmValue],
 ) -> None:
     for asm_form in asm_forms:
         asm_form.result_index_start = len(asm_operand_indices)
@@ -400,6 +528,8 @@ def append_asm_form_table_spans(
         asm_operand_indices.extend(asm_form.operand_indices)
         asm_form.immediate_start = len(asm_immediates)
         asm_immediates.extend(asm_form.immediates)
+        asm_form.native_assembly_value_start = len(native_asm_values)
+        native_asm_values.extend(asm_form.native_assembly_values)
 
 
 def compile_descriptor_set(
@@ -651,7 +781,13 @@ def compile_descriptor_set(
 
     asm_operand_indices: list[int] = []
     asm_immediates: list[CompiledAsmImmediate] = []
-    append_asm_form_table_spans(asm_forms, asm_operand_indices, asm_immediates)
+    native_asm_values: list[CompiledNativeAsmValue] = []
+    append_asm_form_table_spans(
+        asm_forms,
+        asm_operand_indices,
+        asm_immediates,
+        native_asm_values,
+    )
 
     reg_class_alts: list[tuple[int | None, tuple[RegClassAltFlag, ...]]] = []
     reg_alt_group_starts: dict[tuple[tuple[int | None, tuple[RegClassAltFlag, ...]], ...], int] = {}
@@ -849,6 +985,7 @@ def compile_descriptor_set(
         asm_forms=asm_forms,
         asm_operand_indices=asm_operand_indices,
         asm_immediates=asm_immediates,
+        native_asm_values=native_asm_values,
         schedule_rows=schedule_rows,
         enum_domain_rows=enum_domain_rows,
     )

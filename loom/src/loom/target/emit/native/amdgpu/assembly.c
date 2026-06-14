@@ -921,6 +921,60 @@ static iree_status_t loom_amdgpu_append_asm_form_values(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_append_native_asm_form_value(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_descriptor_t* descriptor,
+    const loom_low_native_asm_value_t* value) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  switch (value->kind) {
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_LITERAL: {
+      iree_string_view_t literal = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+          descriptor_set, value->literal_string_offset, &literal));
+      return iree_string_builder_append_string(context->builder, literal);
+    }
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_RESULT:
+      return loom_amdgpu_append_asm_form_value(
+          context, descriptor, value->index, /*is_result=*/true);
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND:
+      return loom_amdgpu_append_asm_form_value(
+          context, descriptor, value->index, /*is_result=*/false);
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64:
+      return loom_amdgpu_append_packet_immediate_i64(context, value->index);
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
+      return loom_amdgpu_append_packet_immediate_unsigned_hex(
+          context, value->index, value->bit_width);
+    default:
+      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                              "AMDGPU native asm value kind %u is unsupported",
+                              (unsigned)value->kind);
+  }
+}
+
+static iree_status_t loom_amdgpu_append_native_asm_form_values(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t* form, bool* in_list) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  for (uint16_t i = 0; i < form->native_assembly_value_count; ++i) {
+    const uint32_t native_value_index = form->native_assembly_value_start + i;
+    if (native_value_index >= descriptor_set->native_asm_value_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU native asm-form value row is outside the descriptor set");
+    }
+    const loom_low_native_asm_value_t* value =
+        &descriptor_set->native_asm_values[native_value_index];
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_append_asm_form_separator(context, in_list));
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_append_native_asm_form_value(context, descriptor, value));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_append_asm_form_immediates(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_descriptor_t* descriptor, const loom_low_asm_form_t* form,
@@ -975,6 +1029,9 @@ static iree_status_t loom_amdgpu_append_canonical_asm_form_packet(
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_string(context->builder, mnemonic));
   bool in_list = false;
+  if (form->native_assembly_value_count > 0) {
+    return loom_amdgpu_append_native_asm_form_values(context, form, &in_list);
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_asm_form_values(
       context, descriptor, form->result_operand_index_start,
       form->result_operand_index_count, /*is_result=*/true, &in_list));
@@ -2596,54 +2653,6 @@ static iree_status_t loom_amdgpu_source0_immediate_asm_form(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_asm_form_immediate_name_equals(
-    const loom_native_assembly_packet_context_t* context,
-    const loom_low_asm_form_t* form, uint16_t form_immediate_index,
-    iree_string_view_t expected_name, bool* out_equal) {
-  *out_equal = false;
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
-  if (form_immediate_index >= form->immediate_count) {
-    return iree_ok_status();
-  }
-  const uint32_t asm_immediate_index =
-      form->immediate_start + form_immediate_index;
-  if (asm_immediate_index >= descriptor_set->asm_immediate_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU asm-form immediate row is outside the descriptor set");
-  }
-  const loom_low_asm_immediate_t* asm_immediate =
-      &descriptor_set->asm_immediates[asm_immediate_index];
-  if (asm_immediate->name_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
-    return iree_ok_status();
-  }
-  iree_string_view_t name = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-      descriptor_set, asm_immediate->name_string_offset, &name));
-  *out_equal = iree_string_view_equal(name, expected_name);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_offset_width_asm_form(
-    const loom_native_assembly_packet_context_t* context,
-    const loom_low_asm_form_t* form, iree_string_view_t canonical_mnemonic,
-    bool* out_matched) {
-  (void)canonical_mnemonic;
-  *out_matched = false;
-  if (form->immediate_count != 2) {
-    return iree_ok_status();
-  }
-  bool has_offset = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_asm_form_immediate_name_equals(
-      context, form, 0, IREE_SV("offset"), &has_offset));
-  bool has_width = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_asm_form_immediate_name_equals(
-      context, form, 1, IREE_SV("width"), &has_width));
-  *out_matched = has_offset && has_width;
-  return iree_ok_status();
-}
-
 typedef struct loom_amdgpu_source_literal_suffix_t {
   // Canonical low mnemonic suffix identifying the omitted source operand.
   const char* suffix;
@@ -2731,26 +2740,6 @@ static const loom_amdgpu_assembly_packet_shape_t kSource0ImmediatePacketShape =
         .immediate_count = 1,
 };
 
-static const loom_amdgpu_assembly_packet_form_t kOffsetWidthInlinePacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_DESCRIPTOR,
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_I64(0),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_I64(1),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_shape_t kOffsetWidthInlinePacketShape =
-    {
-        .diagnostic_name = "offset-width",
-        .result_count = 1,
-        .explicit_operand_count = 1,
-        .immediate_count = 2,
-};
-
 typedef struct loom_amdgpu_asm_form_packet_rule_t {
   // Predicate over the canonical asm form.
   loom_amdgpu_asm_form_match_fn_t match;
@@ -2778,11 +2767,6 @@ static iree_status_t loom_amdgpu_try_append_asm_form_rule_packet(
           .match = loom_amdgpu_source0_immediate_asm_form,
           .shape = &kSource0ImmediatePacketShape,
           .form = &kSource0ImmediatePacketForm,
-      },
-      {
-          .match = loom_amdgpu_offset_width_asm_form,
-          .shape = &kOffsetWidthInlinePacketShape,
-          .form = &kOffsetWidthInlinePacketForm,
       },
   };
   *out_matched = false;

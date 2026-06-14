@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 25u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 26u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -754,6 +754,32 @@ typedef struct loom_low_asm_immediate_t {
   loom_bstring_table_offset_t name_string_offset;
 } loom_low_asm_immediate_t;
 
+typedef enum loom_low_native_asm_value_kind_e {
+  // Unknown or uninitialized native assembly value kind.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_UNKNOWN = 0,
+  // Literal native assembly token.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_LITERAL = 1,
+  // Descriptor-local result operand.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_RESULT = 2,
+  // Descriptor-local packet operand.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND = 3,
+  // Descriptor-local immediate printed as signed decimal.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64 = 4,
+  // Descriptor-local immediate printed as zero-padded unsigned hex.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX = 5,
+} loom_low_native_asm_value_kind_t;
+
+typedef struct loom_low_native_asm_value_t {
+  // Value kind selecting the descriptor field or literal spelling.
+  loom_low_native_asm_value_kind_t kind;
+  // Descriptor-local operand or immediate index for indexed value kinds.
+  uint16_t index;
+  // Immediate bit width for width-sensitive native spellings.
+  uint8_t bit_width;
+  // String-table offset for literal native assembly tokens.
+  loom_bstring_table_offset_t literal_string_offset;
+} loom_low_native_asm_value_t;
+
 typedef struct loom_low_asm_form_t {
   // String-table offset for the unqualified asm mnemonic.
   loom_bstring_table_offset_t mnemonic_string_offset;
@@ -773,6 +799,10 @@ typedef struct loom_low_asm_form_t {
   uint32_t immediate_start;
   // Number of immediate spelling rows for this asm form.
   uint16_t immediate_count;
+  // First native assembly value row for this asm form.
+  uint32_t native_assembly_value_start;
+  // Number of native assembly value rows for this asm form.
+  uint16_t native_assembly_value_count;
 } loom_low_asm_form_t;
 
 typedef struct loom_low_descriptor_set_t {
@@ -815,6 +845,10 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_asm_immediate_t* asm_immediates;
   // Number of immediate spelling rows owned by this set.
   uint32_t asm_immediate_count;
+  // Packed native assembly value rows referenced by asm forms.
+  const loom_low_native_asm_value_t* native_asm_values;
+  // Number of native assembly value rows owned by this set.
+  uint32_t native_asm_value_count;
   // Dense operand/result rows referenced by descriptors.
   const loom_low_operand_t* operands;
   // Number of operand/result rows owned by this set.

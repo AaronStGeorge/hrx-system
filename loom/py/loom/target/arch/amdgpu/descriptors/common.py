@@ -89,6 +89,8 @@ from loom.target.low_descriptors import (
     LatencyKind,
     MemorySpace,
     ModelQuality,
+    NativeAsmValue,
+    NativeAsmValueKind,
     Operand,
     OperandAddressMapKind,
     OperandFlag,
@@ -777,6 +779,7 @@ def _asm(
     operands: tuple[str, ...] = (),
     immediates: tuple[str, ...] = (),
     named_immediates: bool = False,
+    native_assembly_values: tuple[NativeAsmValue, ...] = (),
 ) -> tuple[AsmForm, ...]:
     return (
         AsmForm(
@@ -788,8 +791,21 @@ def _asm(
                 AsmImmediate(field_name, name=field_name if named_immediates else None)
                 for field_name in immediates
             ),
+            native_assembly_values=native_assembly_values,
         ),
     )
+
+
+def _native_result(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.RESULT, field_name=field_name)
+
+
+def _native_operand(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.OPERAND, field_name=field_name)
+
+
+def _native_i64_immediate(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.IMMEDIATE_I64, field_name=field_name)
 
 
 def _global_vaddr_asm(
@@ -2437,6 +2453,8 @@ __all__ = (
     "LatencyKind",
     "MemorySpace",
     "ModelQuality",
+    "NativeAsmValue",
+    "NativeAsmValueKind",
     "Operand",
     "OperandAddressMapKind",
     "OperandFlag",
@@ -2717,6 +2735,9 @@ __all__ = (
     "_matrix_hazards",
     "_memory_asm_immediate_names",
     "_mubuf_vaddr_operand",
+    "_native_i64_immediate",
+    "_native_operand",
+    "_native_result",
     "_named_offset_immediate",
     "_offset_immediate",
     "_predefined",
