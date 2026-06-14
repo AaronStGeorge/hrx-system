@@ -112,6 +112,9 @@ loom_cc_test(
     "runtime-resource=vulkan-device"
     "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
+  SANITIZER_SUPPRESSIONS
+    lsan
+    vulkan
 )
 endif()
 

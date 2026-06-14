@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//build_tools/sanitizer:suppressions.bzl", "vulkan_suppressions")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
@@ -86,6 +87,7 @@ loom_cc_test(
 loom_cc_test(
     name = "iree_hal_execution_test",
     srcs = ["iree_hal_execution_test.cc"],
+    sanitizer_suppressions = vulkan_suppressions,
     tags = [
         "iree-run-requirement=runtime.resource.vulkan_device",
         "runtime-resource=vulkan-device",
