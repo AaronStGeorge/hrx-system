@@ -254,6 +254,24 @@ typedef struct hrx_semaphore_list_t {
 
 typedef uint64_t hrx_queue_affinity_t;
 
+// Borrowed string storage valid only for the duration documented by the
+// containing API.
+typedef struct hrx_string_view_t {
+  // Borrowed string data; not necessarily NUL terminated.
+  const char* data;
+  // String length in bytes.
+  size_t size;
+} hrx_string_view_t;
+
+// Borrowed byte storage valid only for the duration documented by the
+// containing API.
+typedef struct hrx_const_byte_span_t {
+  // Borrowed byte data, or NULL when |data_length| is zero.
+  const void* data;
+  // Byte length of |data|.
+  size_t data_length;
+} hrx_const_byte_span_t;
+
 // Buffer parameters for allocator operations.
 typedef struct hrx_buffer_params_t {
   hrx_memory_type_t type;
@@ -274,6 +292,156 @@ typedef struct hrx_executable_export_info_t {
   uint32_t parameter_count;
   uint32_t workgroup_size[3];
 } hrx_executable_export_info_t;
+
+//===----------------------------------------------------------------------===//
+// Device events
+//===----------------------------------------------------------------------===//
+
+#define HRX_DEVICE_EVENT_ABI_VERSION_0 0u
+#define HRX_DEVICE_ASAN_REPORT_ABI_VERSION_0 0u
+
+typedef uint32_t hrx_device_event_type_t;
+enum hrx_device_event_type_bits_t {
+  HRX_DEVICE_EVENT_TYPE_NONE = 0u,
+  HRX_DEVICE_EVENT_TYPE_DRIVER_FAILURE = 1u,
+  HRX_DEVICE_EVENT_TYPE_ASAN_REPORT = 2u,
+  HRX_DEVICE_EVENT_TYPE_UBSAN_REPORT = 3u,
+  HRX_DEVICE_EVENT_TYPE_PRINTF = 4u,
+  HRX_DEVICE_EVENT_TYPE_HOST_CALL = 5u,
+  HRX_DEVICE_EVENT_TYPE_USER = 0x8000u,
+};
+
+typedef uint32_t hrx_device_event_severity_t;
+enum hrx_device_event_severity_bits_t {
+  HRX_DEVICE_EVENT_SEVERITY_TRACE = 0u,
+  HRX_DEVICE_EVENT_SEVERITY_INFO = 1u,
+  HRX_DEVICE_EVENT_SEVERITY_WARNING = 2u,
+  HRX_DEVICE_EVENT_SEVERITY_ERROR = 3u,
+  HRX_DEVICE_EVENT_SEVERITY_FATAL = 4u,
+};
+
+typedef uint64_t hrx_device_event_flags_t;
+enum hrx_device_event_flag_bits_t {
+  HRX_DEVICE_EVENT_FLAG_NONE = 0u,
+};
+
+// Source attribution for a device event.
+typedef struct hrx_device_event_source_t {
+  // Stable device identifier string when available.
+  hrx_string_view_t device_id;
+  // Backend name such as "amdgpu", "hip", "vulkan", "metal", or "webgpu".
+  hrx_string_view_t driver_id;
+  // Physical device ordinal, or UINT32_MAX when not applicable.
+  uint32_t physical_device_ordinal;
+  // Queue ordinal, or UINT32_MAX when not applicable.
+  uint32_t queue_ordinal;
+  // Backend-assigned executable identifier, or 0 when not applicable.
+  uint64_t executable_id;
+  // Executable export ordinal, or UINT32_MAX when not applicable.
+  uint32_t export_ordinal;
+} hrx_device_event_source_t;
+
+// Device event envelope passed to hrx_device_event_sink_t callbacks.
+//
+// Events and referenced payload storage are borrowed and valid only for the
+// duration of the sink callback. Sinks retaining event data must copy it.
+typedef struct hrx_device_event_t {
+  // Size of this record in bytes.
+  uint32_t record_length;
+  // ABI version of this event envelope.
+  uint32_t abi_version;
+  // Concrete event family.
+  hrx_device_event_type_t type;
+  // Producer-assigned severity.
+  hrx_device_event_severity_t severity;
+  // Event-family flags.
+  hrx_device_event_flags_t flags;
+  // Monotonic producer sequence when available, or 0.
+  uint64_t sequence;
+  // Host timestamp in nanoseconds when available, or 0.
+  uint64_t host_time_ns;
+  // Source attribution for the event producer.
+  hrx_device_event_source_t source;
+  // Event-family payload selected by |type|.
+  hrx_const_byte_span_t payload;
+  // Optional backend-native payload for advanced tools.
+  hrx_const_byte_span_t implementation_payload;
+} hrx_device_event_t;
+
+typedef uint32_t hrx_device_asan_access_kind_t;
+enum hrx_device_asan_access_kind_bits_t {
+  HRX_DEVICE_ASAN_ACCESS_KIND_UNKNOWN = 0u,
+  HRX_DEVICE_ASAN_ACCESS_KIND_READ = 1u,
+  HRX_DEVICE_ASAN_ACCESS_KIND_WRITE = 2u,
+  HRX_DEVICE_ASAN_ACCESS_KIND_ATOMIC = 3u,
+};
+
+typedef uint32_t hrx_device_asan_report_flags_t;
+enum hrx_device_asan_report_flag_bits_t {
+  HRX_DEVICE_ASAN_REPORT_FLAG_NONE = 0u,
+};
+
+// Address-sanitizer report payload.
+typedef struct hrx_device_asan_report_t {
+  // Size of this record in bytes.
+  uint32_t record_length;
+  // ABI version of this report payload.
+  uint32_t abi_version;
+  // Instrumented access kind that triggered the report.
+  hrx_device_asan_access_kind_t access_kind;
+  // ASAN report flags.
+  hrx_device_asan_report_flags_t flags;
+  // Application address that failed the ASAN check.
+  uint64_t fault_address;
+  // Access size in bytes.
+  uint64_t access_length;
+  // Compiler-assigned instrumentation site identifier.
+  uint64_t site_id;
+  // Shadow address consulted by the check, or 0 when unavailable.
+  uint64_t shadow_address;
+  // Shadow value observed by the check, or 0 when unavailable.
+  uint64_t shadow_value;
+  // Workgroup id that produced the report.
+  uint32_t workgroup_id[3];
+  // Workitem id that produced the report.
+  uint32_t workitem_id[3];
+  // Device-visible dispatch packet pointer, or 0 when unavailable.
+  uint64_t source_dispatch_ptr;
+} hrx_device_asan_report_t;
+
+typedef void (*hrx_device_event_sink_fn_t)(void* user_data,
+                                           const hrx_device_event_t* event);
+
+// Value-type event sink copied into HRX devices at creation time.
+typedef struct hrx_device_event_sink_t {
+  // Callback receiving one complete event.
+  hrx_device_event_sink_fn_t fn;
+  // Opaque application-owned callback data.
+  void* user_data;
+} hrx_device_event_sink_t;
+
+static inline void hrx_device_event_sink_discard_callback(
+    void* user_data, const hrx_device_event_t* event) {
+  (void)user_data;
+  (void)event;
+}
+
+static inline hrx_device_event_sink_t hrx_device_event_sink_discard(void) {
+  hrx_device_event_sink_t sink;
+  sink.fn = hrx_device_event_sink_discard_callback;
+  sink.user_data = NULL;
+  return sink;
+}
+
+// Sets the process-wide sink used by subsequently created HRX devices.
+//
+// The sink must be set before any accelerator is initialized. Device-event
+// callbacks may run on driver-owned service, callback, or completion threads.
+// Sink implementations must not call back into the originating device or
+// submit/wait/destroy work from the callback; slow processing should copy the
+// event into application-owned storage and return.
+HRX_API hrx_status_t
+hrx_runtime_set_device_event_sink(hrx_device_event_sink_t sink);
 
 //===----------------------------------------------------------------------===//
 // GPU accelerator lifecycle
