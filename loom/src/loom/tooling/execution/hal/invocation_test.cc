@@ -8,26 +8,38 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "iree/vm/api.h"
 
 namespace loom {
 namespace {
 
-iree_vm_instance_t* hal_invocation_test_vm_instance = nullptr;
+class HalInvocationTest : public ::testing::Test {};
 
-class HalInvocationTest : public ::testing::Test {
- protected:
-  static void SetUpTestSuite() {
-    IREE_ASSERT_OK(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
-                                           iree_allocator_system(),
-                                           &hal_invocation_test_vm_instance));
-  }
+static void RetainedStorageBinding(iree_hal_buffer_t* buffer,
+                                   iree_device_size_t byte_offset,
+                                   iree_device_size_t byte_length,
+                                   iree_tooling_buffer_binding_t* binding) {
+  *binding = (iree_tooling_buffer_binding_t){
+      .kind = IREE_TOOLING_BUFFER_BINDING_KIND_STORAGE_BUFFER,
+      .buffer = buffer,
+      .byte_offset = byte_offset,
+      .byte_length = byte_length,
+  };
+  iree_hal_buffer_retain(binding->buffer);
+}
 
-  static void TearDownTestSuite() {
-    iree_vm_instance_release(hal_invocation_test_vm_instance);
-    hal_invocation_test_vm_instance = nullptr;
-  }
-};
+static void RetainedBufferViewBinding(iree_hal_buffer_view_t* buffer_view,
+                                      iree_tooling_buffer_binding_t* binding) {
+  iree_hal_buffer_t* buffer = iree_hal_buffer_view_buffer(buffer_view);
+  *binding = (iree_tooling_buffer_binding_t){
+      .kind = IREE_TOOLING_BUFFER_BINDING_KIND_BUFFER_VIEW,
+      .buffer = buffer,
+      .buffer_view = buffer_view,
+      .byte_offset = 0,
+      .byte_length = iree_hal_buffer_view_byte_length(buffer_view),
+  };
+  iree_hal_buffer_retain(binding->buffer);
+  iree_hal_buffer_view_retain(binding->buffer_view);
+}
 
 TEST_F(HalInvocationTest, RequestInitializeDefaultsToSingleWorkgroup) {
   loom_run_hal_invocation_request_t request = {};
@@ -110,10 +122,8 @@ TEST_F(HalInvocationTest,
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_artifact_t executable = {};
   iree_string_view_t bindings[] = {IREE_SV("&4xi32")};
-  const char binding_conventions[] = {'r'};
   iree_string_view_t expected_bindings[] = {IREE_SV("4xi32=0"),
                                             IREE_SV("i32=1")};
-  const char expected_binding_conventions[] = {'r', 'r'};
 
   loom_run_hal_invocation_request_t request = {};
   loom_run_hal_invocation_request_initialize(&request);
@@ -121,12 +131,10 @@ TEST_F(HalInvocationTest,
   request.artifact = &executable;
   request.bindings = (loom_run_hal_binding_specs_t){
       /*.values=*/bindings,
-      /*.conventions=*/binding_conventions,
       /*.count=*/IREE_ARRAYSIZE(bindings),
   };
   request.expected_bindings = (loom_run_hal_binding_specs_t){
       /*.values=*/expected_bindings,
-      /*.conventions=*/expected_binding_conventions,
       /*.count=*/IREE_ARRAYSIZE(expected_bindings),
   };
 
@@ -164,17 +172,11 @@ TEST_F(HalInvocationTest,
   loom_run_hal_artifact_t executable = {};
   loom_run_hal_invocation_plan_t plan = {};
   loom_run_hal_invocation_plan_initialize(&plan);
-
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 2, iree_allocator_system(),
-                                     &plan.bindings));
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 2, iree_allocator_system(),
-                                     &plan.expected_bindings));
-  iree_vm_value_t value = iree_vm_value_make_i32(0);
-  IREE_ASSERT_OK(iree_vm_list_push_value(plan.bindings, &value));
-  IREE_ASSERT_OK(iree_vm_list_push_value(plan.expected_bindings, &value));
-  IREE_ASSERT_OK(iree_vm_list_push_value(plan.expected_bindings, &value));
+  IREE_ASSERT_OK(loom_run_hal_binding_list_initialize_count(
+      1, iree_allocator_system(), &plan.bindings));
+  IREE_ASSERT_OK(loom_run_hal_binding_list_initialize_count(
+      2, iree_allocator_system(), &plan.expected_bindings));
+  plan.has_expected_bindings = true;
 
   loom_run_hal_invocation_result_t result = {};
   loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);
@@ -206,11 +208,6 @@ TEST_F(HalInvocationTest, DispatchPlanRejectsMissingPreparedExecutable) {
   loom_run_hal_invocation_plan_t plan = {};
   loom_run_hal_invocation_plan_initialize(&plan);
 
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
-                                     &plan.bindings));
-
   loom_run_hal_iteration_t iteration = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
@@ -225,47 +222,103 @@ TEST_F(HalInvocationTest, PreparePlanFromListsRetainsBindings) {
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
 
-  iree_vm_list_t* bindings = nullptr;
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(
-      iree_vm_list_create(value_type, 1, iree_allocator_system(), &bindings));
-  iree_vm_value_t value = iree_vm_value_make_i32(0);
-  IREE_ASSERT_OK(iree_vm_list_push_value(bindings, &value));
+  iree_hal_allocator_t* allocator = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_create_heap(
+      IREE_SV("hal_invocation_test"), iree_allocator_system(),
+      iree_allocator_system(), &allocator));
+  iree_hal_buffer_params_t buffer_params = {};
+  buffer_params.type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL;
+  buffer_params.access = IREE_HAL_MEMORY_ACCESS_ALL;
+  buffer_params.usage =
+      IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER;
+  iree_hal_buffer_t* buffer = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_allocate_buffer(
+      allocator, buffer_params, /*allocation_size=*/4, &buffer));
+
+  loom_run_hal_binding_list_t bindings = {};
+  IREE_ASSERT_OK(loom_run_hal_binding_list_initialize_count(
+      1, iree_allocator_system(), &bindings));
+  RetainedStorageBinding(buffer, /*byte_offset=*/0, /*byte_length=*/4,
+                         &bindings.values[0]);
 
   loom_run_hal_invocation_plan_t plan = {};
   IREE_ASSERT_OK(loom_run_hal_invocation_plan_prepare_from_lists(
-      &options, bindings, /*expected_bindings=*/nullptr,
-      /*max_output_element_count=*/0, &plan));
-  iree_vm_list_release(bindings);
+      &options, &bindings, /*expected_bindings=*/nullptr,
+      /*max_output_element_count=*/0, iree_allocator_system(), &plan));
+  loom_run_hal_binding_list_deinitialize(&bindings);
+  iree_hal_buffer_release(buffer);
 
-  EXPECT_EQ(iree_vm_list_size(plan.bindings), 1u);
+  EXPECT_EQ(plan.bindings.count, 1u);
+  EXPECT_NE(plan.bindings.values[0].buffer, nullptr);
 
   loom_run_hal_invocation_plan_deinitialize(&plan);
+  iree_hal_allocator_release(allocator);
+}
+
+TEST_F(HalInvocationTest, BindingListTotalByteLengthUsesLogicalBufferExtents) {
+  iree_hal_allocator_t* allocator = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_create_heap(
+      IREE_SV("hal_invocation_test"), iree_allocator_system(),
+      iree_allocator_system(), &allocator));
+
+  iree_hal_buffer_params_t buffer_params = {};
+  buffer_params.type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL;
+  buffer_params.access = IREE_HAL_MEMORY_ACCESS_ALL;
+  buffer_params.usage =
+      IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE | IREE_HAL_BUFFER_USAGE_TRANSFER;
+  iree_hal_buffer_t* allocation = nullptr;
+  IREE_ASSERT_OK(iree_hal_allocator_allocate_buffer(
+      allocator, buffer_params, /*allocation_size=*/256, &allocation));
+
+  iree_hal_buffer_t* subspan = nullptr;
+  IREE_ASSERT_OK(iree_hal_buffer_subspan(allocation, /*byte_offset=*/64,
+                                         /*byte_length=*/32,
+                                         iree_allocator_system(), &subspan));
+
+  const iree_hal_dim_t shape[] = {3, 5};
+  iree_hal_buffer_view_t* buffer_view = nullptr;
+  IREE_ASSERT_OK(iree_hal_buffer_view_create(
+      allocation, IREE_ARRAYSIZE(shape), shape, IREE_HAL_ELEMENT_TYPE_SINT_32,
+      IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR, iree_allocator_system(),
+      &buffer_view));
+
+  loom_run_hal_binding_list_t bindings = {};
+  IREE_ASSERT_OK(loom_run_hal_binding_list_initialize_count(
+      2, iree_allocator_system(), &bindings));
+  RetainedStorageBinding(subspan, /*byte_offset=*/0, /*byte_length=*/32,
+                         &bindings.values[0]);
+  RetainedBufferViewBinding(buffer_view, &bindings.values[1]);
+
+  uint64_t total_byte_length = 0;
+  IREE_ASSERT_OK(loom_run_hal_binding_list_total_byte_length(
+      &bindings, &total_byte_length));
+  EXPECT_EQ(total_byte_length, 32u + 3u * 5u * sizeof(int32_t));
+
+  loom_run_hal_binding_list_deinitialize(&bindings);
+  iree_hal_buffer_view_release(buffer_view);
+  iree_hal_buffer_release(subspan);
+  iree_hal_buffer_release(allocation);
+  iree_hal_allocator_release(allocator);
 }
 
 TEST_F(HalInvocationTest, PreparePlanFromListsRejectsTooManyBindings) {
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
 
-  iree_vm_list_t* bindings = nullptr;
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(
-      iree_vm_list_create(value_type, 0, iree_allocator_system(), &bindings));
-  iree_vm_value_t value = iree_vm_value_make_i32(0);
-  for (iree_host_size_t i = 0; i <= LOOM_RUN_HAL_MAX_BINDING_COUNT; ++i) {
-    IREE_ASSERT_OK(iree_vm_list_push_value(bindings, &value));
-  }
+  loom_run_hal_binding_list_t bindings = {};
+  IREE_ASSERT_OK(loom_run_hal_binding_list_initialize_count(
+      LOOM_RUN_HAL_MAX_BINDING_COUNT + 1, iree_allocator_system(), &bindings));
 
   loom_run_hal_invocation_plan_t plan = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                        loom_run_hal_invocation_plan_prepare_from_lists(
-                            &options, bindings, /*expected_bindings=*/nullptr,
-                            /*max_output_element_count=*/0, &plan));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_run_hal_invocation_plan_prepare_from_lists(
+          &options, &bindings,
+          /*expected_bindings=*/nullptr,
+          /*max_output_element_count=*/0, iree_allocator_system(), &plan));
 
   loom_run_hal_invocation_plan_deinitialize(&plan);
-  iree_vm_list_release(bindings);
+  loom_run_hal_binding_list_deinitialize(&bindings);
 }
 
 TEST_F(HalInvocationTest, DispatchPlanRejectsTooManyConstantsBeforeDeviceUse) {
@@ -274,11 +327,6 @@ TEST_F(HalInvocationTest, DispatchPlanRejectsTooManyConstantsBeforeDeviceUse) {
   loom_run_hal_invocation_plan_t plan = {};
   loom_run_hal_invocation_plan_initialize(&plan);
   plan.options.constant_count = LOOM_RUN_HAL_MAX_CONSTANT_COUNT + 1;
-
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
-                                     &plan.bindings));
 
   loom_run_hal_iteration_t iteration = {};
   IREE_EXPECT_STATUS_IS(
@@ -299,11 +347,6 @@ TEST_F(HalInvocationTest,
   };
   loom_run_hal_invocation_plan_t plan = {};
   loom_run_hal_invocation_plan_initialize(&plan);
-
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
-                                     &plan.bindings));
 
   loom_run_hal_dispatch_batch_options_t options = {};
   loom_run_hal_dispatch_batch_options_initialize(&options);
@@ -362,11 +405,6 @@ TEST_F(HalInvocationTest,
   loom_run_hal_invocation_plan_initialize(&plan);
   plan.options.workgroup_count[0] = 5;
 
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
-                                     &plan.bindings));
-
   loom_run_hal_iteration_t iteration = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_OUT_OF_RANGE,
@@ -382,11 +420,6 @@ TEST_F(HalInvocationTest, CollectResultsRejectsMissingIterationBindings) {
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_invocation_plan_t plan = {};
   loom_run_hal_invocation_plan_initialize(&plan);
-
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
-                                     &plan.bindings));
 
   loom_run_hal_iteration_t iteration = {};
   loom_run_hal_invocation_result_t result = {};
@@ -407,15 +440,10 @@ TEST_F(HalInvocationTest, CollectResultsRejectsIterationPlanBindingMismatch) {
   loom_run_hal_invocation_plan_initialize(&plan);
   loom_run_hal_iteration_t iteration = {};
   loom_run_hal_iteration_initialize(&iteration);
-
-  const iree_vm_type_def_t value_type =
-      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 1, iree_allocator_system(),
-                                     &plan.bindings));
-  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
-                                     &iteration.bindings));
-  iree_vm_value_t value = iree_vm_value_make_i32(0);
-  IREE_ASSERT_OK(iree_vm_list_push_value(plan.bindings, &value));
+  IREE_ASSERT_OK(loom_run_hal_binding_list_initialize_count(
+      1, iree_allocator_system(), &plan.bindings));
+  loom_run_hal_binding_list_initialize(&iteration.bindings);
+  iteration.has_bindings = true;
 
   loom_run_hal_invocation_result_t result = {};
   loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);

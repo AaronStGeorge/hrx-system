@@ -425,6 +425,7 @@ loom_cc_test(
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::lower
     loom::target::arch::amdgpu::ops
+    loom::target::arch::amdgpu::provider
     loom::target::arch::amdgpu::records::target_records
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers

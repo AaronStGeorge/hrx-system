@@ -11,7 +11,6 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
-#include "iree/vm/api.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,8 +18,6 @@ extern "C" {
 
 // Shared HAL runtime state created by the execution layer.
 typedef struct loom_run_hal_runtime_t {
-  // VM instance retaining HAL ref-type registrations for function I/O helpers.
-  iree_vm_instance_t* instance;
   // Selected HAL device used for executable preparation and dispatch.
   iree_hal_device_t* device;
   // Topology group assigning frontier state to |device|.

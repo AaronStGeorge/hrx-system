@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "iree/vm/api.h"
 #include "loom/tooling/execution/hal/benchmark.h"
 #include "loom/tooling/execution/hal/invocation.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
@@ -22,8 +21,8 @@ typedef struct iree_benchmark_loom_hal_input_ring_t {
   iree_allocator_t host_allocator;
   // Ring-owned invocation plans materialized from check ops.
   loom_run_hal_invocation_plan_t* plans;
-  // Borrowed binding-list pointers into |plans| for HAL benchmark setup.
-  iree_vm_list_t** binding_lists;
+  // Borrowed binding lists into |plans| for HAL benchmark setup.
+  loom_run_hal_binding_list_t* binding_lists;
   // Number of entries in |plans| and |binding_lists|.
   iree_host_size_t plan_count;
   // Data/cache summary derived while materializing the ring.
@@ -87,7 +86,7 @@ static iree_status_t iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
     iree_host_size_t sample_ordinal, iree_allocator_t allocator,
     loom_run_hal_invocation_plan_t* out_plan) {
   loom_run_hal_invocation_options_t invocation_options = {0};
-  iree_vm_list_t* bindings = NULL;
+  loom_run_hal_binding_list_t bindings = {0};
   iree_status_t status =
       loom_run_hal_testbench_create_invocation_inputs_for_sample(
           module_plan->module, materializer_options, case_plan,
@@ -96,10 +95,10 @@ static iree_status_t iree_benchmark_loom_prepare_hal_invocation_plan_for_sample(
           &invocation_options, &bindings);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_plan_prepare_from_lists(
-        &invocation_options, bindings, /*expected_bindings=*/NULL,
-        /*max_output_element_count=*/0, out_plan);
+        &invocation_options, &bindings, /*expected_bindings=*/NULL,
+        /*max_output_element_count=*/0, allocator, out_plan);
   }
-  iree_vm_list_release(bindings);
+  loom_run_hal_binding_list_deinitialize(&bindings);
   return status;
 }
 
@@ -124,7 +123,7 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
   uint64_t first_binding_set_bytes = 0;
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_binding_list_total_byte_length(
-        first_plan.bindings, &first_binding_set_bytes);
+        &first_plan.bindings, &first_binding_set_bytes);
   }
 
   iree_host_size_t ring_count = 1;
@@ -151,7 +150,7 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
     out_ring->binding_lists[0] = out_ring->plans[0].bindings;
     out_ring->summary = (iree_benchmark_loom_data_cache_summary_t){
         .populated = true,
-        .binding_count = iree_vm_list_size(out_ring->plans[0].bindings),
+        .binding_count = out_ring->plans[0].bindings.count,
         .binding_ring_count = ring_count,
         .dispatches_per_batch = policy->hal_options.timing.batch_size,
         .requested_min_ring_bytes = (uint64_t)options->input_ring_min_bytes,
@@ -176,7 +175,7 @@ static iree_status_t iree_benchmark_loom_hal_input_ring_initialize(
     uint64_t binding_set_bytes = 0;
     if (iree_status_is_ok(status)) {
       status = loom_run_hal_binding_list_total_byte_length(
-          out_ring->plans[i].bindings, &binding_set_bytes);
+          &out_ring->plans[i].bindings, &binding_set_bytes);
     }
     if (iree_status_is_ok(status)) {
       if (UINT64_MAX - out_ring->summary.binding_ring_bytes <
@@ -241,7 +240,7 @@ static iree_status_t iree_benchmark_loom_hal_sequence_plans_total_byte_length(
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
     uint64_t plan_byte_length = 0;
     IREE_RETURN_IF_ERROR(loom_run_hal_binding_list_total_byte_length(
-        plans[i].bindings, &plan_byte_length));
+        &plans[i].bindings, &plan_byte_length));
     if (UINT64_MAX - *out_byte_length < plan_byte_length) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "HAL benchmark sequence binding byte count "
@@ -256,7 +255,7 @@ static iree_host_size_t iree_benchmark_loom_hal_sequence_binding_count(
     const loom_run_hal_invocation_plan_t* plans, iree_host_size_t plan_count) {
   iree_host_size_t binding_count = 0;
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
-    binding_count += iree_vm_list_size(plans[i].bindings);
+    binding_count += plans[i].bindings.count;
   }
   return binding_count;
 }
@@ -280,16 +279,16 @@ static iree_status_t iree_benchmark_loom_prepare_hal_sequence_plans_for_sample(
     const loom_run_hal_testbench_actual_provider_t* provider =
         &sequence->providers[i];
     loom_run_hal_invocation_options_t invocation_options = {0};
-    iree_vm_list_t* bindings = NULL;
+    loom_run_hal_binding_list_t bindings = {0};
     status = loom_run_hal_testbench_create_invocation_inputs_from_table(
         &table, provider->actual_invocation, &provider->invocation_options,
         allocator, &invocation_options, &bindings);
     if (iree_status_is_ok(status)) {
       status = loom_run_hal_invocation_plan_prepare_from_lists(
-          &invocation_options, bindings, /*expected_bindings=*/NULL,
-          /*max_output_element_count=*/0, &out_plans[i]);
+          &invocation_options, &bindings, /*expected_bindings=*/NULL,
+          /*max_output_element_count=*/0, allocator, &out_plans[i]);
     }
-    iree_vm_list_release(bindings);
+    loom_run_hal_binding_list_deinitialize(&bindings);
   }
   loom_testbench_value_table_deinitialize(&table);
   return status;

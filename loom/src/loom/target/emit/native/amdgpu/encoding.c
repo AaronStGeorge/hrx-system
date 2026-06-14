@@ -761,7 +761,7 @@ static iree_status_t loom_amdgpu_encode_s_mov_b32_m0_zero(
   const loom_low_descriptor_t* descriptor = state->descriptors.s_mov_b32_m0_imm;
   if (descriptor == NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU scratch packet clobbers hidden m0, but "
+                            "AMDGPU packet clobbers hidden m0, but "
                             "target has no s_mov_b32_m0_imm descriptor");
   }
   uint16_t sdst = 0;
@@ -2250,7 +2250,6 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
                             (int)state->target->key.size,
                             state->target->key.data);
   }
-
   if (state->encoding_table == NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU native encoding has no bit table for "

@@ -274,7 +274,7 @@ iree_status_t loom_run_hal_testbench_actual_sequence_invoke(
 iree_status_t loom_run_hal_testbench_invocation_inputs_from_variants(
     const iree_vm_variant_t* inputs, const loom_type_t* input_types,
     iree_host_size_t input_count, loom_run_hal_invocation_options_t* options,
-    iree_allocator_t allocator, iree_vm_list_t** out_bindings);
+    iree_allocator_t allocator, loom_run_hal_binding_list_t* out_bindings);
 
 // Extracts the selected actual invocation inputs from an already-materialized
 // case sample value table as HAL bindings/constants.
@@ -283,7 +283,7 @@ iree_status_t loom_run_hal_testbench_create_invocation_inputs_from_table(
     const loom_testbench_invocation_plan_t* invocation,
     const loom_run_hal_invocation_options_t* base_options,
     iree_allocator_t allocator, loom_run_hal_invocation_options_t* out_options,
-    iree_vm_list_t** out_bindings);
+    loom_run_hal_binding_list_t* out_bindings);
 
 // Materializes one case sample and extracts the selected actual invocation
 // inputs as HAL bindings/constants.
@@ -295,7 +295,7 @@ iree_status_t loom_run_hal_testbench_create_invocation_inputs_for_sample(
     iree_host_size_t sample_ordinal,
     const loom_run_hal_invocation_options_t* base_options,
     iree_allocator_t allocator, loom_run_hal_invocation_options_t* out_options,
-    iree_vm_list_t** out_bindings);
+    loom_run_hal_binding_list_t* out_bindings);
 
 // Prepares a reusable HAL invocation plan for one testbench sample.
 iree_status_t loom_run_hal_testbench_prepare_invocation_plan_for_sample(

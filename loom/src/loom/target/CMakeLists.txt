@@ -398,6 +398,7 @@ loom_cc_library(
   HDRS
     "pipeline_options.h"
   DEPS
+    ::low_legality
     iree::base::core_headers
     loom::sanitizer::options
   PUBLIC

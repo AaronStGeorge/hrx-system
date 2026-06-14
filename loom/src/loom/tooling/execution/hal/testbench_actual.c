@@ -866,26 +866,59 @@ static iree_status_t loom_run_hal_testbench_invocation_options_push_constant(
   return iree_ok_status();
 }
 
-static iree_status_t loom_run_hal_testbench_borrowed_input_append(
-    iree_vm_list_t* bindings, const iree_vm_variant_t* input,
-    loom_type_t input_type, loom_run_hal_invocation_options_t* options) {
-  if (iree_vm_variant_is_ref(*input)) {
-    return iree_vm_list_push_variant_retain(bindings, input);
-  }
-  if (iree_vm_variant_is_value(*input)) {
-    return loom_run_hal_testbench_invocation_options_push_constant(
-        input, input_type, options);
-  }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "HAL invocation input must be a buffer reference or "
-                          "a scalar VM value");
+static bool loom_run_hal_testbench_vm_variant_is_ref_type(
+    const iree_vm_variant_t* input, iree_string_view_t type_name) {
+  return iree_vm_variant_is_ref(*input) && input->ref.ptr != NULL &&
+         input->ref.type != IREE_VM_REF_TYPE_NULL &&
+         iree_string_view_equal(iree_vm_ref_type_name(input->ref.type),
+                                type_name);
 }
 
-static iree_status_t loom_run_hal_testbench_owned_input_append(
-    iree_vm_list_t* bindings, iree_vm_variant_t* input, loom_type_t input_type,
-    loom_run_hal_invocation_options_t* options) {
+static iree_status_t loom_run_hal_testbench_append_ref_binding(
+    const iree_vm_variant_t* input, loom_run_hal_binding_list_t* bindings) {
+  if (bindings->count >= bindings->capacity) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "HAL invocation binding count exceeds capacity "
+                            "%" PRIhsz,
+                            bindings->capacity);
+  }
+  iree_tooling_buffer_binding_t* binding = &bindings->values[bindings->count];
+  if (loom_run_hal_testbench_vm_variant_is_ref_type(input,
+                                                    IREE_SV("hal.buffer"))) {
+    iree_hal_buffer_t* buffer = (iree_hal_buffer_t*)input->ref.ptr;
+    binding->kind = IREE_TOOLING_BUFFER_BINDING_KIND_STORAGE_BUFFER;
+    binding->buffer = buffer;
+    binding->byte_offset = 0;
+    binding->byte_length = iree_hal_buffer_byte_length(buffer);
+    iree_hal_buffer_retain(binding->buffer);
+    ++bindings->count;
+    return iree_ok_status();
+  }
+  if (loom_run_hal_testbench_vm_variant_is_ref_type(
+          input, IREE_SV("hal.buffer_view"))) {
+    iree_hal_buffer_view_t* buffer_view =
+        (iree_hal_buffer_view_t*)input->ref.ptr;
+    iree_hal_buffer_t* buffer = iree_hal_buffer_view_buffer(buffer_view);
+    binding->kind = IREE_TOOLING_BUFFER_BINDING_KIND_BUFFER_VIEW;
+    binding->buffer = buffer;
+    binding->buffer_view = buffer_view;
+    binding->byte_offset = 0;
+    binding->byte_length = iree_hal_buffer_view_byte_length(buffer_view);
+    iree_hal_buffer_retain(binding->buffer);
+    iree_hal_buffer_view_retain(binding->buffer_view);
+    ++bindings->count;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "HAL invocation input reference must be hal.buffer "
+                          "or hal.buffer_view");
+}
+
+static iree_status_t loom_run_hal_testbench_input_append(
+    loom_run_hal_binding_list_t* bindings, const iree_vm_variant_t* input,
+    loom_type_t input_type, loom_run_hal_invocation_options_t* options) {
   if (iree_vm_variant_is_ref(*input)) {
-    return iree_vm_list_push_variant_move(bindings, input);
+    return loom_run_hal_testbench_append_ref_binding(input, bindings);
   }
   if (iree_vm_variant_is_value(*input)) {
     return loom_run_hal_testbench_invocation_options_push_constant(
@@ -899,26 +932,23 @@ static iree_status_t loom_run_hal_testbench_owned_input_append(
 iree_status_t loom_run_hal_testbench_invocation_inputs_from_variants(
     const iree_vm_variant_t* inputs, const loom_type_t* input_types,
     iree_host_size_t input_count, loom_run_hal_invocation_options_t* options,
-    iree_allocator_t allocator, iree_vm_list_t** out_bindings) {
+    iree_allocator_t allocator, loom_run_hal_binding_list_t* out_bindings) {
   if (input_count != 0 && (inputs == NULL || input_types == NULL)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HAL invocation input variants and types are "
                             "required when input count is non-zero");
   }
-  *out_bindings = NULL;
-  iree_vm_list_t* bindings = NULL;
-  IREE_RETURN_IF_ERROR(iree_vm_list_create(iree_vm_make_undefined_type_def(),
-                                           input_count, allocator, &bindings));
+  loom_run_hal_binding_list_initialize(out_bindings);
+  IREE_RETURN_IF_ERROR(loom_run_hal_binding_list_initialize_capacity(
+      input_count, allocator, out_bindings));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < input_count;
        ++i) {
-    status = loom_run_hal_testbench_borrowed_input_append(
-        bindings, &inputs[i], input_types[i], options);
+    status = loom_run_hal_testbench_input_append(out_bindings, &inputs[i],
+                                                 input_types[i], options);
   }
-  if (iree_status_is_ok(status)) {
-    *out_bindings = bindings;
-  } else {
-    iree_vm_list_release(bindings);
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_binding_list_deinitialize(out_bindings);
   }
   return status;
 }
@@ -954,10 +984,9 @@ iree_status_t loom_run_hal_testbench_actual_invoke(
 
   loom_run_hal_invocation_options_t invocation_options =
       provider->invocation_options;
-  iree_vm_list_t* bindings = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_vm_list_create(iree_vm_make_undefined_type_def(), input_count,
-                          provider->context->host_allocator, &bindings));
+  loom_run_hal_binding_list_t bindings = {0};
+  IREE_RETURN_IF_ERROR(loom_run_hal_binding_list_initialize_capacity(
+      input_count, provider->context->host_allocator, &bindings));
   iree_status_t status = iree_ok_status();
   for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < input_count;
        ++i) {
@@ -965,20 +994,20 @@ iree_status_t loom_run_hal_testbench_actual_invoke(
         provider->actual_invocation->input_value_ids[i];
     const loom_type_t input_type =
         loom_module_value_type(provider->test_module, input_value_id);
-    status = loom_run_hal_testbench_borrowed_input_append(
-        bindings, &inputs[i], input_type, &invocation_options);
+    status = loom_run_hal_testbench_input_append(
+        &bindings, &inputs[i], input_type, &invocation_options);
   }
   if (!iree_status_is_ok(status)) {
-    iree_vm_list_release(bindings);
+    loom_run_hal_binding_list_deinitialize(&bindings);
     return status;
   }
 
   loom_run_hal_invocation_plan_t plan = {0};
   loom_run_hal_iteration_t iteration = {0};
   status = loom_run_hal_invocation_plan_prepare_from_lists(
-      &invocation_options, bindings, /*expected_bindings=*/NULL,
-      /*max_output_element_count=*/0, &plan);
-  iree_vm_list_release(bindings);
+      &invocation_options, &bindings, /*expected_bindings=*/NULL,
+      /*max_output_element_count=*/0, provider->context->host_allocator, &plan);
+  loom_run_hal_binding_list_deinitialize(&bindings);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_dispatch_plan(
         &provider->context->runtime, &provider->prepared_candidate, &plan,
@@ -1091,13 +1120,11 @@ iree_status_t loom_run_hal_testbench_create_invocation_inputs_from_table(
     const loom_testbench_invocation_plan_t* invocation,
     const loom_run_hal_invocation_options_t* base_options,
     iree_allocator_t allocator, loom_run_hal_invocation_options_t* out_options,
-    iree_vm_list_t** out_bindings) {
-  *out_bindings = NULL;
+    loom_run_hal_binding_list_t* out_bindings) {
   *out_options = *base_options;
-  iree_vm_list_t* bindings = NULL;
-  iree_status_t status =
-      iree_vm_list_create(iree_vm_make_undefined_type_def(),
-                          invocation->input_count, allocator, &bindings);
+  loom_run_hal_binding_list_initialize(out_bindings);
+  iree_status_t status = loom_run_hal_binding_list_initialize_capacity(
+      invocation->input_count, allocator, out_bindings);
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < invocation->input_count; ++i) {
     iree_vm_variant_t variant = iree_vm_variant_empty();
@@ -1106,16 +1133,14 @@ iree_status_t loom_run_hal_testbench_create_invocation_inputs_from_table(
     if (iree_status_is_ok(status)) {
       const loom_type_t input_type =
           loom_module_value_type(table->module, invocation->input_value_ids[i]);
-      status = loom_run_hal_testbench_owned_input_append(
-          bindings, &variant, input_type, out_options);
+      status = loom_run_hal_testbench_input_append(out_bindings, &variant,
+                                                   input_type, out_options);
     }
     iree_vm_variant_reset(&variant);
   }
-  if (iree_status_is_ok(status)) {
-    *out_bindings = bindings;
-    bindings = NULL;
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_binding_list_deinitialize(out_bindings);
   }
-  iree_vm_list_release(bindings);
   return status;
 }
 
@@ -1127,7 +1152,7 @@ iree_status_t loom_run_hal_testbench_create_invocation_inputs_for_sample(
     iree_host_size_t sample_ordinal,
     const loom_run_hal_invocation_options_t* base_options,
     iree_allocator_t allocator, loom_run_hal_invocation_options_t* out_options,
-    iree_vm_list_t** out_bindings) {
+    loom_run_hal_binding_list_t* out_bindings) {
   loom_testbench_value_table_t table = {0};
   iree_status_t status = loom_testbench_value_table_initialize(
       module, case_plan, allocator, &table);
@@ -1152,7 +1177,7 @@ iree_status_t loom_run_hal_testbench_prepare_invocation_plan_for_sample(
     iree_host_size_t sample_ordinal, iree_allocator_t allocator,
     loom_run_hal_invocation_plan_t* out_plan) {
   loom_run_hal_invocation_options_t invocation_options = {0};
-  iree_vm_list_t* bindings = NULL;
+  loom_run_hal_binding_list_t bindings = {0};
   iree_status_t status =
       loom_run_hal_testbench_create_invocation_inputs_for_sample(
           module_plan->module, materializer_options, case_plan, invocation,
@@ -1160,9 +1185,9 @@ iree_status_t loom_run_hal_testbench_prepare_invocation_plan_for_sample(
           &bindings);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_plan_prepare_from_lists(
-        &invocation_options, bindings, /*expected_bindings=*/NULL,
-        /*max_output_element_count=*/0, out_plan);
+        &invocation_options, &bindings, /*expected_bindings=*/NULL,
+        /*max_output_element_count=*/0, allocator, out_plan);
   }
-  iree_vm_list_release(bindings);
+  loom_run_hal_binding_list_deinitialize(&bindings);
   return status;
 }

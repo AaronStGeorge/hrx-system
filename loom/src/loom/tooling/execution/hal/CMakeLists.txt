@@ -42,9 +42,7 @@ loom_cc_library(
     iree::base
     iree::base::threading
     iree::hal
-    iree::tooling::context_util
     iree::tooling::device_util
-    iree::vm
   PUBLIC
 )
 
@@ -78,11 +76,7 @@ loom_cc_library(
     ::runtime
     iree::base
     iree::hal
-    iree::modules::hal::types
-    iree::tooling::comparison
-    iree::tooling::function_io
-    iree::tooling::function_util
-    iree::vm
+    iree::tooling::value_io
     loom::target::launch
     loom::target::types
   PUBLIC
@@ -201,7 +195,6 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
-    iree::vm
     loom::target::types
 )
 

@@ -364,6 +364,7 @@ loom_cc_library(
     name = "pipeline_options",
     hdrs = ["pipeline_options.h"],
     deps = [
+        ":low_legality",
         "//loom/src/loom/sanitizer:options",
         "//runtime/src/iree/base:core_headers",
     ],

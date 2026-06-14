@@ -34,6 +34,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _SCHEDULE_SALU,
     _SCHEDULE_SMEM_STORE,
     _SCHEDULE_VALU,
+    _SCHEDULE_VMEM_LOAD,
     _SCHEDULE_VMEM_LOAD_LDS,
     _SCHEDULE_WAIT_ALU,
     _SOURCE_INLINE_F32_ENCODING_ID,
@@ -68,6 +69,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _gfx950_core_overlays,
     _gfx1250_core_overlays,
     _record_amdgpu_atomic_candidate,
+    _predefined,
     _validate_address_immediate_units,
     _with_execution_mask_state_read,
     _with_gfx125x_vgpr_msb_address_state,
@@ -812,6 +814,53 @@ def test_feedback_atomic64_descriptors_do_not_expand_source_atomic_candidates() 
     assert "amdgpu.global_atomic_add_u64_saddr" not in keys
     assert "amdgpu.global_atomic_add_u64_rtn_saddr" not in keys
     assert "amdgpu.global_atomic_cmpswap_b64_rtn_saddr" not in keys
+
+
+def test_flat_u8_load_descriptor_covers_execution_families() -> None:
+    for overlays, mnemonic, uses_flat_scratch, uses_m0, expected_saddr_fields in (
+        (_gfx940_core_overlays(), "flat_load_ubyte", True, True, ()),
+        (_gfx950_core_overlays(), "flat_load_ubyte", True, True, ()),
+        (
+            _gfx11_core_overlays(),
+            "flat_load_u8",
+            True,
+            False,
+            (("SADDR", _predefined("NULL", "OPR_SREG")),),
+        ),
+        (_gfx12_core_overlays(), "flat_load_u8", False, False, ()),
+        (_gfx1250_core_overlays(), "flat_load_u8", False, False, ()),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.flat_load_u8"]
+        _assert_memory_width_overlay(
+            descriptor,
+            width_bits=8,
+            semantic_tag="memory.generic.load.u8.zero_extend",
+            mnemonic=mnemonic,
+            operand_units=1,
+            payload_field_name="dst",
+            effect_kind=EffectKind.READ,
+            memory_space=MemorySpace.GENERIC,
+            implicit_data_format="FMT_NUM_U8",
+            implicit_ignore_reason="modeled-by-generic-read-effect",
+        )
+        assert descriptor.schedule_class == _SCHEDULE_VMEM_LOAD
+        assert descriptor.asm_forms == ()
+        assert (
+            any(
+                operand.operand_type == "OPR_FLAT_SCRATCH"
+                for operand in descriptor.implicit_operands
+            )
+            == uses_flat_scratch
+        )
+        assert descriptor.fixed_encoding_fields == expected_saddr_fields
+        assert (
+            any(
+                operand.operand_type == "OPR_SDST_M0"
+                for operand in descriptor.implicit_operands
+            )
+            == uses_m0
+        )
 
 
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:

@@ -19,6 +19,7 @@
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_access.h"
+#include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/registers.h"
 
@@ -556,10 +557,13 @@ iree_status_t loom_amdgpu_lower_sanitizer_assert_access(
   IREE_RETURN_IF_ERROR(loom_amdgpu_sanitizer_lower_state(context, &state));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_sanitizer_ensure_config_symbols(context, state));
+  uint32_t wavefront_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
+      loom_low_lower_context_bundle(context), &wavefront_size));
   loom_amdgpu_sanitizer_access_check_t check = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_sanitizer_access_check(
       builder, descriptor_set, state->asan_config_symbol, fault_address,
-      plan->access_size, source_op->location, &check));
+      plan->access_size, wavefront_size, source_op->location, &check));
 
   loom_amdgpu_sanitizer_report_source_t source = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr64_constant_u64(

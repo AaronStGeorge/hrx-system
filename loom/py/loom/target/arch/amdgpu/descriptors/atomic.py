@@ -874,7 +874,7 @@ def _flat_atomic_cmpswap_overlay(
         effects=_generic_atomic_effects(width_bits, counter_id=_COUNTER_VMEM_LOAD),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_flat_atomic_asm(
-            mnemonic="flat_atomic_cmpswap_b32",
+            mnemonic=mnemonic,
             returns_old_value=True,
             implicit_m0=implicit_m0,
             cache_fields=cache_immediate_fields,

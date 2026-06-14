@@ -162,12 +162,10 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
                  sizeof(request->options->hal_constants[0]));
       invocation_request.bindings = (loom_run_hal_binding_specs_t){
           .values = request->options->hal_bindings.values,
-          .conventions = request->options->hal_bindings.conventions,
           .count = request->options->hal_bindings.count,
       };
       invocation_request.expected_bindings = (loom_run_hal_binding_specs_t){
           .values = request->options->hal_expected_bindings.values,
-          .conventions = request->options->hal_expected_bindings.conventions,
           .count = request->options->hal_expected_bindings.count,
       };
       invocation_request.max_output_element_count =

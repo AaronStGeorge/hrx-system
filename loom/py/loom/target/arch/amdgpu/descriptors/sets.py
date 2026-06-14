@@ -723,6 +723,19 @@ def _cdna_core_overlays(
             descriptor_key_suffix="_saddr",
             implicit_m0=True,
         ),
+        _flat_load_u8_overlay(
+            mnemonic="flat_load_ubyte",
+            encoding_name="ENC_FLAT",
+            address_field_name="ADDR",
+            data_field_name="VDST",
+            offset_field_name="OFFSET",
+            offset_bit_width=12,
+            offset_signed=False,
+            implicit_flat_scratch=True,
+            implicit_m0=True,
+            allow_accumulator_results=True,
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+        ),
         *_flat_atomic_overlays(
             rows=_FLAT_ATOMIC_GFX950_ROWS,
             cmpswap_instruction_name="FLAT_ATOMIC_CMPSWAP",
@@ -1147,6 +1160,18 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=1,
             descriptor_key_suffix="_saddr",
         ),
+        _flat_load_u8_overlay(
+            mnemonic="flat_load_u8",
+            encoding_name="ENC_FLAT",
+            address_field_name="ADDR",
+            data_field_name="VDST",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            offset_signed=True,
+            implicit_flat_scratch=True,
+            fixed_saddr=_predefined("NULL", "OPR_SREG"),
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+        ),
         *_flat_atomic_overlays(
             rows=_FLAT_ATOMIC_GFX11_ROWS,
             cmpswap_instruction_name="FLAT_ATOMIC_CMPSWAP_B32",
@@ -1470,6 +1495,17 @@ def _rdna4_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             descriptor_key_suffix="_saddr",
             include_packed_half_add=True,
         ),
+        _flat_load_u8_overlay(
+            mnemonic="flat_load_u8",
+            encoding_name="ENC_VFLAT",
+            address_field_name="VADDR",
+            data_field_name="VDST",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            offset_signed=True,
+            implicit_flat_scratch=False,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
         *_flat_atomic_overlays(
             rows=_FLAT_ATOMIC_GFX12_ROWS,
             cmpswap_instruction_name="FLAT_ATOMIC_CMPSWAP_B32",
@@ -1586,6 +1622,7 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -1624,7 +1661,7 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_MFMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -1683,6 +1720,7 @@ _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=102,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -1736,6 +1774,7 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -1767,7 +1806,7 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -1848,6 +1887,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -1879,7 +1919,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),

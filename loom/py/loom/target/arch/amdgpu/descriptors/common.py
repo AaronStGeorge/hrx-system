@@ -1870,6 +1870,24 @@ _GLOBAL_PREFETCH_EFFECT = Effect(
     flags=(EffectFlag.DEPENDENCY,),
 )
 
+
+def _generic_memory_effect(kind: EffectKind, width_bits: int) -> Effect:
+    return Effect(
+        kind,
+        memory_space=MemorySpace.GENERIC,
+        flags=(EffectFlag.DEPENDENCY,),
+        width_bits=width_bits,
+    )
+
+
+def _generic_read_effect(width_bits: int) -> Effect:
+    return _generic_memory_effect(EffectKind.READ, width_bits)
+
+
+def _generic_write_effect(width_bits: int) -> Effect:
+    return _generic_memory_effect(EffectKind.WRITE, width_bits)
+
+
 _INSTRUCTION_PREFETCH_EFFECT = Effect(
     EffectKind.READ,
     memory_space=MemorySpace.GENERIC,
@@ -2433,6 +2451,23 @@ def _ignore_generic_atomic_memory(
     )
 
 
+def _ignore_generic_memory(
+    *, width_bits: int, is_input: bool, data_format_name: str | None = None
+) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_GPUMEM",
+        data_format_name=data_format_name or f"FMT_NUM_B{width_bits}",
+        size_bits=width_bits,
+        is_input=is_input,
+        is_output=not is_input,
+        ignore_reason=(
+            "modeled-by-generic-read-effect"
+            if is_input
+            else "modeled-by-generic-write-effect"
+        ),
+    )
+
+
 _IGNORE_FLAT_SCRATCH_INPUT = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_FLAT_SCRATCH",
     data_format_name="FMT_NUM_B64",
@@ -2883,6 +2918,9 @@ __all__ = (
     "_exec_state_read",
     "_f32_bits",
     "_generic_atomic_effects",
+    "_generic_memory_effect",
+    "_generic_read_effect",
+    "_generic_write_effect",
     "_global_addr_operand",
     "_global_atomic_effects",
     "_global_read_effect",
@@ -2892,6 +2930,7 @@ __all__ = (
     "_global_write_effect",
     "_hal_buffer_descriptor_pseudos",
     "_ignore_generic_atomic_memory",
+    "_ignore_generic_memory",
     "_ignore_global_atomic_memory",
     "_ignore_global_read_memory",
     "_ignore_global_write_memory",

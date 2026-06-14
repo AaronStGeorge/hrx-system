@@ -8,7 +8,6 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "iree/vm/api.h"
 
 namespace loom {
 namespace {
@@ -16,21 +15,7 @@ namespace {
 using ::iree::testing::status::StatusIs;
 using ::testing::HasSubstr;
 
-iree_vm_instance_t* hal_testbench_actual_test_vm_instance = nullptr;
-
-class HalTestbenchActualTest : public ::testing::Test {
- protected:
-  static void SetUpTestSuite() {
-    IREE_ASSERT_OK(iree_vm_instance_create(
-        IREE_VM_TYPE_CAPACITY_DEFAULT, iree_allocator_system(),
-        &hal_testbench_actual_test_vm_instance));
-  }
-
-  static void TearDownTestSuite() {
-    iree_vm_instance_release(hal_testbench_actual_test_vm_instance);
-    hal_testbench_actual_test_vm_instance = nullptr;
-  }
-};
+class HalTestbenchActualTest : public ::testing::Test {};
 
 static const loom_run_hal_artifact_provider_t kFakeHalArtifactProvider = {
     /*.name=*/IREE_SVL("fake-hal"),
@@ -71,19 +56,19 @@ TEST_F(HalTestbenchActualTest, ScalarInputsPackDispatchConstantWords) {
   };
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
-  iree_vm_list_t* bindings = nullptr;
+  loom_run_hal_binding_list_t bindings = {};
 
   IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 
-  EXPECT_EQ(iree_vm_list_size(bindings), 0u);
+  EXPECT_EQ(bindings.count, 0u);
   EXPECT_EQ(options.constant_count, 3u);
   EXPECT_EQ(options.constants[0], 0x12345678u);
   EXPECT_EQ(options.constants[1], 0x55667788u);
   EXPECT_EQ(options.constants[2], 0x11223344u);
 
-  iree_vm_list_release(bindings);
+  loom_run_hal_binding_list_deinitialize(&bindings);
 }
 
 TEST_F(HalTestbenchActualTest, F64InputsPackDispatchConstantWords) {
@@ -95,18 +80,18 @@ TEST_F(HalTestbenchActualTest, F64InputsPackDispatchConstantWords) {
   };
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
-  iree_vm_list_t* bindings = nullptr;
+  loom_run_hal_binding_list_t bindings = {};
 
   IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 
-  EXPECT_EQ(iree_vm_list_size(bindings), 0u);
+  EXPECT_EQ(bindings.count, 0u);
   EXPECT_EQ(options.constant_count, 2u);
   EXPECT_EQ(options.constants[0], 0x00000000u);
   EXPECT_EQ(options.constants[1], 0x3ff00000u);
 
-  iree_vm_list_release(bindings);
+  loom_run_hal_binding_list_deinitialize(&bindings);
 }
 
 TEST_F(HalTestbenchActualTest, IndexInputPacksAsOneDispatchConstantWord) {
@@ -118,17 +103,17 @@ TEST_F(HalTestbenchActualTest, IndexInputPacksAsOneDispatchConstantWord) {
   };
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
-  iree_vm_list_t* bindings = nullptr;
+  loom_run_hal_binding_list_t bindings = {};
 
   IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 
-  EXPECT_EQ(iree_vm_list_size(bindings), 0u);
+  EXPECT_EQ(bindings.count, 0u);
   EXPECT_EQ(options.constant_count, 1u);
   EXPECT_EQ(options.constants[0], 3584u);
 
-  iree_vm_list_release(bindings);
+  loom_run_hal_binding_list_deinitialize(&bindings);
 }
 
 TEST_F(HalTestbenchActualTest, OffsetInputPacksAsTwoDispatchConstantWords) {
@@ -141,18 +126,18 @@ TEST_F(HalTestbenchActualTest, OffsetInputPacksAsTwoDispatchConstantWords) {
   };
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
-  iree_vm_list_t* bindings = nullptr;
+  loom_run_hal_binding_list_t bindings = {};
 
   IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 
-  EXPECT_EQ(iree_vm_list_size(bindings), 0u);
+  EXPECT_EQ(bindings.count, 0u);
   EXPECT_EQ(options.constant_count, 2u);
   EXPECT_EQ(options.constants[0], 0x55667788u);
   EXPECT_EQ(options.constants[1], 0x11223344u);
 
-  iree_vm_list_release(bindings);
+  loom_run_hal_binding_list_deinitialize(&bindings);
 }
 
 }  // namespace

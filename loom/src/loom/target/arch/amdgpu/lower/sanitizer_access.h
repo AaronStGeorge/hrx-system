@@ -36,13 +36,14 @@ typedef struct loom_amdgpu_sanitizer_access_check_t {
 //
 // |fault_address| must be a 64-bit SGPR or VGPR register range. |access_size|
 // must be in [1, 8], which is the range this builder can check precisely with
-// first/last shadow bytes and no loop. The returned |failure_mask| is an SGPRx2
-// EXEC-width lane mask suitable for
+// first/last shadow bytes and no loop. |wavefront_size| must be 32 or 64 and
+// controls whether the returned SGPRx2 |failure_mask| needs wave32
+// zero-extension before it is consumed as an EXEC-width lane mask by
 // loom_amdgpu_build_sanitizer_access_report_failure_mask_branch.
 iree_status_t loom_amdgpu_build_sanitizer_access_check(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     loom_symbol_ref_t asan_config_symbol, loom_value_id_t fault_address,
-    uint32_t access_size, loom_location_id_t location,
+    uint32_t access_size, uint32_t wavefront_size, loom_location_id_t location,
     loom_amdgpu_sanitizer_access_check_t* out_check);
 
 #ifdef __cplusplus
