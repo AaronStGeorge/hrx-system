@@ -13,8 +13,7 @@ kernel.def @packed_s8_fields_f16scale_f32dot() {
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %four = index.constant 4 : index
-  %lane0 = kernel.workitem.id<x> : index
-  %lane = index.assume %lane0 [range(%lane0, 0, 3)] : index
+  %lane = kernel.workitem.id<x> : index
 
   %fields_noalias, %scales_noalias, %rhs_noalias, %output_noalias = buffer.assume.noalias %packed_fields, %scales, %rhs, %output : buffer, buffer, buffer, buffer
   %field_view = buffer.view %fields_noalias[%base] : buffer -> view<4xi32, #dense>

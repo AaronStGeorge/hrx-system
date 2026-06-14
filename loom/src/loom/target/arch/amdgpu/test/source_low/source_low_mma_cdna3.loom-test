@@ -370,10 +370,8 @@ kernel.def target(@target) @f32_fragment_memory_dynamic_lds_base() {
   %scratch_bytes = index.constant 4096 : offset
   %m = index.constant 16 : index
   %n = index.constant 16 : index
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 255)] : index
-  %wave0 = index.div %tid, %sixty_four : index
-  %wave = index.assume %wave0 [range(%wave0, 0, 3)] : index
+  %tid = kernel.workitem.id<x> : index
+  %wave = index.div %tid, %sixty_four : index
   %wave_offset_index = index.mul %wave, %wave_stride_bytes : index
   %wave_offset = index.cast %wave_offset_index : index to offset
   %input_view = buffer.view %input_buffer[%base] : buffer -> view<16x16xf32, #dense>
@@ -395,42 +393,42 @@ low.kernel.def target(@target) workgroup_size(256, 1, 1) @f32_fragment_memory_dy
   %out_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %wave = v_lshrrev_b32_lit %tid, 6
   %wave_offset = v_lshlrev_b32_lit %wave, 10
-  %33 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
-  %35 = v_and_b32_src0_inline %tid, 63
-  %36 = v_and_b32_src0_inline %35, 15
-  %37 = v_lshrrev_b32_src0_inline %35, 4
-  %38 = v_lshlrev_b32_src0_inline %37, 8
-  %39 = v_lshlrev_b32_src0_inline %36, 2
-  %40 = v_add_u32 %38, %39
-  %41 = s_mov_b32_m0_imm 0
-  %42 = global_load_dword_saddr %40, %input_view, %41
-  %47 = global_load_dword_saddr %40, %input_view, %41 {offset = 64}
-  %52 = global_load_dword_saddr %40, %input_view, %41 {offset = 128}
-  %57 = global_load_dword_saddr %40, %input_view, %41 {offset = 192}
-  %64 = v_add_u32 %wave_offset, %38
-  %66 = v_add_u32 %64, %39
-  ds_write_b32 %66, %42
-  ds_write_b32 %66, %47 {offset = 64}
-  ds_write_b32 %66, %52 {offset = 128}
-  ds_write_b32 %66, %57 {offset = 192}
+  %31 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
+  %33 = v_and_b32_src0_inline %tid, 63
+  %34 = v_and_b32_src0_inline %33, 15
+  %35 = v_lshrrev_b32_src0_inline %33, 4
+  %36 = v_lshlrev_b32_src0_inline %35, 8
+  %37 = v_lshlrev_b32_src0_inline %34, 2
+  %38 = v_add_u32 %36, %37
+  %39 = s_mov_b32_m0_imm 0
+  %40 = global_load_dword_saddr %38, %input_view, %39
+  %45 = global_load_dword_saddr %38, %input_view, %39 {offset = 64}
+  %50 = global_load_dword_saddr %38, %input_view, %39 {offset = 128}
+  %55 = global_load_dword_saddr %38, %input_view, %39 {offset = 192}
+  %62 = v_add_u32 %wave_offset, %36
+  %64 = v_add_u32 %62, %37
+  ds_write_b32 %64, %40
+  ds_write_b32 %64, %45 {offset = 64}
+  ds_write_b32 %64, %50 {offset = 128}
+  ds_write_b32 %64, %55 {offset = 192}
   s_barrier
-  %82 = v_and_b32_src0_inline %tid, 63
-  %83 = v_and_b32_src0_inline %82, 15
-  %84 = v_lshrrev_b32_src0_inline %82, 4
-  %85 = v_lshlrev_b32_src0_inline %84, 8
-  %86 = v_add_u32 %wave_offset, %85
-  %87 = v_lshlrev_b32_src0_inline %83, 2
-  %88 = v_add_u32 %86, %87
-  %89 = ds_read_b32 %88
-  %94 = ds_read_b32 %88 {offset = 64}
-  %99 = ds_read_b32 %88 {offset = 128}
-  %104 = ds_read_b32 %88 {offset = 192}
-  %112 = v_add_u32 %85, %87
-  %113 = s_mov_b32_m0_imm 0
-  global_store_dword_saddr %112, %89, %out_view, %113
-  global_store_dword_saddr %112, %94, %out_view, %113 {offset = 64}
-  global_store_dword_saddr %112, %99, %out_view, %113 {offset = 128}
-  global_store_dword_saddr %112, %104, %out_view, %113 {offset = 192}
+  %80 = v_and_b32_src0_inline %tid, 63
+  %81 = v_and_b32_src0_inline %80, 15
+  %82 = v_lshrrev_b32_src0_inline %80, 4
+  %83 = v_lshlrev_b32_src0_inline %82, 8
+  %84 = v_add_u32 %wave_offset, %83
+  %85 = v_lshlrev_b32_src0_inline %81, 2
+  %86 = v_add_u32 %84, %85
+  %87 = ds_read_b32 %86
+  %92 = ds_read_b32 %86 {offset = 64}
+  %97 = ds_read_b32 %86 {offset = 128}
+  %102 = ds_read_b32 %86 {offset = 192}
+  %110 = v_add_u32 %83, %85
+  %111 = s_mov_b32_m0_imm 0
+  global_store_dword_saddr %110, %87, %out_view, %111
+  global_store_dword_saddr %110, %92, %out_view, %111 {offset = 64}
+  global_store_dword_saddr %110, %97, %out_view, %111 {offset = 128}
+  global_store_dword_saddr %110, %102, %out_view, %111 {offset = 192}
   return
 }
 

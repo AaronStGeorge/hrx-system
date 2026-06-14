@@ -813,6 +813,9 @@ static void loom_amdgpu_find_first_dynamic_workgroup_count_ops(
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
     const loom_low_lower_selected_plan_view_t selected_plan =
         loom_low_lower_context_selected_plan_view(context, i);
+    if (selected_plan.elided) {
+      continue;
+    }
     if (selected_plan.plan.id != LOOM_OP_KERNEL_WORKGROUP_COUNT) {
       continue;
     }
@@ -845,6 +848,9 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
     const loom_low_lower_selected_plan_view_t selected_plan =
         loom_low_lower_context_selected_plan_view(context, i);
+    if (selected_plan.elided) {
+      continue;
+    }
     const loom_op_t* source_op = selected_plan.source_op;
     const loom_low_lower_plan_t plan = selected_plan.plan;
     switch (plan.id) {
@@ -971,6 +977,9 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
     const loom_low_lower_selected_plan_view_t selected_plan =
         loom_low_lower_context_selected_plan_view(context, i);
+    if (selected_plan.elided) {
+      continue;
+    }
     const loom_op_t* source_op = selected_plan.source_op;
     const loom_low_lower_plan_t plan = selected_plan.plan;
     switch (plan.id) {
@@ -1305,6 +1314,9 @@ iree_status_t loom_amdgpu_emit_entry_setup(void* user_data,
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
     const loom_low_lower_selected_plan_view_t selected_plan =
         loom_low_lower_context_selected_plan_view(context, i);
+    if (selected_plan.elided) {
+      continue;
+    }
     if (selected_plan.plan.id != LOOM_OP_KERNEL_WORKGROUP_COUNT) {
       continue;
     }

@@ -64,12 +64,12 @@ kernel.def target(@target) @async_gather_dynamic_offset_sum_rejected() {
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c4, %c1) : index
 } launch(%input: buffer) {
-  %x0 = kernel.workitem.id<x> : index
+  %lane_x = kernel.workitem.id<x> : index
   %base_x = index.constant 4294966000 : index
-  %x = index.add %x0, %base_x : index
-  %y0 = kernel.workitem.id<y> : index
+  %x = index.add %lane_x, %base_x : index
+  %lane_y = kernel.workitem.id<y> : index
   %base_y = index.constant 2000 : index
-  %y = index.add %y0, %base_y : index
+  %y = index.add %lane_y, %base_y : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
   %global = buffer.assume.memory_space<global> %input : buffer

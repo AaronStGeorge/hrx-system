@@ -22,8 +22,7 @@ kernel.def @q8_packed_word_global_dequant_dot4_kernel() {
   %four = index.constant 4 : index
   %four_bytes = index.constant 4 : offset
   %eight = index.constant 8 : index
-  %lane0 = kernel.workitem.id<x> : index
-  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %weights_global = buffer.assume.memory_space<global> %weights : buffer
   %rhs_global = buffer.assume.memory_space<global> %rhs_buffer : buffer
   %output_global = buffer.assume.memory_space<global> %output : buffer

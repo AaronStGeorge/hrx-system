@@ -331,6 +331,8 @@ typedef struct loom_low_lower_selected_plan_view_t {
   // Target-owned plan selected during planning. Table-driven rule rows return
   // an empty plan because their rule data is owned by core lowering.
   loom_low_lower_plan_t plan;
+  // True when demand analysis proved the source op has no required low storage.
+  bool elided;
 } loom_low_lower_selected_plan_view_t;
 
 typedef enum loom_low_lower_report_selection_kind_e {

@@ -107,14 +107,10 @@ kernel.def @ffn_gate_up_swiglu_q6q8() {
   kernel.launch.config workgroups(%rows, %channel_groups, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%q8_input: buffer, %gate_weight: buffer, %up_weight: buffer, %output: buffer) {
   %base = index.constant 0 : offset
-  %row0 = kernel.workgroup.id<x> : index
-  %channel_group0 = kernel.workgroup.id<y> : index
-  %subgroup_id0 = kernel.subgroup.id : index
-  %lane0 = kernel.subgroup.lane.id : index
-  %row = index.assume %row0 [range(%row0, 0, 30)] : index
-  %channel_group = index.assume %channel_group0 [range(%channel_group0, 0, 1183)] : index
-  %subgroup_id = index.assume %subgroup_id0 [range(%subgroup_id0, 0, 15)] : index
-  %lane = index.assume %lane0 [range(%lane0, 0, 31)] : index
+  %row = kernel.workgroup.id<x> : index
+  %channel_group = kernel.workgroup.id<y> : index
+  %subgroup_id = kernel.subgroup.id : index
+  %lane = kernel.subgroup.lane.id : index
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
   %two = index.constant 2 : index

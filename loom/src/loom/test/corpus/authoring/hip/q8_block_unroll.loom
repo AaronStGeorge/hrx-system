@@ -24,14 +24,11 @@ kernel.def @q8_block_unroll_wg64() {
   %workgroup_size = index.constant 64 : index
 
   // HIP concept: `blockIdx.x`, `blockIdx.y`, and `threadIdx.x`.
-  // Loom spelling: read workgroup/workitem IDs explicitly, then attach range
-  // facts that C++ authors usually get from launch geometry by inspection.
-  %row0 = kernel.workgroup.id<x> : index
-  %row = index.assume %row0 [range(%row0, 0, 63)] : index
-  %col0 = kernel.workgroup.id<y> : index
-  %col = index.assume %col0 [range(%col0, 0, 7)] : index
-  %lane0 = kernel.workitem.id<x> : index
-  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  // Loom spelling: read workgroup/workitem IDs explicitly. The launch config
+  // above publishes the grid and workgroup range facts used below.
+  %row = kernel.workgroup.id<x> : index
+  %col = kernel.workgroup.id<y> : index
+  %lane = kernel.workitem.id<x> : index
   %zero_f32 = scalar.constant 0.0 : f32
   %zero_i32 = scalar.constant 0 : i32
 

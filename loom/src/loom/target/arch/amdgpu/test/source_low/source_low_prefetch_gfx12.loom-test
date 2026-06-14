@@ -30,33 +30,32 @@ low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.rdna4
 
 amdgpu.target<gfx1200> @target
 kernel.def target(@target) @prefetch_workgroup_id() {
-  %c1 = index.constant 1 : index
-  %c1025 = index.constant 1025 : index
-  kernel.launch.config workgroups(%c1025, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroups = index.constant 1025 : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch(%input: buffer) {
-  %gid = kernel.workgroup.id<x> : index
-  %bounded_gid = index.assume %gid [range(%gid, 0, 1024)] : index
+  %workgroup = kernel.workgroup.id<x> : index
   %zero = index.constant 0 : offset
-  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %input_view = buffer.view %input[%zero] : buffer -> view<1025xi32, #dense>
   // REMARK@+1: BACKEND/041 "selected prefetch 'read/l2'" "immediate offset 0" "dynamic index 'soffset'" "count 1"
-  view.prefetch %input_view[%bounded_gid] {intent = read, locality = l2} : view<64xi32, #dense>
+  view.prefetch %input_view[%workgroup] {intent = read, locality = l2} : view<1025xi32, #dense>
   kernel.return
 }
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @prefetch_workgroup_id() asm<amdgpu.rdna4.core> {
-  %bounded_gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %9 = s_lshl_b32_rhs_inline %bounded_gid, 2
-  %11 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %12 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %13 = s_mov_b32 65535
-  %14 = s_and_b32 %12, %13
-  %15 = concat(%11, %14) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %16 = s_mov_b32 256
-  %17 = s_mov_b32 822243328
-  %18 = concat(%15, %16, %17) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
-  s_buffer_prefetch_data %18, %9 {count = 1}
+  %workgroup = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4100} : reg<amdgpu.sgpr x2>
+  %8 = s_lshl_b32_rhs_inline %workgroup, 2
+  %10 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %11 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %12 = s_mov_b32 65535
+  %13 = s_and_b32 %11, %12
+  %14 = concat(%10, %13) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %15 = s_mov_b32 4100
+  %16 = s_mov_b32 822243328
+  %17 = concat(%14, %15, %16) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  s_buffer_prefetch_data %17, %8 {count = 1}
   return
 }
 
@@ -103,16 +102,15 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_off
 
 amdgpu.target<gfx1200> @target
 kernel.def target(@target) @prefetch_workitem_dropped() {
-  %c1 = index.constant 1 : index
-  %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   // REMARK@+1: BACKEND/041 "dropped prefetch 'read/l1'" "decision 'prefetch.dynamic_index'" "packet '<none>'" "count 0"
-  view.prefetch %input_view[%tid] {intent = read, locality = l1} : view<64xi32, #dense>
+  view.prefetch %input_view[%lane] {intent = read, locality = l1} : view<64xi32, #dense>
   kernel.return
 }
 

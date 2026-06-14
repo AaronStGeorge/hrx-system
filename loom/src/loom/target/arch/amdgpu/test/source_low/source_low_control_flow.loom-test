@@ -1019,16 +1019,14 @@ kernel.def target(@target) @workgroup_loop_bound_f32_accumulator() {
   kernel.launch.config workgroups(%rows, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
   %base = index.constant 0 : offset
-  %row0 = kernel.workgroup.id<x> : index
-  %row = index.assume %row0 [range(%row0, 0, 127)] : index
+  %row = kernel.workgroup.id<x> : index
   %start = index.constant 0 : index
   %step = index.constant 1 : index
   %one = index.constant 1 : index
   %zero = scalar.constant 0.0 : f32
   %input_view = buffer.view %input[%base] : buffer -> view<128xf32, #dense>
   %output_view = buffer.view %output[%base] : buffer -> view<128xf32, #dense>
-  %limit0 = index.add %row, %one : index
-  %limit = index.assume %limit0 [range(%limit0, 1, 128)] : index
+  %limit = index.add %row, %one : index
   %sum = scf.for %position = [%start to %limit step %step](%current_sum = %zero : f32) -> (f32) {
     %loaded = view.load %input_view[%position] : view<128xf32, #dense> -> f32
     %next_sum = scalar.addf<reassoc|nnan|nsz> %current_sum, %loaded : f32
@@ -1049,27 +1047,27 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @workgroup_loop_bound_f32
   %limit = s_add_u32 %row, %step
   low.br ^_bb1(%start: reg<amdgpu.sgpr>, %zero: reg<amdgpu.vgpr>)
 ^_bb1(%position: reg<amdgpu.sgpr>, %current_sum: reg<amdgpu.vgpr>):
-  %35 = s_cmp_lt_i32 %position, %limit
-  low.cond_br %35, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+  %33 = s_cmp_lt_i32 %position, %limit
+  low.cond_br %33, ^_bb2, ^_bb3 : reg<amdgpu.scc>
 ^_bb2:
-  %37 = s_lshl_b32_rhs_inline %position, 2
-  %38 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %39 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %41 = s_add_u32 %38, %37
-  %42 = s_addc_u32 %39, %start
-  %43 = concat(%41, %42) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32_saddr %zero, %43
+  %35 = s_lshl_b32_rhs_inline %position, 2
+  %36 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %37 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %39 = s_add_u32 %36, %35
+  %40 = s_addc_u32 %37, %start
+  %41 = concat(%39, %40) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32_saddr %zero, %41
   %next_sum = v_add_f32 %current_sum, %loaded
-  %46 = s_add_u32 %position, %step
-  low.br ^_bb1(%46: reg<amdgpu.sgpr>, %next_sum: reg<amdgpu.vgpr>)
+  %44 = s_add_u32 %position, %step
+  low.br ^_bb1(%44: reg<amdgpu.sgpr>, %next_sum: reg<amdgpu.vgpr>)
 ^_bb3:
-  %48 = s_lshl_b32_rhs_inline %row, 2
-  %49 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %50 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %52 = s_add_u32 %49, %48
-  %53 = s_addc_u32 %50, %start
-  %54 = concat(%52, %53) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  global_store_b32_saddr %zero, %current_sum, %54
+  %46 = s_lshl_b32_rhs_inline %row, 2
+  %47 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %48 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %50 = s_add_u32 %47, %46
+  %51 = s_addc_u32 %48, %start
+  %52 = concat(%50, %51) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  global_store_b32_saddr %zero, %current_sum, %52
   return
 }
 
@@ -1803,10 +1801,8 @@ kernel.def target(@target) @branch_local_buffer_vector_load() {
   %base_offset = index.constant 0 : offset
   %first_lane = index.constant 0 : index
   %vector_width = index.constant 4 : index
-  %workitem = kernel.workitem.id<x> : index
-  %lane = index.assume %workitem [range(%workitem, 0, 63)] : index
-  %channel_start0 = index.mul %lane, %vector_width : index
-  %channel_start = index.assume %channel_start0 [range(%channel_start0, 0, 252)] : index
+  %lane = kernel.workitem.id<x> : index
+  %channel_start = index.mul %lane, %vector_width : index
   %positive_global = buffer.assume.memory_space<global> %positive : buffer
   %negative_global = buffer.assume.memory_space<global> %negative : buffer
   %output_global = buffer.assume.memory_space<global> %output : buffer
@@ -1832,51 +1828,50 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @branch_local_buffer_vec
   %positive_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %negative_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %channel_start = v_lshlrev_b32_lit %lane, 2
   %positive_lane = v_cmp_eq_i32_src1_inline %lane {rhs = 0}
-  %37, %38 = s_and_saveexec_b64 %positive_lane
-  low.cond_br %38, ^_bb1, ^_bb5 : reg<amdgpu.scc>
+  %35, %36 = s_and_saveexec_b64 %positive_lane
+  low.cond_br %36, ^_bb1, ^_bb5 : reg<amdgpu.scc>
 ^_bb1:
-  %56 = v_lshlrev_b32_src0_inline %channel_start, 2
-  %positive_values = global_load_b128_saddr %56, %positive_view
+  %54 = v_lshlrev_b32_src0_inline %lane, 4
+  %positive_values = global_load_b128_saddr %54, %positive_view
   low.br ^_bb4(%positive_values: reg<amdgpu.vgpr x4>)
 ^_bb2:
-  %58 = v_lshlrev_b32_src0_inline %channel_start, 2
-  %negative_values = global_load_b128_saddr %58, %negative_view
+  %56 = v_lshlrev_b32_src0_inline %lane, 4
+  %negative_values = global_load_b128_saddr %56, %negative_view
   low.br ^_bb7
-^_bb3(%values$28: reg<amdgpu.vgpr x4>):
-  %60 = v_lshlrev_b32_src0_inline %channel_start, 2
-  global_store_b128_saddr %60, %values$28, %output_view
+^_bb3(%values$26: reg<amdgpu.vgpr x4>):
+  %58 = v_lshlrev_b32_src0_inline %lane, 4
+  global_store_b128_saddr %58, %values$26, %output_view
   return
-^_bb4(%values$29: reg<amdgpu.vgpr x4>):
-  s_mov_b64_exec %37
-  %54 = s_and_b64 %37, %positive_lane
-  %55 = s_xor_b64_exec %54
-  low.cond_br %55, ^_bb2, ^_bb6 : reg<amdgpu.scc>
+^_bb4(%values$27: reg<amdgpu.vgpr x4>):
+  s_mov_b64_exec %35
+  %52 = s_and_b64 %35, %positive_lane
+  %53 = s_xor_b64_exec %52
+  low.cond_br %53, ^_bb2, ^_bb6 : reg<amdgpu.scc>
 ^_bb5:
-  s_mov_b64_exec %37
-  %39 = v_mov_b32 0
-  %40 = concat(%39, %39, %39, %39) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  low.br ^_bb4(%40: reg<amdgpu.vgpr x4>)
+  s_mov_b64_exec %35
+  %37 = v_mov_b32 0
+  %38 = concat(%37, %37, %37, %37) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.br ^_bb4(%38: reg<amdgpu.vgpr x4>)
 ^_bb6:
-  s_mov_b64_exec %37
-  low.br ^_bb3(%values$29: reg<amdgpu.vgpr x4>)
+  s_mov_b64_exec %35
+  low.br ^_bb3(%values$27: reg<amdgpu.vgpr x4>)
 ^_bb7:
-  s_mov_b64_exec %37
-  %41 = slice %negative_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %42 = slice %values$29[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %43 = v_cndmask_b32 %41, %42, %positive_lane
-  %44 = slice %negative_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %45 = slice %values$29[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %46 = v_cndmask_b32 %44, %45, %positive_lane
-  %47 = slice %negative_values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %48 = slice %values$29[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %49 = v_cndmask_b32 %47, %48, %positive_lane
-  %50 = slice %negative_values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %51 = slice %values$29[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %52 = v_cndmask_b32 %50, %51, %positive_lane
-  %53 = concat(%43, %46, %49, %52) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  low.br ^_bb3(%53: reg<amdgpu.vgpr x4>)
+  s_mov_b64_exec %35
+  %39 = slice %negative_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %40 = slice %values$27[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %41 = v_cndmask_b32 %39, %40, %positive_lane
+  %42 = slice %negative_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %43 = slice %values$27[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %44 = v_cndmask_b32 %42, %43, %positive_lane
+  %45 = slice %negative_values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = slice %values$27[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %47 = v_cndmask_b32 %45, %46, %positive_lane
+  %48 = slice %negative_values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %49 = slice %values$27[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %50 = v_cndmask_b32 %48, %49, %positive_lane
+  %51 = concat(%41, %44, %47, %50) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.br ^_bb3(%51: reg<amdgpu.vgpr x4>)
 }
 
 // ====

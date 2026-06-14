@@ -3,34 +3,35 @@
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @i32_bitwise() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
-  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %loaded = vector.load %input_view[%lane] : view<64xi32, #dense> -> vector<1xi32>
   %mask = vector.constant 15 : vector<1xi32>
   %masked = vector.andi %loaded, %mask : vector<1xi32>
   %tag = vector.constant 240 : vector<1xi32>
   %with_tag = vector.ori %masked, %tag : vector<1xi32>
   %result = vector.xori %with_tag, %loaded : vector<1xi32>
-  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  vector.store %result, %output_view[%lane] : vector<1xi32>, view<64xi32, #dense>
   kernel.return
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<amdgpu.rdna3.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_bitwise() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %18 = v_mov_b32 0
-  %loaded = global_load_b32_saddr %18, %input_view
+  %17 = v_lshlrev_b32_src0_inline %lane, 2
+  %loaded = global_load_b32_saddr %17, %input_view
   %masked = v_and_b32_lit %loaded, 15
   %with_tag = v_or_b32_lit %masked, 240
   %result = v_xor_b32 %with_tag, %loaded
-  global_store_b32_saddr %18, %result, %output_view
+  global_store_b32_saddr %17, %result, %output_view
   return
 }
 
@@ -38,37 +39,38 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<amdgpu
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @i32_shift() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
-  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %loaded = vector.load %input_view[%lane] : view<64xi32, #dense> -> vector<1xi32>
   %shift = vector.constant 3 : vector<1xi32>
   %left = vector.shli %loaded, %shift : vector<1xi32>
   %logical = vector.shrui %loaded, %shift : vector<1xi32>
   %arithmetic = vector.shrsi %loaded, %shift : vector<1xi32>
   %joined = vector.ori %left, %logical : vector<1xi32>
   %result = vector.xori %joined, %arithmetic : vector<1xi32>
-  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  vector.store %result, %output_view[%lane] : vector<1xi32>, view<64xi32, #dense>
   kernel.return
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<amdgpu.rdna3.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_shift() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %19 = v_mov_b32 0
-  %loaded = global_load_b32_saddr %19, %input_view
+  %18 = v_lshlrev_b32_src0_inline %lane, 2
+  %loaded = global_load_b32_saddr %18, %input_view
   %left = v_lshlrev_b32_lit %loaded, 3
   %logical = v_lshrrev_b32_lit %loaded, 3
   %arithmetic = v_ashrrev_i32_lit %loaded, 3
   %joined = v_or_b32 %left, %logical
   %result = v_xor_b32 %joined, %arithmetic
-  global_store_b32_saddr %19, %result, %output_view
+  global_store_b32_saddr %18, %result, %output_view
   return
 }
 
@@ -76,29 +78,30 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<amdgpu.r
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @i32_negative_literal() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
-  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %loaded = vector.load %input_view[%lane] : view<64xi32, #dense> -> vector<1xi32>
   %mask = vector.constant -1 : vector<1xi32>
   %result = vector.xori %loaded, %mask : vector<1xi32>
-  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  vector.store %result, %output_view[%lane] : vector<1xi32>, view<64xi32, #dense>
   kernel.return
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() asm<amdgpu.rdna3.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_negative_literal() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %15 = v_mov_b32 0
-  %loaded = global_load_b32_saddr %15, %input_view
+  %14 = v_lshlrev_b32_src0_inline %lane, 2
+  %loaded = global_load_b32_saddr %14, %input_view
   %result = v_xor_b32_lit %loaded, 4294967295
-  global_store_b32_saddr %15, %result, %output_view
+  global_store_b32_saddr %14, %result, %output_view
   return
 }
 
@@ -106,15 +109,15 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() a
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @i32_scalarized() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
-  %loaded = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %loaded = vector.load %input_view[%lane, 0] : view<64x4xi32, #dense> -> vector<4xi32>
   %lane0 = vector.extract %loaded[0] : vector<4xi32> -> i32
   %lane1 = vector.extract %loaded[1] : vector<4xi32> -> i32
   %mask = scalar.constant 255 : i32
@@ -129,16 +132,17 @@ kernel.def target(@target) @i32_scalarized() {
   %lane2 = vector.extract %loaded[2] : vector<4xi32> -> i32
   %lane3 = vector.extract %loaded[3] : vector<4xi32> -> i32
   %result = vector.from_elements %mixed, %logical, %lane2, %lane3 : vector<4xi32>
-  vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  vector.store %result, %output_view[%lane, 0] : vector<4xi32>, view<64x4xi32, #dense>
   kernel.return
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amdgpu.rdna3.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_scalarized() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %28 = v_mov_b32 0
-  %loaded = global_load_b128_saddr %28, %input_view
+  %38 = v_lshlrev_b32_src0_inline %lane, 4
+  %loaded = global_load_b128_saddr %38, %input_view
   %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane1 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %masked = v_and_b32_lit %lane0, 255
@@ -149,6 +153,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amd
   %lane2 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane3 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %result = concat(%mixed, %logical, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128_saddr %28, %result, %output_view
+  global_store_b128_saddr %38, %result, %output_view
   return
 }

@@ -260,6 +260,8 @@ loom_low_lower_selected_plan_view_t loom_low_lower_context_selected_plan_view(
   return (loom_low_lower_selected_plan_view_t){
       .source_op = context->lowering.selected_plans[index].source_op,
       .plan = context->lowering.selected_plans[index].plan,
+      .elided = iree_any_bit_set(context->lowering.selected_plans[index].flags,
+                                 LOOM_LOW_LOWER_SELECTED_PLAN_ELIDED),
   };
 }
 

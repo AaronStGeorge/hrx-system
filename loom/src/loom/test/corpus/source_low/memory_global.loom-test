@@ -503,57 +503,56 @@ kernel.def target(@target) @i64_readonly_uniform_smem_guarded_index_address() {
 // ====
 
 kernel.def @i32_b128() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
-  %loaded = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %loaded = vector.load %input_view[%lane, 0] : view<64x4xi32, #dense> -> vector<4xi32>
   %raise = vector.constant 9 : vector<4xi32>
   %raised = vector.addi %loaded, %raise : vector<4xi32>
   %drop = vector.constant 4 : vector<4xi32>
   %result = vector.subi %raised, %drop : vector<4xi32>
-  vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  vector.store %result, %output_view[%lane, 0] : vector<4xi32>, view<64x4xi32, #dense>
   kernel.return
 }
 
 // ====
 
 kernel.def @f32x8_split_b128() {
-  %c1 = index.constant 1 : index
+  %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%workgroup_size, %c1, %c1) : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x8xf32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x8xf32, #dense>
-  %loaded = vector.load %input_view[%tid, 0] : view<64x8xf32, #dense> -> vector<8xf32>
+  %loaded = vector.load %input_view[%lane, 0] : view<64x8xf32, #dense> -> vector<8xf32>
   %raise = vector.constant 2.0 : vector<8xf32>
   %result = vector.addf %loaded, %raise : vector<8xf32>
-  vector.store %result, %output_view[%tid, 0] : vector<8xf32>, view<64x8xf32, #dense>
+  vector.store %result, %output_view[%lane, 0] : vector<8xf32>, view<64x8xf32, #dense>
   kernel.return
 }
 
 // ====
 
 kernel.def @i32_scalar_2d_store() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %columns = index.constant 8 : index
+  %rows = index.constant 4 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%columns, %rows, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %x0 = kernel.workitem.id<x> : index
-  %x = index.assume %x0 [range(%x0, 0, 7)] : index
-  %y0 = kernel.workitem.id<y> : index
-  %y = index.assume %y0 [range(%y0, 0, 3)] : index
+  %column = kernel.workitem.id<x> : index
+  %row = kernel.workitem.id<y> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4x8xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<4x8xi32, #dense>
-  %loaded = vector.load %input_view[%y, %x] : view<4x8xi32, #dense> -> vector<1xi32>
-  vector.store %loaded, %output_view[%y, %x] : vector<1xi32>, view<4x8xi32, #dense>
+  %loaded = vector.load %input_view[%row, %column] : view<4x8xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%row, %column] : vector<1xi32>, view<4x8xi32, #dense>
   kernel.return
 }
 
@@ -561,12 +560,12 @@ kernel.def @i32_scalar_2d_store() {
 
 kernel.def @i32_view_scalar_2d_store() {
   %unit = index.constant 1 : index
-  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+  %columns = index.constant 8 : index
+  %rows = index.constant 4 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%columns, %rows, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %column0 = kernel.workitem.id<x> : index
-  %column = index.assume %column0 [range(%column0, 0, 7)] : index
-  %row0 = kernel.workitem.id<y> : index
-  %row = index.assume %row0 [range(%row0, 0, 3)] : index
+  %column = kernel.workitem.id<x> : index
+  %row = kernel.workitem.id<y> : index
   %base = index.constant 0 : offset
   %input_view = buffer.view %input[%base] : buffer -> view<4x8xi32, #dense>
   %output_view = buffer.view %output[%base] : buffer -> view<4x8xi32, #dense>
@@ -578,17 +577,17 @@ kernel.def @i32_view_scalar_2d_store() {
 // ====
 
 kernel.def @i32_dynamic_constant_index() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero_offset = index.constant 0 : offset
   %zero = index.constant 0 : index
   %input_view = buffer.view %input[%zero_offset] : buffer -> view<64x1x4xi32, #dense>
   %output_view = buffer.view %output[%zero_offset] : buffer -> view<64x1x4xi32, #dense>
-  %loaded = vector.load %input_view[%tid, %zero, 0] : view<64x1x4xi32, #dense> -> vector<4xi32>
-  vector.store %loaded, %output_view[%tid, %zero, 0] : vector<4xi32>, view<64x1x4xi32, #dense>
+  %loaded = vector.load %input_view[%lane, %zero, 0] : view<64x1x4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[%lane, %zero, 0] : vector<4xi32>, view<64x1x4xi32, #dense>
   kernel.return
 }
 
@@ -723,64 +722,64 @@ kernel.def @bf16_view_scalar() {
 // ====
 
 kernel.def @f16x2_b32() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x2xf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x2xf16, #dense>
-  %loaded = vector.load %input_view[%tid, 0] : view<64x2xf16, #dense> -> vector<2xf16>
-  vector.store %loaded, %output_view[%tid, 0] : vector<2xf16>, view<64x2xf16, #dense>
+  %loaded = vector.load %input_view[%lane, 0] : view<64x2xf16, #dense> -> vector<2xf16>
+  vector.store %loaded, %output_view[%lane, 0] : vector<2xf16>, view<64x2xf16, #dense>
   kernel.return
 }
 
 // ====
 
 kernel.def @f16x4_b64() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xf16, #dense>
-  %loaded = vector.load %input_view[%tid, 0] : view<64x4xf16, #dense> -> vector<4xf16>
-  vector.store %loaded, %output_view[%tid, 0] : vector<4xf16>, view<64x4xf16, #dense>
+  %loaded = vector.load %input_view[%lane, 0] : view<64x4xf16, #dense> -> vector<4xf16>
+  vector.store %loaded, %output_view[%lane, 0] : vector<4xf16>, view<64x4xf16, #dense>
   kernel.return
 }
 
 // ====
 
 kernel.def @bf16x2_b32() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x2xbf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x2xbf16, #dense>
-  %loaded = vector.load %input_view[%tid, 0] : view<64x2xbf16, #dense> -> vector<2xbf16>
-  vector.store %loaded, %output_view[%tid, 0] : vector<2xbf16>, view<64x2xbf16, #dense>
+  %loaded = vector.load %input_view[%lane, 0] : view<64x2xbf16, #dense> -> vector<2xbf16>
+  vector.store %loaded, %output_view[%lane, 0] : vector<2xbf16>, view<64x2xbf16, #dense>
   kernel.return
 }
 
 // ====
 
 kernel.def @bf16x4_b64() {
-  %c1 = index.constant 1 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer, %output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xbf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xbf16, #dense>
-  %loaded = vector.load %input_view[%tid, 0] : view<64x4xbf16, #dense> -> vector<4xbf16>
-  vector.store %loaded, %output_view[%tid, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
+  %loaded = vector.load %input_view[%lane, 0] : view<64x4xbf16, #dense> -> vector<4xbf16>
+  vector.store %loaded, %output_view[%lane, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
   kernel.return
 }
 

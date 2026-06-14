@@ -33,7 +33,7 @@ python dev.py bazel run //loom/src/loom/tools/loom-opt:loom-opt -- \
 | Tags / HIP terms | Loom feature | Recipe |
 | --- | --- | --- |
 | `#pragma unroll`, `pragma-unroll`, `loop-expansion`, `for`, `q8`, `WG64` | `scf.for ... unroll`, `unroll-scf-for`, range-fact trip count inference | `q8_block_unroll.loom` |
-| `blockIdx`, `threadIdx`, `lane`, `warp`, `wavefront` | `kernel.workgroup.id`, `kernel.workitem.id`, `kernel.subgroup.*`, `index.assume` | `q8_block_unroll.loom` |
+| `blockIdx`, `threadIdx`, `lane`, `warp`, `wavefront` | `kernel.launch.config`, `kernel.workgroup.id`, `kernel.workitem.id`, `kernel.subgroup.*` | `q8_block_unroll.loom` |
 | `threadIdx`, `lane_id`, `warp lane`, `wavefront lane`, `SGPR`, `VGPR`, `EXEC`, `scalarized`, `lane-varying`, `uniform`, `dot operand` | value distribution facts, `test.fact_uniform`, `test.fact_lane_varying`, `test.fact_lane_predicate` | `lane_distribution.loom` |
 | `__global__`, `restrict`, pointer casts, address arithmetic | `buffer.assume.memory_space`, `buffer.assume.noalias`, `buffer.view` | `q8_block_unroll.loom` |
 | `global_load_b32`, packed bytes, `q8`, bitfield, unpack | `vector.load`, `vector.bitunpacks<8>`, `scalar.extf`, `vector.dotf` | `q8_block_unroll.loom` |
@@ -150,10 +150,10 @@ the exact positive step. In this Q8 WG64 pattern, `%lane` is in `[0,63]`,
 `%block_slot = %lane / 8` is in `[0,7]`, `%blocks_per_row` is `16`, and
 `%block_step` is `8`, so every lane executes two local blocks.
 
-`index.assume` is the source-level contract for facts that are obvious from the
-kernel mapping but not present in the IR. The body-level
-`range(%block_idx_raw, 0, 15)` records the valid packed-block domain for later
-address and load reasoning.
+`kernel.launch.config` is the source-level contract for grid and workgroup
+range facts. `index.assume` records facts that are not already present in the
+IR; the body-level `range(%block_idx_raw, 0, 15)` records the valid packed-block
+domain for later address and load reasoning.
 
 Proof command:
 
@@ -485,8 +485,9 @@ Tags: `blockIdx`, `threadIdx`, `workgroup`, `thread`, `lane`, `warp`,
 Loom names the launch grid and the executing invocation explicitly:
 `kernel.launch.config` declares workgroup count and workgroup size,
 `kernel.workgroup.id<x/y/z>` reads block IDs, `kernel.workitem.id<x/y/z>` reads
-thread IDs, and `kernel.subgroup.*` reads wave/subgroup IDs. Add `index.assume`
-range facts when later passes need bounded values.
+thread IDs, and `kernel.subgroup.*` reads wave/subgroup IDs. Grid and workgroup
+range facts come from the launch config. `index.assume` is for bounds or
+relations that the launch shape cannot express directly.
 
 Tags: `__global__`, `restrict`, pointer cast, typed pointer, `reinterpret_cast`.
 

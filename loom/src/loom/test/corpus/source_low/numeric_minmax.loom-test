@@ -285,16 +285,15 @@ func.def @scf_select_i1_scc_condition(%lhs: i32, %rhs: i32, %alt: i32, %true_val
 // ====
 
 kernel.def @index_minmax_vgpr_select() {
-  %c1 = index.constant 1 : index
-  %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%output: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %limit = index.constant 31 : index
-  %min = index.min %tid, %limit : index
-  %max = index.max %tid, %limit : index
-  %cond = index.cmp slt, %tid, %limit : index
+  %min = index.min %lane, %limit : index
+  %max = index.max %lane, %limit : index
+  %cond = index.cmp slt, %lane, %limit : index
   %selected = scf.select %cond, %min, %max : index
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>

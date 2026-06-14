@@ -10,15 +10,14 @@ func.def @prefetch_static(%input: buffer) {
 // ====
 
 kernel.def @prefetch_workgroup_id() {
-  %c1 = index.constant 1 : index
-  %c1025 = index.constant 1025 : index
-  kernel.launch.config workgroups(%c1025, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroups = index.constant 1025 : index
+  kernel.launch.config workgroups(%workgroups, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch(%input: buffer) {
-  %gid = kernel.workgroup.id<x> : index
-  %bounded_gid = index.assume %gid [range(%gid, 0, 1024)] : index
+  %workgroup = kernel.workgroup.id<x> : index
   %zero = index.constant 0 : offset
-  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
-  view.prefetch %input_view[%bounded_gid] {intent = read, locality = l2} : view<64xi32, #dense>
+  %input_view = buffer.view %input[%zero] : buffer -> view<1025xi32, #dense>
+  view.prefetch %input_view[%workgroup] {intent = read, locality = l2} : view<1025xi32, #dense>
   kernel.return
 }
 
@@ -46,14 +45,13 @@ kernel.def @prefetch_fixed_query_offset() {
 // ====
 
 kernel.def @prefetch_workitem_dropped() {
-  %c1 = index.constant 1 : index
-  %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%input: buffer) {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
-  view.prefetch %input_view[%tid] {intent = read, locality = l1} : view<64xi32, #dense>
+  view.prefetch %input_view[%lane] {intent = read, locality = l1} : view<64xi32, #dense>
   kernel.return
 }
