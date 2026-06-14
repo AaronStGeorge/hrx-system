@@ -6,7 +6,9 @@
 
 #include "loom/analysis/condition_facts.h"
 
+#include "loom/ops/index/compare.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/scalar/compare.h"
 #include "loom/ops/scalar/ops.h"
 
 void loom_condition_fact_set_initialize(
@@ -420,6 +422,221 @@ bool loom_condition_facts_query(const loom_module_t* module,
   return loom_condition_facts_query_impl(module, fact_table, condition_value,
                                          assumed_truth, out_facts,
                                          /*recursion_depth=*/0);
+}
+
+static loom_value_facts_t loom_condition_edge_value_facts(
+    const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts, loom_value_id_t value_id) {
+  loom_value_facts_t value_facts =
+      loom_condition_lookup_facts(fact_table, value_id);
+  if (edge_facts != NULL) {
+    (void)loom_condition_fact_set_apply_to_value_facts(edge_facts, fact_table,
+                                                       value_id, &value_facts);
+  }
+  return value_facts;
+}
+
+static bool loom_condition_fact_set_proves_index_cmp(
+    const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts, const loom_op_t* defining_op,
+    bool* out_condition) {
+  const loom_value_id_t lhs = loom_index_cmp_lhs(defining_op);
+  const loom_value_id_t rhs = loom_index_cmp_rhs(defining_op);
+  if (lhs == rhs && loom_index_cmp_same_value_result(
+                        loom_index_cmp_predicate(defining_op), out_condition)) {
+    return true;
+  }
+
+  const loom_value_facts_t lhs_facts =
+      loom_condition_edge_value_facts(fact_table, edge_facts, lhs);
+  const loom_value_facts_t rhs_facts =
+      loom_condition_edge_value_facts(fact_table, edge_facts, rhs);
+  return loom_index_cmp_result_from_facts(loom_index_cmp_predicate(defining_op),
+                                          &lhs_facts, &rhs_facts,
+                                          out_condition);
+}
+
+static bool loom_condition_fact_set_proves_scalar_cmpi(
+    const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts, const loom_op_t* defining_op,
+    bool* out_condition) {
+  const loom_value_id_t lhs = loom_scalar_cmpi_lhs(defining_op);
+  const loom_value_id_t rhs = loom_scalar_cmpi_rhs(defining_op);
+  if (lhs == rhs &&
+      loom_scalar_cmpi_same_value_result(
+          loom_scalar_cmpi_predicate(defining_op), out_condition)) {
+    return true;
+  }
+
+  const loom_value_facts_t lhs_facts =
+      loom_condition_edge_value_facts(fact_table, edge_facts, lhs);
+  const loom_value_facts_t rhs_facts =
+      loom_condition_edge_value_facts(fact_table, edge_facts, rhs);
+  return loom_scalar_cmpi_result_from_facts(
+      loom_scalar_cmpi_predicate(defining_op), &lhs_facts, &rhs_facts,
+      out_condition);
+}
+
+static bool loom_condition_fact_set_proves_condition_impl(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts,
+    loom_value_id_t condition_value, bool* out_condition,
+    uint8_t recursion_depth);
+
+static bool loom_condition_fact_set_proves_boolean_and(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts, const loom_op_t* defining_op,
+    bool* out_condition, uint8_t recursion_depth) {
+  bool lhs = false;
+  const bool lhs_known = loom_condition_fact_set_proves_condition_impl(
+      module, fact_table, edge_facts, loom_scalar_andi_lhs(defining_op), &lhs,
+      recursion_depth);
+  if (lhs_known && !lhs) {
+    *out_condition = false;
+    return true;
+  }
+
+  bool rhs = false;
+  const bool rhs_known = loom_condition_fact_set_proves_condition_impl(
+      module, fact_table, edge_facts, loom_scalar_andi_rhs(defining_op), &rhs,
+      recursion_depth);
+  if (rhs_known && !rhs) {
+    *out_condition = false;
+    return true;
+  }
+  if (!lhs_known || !rhs_known) {
+    return false;
+  }
+
+  *out_condition = true;
+  return true;
+}
+
+static bool loom_condition_fact_set_proves_boolean_or(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts, const loom_op_t* defining_op,
+    bool* out_condition, uint8_t recursion_depth) {
+  bool lhs = false;
+  const bool lhs_known = loom_condition_fact_set_proves_condition_impl(
+      module, fact_table, edge_facts, loom_scalar_ori_lhs(defining_op), &lhs,
+      recursion_depth);
+  if (lhs_known && lhs) {
+    *out_condition = true;
+    return true;
+  }
+
+  bool rhs = false;
+  const bool rhs_known = loom_condition_fact_set_proves_condition_impl(
+      module, fact_table, edge_facts, loom_scalar_ori_rhs(defining_op), &rhs,
+      recursion_depth);
+  if (rhs_known && rhs) {
+    *out_condition = true;
+    return true;
+  }
+  if (!lhs_known || !rhs_known) {
+    return false;
+  }
+
+  *out_condition = false;
+  return true;
+}
+
+static bool loom_condition_fact_set_proves_boolean_xor(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts, const loom_op_t* defining_op,
+    bool* out_condition, uint8_t recursion_depth) {
+  bool lhs = false;
+  if (!loom_condition_fact_set_proves_condition_impl(
+          module, fact_table, edge_facts, loom_scalar_xori_lhs(defining_op),
+          &lhs, recursion_depth)) {
+    return false;
+  }
+  bool rhs = false;
+  if (!loom_condition_fact_set_proves_condition_impl(
+          module, fact_table, edge_facts, loom_scalar_xori_rhs(defining_op),
+          &rhs, recursion_depth)) {
+    return false;
+  }
+  *out_condition = lhs != rhs;
+  return true;
+}
+
+static bool loom_condition_fact_set_proves_condition_impl(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* edge_facts,
+    loom_value_id_t condition_value, bool* out_condition,
+    uint8_t recursion_depth) {
+  *out_condition = false;
+  if (recursion_depth > 16) return false;
+  if (loom_condition_value_exact_bool(fact_table, condition_value,
+                                      out_condition)) {
+    return true;
+  }
+  if (!module || condition_value >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, condition_value);
+  if (loom_value_is_block_arg(value) || loom_value_def_index(value) != 0) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op) return false;
+
+  switch (defining_op->kind) {
+    case LOOM_OP_INDEX_CMP:
+      return loom_condition_fact_set_proves_index_cmp(
+          fact_table, edge_facts, defining_op, out_condition);
+    case LOOM_OP_SCALAR_CMPI:
+      return loom_condition_fact_set_proves_scalar_cmpi(
+          fact_table, edge_facts, defining_op, out_condition);
+    case LOOM_OP_SCALAR_ANDI:
+      if (!loom_condition_value_is_i1(module,
+                                      loom_op_const_results(defining_op)[0]) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_andi_lhs(defining_op)) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_andi_rhs(defining_op))) {
+        return false;
+      }
+      return loom_condition_fact_set_proves_boolean_and(
+          module, fact_table, edge_facts, defining_op, out_condition,
+          (uint8_t)(recursion_depth + 1));
+    case LOOM_OP_SCALAR_ORI:
+      if (!loom_condition_value_is_i1(module,
+                                      loom_op_const_results(defining_op)[0]) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_ori_lhs(defining_op)) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_ori_rhs(defining_op))) {
+        return false;
+      }
+      return loom_condition_fact_set_proves_boolean_or(
+          module, fact_table, edge_facts, defining_op, out_condition,
+          (uint8_t)(recursion_depth + 1));
+    case LOOM_OP_SCALAR_XORI:
+      if (!loom_condition_value_is_i1(module,
+                                      loom_op_const_results(defining_op)[0]) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_xori_lhs(defining_op)) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_xori_rhs(defining_op))) {
+        return false;
+      }
+      return loom_condition_fact_set_proves_boolean_xor(
+          module, fact_table, edge_facts, defining_op, out_condition,
+          (uint8_t)(recursion_depth + 1));
+    default:
+      return false;
+  }
+}
+
+bool loom_condition_fact_set_proves_condition(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* facts, loom_value_id_t condition_value,
+    bool* out_condition) {
+  return loom_condition_fact_set_proves_condition_impl(
+      module, fact_table, facts, condition_value, out_condition,
+      /*recursion_depth=*/0);
 }
 
 static bool loom_condition_relation_to_predicate_kind(
