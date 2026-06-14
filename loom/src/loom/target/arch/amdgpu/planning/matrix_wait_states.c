@@ -116,56 +116,75 @@ static const loom_amdgpu_matrix_wait_result_row_t
 
 #undef LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW
 
+static const iree_string_view_t kAmdgpuMatrixWaitProfileNames[] = {
+    [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN] = IREE_SVL("unknown"),
+    [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950] =
+        IREE_SVL("mfma_pre_gfx950"),
+    [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950] = IREE_SVL("mfma_gfx950"),
+};
+
+static const iree_string_view_t kAmdgpuMatrixWaitResultUseNames[] = {
+    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN] = IREE_SVL("unknown"),
+    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX] = IREE_SVL("non_matrix"),
+    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT] =
+        IREE_SVL("matrix_srcc_exact"),
+    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP] =
+        IREE_SVL("matrix_srcc_overlap"),
+    [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB] =
+        IREE_SVL("matrix_src_ab"),
+};
+
+static const loom_amdgpu_matrix_wait_profile_t
+    kAmdgpuMatrixWaitProfilesByFeatureProfile[] = {
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_NONE] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950,
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950,
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+        [LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250] =
+            LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN,
+};
+
 iree_string_view_t loom_amdgpu_matrix_wait_profile_name(
     loom_amdgpu_matrix_wait_profile_t profile) {
-  switch (profile) {
-    case LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950:
-      return IREE_SV("mfma_pre_gfx950");
-    case LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950:
-      return IREE_SV("mfma_gfx950");
-    case LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN:
-    default:
-      return IREE_SV("unknown");
+  if ((iree_host_size_t)profile >=
+      IREE_ARRAYSIZE(kAmdgpuMatrixWaitProfileNames)) {
+    return kAmdgpuMatrixWaitProfileNames
+        [LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN];
   }
+  return kAmdgpuMatrixWaitProfileNames[profile];
 }
 
 iree_string_view_t loom_amdgpu_matrix_wait_result_use_name(
     loom_amdgpu_matrix_wait_result_use_t use) {
-  switch (use) {
-    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX:
-      return IREE_SV("non_matrix");
-    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT:
-      return IREE_SV("matrix_srcc_exact");
-    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP:
-      return IREE_SV("matrix_srcc_overlap");
-    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB:
-      return IREE_SV("matrix_src_ab");
-    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN:
-    default:
-      return IREE_SV("unknown");
+  if ((iree_host_size_t)use >=
+      IREE_ARRAYSIZE(kAmdgpuMatrixWaitResultUseNames)) {
+    return kAmdgpuMatrixWaitResultUseNames
+        [LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN];
   }
+  return kAmdgpuMatrixWaitResultUseNames[use];
 }
 
 bool loom_amdgpu_matrix_wait_profile_from_feature_profile(
     loom_amdgpu_matrix_feature_profile_t feature_profile,
     loom_amdgpu_matrix_wait_profile_t* out_profile) {
-  *out_profile = LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
-  switch (feature_profile) {
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908:
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A:
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940:
-      *out_profile = LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950;
-      return true;
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950:
-      *out_profile = LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950;
-      return true;
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_NONE:
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11:
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12:
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250:
-    default:
-      return false;
+  loom_amdgpu_matrix_wait_profile_t profile =
+      LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
+  if ((iree_host_size_t)feature_profile <
+      IREE_ARRAYSIZE(kAmdgpuMatrixWaitProfilesByFeatureProfile)) {
+    profile = kAmdgpuMatrixWaitProfilesByFeatureProfile[feature_profile];
   }
+  *out_profile = profile;
+  return profile != LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
 }
 
 iree_host_size_t loom_amdgpu_matrix_wait_result_row_count(void) {
