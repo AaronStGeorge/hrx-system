@@ -130,6 +130,129 @@ kernel.def @dynamic_launch_config_facts_seed_body(%count: index) {
 
 // ====
 
+kernel.def @fixed_multidim_launch_config_facts_seed_body() {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
+} launch() {
+  %x = kernel.workitem.id<x> : index
+  %y = kernel.workitem.id<y> : index
+  %row_stride = index.constant 8 : index
+  %linear = index.madd %y, %row_stride, %x : index
+  %x_hi = test.fact_range_hi %x : index -> i64
+  %y_hi = test.fact_range_hi %y : index -> i64
+  %linear_hi = test.fact_range_hi %linear : index -> i64
+  %linear_is_varying = test.fact_lane_varying %linear : index -> i1
+  test.use %x_hi, %y_hi, %linear_hi, %linear_is_varying : i64, i64, i64, i1
+  kernel.return
+}
+
+// ----
+kernel.def @fixed_multidim_launch_config_facts_seed_body() {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
+} launch() {
+  %x_hi = scalar.constant 7 : i64
+  %y_hi = scalar.constant 3 : i64
+  %linear_hi = scalar.constant 31 : i64
+  %linear_is_varying = scalar.constant true : i1
+  test.use %x_hi, %y_hi, %linear_hi, %linear_is_varying : i64, i64, i64, i1
+  kernel.return
+}
+
+// ====
+
+kernel.def @rounded_dynamic_launch_config_facts_seed_body(%element_count: index) {
+  %c1 = index.constant 1 : index
+  %c63 = index.constant 63 : index
+  %c64 = index.constant 64 : index
+  %bounded_count = index.assume %element_count [range(%element_count, 1, 4096)] : index
+  %rounded = index.add %bounded_count, %c63 : index
+  %workgroups = index.div %rounded, %c64 : index
+  kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %tile = index.constant 64 : index
+  %bid = kernel.workgroup.id<x> : index
+  %tid = kernel.workitem.id<x> : index
+  %dispatch_id = kernel.workitem.dispatch.id<x> : index
+  %manual_linear = index.madd %bid, %tile, %tid : index
+  %bid_hi = test.fact_range_hi %bid : index -> i64
+  %dispatch_hi = test.fact_range_hi %dispatch_id : index -> i64
+  %manual_hi = test.fact_range_hi %manual_linear : index -> i64
+  %manual_is_varying = test.fact_lane_varying %manual_linear : index -> i1
+  test.use %bid_hi, %dispatch_hi, %manual_hi, %manual_is_varying : i64, i64, i64, i1
+  kernel.return
+}
+
+// ----
+kernel.def @rounded_dynamic_launch_config_facts_seed_body(%element_count: index) {
+  %c1 = index.constant 1 : index
+  %c63 = index.constant 63 : index
+  %c64 = index.constant 64 : index
+  %bounded_count = index.assume %element_count [range(%element_count, 1, 4096)] : index
+  %rounded = index.add %bounded_count, %c63 : index
+  %16 = index.constant 6 : index
+  %workgroups = index.shrui %rounded, %16 : index
+  kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %bid_hi = scalar.constant 63 : i64
+  %dispatch_hi = scalar.constant 4095 : i64
+  %manual_hi = scalar.constant 4095 : i64
+  %manual_is_varying = scalar.constant true : i1
+  test.use %bid_hi, %dispatch_hi, %manual_hi, %manual_is_varying : i64, i64, i64, i1
+  kernel.return
+}
+
+// ====
+
+config.decl @runtime.element_count : %value: index where [range(%value, 1, 4096)]
+
+kernel.def @config_decl_rounded_launch_config_facts_seed_body() {
+  %c1 = index.constant 1 : index
+  %c63 = index.constant 63 : index
+  %c64 = index.constant 64 : index
+  %element_count = config.get @runtime.element_count : index
+  %rounded = index.add %element_count, %c63 : index
+  %workgroups = index.div %rounded, %c64 : index
+  kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %tile = index.constant 64 : index
+  %bid = kernel.workgroup.id<x> : index
+  %tid = kernel.workitem.id<x> : index
+  %dispatch_id = kernel.workitem.dispatch.id<x> : index
+  %manual_linear = index.madd %bid, %tile, %tid : index
+  %bid_hi = test.fact_range_hi %bid : index -> i64
+  %dispatch_hi = test.fact_range_hi %dispatch_id : index -> i64
+  %manual_hi = test.fact_range_hi %manual_linear : index -> i64
+  test.use %bid_hi, %dispatch_hi, %manual_hi : i64, i64, i64
+  kernel.return
+}
+
+// ----
+config.decl @runtime.element_count : %value: index where [range(%value, 1, 4096)]
+
+kernel.def @config_decl_rounded_launch_config_facts_seed_body() {
+  %c1 = index.constant 1 : index
+  %c63 = index.constant 63 : index
+  %c64 = index.constant 64 : index
+  %element_count = config.get @runtime.element_count : index
+  %rounded = index.add %element_count, %c63 : index
+  %15 = index.constant 6 : index
+  %workgroups = index.shrui %rounded, %15 : index
+  kernel.launch.config workgroups(%workgroups, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch() {
+  %bid_hi = scalar.constant 63 : i64
+  %dispatch_hi = scalar.constant 4095 : i64
+  %manual_hi = scalar.constant 4095 : i64
+  test.use %bid_hi, %dispatch_hi, %manual_hi : i64, i64, i64
+  kernel.return
+}
+
+// ====
+
 kernel.def @small_workgroup_lane_facts() {
   %c1 = index.constant 1 : index
   %c8 = index.constant 8 : index
