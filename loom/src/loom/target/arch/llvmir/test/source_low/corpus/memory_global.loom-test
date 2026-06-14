@@ -1598,6 +1598,371 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_dynamic_flat_store(%
 // ====
 
 llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i32_row_stride_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  view.store %value, %output_view[%element] : f32, view<[%element_count]xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_stride_store(%value: reg<llvmir.f32>, %stride_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %stride = sext.i32.i64 %stride_i32
+  %row_i32 = load.i32 %idx_view, 0
+  %row = sext.i32.i64 %row_i32
+  %element = mul.i64 %row, %stride
+  store.indexed.f32 %value, %output_view, %element, 0, 4
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i64_row_stride_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi64, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %row_i64_raw = view.load %idx_view[0] : view<1xi64, #dense> -> i64
+  %row_i64 = scalar.assume %row_i64_raw [range(%row_i64_raw, 0, 1073741823)] : i64
+  %row = index.cast %row_i64 : i64 to index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  view.store %value, %output_view[%element] : f32, view<[%element_count]xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i64_row_stride_store(%value: reg<llvmir.f32>, %stride_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %stride = sext.i32.i64 %stride_i32
+  %row = load.i64 %idx_view, 0
+  %element = mul.i64 %row, %stride
+  store.indexed.f32 %value, %output_view, %element, 0, 4
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i64_row_stride_load() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %input: buffer, %output: buffer, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %start = index.constant 0 : index
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi64, #dense>
+  %input_view = buffer.view %input[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<1xf32, #dense>
+  %row_i64_raw = view.load %idx_view[0] : view<1xi64, #dense> -> i64
+  %row_i64 = scalar.assume %row_i64_raw [range(%row_i64_raw, 0, 1073741823)] : i64
+  %row = index.cast %row_i64 : i64 to index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %loaded = view.load %input_view[%element] : view<[%element_count]xf32, #dense> -> f32
+  view.store %loaded, %output_view[%start] : f32, view<1xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i64_row_stride_load(%stride_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %input_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<llvmir.ptr>
+  %stride = sext.i32.i64 %stride_i32
+  %row = load.i64 %idx_view, 0
+  %element = mul.i64 %row, %stride
+  %loaded = load.indexed.f32 %input_view, %element, 0, 4
+  store.f32 %loaded, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i32_row_shift_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %shift = index.constant 2 : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.shli %row, %shift : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  view.store %value, %output_view[%element] : f32, view<[%element_count]xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_shift_store(%value: reg<llvmir.f32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %shift = const.i64 2
+  %row_i32 = load.i32 %idx_view, 0
+  %row = sext.i32.i64 %row_i32
+  %element = shl.i64 %row, %shift
+  store.indexed.f32 %value, %output_view, %element, 0, 4
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i32_row_shift_load() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %input: buffer, %output: buffer, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %shift = index.constant 2 : index
+  %start = index.constant 0 : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %input_view = buffer.view %input[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<1xf32, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.shli %row, %shift : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %loaded = view.load %input_view[%element] : view<[%element_count]xf32, #dense> -> f32
+  view.store %loaded, %output_view[%start] : f32, view<1xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_shift_load(%element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %input_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<llvmir.ptr>
+  %shift = const.i64 2
+  %row_i32 = load.i32 %idx_view, 0
+  %row = sext.i32.i64 %row_i32
+  %element = shl.i64 %row, %shift
+  %loaded = load.indexed.f32 %input_view, %element, 0, 4
+  store.f32 %loaded, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i32_row_stride_f32_to_f16_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xf16, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %half = scalar.fptrunc %value : f32 to f16
+  view.store %half, %output_view[%element] : f16, view<[%element_count]xf16, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_stride_f32_to_f16_store(%value: reg<llvmir.f32>, %stride_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %stride = sext.i32.i64 %stride_i32
+  %row_i32 = load.i32 %idx_view, 0
+  %row = sext.i32.i64 %row_i32
+  %element = mul.i64 %row, %stride
+  %half = fptrunc.f32.f16 %value
+  store.indexed.f16 %half, %output_view, %element, 0, 2
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i32_row_stride_f32_to_f16_bits_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xi16, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %half = scalar.fptrunc %value : f32 to f16
+  %bits = scalar.bitcast %half : f16 to i16
+  view.store %bits, %output_view[%element] : i16, view<[%element_count]xi16, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_stride_f32_to_f16_bits_store(%value: reg<llvmir.f32>, %stride_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %stride = sext.i32.i64 %stride_i32
+  %row_i32 = load.i32 %idx_view, 0
+  %row = sext.i32.i64 %row_i32
+  %element = mul.i64 %row, %stride
+  %half = fptrunc.f32.f16 %value
+  %bits = bitcast.f16.i16 %half
+  store.indexed.i16 %bits, %output_view, %element, 0, 2
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i32_row_stride_f32_to_bf16_bits_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xi16, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %half = scalar.fptrunc %value : f32 to bf16
+  %bits = scalar.bitcast %half : bf16 to i16
+  view.store %bits, %output_view[%element] : i16, view<[%element_count]xi16, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_stride_f32_to_bf16_bits_store(%value: reg<llvmir.f32>, %stride_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %stride = sext.i32.i64 %stride_i32
+  %row_i32 = load.i32 %idx_view, 0
+  %row = sext.i32.i64 %row_i32
+  %element = mul.i64 %row, %stride
+  %half = fptrunc.f32.bf16 %value
+  %bits = bitcast.bf16.i16 %half
+  store.indexed.i16 %bits, %output_view, %element, 0, 2
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+kernel.def target(@target) @loaded_i32_row_stride_f16_to_f32_load() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %input: buffer, %output: buffer, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %start = index.constant 0 : index
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %input_view = buffer.view %input[%base] : buffer -> view<[%element_count]xf16, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<1xf32, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %half = view.load %input_view[%element] : view<[%element_count]xf16, #dense> -> f16
+  %loaded = scalar.extf %half : f16 to f32
+  view.store %loaded, %output_view[%start] : f32, view<1xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_stride_f16_to_f32_load(%stride_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %input_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<llvmir.ptr>
+  %stride = sext.i32.i64 %stride_i32
+  %row_i32 = load.i32 %idx_view, 0
+  %row = sext.i32.i64 %row_i32
+  %element = mul.i64 %row, %stride
+  %half = load.indexed.f16 %input_view, %element, 0, 2
+  %loaded = fpext.f16.f32 %half
+  store.f32 %loaded, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
 kernel.def target(@target) @rank2_vector_tile_transpose() {

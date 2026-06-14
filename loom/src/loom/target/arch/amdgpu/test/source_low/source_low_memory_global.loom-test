@@ -2093,6 +2093,50 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_stride_f3
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @loaded_i32_row_stride_f32_to_bf16_bits_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xi16, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %half = scalar.fptrunc %value : f32 to bf16
+  %bits = scalar.bitcast %half : bf16 to i16
+  view.store %bits, %output_view[%element] : i16, view<[%element_count]xi16, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @loaded_i32_row_stride_f32_to_bf16_bits_store(%value: reg<amdgpu.sgpr>, %stride: reg<amdgpu.sgpr>, %element_count: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %idx_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %25 = v_mov_b32 0
+  %row = global_load_b32_saddr %25, %idx_view
+  %27 = v_mov_b32_copy %stride
+  %element = v_mul_lo_u32 %row, %27
+  %29 = v_mov_b32_copy %value
+  %30 = v_lshrrev_b32_lit %29, 16
+  %31 = v_and_b32_lit %30, 1
+  %32 = v_add_u32_lit %31, 32767
+  %34 = v_add_u32 %29, %32
+  %bits = v_lshrrev_b32_lit %34, 16
+  %36 = v_lshlrev_b32_src0_inline %element, 1
+  global_store_short_saddr %36, %bits, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @loaded_i32_row_stride_f16_to_f32_load() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
