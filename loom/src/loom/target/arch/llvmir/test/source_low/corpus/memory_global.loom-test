@@ -1029,7 +1029,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @bf16x4_b64() asm<llvmir.
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -1044,6 +1043,23 @@ func.def target(@target) @bf16_strided_gather_dot2(%latent: vector<2xbf16>, %wei
   %weight = vector.gather %weights_view[%origin_bounded][%offsets] : view<4096xbf16, #dense>, vector<2xindex> -> vector<2xbf16>
   %dot = vector.dot2f %latent, %weight, %accumulator : vector<2xbf16>, vector<2xbf16>, vector<1xf32>
   func.return %dot : vector<1xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @bf16_strided_gather_dot2(%latent: reg<llvmir.bf16 x2>, %weights_view: reg<llvmir.ptr>, %origin_bounded: reg<llvmir.i64>, %accumulator: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %39 = extract.v2bf16 %latent, 0
+  %40 = load.indexed.bf16 %weights_view, %origin_bounded, 0, 2
+  %41 = fpext.bf16.f32 %39
+  %42 = fpext.bf16.f32 %40
+  %43 = fma.f32 %41, %42, %accumulator
+  %44 = extract.v2bf16 %latent, 1
+  %45 = const.i64 7
+  %46 = add.i64 %origin_bounded, %45
+  %47 = load.indexed.bf16 %weights_view, %46, 14, 2
+  %48 = fpext.bf16.f32 %44
+  %49 = fpext.bf16.f32 %47
+  %dot = fma.f32 %48, %49, %43
+  return %dot
 }
 
 // ====
