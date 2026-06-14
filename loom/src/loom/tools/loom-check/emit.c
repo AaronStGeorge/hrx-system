@@ -1270,6 +1270,20 @@ static iree_status_t loom_check_emit_write_low_packet_json(
                                      &result->actual_output);
 }
 
+static void loom_check_emit_initialize_source_low_print_options(
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    iree_string_view_t descriptor_set_key,
+    loom_text_low_asm_environment_t* low_asm_environment,
+    loom_text_print_options_t* print_options) {
+  loom_low_descriptor_text_asm_environment_initialize(descriptor_registry,
+                                                      low_asm_environment);
+  *print_options = (loom_text_print_options_t){
+      .flags = LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_REQUIRE_LOW_ASM,
+      .low_asm_environment = *low_asm_environment,
+      .low_asm_descriptor_set_key = descriptor_set_key,
+  };
+}
+
 static iree_status_t loom_check_emit_write_source_low_artifacts(
     const loom_module_t* module,
     const loom_low_descriptor_registry_t* descriptor_registry,
@@ -1280,13 +1294,10 @@ static iree_status_t loom_check_emit_write_source_low_artifacts(
         "source-low low output requires a selected descriptor-set key");
   }
   loom_text_low_asm_environment_t low_asm_environment = {0};
-  loom_low_descriptor_text_asm_environment_initialize(descriptor_registry,
-                                                      &low_asm_environment);
-  const loom_text_print_options_t print_options = {
-      .flags = LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_REQUIRE_LOW_ASM,
-      .low_asm_environment = low_asm_environment,
-      .low_asm_descriptor_set_key = descriptor_set_key,
-  };
+  loom_text_print_options_t print_options = {0};
+  loom_check_emit_initialize_source_low_print_options(
+      descriptor_registry, descriptor_set_key, &low_asm_environment,
+      &print_options);
   bool has_artifact = false;
   const loom_block_t* block = loom_region_const_entry_block(module->body);
   const loom_op_t* op = NULL;
@@ -1596,8 +1607,13 @@ static iree_status_t loom_check_emit_write_source_low_text(
     if (iree_status_is_ok(status)) result->has_actual_output = true;
     return status;
   }
-  status = loom_text_print_module_to_builder(module, &result->actual_output,
-                                             LOOM_TEXT_PRINT_DEFAULT);
+  loom_text_low_asm_environment_t low_asm_environment = {0};
+  loom_text_print_options_t print_options = {0};
+  loom_check_emit_initialize_source_low_print_options(
+      &low_registry->registry, selected_descriptor_set_key,
+      &low_asm_environment, &print_options);
+  status = loom_text_print_module_to_builder_with_options(
+      module, &result->actual_output, &print_options);
   if (iree_status_is_ok(status)) result->has_actual_output = true;
   return status;
 }
