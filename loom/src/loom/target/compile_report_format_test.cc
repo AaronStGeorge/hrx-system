@@ -20,6 +20,7 @@ constexpr uint32_t kTestSourceRejectionDetail = 4;
 TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   loom_target_compile_report_pressure_row_t pressure_rows[] = {
       {
+          /*.function_name=*/IREE_SVL("branchy"),
           /*.register_class=*/IREE_SVL("test.i32"),
           /*.type_kind=*/LOOM_TYPE_REGISTER,
           /*.element_type=*/LOOM_SCALAR_TYPE_I32,
@@ -32,6 +33,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   };
   loom_target_compile_report_spill_row_t spill_rows[] = {
       {
+          /*.function_name=*/IREE_SVL("branchy"),
           /*.value_name=*/IREE_SVL("rhs"),
           /*.register_class=*/IREE_SVL("test.i32"),
           /*.type_kind=*/LOOM_TYPE_REGISTER,
@@ -98,7 +100,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS |
       LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
+  report.function_name = IREE_SVL("branchy");
   report.target_bundle_name = IREE_SVL("vm_target");
+  report.target_export_name = IREE_SVL("vm_export");
+  report.target_export_symbol = IREE_SVL("branchy_export");
+  report.target_config_name = IREE_SVL("vm_o0");
   report.lowered_symbol = IREE_SVL("branchy");
   loom_target_compile_report_record_artifact_size(&report, 128);
   loom_target_compile_report_record_schedule(&report, 5, 5, 4, 2, 1, 1, 1, 7);
@@ -134,6 +140,31 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                                            &instruction_mix);
   loom_target_compile_report_record_emission(&report, 8, 64, 80);
   loom_target_compile_report_record_memory(&report, 16, 32);
+  loom_target_compile_report_t entry_report = {};
+  loom_target_compile_report_initialize(&entry_report, iree_allocator_system());
+  entry_report.function_name = IREE_SVL("branchy_export");
+  entry_report.lowered_symbol = IREE_SVL("branchy");
+  entry_report.target_bundle_name = IREE_SVL("vm_target");
+  entry_report.target_export_name = IREE_SVL("vm_export");
+  entry_report.target_export_symbol = IREE_SVL("branchy_export");
+  entry_report.target_config_name = IREE_SVL("vm_o0");
+  loom_target_compile_report_record_schedule(&entry_report, 5, 5, 4, 2, 1, 1, 1,
+                                             7);
+  loom_target_compile_report_record_allocation(&entry_report, 6, 1, 1, 2, 0);
+  loom_target_compile_report_record_move_cause(
+      &entry_report,
+      LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION, 3, 3);
+  loom_target_compile_report_record_move_cause(
+      &entry_report, LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_CONCAT, 2, 8);
+  loom_target_compile_report_record_move_cause(
+      &entry_report,
+      LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION, 1, 1);
+  loom_target_compile_report_record_emission(&entry_report, 8, 64, 80);
+  loom_target_compile_report_record_memory(&entry_report, 16, 32);
+  loom_target_compile_report_record_static_instruction_mix(&entry_report,
+                                                           &instruction_mix);
+  IREE_ASSERT_OK(
+      loom_target_compile_report_record_entry_report(&report, &entry_report));
   IREE_ASSERT_OK(loom_target_compile_report_record_pressure_row(
       &report, &pressure_rows[0]));
   IREE_ASSERT_OK(
@@ -183,10 +214,34 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("vector_alu=3"), 0),
             IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(
-      iree_string_view_find(output, IREE_SV("pressure[0] class=test.i32"), 0),
-      IREE_STRING_VIEW_NPOS);
-  EXPECT_NE(iree_string_view_find(output, IREE_SV("spill[0] value=rhs"), 0),
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("pressure[0] function=branchy "
+                                          "class=test.i32"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("spill[0] function=branchy "
+                                          "value=rhs"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("entry[0] "
+                                          "function=branchy_export "
+                                          "source=branchy"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("resource_uses=2 hazard_gaps=1 "
+                                          "model_summaries=1 "
+                                          "pressure_summaries=1 peak_live=7"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("spill_plans=1 coalesced_copies=2 "
+                                          "materialized_copies=0 "
+                                          "move_kinds=3 move_packets=6 "
+                                          "move_units=12"),
+                                  0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("source_low selected_ops=4"), 0),
@@ -230,6 +285,21 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"schedule\":{\"node_count\":5"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"entries\":{\"count\":1,"
+                                          "\"rows\":[{\"index\":0,"
+                                          "\"function\":\"branchy_export\""),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"schedule_resource_use_count\":2"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"move_causes\":{\"kind_count\":3,"
+                        "\"packet_count\":6,\"unit_count\":12,\"causes\""),
+                0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"move_causes\":{\"kind_count\":3"), 0),
@@ -294,12 +364,14 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);
+  loom_target_compile_report_deinitialize(&entry_report);
   loom_target_compile_report_deinitialize(&report);
 }
 
 TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
   loom_target_compile_report_pressure_row_t pressure_rows[] = {
       {
+          /*.function_name=*/IREE_SVL("summary_only"),
           /*.register_class=*/IREE_SVL("test.i32"),
           /*.type_kind=*/LOOM_TYPE_REGISTER,
           /*.element_type=*/LOOM_SCALAR_TYPE_I32,

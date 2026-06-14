@@ -52,6 +52,56 @@
       ]
     },
     {
+      "name": "reports multi-entry AMDGPU HAL artifacts by emitted function",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/multi_entry_report_amdgpu.loom",
+            "text": "kernel.def export(\"compile_report_store_i32\") @compile_report_store_i32() {\n  %unit = index.constant 1 : index\n  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index\n} launch(%output: buffer) {\n  %zero_offset = index.constant 0 : offset\n  %zero_index = index.constant 0 : index\n  %value = scalar.constant 42 : i32\n  %global = buffer.assume.memory_space<global> %output : buffer\n  %view = buffer.view %global[%zero_offset] : buffer -> view<1xi32, #dense>\n  view.store %value, %view[%zero_index] : i32, view<1xi32, #dense>\n  kernel.return\n}\n\nkernel.def export(\"compile_report_store_i8\") @compile_report_store_i8() {\n  %unit = index.constant 1 : index\n  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index\n} launch(%output: buffer) {\n  %zero_offset = index.constant 0 : offset\n  %zero_index = index.constant 0 : index\n  %value = scalar.constant 7 : i8\n  %global = buffer.assume.memory_space<global> %output : buffer\n  %view = buffer.view %global[%zero_offset] : buffer -> view<1xi8, #dense>\n  view.store %value, %view[%zero_index] : i8, view<1xi8, #dense>\n  kernel.return\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/multi_entry_report_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--output={tmp}/multi_entry_report_amdgpu.hsaco",
+              "--artifact-manifest=summary",
+              "--compile-report=details"
+            ]
+          },
+          "stderr": {
+            "contains": {
+              "unordered": [
+                "\"target_export\":null",
+                "\"entries\":{\"count\":2,\"rows\":[",
+                "\"function\":\"compile_report_store_i32\"",
+                "\"function\":\"compile_report_store_i8\"",
+                "\"source_function\":\"compile_report_store_i32\"",
+                "\"source_function\":\"compile_report_store_i8\"",
+                "\"pressure_rows\":{\"count\":",
+                "\"status\":\"OK\""
+              ]
+            }
+          },
+          "files": [
+            {
+              "path": "{tmp}/multi_entry_report_amdgpu.hsaco",
+              "non_empty": true
+            },
+            {
+              "path": "{tmp}/multi_entry_report_amdgpu.hsaco.manifest.json",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "requires invocation target for AMDGPU HAL root without target attr",
       "steps": [
         {

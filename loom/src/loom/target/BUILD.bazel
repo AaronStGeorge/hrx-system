@@ -189,6 +189,7 @@ loom_cc_library(
         ":compile_report",
         ":registers",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/codegen/low/lower",
         "//loom/src/loom/ir",

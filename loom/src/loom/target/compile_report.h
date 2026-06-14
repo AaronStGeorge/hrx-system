@@ -55,6 +55,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX = 1u << 9,
   // Target-legalization decision rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS = 1u << 10,
+  // Per-entry native artifact summaries were recorded.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES = 1u << 11,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -210,8 +212,76 @@ typedef struct loom_target_compile_report_static_instruction_mix_t {
   uint64_t register_move_count;
 } loom_target_compile_report_static_instruction_mix_t;
 
+// One emitted artifact entry summary in a compile report.
+typedef struct loom_target_compile_report_entry_t {
+  // Target artifact function symbol emitted for this entry.
+  iree_string_view_t function_name;
+  // Source or target-low function symbol that produced this entry.
+  iree_string_view_t source_function_name;
+  // Resolved target record name selected for this entry.
+  iree_string_view_t target_bundle_name;
+  // Resolved target snapshot name selected for this entry.
+  iree_string_view_t target_snapshot_name;
+  // Resolved target export-plan name selected for this entry.
+  iree_string_view_t target_export_name;
+  // Target artifact export symbol requested by the export plan, if any.
+  iree_string_view_t target_export_symbol;
+  // Resolved target config name selected for this entry.
+  iree_string_view_t target_config_name;
+  // Optional detail flags indicating which summary groups are populated.
+  loom_target_compile_report_detail_flags_t detail_flags;
+  // Number of low schedule nodes before target emission.
+  uint64_t schedule_node_count;
+  // Number of low schedule nodes in scheduled order.
+  uint64_t scheduled_node_count;
+  // Number of low schedule dependency edges.
+  uint64_t schedule_dependency_count;
+  // Number of descriptor resource-use records.
+  uint64_t schedule_resource_use_count;
+  // Number of required schedule hazard gaps.
+  uint64_t schedule_hazard_gap_count;
+  // Number of schedule model-quality summary records.
+  uint64_t schedule_model_summary_count;
+  // Number of register-pressure summary records.
+  uint64_t register_pressure_summary_count;
+  // Maximum boundary-live register units observed for this entry.
+  uint64_t register_pressure_peak_live_units;
+  // Number of allocation assignments.
+  uint64_t allocation_assignment_count;
+  // Number of values assigned to spill slots.
+  uint64_t allocation_spill_count;
+  // Number of synthetic spill plans.
+  uint64_t allocation_spill_plan_count;
+  // Number of low.copy ops coalesced away by allocation.
+  uint64_t allocation_coalesced_copy_count;
+  // Number of low.copy ops that must remain materialized.
+  uint64_t allocation_materialized_copy_count;
+  // Number of target instructions or bytecode opcodes emitted.
+  uint64_t emitted_instruction_count;
+  // Number of semantic target code bytes before target-local padding.
+  uint64_t emitted_code_byte_count;
+  // Number of target code storage bytes including target-local padding.
+  uint64_t emitted_code_storage_byte_count;
+  // Estimated target private memory bytes.
+  uint64_t private_memory_bytes;
+  // Estimated target local/shared memory bytes.
+  uint64_t local_memory_bytes;
+  // Residual target move counts indexed by
+  // loom_target_compile_report_move_cause_t.
+  loom_target_compile_report_move_cause_counts_t
+      move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
+  // Static descriptor-backed instruction-mix feature counters.
+  loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Number of detailed register-pressure rows copied for this entry.
+  iree_host_size_t pressure_row_count;
+  // Number of detailed spill rows copied for this entry.
+  iree_host_size_t spill_row_count;
+} loom_target_compile_report_entry_t;
+
 // One register-pressure peak row in a compile report.
 typedef struct loom_target_compile_report_pressure_row_t {
+  // Target artifact function symbol containing this pressure peak.
+  iree_string_view_t function_name;
   // Register class name for register values, or an empty string otherwise.
   iree_string_view_t register_class;
   // Numeric Loom type kind for the pressure class.
@@ -232,6 +302,8 @@ typedef struct loom_target_compile_report_pressure_row_t {
 
 // One predicted spill row in a compile report.
 typedef struct loom_target_compile_report_spill_row_t {
+  // Target artifact function symbol containing this spill plan.
+  iree_string_view_t function_name;
   // SSA value name represented by the spilled assignment.
   iree_string_view_t value_name;
   // Register class name for the spilled value.
@@ -385,6 +457,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_detail_flags_t requested_detail_flags;
   // Optional detail flags indicating which numeric summaries are populated.
   loom_target_compile_report_detail_flags_t detail_flags;
+  // Target artifact function symbol when exactly one entry is described.
+  iree_string_view_t function_name;
   // VM module name requested for archive emission.
   iree_string_view_t module_name;
   // Execution or codegen backend name that produced the candidate, if any.
@@ -399,6 +473,9 @@ typedef struct loom_target_compile_report_t {
   iree_string_view_t target_snapshot_name;
   // Resolved target export-plan name selected for compilation, if any.
   iree_string_view_t target_export_name;
+  // Target artifact export symbol requested by the selected export plan, if
+  // any.
+  iree_string_view_t target_export_symbol;
   // Resolved target config name selected for compilation, if any.
   iree_string_view_t target_config_name;
   // Low function symbol produced or selected after lowering, if any.
@@ -465,6 +542,8 @@ typedef struct loom_target_compile_report_t {
       move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
   // Static descriptor-backed instruction-mix feature counters.
   loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
+  // Owned emitted artifact entry summary rows.
+  loom_target_compile_report_row_list_t entry_rows;
   // Owned register-pressure peak rows.
   loom_target_compile_report_row_list_t pressure_rows;
   // Owned predicted spill rows.
@@ -555,6 +634,13 @@ void loom_target_compile_report_record_emission(
 void loom_target_compile_report_record_memory(
     loom_target_compile_report_t* report, uint64_t private_memory_bytes,
     uint64_t local_memory_bytes);
+
+// Records one emitted artifact entry and copies its detailed pressure and spill
+// rows into |report|. String views remain borrowed from |entry_report|'s
+// original owners.
+iree_status_t loom_target_compile_report_record_entry_report(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_t* entry_report);
 
 // Records one pressure row.
 iree_status_t loom_target_compile_report_record_pressure_row(

@@ -213,6 +213,7 @@ loom_cc_library(
     ::registers
     iree::base
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
     loom::codegen::low::frame
     loom::codegen::low::lower
     loom::ir

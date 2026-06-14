@@ -1285,9 +1285,14 @@ static iree_status_t iree_benchmark_loom_write_static_summary_json(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
       stream, &first_field, "target_key", report->target_key));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
+      stream, &first_field, "function", report->function_name));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
       stream, &first_field, "target_bundle", report->target_bundle_name));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
       stream, &first_field, "target_export", report->target_export_name));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
+      stream, &first_field, "target_export_symbol",
+      report->target_export_symbol));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
       stream, &first_field, "target_config", report->target_config_name));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
@@ -1298,6 +1303,11 @@ static iree_status_t iree_benchmark_loom_write_static_summary_json(
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_ARTIFACT_SIZE)) {
     IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_u64_field(
         stream, &first_field, "artifact_size", report->artifact_size));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES)) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, &first_field, "entry_count", report->entry_rows.count));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION)) {

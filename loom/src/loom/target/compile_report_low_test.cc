@@ -457,6 +457,8 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
       report.detail_flags, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS));
+  EXPECT_TRUE(
+      iree_string_view_equal(report.function_name, IREE_SV("<unnamed>")));
   EXPECT_EQ(report.schedule_node_count, 13u);
   EXPECT_EQ(report.register_pressure_summary_count, 2u);
   EXPECT_EQ(report.register_pressure_peak_live_units, 11u);
@@ -499,6 +501,8 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
   const auto* pressure_rows =
       static_cast<const loom_target_compile_report_pressure_row_t*>(
           loom_target_compile_report_vec_const_rows(report.pressure_rows.head));
+  EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].function_name,
+                                     IREE_SV("<unnamed>")));
   EXPECT_EQ(pressure_rows[0].peak_live_units, 7u);
   EXPECT_EQ(pressure_rows[0].peak_live_values, 5u);
   EXPECT_TRUE(iree_string_view_equal(pressure_rows[0].peak_operation_name,
@@ -509,6 +513,8 @@ TEST(CompileReportLowTest, RecordsPressureAndSpillRows) {
   const auto* spill_rows =
       static_cast<const loom_target_compile_report_spill_row_t*>(
           loom_target_compile_report_vec_const_rows(report.spill_rows.head));
+  EXPECT_TRUE(iree_string_view_equal(spill_rows[0].function_name,
+                                     IREE_SV("<unnamed>")));
   EXPECT_EQ(spill_rows[0].assignment_index, 0u);
   EXPECT_EQ(spill_rows[0].slot_index, 0u);
   EXPECT_TRUE(
