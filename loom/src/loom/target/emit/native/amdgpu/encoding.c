@@ -73,6 +73,37 @@ typedef enum loom_amdgpu_vopd_component_slot_e {
   LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y = 1,
 } loom_amdgpu_vopd_component_slot_t;
 
+typedef struct loom_amdgpu_vopd_component_fields_t {
+  // Slot-local operation id field.
+  uint16_t* op;
+  // Slot-local destination field.
+  uint16_t* vdst;
+  // Slot-local unified SRC0 selector field.
+  uint16_t* src0;
+  // Slot-local VGPR source 1 field.
+  uint16_t* vsrc1;
+} loom_amdgpu_vopd_component_fields_t;
+
+static loom_amdgpu_vopd_component_fields_t
+loom_amdgpu_vopd_component_fields_for_slot(
+    loom_amdgpu_encoding_vopdxy_fields_t* fields,
+    loom_amdgpu_vopd_component_slot_t slot) {
+  if (slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y) {
+    return (loom_amdgpu_vopd_component_fields_t){
+        .op = &fields->op_y,
+        .vdst = &fields->vdst_y,
+        .src0 = &fields->src0_y,
+        .vsrc1 = &fields->vsrc1_y,
+    };
+  }
+  return (loom_amdgpu_vopd_component_fields_t){
+      .op = &fields->op_x,
+      .vdst = &fields->vdst_x,
+      .src0 = &fields->src0_x,
+      .vsrc1 = &fields->vsrc1_x,
+  };
+}
+
 static iree_status_t loom_amdgpu_descriptor_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
@@ -1445,18 +1476,11 @@ static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
     loom_amdgpu_encoding_vopdxy_fields_t* fields,
     loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
     loom_amdgpu_vopd_component_slot_t slot) {
-  uint16_t* out_vdst = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                           ? &fields->vdst_y
-                           : &fields->vdst_x;
-  uint16_t* out_src0 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                           ? &fields->src0_y
-                           : &fields->src0_x;
-  uint16_t* out_vsrc1 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                            ? &fields->vsrc1_y
-                            : &fields->vsrc1_x;
-  *out_vdst = 0;
-  *out_src0 = 0;
-  *out_vsrc1 = 0;
+  loom_amdgpu_vopd_component_fields_t slot_fields =
+      loom_amdgpu_vopd_component_fields_for_slot(fields, slot);
+  *slot_fields.vdst = 0;
+  *slot_fields.src0 = 0;
+  *slot_fields.vsrc1 = 0;
   *out_flags = LOOM_AMDGPU_VOPD_PAIR_FLAG_NONE;
   *out_literal_u32 = 0;
 
@@ -1467,7 +1491,7 @@ static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
                             "operand shape");
   }
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_result_vgpr(state, packet, 0, out_vdst));
+      loom_amdgpu_packet_result_vgpr(state, packet, 0, slot_fields.vdst));
   const loom_value_id_t* results = loom_op_const_results(op);
   const loom_value_id_t* operands = loom_op_const_operands(op);
   const loom_low_allocation_assignment_t* result_assignment =
@@ -1487,12 +1511,12 @@ static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
   IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_vgpr(
       state->allocation, src0_assignment, &src0_vgpr));
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_encode_vopd_vgpr_src0(state, src0_vgpr, out_src0));
+      loom_amdgpu_encode_vopd_vgpr_src0(state, src0_vgpr, slot_fields.src0));
 
   const loom_low_allocation_assignment_t* vsrc1_assignment =
       loom_amdgpu_map_assignment(state->allocation, operands[2]);
   return loom_amdgpu_assignment_vgpr(state->allocation, vsrc1_assignment,
-                                     out_vsrc1);
+                                     slot_fields.vsrc1);
 }
 
 static iree_status_t loom_amdgpu_encode_vopd_literal_fma_component(
@@ -1500,18 +1524,11 @@ static iree_status_t loom_amdgpu_encode_vopd_literal_fma_component(
     loom_amdgpu_encoding_vopdxy_fields_t* fields,
     loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
     loom_amdgpu_vopd_component_slot_t slot) {
-  uint16_t* out_vdst = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                           ? &fields->vdst_y
-                           : &fields->vdst_x;
-  uint16_t* out_src0 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                           ? &fields->src0_y
-                           : &fields->src0_x;
-  uint16_t* out_vsrc1 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                            ? &fields->vsrc1_y
-                            : &fields->vsrc1_x;
-  *out_vdst = 0;
-  *out_src0 = 0;
-  *out_vsrc1 = 0;
+  loom_amdgpu_vopd_component_fields_t slot_fields =
+      loom_amdgpu_vopd_component_fields_for_slot(fields, slot);
+  *slot_fields.vdst = 0;
+  *slot_fields.src0 = 0;
+  *slot_fields.vsrc1 = 0;
   *out_flags = LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL;
   *out_literal_u32 = 0;
 
@@ -1523,7 +1540,7 @@ static iree_status_t loom_amdgpu_encode_vopd_literal_fma_component(
                             "unexpected operand shape");
   }
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_result_vgpr(state, packet, 0, out_vdst));
+      loom_amdgpu_packet_result_vgpr(state, packet, 0, slot_fields.vdst));
 
   const loom_value_id_t* operands = loom_op_const_operands(op);
   const loom_low_allocation_assignment_t* src0_assignment =
@@ -1532,12 +1549,12 @@ static iree_status_t loom_amdgpu_encode_vopd_literal_fma_component(
   IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_vgpr(
       state->allocation, src0_assignment, &src0_vgpr));
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_encode_vopd_vgpr_src0(state, src0_vgpr, out_src0));
+      loom_amdgpu_encode_vopd_vgpr_src0(state, src0_vgpr, slot_fields.src0));
 
   const loom_low_allocation_assignment_t* vsrc1_assignment =
       loom_amdgpu_map_assignment(state->allocation, operands[1]);
   IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_vgpr(
-      state->allocation, vsrc1_assignment, out_vsrc1));
+      state->allocation, vsrc1_assignment, slot_fields.vsrc1));
   return loom_amdgpu_read_immediate_u32(state, packet, 0, out_literal_u32);
 }
 
@@ -1546,21 +1563,12 @@ static iree_status_t loom_amdgpu_encode_vopd_mov_component(
     loom_amdgpu_encoding_vopdxy_fields_t* fields,
     loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
     loom_amdgpu_vopd_component_slot_t slot) {
-  uint16_t* out_op =
-      slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y ? &fields->op_y : &fields->op_x;
-  uint16_t* out_vdst = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                           ? &fields->vdst_y
-                           : &fields->vdst_x;
-  uint16_t* out_src0 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                           ? &fields->src0_y
-                           : &fields->src0_x;
-  uint16_t* out_vsrc1 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
-                            ? &fields->vsrc1_y
-                            : &fields->vsrc1_x;
-  *out_op = 8;
-  *out_vdst = 0;
-  *out_src0 = 0;
-  *out_vsrc1 = 0;
+  loom_amdgpu_vopd_component_fields_t slot_fields =
+      loom_amdgpu_vopd_component_fields_for_slot(fields, slot);
+  *slot_fields.op = 8;
+  *slot_fields.vdst = 0;
+  *slot_fields.src0 = 0;
+  *slot_fields.vsrc1 = 0;
   *out_flags = LOOM_AMDGPU_VOPD_PAIR_FLAG_NONE;
   *out_literal_u32 = 0;
 
@@ -1572,12 +1580,12 @@ static iree_status_t loom_amdgpu_encode_vopd_mov_component(
                             "operand shape");
   }
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_result_vgpr(state, packet, 0, out_vdst));
+      loom_amdgpu_packet_result_vgpr(state, packet, 0, slot_fields.vdst));
   uint32_t imm32 = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_read_immediate_u32(state, packet, 0, &imm32));
   if (!loom_amdgpu_encoding_inline_u32_source(state->encoding_table, imm32,
-                                              out_src0)) {
+                                              slot_fields.src0)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU VOPD mov component immediate %" PRIu32
                             " does not have an inline source encoding",
