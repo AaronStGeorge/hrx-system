@@ -24,6 +24,11 @@ from loom.target.contracts import (
     LowerAttrCopyKind,
     LowerEmitKind,
     Scalar,
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
+    SourceMemoryRootKind,
+    SourceValueKind,
     TypePattern,
     ValueAliasRule,
     ValueElideRule,
@@ -39,6 +44,7 @@ from loom.target.test.descriptors import (
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
     TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
+    TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
 )
 
 
@@ -205,6 +211,60 @@ def test_compile_lower_rule_set_offsets_variadic_operand_elements() -> None:
         emit.operand_ref_start : emit.operand_ref_start + emit.operand_ref_count
     ]
     assert tuple(value_ref.index for value_ref in value_refs) == (0, 1, 2, 3)
+
+
+def test_compile_lower_rule_set_compiles_source_memory_dynamic_term_operand() -> None:
+    table = ContractFragment(
+        name="test.source-memory-term",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=vector.vector_load,
+                descriptor=TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
+                guards=(
+                    Guard.operand_segment_count("indices", 0),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
+                        operands={
+                            "address": ValueRef.operand("view"),
+                            "index": ValueRef.source_memory_dynamic_term(),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                        source_memory=SourceMemoryConstraint(
+                            operation=SourceMemoryOperation.LOAD,
+                            root_kind=SourceMemoryRootKind.ANY,
+                            memory_spaces=("unknown", "global"),
+                            element_byte_count=4,
+                            vector_lane_count=4,
+                            vector_lane_byte_stride=4,
+                            static_byte_offset_minimum=-(2**63),
+                            static_byte_offset_maximum=(2**63) - 1,
+                            dynamic_term_count=1,
+                            dynamic_index_source=SourceMemoryDynamicIndexSource.VALUE,
+                            dynamic_byte_stride=None,
+                        ),
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    emit = compiled.emits[0]
+    value_refs = compiled.value_refs[
+        emit.operand_ref_start : emit.operand_ref_start + emit.operand_ref_count
+    ]
+    assert tuple(value_ref.kind for value_ref in value_refs) == (
+        SourceValueKind.OPERAND,
+        SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM,
+    )
+    assert tuple(value_ref.index for value_ref in value_refs) == (0, 0)
+    source_memory = compiled.source_memories[emit.source_memory_ordinal - 1]
+    assert source_memory.constraint is table.cases[0].emit[0].source_memory
 
 
 def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:

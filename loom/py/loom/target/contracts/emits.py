@@ -170,6 +170,11 @@ class EmitDescriptorOp:
                 self.descriptor, descriptor_field, "descriptor result type binding"
             )
             if isinstance(binding, ValueRef):
+                if binding.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
+                    raise ValueError(
+                        f"{source_op.name}: descriptor result type "
+                        f"'{descriptor_field}' cannot bind a source-memory term"
+                    )
                 binding.validate(
                     source_op,
                     f"descriptor result type '{descriptor_field}'",
@@ -242,6 +247,27 @@ class EmitDescriptorOp:
             raise ValueError(f"{source_op.name}: source memory requires an op emit")
         if self.source_memory is not None:
             self.source_memory.validate(source_op)
+        for descriptor_field, value_ref in operand_bindings.items():
+            if value_ref.kind != SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
+                continue
+            if self.source_memory is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs a source-memory emit"
+                )
+            if self.source_memory.dynamic_term_count is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs a fixed source-memory "
+                    "dynamic term count"
+                )
+            if value_ref.element >= self.source_memory.dynamic_term_count:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' references dynamic term "
+                    f"{value_ref.element}, but the source-memory constraint only "
+                    f"selects {self.source_memory.dynamic_term_count}"
+                )
         self._validate_immediates(source_op)
         return tuple(produced_temporaries)
 

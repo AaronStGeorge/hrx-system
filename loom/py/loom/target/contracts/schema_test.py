@@ -147,6 +147,37 @@ def test_descriptor_rule_accepts_named_test_low_descriptor_object() -> None:
     assert table.cases[0].source_op == scalar_arithmetic.scalar_addi
 
 
+def test_descriptor_rule_rejects_source_memory_term_without_source_memory() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"scalar.addi: descriptor 'test.add.i32' operand 'lhs' needs a "
+            r"source-memory emit"
+        ),
+    ):
+        ContractFragment(
+            name="descriptor.source-memory-term",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=scalar_arithmetic.scalar_addi,
+                    descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                    guards=(Guard.value_type("result", Scalar("i32")),),
+                    emit=(
+                        EmitDescriptorOp(
+                            descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                            operands={
+                                "lhs": ValueRef.source_memory_dynamic_term(),
+                                "rhs": ValueRef.operand("rhs"),
+                            },
+                            results={"dst": ValueRef.result("result")},
+                        ),
+                    ),
+                )
+            ],
+        )
+
+
 def test_compare_descriptor_rule_validates_enum_guard() -> None:
     descriptor = TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR
 

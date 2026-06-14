@@ -23,7 +23,6 @@ low.func.def target(@target) abi(object_function) @global_saddr_fallback(%input_
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -33,6 +32,12 @@ func.def target(@target) @global_saddr_dynamic_offset_argument(%input: buffer, %
   %input_view = buffer.view %input_global[%byte_offset] : buffer -> view<1xi32, #dense>
   %loaded = view.load %input_view[0] : view<1xi32, #dense> -> i32
   func.return %loaded : i32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @global_saddr_dynamic_offset_argument(%input_view: reg<llvmir.ptr>, %byte_offset: reg<llvmir.i64>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %loaded = load.indexed.i32 %input_view, %byte_offset, 0, 1
+  return %loaded
 }
 
 // ====
@@ -681,7 +686,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalar_arg_index(%co
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -699,9 +703,18 @@ kernel.def target(@target) @i32_dynamic_view_base() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_dynamic_view_base(%offset_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %control_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %base = zext.i32.i64 %offset_i32
+  %loaded = load.indexed.i32 %control_view, %base, 8, 1
+  store.i32 %loaded, %output_view, 0
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -720,9 +733,19 @@ kernel.def target(@target) @i32_dynamic_view_base_loaded() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_dynamic_view_base_loaded() asm<llvmir.generic.core> {
+  %control_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %base_i32 = load.i32 %control_view, 28
+  %base = zext.i32.i64 %base_i32
+  %loaded = load.indexed.i32 %control_view, %base, 8, 1
+  store.i32 %loaded, %output_view, 0
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -738,6 +761,16 @@ kernel.def target(@target) @i32x4_dynamic_view_base_b128() {
   %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
   vector.store %loaded, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32x4_dynamic_view_base_b128(%offset_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %base = zext.i32.i64 %offset_i32
+  %loaded = load.indexed.v4i32 %input_view, %base, 0, 1
+  store.v4i32 %loaded, %output_view, 0
+  return
 }
 
 // ====
@@ -996,7 +1029,6 @@ kernel.def target(@target) @rank2_vector_tile_transpose() {
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -1022,4 +1054,21 @@ kernel.def target(@target) @grid_stride_store_offset() {
   cfg.br ^loop(%next: offset)
 ^done:
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @grid_stride_store_offset(%byte_length: reg<llvmir.i64>, %value: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %target_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %lane = kernel.workitem_id.x
+  %step = const.i64 64
+  low.br ^loop(%lane: reg<llvmir.i64>)
+^loop(%byte_offset: reg<llvmir.i64>):
+  %inside = cmp.ult.i64 %byte_offset, %byte_length
+  low.cond_br %inside, ^body, ^done : reg<llvmir.i1>
+^body:
+  store.indexed.i32 %value, %target_view, %byte_offset, 0, 1
+  %next = add.i64 %byte_offset, %step
+  low.br ^loop(%next: reg<llvmir.i64>)
+^done:
+  return
 }

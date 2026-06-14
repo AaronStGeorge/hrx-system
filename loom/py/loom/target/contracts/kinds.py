@@ -28,3 +28,4 @@ class SourceValueKind(Enum):
     OPERAND = "operand"
     RESULT = "result"
     TEMPORARY = "temporary"
+    SOURCE_MEMORY_DYNAMIC_TERM = "source_memory_dynamic_term"

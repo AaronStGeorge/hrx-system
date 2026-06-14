@@ -589,7 +589,11 @@ def _view_load_rule(
     descriptor = _descriptor(descriptor_key)
     operands = {"ptr": ValueRef.operand(view_field)}
     if address_dynamic:
-        operands["index"] = ValueRef.operand("indices")
+        operands["index"] = (
+            ValueRef.operand("indices")
+            if source_dynamic
+            else ValueRef.source_memory_dynamic_term()
+        )
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
@@ -631,7 +635,11 @@ def _view_store_rule(
         "ptr": ValueRef.operand(view_field),
     }
     if address_dynamic:
-        operands["index"] = ValueRef.operand("indices")
+        operands["index"] = (
+            ValueRef.operand("indices")
+            if source_dynamic
+            else ValueRef.source_memory_dynamic_term()
+        )
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
@@ -1599,6 +1607,7 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
     for element, element_byte_count in _MEMORY_VALUE_TYPES:
         for source_dynamic, address_dynamic in (
             (False, False),
+            (False, True),
             (True, False),
             (True, True),
         ):

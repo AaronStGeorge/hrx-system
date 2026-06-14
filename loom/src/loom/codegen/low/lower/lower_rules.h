@@ -75,6 +75,8 @@ typedef enum loom_low_lower_value_ref_kind_e {
   LOOM_LOW_LOWER_VALUE_REF_RESULT = 2,
   // Rule-local temporary low value at |index|.
   LOOM_LOW_LOWER_VALUE_REF_TEMPORARY = 3,
+  // Dynamic source-memory term at |index|.
+  LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_TERM = 4,
 } loom_low_lower_value_ref_kind_t;
 
 // Returns true when the materializer can produce a low value for the source
@@ -165,7 +167,7 @@ typedef struct loom_low_lower_rule_descriptor_ref_t {
 typedef struct loom_low_lower_value_ref_t {
   // Source value namespace being referenced.
   loom_low_lower_value_ref_kind_t kind;
-  // Operand or result ordinal in the source op.
+  // Ordinal within the namespace selected by |kind|.
   uint16_t index;
   // One-based materializer table row used when this source ref is consumed as a
   // low operand. Zero means direct source-to-low value lookup.

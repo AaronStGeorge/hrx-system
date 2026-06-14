@@ -48,6 +48,14 @@ class ValueRef:
     def temporary(cls, field: str) -> Self:
         return cls(kind=SourceValueKind.TEMPORARY, field=field)
 
+    @classmethod
+    def source_memory_dynamic_term(cls, *, term: int = 0) -> Self:
+        return cls(
+            kind=SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM,
+            field="",
+            element=term,
+        )
+
     def validate(
         self,
         source_op: Op,
@@ -55,8 +63,6 @@ class ValueRef:
         *,
         defined_temporaries: Iterable[str] = (),
     ) -> None:
-        if not self.field:
-            raise ValueError(f"{source_op.name}: {subject} field must be non-empty")
         if self.materializer is not None:
             if not self.materializer:
                 raise ValueError(
@@ -67,6 +73,8 @@ class ValueRef:
                     f"{source_op.name}: {subject} materializer requires an operand"
                 )
         if self.kind == SourceValueKind.OPERAND:
+            if not self.field:
+                raise ValueError(f"{source_op.name}: {subject} field must be non-empty")
             operand = _require_operand(source_op, self.field, subject)
             if self.element < 0:
                 raise ValueError(
@@ -78,13 +86,33 @@ class ValueRef:
                     "is not variadic"
                 )
             return
+        if self.kind == SourceValueKind.RESULT:
+            if not self.field:
+                raise ValueError(f"{source_op.name}: {subject} field must be non-empty")
+            if self.element != 0:
+                raise ValueError(
+                    f"{source_op.name}: {subject} element selection requires an operand"
+                )
+            _require_result(source_op, self.field, subject)
+            return
+        if self.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
+            if self.field:
+                raise ValueError(
+                    f"{source_op.name}: {subject} source-memory term must not name "
+                    "a source field"
+                )
+            if self.element < 0:
+                raise ValueError(
+                    f"{source_op.name}: {subject} source-memory term must be "
+                    "non-negative"
+                )
+            return
+        if not self.field:
+            raise ValueError(f"{source_op.name}: {subject} field must be non-empty")
         if self.element != 0:
             raise ValueError(
                 f"{source_op.name}: {subject} element selection requires an operand"
             )
-        if self.kind == SourceValueKind.RESULT:
-            _require_result(source_op, self.field, subject)
-            return
         if self.field not in set(defined_temporaries):
             raise ValueError(
                 f"{source_op.name}: {subject} temporary '{self.field}' is not defined"

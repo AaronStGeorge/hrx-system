@@ -1643,6 +1643,8 @@ def _source_value_index(
         ordinal = temporary_ordinals.get(value_ref.field)
         if ordinal is not None:
             return ordinal
+    if value_ref.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
+        return value_ref.element
     raise ValueError(f"source value field '{value_ref.field}' is not declared")
 
 
