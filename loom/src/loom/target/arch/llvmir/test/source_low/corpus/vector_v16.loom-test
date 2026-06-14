@@ -233,7 +233,6 @@ low.func.def target(@target) abi(object_function) @f32x16_compare_select(%lhs: r
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -248,9 +247,15 @@ func.def target(@target) @f32x16_static_memory(%input: buffer, %output: buffer) 
   func.return
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_static_memory(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  %loaded = load.v16f32 %input_view, 32
+  store.v16f32 %loaded, %output_view, 64
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -266,9 +271,15 @@ func.def target(@target) @f32x16_dynamic_memory(%input: buffer, %output: buffer,
   func.return
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_dynamic_memory(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>, %bounded_i: reg<llvmir.i64>) asm<llvmir.generic.core> {
+  %loaded = load.indexed.v16f32 %input_view, %bounded_i, 16, 4
+  store.indexed.v16f32 %loaded, %output_view, %bounded_i, 32, 4
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -282,6 +293,14 @@ func.def target(@target) @f32x16_index_add_memory(%input: buffer, %output: buffe
   %loaded = vector.load %input_view[%bounded_sum] : view<32xf32, #dense> -> vector<16xf32>
   vector.store %loaded, %output_view[%bounded_sum] : vector<16xf32>, view<32xf32, #dense>
   func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_index_add_memory(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>, %i: reg<llvmir.i64>, %j: reg<llvmir.i64>) asm<llvmir.generic.core> {
+  %bounded_sum = add.i64 %i, %j
+  %loaded = load.indexed.v16f32 %input_view, %bounded_sum, 0, 4
+  store.indexed.v16f32 %loaded, %output_view, %bounded_sum, 0, 4
+  return
 }
 
 // ====

@@ -16,6 +16,18 @@ low.func.def target(@target) abi(object_function) @second(%input_view: reg<llvmi
   return %loaded
 }
 
+low.func.def target(@target) abi(object_function) @memory_widths(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>, %bounded_i: reg<llvmir.i64>) -> (reg<llvmir.f32 x16>) asm<llvmir.generic.core> {
+  %byte = load.i8 %input_view, 1
+  %halves = load.v4f16 %input_view, 8
+  %brain = load.v2bf16 %input_view, 32
+  %wide = load.indexed.v16f32 %input_view, %bounded_i, 64, 64
+  store.i8 %byte, %output_view, 1
+  store.v4f16 %halves, %output_view, 8
+  store.v2bf16 %brain, %output_view, 32
+  store.indexed.v16f32 %wide, %output_view, %bounded_i, 64, 64
+  return %wide
+}
+
 low.func.def target(@target) abi(object_function) @i8_identity(%value: reg<llvmir.i8>) -> (reg<llvmir.i8>) asm<llvmir.generic.core> {
   return %value
 }
@@ -138,6 +150,31 @@ entry:
   ret i32 %loaded
 }
 
+define dso_local <16 x float> @memory_widths(ptr %input_view, ptr %output_view, i64 %bounded_i) {
+entry:
+  %v21 = getelementptr i8, ptr %input_view, i64 1
+  %byte = load i8, ptr %v21
+  %v24 = getelementptr i8, ptr %input_view, i64 8
+  %halves = load <4 x half>, ptr %v24
+  %v27 = getelementptr i8, ptr %input_view, i64 32
+  %brain = load <2 x bfloat>, ptr %v27
+  %v30 = mul i64 %bounded_i, 64
+  %v32 = add i64 %v30, 64
+  %v33 = getelementptr i8, ptr %input_view, i64 %v32
+  %wide = load <16 x float>, ptr %v33
+  %v36 = getelementptr i8, ptr %output_view, i64 1
+  store i8 %byte, ptr %v36
+  %v38 = getelementptr i8, ptr %output_view, i64 8
+  store <4 x half> %halves, ptr %v38
+  %v40 = getelementptr i8, ptr %output_view, i64 32
+  store <2 x bfloat> %brain, ptr %v40
+  %v42 = mul i64 %bounded_i, 64
+  %v44 = add i64 %v42, 64
+  %v45 = getelementptr i8, ptr %output_view, i64 %v44
+  store <16 x float> %wide, ptr %v45
+  ret <16 x float> %wide
+}
+
 define dso_local i8 @i8_identity(i8 %value) {
 entry:
   ret i8 %value
@@ -216,15 +253,15 @@ entry:
 
 define dso_local <4 x i32> @structural_i32_vector(i32 %value, <4 x i32> %source) {
 entry:
-  %v58 = insertelement <4 x i32> poison, i32 %value, i64 0
-  %v60 = insertelement <4 x i32> %v58, i32 %value, i64 1
-  %v62 = insertelement <4 x i32> %v60, i32 %value, i64 2
-  %splat = insertelement <4 x i32> %v62, i32 %value, i64 3
+  %v87 = insertelement <4 x i32> poison, i32 %value, i64 0
+  %v89 = insertelement <4 x i32> %v87, i32 %value, i64 1
+  %v91 = insertelement <4 x i32> %v89, i32 %value, i64 2
+  %splat = insertelement <4 x i32> %v91, i32 %value, i64 3
   %lane = extractelement <4 x i32> %source, i64 2
-  %v69 = insertelement <4 x i32> poison, i32 %value, i64 0
-  %v71 = insertelement <4 x i32> %v69, i32 %lane, i64 1
-  %v73 = insertelement <4 x i32> %v71, i32 %value, i64 2
-  %from = insertelement <4 x i32> %v73, i32 %lane, i64 3
+  %v98 = insertelement <4 x i32> poison, i32 %value, i64 0
+  %v100 = insertelement <4 x i32> %v98, i32 %lane, i64 1
+  %v102 = insertelement <4 x i32> %v100, i32 %value, i64 2
+  %from = insertelement <4 x i32> %v102, i32 %lane, i64 3
   %updated = insertelement <4 x i32> %splat, i32 %lane, i64 3
   %shuffled = shufflevector <4 x i32> %from, <4 x i32> poison, <4 x i32> <i32 3, i32 2, i32 1, i32 0>
   ret <4 x i32> %shuffled
@@ -238,10 +275,10 @@ entry:
 
 define dso_local <4 x float> @structural_f32_splat(float %float_value) {
 entry:
-  %v88 = insertelement <4 x float> poison, float %float_value, i64 0
-  %v90 = insertelement <4 x float> %v88, float %float_value, i64 1
-  %v92 = insertelement <4 x float> %v90, float %float_value, i64 2
-  %float_splat = insertelement <4 x float> %v92, float %float_value, i64 3
+  %v117 = insertelement <4 x float> poison, float %float_value, i64 0
+  %v119 = insertelement <4 x float> %v117, float %float_value, i64 1
+  %v121 = insertelement <4 x float> %v119, float %float_value, i64 2
+  %float_splat = insertelement <4 x float> %v121, float %float_value, i64 3
   ret <4 x float> %float_splat
 }
 
@@ -264,8 +301,8 @@ entry:
 
 define dso_local <2 x float> @float_vector_constant() {
 entry:
-  %v107 = insertelement <2 x float> poison, float 0x0000000040000000, i64 0
-  %float = insertelement <2 x float> %v107, float 0x0000000040000000, i64 1
+  %v136 = insertelement <2 x float> poison, float 0x0000000040000000, i64 0
+  %float = insertelement <2 x float> %v136, float 0x0000000040000000, i64 1
   ret <2 x float> %float
 }
 

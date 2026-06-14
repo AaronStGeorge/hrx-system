@@ -69,6 +69,16 @@ _STRUCTURAL_VECTOR_TYPES = (
     "f32",
     "f64",
 )
+_MEMORY_VALUE_TYPES = (
+    ("i8", 1),
+    ("i16", 2),
+    ("i32", 4),
+    ("i64", 8),
+    ("f16", 2),
+    ("bf16", 2),
+    ("f32", 4),
+    ("f64", 8),
+)
 
 _INTEGER_PREDICATES = (
     "eq",
@@ -376,7 +386,15 @@ def _source_memory_constraint(
     return SourceMemoryConstraint(
         operation=operation,
         root_kind=SourceMemoryRootKind.BLOCK_ARGUMENT,
-        memory_spaces=("unknown", "generic", "global"),
+        memory_spaces=(
+            "unknown",
+            "generic",
+            "global",
+            "workgroup",
+            "private",
+            "constant",
+            "descriptor",
+        ),
         element_byte_count=element_byte_count,
         vector_lane_count=vector_lane_count,
         vector_lane_byte_stride=element_byte_count,
@@ -388,7 +406,7 @@ def _source_memory_constraint(
             if dynamic
             else SourceMemoryDynamicIndexSource.NONE
         ),
-        dynamic_byte_stride=element_byte_count * vector_lane_count if dynamic else 0,
+        dynamic_byte_stride=element_byte_count if dynamic else 0,
         diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
     )
 
@@ -401,6 +419,8 @@ def _memory_immediates(dynamic: bool) -> dict[str, SourceMemoryProject]:
 
 
 def _view_load_rule(
+    source_op: Op,
+    view_field: str,
     result_type: TypePattern,
     descriptor_key: str,
     *,
@@ -409,11 +429,11 @@ def _view_load_rule(
     vector_lane_count: int = 1,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
-    operands = {"ptr": ValueRef.operand("view")}
+    operands = {"ptr": ValueRef.operand(view_field)}
     if dynamic:
         operands["index"] = ValueRef.operand("indices")
     return DescriptorRule(
-        source_op=view.view_load,
+        source_op=source_op,
         descriptor=descriptor,
         guards=(
             Guard.operand_segment_count("indices", 1 if dynamic else 0),
@@ -437,6 +457,8 @@ def _view_load_rule(
 
 
 def _view_store_rule(
+    source_op: Op,
+    view_field: str,
     value_type: TypePattern,
     descriptor_key: str,
     *,
@@ -447,12 +469,12 @@ def _view_store_rule(
     descriptor = _descriptor(descriptor_key)
     operands = {
         "value": ValueRef.operand("value"),
-        "ptr": ValueRef.operand("view"),
+        "ptr": ValueRef.operand(view_field),
     }
     if dynamic:
         operands["index"] = ValueRef.operand("indices")
     return DescriptorRule(
-        source_op=view.view_store,
+        source_op=source_op,
         descriptor=descriptor,
         guards=(
             Guard.operand_segment_count("indices", 1 if dynamic else 0),
@@ -892,33 +914,53 @@ def _structural_vector_rules() -> tuple[DescriptorRule, ...]:
 
 def _memory_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
-    for value_type, suffix, element_byte_count, vector_lane_count in (
-        (_I32, "i32", 4, 1),
-        (_I64, "i64", 8, 1),
-        (_F32, "f32", 4, 1),
-        (_F64, "f64", 8, 1),
-        (_vector_type("i32", 4), "v4i32", 4, 4),
-        (_vector_type("f32", 4), "v4f32", 4, 4),
-    ):
+    for element, element_byte_count in _MEMORY_VALUE_TYPES:
         for dynamic in (False, True):
             rules.append(
                 _view_load_rule(
-                    value_type,
-                    _memory_descriptor_key("load", suffix, dynamic=dynamic),
+                    view.view_load,
+                    "view",
+                    Scalar(element),
+                    _memory_descriptor_key("load", element, dynamic=dynamic),
                     dynamic=dynamic,
                     element_byte_count=element_byte_count,
-                    vector_lane_count=vector_lane_count,
                 )
             )
             rules.append(
                 _view_store_rule(
-                    value_type,
-                    _memory_descriptor_key("store", suffix, dynamic=dynamic),
+                    view.view_store,
+                    "view",
+                    Scalar(element),
+                    _memory_descriptor_key("store", element, dynamic=dynamic),
                     dynamic=dynamic,
                     element_byte_count=element_byte_count,
-                    vector_lane_count=vector_lane_count,
                 )
             )
+            for lane_count in _VECTOR_LANE_COUNTS:
+                vector_type = _vector_type(element, lane_count)
+                vector_suffix = _vector_suffix(element, lane_count)
+                rules.append(
+                    _view_load_rule(
+                        vector.vector_load,
+                        "view",
+                        vector_type,
+                        _memory_descriptor_key("load", vector_suffix, dynamic=dynamic),
+                        dynamic=dynamic,
+                        element_byte_count=element_byte_count,
+                        vector_lane_count=lane_count,
+                    )
+                )
+                rules.append(
+                    _view_store_rule(
+                        vector.vector_store,
+                        "view",
+                        vector_type,
+                        _memory_descriptor_key("store", vector_suffix, dynamic=dynamic),
+                        dynamic=dynamic,
+                        element_byte_count=element_byte_count,
+                        vector_lane_count=lane_count,
+                    )
+                )
     return tuple(rules)
 
 

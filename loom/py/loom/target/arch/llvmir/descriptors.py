@@ -69,6 +69,16 @@ _STRUCTURAL_VECTOR_TYPES = (
     "f32",
     "f64",
 )
+_MEMORY_VALUE_TYPES = (
+    ("i8", 1),
+    ("i16", 2),
+    ("i32", 4),
+    ("i64", 8),
+    ("f16", 2),
+    ("bf16", 2),
+    ("f32", 4),
+    ("f64", 8),
+)
 
 _INTEGER_PREDICATES = (
     "eq",
@@ -756,29 +766,36 @@ def _structural_vector_descriptors() -> tuple[Descriptor, ...]:
 
 def _memory_descriptors() -> tuple[Descriptor, ...]:
     descriptors: list[Descriptor] = []
-    for type_name, unit_count in (
-        ("i32", 1),
-        ("i64", 1),
-        ("f32", 1),
-        ("f64", 1),
-        ("i32", 4),
-        ("f32", 4),
-    ):
+    for type_name, _ in _MEMORY_VALUE_TYPES:
         for indexed in (False, True):
             descriptors.append(
                 _load_descriptor(
                     type_name,
-                    unit_count=unit_count,
                     indexed=indexed,
                 )
             )
             descriptors.append(
                 _store_descriptor(
                     type_name,
-                    unit_count=unit_count,
                     indexed=indexed,
                 )
             )
+        for unit_count in _VECTOR_LANE_COUNTS:
+            for indexed in (False, True):
+                descriptors.append(
+                    _load_descriptor(
+                        type_name,
+                        unit_count=unit_count,
+                        indexed=indexed,
+                    )
+                )
+                descriptors.append(
+                    _store_descriptor(
+                        type_name,
+                        unit_count=unit_count,
+                        indexed=indexed,
+                    )
+                )
     return tuple(descriptors)
 
 
