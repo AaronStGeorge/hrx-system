@@ -64,6 +64,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::codegen::low::builder
     loom::codegen::low::descriptors
     loom::codegen::low::function
     loom::codegen::low::pipeline::pass_environment

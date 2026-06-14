@@ -1009,7 +1009,11 @@ def _exec_state_read(field_name: str = "exec_in") -> Operand:
         field_name,
         OperandRole.IMPLICIT,
         _EXEC_ALT,
-        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        flags=(
+            OperandFlag.IMPLICIT,
+            OperandFlag.STATE_READ,
+            OperandFlag.SCHEDULE_ONLY_STATE,
+        ),
         unit_count=1,
     )
 

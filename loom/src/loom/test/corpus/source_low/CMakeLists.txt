@@ -352,6 +352,17 @@ iree_native_test(
 
 iree_native_test(
   NAME
+    "packed_payload_offsets"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_payload_offsets.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
     "packed_q8_dequant_dot"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packed_q8_dequant_dot.loom-test"

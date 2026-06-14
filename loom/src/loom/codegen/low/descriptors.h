@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 24u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 25u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -102,6 +102,9 @@ typedef uint16_t loom_low_operand_flags_t;
 #define LOOM_LOW_OPERAND_FLAG_STATE_READ ((uint16_t)1u << 4)
 // Operand writes target architectural state named by its register class.
 #define LOOM_LOW_OPERAND_FLAG_STATE_WRITE ((uint16_t)1u << 5)
+// Operand reads implicit state that constrains scheduling but is not a hidden
+// value dependency for generic CSE identity.
+#define LOOM_LOW_OPERAND_FLAG_SCHEDULE_ONLY_STATE ((uint16_t)1u << 6)
 
 // Bitset of register-class alternative flags.
 typedef uint16_t loom_low_reg_class_alt_flags_t;

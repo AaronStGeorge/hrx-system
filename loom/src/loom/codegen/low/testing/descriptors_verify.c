@@ -1295,6 +1295,30 @@ static iree_status_t loom_low_verify_descriptor_state_operands(
     const uint16_t state_flags =
         operand->flags &
         (LOOM_LOW_OPERAND_FLAG_STATE_READ | LOOM_LOW_OPERAND_FLAG_STATE_WRITE);
+    if (iree_any_bit_set(operand->flags,
+                         LOOM_LOW_OPERAND_FLAG_SCHEDULE_ONLY_STATE)) {
+      if (!iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low descriptor %" PRIu32 " operand row %" PRIu16
+            " has schedule-only state without the implicit flag",
+            descriptor_index, i);
+      }
+      if (!iree_any_bit_set(state_flags, LOOM_LOW_OPERAND_FLAG_STATE_READ)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low descriptor %" PRIu32 " operand row %" PRIu16
+            " has schedule-only state without a state read flag",
+            descriptor_index, i);
+      }
+      if (iree_any_bit_set(state_flags, LOOM_LOW_OPERAND_FLAG_STATE_WRITE)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low descriptor %" PRIu32 " operand row %" PRIu16
+            " has schedule-only state with a state write flag",
+            descriptor_index, i);
+      }
+    }
     if (state_flags == 0) {
       continue;
     }
@@ -1587,7 +1611,8 @@ static iree_status_t loom_low_verify_operand(
       operand->flags,
       LOOM_LOW_OPERAND_FLAG_IMPLICIT | LOOM_LOW_OPERAND_FLAG_TIED |
           LOOM_LOW_OPERAND_FLAG_EARLY_CLOBBER | LOOM_LOW_OPERAND_FLAG_OPTIONAL |
-          LOOM_LOW_OPERAND_FLAG_STATE_READ | LOOM_LOW_OPERAND_FLAG_STATE_WRITE,
+          LOOM_LOW_OPERAND_FLAG_STATE_READ | LOOM_LOW_OPERAND_FLAG_STATE_WRITE |
+          LOOM_LOW_OPERAND_FLAG_SCHEDULE_ONLY_STATE,
       "operand", operand_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
       descriptor_set, operand->field_name_string_offset, "operand.field_name"));

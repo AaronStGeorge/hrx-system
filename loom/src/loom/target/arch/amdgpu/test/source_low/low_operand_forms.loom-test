@@ -1,4 +1,4 @@
-// RUN: pass low-select-operand-forms,low-dce
+// RUN: pass low-select-operand-forms,cse,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -301,6 +301,26 @@ amdgpu.target<gfx1100> @target
 low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
   %result = low.op<amdgpu.s_add_u32.rhs_inline>(%position) {imm32 = 3} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
   low.return %result : reg<amdgpu.sgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sop2_rhs_inline_add_cses_write_only_scc_state(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %step0 = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
+  %sum0 = low.op<amdgpu.s_add_u32>(%position, %step0) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %step1 = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
+  %sum1 = low.op<amdgpu.s_add_u32>(%position, %step1) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %sum0, %sum1 : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sop2_rhs_inline_add_cses_write_only_scc_state(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %sum0 = low.op<amdgpu.s_add_u32.rhs_inline>(%position) {imm32 = 3} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %sum0, %sum0 : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
 }
 
 // ====

@@ -180,6 +180,7 @@ def test_execution_masked_descriptors_read_exec_state() -> None:
     )
     assert OperandFlag.IMPLICIT in exec_operand.flags
     assert OperandFlag.STATE_READ in exec_operand.flags
+    assert OperandFlag.SCHEDULE_ONLY_STATE in exec_operand.flags
     assert (
         _with_execution_mask_state_read(masked_descriptor).operands
         == masked_descriptor.operands
@@ -262,6 +263,7 @@ def test_trans_descriptors_read_exec_state() -> None:
     )
     assert OperandFlag.IMPLICIT in exec_operand.flags
     assert OperandFlag.STATE_READ in exec_operand.flags
+    assert OperandFlag.SCHEDULE_ONLY_STATE in exec_operand.flags
 
 
 def test_scalar_descriptors_do_not_get_execution_mask_state_read() -> None:

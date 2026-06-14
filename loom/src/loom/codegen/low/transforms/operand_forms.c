@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/codegen/low/target_binding.h"
@@ -522,10 +523,11 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
   loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
   loom_builder_set_before(&rewriter->builder, op);
   loom_op_t* replacement_op = NULL;
-  iree_status_t status = loom_low_op_build(
-      &rewriter->builder, replacement_key_id, operands, form->operand_map_count,
-      replacement_attrs, result_types, op->result_count, tied_results,
-      tied_result_count, op->location, &replacement_op);
+  iree_status_t status = loom_low_build_resolved_descriptor_op(
+      &rewriter->builder, descriptor_set, replacement_descriptor,
+      replacement_key_id, operands, form->operand_map_count, replacement_attrs,
+      result_types, op->result_count, tied_results, tied_result_count,
+      op->location, &replacement_op);
   loom_builder_restore(&rewriter->builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
 

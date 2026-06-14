@@ -6,11 +6,16 @@
 
 #include "loom/transforms/cleanup/cse.h"
 
+#include <stdint.h>
 #include <string.h>
 
+#include "loom/codegen/low/function.h"
+#include "loom/codegen/low/pipeline/pass_environment.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/selection.h"
 #include "loom/util/dominance.h"
 
 #define LOOM_CSE_STATISTICS(V, statistics_type)                        \
@@ -135,6 +140,96 @@ static bool loom_cse_ops_equal(const loom_module_t* module, const loom_op_t* a,
 }
 
 //===----------------------------------------------------------------------===//
+// Target-low state identity
+//===----------------------------------------------------------------------===//
+
+typedef struct loom_cse_low_state_t {
+  uint64_t dependencies;
+  uint64_t reads;
+  uint64_t writes;
+} loom_cse_low_state_t;
+
+static uint64_t loom_cse_low_state_bit(uint16_t register_class_id) {
+  return register_class_id < 64 ? ((uint64_t)1u << register_class_id)
+                                : UINT64_MAX;
+}
+
+static uint16_t loom_cse_low_descriptor_state_register_class_id(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_t* operand) {
+  IREE_ASSERT_EQ(operand->reg_class_alt_count, 1);
+  IREE_ASSERT_LT(operand->reg_class_alt_start,
+                 descriptor_set->reg_class_alt_count);
+  const loom_low_reg_class_alt_t* alt =
+      &descriptor_set->reg_class_alts[operand->reg_class_alt_start];
+  IREE_ASSERT_NE(alt->reg_class_id, LOOM_LOW_REG_CLASS_NONE);
+  IREE_ASSERT_LT(alt->reg_class_id, descriptor_set->reg_class_count);
+  return alt->reg_class_id;
+}
+
+static loom_cse_low_state_t loom_cse_low_descriptor_state(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  loom_cse_low_state_t state = {0};
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    const uint32_t operand_index = descriptor->operand_start + i;
+    IREE_ASSERT_LT(operand_index, descriptor_set->operand_count);
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[operand_index];
+    if (iree_any_bit_set(operand->flags,
+                         LOOM_LOW_OPERAND_FLAG_SCHEDULE_ONLY_STATE)) {
+      continue;
+    }
+    const loom_low_operand_flags_t state_flags =
+        operand->flags &
+        (LOOM_LOW_OPERAND_FLAG_STATE_READ | LOOM_LOW_OPERAND_FLAG_STATE_WRITE);
+    if (state_flags == 0) {
+      continue;
+    }
+
+    const uint64_t state_bit =
+        loom_cse_low_state_bit(loom_cse_low_descriptor_state_register_class_id(
+            descriptor_set, operand));
+    if (iree_any_bit_set(state_flags, LOOM_LOW_OPERAND_FLAG_STATE_READ)) {
+      state.reads |= state_bit;
+      const bool has_explicit_packet_value =
+          i >= descriptor->result_count &&
+          loom_low_operand_role_is_packet_operand(operand->role);
+      if (!has_explicit_packet_value) {
+        state.dependencies |= state_bit;
+      }
+    }
+    if (iree_any_bit_set(state_flags, LOOM_LOW_OPERAND_FLAG_STATE_WRITE)) {
+      state.writes |= state_bit;
+      if (i < descriptor->result_count) {
+        state.dependencies |= state_bit;
+      }
+    }
+  }
+  return state;
+}
+
+static iree_status_t loom_cse_resolve_low_packet_state(
+    const loom_module_t* module, const loom_low_resolved_target_t* target,
+    const loom_op_t* op, loom_cse_low_state_t* out_state) {
+  *out_state = (loom_cse_low_state_t){0};
+  if (!target || !target->descriptor_set) {
+    return iree_ok_status();
+  }
+
+  loom_low_resolved_descriptor_packet_t packet = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_resolve_descriptor_packet(module, target, op, &packet));
+  if (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE || !packet.descriptor) {
+    return iree_ok_status();
+  }
+
+  *out_state =
+      loom_cse_low_descriptor_state(target->descriptor_set, packet.descriptor);
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
 // Hash table with tombstone support
 //===----------------------------------------------------------------------===//
 //
@@ -151,9 +246,14 @@ static bool loom_cse_ops_equal(const loom_module_t* module, const loom_op_t* a,
 #define LOOM_CSE_TOMBSTONE ((loom_op_t*)(uintptr_t)1)
 
 typedef struct loom_cse_entry_t {
-  loom_op_t* op;              // NULL = empty, TOMBSTONE = deleted, else = live.
-  uint32_t hash;              // FNV-1a hash of the op's identity.
-  loom_trait_flags_t traits;  // Trait flags at insert time.
+  // NULL = empty, TOMBSTONE = deleted, else = live.
+  loom_op_t* op;
+  // FNV-1a hash of the op's identity.
+  uint32_t hash;
+  // Trait flags at insert time.
+  loom_trait_flags_t traits;
+  // Target state registers this entry depends on.
+  uint64_t state_dependency_bits;
 } loom_cse_entry_t;
 
 typedef struct loom_cse_table_t {
@@ -161,14 +261,20 @@ typedef struct loom_cse_table_t {
   // Slots containing live non-PURE entries, used for O(non-pure) write
   // barriers.
   iree_host_size_t* non_pure_slots;
+  // Slots containing live entries whose identity depends on target state.
+  iree_host_size_t* state_dependency_slots;
   // Always a power of 2.
   iree_host_size_t capacity;
   // Live entries only (excludes tombstones).
   iree_host_size_t count;
   // Count of live non-PURE slot entries.
   iree_host_size_t non_pure_slot_count;
+  // Count of live target-state-dependent slot entries.
+  iree_host_size_t state_dependency_slot_count;
   // Capacity of non_pure_slots.
   iree_host_size_t non_pure_slot_capacity;
+  // Capacity of state_dependency_slots.
+  iree_host_size_t state_dependency_slot_capacity;
 } loom_cse_table_t;
 
 static iree_status_t loom_cse_table_initialize(iree_arena_allocator_t* arena,
@@ -177,10 +283,13 @@ static iree_status_t loom_cse_table_initialize(iree_arena_allocator_t* arena,
                                                loom_cse_table_t* table) {
   table->entries = NULL;
   table->non_pure_slots = NULL;
+  table->state_dependency_slots = NULL;
   table->capacity = capacity;
   table->count = 0;
   table->non_pure_slot_count = 0;
+  table->state_dependency_slot_count = 0;
   table->non_pure_slot_capacity = max_entry_count;
+  table->state_dependency_slot_capacity = max_entry_count;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, capacity, sizeof(loom_cse_entry_t), (void**)&table->entries));
   memset(table->entries, 0, capacity * sizeof(loom_cse_entry_t));
@@ -188,6 +297,9 @@ static iree_status_t loom_cse_table_initialize(iree_arena_allocator_t* arena,
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         arena, max_entry_count, sizeof(iree_host_size_t),
         (void**)&table->non_pure_slots));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, max_entry_count, sizeof(iree_host_size_t),
+        (void**)&table->state_dependency_slots));
   }
   return iree_ok_status();
 }
@@ -213,7 +325,8 @@ static loom_op_t* loom_cse_table_find(const loom_cse_table_t* table,
 // Inserts an op into this table. Caller must verify no duplicate exists.
 // Reuses tombstone slots when available to reclaim space.
 static void loom_cse_table_insert(loom_cse_table_t* table, loom_op_t* op,
-                                  uint32_t hash, loom_trait_flags_t traits) {
+                                  uint32_t hash, loom_trait_flags_t traits,
+                                  uint64_t state_dependency_bits) {
   iree_host_size_t mask = table->capacity - 1;
   iree_host_size_t slot = hash & mask;
   while (table->entries[slot].op &&
@@ -224,11 +337,17 @@ static void loom_cse_table_insert(loom_cse_table_t* table, loom_op_t* op,
       .op = op,
       .hash = hash,
       .traits = traits,
+      .state_dependency_bits = state_dependency_bits,
   };
   ++table->count;
   if (!(traits & LOOM_TRAIT_PURE)) {
     IREE_ASSERT(table->non_pure_slot_count < table->non_pure_slot_capacity);
     table->non_pure_slots[table->non_pure_slot_count++] = slot;
+  }
+  if (state_dependency_bits != 0) {
+    IREE_ASSERT(table->state_dependency_slot_count <
+                table->state_dependency_slot_capacity);
+    table->state_dependency_slots[table->state_dependency_slot_count++] = slot;
   }
 }
 
@@ -251,6 +370,29 @@ static void loom_cse_table_invalidate_reads(loom_cse_table_t* table) {
   table->non_pure_slot_count = 0;
 }
 
+// Evicts entries whose identity depends on target state written by the current
+// packet. Stale slots from other invalidation paths are compacted while walking
+// the side list.
+static void loom_cse_table_invalidate_state_dependencies(
+    loom_cse_table_t* table, uint64_t state_write_bits) {
+  if (state_write_bits == 0 || table->state_dependency_slot_count == 0) return;
+  iree_host_size_t live_slot_count = 0;
+  for (iree_host_size_t i = 0; i < table->state_dependency_slot_count; ++i) {
+    iree_host_size_t slot = table->state_dependency_slots[i];
+    loom_cse_entry_t* entry = &table->entries[slot];
+    if (!entry->op || entry->op == LOOM_CSE_TOMBSTONE) {
+      continue;
+    }
+    if ((entry->state_dependency_bits & state_write_bits) != 0) {
+      entry->op = LOOM_CSE_TOMBSTONE;
+      --table->count;
+      continue;
+    }
+    table->state_dependency_slots[live_slot_count++] = slot;
+  }
+  table->state_dependency_slot_count = live_slot_count;
+}
+
 // Evicts every entry from the table. This is used for execution-state barriers:
 // a pure value materialized under one dynamic participant set may not be
 // reusable after a later convergent operation changes that set.
@@ -259,6 +401,7 @@ static void loom_cse_table_invalidate_all(loom_cse_table_t* table) {
   memset(table->entries, 0, table->capacity * sizeof(*table->entries));
   table->count = 0;
   table->non_pure_slot_count = 0;
+  table->state_dependency_slot_count = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -320,6 +463,15 @@ static loom_op_t* loom_cse_scope_lookup(const loom_cse_scope_t* scope,
 static void loom_cse_scope_invalidate_reads(loom_cse_scope_t* scope) {
   for (loom_cse_scope_t* s = scope; s; s = s->parent) {
     loom_cse_table_invalidate_reads(&s->table);
+  }
+}
+
+// Propagates target-state write barriers up the entire scope chain.
+static void loom_cse_scope_invalidate_state_dependencies(
+    loom_cse_scope_t* scope, uint64_t state_write_bits) {
+  if (state_write_bits == 0) return;
+  for (loom_cse_scope_t* s = scope; s; s = s->parent) {
+    loom_cse_table_invalidate_state_dependencies(&s->table, state_write_bits);
   }
 }
 
@@ -598,6 +750,26 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
   if (!loom_func_like_body(function)) return iree_ok_status();
   loom_cse_statistics_t* statistics = loom_cse_statistics(pass);
 
+  loom_low_resolved_target_t low_target = {0};
+  const loom_low_resolved_target_t* low_target_ptr = NULL;
+  if (loom_low_function_def_isa(function.op)) {
+    const loom_low_pass_capability_t* low_capability =
+        loom_low_pass_capability_from_pass(pass);
+    const loom_low_descriptor_registry_t* descriptor_registry =
+        loom_low_pass_capability_descriptor_registry(low_capability);
+    if (descriptor_registry) {
+      const loom_target_pass_capability_t* target_capability =
+          loom_target_pass_capability_from_pass(pass);
+      IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+          module, function.op, descriptor_registry,
+          loom_target_pass_capability_target_selection(target_capability),
+          pass->diagnostic_emitter, &low_target));
+      if (low_target.descriptor_set) {
+        low_target_ptr = &low_target;
+      }
+    }
+  }
+
   loom_dominance_info_t dominance = {0};
   IREE_RETURN_IF_ERROR(
       loom_dominance_info_initialize(module, pass->arena, &dominance));
@@ -648,6 +820,11 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
       }
 
       loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+      loom_cse_low_state_t low_state = {0};
+      status = loom_cse_resolve_low_packet_state(module, low_target_ptr, op,
+                                                 &low_state);
+      if (!iree_status_is_ok(status)) break;
+      const uint64_t state_write_bits = low_state.writes;
 
       // Execution-state barrier: convergent operations can change which
       // dynamic participants define later values. A pure materialization before
@@ -666,6 +843,8 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
 
       // Push child frames for nested regions.
       if (op->region_count > 0) {
+        loom_cse_scope_invalidate_state_dependencies(frame->scope,
+                                                     state_write_bits);
         loom_cse_scope_t* parent_scope =
             loom_traits_is_isolated(traits) ? NULL : frame->scope;
 
@@ -678,15 +857,23 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
       // CSE candidate check: must have results, no regions (handled
       // above), no writes, no unknown effects, and be deterministic.
       if (op->result_count == 0) {
+        loom_cse_scope_invalidate_state_dependencies(frame->scope,
+                                                     state_write_bits);
         continue;
       }
       if (op->tied_result_count != 0) {
+        loom_cse_scope_invalidate_state_dependencies(frame->scope,
+                                                     state_write_bits);
         continue;
       }
       if (loom_cse_result_is_consumed(module, op)) {
+        loom_cse_scope_invalidate_state_dependencies(frame->scope,
+                                                     state_write_bits);
         continue;
       }
       if (loom_cse_prevents_cse(traits)) {
+        loom_cse_scope_invalidate_state_dependencies(frame->scope,
+                                                     state_write_bits);
         continue;
       }
 
@@ -712,7 +899,10 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         loom_pass_mark_changed(pass);
         ++statistics->expressions_eliminated;
       } else {
-        loom_cse_table_insert(&frame->scope->table, op, hash, traits);
+        loom_cse_scope_invalidate_state_dependencies(frame->scope,
+                                                     state_write_bits);
+        loom_cse_table_insert(&frame->scope->table, op, hash, traits,
+                              low_state.dependencies);
       }
     }
   }

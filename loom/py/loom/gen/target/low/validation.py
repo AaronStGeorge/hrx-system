@@ -177,6 +177,13 @@ def validate_descriptor_operands(descriptor: Descriptor) -> int:
             OperandFlag.STATE_READ,
             OperandFlag.STATE_WRITE,
         }.intersection(operand.flags)
+        if OperandFlag.SCHEDULE_ONLY_STATE in operand.flags:
+            if OperandFlag.IMPLICIT not in operand.flags:
+                raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' uses schedule-only state without the implicit flag")
+            if OperandFlag.STATE_READ not in state_flags:
+                raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' uses schedule-only state without a state read flag")
+            if OperandFlag.STATE_WRITE in state_flags:
+                raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' uses schedule-only state with a state write flag")
         if state_flags:
             if len(operand.reg_alts) != 1:
                 raise ValueError(f"descriptor '{descriptor.key}' state operand '{operand.field_name}' must name exactly one register-class alternative")

@@ -31,6 +31,10 @@ from loom.target.low_descriptors import (
     MemorySpace,
     ModelQuality,
     Operand,
+    OperandFlag,
+    OperandForm,
+    OperandFormMatch,
+    OperandFormMatchKind,
     OperandRole,
     RegClass,
     RegClassAlt,
@@ -173,6 +177,24 @@ def _special_result(field_name: str = "dst") -> Operand:
 
 def _special_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _SPECIAL_ALT)
+
+
+def _special_state_read(field_name: str = "state_in") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _SPECIAL_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+    )
+
+
+def _special_state_write(field_name: str = "state_out") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _SPECIAL_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+    )
 
 
 _I32_VALUE_IMMEDIATE = Immediate(
@@ -581,6 +603,49 @@ TEST_LOW_ADD_SPECIAL_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
+TEST_LOW_STATE_ADD_I32_DESCRIPTOR = Descriptor(
+    key="test.state.add.i32",
+    mnemonic="test.state.add.i32",
+    semantic_tag="test.state.add.i32",
+    operands=(
+        _i32_result(),
+        _i32_operand("lhs"),
+        _i32_operand("rhs"),
+        _special_state_write(),
+        _special_state_read(),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    operand_forms=(
+        OperandForm(
+            replacement_descriptor="test.state.add.i32.rhs_zero",
+            matches=(
+                OperandFormMatch(
+                    source_operand="rhs",
+                    match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                    match_i64=0,
+                ),
+            ),
+        ),
+    ),
+)
+
+TEST_LOW_STATE_ADD_I32_RHS_ZERO_DESCRIPTOR = Descriptor(
+    key="test.state.add.i32.rhs_zero",
+    mnemonic="test.state.add.i32.rhs_zero",
+    semantic_tag="test.state.add.i32",
+    operands=(
+        _i32_result(),
+        _i32_operand("lhs"),
+        _special_state_write(),
+        _special_state_read(),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("lhs",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
 TEST_LOW_LOAD_V4I32_DESCRIPTOR = Descriptor(
     key="test.load.v4i32",
     mnemonic="test.load.v4i32",
@@ -949,6 +1014,8 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR,
         TEST_LOW_ADD_PHYS_DESCRIPTOR,
         TEST_LOW_ADD_SPECIAL_DESCRIPTOR,
+        TEST_LOW_STATE_ADD_I32_DESCRIPTOR,
+        TEST_LOW_STATE_ADD_I32_RHS_ZERO_DESCRIPTOR,
         TEST_LOW_LOAD_V4I32_DESCRIPTOR,
         TEST_LOW_LOAD_V4F32_DESCRIPTOR,
         TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,

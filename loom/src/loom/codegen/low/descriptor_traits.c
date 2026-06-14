@@ -64,7 +64,8 @@ loom_trait_flags_t loom_low_descriptor_effective_traits(
                                                         descriptor)) {
     // Implicit state results define target-owned architectural state outside
     // ordinary SSA identity. The low scheduler models clobbers, but generic
-    // CSE must not merge distinct definitions of state values such as SCC.
+    // transforms must not treat state values such as SCC as freely
+    // rematerializable SSA.
     traits |= LOOM_TRAIT_NON_DETERMINISTIC;
   }
   if (iree_any_bit_set(traits, LOOM_TRAIT_UNKNOWN_EFFECTS)) return traits;
