@@ -15,10 +15,12 @@ package(
 loom_generated_cc_library(
     name = "llvmir",
     srcs = [
+        "registry.c",
         "target_records.c",
     ],
     hdrs = [
         "ops.h",
+        "registry.h",
         "target_records.h",
     ],
     args = ["--dialect=llvmir"],
@@ -37,5 +39,6 @@ loom_generated_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
     ],
 )

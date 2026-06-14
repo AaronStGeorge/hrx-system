@@ -13,6 +13,7 @@
 #include "loom/codegen/low/lower/contract_query.h"
 #include "loom/codegen/low/lower/lower_internal.h"
 #include "loom/codegen/low/lower/lower_rules.h"
+#include "loom/codegen/low/source_memory_plan.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
@@ -445,10 +446,56 @@ static bool loom_low_lower_rule_value_ref_source_value(
       *out_source_value_id = loom_op_const_results(source_op)[value_ref->index];
       return true;
     case LOOM_LOW_LOWER_VALUE_REF_TEMPORARY:
+    case LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_TERM:
+    case LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET:
       return false;
     default:
       IREE_ASSERT_UNREACHABLE("unknown source-low value ref kind");
       IREE_BUILTIN_UNREACHABLE();
+  }
+}
+
+static bool loom_low_lower_rule_value_ref_uses_source_memory_plan(
+    const loom_low_lower_rule_set_t* rule_set, uint16_t value_ref_index) {
+  const loom_low_lower_value_ref_t* value_ref =
+      &rule_set->value_refs[value_ref_index];
+  switch (value_ref->kind) {
+    case LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_TERM:
+    case LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_lower_emit_uses_source_memory_plan(
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_emit_t* emit) {
+  for (uint16_t operand_ordinal = 0; operand_ordinal < emit->operand_ref_count;
+       ++operand_ordinal) {
+    const uint16_t value_ref_index =
+        (uint16_t)(emit->operand_ref_start + operand_ordinal);
+    if (loom_low_lower_rule_value_ref_uses_source_memory_plan(
+            rule_set, value_ref_index)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void loom_low_lower_mark_source_memory_access_storage_demands(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* access) {
+  for (uint8_t term_ordinal = 0; term_ordinal < access->dynamic_term_count;
+       ++term_ordinal) {
+    const loom_low_source_memory_dynamic_term_t* term =
+        &access->dynamic_terms[term_ordinal];
+    loom_low_lower_mark_value_storage_required(context, term->index);
+    for (uint8_t stride_ordinal = 0; stride_ordinal < term->stride_value_count;
+         ++stride_ordinal) {
+      loom_low_lower_mark_value_storage_required(
+          context, term->stride_values[stride_ordinal]);
+    }
   }
 }
 
@@ -459,6 +506,8 @@ static void loom_low_lower_mark_rule_storage_demands(
   const loom_low_lower_rule_t* rule = selected_plan->rule;
   IREE_ASSERT(rule_set != NULL);
   IREE_ASSERT(rule != NULL);
+  loom_low_source_memory_access_plan_t source_memory_access = {0};
+  bool source_memory_access_built = false;
   for (uint16_t emit_ordinal = 0; emit_ordinal < rule->emit_count;
        ++emit_ordinal) {
     const uint16_t emit_index = (uint16_t)(rule->emit_start + emit_ordinal);
@@ -474,6 +523,22 @@ static void loom_low_lower_mark_rule_storage_demands(
         loom_low_lower_mark_value_storage_required(context, source_value_id);
       }
     }
+    if (emit->source_memory_ordinal == 0 ||
+        !loom_low_lower_emit_uses_source_memory_plan(rule_set, emit)) {
+      continue;
+    }
+    if (!source_memory_access_built) {
+      loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+      if (!loom_low_source_memory_access_plan_build(
+              context->module, context->lowering.fact_table,
+              selected_plan->source_op, &source_memory_access, &diagnostic)) {
+        IREE_ASSERT_UNREACHABLE("selected source memory must still plan");
+        IREE_BUILTIN_UNREACHABLE();
+      }
+      source_memory_access_built = true;
+    }
+    loom_low_lower_mark_source_memory_access_storage_demands(
+        context, &source_memory_access);
   }
   for (uint16_t alias_ordinal = 0; alias_ordinal < rule->alias_ref_count;
        ++alias_ordinal) {

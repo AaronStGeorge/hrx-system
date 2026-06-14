@@ -36,6 +36,7 @@
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/target/math_policy.h"
+#include "loom/target/pipeline.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
@@ -223,11 +224,22 @@ typedef struct loom_check_emit_provider_request_t {
   loom_check_diagnostic_collector_t* diagnostic_collector;
   // Arena scoped to this emit case for analysis and diagnostics.
   iree_arena_allocator_t* case_arena;
+  // Block pool backing compile pipeline allocations for this emit case.
+  iree_arena_block_pool_t* block_pool;
   // Host allocator for transient provider allocations.
   iree_allocator_t host_allocator;
   // Result receiving provider output.
   loom_check_result_t* result;
 } loom_check_emit_provider_request_t;
+
+// Source-to-target-low preparation options for emit providers.
+typedef struct loom_check_prepare_source_low_options_t {
+  // Pass pipeline spelling. Empty or "default" runs the default source-to-low
+  // pipeline; "none" is accepted for already-low focused tests.
+  iree_string_view_t pipeline;
+  // Control-flow lowering shape used when building the default pipeline.
+  loom_target_control_flow_lowering_t control_flow_lowering;
+} loom_check_prepare_source_low_options_t;
 
 // Returns true when |provider| owns emit targets named |target_name|.
 typedef bool (*loom_check_emit_provider_match_fn_t)(
@@ -371,6 +383,26 @@ iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
                                             iree_string_view_t actual,
                                             iree_allocator_t allocator,
                                             loom_check_result_t* result);
+
+// Initializes source-to-low preparation options with the normal user-facing
+// target-low pipeline.
+void loom_check_prepare_source_low_options_initialize(
+    loom_check_prepare_source_low_options_t* out_options);
+
+// Verifies |module| as source IR, lowers it through the selected source-to-low
+// pipeline, and verifies the resulting target-low module.
+//
+// Infrastructure failures return a non-OK status. User IR failures are emitted
+// into |diagnostic_collector| and return OK so loom-check can match structured
+// diagnostics in the usual way.
+iree_status_t loom_check_prepare_source_low_module(
+    loom_module_t* module,
+    const loom_check_prepare_source_low_options_t* options,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    const loom_check_environment_t* environment,
+    loom_source_resolver_t source_resolver,
+    loom_check_diagnostic_collector_t* diagnostic_collector,
+    iree_arena_block_pool_t* block_pool);
 
 // Registers the dialects selected by |environment|, then finalizes |context|.
 //

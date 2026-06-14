@@ -64,22 +64,22 @@ AsmFlags = EnumDef(
 LlvmirTargetKind = EnumDef(
     "LlvmirTargetKind",
     [
-        EnumCase("object", 1, doc="Target-neutral LLVM object projection row."),
+        EnumCase("object", 1, doc="Generic LLVM object-function target row."),
     ],
-    doc="LLVMIR projection target row selected by llvmir.target.",
+    doc="LLVMIR target row selected by llvmir.target.",
 )
 
 llvmir_target = Op(
     "llvmir.target",
     group=llvmir_ops,
-    doc=("LLVMIR target projection record. The selector chooses a target-neutral bundle row while the LLVM-specific attributes own the triple, data layout, CPU, and feature-string vocabulary."),
+    doc=("LLVMIR target-family record. The selector chooses an LLVMIR bundle row while optional LLVM-specific attributes own the triple, data layout, CPU, and feature-string vocabulary."),
     phase=OpPhase.MODULE_METADATA,
     traits=[SYMBOL_DEFINE],
     interfaces=[
         TargetLikeInterface(
             symbol="symbol",
             selector="kind",
-            bundle_table="loom_llvmir_projection_target_bundles",
+            bundle_table="loom_llvmir_target_bundles",
         )
     ],
     symbol_def=SymbolDefinition(
@@ -173,7 +173,11 @@ llvmir_intrinsic = Op(
     operands=[Operand("operands", ANY, variadic=True)],
     results=[Result("results", ANY, variadic=True)],
     attrs=[
-        AttrDef("kind", ATTR_TYPE_STRING, doc="LLVM intrinsic spelling, such as llvm.memcpy or llvm.amdgcn.workitem.id.x."),
+        AttrDef(
+            "kind",
+            ATTR_TYPE_STRING,
+            doc=("LLVM intrinsic spelling, such as llvm.memcpy or llvm.amdgcn.workitem.id.x."),
+        ),
     ],
     traits=[UNKNOWN_EFFECTS],
     format=[

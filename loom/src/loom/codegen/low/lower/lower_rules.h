@@ -48,6 +48,8 @@ typedef uint16_t loom_low_lower_type_pattern_flags_t;
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0 ((uint16_t)1u << 3)
 // First shaped dimension must be inside [static_dim0_min, static_dim0_max].
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE ((uint16_t)1u << 4)
+// Second shaped dimension must be statically equal to static_dim1.
+#define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1 ((uint16_t)1u << 5)
 
 typedef struct loom_low_lower_type_pattern_t {
   // Type fields this pattern checks.
@@ -64,6 +66,8 @@ typedef struct loom_low_lower_type_pattern_t {
   int64_t static_dim0_min;
   // Inclusive maximum static dimension 0 when STATIC_DIM0_RANGE is set.
   int64_t static_dim0_max;
+  // Required static dimension 1 when the STATIC_DIM1 flag is set.
+  int64_t static_dim1;
 } loom_low_lower_type_pattern_t;
 
 typedef enum loom_low_lower_value_ref_kind_e {
@@ -75,6 +79,10 @@ typedef enum loom_low_lower_value_ref_kind_e {
   LOOM_LOW_LOWER_VALUE_REF_RESULT = 2,
   // Rule-local temporary low value at |index|.
   LOOM_LOW_LOWER_VALUE_REF_TEMPORARY = 3,
+  // Dynamic source-memory term at |index|.
+  LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_TERM = 4,
+  // Dynamic byte offset materialized from all selected source-memory terms.
+  LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET = 5,
 } loom_low_lower_value_ref_kind_t;
 
 // Returns true when the materializer can produce a low value for the source
@@ -165,7 +173,7 @@ typedef struct loom_low_lower_rule_descriptor_ref_t {
 typedef struct loom_low_lower_value_ref_t {
   // Source value namespace being referenced.
   loom_low_lower_value_ref_kind_t kind;
-  // Operand or result ordinal in the source op.
+  // Ordinal within the namespace selected by |kind|.
   uint16_t index;
   // One-based materializer table row used when this source ref is consumed as a
   // low operand. Zero means direct source-to-low value lookup.
@@ -216,6 +224,16 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Emits one selected source-memory dynamic term byte stride as an i64
   // attribute.
   LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 15,
+  // Emits an exact f64 source value fact as a rounded f16 packet attribute bit
+  // pattern.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F16_BITS = 16,
+  // Emits an exact f64 source value fact as a rounded bf16 packet attribute bit
+  // pattern.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_BF16_BITS = 17,
+  // Emits a source enum attribute ordinal as an i64 packet attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_ENUM_ORDINAL = 18,
+  // Emits the source op instance flag bitmask as an i64 packet attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_OP_INSTANCE_FLAGS = 19,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -338,7 +356,18 @@ typedef enum loom_low_lower_source_memory_root_kind_e {
 
 #define LOOM_LOW_LOWER_SOURCE_MEMORY_DYNAMIC_TERM_COUNT_ANY UINT8_MAX
 
+typedef uint16_t loom_low_lower_source_memory_flags_t;
+
+// Accept any byte stride for selected dynamic source-memory terms.
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY \
+  ((uint16_t)1u << 0)
+// Accept selected dynamic source-memory terms with dynamic stride values.
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_STRIDE_VALUES \
+  ((uint16_t)1u << 1)
+
 typedef struct loom_low_lower_source_memory_t {
+  // Bitfield of source-memory row option bits.
+  loom_low_lower_source_memory_flags_t flags;
   // Source memory operation category required by this row.
   loom_low_source_memory_operation_kind_t operation_kind;
   // Source provenance required for the root memory value.
@@ -361,7 +390,7 @@ typedef struct loom_low_lower_source_memory_t {
   uint8_t dynamic_term_count;
   // Required provenance for each dynamic address term.
   loom_low_source_memory_dynamic_index_source_t dynamic_index_source;
-  // Required byte stride for each dynamic address term.
+  // Required byte stride for each dynamic address term unless ANY is set.
   int64_t dynamic_byte_stride;
   // Required unsigned dynamic byte offset bit width, or zero if unconstrained.
   uint8_t dynamic_offset_unsigned_bit_count;
@@ -371,6 +400,14 @@ typedef struct loom_low_lower_source_memory_t {
   uint32_t cache_policy_build_flags;
   // Diagnostic table row emitted when this source-memory row rejects.
   uint16_t diagnostic_index;
+  // Descriptor ref used to materialize i64 constants for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_const_i64_descriptor_ref;
+  // Descriptor ref used to materialize i64 additions for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_add_i64_descriptor_ref;
+  // Descriptor ref used to materialize i64 multiplies for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_mul_i64_descriptor_ref;
+  // Descriptor ref used to materialize i64 shifts for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_shl_i64_descriptor_ref;
 } loom_low_lower_source_memory_t;
 
 typedef enum loom_low_lower_guard_kind_e {

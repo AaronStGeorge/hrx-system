@@ -15,6 +15,7 @@ loom_generated_cc_library(
   GENERATOR
     loom::py::loom::gen::ops::c_tables_llvmir_generator
   SRCS
+    "registry.c"
     "target_records.c"
   GENERATED_SRC_FLAGS
     "--builders"
@@ -24,10 +25,12 @@ loom_generated_cc_library(
     "tables.c"
   HDRS
     "ops.h"
+    "registry.h"
     "target_records.h"
   ARGS
     "--dialect=llvmir"
   DEPS
+    iree::base
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs

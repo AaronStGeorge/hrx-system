@@ -1,0 +1,145 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_reduce.loom-test
+// RUN: emit source-low output=low
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @i32_reduce_add(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  %init = scalar.constant 0 : i32
+  %sum = vector.reduce<addi> %loaded, %init : vector<4xi32>, i32
+  %stored = vector.from_elements %sum : vector<1xi32>
+  vector.store %stored, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32_reduce_add(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  %20 = load.i32 %input_view, 0
+  %21 = load.i32 %input_view, 4
+  %22 = add.i32 %20, %21
+  %23 = load.i32 %input_view, 8
+  %24 = add.i32 %22, %23
+  %25 = load.i32 %input_view, 12
+  %stored = add.i32 %24, %25
+  store.i32 %stored, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @f32_reduce_add(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xf32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %init = scalar.constant 0.0 : f32
+  %sum = vector.reduce<addf> %loaded, %init : vector<4xf32>, f32
+  %stored = vector.from_elements %sum : vector<1xf32>
+  vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32_reduce_add(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  %init = const.f32 0
+  %21 = load.f32 %input_view, 0
+  %22 = add.f32 %init, %21
+  %23 = load.f32 %input_view, 4
+  %24 = add.f32 %22, %23
+  %25 = load.f32 %input_view, 8
+  %26 = add.f32 %24, %25
+  %27 = load.f32 %input_view, 12
+  %stored = add.f32 %26, %27
+  store.f32 %stored, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @f32_reduce_add_fastmath(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xf32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %init = scalar.constant 0.0 : f32
+  %sum = vector.reduce<addf, reassoc|nnan|nsz> %loaded, %init : vector<4xf32>, f32
+  %stored = vector.from_elements %sum : vector<1xf32>
+  vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32_reduce_add_fastmath(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  %20 = load.f32 %input_view, 0
+  %21 = load.f32 %input_view, 4
+  %22 = add.f32 %20, %21 {fast_math_flags = 11}
+  %23 = load.f32 %input_view, 8
+  %24 = load.f32 %input_view, 12
+  %25 = add.f32 %23, %24 {fast_math_flags = 11}
+  %stored = add.f32 %22, %25 {fast_math_flags = 11}
+  store.f32 %stored, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @i32_reduce_minui_select_sentinel(%values: vector<4xi32>) -> (i32) {
+  %zero = scalar.constant 0 : i32
+  %zeros = vector.splat %zero : vector<4xi32>
+  %is_zero = vector.cmpi eq, %values, %zeros : vector<4xi32> -> vector<4xi1>
+  %start = scalar.constant 0 : i32
+  %step = scalar.constant 1 : i32
+  %indices = vector.iota %start step %step : vector<4xi32>
+  %sentinel = scalar.constant 2147483647 : i32
+  %sentinels = vector.splat %sentinel : vector<4xi32>
+  %selected = vector.select %is_zero, %indices, %sentinels : vector<4xi32>
+  %result = vector.reduce<minui> %selected, %sentinel : vector<4xi32>, i32
+  func.return %result : i32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32_reduce_minui_select_sentinel(%values: reg<llvmir.i32 x4>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %zero = const.i32 0
+  %sentinel = const.i32 2147483647
+  %48 = extract.v4i32 %values, 0
+  %49 = cmp.eq.i32 %48, %zero
+  %50 = select.i32 %49, %zero, %sentinel
+  %51 = cmp.ult.i32 %sentinel, %50
+  %52 = select.i32 %51, %sentinel, %50
+  %53 = extract.v4i32 %values, 1
+  %54 = cmp.eq.i32 %53, %zero
+  %55 = const.i32 1
+  %56 = select.i32 %54, %55, %sentinel
+  %57 = cmp.ult.i32 %52, %56
+  %58 = select.i32 %57, %52, %56
+  %59 = extract.v4i32 %values, 2
+  %60 = cmp.eq.i32 %59, %zero
+  %61 = const.i32 2
+  %62 = select.i32 %60, %61, %sentinel
+  %63 = cmp.ult.i32 %58, %62
+  %64 = select.i32 %63, %58, %62
+  %65 = extract.v4i32 %values, 3
+  %66 = cmp.eq.i32 %65, %zero
+  %67 = const.i32 3
+  %68 = select.i32 %66, %67, %sentinel
+  %69 = cmp.ult.i32 %64, %68
+  %result = select.i32 %69, %64, %68
+  return %result
+}

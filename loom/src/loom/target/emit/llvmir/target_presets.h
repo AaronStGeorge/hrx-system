@@ -20,9 +20,16 @@
 extern "C" {
 #endif
 
+typedef struct loom_llvmir_target_profile_projection_request_t {
+  // Generic Loom target bundle resolved for the function being emitted.
+  const loom_target_bundle_t* bundle;
+  // LLVM target triple requested by llvmir.target, or empty when unspecified.
+  iree_string_view_t target_triple;
+} loom_llvmir_target_profile_projection_request_t;
+
 typedef bool(
     IREE_API_PTR* loom_llvmir_target_profile_provider_project_bundle_fn_t)(
-    const loom_target_bundle_t* bundle,
+    const loom_llvmir_target_profile_projection_request_t* request,
     const loom_llvmir_target_profile_t** out_profile);
 
 typedef struct loom_llvmir_target_profile_provider_t {
@@ -52,6 +59,14 @@ typedef struct loom_llvmir_target_profile_registry_t {
 bool loom_llvmir_target_profile_registry_lookup(
     const loom_llvmir_target_profile_registry_t* registry,
     iree_string_view_t profile_name,
+    const loom_llvmir_target_profile_t** out_profile);
+
+// Projects a generic Loom target bundle to a linked LLVM target profile.
+// Returns false when no provider in |registry| supports the requested bundle
+// and LLVM target triple combination.
+bool loom_llvmir_target_profile_registry_project_bundle(
+    const loom_llvmir_target_profile_registry_t* registry,
+    const loom_llvmir_target_profile_projection_request_t* request,
     const loom_llvmir_target_profile_t** out_profile);
 
 #ifdef __cplusplus

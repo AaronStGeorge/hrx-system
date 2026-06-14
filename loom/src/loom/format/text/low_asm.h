@@ -46,7 +46,9 @@ typedef struct loom_text_low_asm_packet_descriptor_t {
   uint16_t result_count;
   // Number of SSA operands consumed by this asm packet.
   uint16_t operand_count;
-  // Number of immediate attributes parsed by this asm packet.
+  // Number of immediate attributes addressed by the compact asm form.
+  uint16_t asm_immediate_count;
+  // Number of descriptor immediate attributes addressable by this asm packet.
   uint16_t immediate_count;
   // Operation attribute field index storing packet immediate attributes.
   uint16_t immediate_attribute_field_index;

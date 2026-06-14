@@ -54,6 +54,7 @@ typedef enum loom_llvmir_type_kind_e {
   LOOM_LLVMIR_TYPE_FLOAT = 2,
   LOOM_LLVMIR_TYPE_POINTER = 3,
   LOOM_LLVMIR_TYPE_VECTOR = 4,
+  LOOM_LLVMIR_TYPE_STRUCT = 5,
 } loom_llvmir_type_kind_t;
 
 typedef enum loom_llvmir_value_kind_e {
@@ -217,6 +218,15 @@ iree_status_t loom_llvmir_module_get_vector_type(
     loom_llvmir_module_t* module, uint32_t element_count,
     loom_llvmir_type_id_t element_type_id, loom_llvmir_type_id_t* out_type_id);
 
+iree_status_t loom_llvmir_module_get_struct_type(
+    loom_llvmir_module_t* module, const loom_llvmir_type_id_t* element_type_ids,
+    iree_host_size_t element_count, loom_llvmir_type_id_t* out_type_id);
+
+// Queries the element type and lane count of a VECTOR type.
+iree_status_t loom_llvmir_module_get_vector_type_info(
+    const loom_llvmir_module_t* module, loom_llvmir_type_id_t type_id,
+    uint32_t* out_element_count, loom_llvmir_type_id_t* out_element_type_id);
+
 iree_status_t loom_llvmir_module_add_integer_constant(
     loom_llvmir_module_t* module, loom_llvmir_type_id_t type_id, uint64_t value,
     loom_llvmir_value_id_t* out_value_id);
@@ -260,6 +270,10 @@ loom_llvmir_value_id_t loom_llvmir_global_value_id(
 iree_status_t loom_llvmir_module_add_function(
     loom_llvmir_module_t* module, const loom_llvmir_function_desc_t* desc,
     loom_llvmir_function_t** out_function);
+
+// Finds a function declaration or definition by symbol name.
+loom_llvmir_function_t* loom_llvmir_module_find_function(
+    loom_llvmir_module_t* module, iree_string_view_t name);
 
 loom_llvmir_function_id_t loom_llvmir_function_id(
     const loom_llvmir_function_t* function);

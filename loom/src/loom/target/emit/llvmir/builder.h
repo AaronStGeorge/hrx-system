@@ -119,6 +119,32 @@ typedef enum loom_llvmir_memory_flag_bits_e {
   LOOM_LLVMIR_MEMORY_VOLATILE = 1u << 0,
 } loom_llvmir_memory_flags_t;
 
+typedef enum loom_llvmir_atomic_rmw_op_e {
+  LOOM_LLVMIR_ATOMIC_RMW_XCHG = 0,
+  LOOM_LLVMIR_ATOMIC_RMW_ADD = 1,
+  LOOM_LLVMIR_ATOMIC_RMW_SUB = 2,
+  LOOM_LLVMIR_ATOMIC_RMW_AND = 3,
+  LOOM_LLVMIR_ATOMIC_RMW_OR = 4,
+  LOOM_LLVMIR_ATOMIC_RMW_XOR = 5,
+  LOOM_LLVMIR_ATOMIC_RMW_MAX = 6,
+  LOOM_LLVMIR_ATOMIC_RMW_MIN = 7,
+  LOOM_LLVMIR_ATOMIC_RMW_UMAX = 8,
+  LOOM_LLVMIR_ATOMIC_RMW_UMIN = 9,
+  LOOM_LLVMIR_ATOMIC_RMW_FADD = 10,
+  LOOM_LLVMIR_ATOMIC_RMW_FMAX = 11,
+  LOOM_LLVMIR_ATOMIC_RMW_FMIN = 12,
+  LOOM_LLVMIR_ATOMIC_RMW_FMAXIMUM = 13,
+  LOOM_LLVMIR_ATOMIC_RMW_FMINIMUM = 14,
+} loom_llvmir_atomic_rmw_op_t;
+
+typedef enum loom_llvmir_atomic_ordering_e {
+  LOOM_LLVMIR_ATOMIC_ORDERING_MONOTONIC = 0,
+  LOOM_LLVMIR_ATOMIC_ORDERING_ACQUIRE = 1,
+  LOOM_LLVMIR_ATOMIC_ORDERING_RELEASE = 2,
+  LOOM_LLVMIR_ATOMIC_ORDERING_ACQ_REL = 3,
+  LOOM_LLVMIR_ATOMIC_ORDERING_SEQ_CST = 4,
+} loom_llvmir_atomic_ordering_t;
+
 typedef enum loom_llvmir_inline_asm_flag_bits_e {
   LOOM_LLVMIR_INLINE_ASM_SIDE_EFFECT = 1u << 0,
   LOOM_LLVMIR_INLINE_ASM_ALIGN_STACK = 1u << 1,
@@ -270,6 +296,54 @@ typedef struct loom_llvmir_store_desc_t {
   iree_host_size_t metadata_attachment_count;
 } loom_llvmir_store_desc_t;
 
+typedef struct loom_llvmir_atomic_rmw_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Atomic operation result type and expected update value type.
+  loom_llvmir_type_id_t result_type;
+  // Read-modify-write opcode.
+  loom_llvmir_atomic_rmw_op_t op;
+  // Pointer value to update.
+  loom_llvmir_value_id_t pointer;
+  // Update value.
+  loom_llvmir_value_id_t value;
+  // Atomic memory ordering.
+  loom_llvmir_atomic_ordering_t ordering;
+  // Optional LLVM syncscope name, or empty for the default system scope.
+  iree_string_view_t sync_scope;
+  // Optional byte alignment, or zero to omit the text attribute.
+  uint32_t alignment;
+  // Memory operation flags.
+  loom_llvmir_memory_flags_t flags;
+} loom_llvmir_atomic_rmw_desc_t;
+
+typedef struct loom_llvmir_cmpxchg_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Aggregate result type containing old value and success flag.
+  loom_llvmir_type_id_t result_type;
+  // Scalar expected and replacement value type.
+  loom_llvmir_type_id_t value_type;
+  // Pointer value to update.
+  loom_llvmir_value_id_t pointer;
+  // Expected value.
+  loom_llvmir_value_id_t expected;
+  // Replacement value.
+  loom_llvmir_value_id_t replacement;
+  // Atomic memory ordering when the exchange succeeds.
+  loom_llvmir_atomic_ordering_t success_ordering;
+  // Atomic memory ordering when the exchange fails.
+  loom_llvmir_atomic_ordering_t failure_ordering;
+  // Optional LLVM syncscope name, or empty for the default system scope.
+  iree_string_view_t sync_scope;
+  // Optional byte alignment, or zero to omit the text attribute.
+  uint32_t alignment;
+  // Memory operation flags.
+  loom_llvmir_memory_flags_t flags;
+  // True when the compare-exchange may fail spuriously.
+  bool is_weak;
+} loom_llvmir_cmpxchg_desc_t;
+
 typedef struct loom_llvmir_call_desc_t {
   // Optional result name without the leading percent sign.
   iree_string_view_t result_name;
@@ -325,6 +399,17 @@ typedef struct loom_llvmir_extract_element_desc_t {
   // Integer lane index.
   loom_llvmir_value_id_t index;
 } loom_llvmir_extract_element_desc_t;
+
+typedef struct loom_llvmir_extract_value_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Extracted element result type.
+  loom_llvmir_type_id_t result_type;
+  // Aggregate value to extract from.
+  loom_llvmir_value_id_t aggregate;
+  // Zero-based aggregate element index.
+  uint32_t index;
+} loom_llvmir_extract_value_desc_t;
 
 typedef struct loom_llvmir_insert_element_desc_t {
   // Optional result name without the leading percent sign.
@@ -401,6 +486,14 @@ iree_status_t loom_llvmir_build_load(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_store(loom_llvmir_block_t* block,
                                       const loom_llvmir_store_desc_t* desc);
 
+iree_status_t loom_llvmir_build_atomic_rmw(
+    loom_llvmir_block_t* block, const loom_llvmir_atomic_rmw_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_cmpxchg(loom_llvmir_block_t* block,
+                                        const loom_llvmir_cmpxchg_desc_t* desc,
+                                        loom_llvmir_value_id_t* out_value_id);
+
 iree_status_t loom_llvmir_build_call(loom_llvmir_block_t* block,
                                      const loom_llvmir_call_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id);
@@ -415,6 +508,10 @@ iree_status_t loom_llvmir_build_select(loom_llvmir_block_t* block,
 
 iree_status_t loom_llvmir_build_extract_element(
     loom_llvmir_block_t* block, const loom_llvmir_extract_element_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_extract_value(
+    loom_llvmir_block_t* block, const loom_llvmir_extract_value_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_insert_element(

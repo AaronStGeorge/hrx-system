@@ -69,6 +69,7 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
 
 _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/target:amdgpu_artifacts": "LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU",
+    "//loom/config/target:llvmir_artifacts": "LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR",
     "//loom/config/target:spirv_artifacts": "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV",
     "//loom/config/target:spirv_vulkan_artifacts": "LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN",
 }

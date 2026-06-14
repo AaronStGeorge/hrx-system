@@ -67,10 +67,31 @@ _SPIRV_VULKAN_COMPILE_DEPS = iree_select({
     "//conditions:default": [],
 })
 
+_LLVMIR_COMPILE_COPTS = iree_select({
+    "//loom/config/target:llvmir_artifacts": [
+        "-DLOOM_COMPILE_HAVE_LLVMIR=1",
+    ],
+    "//conditions:default": [],
+})
+
+_LLVMIR_COMPILE_DEPS = iree_select({
+    "//loom/config/target:llvmir_artifacts": [
+        "//loom/src/loom/target/arch/llvmir:provider",
+        "//loom/src/loom/target/emit/llvmir:artifact_emitter",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
+    ],
+    "//conditions:default": [],
+})
+
+_LLVMIR_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
+    "//loom/config/target:llvmir_artifacts",
+])
+
 loom_cc_binary(
     name = "loom-compile",
     srcs = ["loom-compile.c"],
-    copts = _AMDGPU_COMPILE_COPTS + _IREE_VM_COMPILE_COPTS + _SPIRV_VULKAN_COMPILE_COPTS,
+    copts = _AMDGPU_COMPILE_COPTS + _IREE_VM_COMPILE_COPTS + _SPIRV_VULKAN_COMPILE_COPTS + _LLVMIR_COMPILE_COPTS,
     deps = [
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
@@ -79,6 +100,7 @@ loom_cc_binary(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/target:artifact_manifest",
+        "//loom/src/loom/target:entry_selection",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/tooling/cli:help",
         "//loom/src/loom/tooling/compile:pipeline",
@@ -95,7 +117,7 @@ loom_cc_binary(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
-    ] + _AMDGPU_COMPILE_DEPS + _IREE_VM_COMPILE_DEPS + _SPIRV_VULKAN_COMPILE_DEPS,
+    ] + _AMDGPU_COMPILE_DEPS + _IREE_VM_COMPILE_DEPS + _SPIRV_VULKAN_COMPILE_DEPS + _LLVMIR_COMPILE_DEPS,
 )
 
 iree_execution_test_suite(
@@ -113,6 +135,16 @@ iree_execution_test_suite(
     manifests = ["loom-compile-amdgpu.test.json"],
     tags = ["hostonly"],
     target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
+    tools = {
+        "loom-compile": ":loom-compile",
+    },
+)
+
+iree_execution_test_suite(
+    name = "llvmir_execution_test",
+    manifests = ["loom-compile-llvmir.test.json"],
+    tags = ["hostonly"],
+    target_compatible_with = _LLVMIR_ARTIFACTS_COMPATIBLE_WITH,
     tools = {
         "loom-compile": ":loom-compile",
     },

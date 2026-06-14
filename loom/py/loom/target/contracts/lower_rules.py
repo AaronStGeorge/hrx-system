@@ -47,6 +47,8 @@ from loom.target.contracts.immediates import (
     AttrProjectKind,
     SourceMemoryProject,
     SourceMemoryProjectKind,
+    SourceOpProject,
+    SourceOpProjectKind,
     ValueProject,
     ValueProjectKind,
 )
@@ -54,7 +56,10 @@ from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.rules import DescriptorRule, ValueAliasRule, ValueElideRule
 from loom.target.contracts.source import ValueRef
-from loom.target.contracts.source_memory import SourceMemoryConstraint
+from loom.target.contracts.source_memory import (
+    SourceMemoryByteOffsetMaterializer,
+    SourceMemoryConstraint,
+)
 from loom.target.low_descriptors import ConstraintKind, Descriptor, OperandRole
 
 
@@ -74,6 +79,7 @@ class LowerAttrCopyKind(Enum):
     """Interpreter attribute-copy operation used by a compiled emit row."""
 
     DIRECT = "direct"
+    ENUM_ORDINAL = "enum_ordinal"
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     I64_LITERAL = "i64_literal"
@@ -84,11 +90,14 @@ class LowerAttrCopyKind(Enum):
     VALUE_U32_DIVISOR_MAGIC_MULTIPLIER = "value_u32_divisor_magic_multiplier"
     VALUE_U32_DIVISOR_MAGIC_SHIFT = "value_u32_divisor_magic_shift"
     VALUE_I32_AS_U32_BITS = "value_i32_as_u32_bits"
+    VALUE_F64_AS_F16_BITS = "value_f64_as_f16_bits"
+    VALUE_F64_AS_BF16_BITS = "value_f64_as_bf16_bits"
     VALUE_F64_AS_F32_BITS = "value_f64_as_f32_bits"
     VALUE_F64_AS_F64_BITS = "value_f64_as_f64_bits"
     I64_ARRAY_LANE_BYTE = "i64_array_lane_byte"
     SOURCE_MEMORY_STATIC_BYTE_OFFSET = "source_memory_static_byte_offset"
     SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = "source_memory_dynamic_byte_stride"
+    SOURCE_OP_INSTANCE_FLAGS = "source_op_instance_flags"
 
 
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
@@ -145,6 +154,7 @@ class LowerSourceMemory:
     constraint: SourceMemoryConstraint
     diagnostic_index: int
     dynamic_offset_diagnostic_index: int
+    byte_offset_materializer: SourceMemoryByteOffsetMaterializer | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1130,6 +1140,7 @@ class _LowerRuleSetCompiler:
             source_memory_ordinal = self._append_source_memory(
                 source_op,
                 emit.source_memory,
+                emit.source_memory_byte_offset_materializer,
             )
 
         self._emits.append(
@@ -1157,6 +1168,7 @@ class _LowerRuleSetCompiler:
         self,
         source_op: Op,
         constraint: SourceMemoryConstraint,
+        byte_offset_materializer: SourceMemoryByteOffsetMaterializer | None,
     ) -> int:
         row = LowerSourceMemory(
             constraint,
@@ -1168,6 +1180,7 @@ class _LowerRuleSetCompiler:
                 source_op,
                 _source_memory_dynamic_offset_diagnostic(constraint),
             ),
+            byte_offset_materializer=byte_offset_materializer,
         )
         for index, existing in enumerate(self._source_memories):
             if existing == row:
@@ -1257,6 +1270,11 @@ class _LowerRuleSetCompiler:
                     self._lower_attr_project(source_op, target_name, binding)
                 )
                 continue
+            if isinstance(binding, SourceOpProject):
+                attr_copies.append(
+                    self._lower_source_op_project(source_op, target_name, binding)
+                )
+                continue
             if isinstance(binding, SourceMemoryProject):
                 attr_copies.append(
                     self._lower_source_memory_project(target_name, binding)
@@ -1277,6 +1295,12 @@ class _LowerRuleSetCompiler:
         if project.kind == AttrProjectKind.DIRECT:
             return LowerAttrCopy(
                 kind=LowerAttrCopyKind.DIRECT,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+            )
+        if project.kind == AttrProjectKind.ENUM_ORDINAL:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.ENUM_ORDINAL,
                 target_name=target_name,
                 source_attr_index=source_attr_index,
             )
@@ -1363,6 +1387,10 @@ class _LowerRuleSetCompiler:
             kind = LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_SHIFT
         elif project.kind == ValueProjectKind.I32_AS_U32_BITS:
             kind = LowerAttrCopyKind.VALUE_I32_AS_U32_BITS
+        elif project.kind == ValueProjectKind.F64_AS_F16_BITS:
+            kind = LowerAttrCopyKind.VALUE_F64_AS_F16_BITS
+        elif project.kind == ValueProjectKind.F64_AS_BF16_BITS:
+            kind = LowerAttrCopyKind.VALUE_F64_AS_BF16_BITS
         elif project.kind == ValueProjectKind.F64_AS_F32_BITS:
             kind = LowerAttrCopyKind.VALUE_F64_AS_F32_BITS
         elif project.kind == ValueProjectKind.F64_AS_F64_BITS:
@@ -1401,6 +1429,22 @@ class _LowerRuleSetCompiler:
             kind=kind,
             target_name=target_name,
             dynamic_term_index=project.dynamic_term_index,
+        )
+
+    def _lower_source_op_project(
+        self,
+        source_op: Op,
+        target_name: str,
+        project: SourceOpProject,
+    ) -> LowerAttrCopy:
+        if project.kind != SourceOpProjectKind.INSTANCE_FLAGS:
+            raise ValueError(
+                f"{source_op.name}: immediate projection '{project.kind.value}' is "
+                "not representable by generated lower rules yet"
+            )
+        return LowerAttrCopy(
+            kind=LowerAttrCopyKind.SOURCE_OP_INSTANCE_FLAGS,
+            target_name=target_name,
         )
 
     def _append_attr_copy_sequence(self, sequence: tuple[LowerAttrCopy, ...]) -> int:
@@ -1643,6 +1687,10 @@ def _source_value_index(
         ordinal = temporary_ordinals.get(value_ref.field)
         if ordinal is not None:
             return ordinal
+    if value_ref.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
+        return value_ref.element
+    if value_ref.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET:
+        return 0
     raise ValueError(f"source value field '{value_ref.field}' is not declared")
 
 
@@ -1666,6 +1714,9 @@ def _type_pattern_text(type_pattern: TypePattern) -> str:
         return element_text
     if type_pattern.kind == "view":
         return f"view<{element_text}>"
+    if type_pattern.dims:
+        dims_text = "x".join(str(dim) for dim in type_pattern.dims)
+        return f"vector<{dims_text}x{element_text}>"
     if type_pattern.lanes is not None:
         return f"vector<{type_pattern.lanes}x{element_text}>"
     return f"vector<{element_text}>"

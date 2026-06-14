@@ -13,10 +13,10 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Self
 
-from loom.dsl import ATTR_TYPE_I64_ARRAY, Op
+from loom.dsl import ATTR_TYPE_ENUM, ATTR_TYPE_I64_ARRAY, Op
 from loom.target.contracts.descriptors import _require_immediate
 from loom.target.contracts.source import _require_attr, _require_value
-from loom.target.low_descriptors import Descriptor
+from loom.target.low_descriptors import Descriptor, ImmediateKind
 
 
 @unique
@@ -24,6 +24,7 @@ class AttrProjectKind(Enum):
     """Projection from source op attributes to descriptor immediates."""
 
     DIRECT = "direct"
+    ENUM_ORDINAL = "enum_ordinal"
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     EXPAND_LANE_I64_ARRAY_TO_BYTE_LANES = "expand_lane_i64_array_to_byte_lanes"
@@ -40,6 +41,8 @@ class ValueProjectKind(Enum):
     U32_DIVISOR_MAGIC_MULTIPLIER = "u32_divisor_magic_multiplier"
     U32_DIVISOR_MAGIC_SHIFT = "u32_divisor_magic_shift"
     I32_AS_U32_BITS = "i32_as_u32_bits"
+    F64_AS_F16_BITS = "f64_as_f16_bits"
+    F64_AS_BF16_BITS = "f64_as_bf16_bits"
     F64_AS_F32_BITS = "f64_as_f32_bits"
     F64_AS_F64_BITS = "f64_as_f64_bits"
 
@@ -50,6 +53,13 @@ class SourceMemoryProjectKind(Enum):
 
     STATIC_BYTE_OFFSET = "static_byte_offset"
     DYNAMIC_BYTE_STRIDE = "dynamic_byte_stride"
+
+
+@unique
+class SourceOpProjectKind(Enum):
+    """Projection from source op state to descriptor immediates."""
+
+    INSTANCE_FLAGS = "instance_flags"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +79,10 @@ class AttrProject:
     @classmethod
     def direct(cls, source_attr: str) -> Self:
         return cls(kind=AttrProjectKind.DIRECT, source_attr=source_attr)
+
+    @classmethod
+    def enum_ordinal(cls, source_attr: str) -> Self:
+        return cls(kind=AttrProjectKind.ENUM_ORDINAL, source_attr=source_attr)
 
     @classmethod
     def i64_array_element(
@@ -156,6 +170,23 @@ class AttrProject:
                 )
             _require_immediate(descriptor, bound_immediate_name, subject)
             return
+        if self.kind == AttrProjectKind.ENUM_ORDINAL:
+            if bound_immediate_name is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} must bind one descriptor immediate"
+                )
+            immediate = _require_immediate(descriptor, bound_immediate_name, subject)
+            if attr.attr_type != ATTR_TYPE_ENUM:
+                raise ValueError(
+                    f"{source_op.name}: {subject} source attr "
+                    f"'{self.source_attr}' must be an enum attr"
+                )
+            if immediate.kind != ImmediateKind.ENUM:
+                raise ValueError(
+                    f"{source_op.name}: {subject} descriptor immediate "
+                    f"'{bound_immediate_name}' must be an enum immediate"
+                )
+            return
         if attr.attr_type != ATTR_TYPE_I64_ARRAY:
             raise ValueError(
                 f"{source_op.name}: {subject} source attr '{self.source_attr}' "
@@ -199,6 +230,40 @@ class AttrProject:
             )
         for name in self.target_names:
             _require_immediate(descriptor, name, subject)
+
+
+@dataclass(frozen=True, slots=True)
+class SourceOpProject:
+    """Descriptor immediate projection from source operation state."""
+
+    kind: SourceOpProjectKind
+
+    @classmethod
+    def instance_flags(cls) -> Self:
+        return cls(kind=SourceOpProjectKind.INSTANCE_FLAGS)
+
+    def validate(
+        self,
+        source_op: Op,
+        descriptor: Descriptor,
+        bound_immediate_name: str | None,
+    ) -> None:
+        subject = f"immediate projection {self.kind.value}"
+        if self.kind != SourceOpProjectKind.INSTANCE_FLAGS:
+            raise ValueError(
+                f"{source_op.name}: {subject} is not representable by "
+                "generated lower rules yet"
+            )
+        if bound_immediate_name is None:
+            raise ValueError(
+                f"{source_op.name}: {subject} must bind one descriptor immediate"
+            )
+        immediate = _require_immediate(descriptor, bound_immediate_name, subject)
+        if immediate.kind != ImmediateKind.UNSIGNED:
+            raise ValueError(
+                f"{source_op.name}: {subject} descriptor immediate "
+                f"'{bound_immediate_name}' must be an unsigned immediate"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,6 +332,22 @@ class ValueProject:
     def i32_as_u32_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
         return cls(
             kind=ValueProjectKind.I32_AS_U32_BITS,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def f64_as_f16_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
+        return cls(
+            kind=ValueProjectKind.F64_AS_F16_BITS,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def f64_as_bf16_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
+        return cls(
+            kind=ValueProjectKind.F64_AS_BF16_BITS,
             source_value=source_value,
             target_bit_offset=target_bit_offset,
         )

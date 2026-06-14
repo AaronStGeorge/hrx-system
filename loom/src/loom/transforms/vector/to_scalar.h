@@ -50,6 +50,20 @@ iree_status_t loom_vector_reduce_to_scalar_rewrite_op(loom_pass_t* pass,
                                                       loom_op_t* op,
                                                       bool* out_rewritten);
 
+// Rewrites one vector.dotf op using scalar reference semantics.
+iree_status_t loom_vector_dotf_to_scalar_rewrite_op(loom_pass_t* pass,
+                                                    loom_rewriter_t* rewriter,
+                                                    loom_op_t* op,
+                                                    bool* out_rewritten);
+
+// Rewrites one descriptor-backed vector op using scalar reference semantics.
+// This is the generic lane-by-lane expansion used by the standalone pass for
+// arithmetic, bitwise, structural, and packed vector ops represented in the
+// vector-to-scalar descriptor table.
+iree_status_t loom_vector_descriptor_to_scalar_rewrite_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    bool* out_rewritten);
+
 // Rewrites one vector.mma op using scalar reference semantics. Dense logical
 // fragments lower directly; target-shaped physical fragments require options
 // that provide the selected matrix-fragment layout and permit subgroup

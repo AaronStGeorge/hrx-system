@@ -286,8 +286,9 @@ static iree_status_t loom_low_asm_append_immediate_attr(
 
 static iree_status_t loom_parse_low_asm_named_immediates(
     loom_parser_t* parser, const loom_text_low_asm_packet_descriptor_t* packet,
-    loom_token_t mnemonic_token, loom_named_attr_t* attrs,
-    uint16_t* out_attr_count, loom_parsed_op_t* parsed_spans) {
+    loom_token_t mnemonic_token, uint16_t immediate_start,
+    uint16_t immediate_end, loom_named_attr_t* attrs, uint16_t* out_attr_count,
+    loom_parsed_op_t* parsed_spans) {
   loom_token_t dict_token = loom_tokenizer_peek(&parser->tokenizer);
   if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LBRACE)) {
     return loom_parser_emit_low_asm_error(
@@ -311,7 +312,7 @@ static iree_status_t loom_parse_low_asm_named_immediates(
     iree_string_view_t parsed_name =
         parser->module->strings.entries[parsed_attrs.entries[i].name_id];
     bool found = false;
-    for (uint16_t j = 0; j < packet->immediate_count; ++j) {
+    for (uint16_t j = immediate_start; j < immediate_end; ++j) {
       loom_text_low_asm_immediate_descriptor_t immediate = {0};
       IREE_RETURN_IF_ERROR(
           loom_low_asm_immediate_descriptor(parser, packet, j, &immediate));
@@ -326,7 +327,7 @@ static iree_status_t loom_parse_low_asm_named_immediates(
     }
   }
 
-  for (uint16_t i = 0; i < packet->immediate_count; ++i) {
+  for (uint16_t i = immediate_start; i < immediate_end; ++i) {
     loom_text_low_asm_immediate_descriptor_t immediate = {0};
     IREE_RETURN_IF_ERROR(
         loom_low_asm_immediate_descriptor(parser, packet, i, &immediate));
@@ -358,7 +359,7 @@ static iree_status_t loom_parse_low_asm_positional_immediates(
     loom_parser_t* parser, const loom_text_low_asm_packet_descriptor_t* packet,
     loom_token_t mnemonic_token, loom_named_attr_t* attrs,
     uint16_t* out_attr_count, loom_parsed_op_t* parsed_spans) {
-  for (uint16_t i = 0; i < packet->immediate_count; ++i) {
+  for (uint16_t i = 0; i < packet->asm_immediate_count; ++i) {
     if ((i > 0 || packet->operand_count > 0) &&
         !loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
       return loom_parser_emit_low_asm_error(parser, mnemonic_token,
@@ -396,9 +397,9 @@ static iree_status_t loom_parse_low_asm_positional_immediates(
 
 static iree_status_t loom_low_asm_required_immediate_count(
     loom_parser_t* parser, const loom_text_low_asm_packet_descriptor_t* packet,
-    uint16_t* out_count) {
+    uint16_t immediate_start, uint16_t immediate_end, uint16_t* out_count) {
   *out_count = 0;
-  for (uint16_t i = 0; i < packet->immediate_count; ++i) {
+  for (uint16_t i = immediate_start; i < immediate_end; ++i) {
     loom_text_low_asm_immediate_descriptor_t immediate = {0};
     IREE_RETURN_IF_ERROR(
         loom_low_asm_immediate_descriptor(parser, packet, i, &immediate));
@@ -428,16 +429,39 @@ static iree_status_t loom_parse_low_asm_immediates(
     if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LBRACE)) {
       uint16_t required_immediate_count = 0;
       IREE_RETURN_IF_ERROR(loom_low_asm_required_immediate_count(
-          parser, packet, &required_immediate_count));
+          parser, packet, /*immediate_start=*/0, packet->immediate_count,
+          &required_immediate_count));
       if (required_immediate_count == 0) {
         return iree_ok_status();
       }
     }
     return loom_parse_low_asm_named_immediates(
-        parser, packet, mnemonic_token, attrs, out_attr_count, parsed_spans);
+        parser, packet, mnemonic_token, /*immediate_start=*/0,
+        packet->immediate_count, attrs, out_attr_count, parsed_spans);
   }
-  return loom_parse_low_asm_positional_immediates(
-      parser, packet, mnemonic_token, attrs, out_attr_count, parsed_spans);
+  IREE_RETURN_IF_ERROR(loom_parse_low_asm_positional_immediates(
+      parser, packet, mnemonic_token, attrs, out_attr_count, parsed_spans));
+  if (packet->asm_immediate_count >= packet->immediate_count) {
+    return iree_ok_status();
+  }
+
+  loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+  if (loom_low_asm_token_is_on_line(peek, mnemonic_token.line) &&
+      peek.kind == LOOM_TOKEN_LBRACE) {
+    return loom_parse_low_asm_named_immediates(
+        parser, packet, mnemonic_token, packet->asm_immediate_count,
+        packet->immediate_count, attrs, out_attr_count, parsed_spans);
+  }
+
+  uint16_t required_immediate_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_asm_required_immediate_count(
+      parser, packet, packet->asm_immediate_count, packet->immediate_count,
+      &required_immediate_count));
+  if (required_immediate_count != 0) {
+    return loom_parser_emit_low_asm_error(parser, mnemonic_token,
+                                          IREE_SV("missing named immediate"));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_parse_low_asm_lhs(

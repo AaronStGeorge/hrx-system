@@ -19,6 +19,9 @@ endif()
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
   list(APPEND _loom_compile_platform_copts "-DLOOM_COMPILE_HAVE_SPIRV_VULKAN=1")
 endif()
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+  list(APPEND _loom_compile_platform_copts "-DLOOM_COMPILE_HAVE_LLVMIR=1")
+endif()
 set(_loom_compile_platform_deps "")
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
   list(APPEND _loom_compile_platform_deps loom::target::arch::amdgpu::provider)
@@ -31,6 +34,12 @@ endif()
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
   list(APPEND _loom_compile_platform_deps loom::target::arch::spirv::provider)
   list(APPEND _loom_compile_platform_deps loom::tooling::target::spirv::artifact_provider)
+endif()
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+  list(APPEND _loom_compile_platform_deps loom::target::arch::llvmir::provider)
+  list(APPEND _loom_compile_platform_deps loom::target::emit::llvmir::amdgpu::target_env)
+  list(APPEND _loom_compile_platform_deps loom::target::emit::llvmir::artifact_emitter)
+  list(APPEND _loom_compile_platform_deps loom::target::emit::llvmir::x86::target_env)
 endif()
 loom_cc_binary(
   NAME
@@ -50,6 +59,7 @@ loom_cc_binary(
     loom::ops::kernel
     loom::ops::op_defs
     loom::target::artifact_manifest
+    loom::target::entry_selection
     loom::target::low_descriptor_registry
     loom::tooling::cli::help
     loom::tooling::compile::pipeline
@@ -84,6 +94,19 @@ iree_execution_test_suite(
     amdgpu_execution_test
   MANIFESTS
     "loom-compile-amdgpu.test.json"
+  TOOLS
+    "loom-compile=::loom-compile"
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+iree_execution_test_suite(
+  NAME
+    llvmir_execution_test
+  MANIFESTS
+    "loom-compile-llvmir.test.json"
   TOOLS
     "loom-compile=::loom-compile"
   LABELS

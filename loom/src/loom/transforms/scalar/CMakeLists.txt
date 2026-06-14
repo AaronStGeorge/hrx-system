@@ -20,6 +20,7 @@ loom_cc_library(
     iree::base
     loom::ir
     loom::ops::scalar
+    loom::ops::scf
     loom::rewrite::rewriter
     loom::target::legalization
   PUBLIC

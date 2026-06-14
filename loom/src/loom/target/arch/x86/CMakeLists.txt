@@ -73,12 +73,30 @@ endif()
 if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
+    legalization
+  HDRS
+    "legalization.h"
+  SRCS
+    "legalization.c"
+  DEPS
+    iree::base
+    loom::ops::vector
+    loom::target::arch::x86::records::target_records
+    loom::target::legalization
+  PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_X86)
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
   SRCS
     "provider.c"
   DEPS
+    ::legalization
     ::math_policy
     iree::base
     loom::target::arch::x86::descriptors::low_registry

@@ -24,6 +24,27 @@
 // Macros for mechanical fact inference functions
 //===----------------------------------------------------------------------===//
 
+static void loom_scalar_expand_result_facts_to_domain_on_overflow(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_value_facts_t* facts) {
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_op_results(op)[0]);
+  int64_t domain_lo = 0;
+  int64_t domain_hi = 0;
+  if (loom_value_facts_scalar_type_domain(loom_type_element_type(result_type),
+                                          &domain_lo, &domain_hi)) {
+    if (facts->range_lo < domain_lo || facts->range_hi > domain_hi) {
+      const uint32_t preserved_flags =
+          facts->flags &
+          (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+           LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
+      const int64_t known_divisor = facts->known_divisor;
+      *facts = loom_value_facts_make(domain_lo, domain_hi, known_divisor);
+      facts->flags |= preserved_flags;
+    }
+  }
+}
+
 #define BINARY_FACTS(name, transfer_fn)                                  \
   iree_status_t name(loom_fact_context_t* context,                       \
                      const loom_module_t* module, const loom_op_t* op,   \
@@ -351,7 +372,16 @@ FLOAT_UNARY_FACTS(loom_scalar_truncf_facts, trunc)
 BINARY_FACTS(loom_scalar_andi_facts, loom_value_facts_andi)
 BINARY_FACTS(loom_scalar_ori_facts, loom_value_facts_ori)
 BINARY_FACTS(loom_scalar_xori_facts, loom_value_facts_xori)
-BINARY_FACTS(loom_scalar_shli_facts, loom_value_facts_shli)
+iree_status_t loom_scalar_shli_facts(loom_fact_context_t* context,
+                                     const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     const loom_value_facts_t* operand_facts,
+                                     loom_value_facts_t* result_facts) {
+  loom_value_facts_shli(&operand_facts[0], &operand_facts[1], &result_facts[0]);
+  loom_scalar_expand_result_facts_to_domain_on_overflow(module, op,
+                                                        &result_facts[0]);
+  return iree_ok_status();
+}
 BINARY_FACTS(loom_scalar_shrsi_facts, loom_value_facts_shrsi)
 BINARY_FACTS(loom_scalar_shrui_facts, loom_value_facts_shrui)
 

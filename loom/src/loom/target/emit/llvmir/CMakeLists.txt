@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     core
@@ -38,12 +38,13 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::io::stream
+    loom::ops::atomic
     loom::util::stream
   PUBLIC
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     target_env
@@ -60,7 +61,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     target_presets
@@ -76,41 +77,61 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
-    test_target
+    module_emitter
   HDRS
-    "test_target.h"
+    "module_emitter.h"
   SRCS
-    "test_target.c"
+    "module_emitter.c"
   DEPS
+    ::core
     ::target_env
+    ::target_presets
     iree::base
+    iree::base::internal::arena
+    loom::analysis::symbol_facts
+    loom::codegen::low::diagnostics
+    loom::codegen::low::function
+    loom::codegen::low::target_binding
+    loom::error::emitter
+    loom::error::error_defs
+    loom::ir
+    loom::ir::facts
+    loom::ops::atomic
+    loom::ops::llvmir
+    loom::ops::low
+    loom::target::arch::llvmir::descriptors::descriptors_ids
+    loom::target::launch
+    loom::target::low_descriptor_registry
+    loom::target::registers
     loom::target::types
   PUBLIC
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
-    llvmir
+    artifact_emitter
   HDRS
-    "intrinsics.h"
+    "artifact_emitter.h"
+  SRCS
+    "artifact_emitter.c"
   DEPS
     ::core
-    ::target_env
+    ::module_emitter
     ::target_presets
-    loom::target::emit::llvmir::amdgpu::intrinsics
-    loom::target::emit::llvmir::amdgpu::target_env
-    loom::target::emit::llvmir::x86::intrinsics
-    loom::target::emit::llvmir::x86::target_env
+    iree::base
+    iree::io::stream
+    loom::target::provider
+    loom::util::stream
   PUBLIC
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     test_modules_core
@@ -123,16 +144,16 @@ loom_cc_library(
     ::target_env
     iree::base
   DEFINES
-    "LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS=0"
+    "LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS=0"
   TESTONLY
   PUBLIC
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
-    test_modules
+    test_modules_target_scenarios
   HDRS
     "test_modules.h"
   SRCS
@@ -150,98 +171,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    lower
-  HDRS
-    "lower.h"
-    "lower/internal.h"
-  SRCS
-    "lower/memory.c"
-    "lower/registry.c"
-    "lower/scalar.c"
-    "lower/target.c"
-    "lower/vector.c"
-  DEPS
-    ::core
-    ::target_env
-    iree::base
-    iree::base::internal::arena
-    loom::ir
-    loom::ir::facts
-    loom::ops::buffer
-    loom::ops::cache
-    loom::ops::cfg
-    loom::ops::encoding
-    loom::ops::func
-    loom::ops::index
-    loom::ops::llvmir
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::type_registry
-    loom::ops::vector
-    loom::ops::view
-    loom::util::cfg_graph
-    loom::util::fact_table
-  PUBLIC
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    legality
-  HDRS
-    "legality.h"
-  SRCS
-    "legality.c"
-  DEPS
-    ::target_env
-    iree::base
-    loom::ir
-    loom::ops::buffer
-    loom::ops::cfg
-    loom::ops::func
-    loom::ops::index
-    loom::ops::llvmir
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::target
-    loom::ops::vector
-    loom::ops::view
-    loom::target::launch
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-loom_cc_library(
-  NAME
-    target_registry
-  HDRS
-    "target_registry.h"
-  SRCS
-    "target_registry.c"
-  DEPS
-    ::legality
-    ::lower
-    ::target_presets
-    ::test_target
-    iree::base
-    loom::target::emit::llvmir::amdgpu::legality
-    loom::target::emit::llvmir::amdgpu::lower
-    loom::target::emit::llvmir::amdgpu::target_env
-    loom::target::emit::llvmir::x86::legality
-    loom::target::emit::llvmir::x86::lower
-    loom::target::emit::llvmir::x86::target_env
-    loom::target::types
-  PUBLIC
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_library(
   NAME
     loom_check
@@ -251,16 +181,14 @@ loom_cc_library(
     "check/loom_check.c"
   DEPS
     ::core
-    ::legality
-    ::lower
-    ::target_registry
+    ::module_emitter
+    ::target_env
+    ::target_presets
     iree::base
     iree::io::stream
-    loom::analysis::symbol_facts
-    loom::error::error_defs
+    loom::codegen::low::function
     loom::ir
     loom::ops::llvmir
-    loom::ops::target
     loom::target::tool::llvm
     loom::tools::loom-check::execute
     loom::util::stream
@@ -269,24 +197,20 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
-loom_cc_library(
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+iree_native_test(
   NAME
-    check_provider
-  HDRS
-    "check/provider.h"
-  SRCS
-    "check/provider.c"
-  DEPS
-    ::loom_check
-    iree::base
-    loom::tools::loom-check::provider
-  TESTONLY
-  PUBLIC
+    "test_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/diagnostics.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
     "test_emit"
@@ -299,12 +223,12 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
-    "test_llvmir_cfg"
+    "test_target_low"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/cfg.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/target_low.loom-test"
   SRC
     loom::tools::loom-check::loom-check
   LABELS
@@ -312,12 +236,12 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 iree_native_test(
   NAME
-    "test_llvmir_intrinsics"
+    "test_toolchain"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/intrinsics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/toolchain.loom-test"
   SRC
     loom::tools::loom-check::loom-check
   LABELS
@@ -325,114 +249,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_lowering_errors"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/lowering_errors.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_memory"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/memory.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_packed_dot"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/packed_dot.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_scalar_index"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/scalar_index.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_target_projection"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/target_projection.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_toolchain"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/toolchain.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-iree_native_test(
-  NAME
-    "test_llvmir_vector_core"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/vector_core.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-loom_cc_test(
-  NAME
-    target_registry_test
-  SRCS
-    "target_registry_test.cc"
-  DEPS
-    ::target_env
-    ::target_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.emit.llvmir"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitcode_record_writer_test
@@ -444,11 +261,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitstream_writer_test
@@ -460,11 +278,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitcode_writer_test
@@ -478,11 +297,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     bitcode_writer_target_test
@@ -493,16 +313,17 @@ loom_cc_test(
   DEPS
     ::core
     ::target_env
-    ::test_modules
+    ::test_modules_target_scenarios
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     text_writer_test
@@ -514,11 +335,12 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     text_writer_target_test
@@ -528,15 +350,44 @@ loom_cc_test(
     "LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS=1"
   DEPS
     ::core
-    ::test_modules
+    ::test_modules_target_scenarios
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
+loom_cc_test(
+  NAME
+    module_emitter_test
+  SRCS
+    "module_emitter_test.cc"
+  DEPS
+    ::core
+    ::module_emitter
+    ::target_presets
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::text_asm
+    loom::error::error_defs
+    loom::format::text::parser
+    loom::ir
+    loom::ops::op_registry
+    loom::target::arch::llvmir::descriptors::low_registry
+    loom::testing::diagnostic_matchers
+    loom::testing::module_ptr
+    loom::util::stream
+  LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
+    "iree-build-requirement=loom.emit.llvmir"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     target_env_test
@@ -548,15 +399,14 @@ loom_cc_test(
     ::target_presets
     iree::testing::gtest
     iree::testing::gtest_main
-    loom::target::emit::llvmir::amdgpu::target_env
     loom::target::emit::llvmir::x86::target_env
-    loom::util::stream
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     tool_test
@@ -564,7 +414,7 @@ loom_cc_test(
     "tool_test.cc"
   DEPS
     ::core
-    ::test_modules
+    ::test_modules_target_scenarios
     iree::io::file_handle
     iree::io::stream
     iree::testing::gtest
@@ -573,54 +423,12 @@ loom_cc_test(
     loom::util::stream
   LABELS
     "requires-filesystem"
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()
 
-if(LOOM_EMIT_LLVMIR)
-loom_cc_test(
-  NAME
-    lower_options_test
-  SRCS
-    "lower_options_test.cc"
-  DEPS
-    ::lower
-    ::test_target
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::ir
-  LABELS
-    "requires-filesystem"
-    "iree-build-requirement=loom.emit.llvmir"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
-loom_cc_test(
-  NAME
-    legality_test
-  SRCS
-    "legality_test.cc"
-  DEPS
-    ::legality
-    ::test_target
-    iree::base::internal::arena
-    iree::testing::gtest
-    iree::testing::gtest_main
-    loom::ir
-    loom::ops::func
-    loom::ops::llvmir
-    loom::ops::scalar
-    loom::ops::scf
-    loom::ops::target
-    loom::ops::vector
-  LABELS
-    "iree-build-requirement=loom.emit.llvmir"
-)
-endif()
-
-if(LOOM_EMIT_LLVMIR)
+if(LOOM_TARGET_ARCH_LLVMIR AND LOOM_EMIT_LLVMIR)
 loom_cc_test(
   NAME
     verify_test
@@ -631,6 +439,7 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
+    "iree-build-requirement=loom.target.arch.llvmir"
     "iree-build-requirement=loom.emit.llvmir"
 )
 endif()

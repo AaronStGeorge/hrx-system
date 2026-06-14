@@ -67,15 +67,30 @@ def _append_field(
 
 def value_ref_row(row: LowerValueRef) -> list[str]:
     fields: list[str] = []
-    _append_field(fields, "kind", lower_rule_spelling.VALUE_REF_KIND_C_NAMES[row.kind], always=True)
+    _append_field(
+        fields,
+        "kind",
+        lower_rule_spelling.VALUE_REF_KIND_C_NAMES[row.kind],
+        always=True,
+    )
     _append_field(fields, "index", row.index, always=True)
     _append_field(fields, "materializer_index", row.materializer_index)
     return fields
 
 
-def source_memory_row(row: LowerSourceMemory) -> list[str]:
+def source_memory_row(
+    descriptor_refs: Mapping[str, int],
+    row: LowerSourceMemory,
+) -> list[str]:
     constraint = row.constraint
     fields: list[str] = []
+    flags: list[str] = []
+    if constraint.dynamic_byte_stride is None:
+        flags.append("LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY")
+    if constraint.allow_dynamic_stride_values:
+        flags.append("LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_STRIDE_VALUES")
+    if flags:
+        _append_field(fields, "flags", " | ".join(flags))
     _append_field(
         fields,
         "operation_kind",
@@ -136,7 +151,8 @@ def source_memory_row(row: LowerSourceMemory) -> list[str]:
         lower_rule_spelling.SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_C_NAMES[constraint.dynamic_index_source],
         default="LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE",
     )
-    _append_field(fields, "dynamic_byte_stride", constraint.dynamic_byte_stride)
+    if constraint.dynamic_byte_stride is not None:
+        _append_field(fields, "dynamic_byte_stride", constraint.dynamic_byte_stride)
     _append_field(
         fields,
         "dynamic_offset_unsigned_bit_count",
@@ -159,12 +175,54 @@ def source_memory_row(row: LowerSourceMemory) -> list[str]:
         lower_rule_spelling.diagnostic_index(row.diagnostic_index),
         always=True,
     )
+    if row.byte_offset_materializer is not None:
+        materializer = row.byte_offset_materializer
+        _append_field(
+            fields,
+            "byte_offset_const_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.const_i64),
+            always=True,
+            default="0xFFFF",
+        )
+        _append_field(
+            fields,
+            "byte_offset_add_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.add_i64),
+            always=True,
+            default="0xFFFF",
+        )
+        _append_field(
+            fields,
+            "byte_offset_mul_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.mul_i64),
+            always=True,
+            default="0xFFFF",
+        )
+        _append_field(
+            fields,
+            "byte_offset_shl_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.shl_i64),
+            always=True,
+            default="0xFFFF",
+        )
     return fields
 
 
 def descriptor_ref_keys(table: CompiledLowerRuleSet, source_contract: ContractFragment) -> tuple[str, ...]:
     used_keys = {row.descriptor.key for row in table.guards if row.kind == GuardKind.DESCRIPTOR_AVAILABLE and row.descriptor is not None}
     used_keys.update(row.descriptor.key for row in table.emits)
+    for row in table.source_memories:
+        if row.byte_offset_materializer is None:
+            continue
+        materializer = row.byte_offset_materializer
+        used_keys.update(
+            (
+                materializer.const_i64.key,
+                materializer.add_i64.key,
+                materializer.mul_i64.key,
+                materializer.shl_i64.key,
+            )
+        )
     return tuple(descriptor.key for descriptor in source_contract.descriptor_set.descriptors if descriptor.key in used_keys)
 
 
@@ -283,6 +341,7 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
     )
     if row.kind in (
         LowerAttrCopyKind.DIRECT,
+        LowerAttrCopyKind.ENUM_ORDINAL,
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
@@ -325,6 +384,8 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_MULTIPLIER,
         LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_SHIFT,
         LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_F16_BITS,
+        LowerAttrCopyKind.VALUE_F64_AS_BF16_BITS,
         LowerAttrCopyKind.VALUE_F64_AS_F32_BITS,
         LowerAttrCopyKind.VALUE_F64_AS_F64_BITS,
     ):
@@ -567,15 +628,23 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
     ]
     if type_pattern.kind == "vector":
         row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
-        row.extend(
-            [
-                ".rank = 1",
-            ]
-        )
-        if type_pattern.lanes is not None:
+        if type_pattern.dims:
+            row.extend(
+                [
+                    f".rank = {len(type_pattern.dims)}",
+                    f".static_dim0 = {lower_rule_spelling.c_expression(type_pattern.dims[0])}",
+                ]
+            )
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
+            if len(type_pattern.dims) >= 2:
+                row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1"
+                row.append(f".static_dim1 = {lower_rule_spelling.c_expression(type_pattern.dims[1])}")
+        elif type_pattern.lanes is not None:
+            row.append(".rank = 1")
             row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
             row.append(f".static_dim0 = {lower_rule_spelling.c_expression(type_pattern.lanes)}")
         elif type_pattern.minimum_lanes is not None and type_pattern.maximum_lanes is not None:
+            row.append(".rank = 1")
             row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE"
             row.extend(
                 [
@@ -584,5 +653,5 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
                 ]
             )
         else:
-            raise ValueError("generated vector type patterns require static lanes")
+            raise ValueError("generated vector type patterns require static shape")
     return row

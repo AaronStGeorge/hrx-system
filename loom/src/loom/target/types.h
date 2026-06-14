@@ -40,6 +40,8 @@ typedef enum loom_target_artifact_format_e {
   LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY = 4,
   LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE = 5,
   LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY = 6,
+  LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_TEXT = 7,
+  LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_BITCODE = 8,
 } loom_target_artifact_format_e;
 
 typedef uint8_t loom_target_abi_kind_t;
@@ -94,6 +96,10 @@ static inline iree_string_view_t loom_target_artifact_format_name(
       return IREE_SV("vm_bytecode");
     case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
       return IREE_SV("wasm_binary");
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_TEXT:
+      return IREE_SV("llvmir_text");
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_BITCODE:
+      return IREE_SV("llvmir_bitcode");
     case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
       return IREE_SV("unknown");
   }

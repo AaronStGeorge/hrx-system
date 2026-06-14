@@ -31,13 +31,13 @@ enum {
 #define LOOM_LLVMIR_ASMFLAGS_ALIGNSTACK ((uint8_t)2)
 #define LOOM_LLVMIR_ASMFLAGS_INTELDIALECT ((uint8_t)4)
 
-// LLVMIR projection target row selected by llvmir.target.
+// LLVMIR target row selected by llvmir.target.
 typedef enum loom_llvmir_target_kind_e {
   LOOM_LLVMIR_TARGET_KIND_OBJECT = 1,
   LOOM_LLVMIR_TARGET_KIND_COUNT_ = 2,
 } loom_llvmir_target_kind_t;
 
-// LOOM_OP_LLVMIR_TARGET: LLVMIR target projection record. The selector chooses a target-neutral bundle row while the LLVM-specific attributes own the triple, data layout, CPU, and feature-string vocabulary.
+// LOOM_OP_LLVMIR_TARGET: LLVMIR target-family record. The selector chooses an LLVMIR bundle row while optional LLVM-specific attributes own the triple, data layout, CPU, and feature-string vocabulary.
 // llvmir.target<object> @llvm_host {triple = "x86_64-unknown-linux-gnu"}
 LOOM_DEFINE_ISA(loom_llvmir_target_isa, LOOM_OP_LLVMIR_TARGET)
 LOOM_DEFINE_ATTR_SYMBOL(loom_llvmir_target_symbol, 0)

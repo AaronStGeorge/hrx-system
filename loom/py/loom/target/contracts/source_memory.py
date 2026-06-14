@@ -14,6 +14,7 @@ from enum import Enum, unique
 
 from loom.dsl import Op
 from loom.target.contracts.guards import GuardDiagnostic
+from loom.target.low_descriptors import Descriptor
 
 _MEMORY_SPACE_NAMES = frozenset(
     (
@@ -65,6 +66,16 @@ class SourceMemoryRootKind(Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class SourceMemoryByteOffsetMaterializer:
+    """Low descriptors used to materialize a dynamic byte offset value."""
+
+    const_i64: Descriptor
+    add_i64: Descriptor
+    mul_i64: Descriptor
+    shl_i64: Descriptor
+
+
+@dataclass(frozen=True, slots=True)
 class SourceMemoryConstraint:
     """Target-independent memory-access shape required by an emit row."""
 
@@ -81,7 +92,8 @@ class SourceMemoryConstraint:
     dynamic_index_source: SourceMemoryDynamicIndexSource = (
         SourceMemoryDynamicIndexSource.NONE
     )
-    dynamic_byte_stride: int = 0
+    dynamic_byte_stride: int | None = 0
+    allow_dynamic_stride_values: bool = False
     dynamic_offset_unsigned_bit_count: int = 0
     dynamic_offset_diagnostic: GuardDiagnostic | None = None
     cache_policy_build_flags: int = 0
@@ -104,7 +116,8 @@ class SourceMemoryConstraint:
         dynamic_index_source: SourceMemoryDynamicIndexSource = (
             SourceMemoryDynamicIndexSource.NONE
         ),
-        dynamic_byte_stride: int = 0,
+        dynamic_byte_stride: int | None = 0,
+        allow_dynamic_stride_values: bool = False,
         dynamic_offset_unsigned_bit_count: int = 0,
         dynamic_offset_diagnostic: GuardDiagnostic | None = None,
         cache_policy_build_flags: int = 0,
@@ -127,6 +140,11 @@ class SourceMemoryConstraint:
         object.__setattr__(self, "dynamic_term_count", dynamic_term_count)
         object.__setattr__(self, "dynamic_index_source", dynamic_index_source)
         object.__setattr__(self, "dynamic_byte_stride", dynamic_byte_stride)
+        object.__setattr__(
+            self,
+            "allow_dynamic_stride_values",
+            allow_dynamic_stride_values,
+        )
         object.__setattr__(
             self,
             "dynamic_offset_unsigned_bit_count",
@@ -196,7 +214,16 @@ class SourceMemoryConstraint:
             raise ValueError("dynamic source memory needs an index source")
         elif self.dynamic_byte_stride == 0:
             raise ValueError("dynamic source memory stride must be non-zero")
-        if not _I64_MIN <= self.dynamic_byte_stride <= _I64_MAX:
+        if self.allow_dynamic_stride_values and (
+            dynamic_term_count is None or dynamic_term_count == 0
+        ):
+            raise ValueError(
+                "dynamic source memory stride values require a fixed nonzero "
+                "dynamic term count"
+            )
+        if self.dynamic_byte_stride is not None and not (
+            _I64_MIN <= self.dynamic_byte_stride <= _I64_MAX
+        ):
             raise ValueError("source memory dynamic byte stride must fit in i64")
         if not 0 <= self.dynamic_offset_unsigned_bit_count <= 64:
             raise ValueError(

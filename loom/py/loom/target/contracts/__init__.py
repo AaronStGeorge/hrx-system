@@ -57,6 +57,8 @@ from loom.target.contracts.immediates import (
     AttrProjectKind,
     SourceMemoryProject,
     SourceMemoryProjectKind,
+    SourceOpProject,
+    SourceOpProjectKind,
     ValueProject,
     ValueProjectKind,
 )
@@ -96,6 +98,7 @@ from loom.target.contracts.rules import (
 )
 from loom.target.contracts.source import ValueRef
 from loom.target.contracts.source_memory import (
+    SourceMemoryByteOffsetMaterializer,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
     SourceMemoryOperation,
@@ -172,6 +175,7 @@ __all__ = [
     "ReductionDescriptorCase",
     "Scalar",
     "SelectDescriptorCase",
+    "SourceMemoryByteOffsetMaterializer",
     "SourceMemoryProject",
     "SourceMemoryProjectKind",
     "SourceValueKind",
@@ -179,6 +183,8 @@ __all__ = [
     "SourceMemoryDynamicIndexSource",
     "SourceMemoryOperation",
     "SourceMemoryRootKind",
+    "SourceOpProject",
+    "SourceOpProjectKind",
     "TypePattern",
     "ValueAliasRule",
     "ValueElideRule",

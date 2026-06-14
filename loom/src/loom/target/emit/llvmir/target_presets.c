@@ -34,3 +34,23 @@ bool loom_llvmir_target_profile_registry_lookup(
   }
   return false;
 }
+
+bool loom_llvmir_target_profile_registry_project_bundle(
+    const loom_llvmir_target_profile_registry_t* registry,
+    const loom_llvmir_target_profile_projection_request_t* request,
+    const loom_llvmir_target_profile_t** out_profile) {
+  *out_profile = NULL;
+  if (!registry || !request || !request->bundle) {
+    return false;
+  }
+  for (iree_host_size_t provider_ordinal = 0;
+       provider_ordinal < registry->provider_count; ++provider_ordinal) {
+    const loom_llvmir_target_profile_provider_t* provider =
+        registry->providers[provider_ordinal];
+    if (provider->project_bundle &&
+        provider->project_bundle(request, out_profile)) {
+      return true;
+    }
+  }
+  return false;
+}

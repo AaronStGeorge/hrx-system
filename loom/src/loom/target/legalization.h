@@ -11,7 +11,8 @@
 // contract; legalizers rewrite unsupported source forms into lower or more
 // target-shaped IR. Target packages contribute callbacks through provider
 // tables, while generic reference legalizers can be composed after the
-// target-owned providers to guarantee a scalar path.
+// target-owned providers to offer a scalar path for ops the target does not
+// retain for native lowering.
 
 #ifndef LOOM_TARGET_LEGALIZATION_H_
 #define LOOM_TARGET_LEGALIZATION_H_
@@ -56,8 +57,8 @@ typedef enum loom_target_legalizer_action_e {
   LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT = 0,
   // The legalizer rewrote the op or erased it through the active rewriter.
   LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN = 1,
-  // The legalizer recognizes the op but requires a later specialization or
-  // normalization pass before it can rewrite.
+  // The legalizer recognizes the op but leaves it for a later legalization,
+  // target lowering, or target verification phase.
   LOOM_TARGET_LEGALIZER_ACTION_DEFER = 2,
   // The legalizer found invalid source IR and expects the final verifier to
   // emit the precise diagnostic.

@@ -65,6 +65,8 @@ _ARTIFACT_FORMAT_CASES = [
     EnumCase("spirv_binary", 4, doc="SPIR-V binary artifact."),
     EnumCase("vm_bytecode", 5, doc="IREE VM bytecode artifact."),
     EnumCase("wasm_binary", 6, doc="WebAssembly binary module artifact."),
+    EnumCase("llvmir_text", 7, doc="Textual LLVM IR module artifact."),
+    EnumCase("llvmir_bitcode", 8, doc="LLVM bitcode module artifact."),
 ]
 
 ArtifactFormatAttr = EnumDef(

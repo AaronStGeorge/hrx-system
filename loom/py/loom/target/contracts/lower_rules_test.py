@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
@@ -24,6 +25,12 @@ from loom.target.contracts import (
     LowerAttrCopyKind,
     LowerEmitKind,
     Scalar,
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
+    SourceMemoryRootKind,
+    SourceOpProject,
+    SourceValueKind,
     TypePattern,
     ValueAliasRule,
     ValueElideRule,
@@ -33,13 +40,34 @@ from loom.target.contracts import (
     binary_descriptor_rules,
     compile_lower_rule_set,
 )
+from loom.target.low_descriptors import Immediate, ImmediateKind
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_F32_DESCRIPTOR,
     TEST_LOW_ADD_I32_DESCRIPTOR,
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
     TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
+    TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
 )
+
+
+def _add_f32_flags_descriptor_set():
+    descriptor = replace(
+        TEST_LOW_ADD_F32_DESCRIPTOR,
+        key="test.add.f32.flags",
+        immediates=(
+            Immediate(
+                "fast_math_flags",
+                ImmediateKind.UNSIGNED,
+                bit_width=7,
+                unsigned_max=0x7F,
+            ),
+        ),
+    )
+    return descriptor, replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(*TEST_LOW_CORE_DESCRIPTOR_SET.descriptors, descriptor),
+    )
 
 
 def _expect_value_error(callable_obj: Callable[[], object], message: str) -> None:
@@ -207,6 +235,60 @@ def test_compile_lower_rule_set_offsets_variadic_operand_elements() -> None:
     assert tuple(value_ref.index for value_ref in value_refs) == (0, 1, 2, 3)
 
 
+def test_compile_lower_rule_set_compiles_source_memory_dynamic_term_operand() -> None:
+    table = ContractFragment(
+        name="test.source-memory-term",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=vector.vector_load,
+                descriptor=TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
+                guards=(
+                    Guard.operand_segment_count("indices", 0),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
+                        operands={
+                            "address": ValueRef.operand("view"),
+                            "index": ValueRef.source_memory_dynamic_term(),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                        source_memory=SourceMemoryConstraint(
+                            operation=SourceMemoryOperation.LOAD,
+                            root_kind=SourceMemoryRootKind.ANY,
+                            memory_spaces=("unknown", "global"),
+                            element_byte_count=4,
+                            vector_lane_count=4,
+                            vector_lane_byte_stride=4,
+                            static_byte_offset_minimum=-(2**63),
+                            static_byte_offset_maximum=(2**63) - 1,
+                            dynamic_term_count=1,
+                            dynamic_index_source=SourceMemoryDynamicIndexSource.VALUE,
+                            dynamic_byte_stride=None,
+                        ),
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    emit = compiled.emits[0]
+    value_refs = compiled.value_refs[
+        emit.operand_ref_start : emit.operand_ref_start + emit.operand_ref_count
+    ]
+    assert tuple(value_ref.kind for value_ref in value_refs) == (
+        SourceValueKind.OPERAND,
+        SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM,
+    )
+    assert tuple(value_ref.index for value_ref in value_refs) == (0, 0)
+    source_memory = compiled.source_memories[emit.source_memory_ordinal - 1]
+    assert source_memory.constraint is table.cases[0].emit[0].source_memory
+
+
 def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:
     table = ContractFragment(
         name="test.no-emit",
@@ -288,6 +370,44 @@ def test_compile_lower_rule_set_compiles_instance_flags_guard() -> None:
     assert compiled.rules[0].guard_count == 4
     assert compiled.guards[0].kind == GuardKind.INSTANCE_FLAGS_HAS_ALL
     assert compiled.guards[0].u64 == 16
+
+
+def test_compile_lower_rule_set_projects_source_instance_flags() -> None:
+    descriptor, descriptor_set = _add_f32_flags_descriptor_set()
+    table = ContractFragment(
+        name="test.flags",
+        descriptor_set=descriptor_set,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_divf,
+                descriptor=descriptor,
+                guards=(
+                    Guard.value_type("lhs", Scalar("f32")),
+                    Guard.value_type("rhs", Scalar("f32")),
+                    Guard.value_type("result", Scalar("f32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=descriptor,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                        immediates={
+                            "fast_math_flags": SourceOpProject.instance_flags()
+                        },
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert compiled.emits[0].attr_copy_count == 1
+    assert len(compiled.attr_copies) == 1
+    assert compiled.attr_copies[0].kind == LowerAttrCopyKind.SOURCE_OP_INSTANCE_FLAGS
 
 
 def test_compile_lower_rule_set_compiles_f64_equals_guard() -> None:

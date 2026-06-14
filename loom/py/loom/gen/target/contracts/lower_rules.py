@@ -179,15 +179,6 @@ def _generate_source(
         )
     )
 
-    source_memories_name = f"k{c_table_prefix}SourceMemories"
-    lines.extend(
-        lower_rule_rows.emit_optional_array(
-            source_memories_name,
-            "loom_low_lower_source_memory_t",
-            [lower_rule_rows.source_memory_row(row) for row in table.source_memories],
-        )
-    )
-
     descriptor_ref_keys = lower_rule_rows.descriptor_ref_keys(table, source_contract)
     descriptor_refs = {key: index for index, key in enumerate(descriptor_ref_keys)}
     descriptor_refs_name = f"k{c_table_prefix}DescriptorRefs"
@@ -196,6 +187,15 @@ def _generate_source(
             descriptor_refs_name,
             "loom_low_lower_rule_descriptor_ref_t",
             [lower_rule_rows.descriptor_ref_row(key) for key in descriptor_ref_keys],
+        )
+    )
+
+    source_memories_name = f"k{c_table_prefix}SourceMemories"
+    lines.extend(
+        lower_rule_rows.emit_optional_array(
+            source_memories_name,
+            "loom_low_lower_source_memory_t",
+            [lower_rule_rows.source_memory_row(descriptor_refs, row) for row in table.source_memories],
         )
     )
 

@@ -63,6 +63,9 @@ typedef struct loomc_emit_resolved_options_t {
 typedef struct loomc_emit_diagnostic_capture_t {
   // Result receiving converted diagnostics.
   loomc_result_t* result;
+
+  // Number of error diagnostics captured during emission.
+  uint32_t error_count;
 } loomc_emit_diagnostic_capture_t;
 
 static loomc_status_t loomc_emit_validate_string_view(
@@ -517,8 +520,12 @@ static iree_status_t loomc_emit_capture_diagnostic(
     void* user_data, const loom_diagnostic_emission_t* emission) {
   loomc_emit_diagnostic_capture_t* capture =
       (loomc_emit_diagnostic_capture_t*)user_data;
+  if (emission != NULL && emission->error != NULL &&
+      emission->error->severity == LOOM_DIAGNOSTIC_ERROR) {
+    ++capture->error_count;
+  }
   return iree_status_from_loomc(loomc_result_add_loom_diagnostic_emission(
-      capture->result, /*source=*/NULL, LOOM_EMITTER_PASS, emission));
+      capture->result, /*source=*/NULL, LOOM_EMITTER_VERIFIER, emission));
 }
 
 static void loomc_emit_artifact_release(loom_target_emit_artifact_t* artifact,
@@ -546,6 +553,16 @@ static loomc_status_t loomc_emit_sidecar_artifact_metadata(
     default:
       return loomc_make_status(LOOMC_STATUS_INTERNAL,
                                "emitter returned an unknown sidecar kind");
+  }
+}
+
+static loomc_artifact_kind_t loomc_emit_primary_artifact_kind(
+    loom_target_artifact_format_t target_artifact_format) {
+  switch (target_artifact_format) {
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_TEXT:
+      return LOOMC_ARTIFACT_KIND_TEXT;
+    default:
+      return LOOMC_ARTIFACT_KIND_EXECUTABLE;
   }
 }
 
@@ -673,15 +690,17 @@ static loomc_status_t loomc_emit_add_artifact(
   }
 
   loomc_status_t status = loomc_ok_status();
+  const loomc_artifact_kind_t artifact_kind =
+      loomc_emit_primary_artifact_kind(target_artifact->target_artifact_format);
   if (target_artifact->sidecar_count == 0) {
     status = loomc_result_add_artifact_take_contents(
-        result, LOOMC_ARTIFACT_KIND_EXECUTABLE,
+        result, artifact_kind,
         loomc_string_view_from_iree(emitter->public_artifact_format),
         loomc_emit_identifier(options, emitter),
         loomc_byte_span_from_iree(target_artifact->contents));
   } else {
     const loomc_artifact_t artifact = {
-        .kind = LOOMC_ARTIFACT_KIND_EXECUTABLE,
+        .kind = artifact_kind,
         .format = loomc_string_view_from_iree(emitter->public_artifact_format),
         .identifier = loomc_emit_identifier(options, emitter),
         .contents = loomc_byte_span_from_iree(target_artifact->contents),
@@ -856,6 +875,9 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
         status = loomc_result_fail_status_diagnostic_consume(
             result, NULL, LOOMC_DIAGNOSTIC_SEVERITY_ERROR,
             loomc_make_cstring_view("EMIT/TARGET"), status);
+      }
+      if (loomc_status_is_ok(status) && capture.error_count != 0) {
+        status = loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
       }
     }
   }

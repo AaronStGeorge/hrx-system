@@ -114,11 +114,18 @@ static iree_status_t loom_llvmir_module_define_value(
 
 static bool loom_llvmir_type_equal(const loom_llvmir_type_t* lhs,
                                    const loom_llvmir_type_t* rhs) {
-  return lhs->kind == rhs->kind && lhs->bit_width == rhs->bit_width &&
-         lhs->address_space == rhs->address_space &&
-         lhs->element_count == rhs->element_count &&
-         lhs->element_type == rhs->element_type &&
-         lhs->float_kind == rhs->float_kind;
+  if (lhs->kind != rhs->kind || lhs->bit_width != rhs->bit_width ||
+      lhs->address_space != rhs->address_space ||
+      lhs->element_count != rhs->element_count ||
+      lhs->element_type != rhs->element_type ||
+      lhs->float_kind != rhs->float_kind) {
+    return false;
+  }
+  if (lhs->kind != LOOM_LLVMIR_TYPE_STRUCT) return true;
+  for (uint32_t i = 0; i < lhs->element_count; ++i) {
+    if (lhs->element_types[i] != rhs->element_types[i]) return false;
+  }
+  return true;
 }
 
 static bool loom_llvmir_module_is_constant_value_kind(
@@ -162,6 +169,14 @@ static iree_status_t loom_llvmir_module_get_type(
       &module->arena, (void**)&module->types, &module->type_count,
       &module->type_capacity, sizeof(*module->types), (void**)&stored_type));
   *stored_type = *type;
+  if (type->kind == LOOM_LLVMIR_TYPE_STRUCT && type->element_count != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(&module->arena, type->element_count,
+                                  sizeof(*stored_type->element_types),
+                                  (void**)&stored_type->element_types));
+    memcpy(stored_type->element_types, type->element_types,
+           type->element_count * sizeof(*stored_type->element_types));
+  }
   *out_type_id = (loom_llvmir_type_id_t)(module->type_count - 1);
   return iree_ok_status();
 }
@@ -283,6 +298,58 @@ iree_status_t loom_llvmir_module_get_vector_type(
       .element_type = element_type_id,
   };
   return loom_llvmir_module_get_type(module, &type, out_type_id);
+}
+
+iree_status_t loom_llvmir_module_get_struct_type(
+    loom_llvmir_module_t* module, const loom_llvmir_type_id_t* element_type_ids,
+    iree_host_size_t element_count, loom_llvmir_type_id_t* out_type_id) {
+  if (element_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM struct type needs at least one element");
+  }
+  if (element_count > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "LLVM struct element count exceeds 32 bits");
+  }
+  if (element_type_ids == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM struct has null element type storage");
+  }
+  for (iree_host_size_t i = 0; i < element_count; ++i) {
+    if (element_type_ids[i] >= module->type_count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVM struct references unknown element type");
+    }
+    if (module->types[element_type_ids[i]].kind == LOOM_LLVMIR_TYPE_VOID) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVM struct element type must not be void");
+    }
+  }
+  loom_llvmir_type_t type = {
+      .kind = LOOM_LLVMIR_TYPE_STRUCT,
+      .element_count = (uint32_t)element_count,
+      .element_types = (loom_llvmir_type_id_t*)element_type_ids,
+  };
+  return loom_llvmir_module_get_type(module, &type, out_type_id);
+}
+
+iree_status_t loom_llvmir_module_get_vector_type_info(
+    const loom_llvmir_module_t* module, loom_llvmir_type_id_t type_id,
+    uint32_t* out_element_count, loom_llvmir_type_id_t* out_element_type_id) {
+  *out_element_count = 0;
+  *out_element_type_id = LOOM_LLVMIR_TYPE_ID_INVALID;
+  if (type_id >= module->type_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM vector info references unknown type");
+  }
+  const loom_llvmir_type_t* type = &module->types[type_id];
+  if (type->kind != LOOM_LLVMIR_TYPE_VECTOR) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM vector info requires a vector type");
+  }
+  *out_element_count = type->element_count;
+  *out_element_type_id = type->element_type;
+  return iree_ok_status();
 }
 
 iree_status_t loom_llvmir_module_add_integer_constant(
@@ -546,6 +613,15 @@ iree_status_t loom_llvmir_module_add_function(
   *function_slot = function;
   *out_function = function;
   return iree_ok_status();
+}
+
+loom_llvmir_function_t* loom_llvmir_module_find_function(
+    loom_llvmir_module_t* module, iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < module->function_count; ++i) {
+    loom_llvmir_function_t* function = module->functions[i];
+    if (iree_string_view_equal(function->name, name)) return function;
+  }
+  return NULL;
 }
 
 loom_llvmir_function_id_t loom_llvmir_function_id(

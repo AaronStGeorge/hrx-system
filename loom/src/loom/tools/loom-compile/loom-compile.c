@@ -19,6 +19,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/artifact_manifest.h"
+#include "loom/target/entry_selection.h"
 #include "loom/tooling/cli/help.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/config/config.h"
@@ -40,6 +41,9 @@
 #ifndef LOOM_COMPILE_HAVE_SPIRV_VULKAN
 #define LOOM_COMPILE_HAVE_SPIRV_VULKAN 0
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
+#ifndef LOOM_COMPILE_HAVE_LLVMIR
+#define LOOM_COMPILE_HAVE_LLVMIR 0
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
 
 typedef struct loom_compile_diagnostic_sink_t {
   // Parsed module used for full type rendering.
@@ -81,7 +85,7 @@ static iree_status_t loom_compile_diagnostic_sink(
 
 #define LOOM_COMPILE_HAVE_ANY_PROVIDER                      \
   (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREE_VM || \
-   LOOM_COMPILE_HAVE_SPIRV_VULKAN)
+   LOOM_COMPILE_HAVE_SPIRV_VULKAN || LOOM_COMPILE_HAVE_LLVMIR)
 #define LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER \
   (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_SPIRV_VULKAN)
 
@@ -97,6 +101,12 @@ static iree_status_t loom_compile_diagnostic_sink(
 #include "loom/target/arch/spirv/provider.h"
 #include "loom/tooling/target/spirv/artifact_provider.h"
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
+#if LOOM_COMPILE_HAVE_LLVMIR
+#include "loom/target/arch/llvmir/provider.h"
+#include "loom/target/emit/llvmir/amdgpu/target_env.h"
+#include "loom/target/emit/llvmir/artifact_emitter.h"
+#include "loom/target/emit/llvmir/x86/target_env.h"
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
 
 IREE_FLAG(string, backend, "vm",
           "Compilation backend to emit, such as 'vm' or a linked native "
@@ -163,6 +173,19 @@ static const loom_run_execution_provider_t kLoomCompileSpirvProvider = {
 };
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
 
+#if LOOM_COMPILE_HAVE_LLVMIR
+static const loom_run_execution_provider_t kLoomCompileLlvmirProvider = {
+    .name = IREE_SVL("llvmir"),
+    .target_provider = &loom_llvmir_target_provider,
+};
+
+static const loom_run_execution_provider_t
+    kLoomCompileLlvmirArtifactEmitterProvider = {
+        .name = IREE_SVL("llvmir-artifacts"),
+        .target_provider = &loom_llvmir_artifact_emitter_provider,
+};
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
+
 #if LOOM_COMPILE_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kLoomCompileProviders[] = {
 #if LOOM_COMPILE_HAVE_AMDGPU
@@ -174,6 +197,11 @@ static const loom_run_execution_provider_t* const kLoomCompileProviders[] = {
 #if LOOM_COMPILE_HAVE_SPIRV_VULKAN
     &kLoomCompileSpirvProvider,
 #endif  // LOOM_COMPILE_HAVE_SPIRV_VULKAN
+#if LOOM_COMPILE_HAVE_LLVMIR
+    // Register the target executor and the artifact-only emitter.
+    &kLoomCompileLlvmirProvider,
+    &kLoomCompileLlvmirArtifactEmitterProvider,
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
 };
 #endif  // LOOM_COMPILE_HAVE_ANY_PROVIDER
 
@@ -209,6 +237,15 @@ static const loom_run_hal_artifact_provider_registry_t
         .provider_count = 0,
 #endif  // LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 };
+
+typedef struct loom_compile_backend_t {
+  // Selected HAL artifact provider, if |--backend| names a HAL path.
+  const loom_run_hal_artifact_provider_t* hal_artifact_provider;
+  // Selected target-owned emitter, if |--backend| names an emitter format.
+  const loom_target_emitter_t* target_emitter;
+  // True when |--backend| names the VM archive emitter.
+  bool is_vm_backend;
+} loom_compile_backend_t;
 
 static iree_status_t loom_compile_register_context(void* user_data,
                                                    loom_context_t* context) {
@@ -658,21 +695,184 @@ static iree_status_t loom_compile_emit_vm(
 #endif  // LOOM_COMPILE_HAVE_IREE_VM
 }
 
+static iree_string_view_t loom_compile_target_artifact_identifier(
+    iree_string_view_t output_path, const loom_target_emitter_t* emitter) {
+  return loom_tooling_file_path_is_stdio(output_path)
+             ? emitter->default_identifier
+             : output_path;
+}
+
+#if LOOM_COMPILE_HAVE_LLVMIR
+static bool loom_compile_target_emitter_is_llvmir(
+    const loom_target_emitter_t* target_emitter) {
+  switch (target_emitter->target_artifact_format) {
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_TEXT:
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_BITCODE:
+      return true;
+    default:
+      return false;
+  }
+}
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
+
+static iree_status_t loom_compile_emit_target(
+    const loom_run_execution_environment_t* environment,
+    loom_run_session_t* session, const loom_target_emitter_t* target_emitter,
+    loom_run_module_t* run_module,
+    const loom_run_candidate_compile_options_t* compile_options,
+    iree_allocator_t allocator, bool* out_emitted) {
+  *out_emitted = false;
+  if (target_emitter == NULL || target_emitter->emit == NULL) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "selected target emitter is incomplete");
+  }
+  if (!iree_string_view_is_empty(
+          iree_make_cstring_view(FLAG_emit_target_artifact))) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--emit-target-artifact is only valid for HAL artifact providers");
+  }
+  if (compile_options->artifact_manifest.mode !=
+      LOOM_TARGET_ARTIFACT_MANIFEST_MODE_NONE) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--artifact-manifest is only valid for HAL artifact providers");
+  }
+
+  loom_target_entry_options_t target_options = {
+      .diagnostic_sink = compile_options->diagnostic_sink,
+      .source_resolver = compile_options->source_resolver,
+      .max_errors = compile_options->max_errors,
+  };
+  loom_target_entry_diagnostic_emitter_t diagnostic_emitter = {0};
+  loom_target_entry_diagnostic_emitter_initialize(
+      run_module->module, &target_options, LOOM_EMITTER_VERIFIER,
+      &diagnostic_emitter);
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(loom_run_session_block_pool(session), &arena);
+  loom_target_emit_artifact_t artifact = {0};
+  const iree_string_view_t output_path = iree_make_cstring_view(FLAG_output);
+  const iree_string_view_t identifier =
+      loom_compile_target_artifact_identifier(output_path, target_emitter);
+#if LOOM_COMPILE_HAVE_LLVMIR
+  const loom_llvmir_target_profile_provider_t*
+      llvmir_target_profile_providers[] = {
+          loom_llvmir_x86_target_profile_provider(),
+          loom_llvmir_amdgpu_target_profile_provider(),
+      };
+  const loom_llvmir_target_profile_registry_t llvmir_target_profile_registry = {
+      .providers = llvmir_target_profile_providers,
+      .provider_count = IREE_ARRAYSIZE(llvmir_target_profile_providers),
+  };
+  loom_llvmir_artifact_emitter_options_t llvmir_options = {0};
+  const void* option_chain = NULL;
+  if (loom_compile_target_emitter_is_llvmir(target_emitter)) {
+    loom_llvmir_artifact_emitter_options_initialize(&llvmir_options);
+    llvmir_options.target_profile_registry = &llvmir_target_profile_registry;
+    option_chain = &llvmir_options;
+  }
+#else
+  const void* option_chain = NULL;
+#endif  // LOOM_COMPILE_HAVE_LLVMIR
+  if (compile_options->report != NULL) {
+    compile_options->report->artifact_kind =
+        LOOM_TARGET_COMPILE_ARTIFACT_KIND_TARGET_ARTIFACT;
+    compile_options->report->backend_name = target_emitter->name;
+    compile_options->report->executable_format =
+        target_emitter->public_artifact_format;
+  }
+  const loom_target_emit_request_t request = {
+      .target_environment =
+          loom_run_execution_environment_target_environment(environment),
+      .low_descriptor_registry =
+          &loom_run_session_low_descriptor_registry(session)->registry,
+      .module = run_module->module,
+      .target_selection = loom_target_selection_empty(),
+      .option_chain = option_chain,
+      .identifier = identifier,
+      .compile_report = compile_options->report,
+      .diagnostic_emitter = loom_target_entry_emitter(&diagnostic_emitter),
+      .scratch_arena = &arena,
+      .allocator = allocator,
+  };
+
+  iree_status_t status = target_emitter->emit(&request, &artifact);
+  if (compile_options->report != NULL) {
+    loom_target_compile_report_record_status(compile_options->report,
+                                             iree_status_code(status));
+    if (artifact.contents.data_length != 0) {
+      loom_target_compile_report_record_artifact_size(
+          compile_options->report, artifact.contents.data_length);
+    }
+  }
+  if (iree_status_is_ok(status) && diagnostic_emitter.error_count == 0 &&
+      artifact.contents.data != NULL && artifact.contents.data_length != 0) {
+    status =
+        loom_compile_write_bytes(output_path, artifact.contents, allocator);
+    if (iree_status_is_ok(status)) {
+      *out_emitted = true;
+    }
+  }
+  if (artifact.storage != NULL && artifact.release != NULL) {
+    artifact.release(artifact.storage, allocator);
+  }
+  iree_arena_deinitialize(&arena);
+  return status;
+}
+
+static iree_status_t loom_compile_append_backend_name(
+    iree_string_builder_t* builder, iree_string_view_t name,
+    bool* inout_needs_separator) {
+  if (*inout_needs_separator) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ", "));
+  }
+  *inout_needs_separator = true;
+  return iree_string_builder_append_string(builder, name);
+}
+
+static iree_status_t loom_compile_append_hal_backend_names(
+    const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry,
+    iree_string_builder_t* builder, bool* inout_needs_separator) {
+  for (iree_host_size_t i = 0; i < artifact_provider_registry->provider_count;
+       ++i) {
+    IREE_RETURN_IF_ERROR(loom_compile_append_backend_name(
+        builder, artifact_provider_registry->providers[i]->name,
+        inout_needs_separator));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_compile_append_target_emitter_names(
+    const loom_target_environment_t* target_environment,
+    iree_string_builder_t* builder, bool* inout_needs_separator) {
+  const loom_target_emitter_list_t emitters =
+      loom_target_environment_emitter_list(target_environment);
+  for (iree_host_size_t i = 0; i < emitters.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_compile_append_backend_name(
+        builder, emitters.values[i]->public_artifact_format,
+        inout_needs_separator));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_compile_make_unknown_backend_status(
     iree_string_view_t backend_name,
     const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry,
+    const loom_target_environment_t* target_environment,
     iree_allocator_t allocator) {
   iree_string_builder_t backend_names;
   iree_string_builder_initialize(allocator, &backend_names);
-  iree_status_t status =
-      iree_string_builder_append_cstring(&backend_names, "vm");
-  if (iree_status_is_ok(status) &&
-      artifact_provider_registry->provider_count != 0) {
-    status = iree_string_builder_append_cstring(&backend_names, ", ");
+  bool needs_separator = false;
+  iree_status_t status = loom_compile_append_backend_name(
+      &backend_names, IREE_SV("vm"), &needs_separator);
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_append_hal_backend_names(
+        artifact_provider_registry, &backend_names, &needs_separator);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_run_hal_artifact_provider_registry_format_names(
-        artifact_provider_registry, &backend_names);
+    status = loom_compile_append_target_emitter_names(
+        target_environment, &backend_names, &needs_separator);
   }
   if (!iree_status_is_ok(status)) {
     iree_string_builder_deinitialize(&backend_names);
@@ -691,24 +891,40 @@ static iree_status_t loom_compile_make_unknown_backend_status(
 static iree_status_t loom_compile_select_backend(
     iree_string_view_t backend_name,
     const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry,
-    iree_allocator_t allocator,
-    const loom_run_hal_artifact_provider_t** out_artifact_provider,
-    bool* out_is_vm_backend) {
-  *out_artifact_provider = NULL;
-  *out_is_vm_backend = false;
+    const loom_target_environment_t* target_environment,
+    iree_allocator_t allocator, loom_compile_backend_t* out_backend) {
+  *out_backend = (loom_compile_backend_t){0};
   const loom_run_hal_artifact_provider_t* artifact_provider =
       loom_run_hal_artifact_provider_registry_lookup(artifact_provider_registry,
                                                      backend_name);
   if (artifact_provider != NULL) {
-    *out_artifact_provider = artifact_provider;
+    out_backend->hal_artifact_provider = artifact_provider;
+    return iree_ok_status();
+  }
+  const loom_target_emitter_list_t emitters =
+      loom_target_environment_emitter_list(target_environment);
+  for (iree_host_size_t i = 0; i < emitters.count; ++i) {
+    const loom_target_emitter_t* emitter = emitters.values[i];
+    if (!iree_string_view_equal(emitter->public_artifact_format,
+                                backend_name)) {
+      continue;
+    }
+    if (out_backend->target_emitter != NULL) {
+      return iree_make_status(
+          IREE_STATUS_INTERNAL,
+          "target environment contains duplicate emitter artifact formats");
+    }
+    out_backend->target_emitter = emitter;
+  }
+  if (out_backend->target_emitter != NULL) {
     return iree_ok_status();
   }
   if (iree_string_view_equal(backend_name, IREE_SV("vm"))) {
-    *out_is_vm_backend = true;
+    out_backend->is_vm_backend = true;
     return iree_ok_status();
   }
   return loom_compile_make_unknown_backend_status(
-      backend_name, artifact_provider_registry, allocator);
+      backend_name, artifact_provider_registry, target_environment, allocator);
 }
 
 static iree_status_t loom_compile_select_explicit_hal_target(
@@ -790,6 +1006,8 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "loom-compile kernel.loom --backend=vm --output=kernel.vmfb\n"
       "loom-compile kernel.loom --backend=amdgpu --target=gfx1100 \\\n"
       "  --emit-target-artifact=kernel.hsaco --output=kernel.vmfb\n"
+      "loom-compile kernel.loom --backend=llvmir-text --output=kernel.ll\n"
+      "loom-compile kernel.loom --backend=llvmir-bitcode --output=kernel.bc\n"
       "loom-compile kernel.loombc --backend=amdgpu --target=gfx1100 \\\n"
       "  --artifact-manifest=summary --emit-artifact-manifest=kernel.json\n"
       "loom-compile kernel.loom --backend=vm --pipeline=none\n"
@@ -805,7 +1023,9 @@ static void loom_compile_print_agents_markdown(FILE* stream) {
       "artifact with `--emit-target-artifact=path`. Use `--target=gfx1100` or\n"
       "another backend-owned target key when roots omit explicit "
       "`target(...)`\n"
-      "attrs. A single invocation compiles one target configuration.\n"
+      "attrs. Target-owned emitters such as `--backend=llvmir-text` and\n"
+      "`--backend=llvmir-bitcode` write the selected artifact directly to\n"
+      "`--output`. A single invocation compiles one target configuration.\n"
       "\n"
       "### Config specialization\n"
       "\n"
@@ -879,6 +1099,7 @@ int main(int argc, char** argv) {
   loom_run_compile_report_capture_t compile_report_capture = {0};
   loom_tooling_pass_trace_t pass_trace = {0};
   const loom_run_hal_artifact_provider_t* hal_artifact_provider = NULL;
+  const loom_target_emitter_t* target_emitter = NULL;
   loom_run_candidate_artifact_manifest_options_t artifact_manifest_options = {
       0};
   iree_string_view_t artifact_manifest_output_path = iree_string_view_empty();
@@ -918,9 +1139,14 @@ int main(int argc, char** argv) {
   }
   const iree_string_view_t backend_name = iree_make_cstring_view(FLAG_backend);
   if (iree_status_is_ok(status)) {
+    loom_compile_backend_t backend = {0};
     status = loom_compile_select_backend(
-        backend_name, &kLoomCompileHalArtifactProviderRegistry, allocator,
-        &hal_artifact_provider, &is_vm_backend);
+        backend_name, &kLoomCompileHalArtifactProviderRegistry,
+        loom_run_execution_environment_target_environment(&environment),
+        allocator, &backend);
+    hal_artifact_provider = backend.hal_artifact_provider;
+    target_emitter = backend.target_emitter;
+    is_vm_backend = backend.is_vm_backend;
   }
   if (iree_status_is_ok(status)) {
     status = loom_compile_artifact_manifest_options_initialize(
@@ -1014,6 +1240,10 @@ int main(int argc, char** argv) {
           explicit_hal_target_selected ? &explicit_hal_target : NULL,
           &run_module, &compile_options, &compile_report_capture,
           artifact_manifest_output_path, allocator, &emitted, &report_written);
+    } else if (target_emitter != NULL) {
+      status = loom_compile_emit_target(&environment, &session, target_emitter,
+                                        &run_module, &compile_options,
+                                        allocator, &emitted);
     } else if (is_vm_backend) {
       status = loom_compile_emit_vm(&run_module, &compile_options, allocator,
                                     &emitted);

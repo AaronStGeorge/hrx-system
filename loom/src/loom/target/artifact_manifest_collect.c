@@ -58,6 +58,10 @@ static iree_string_view_t loom_target_artifact_manifest_public_format_name(
       return IREE_SV("vm-bytecode");
     case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
       return IREE_SV("wasm-binary");
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_TEXT:
+      return IREE_SV("llvmir-text");
+    case LOOM_TARGET_ARTIFACT_FORMAT_LLVMIR_BITCODE:
+      return IREE_SV("llvmir-bitcode");
     case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
       return IREE_SV("unknown");
   }

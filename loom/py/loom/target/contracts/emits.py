@@ -27,12 +27,16 @@ from loom.target.contracts.immediates import (
     AttrProject,
     SourceMemoryProject,
     SourceMemoryProjectKind,
+    SourceOpProject,
     ValueProject,
 )
 from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.source import ValueRef
-from loom.target.contracts.source_memory import SourceMemoryConstraint
+from loom.target.contracts.source_memory import (
+    SourceMemoryByteOffsetMaterializer,
+    SourceMemoryConstraint,
+)
 from loom.target.low_descriptors import Descriptor, DescriptorSet
 
 
@@ -76,7 +80,10 @@ class EmitDescriptorOp:
     results: Mapping[str, ValueRef] | None = None
     result_types: Mapping[str, ResultTypeBinding] | None = None
     immediates: (
-        Mapping[str, AttrProject | ValueProject | SourceMemoryProject | int]
+        Mapping[
+            str,
+            AttrProject | SourceOpProject | ValueProject | SourceMemoryProject | int,
+        ]
         | Sequence[AttrProject]
     ) = ()
     form: DescriptorEmitForm = DescriptorEmitForm.AUTO
@@ -87,6 +94,9 @@ class EmitDescriptorOp:
     accumulator_tree: DescriptorAccumulatorTree = DescriptorAccumulatorTree.CHAIN
     skip_first_lane: bool = False
     source_memory: SourceMemoryConstraint | None = None
+    source_memory_byte_offset_materializer: (
+        SourceMemoryByteOffsetMaterializer | None
+    ) = None
 
     def __post_init__(self) -> None:
         operand_bindings = self.operands if self.operands is not None else {}
@@ -170,6 +180,11 @@ class EmitDescriptorOp:
                 self.descriptor, descriptor_field, "descriptor result type binding"
             )
             if isinstance(binding, ValueRef):
+                if binding.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
+                    raise ValueError(
+                        f"{source_op.name}: descriptor result type "
+                        f"'{descriptor_field}' cannot bind a source-memory term"
+                    )
                 binding.validate(
                     source_op,
                     f"descriptor result type '{descriptor_field}'",
@@ -235,6 +250,20 @@ class EmitDescriptorOp:
                 f"{source_op.name}: skip-first-lane cannot be combined with "
                 "first-lane accumulator seeding"
             )
+        self._validate_source_memory_emit(
+            source_op,
+            descriptor_set,
+            operand_bindings,
+        )
+        self._validate_immediates(source_op)
+        return tuple(produced_temporaries)
+
+    def _validate_source_memory_emit(
+        self,
+        source_op: Op,
+        descriptor_set: DescriptorSet,
+        operand_bindings: Mapping[str, ValueRef],
+    ) -> None:
         if self.source_memory is not None and self.form not in (
             DescriptorEmitForm.AUTO,
             DescriptorEmitForm.OP,
@@ -242,8 +271,61 @@ class EmitDescriptorOp:
             raise ValueError(f"{source_op.name}: source memory requires an op emit")
         if self.source_memory is not None:
             self.source_memory.validate(source_op)
-        self._validate_immediates(source_op)
-        return tuple(produced_temporaries)
+        if self.source_memory_byte_offset_materializer is not None:
+            materializer = self.source_memory_byte_offset_materializer
+            for descriptor in (
+                materializer.const_i64,
+                materializer.add_i64,
+                materializer.mul_i64,
+                materializer.shl_i64,
+            ):
+                _require_descriptor(descriptor_set, descriptor)
+        for descriptor_field, value_ref in operand_bindings.items():
+            if value_ref.kind != SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
+                continue
+            if self.source_memory is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs a source-memory emit"
+                )
+            if self.source_memory.dynamic_term_count is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs a fixed source-memory "
+                    "dynamic term count"
+                )
+            if value_ref.element >= self.source_memory.dynamic_term_count:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' references dynamic term "
+                    f"{value_ref.element}, but the source-memory constraint only "
+                    f"selects {self.source_memory.dynamic_term_count}"
+                )
+        for descriptor_field, value_ref in operand_bindings.items():
+            if value_ref.kind != SourceValueKind.SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET:
+                continue
+            if self.source_memory is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs a source-memory emit"
+                )
+            if self.source_memory.dynamic_term_count is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs a fixed source-memory "
+                    "dynamic term count"
+                )
+            if self.source_memory.dynamic_term_count == 0:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs dynamic source memory"
+                )
+            if self.source_memory_byte_offset_materializer is None:
+                raise ValueError(
+                    f"{source_op.name}: descriptor '{self.descriptor.key}' "
+                    f"operand '{descriptor_field}' needs a source-memory byte "
+                    "offset materializer"
+                )
 
     def _validate_immediates(self, source_op: Op) -> None:
         if isinstance(self.immediates, Mapping):
@@ -254,7 +336,7 @@ class EmitDescriptorOp:
                     immediate_name,
                     "descriptor immediate binding",
                 )
-                if isinstance(binding, AttrProject | ValueProject):
+                if isinstance(binding, AttrProject | SourceOpProject | ValueProject):
                     binding.validate(source_op, self.descriptor, immediate_name)
                 elif isinstance(binding, SourceMemoryProject):
                     if self.source_memory is None:

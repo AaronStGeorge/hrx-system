@@ -105,6 +105,7 @@ loom_cc_library(
     loom::target::low_legality
     loom::target::low_packet_diagnostics
     loom::target::math_policy
+    loom::target::pipeline
     loom::target::predicate
     loom::target::types
     loom::tooling::compile::pipeline
@@ -347,6 +348,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    llvmir_provider
+  HDRS
+    "llvmir_provider.h"
+  SRCS
+    "llvmir_provider.c"
+  DEPS
+    ::provider
+    iree::base
+    loom::target::emit::llvmir::amdgpu::target_env
+    loom::target::emit::llvmir::loom_check
+    loom::target::emit::llvmir::x86::target_env
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     test_provider
   HDRS
     "test_provider.h"
@@ -390,6 +408,9 @@ endif()
 if(LOOM_TARGET_ARCH_IREE_VM)
   list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_IREE_VM=1")
 endif()
+if(LOOM_TARGET_ARCH_LLVMIR)
+  list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_TARGET_LLVMIR=1")
+endif()
 if(LOOM_EMIT_LLVMIR)
   list(APPEND _loom_check_platform_copts "-DLOOM_CHECK_HAVE_EMIT_LLVMIR=1")
 endif()
@@ -415,8 +436,11 @@ endif()
 if(LOOM_TARGET_ARCH_IREE_VM)
   list(APPEND _loom_check_platform_deps loom::target::arch::ireevm::check::check_provider)
 endif()
+if(LOOM_TARGET_ARCH_LLVMIR)
+  list(APPEND _loom_check_platform_deps loom::target::arch::llvmir::check::check_provider)
+endif()
 if(LOOM_EMIT_LLVMIR)
-  list(APPEND _loom_check_platform_deps loom::target::emit::llvmir::check_provider)
+  list(APPEND _loom_check_platform_deps ::llvmir_provider)
 endif()
 if(LOOM_TARGET_ARCH_SPIRV)
   list(APPEND _loom_check_platform_deps loom::target::arch::spirv::check::check_provider)

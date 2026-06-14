@@ -114,6 +114,32 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    llvmir_contract_fragment
+  MAIN
+    "contract_fragment.py"
+  SRCS
+    "__init__.py"
+    "contract_fragment.py"
+  DEPS
+    loom::py::loom::gen::target::contracts::contract_fragment
+    loom::py::loom::target::arch::llvmir::contracts
+)
+
+iree_py_library(
+  NAME
+    llvmir_lower_rule_shard
+  MAIN
+    "lower_rule_shard.py"
+  SRCS
+    "__init__.py"
+    "lower_rule_shard.py"
+  DEPS
+    loom::py::loom::gen::target::contracts::lower_rule_shard
+    loom::py::loom::target::arch::llvmir::contracts
+)
+
+iree_py_library(
+  NAME
     spirv_contract_fragment
   MAIN
     "contract_fragment.py"

@@ -184,11 +184,14 @@ static iree_status_t loom_func_symbol_fact_compute(
   IREE_RETURN_IF_ERROR(loom_func_symbol_apply_imports(module, func, facts));
   facts->target_symbol = loom_func_like_target(func);
 
-  bool has_abi_attr =
+  const bool has_abi_attr =
       loom_func_symbol_attr_present(func, func.vtable->abi_attr_index);
-  facts->has_abi = has_abi_attr;
   if (has_abi_attr) {
+    facts->has_abi = true;
     facts->abi_kind = (loom_target_abi_kind_t)loom_func_like_abi(func);
+  } else if (loom_func_symbol_is_kernel_entry(func)) {
+    facts->has_abi = true;
+    facts->abi_kind = LOOM_TARGET_ABI_HAL_KERNEL;
   }
   facts->abi_attrs = loom_func_like_abi_attrs(func);
   loom_string_id_t export_symbol_id = loom_func_like_export_symbol(func);

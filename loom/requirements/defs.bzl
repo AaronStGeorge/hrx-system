@@ -88,6 +88,13 @@ TARGET_ARCH_IREE_VM = build_requirement(
     cmake_condition = "LOOM_TARGET_ARCH_IREE_VM",
 )
 
+TARGET_ARCH_LLVMIR = build_requirement(
+    id = "loom.target.arch.llvmir",
+    label = "//loom/requirements:target_arch_llvmir",
+    enabled_by = "//loom/config/target/arch:llvmir",
+    cmake_condition = "LOOM_TARGET_ARCH_LLVMIR",
+)
+
 TARGET_ARCH_SPIRV = build_requirement(
     id = "loom.target.arch.spirv",
     label = "//loom/requirements:target_arch_spirv",
@@ -121,6 +128,7 @@ REQUIREMENTS = [
     IMPORT_TILELANG,
     TARGET_ARCH_AMDGPU,
     TARGET_ARCH_IREE_VM,
+    TARGET_ARCH_LLVMIR,
     TARGET_ARCH_SPIRV,
     TARGET_ARCH_WASM,
     TARGET_ARCH_X86,

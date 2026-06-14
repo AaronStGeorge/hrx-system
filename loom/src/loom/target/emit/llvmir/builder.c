@@ -515,6 +515,66 @@ iree_status_t loom_llvmir_build_store(loom_llvmir_block_t* block,
   return loom_llvmir_builder_append_instruction(block, &instruction);
 }
 
+iree_status_t loom_llvmir_build_atomic_rmw(
+    loom_llvmir_block_t* block, const loom_llvmir_atomic_rmw_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id) {
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->pointer));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->value));
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_ATOMIC_RMW,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .atomic_rmw =
+          {
+              .result_type = desc->result_type,
+              .op = desc->op,
+              .pointer = desc->pointer,
+              .value = desc->value,
+              .ordering = desc->ordering,
+              .alignment = desc->alignment,
+              .flags = desc->flags,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_builder_copy_string(
+      module, desc->sync_scope, &instruction.atomic_rmw.sync_scope));
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
+iree_status_t loom_llvmir_build_cmpxchg(loom_llvmir_block_t* block,
+                                        const loom_llvmir_cmpxchg_desc_t* desc,
+                                        loom_llvmir_value_id_t* out_value_id) {
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->pointer));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->expected));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->replacement));
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_CMPXCHG,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .cmpxchg =
+          {
+              .result_type = desc->result_type,
+              .value_type = desc->value_type,
+              .pointer = desc->pointer,
+              .expected = desc->expected,
+              .replacement = desc->replacement,
+              .success_ordering = desc->success_ordering,
+              .failure_ordering = desc->failure_ordering,
+              .alignment = desc->alignment,
+              .flags = desc->flags,
+              .is_weak = desc->is_weak,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_builder_copy_string(
+      module, desc->sync_scope, &instruction.cmpxchg.sync_scope));
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
 iree_status_t loom_llvmir_build_call(loom_llvmir_block_t* block,
                                      const loom_llvmir_call_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {
@@ -664,6 +724,26 @@ iree_status_t loom_llvmir_build_extract_element(
       .extract_element =
           {
               .vector = desc->vector,
+              .index = desc->index,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
+iree_status_t loom_llvmir_build_extract_value(
+    loom_llvmir_block_t* block, const loom_llvmir_extract_value_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id) {
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->aggregate));
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_EXTRACT_VALUE,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .extract_value =
+          {
+              .aggregate = desc->aggregate,
               .index = desc->index,
           },
   };

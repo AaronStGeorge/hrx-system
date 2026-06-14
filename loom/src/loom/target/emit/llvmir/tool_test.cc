@@ -51,10 +51,10 @@ std::string ToString(const loom_llvm_tool_output_t& output) {
   return output.data ? std::string(output.data, output.length) : std::string();
 }
 
-bool IsToolUnavailable(iree_status_t status) {
-  return iree_status_is_not_found(status) ||
-         iree_status_is_unavailable(status) ||
-         iree_status_is_unimplemented(status);
+bool IsToolUnavailable(iree_status_code_t status_code) {
+  return status_code == IREE_STATUS_NOT_FOUND ||
+         status_code == IREE_STATUS_UNAVAILABLE ||
+         status_code == IREE_STATUS_UNIMPLEMENTED;
 }
 
 const char* TempDirectory() {
@@ -184,7 +184,7 @@ TEST(LlvmIrToolTest, QueriesVersion) {
   iree_status_t status =
       loom_llvm_tool_query_version(&toolchain, LOOM_LLVM_TOOL_LLVM_DIS,
                                    iree_allocator_system(), &version_text);
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llvm-dis is unavailable in this test environment";
   }
@@ -206,7 +206,7 @@ TEST(LlvmIrToolTest, AssemblesTextAndVerifiesBitcode) {
   iree_status_t status = loom_llvm_tool_assemble_ir_text_file(
       &toolchain, StringView(input_file.path()),
       StringView(bitcode_file.path()), iree_allocator_system());
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llvm-as is unavailable in this test environment";
   }
@@ -214,7 +214,7 @@ TEST(LlvmIrToolTest, AssemblesTextAndVerifiesBitcode) {
 
   status = loom_llvm_tool_verify_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "opt is unavailable in this test environment";
   }
@@ -233,7 +233,7 @@ TEST(LlvmIrToolTest, DisassemblesBitcode) {
   iree_status_t status = loom_llvm_tool_disassemble_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system(),
       &text);
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llvm-dis is unavailable in this test environment";
   }
@@ -255,7 +255,7 @@ TEST(LlvmIrToolTest, DisassemblesBitcodeBytes) {
   iree_status_t status = loom_llvm_tool_disassemble_bitcode(
       &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
       iree_allocator_system(), &text);
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llvm-dis is unavailable in this test environment";
   }
@@ -278,7 +278,7 @@ TEST(LlvmIrToolTest, DisassemblesAndVerifiesCastsBitcode) {
   iree_status_t status = loom_llvm_tool_disassemble_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system(),
       &text);
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llvm-dis is unavailable in this test environment";
   }
@@ -292,7 +292,7 @@ TEST(LlvmIrToolTest, DisassemblesAndVerifiesCastsBitcode) {
 
   status = loom_llvm_tool_verify_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "opt is unavailable in this test environment";
   }
@@ -311,7 +311,7 @@ TEST(LlvmIrToolTest, CompilesX86Object) {
   iree_status_t status = loom_llvm_tool_compile_object_file(
       &toolchain, StringView(bitcode_file.path()),
       StringView(object_file.path()), NULL, 0, iree_allocator_system());
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llc is unavailable in this test environment";
   }
@@ -333,7 +333,7 @@ TEST(LlvmIrToolTest, CompilesX86ObjectBytes) {
   iree_status_t status = loom_llvm_tool_compile_object(
       &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
       NULL, 0, iree_allocator_system(), &object);
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llc is unavailable in this test environment";
   }
@@ -355,7 +355,7 @@ TEST(LlvmIrToolTest, CompilesX86Assembly) {
   iree_status_t status = loom_llvm_tool_compile_assembly_file(
       &toolchain, StringView(bitcode_file.path()),
       StringView(assembly_file.path()), NULL, 0, iree_allocator_system());
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llc is unavailable in this test environment";
   }
@@ -379,7 +379,7 @@ TEST(LlvmIrToolTest, CompilesX86AssemblyBytes) {
   iree_status_t status = loom_llvm_tool_compile_assembly(
       &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
       NULL, 0, iree_allocator_system(), &assembly);
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llc is unavailable in this test environment";
   }
@@ -396,7 +396,7 @@ TEST(LlvmIrToolTest, CompilesAmdgpuObjectWhenTargetIsRegistered) {
   loom_llvm_tool_output_t version_text = {};
   iree_status_t status = loom_llvm_tool_query_version(
       &toolchain, LOOM_LLVM_TOOL_LLC, iree_allocator_system(), &version_text);
-  if (IsToolUnavailable(status)) {
+  if (IsToolUnavailable(iree_status_code(status))) {
     IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llc is unavailable in this test environment";
   }

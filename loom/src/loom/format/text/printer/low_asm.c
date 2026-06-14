@@ -265,9 +265,10 @@ static iree_status_t loom_print_low_asm_value_list(
 }
 
 static iree_status_t loom_print_low_asm_named_immediates(
-    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement,
+    uint16_t immediate_start, uint16_t immediate_end) {
   bool has_printed_immediate = false;
-  for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+  for (uint16_t i = immediate_start; i < immediate_end; ++i) {
     loom_text_low_asm_immediate_descriptor_t immediate = {0};
     const loom_named_attr_t* attr = NULL;
     IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
@@ -285,7 +286,7 @@ static iree_status_t loom_print_low_asm_named_immediates(
   iree_host_size_t start = ctx->stream->offset;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
   iree_host_size_t printed_count = 0;
-  for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+  for (uint16_t i = immediate_start; i < immediate_end; ++i) {
     loom_text_low_asm_immediate_descriptor_t immediate = {0};
     const loom_named_attr_t* attr = NULL;
     IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
@@ -317,7 +318,7 @@ static iree_status_t loom_print_low_asm_named_immediates(
 
 static iree_status_t loom_print_low_asm_positional_immediates(
     loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
-  for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+  for (uint16_t i = 0; i < statement->packet.asm_immediate_count; ++i) {
     if (i > 0 || statement->operand_count > 0) {
       IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
     }
@@ -355,9 +356,19 @@ static iree_status_t loom_print_low_asm_immediates(
     return iree_ok_status();
   }
   if (statement->packet.has_named_immediates) {
-    return loom_print_low_asm_named_immediates(ctx, statement);
+    return loom_print_low_asm_named_immediates(
+        ctx, statement, /*immediate_start=*/0,
+        statement->packet.immediate_count);
   }
-  return loom_print_low_asm_positional_immediates(ctx, statement);
+  IREE_RETURN_IF_ERROR(
+      loom_print_low_asm_positional_immediates(ctx, statement));
+  if (statement->packet.asm_immediate_count >=
+      statement->packet.immediate_count) {
+    return iree_ok_status();
+  }
+  return loom_print_low_asm_named_immediates(
+      ctx, statement, statement->packet.asm_immediate_count,
+      statement->packet.immediate_count);
 }
 
 static iree_status_t loom_print_low_asm_result_type_annotation(

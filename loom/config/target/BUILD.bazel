@@ -15,6 +15,7 @@ package(default_visibility = ["//visibility:public"])
 DEFAULT_ENABLED = [
     "amdgpu",
     "iree_vm",
+    "llvmir",
     "spirv",
     "x86",
 ]
@@ -22,6 +23,7 @@ DEFAULT_ENABLED = [
 SUPPORTED_VALUES = [
     "amdgpu",
     "iree_vm",
+    "llvmir",
     "spirv",
     "wasm",
     "x86",
@@ -66,5 +68,13 @@ selects.config_setting_group(
     match_all = [
         ":spirv_artifacts",
         "//runtime/config/hal:driver_vulkan",
+    ],
+)
+
+selects.config_setting_group(
+    name = "llvmir_artifacts",
+    match_all = [
+        "//loom/config/target/arch:llvmir",
+        "//loom/config/emit:llvmir",
     ],
 )

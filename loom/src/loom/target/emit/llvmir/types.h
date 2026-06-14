@@ -25,10 +25,12 @@ typedef struct loom_llvmir_type_t {
   uint32_t bit_width;
   // Pointer address space for POINTER types.
   uint32_t address_space;
-  // Vector lane count for VECTOR types.
+  // Element count for VECTOR and STRUCT types.
   uint32_t element_count;
   // Vector element type for VECTOR types.
   loom_llvmir_type_id_t element_type;
+  // Struct element types for STRUCT types.
+  loom_llvmir_type_id_t* element_types;
   // Floating-point scalar kind for FLOAT types.
   loom_llvmir_float_kind_t float_kind;
 } loom_llvmir_type_t;
@@ -109,6 +111,9 @@ typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_COND_BR = 17,
   LOOM_LLVMIR_INST_UNREACHABLE = 18,
   LOOM_LLVMIR_INST_UNOP = 19,
+  LOOM_LLVMIR_INST_ATOMIC_RMW = 20,
+  LOOM_LLVMIR_INST_CMPXCHG = 21,
+  LOOM_LLVMIR_INST_EXTRACT_VALUE = 22,
 } loom_llvmir_inst_kind_t;
 
 typedef struct loom_llvmir_metadata_attachment_storage_t {
@@ -240,6 +245,57 @@ typedef struct loom_llvmir_instruction_t {
       // Number of entries in |metadata_attachments|.
       iree_host_size_t metadata_attachment_count;
     } store;
+    // Atomic read-modify-write operands and memory attributes.
+    struct {
+      // Atomic operation result type.
+      loom_llvmir_type_id_t result_type;
+      // Read-modify-write opcode.
+      loom_llvmir_atomic_rmw_op_t op;
+      // Pointer operand.
+      loom_llvmir_value_id_t pointer;
+      // Update value operand.
+      loom_llvmir_value_id_t value;
+      // Atomic memory ordering.
+      loom_llvmir_atomic_ordering_t ordering;
+      // Optional LLVM syncscope name.
+      iree_string_view_t sync_scope;
+      // Optional byte alignment.
+      uint32_t alignment;
+      // Memory operation flags.
+      uint32_t flags;
+    } atomic_rmw;
+    // Atomic compare-exchange operands and memory attributes.
+    struct {
+      // Aggregate result type containing the old value and success flag.
+      loom_llvmir_type_id_t result_type;
+      // Scalar compared and replaced by the operation.
+      loom_llvmir_type_id_t value_type;
+      // Pointer operand.
+      loom_llvmir_value_id_t pointer;
+      // Expected value operand.
+      loom_llvmir_value_id_t expected;
+      // Replacement value operand.
+      loom_llvmir_value_id_t replacement;
+      // Success atomic memory ordering.
+      loom_llvmir_atomic_ordering_t success_ordering;
+      // Failure atomic memory ordering.
+      loom_llvmir_atomic_ordering_t failure_ordering;
+      // Optional LLVM syncscope name.
+      iree_string_view_t sync_scope;
+      // Optional byte alignment.
+      uint32_t alignment;
+      // Memory operation flags.
+      uint32_t flags;
+      // True when the compare-exchange may fail spuriously.
+      bool is_weak;
+    } cmpxchg;
+    // Aggregate value extraction operands.
+    struct {
+      // Aggregate value to extract from.
+      loom_llvmir_value_id_t aggregate;
+      // Zero-based aggregate element index.
+      uint32_t index;
+    } extract_value;
     // Vector lane extraction operands.
     struct {
       // Vector value to extract from.

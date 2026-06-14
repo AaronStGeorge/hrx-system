@@ -82,11 +82,24 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "legalization",
+    srcs = ["legalization.c"],
+    hdrs = ["legalization.h"],
+    deps = [
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:legalization",
+        "//loom/src/loom/target/arch/x86/records:target_records",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     visibility = _X86_PROVIDER_VISIBILITY,
     deps = [
+        ":legalization",
         ":math_policy",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/x86/descriptors:low_registry",
