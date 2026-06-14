@@ -9,11 +9,16 @@
 #ifndef LOOM_TARGET_ARCH_X86_RECORDS_TARGET_RECORDS_H_
 #define LOOM_TARGET_ARCH_X86_RECORDS_TARGET_RECORDS_H_
 
+#include <stdint.h>
+
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Stable target-family identity for x86 low descriptor sets.
+#define LOOM_X86_TARGET_STABLE_ID UINT64_C(0x3f1e78197f70e441)
 
 extern const loom_target_bundle_table_t loom_x86_target_bundles;
 

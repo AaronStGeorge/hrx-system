@@ -28,7 +28,7 @@
 #define LOOM_LLVMIR_LOW_EMITTER_KEY IREE_SV("llvmir.low")
 #define LOOM_LLVMIR_GENERIC_CORE_DESCRIPTOR_SET_KEY \
   IREE_SV("llvmir.generic.core")
-#define LOOM_LLVMIR_MAX_VECTOR_LANES 16
+#define LOOM_LLVMIR_MAX_VECTOR_LANES 32
 
 typedef enum loom_llvmir_emit_core_type_e {
   LOOM_LLVMIR_EMIT_CORE_TYPE_I1 = 0,
@@ -629,7 +629,8 @@ static const loom_llvmir_emit_const_info_t kConstInfos[] = {
       LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 3),   \
       LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 4),   \
       LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 8),   \
-      LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 16)
+      LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 16),  \
+      LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 32)
 
 #define LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(lanes)         \
   LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##I1),       \
@@ -647,7 +648,8 @@ static const loom_llvmir_emit_const_info_t kConstInfos[] = {
       LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(3),     \
       LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(4),     \
       LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(8),     \
-      LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(16)
+      LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(16),    \
+      LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(32)
 
 static const uint32_t kSplatDescriptorRefs[] = {
     LOOM_LLVMIR_ALL_STRUCTURAL_VECTOR_REFS(SPLAT),

@@ -52,7 +52,7 @@ static loom_target_legalizer_action_t loom_amdgpu_defer_or_reject_final(
              : LOOM_TARGET_LEGALIZER_ACTION_DEFER;
 }
 
-static iree_status_t loom_amdgpu_retain_native_vector_bitstream_op(
+static iree_status_t loom_amdgpu_retain_native_vector_op(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
     loom_target_legalizer_result_t* out_result) {
@@ -323,27 +323,47 @@ static iree_status_t loom_amdgpu_legalize_kernel_subgroup_match_all(
 static const loom_target_legalizer_entry_t kAmdgpuLegalizerEntries[] = {
     {
         .root_kind = LOOM_OP_VECTOR_BITFIELD_EXTRACTU,
-        .legalize = loom_amdgpu_retain_native_vector_bitstream_op,
+        .legalize = loom_amdgpu_retain_native_vector_op,
     },
     {
         .root_kind = LOOM_OP_VECTOR_BITFIELD_EXTRACTS,
-        .legalize = loom_amdgpu_retain_native_vector_bitstream_op,
+        .legalize = loom_amdgpu_retain_native_vector_op,
     },
     {
         .root_kind = LOOM_OP_VECTOR_BITFIELD_INSERT,
-        .legalize = loom_amdgpu_retain_native_vector_bitstream_op,
+        .legalize = loom_amdgpu_retain_native_vector_op,
     },
     {
         .root_kind = LOOM_OP_VECTOR_BITPACK,
-        .legalize = loom_amdgpu_retain_native_vector_bitstream_op,
+        .legalize = loom_amdgpu_retain_native_vector_op,
     },
     {
         .root_kind = LOOM_OP_VECTOR_BITUNPACKU,
-        .legalize = loom_amdgpu_retain_native_vector_bitstream_op,
+        .legalize = loom_amdgpu_retain_native_vector_op,
     },
     {
         .root_kind = LOOM_OP_VECTOR_BITUNPACKS,
-        .legalize = loom_amdgpu_retain_native_vector_bitstream_op,
+        .legalize = loom_amdgpu_retain_native_vector_op,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOTF,
+        .legalize = loom_amdgpu_retain_native_vector_op,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT2F,
+        .legalize = loom_amdgpu_retain_native_vector_op,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT4I,
+        .legalize = loom_amdgpu_retain_native_vector_op,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT8I4,
+        .legalize = loom_amdgpu_retain_native_vector_op,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT4F8,
+        .legalize = loom_amdgpu_retain_native_vector_op,
     },
     {
         .root_kind = LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY,

@@ -64,6 +64,7 @@ _CACHE_SCOPE_ENUM = "llvmir.cache_scope"
 _CACHE_TEMPORAL_ENUM = "llvmir.cache_temporal"
 
 _VECTOR_LANE_COUNTS = (2, 3, 4, 8, 16)
+_STRUCTURAL_VECTOR_LANE_COUNTS = (*_VECTOR_LANE_COUNTS, 32)
 _KERNEL_DIMENSIONS = ("x", "y", "z")
 _STRUCTURAL_VECTOR_TYPES = (
     "i1",
@@ -1152,7 +1153,7 @@ def _slice_descriptor(
 def _structural_vector_descriptors() -> tuple[Descriptor, ...]:
     descriptors: list[Descriptor] = []
     for type_name in _STRUCTURAL_VECTOR_TYPES:
-        for lane_count in _VECTOR_LANE_COUNTS:
+        for lane_count in _STRUCTURAL_VECTOR_LANE_COUNTS:
             descriptors.append(_splat_descriptor(type_name, lane_count))
             descriptors.append(_from_elements_descriptor(type_name, lane_count))
             descriptors.append(_extract_descriptor(type_name, lane_count))

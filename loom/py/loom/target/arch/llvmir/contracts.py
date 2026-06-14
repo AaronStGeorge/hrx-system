@@ -69,6 +69,7 @@ _OFFSET = Scalar("offset")
 _DYNAMIC_INDEX = -(2**63)
 
 _VECTOR_LANE_COUNTS = (2, 3, 4, 8, 16)
+_STRUCTURAL_VECTOR_LANE_COUNTS = (*_VECTOR_LANE_COUNTS, 32)
 _VECTOR_SELECT_TYPES = ("i8", "i16", "i32", "i64", "f16", "bf16", "f32", "f64")
 _STRUCTURAL_VECTOR_TYPES = (
     "i1",
@@ -2019,7 +2020,7 @@ def _slice_rule(
 def _structural_vector_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
     rules: list[DescriptorRule | ValueAliasRule] = []
     for element in _STRUCTURAL_VECTOR_TYPES:
-        for lane_count in _VECTOR_LANE_COUNTS:
+        for lane_count in _STRUCTURAL_VECTOR_LANE_COUNTS:
             rules.append(_splat_rule(element, lane_count))
             rules.append(_from_elements_rule(element, lane_count))
             rules.append(_extract_rule(element, lane_count))

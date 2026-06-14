@@ -99,6 +99,25 @@ static iree_status_t loom_vector_legalize_descriptor(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_legalize_dotf(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_dotf_to_scalar_rewrite_op(
+      context->pass, context->rewriter, op, &rewritten));
+  if (rewritten) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
+    };
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_legalize_mma(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -255,6 +274,26 @@ static const loom_target_legalizer_entry_t kVectorLegalizerEntries[] = {
     },
     {
         .root_kind = LOOM_OP_VECTOR_BITUNPACKS,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOTF,
+        .legalize = loom_vector_legalize_dotf,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT2F,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT4I,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT8I4,
+        .legalize = loom_vector_legalize_descriptor,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_DOT4F8,
         .legalize = loom_vector_legalize_descriptor,
     },
     {
