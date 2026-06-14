@@ -650,6 +650,7 @@ static iree_status_t loom_target_compile_report_format_source_low_rows(
       const iree_string_view_t selection_name =
           loom_target_compile_report_source_low_selection_name(
               row->selection_kind);
+      const iree_string_view_t plan_detail = row->plan_detail;
       if (row->selection_kind ==
           LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE) {
         IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -663,15 +664,28 @@ static iree_status_t loom_target_compile_report_format_source_low_rows(
             row->rule_index, row->descriptor_id, row->emitted_low_op_count));
         continue;
       }
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-          builder,
-          "COMPILE-REPORT: source_low[%" PRIhsz
-          "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
-          "descriptor=%" PRIu64 " emitted_ops=%u\n",
-          row_index, (int)function_name.size, function_name.data,
-          (int)source_op_name.size, source_op_name.data,
-          (int)selection_name.size, selection_name.data, row->plan_id,
-          row->descriptor_id, row->emitted_low_op_count));
+      if (!iree_string_view_is_empty(plan_detail)) {
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder,
+            "COMPILE-REPORT: source_low[%" PRIhsz
+            "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
+            " detail=%.*s descriptor=%" PRIu64 " emitted_ops=%u\n",
+            row_index, (int)function_name.size, function_name.data,
+            (int)source_op_name.size, source_op_name.data,
+            (int)selection_name.size, selection_name.data, row->plan_id,
+            (int)plan_detail.size, plan_detail.data, row->descriptor_id,
+            row->emitted_low_op_count));
+      } else {
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder,
+            "COMPILE-REPORT: source_low[%" PRIhsz
+            "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
+            " descriptor=%" PRIu64 " emitted_ops=%u\n",
+            row_index, (int)function_name.size, function_name.data,
+            (int)source_op_name.size, source_op_name.data,
+            (int)selection_name.size, selection_name.data, row->plan_id,
+            row->descriptor_id, row->emitted_low_op_count));
+      }
     }
   }
   return iree_ok_status();
@@ -1360,6 +1374,9 @@ static iree_status_t loom_target_compile_report_format_source_low_row_json(
       stream, &first_field, "rule_index", row->rule_index));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u64_field(
       stream, &first_field, "plan_id", row->plan_id));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "plan_detail", row->plan_detail));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u64_field(
       stream, &first_field, "descriptor_id", row->descriptor_id));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(

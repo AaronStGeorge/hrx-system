@@ -1382,6 +1382,7 @@ static iree_status_t loom_low_lower_record_report_row(
       .rule_set_index = UINT16_MAX,
       .rule_index = UINT16_MAX,
       .plan_id = selected_plan->plan.id,
+      .plan_detail = iree_string_view_empty(),
       .descriptor_id = LOOM_LOW_STABLE_ID_NONE,
       .emitted_low_op_count = emitted_low_op_count,
   };
@@ -1401,6 +1402,12 @@ static iree_status_t loom_low_lower_record_report_row(
         (const loom_low_lower_descriptor_matrix_plan_t*)
             selected_plan->plan.target_data;
     row.descriptor_id = plan->descriptor.descriptor->stable_id;
+  }
+  if (selected_plan->rule == NULL &&
+      context->policy->describe_plan.fn != NULL) {
+    row.plan_detail = context->policy->describe_plan.fn(
+        context->policy->describe_plan.user_data, context,
+        selected_plan->source_op, selected_plan->plan);
   }
   return loom_low_lower_report_row_list_append(&result->report_rows,
                                                result->report_allocator, &row);
@@ -2979,6 +2986,9 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   *out_result = (loom_low_lower_result_t){
       .low_func_ref = loom_symbol_ref_null(),
   };
+  if (!iree_allocator_is_null(options->report_allocator)) {
+    out_result->report_allocator = options->report_allocator;
+  }
 
   loom_region_t* source_body = loom_func_like_body(source_function);
   IREE_ASSERT(source_body != NULL);

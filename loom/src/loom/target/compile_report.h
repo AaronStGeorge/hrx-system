@@ -344,6 +344,8 @@ typedef struct loom_target_compile_report_source_low_row_t {
   uint16_t rule_index;
   // Target-owned plan id for callback selections, or UINT64_MAX otherwise.
   uint64_t plan_id;
+  // Stable target-owned description of the selected plan variant, if any.
+  iree_string_view_t plan_detail;
   // First stable low descriptor id emitted by a table rule, or none for plans.
   uint64_t descriptor_id;
   // Number of low operations emitted for this source operation.

@@ -360,6 +360,8 @@ typedef struct loom_low_lower_report_row_t {
   uint16_t rule_index;
   // Target-owned plan id for callback selections, or PLAN_ID_NONE otherwise.
   loom_low_lower_plan_id_t plan_id;
+  // Stable target-owned description of the selected plan variant, if any.
+  iree_string_view_t plan_detail;
   // First stable low descriptor id emitted by a table rule, or none for plans.
   uint64_t descriptor_id;
   // Number of low operations emitted for this source operation.
@@ -437,6 +439,19 @@ typedef struct loom_low_lower_mark_plan_storage_demands_callback_t {
   void* user_data;
 } loom_low_lower_mark_plan_storage_demands_callback_t;
 
+typedef iree_string_view_t (*loom_low_lower_describe_plan_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t plan);
+
+typedef struct loom_low_lower_describe_plan_callback_t {
+  // Optional callback returning a stable target-owned detail string for one
+  // selected callback plan. The string is used only for production compile
+  // reports and must remain borrowed/static.
+  loom_low_lower_describe_plan_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_describe_plan_callback_t;
+
 typedef struct loom_low_lower_policy_t {
   // Stable policy name used in diagnostics and status messages.
   iree_string_view_t name;
@@ -496,6 +511,8 @@ typedef struct loom_low_lower_policy_t {
   // Optional target-owned source storage demand marker for callback-selected
   // plans. Missing preserves the conservative all-operands behavior.
   loom_low_lower_mark_plan_storage_demands_callback_t mark_plan_storage_demands;
+  // Optional target-owned callback plan detail formatter for compile reports.
+  loom_low_lower_describe_plan_callback_t describe_plan;
   // Optional target-owned emitter for plans selected by |select_op|.
   loom_low_lower_emit_op_callback_t emit_op;
 } loom_low_lower_policy_t;

@@ -377,6 +377,7 @@ loom_check_test_suite(
         "test/source_low/source_low_subgroup_collective.loom-test",
         "test/source_low/source_low_subgroup_collective_cdna3.loom-test",
         "test/source_low/source_low_subgroup_collective_diagnostics.loom-test",
+        "test/source_low/source_low_subgroup_collective_report.loom-test",
         "test/source_low/source_low_subgroup_index.loom-test",
         "test/source_low/source_low_sync.loom-test",
         "test/source_low/source_low_sync_kernel.loom-test",
