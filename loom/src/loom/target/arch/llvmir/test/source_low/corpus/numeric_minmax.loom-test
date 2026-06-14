@@ -127,7 +127,6 @@ low.func.def target(@target) abi(object_function) @vector_f32_clampf_ordered(%in
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -139,6 +138,16 @@ func.def target(@target) @index_minmax_sgpr(%lhs0: index, %rhs0: index) -> (inde
   %max = index.max %lhs, %rhs : index
   %sum = index.add %min, %max : index
   func.return %sum : index
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @index_minmax_sgpr(%lhs: reg<llvmir.i64>, %rhs: reg<llvmir.i64>) -> (reg<llvmir.i64>) asm<llvmir.generic.core> {
+  %11 = cmp.slt.i64 %lhs, %rhs
+  %min = select.i64 %11, %lhs, %rhs
+  %13 = cmp.sgt.i64 %lhs, %rhs
+  %max = select.i64 %13, %lhs, %rhs
+  %sum = add.i64 %min, %max
+  return %sum
 }
 
 // ====

@@ -747,6 +747,43 @@ def _index_bitwise_rules() -> tuple[DescriptorRule, ...]:
     )
 
 
+def _index_minmax_rule(source_op: Op, predicate: str) -> DescriptorRule:
+    compare_descriptor = _descriptor(f"llvmir.cmp.{predicate}.i64")
+    select_descriptor = _descriptor("llvmir.select.i64")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=compare_descriptor,
+        guards=_typed_guards(("lhs", "rhs", "result"), _INDEX),
+        emit=(
+            _op_emit(
+                descriptor=compare_descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.temporary("take_lhs")},
+                result_types={"dst": _I1},
+            ),
+            _op_emit(
+                descriptor=select_descriptor,
+                operands={
+                    "condition": ValueRef.temporary("take_lhs"),
+                    "true_value": ValueRef.operand("lhs"),
+                    "false_value": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _index_minmax_rules() -> tuple[DescriptorRule, ...]:
+    return (
+        _index_minmax_rule(index.index_min, "slt"),
+        _index_minmax_rule(index.index_max, "sgt"),
+    )
+
+
 def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for element, source_ops in (
@@ -855,6 +892,8 @@ def _vector_bitwise_rules() -> tuple[DescriptorRule, ...]:
 def _compare_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for type_pattern, suffix, result_type, source_op, predicates in (
+        (_INDEX, "i64", _I1, index.index_cmp, _INTEGER_PREDICATES),
+        (_OFFSET, "i64", _I1, index.index_cmp, _INTEGER_PREDICATES),
         (_I32, "i32", _I1, scalar_comparison.scalar_cmpi, _INTEGER_PREDICATES),
         (_I64, "i64", _I1, scalar_comparison.scalar_cmpi, _INTEGER_PREDICATES),
         (_F32, "f32", _I1, scalar_comparison.scalar_cmpf, _FLOAT_PREDICATES),
@@ -954,6 +993,8 @@ def _select_rules() -> tuple[DescriptorRule, ...]:
         tuple(
             _select_rule(type_pattern, f"llvmir.select.{suffix}")
             for type_pattern, suffix in (
+                (_INDEX, "i64"),
+                (_OFFSET, "i64"),
                 (_I32, "i32"),
                 (_I64, "i64"),
                 (_F32, "f32"),
@@ -1603,6 +1644,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _binary_rule(index.index_add, _INDEX, "llvmir.add.i64"),
         _binary_rule(index.index_sub, _INDEX, "llvmir.sub.i64"),
         _binary_rule(index.index_mul, _INDEX, "llvmir.mul.i64"),
+        *_index_minmax_rules(),
         *_index_bitwise_rules(),
         _binary_rule(index.index_add, _OFFSET, "llvmir.add.i64"),
         _binary_rule(index.index_sub, _OFFSET, "llvmir.sub.i64"),
