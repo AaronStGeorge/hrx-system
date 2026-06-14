@@ -55,9 +55,39 @@ _F32 = Scalar("f32")
 _F64 = Scalar("f64")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
-_V4I1 = Vector("i1", lanes=4)
-_V4I32 = Vector("i32", lanes=4)
-_V4F32 = Vector("f32", lanes=4)
+
+_VECTOR_LANE_COUNTS = (2, 4, 8, 16)
+_VECTOR_SELECT_TYPES = ("i8", "i16", "i32", "i64", "f16", "bf16", "f32", "f64")
+
+_INTEGER_PREDICATES = (
+    "eq",
+    "ne",
+    "slt",
+    "sle",
+    "sgt",
+    "sge",
+    "ult",
+    "ule",
+    "ugt",
+    "uge",
+)
+
+_FLOAT_PREDICATES = (
+    "oeq",
+    "ogt",
+    "oge",
+    "olt",
+    "ole",
+    "one",
+    "ord",
+    "ueq",
+    "ugt",
+    "uge",
+    "ult",
+    "ule",
+    "une",
+    "uno",
+)
 
 _I32_MIN = -(2**31)
 _I32_MAX = (2**31) - 1
@@ -86,6 +116,14 @@ _PREDICATE_DIAGNOSTIC = GuardDiagnostic(
 
 def _descriptor(key: str) -> Descriptor:
     return descriptor_by_key(LLVMIR_GENERIC_CORE_DESCRIPTOR_SET, key)
+
+
+def _vector_type(element: str, lane_count: int) -> TypePattern:
+    return Vector(element, lanes=lane_count)
+
+
+def _vector_suffix(element: str, lane_count: int) -> str:
+    return f"v{lane_count}{element}"
 
 
 def _typed_guards(
@@ -238,8 +276,8 @@ def _compare_rule(
 
 def _select_rule(type_pattern: TypePattern, descriptor_key: str) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
-    vector_select = type_pattern in (_V4I32, _V4F32)
-    condition_type = _V4I1 if vector_select else _I1
+    vector_select = type_pattern.kind == "vector"
+    condition_type = Vector("i1", lanes=type_pattern.lanes) if vector_select else _I1
     return DescriptorRule(
         source_op=vector.vector_select if vector_select else scf.scf_select,
         descriptor=descriptor,
@@ -448,10 +486,9 @@ def _index_bitwise_rules() -> tuple[DescriptorRule, ...]:
 
 def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
-    for type_pattern, suffix, source_ops in (
+    for element, source_ops in (
         (
-            _V4I32,
-            "v4i32",
+            "i32",
             (
                 (vector.vector_addi, "add"),
                 (vector.vector_subi, "sub"),
@@ -459,8 +496,7 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             ),
         ),
         (
-            _V4F32,
-            "v4f32",
+            "f32",
             (
                 (vector.vector_addf, "add"),
                 (vector.vector_subf, "sub"),
@@ -468,19 +504,21 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             ),
         ),
     ):
-        for source_op, stem in source_ops:
-            rules.append(
-                _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
-            )
+        for lane_count in _VECTOR_LANE_COUNTS:
+            type_pattern = _vector_type(element, lane_count)
+            suffix = _vector_suffix(element, lane_count)
+            for source_op, stem in source_ops:
+                rules.append(
+                    _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+                )
     return tuple(rules)
 
 
 def _vector_bitwise_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
-    for type_pattern, suffix, source_ops in (
+    for element, source_ops in (
         (
-            _V4I1,
-            "v4i1",
+            "i1",
             (
                 (vector.vector_andi, "and"),
                 (vector.vector_ori, "or"),
@@ -488,8 +526,7 @@ def _vector_bitwise_rules() -> tuple[DescriptorRule, ...]:
             ),
         ),
         (
-            _V4I32,
-            "v4i32",
+            "i32",
             (
                 (vector.vector_andi, "and"),
                 (vector.vector_ori, "or"),
@@ -500,36 +537,23 @@ def _vector_bitwise_rules() -> tuple[DescriptorRule, ...]:
             ),
         ),
     ):
-        for source_op, stem in source_ops:
-            rules.append(
-                _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
-            )
+        for lane_count in _VECTOR_LANE_COUNTS:
+            type_pattern = _vector_type(element, lane_count)
+            suffix = _vector_suffix(element, lane_count)
+            for source_op, stem in source_ops:
+                rules.append(
+                    _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+                )
     return tuple(rules)
 
 
 def _compare_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
-    integer_predicates = (
-        "eq",
-        "ne",
-        "slt",
-        "sle",
-        "sgt",
-        "sge",
-        "ult",
-        "ule",
-        "ugt",
-        "uge",
-    )
-    signed_predicates = ("eq", "ne", "slt", "sle", "sgt", "sge")
-    ordered_float_predicates = ("oeq", "one", "olt", "ole", "ogt", "oge")
     for type_pattern, suffix, result_type, source_op, predicates in (
-        (_I32, "i32", _I1, scalar_comparison.scalar_cmpi, integer_predicates),
-        (_I64, "i64", _I1, scalar_comparison.scalar_cmpi, integer_predicates),
-        (_F32, "f32", _I1, scalar_comparison.scalar_cmpf, ordered_float_predicates),
-        (_F64, "f64", _I1, scalar_comparison.scalar_cmpf, ordered_float_predicates),
-        (_V4I32, "v4i32", _V4I1, vector.vector_cmpi, signed_predicates),
-        (_V4F32, "v4f32", _V4I1, vector.vector_cmpf, ordered_float_predicates),
+        (_I32, "i32", _I1, scalar_comparison.scalar_cmpi, _INTEGER_PREDICATES),
+        (_I64, "i64", _I1, scalar_comparison.scalar_cmpi, _INTEGER_PREDICATES),
+        (_F32, "f32", _I1, scalar_comparison.scalar_cmpf, _FLOAT_PREDICATES),
+        (_F64, "f64", _I1, scalar_comparison.scalar_cmpf, _FLOAT_PREDICATES),
     ):
         rules.extend(
             (
@@ -543,6 +567,26 @@ def _compare_rules() -> tuple[DescriptorRule, ...]:
             )
             for predicate in predicates
         )
+    for lane_count in _VECTOR_LANE_COUNTS:
+        mask_type = _vector_type("i1", lane_count)
+        for element, source_op, predicates in (
+            ("i32", vector.vector_cmpi, _INTEGER_PREDICATES),
+            ("f32", vector.vector_cmpf, _FLOAT_PREDICATES),
+        ):
+            value_type = _vector_type(element, lane_count)
+            suffix = _vector_suffix(element, lane_count)
+            rules.extend(
+                (
+                    _compare_rule(
+                        source_op,
+                        value_type,
+                        mask_type,
+                        predicate,
+                        f"llvmir.cmp.{predicate}.{suffix}",
+                    )
+                )
+                for predicate in predicates
+            )
     return tuple(rules)
 
 
@@ -554,9 +598,14 @@ def _select_rules() -> tuple[DescriptorRule, ...]:
             (_I64, "i64"),
             (_F32, "f32"),
             (_F64, "f64"),
-            (_V4I32, "v4i32"),
-            (_V4F32, "v4f32"),
         )
+    ) + tuple(
+        _select_rule(
+            _vector_type(element, lane_count),
+            f"llvmir.select.{_vector_suffix(element, lane_count)}",
+        )
+        for element in _VECTOR_SELECT_TYPES
+        for lane_count in _VECTOR_LANE_COUNTS
     )
 
 
@@ -567,8 +616,8 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
         (_I64, "i64", 8, 1),
         (_F32, "f32", 4, 1),
         (_F64, "f64", 8, 1),
-        (_V4I32, "v4i32", 4, 4),
-        (_V4F32, "v4f32", 4, 4),
+        (_vector_type("i32", 4), "v4i32", 4, 4),
+        (_vector_type("f32", 4), "v4f32", 4, 4),
     ):
         for dynamic in (False, True):
             rules.append(

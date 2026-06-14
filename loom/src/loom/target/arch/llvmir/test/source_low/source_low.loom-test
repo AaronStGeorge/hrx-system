@@ -61,6 +61,26 @@ llvmir.target<object> @target {
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
 
+func.def target(@target) @llvmir_f64_unordered_compare_select(%lhs: f64, %rhs: f64, %true_value: f64, %false_value: f64) -> (f64) {
+  %predicate = scalar.cmpf uno, %lhs, %rhs : f64
+  %selected = scf.select %predicate, %true_value, %false_value : f64
+  func.return %selected : f64
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @llvmir_f64_unordered_compare_select(%lhs: reg<llvmir.f64>, %rhs: reg<llvmir.f64>, %true_value: reg<llvmir.f64>, %false_value: reg<llvmir.f64>) -> (reg<llvmir.f64>) asm<llvmir.generic.core> {
+  %predicate = cmp.uno.f64 %lhs, %rhs
+  %selected = select.f64 %predicate, %true_value, %false_value
+  return %selected
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
 func.def target(@target) @llvmir_i32x4_compare_select(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %fallback: vector<4xi32>) -> (vector<4xi32>) {
   %sum = vector.addi %lhs, %rhs : vector<4xi32>
   %predicate = vector.cmpi slt, %sum, %rhs : vector<4xi32> -> vector<4xi1>
@@ -74,6 +94,86 @@ low.func.def target(@target) abi(object_function) @llvmir_i32x4_compare_select(%
   %predicate = cmp.slt.v4i32 %sum, %rhs
   %selected = select.v4i32 %predicate, %sum, %fallback
   return %selected
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
+func.def target(@target) @llvmir_i32x16_vector_ops(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fallback: vector<16xi32>) -> (vector<16xi32>) {
+  %sum = vector.addi %lhs, %rhs : vector<16xi32>
+  %shifted = vector.shli %sum, %rhs : vector<16xi32>
+  %signed = vector.cmpi sgt, %shifted, %rhs : vector<16xi32> -> vector<16xi1>
+  %unsigned = vector.cmpi ugt, %shifted, %lhs : vector<16xi32> -> vector<16xi1>
+  %mask = vector.ori %signed, %unsigned : vector<16xi1>
+  %selected = vector.select %mask, %shifted, %fallback : vector<16xi32>
+  func.return %selected : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @llvmir_i32x16_vector_ops(%lhs: reg<llvmir.i32 x16>, %rhs: reg<llvmir.i32 x16>, %fallback: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %sum = add.v16i32 %lhs, %rhs
+  %shifted = shl.v16i32 %sum, %rhs
+  %signed = cmp.sgt.v16i32 %shifted, %rhs
+  %unsigned = cmp.ugt.v16i32 %shifted, %lhs
+  %mask = or.v16i1 %signed, %unsigned
+  %selected = select.v16i32 %mask, %shifted, %fallback
+  return %selected
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
+func.def target(@target) @llvmir_f32x16_unordered_select(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %fallback: vector<16xf32>) -> (vector<16xf32>) {
+  %ordered = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
+  %unordered = vector.cmpf une, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
+  %selected = vector.select %ordered, %lhs, %rhs : vector<16xf32>
+  %result = vector.select %unordered, %selected, %fallback : vector<16xf32>
+  func.return %result : vector<16xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @llvmir_f32x16_unordered_select(%lhs: reg<llvmir.f32 x16>, %rhs: reg<llvmir.f32 x16>, %fallback: reg<llvmir.f32 x16>) -> (reg<llvmir.f32 x16>) asm<llvmir.generic.core> {
+  %ordered = cmp.olt.v16f32 %lhs, %rhs
+  %unordered = cmp.une.v16f32 %lhs, %rhs
+  %selected = select.v16f32 %ordered, %lhs, %rhs
+  %result = select.v16f32 %unordered, %selected, %fallback
+  return %result
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
+func.def target(@target) @llvmir_mixed_vector_selects(%m2: vector<2xi1>, %m4: vector<4xi1>, %m16: vector<16xi1>, %i8_t: vector<4xi8>, %i8_f: vector<4xi8>, %i16_t: vector<2xi16>, %i16_f: vector<2xi16>, %i64_t: vector<2xi64>, %i64_f: vector<2xi64>, %f16_t: vector<4xf16>, %f16_f: vector<4xf16>, %bf16_t: vector<16xbf16>, %bf16_f: vector<16xbf16>, %f64_t: vector<2xf64>, %f64_f: vector<2xf64>) -> (vector<4xi8>, vector<2xi16>, vector<2xi64>, vector<4xf16>, vector<16xbf16>, vector<2xf64>) {
+  %i8 = vector.select %m4, %i8_t, %i8_f : vector<4xi8>
+  %i16 = vector.select %m2, %i16_t, %i16_f : vector<2xi16>
+  %i64 = vector.select %m2, %i64_t, %i64_f : vector<2xi64>
+  %f16 = vector.select %m4, %f16_t, %f16_f : vector<4xf16>
+  %bf16 = vector.select %m16, %bf16_t, %bf16_f : vector<16xbf16>
+  %f64 = vector.select %m2, %f64_t, %f64_f : vector<2xf64>
+  func.return %i8, %i16, %i64, %f16, %bf16, %f64 : vector<4xi8>, vector<2xi16>, vector<2xi64>, vector<4xf16>, vector<16xbf16>, vector<2xf64>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @llvmir_mixed_vector_selects(%m2: reg<llvmir.i1 x2>, %m4: reg<llvmir.i1 x4>, %m16: reg<llvmir.i1 x16>, %i8_t: reg<llvmir.i8 x4>, %i8_f: reg<llvmir.i8 x4>, %i16_t: reg<llvmir.i16 x2>, %i16_f: reg<llvmir.i16 x2>, %i64_t: reg<llvmir.i64 x2>, %i64_f: reg<llvmir.i64 x2>, %f16_t: reg<llvmir.f16 x4>, %f16_f: reg<llvmir.f16 x4>, %bf16_t: reg<llvmir.bf16 x16>, %bf16_f: reg<llvmir.bf16 x16>, %f64_t: reg<llvmir.f64 x2>, %f64_f: reg<llvmir.f64 x2>) -> (reg<llvmir.i8 x4>, reg<llvmir.i16 x2>, reg<llvmir.i64 x2>, reg<llvmir.f16 x4>, reg<llvmir.bf16 x16>, reg<llvmir.f64 x2>) asm<llvmir.generic.core> {
+  %i8 = select.v4i8 %m4, %i8_t, %i8_f
+  %i16 = select.v2i16 %m2, %i16_t, %i16_f
+  %i64 = select.v2i64 %m2, %i64_t, %i64_f
+  %f16 = select.v4f16 %m4, %f16_t, %f16_f
+  %bf16 = select.v16bf16 %m16, %bf16_t, %bf16_f
+  %f64 = select.v2f64 %m2, %f64_t, %f64_f
+  return %i8, %i16, %i64, %f16, %bf16, %f64
 }
 
 // ====

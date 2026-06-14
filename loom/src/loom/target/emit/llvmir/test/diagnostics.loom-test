@@ -5,10 +5,10 @@ llvmir.target<object> @target {
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
 
-func.def target(@target) @unsupported_vector_shape(%lhs: vector<8xi32>, %rhs: vector<8xi32>) -> (vector<8xi32>) {
-  // ERROR@+1: TARGET/002 {field_name="lhs", actual_type="vector<8xi32>", expected_type="vector<4xi32>"}
-  %sum = vector.addi %lhs, %rhs : vector<8xi32>
-  func.return %sum : vector<8xi32>
+func.def target(@target) @unsupported_vector_shape(%lhs: vector<32xi32>, %rhs: vector<32xi32>) -> (vector<32xi32>) {
+  // ERROR@+1: TARGET/002 {field_name="lhs", actual_type="vector<32xi32>", expected_type="vector<2xi32>"}
+  %sum = vector.addi %lhs, %rhs : vector<32xi32>
+  func.return %sum : vector<32xi32>
 }
 
 // ====

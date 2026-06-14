@@ -1,7 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/vector_v16.loom-test
 // RUN: emit source-low output=low
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -10,6 +9,13 @@ func.def target(@target) @i32x16_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32
   %sum = vector.addi %lhs, %rhs : vector<16xi32>
   %diff = vector.subi %sum, %rhs : vector<16xi32>
   func.return %diff : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_arith(%lhs: reg<llvmir.i32 x16>, %rhs: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %sum = add.v16i32 %lhs, %rhs
+  %diff = sub.v16i32 %sum, %rhs
+  return %diff
 }
 
 // ====
@@ -32,7 +38,6 @@ func.def target(@target) @i32x16_minmax_logic(%lhs: vector<16xi32>, %rhs: vector
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -42,6 +47,14 @@ func.def target(@target) @i32x16_variable_shift(%value: vector<16xi32>, %amount:
   %signed = vector.shrsi %left, %amount : vector<16xi32>
   %result = vector.shrui %signed, %amount : vector<16xi32>
   func.return %result : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_variable_shift(%value: reg<llvmir.i32 x16>, %amount: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %left = shl.v16i32 %value, %amount
+  %signed = ashr.v16i32 %left, %amount
+  %result = lshr.v16i32 %signed, %amount
+  return %result
 }
 
 // ====
@@ -59,7 +72,6 @@ func.def target(@target) @i32x16_splat_add(%value: i32, %rhs: vector<16xi32>) ->
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -72,9 +84,17 @@ func.def target(@target) @i32x16_compare_select(%lhs: vector<16xi32>, %rhs: vect
   func.return %result : vector<16xi32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_compare_select(%lhs: reg<llvmir.i32 x16>, %rhs: reg<llvmir.i32 x16>, %fallback: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %signed = cmp.sgt.v16i32 %lhs, %rhs
+  %unsigned = cmp.ugt.v16i32 %lhs, %rhs
+  %selected = select.v16i32 %signed, %lhs, %rhs
+  %result = select.v16i32 %unsigned, %selected, %fallback
+  return %result
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -87,6 +107,17 @@ func.def target(@target) @i32x16_mask_and_select(%lhs: vector<16xi32>, %rhs: vec
   %condition = vector.xori %greater_again, %less : vector<16xi1>
   %result = vector.select %condition, %lhs, %fallback : vector<16xi32>
   func.return %result : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_mask_and_select(%lhs: reg<llvmir.i32 x16>, %rhs: reg<llvmir.i32 x16>, %fallback: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %greater = cmp.sgt.v16i32 %lhs, %rhs
+  %less = cmp.slt.v16i32 %lhs, %rhs
+  %either = or.v16i1 %greater, %less
+  %greater_again = and.v16i1 %either, %greater
+  %condition = xor.v16i1 %greater_again, %less
+  %result = select.v16i32 %condition, %lhs, %fallback
+  return %result
 }
 
 // ====
@@ -131,7 +162,6 @@ func.def target(@target) @f32x16_reduce_add(%v: vector<16xf32>, %init: f32) -> (
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -142,6 +172,15 @@ func.def target(@target) @f32x16_compare_select(%lhs: vector<16xf32>, %rhs: vect
   %selected = vector.select %ordered_lt, %lhs, %rhs : vector<16xf32>
   %result = vector.select %unordered_ne, %selected, %fallback : vector<16xf32>
   func.return %result : vector<16xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_compare_select(%lhs: reg<llvmir.f32 x16>, %rhs: reg<llvmir.f32 x16>, %fallback: reg<llvmir.f32 x16>) -> (reg<llvmir.f32 x16>) asm<llvmir.generic.core> {
+  %ordered_lt = cmp.olt.v16f32 %lhs, %rhs
+  %unordered_ne = cmp.une.v16f32 %lhs, %rhs
+  %selected = select.v16f32 %ordered_lt, %lhs, %rhs
+  %result = select.v16f32 %unordered_ne, %selected, %fallback
+  return %result
 }
 
 // ====

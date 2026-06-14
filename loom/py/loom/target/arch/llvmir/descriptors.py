@@ -57,6 +57,38 @@ _SCHEDULE_ALU = "llvmir.alu"
 _SCHEDULE_LOAD = "llvmir.load"
 _SCHEDULE_STORE = "llvmir.store"
 
+_VECTOR_LANE_COUNTS = (2, 4, 8, 16)
+
+_INTEGER_PREDICATES = (
+    "eq",
+    "ne",
+    "slt",
+    "sle",
+    "sgt",
+    "sge",
+    "ult",
+    "ule",
+    "ugt",
+    "uge",
+)
+
+_FLOAT_PREDICATES = (
+    "oeq",
+    "ogt",
+    "oge",
+    "olt",
+    "ole",
+    "one",
+    "ord",
+    "ueq",
+    "ugt",
+    "uge",
+    "ult",
+    "ule",
+    "une",
+    "uno",
+)
+
 _ALT_BY_TYPE = {
     "i1": (RegClassAlt(_REG_I1),),
     "i8": (RegClassAlt(_REG_I8),),
@@ -133,6 +165,12 @@ def _predicate(
 
 def _ptr_operand(field_name: str) -> Operand:
     return _value("ptr", OperandRole.RESOURCE, field_name)
+
+
+def _descriptor_suffix(type_name: str, unit_count: int, *, vector: bool = False) -> str:
+    if vector:
+        return f"v{unit_count}{type_name}"
+    return type_name if unit_count == 1 else f"v{unit_count}{type_name}"
 
 
 _I64_VALUE_IMMEDIATE = Immediate(
@@ -232,8 +270,9 @@ def _binary_descriptor(
     type_name: str,
     semantic_stem: str,
     unit_count: int = 1,
+    vector: bool = False,
 ) -> Descriptor:
-    suffix = type_name if unit_count == 1 else f"v{unit_count}{type_name}"
+    suffix = _descriptor_suffix(type_name, unit_count, vector=vector)
     return Descriptor(
         key=f"llvmir.{stem}.{suffix}",
         mnemonic=stem,
@@ -258,8 +297,9 @@ def _compare_descriptor(
     predicate: str,
     type_name: str,
     unit_count: int = 1,
+    vector: bool = False,
 ) -> Descriptor:
-    suffix = type_name if unit_count == 1 else f"v{unit_count}{type_name}"
+    suffix = _descriptor_suffix(type_name, unit_count, vector=vector)
     result_unit_count = unit_count
     return Descriptor(
         key=f"llvmir.cmp.{predicate}.{suffix}",
@@ -280,8 +320,13 @@ def _compare_descriptor(
     )
 
 
-def _select_descriptor(type_name: str, unit_count: int = 1) -> Descriptor:
-    suffix = type_name if unit_count == 1 else f"v{unit_count}{type_name}"
+def _select_descriptor(
+    type_name: str,
+    unit_count: int = 1,
+    *,
+    vector: bool = False,
+) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, unit_count, vector=vector)
     return Descriptor(
         key=f"llvmir.select.{suffix}",
         mnemonic="select",
@@ -308,7 +353,7 @@ def _load_descriptor(
     unit_count: int = 1,
     indexed: bool = False,
 ) -> Descriptor:
-    suffix = type_name if unit_count == 1 else f"v{unit_count}{type_name}"
+    suffix = _descriptor_suffix(type_name, unit_count)
     operands = [_result(type_name, unit_count=unit_count), _ptr_operand("ptr")]
     immediates = [_BYTE_OFFSET_IMMEDIATE]
     asm_operands = ["ptr"]
@@ -344,7 +389,7 @@ def _store_descriptor(
     unit_count: int = 1,
     indexed: bool = False,
 ) -> Descriptor:
-    suffix = type_name if unit_count == 1 else f"v{unit_count}{type_name}"
+    suffix = _descriptor_suffix(type_name, unit_count)
     operands = [
         _operand(type_name, "value", unit_count=unit_count),
         _ptr_operand("ptr"),
@@ -395,9 +440,11 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
                     stem=stem,
                     type_name=type_name,
                     semantic_stem=stem,
-                    unit_count=4,
+                    unit_count=lane_count,
+                    vector=True,
                 )
             )
+            for lane_count in _VECTOR_LANE_COUNTS
             for stem in ("add", "sub", "mul")
         )
     return tuple(descriptors)
@@ -425,9 +472,11 @@ def _bitwise_descriptors() -> tuple[Descriptor, ...]:
                     stem=stem,
                     type_name=type_name,
                     semantic_stem=stem,
-                    unit_count=4,
+                    unit_count=lane_count,
+                    vector=True,
                 )
             )
+            for lane_count in _VECTOR_LANE_COUNTS
             for stem in stems
         )
     return tuple(descriptors)
@@ -435,41 +484,26 @@ def _bitwise_descriptors() -> tuple[Descriptor, ...]:
 
 def _compare_descriptors() -> tuple[Descriptor, ...]:
     descriptors: list[Descriptor] = []
-    integer_predicates = (
-        "eq",
-        "ne",
-        "slt",
-        "sle",
-        "sgt",
-        "sge",
-        "ult",
-        "ule",
-        "ugt",
-        "uge",
-    )
-    ordered_float_predicates = ("oeq", "one", "olt", "ole", "ogt", "oge")
     for type_name in ("i32", "i64"):
         descriptors.extend(
             _compare_descriptor(predicate=predicate, type_name=type_name)
-            for predicate in integer_predicates
+            for predicate in _INTEGER_PREDICATES
         )
     for type_name in ("f32", "f64"):
         descriptors.extend(
             _compare_descriptor(predicate=predicate, type_name=type_name)
-            for predicate in ordered_float_predicates
+            for predicate in _FLOAT_PREDICATES
         )
     for type_name in ("i32", "f32"):
-        predicates = (
-            ("eq", "ne", "slt", "sle", "sgt", "sge")
-            if type_name == "i32"
-            else ordered_float_predicates
-        )
+        predicates = _INTEGER_PREDICATES if type_name == "i32" else _FLOAT_PREDICATES
         descriptors.extend(
             _compare_descriptor(
                 predicate=predicate,
                 type_name=type_name,
-                unit_count=4,
+                unit_count=lane_count,
+                vector=True,
             )
+            for lane_count in _VECTOR_LANE_COUNTS
             for predicate in predicates
         )
     return tuple(descriptors)
@@ -483,9 +517,11 @@ def _select_descriptors() -> tuple[Descriptor, ...]:
             ("i64", 1),
             ("f32", 1),
             ("f64", 1),
-            ("i32", 4),
-            ("f32", 4),
         )
+    ) + tuple(
+        _select_descriptor(type_name, unit_count=lane_count, vector=True)
+        for type_name in ("i8", "i16", "i32", "i64", "f16", "bf16", "f32", "f64")
+        for lane_count in _VECTOR_LANE_COUNTS
     )
 
 

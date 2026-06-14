@@ -44,6 +44,41 @@ low.func.def target(@target) abi(object_function) @v16bf16_identity(%value: reg<
   return %value
 }
 
+low.func.def target(@target) abi(object_function) @f64_unordered_select(%lhs: reg<llvmir.f64>, %rhs: reg<llvmir.f64>, %true_value: reg<llvmir.f64>, %false_value: reg<llvmir.f64>) -> (reg<llvmir.f64>) asm<llvmir.generic.core> {
+  %mask = cmp.uno.f64 %lhs, %rhs
+  %selected = select.f64 %mask, %true_value, %false_value
+  return %selected
+}
+
+low.func.def target(@target) abi(object_function) @i32x16_vector_ops(%lhs: reg<llvmir.i32 x16>, %rhs: reg<llvmir.i32 x16>, %fallback: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %sum = add.v16i32 %lhs, %rhs
+  %shifted = shl.v16i32 %sum, %rhs
+  %mask = cmp.ugt.v16i32 %shifted, %lhs
+  %selected = select.v16i32 %mask, %shifted, %fallback
+  return %selected
+}
+
+low.func.def target(@target) abi(object_function) @f32x16_unordered_select(%lhs: reg<llvmir.f32 x16>, %rhs: reg<llvmir.f32 x16>, %fallback: reg<llvmir.f32 x16>) -> (reg<llvmir.f32 x16>) asm<llvmir.generic.core> {
+  %mask = cmp.une.v16f32 %lhs, %rhs
+  %selected = select.v16f32 %mask, %lhs, %fallback
+  return %selected
+}
+
+low.func.def target(@target) abi(object_function) @v4i8_select(%mask: reg<llvmir.i1 x4>, %true_value: reg<llvmir.i8 x4>, %false_value: reg<llvmir.i8 x4>) -> (reg<llvmir.i8 x4>) asm<llvmir.generic.core> {
+  %selected = select.v4i8 %mask, %true_value, %false_value
+  return %selected
+}
+
+low.func.def target(@target) abi(object_function) @v2i16_select(%mask: reg<llvmir.i1 x2>, %true_value: reg<llvmir.i16 x2>, %false_value: reg<llvmir.i16 x2>) -> (reg<llvmir.i16 x2>) asm<llvmir.generic.core> {
+  %selected = select.v2i16 %mask, %true_value, %false_value
+  return %selected
+}
+
+low.func.def target(@target) abi(object_function) @v16bf16_select(%mask: reg<llvmir.i1 x16>, %true_value: reg<llvmir.bf16 x16>, %false_value: reg<llvmir.bf16 x16>) -> (reg<llvmir.bf16 x16>) asm<llvmir.generic.core> {
+  %selected = select.v16bf16 %mask, %true_value, %false_value
+  return %selected
+}
+
 // ----
 define dso_local i32 @first(i32 %lhs, i32 %rhs) {
 entry:
@@ -97,6 +132,47 @@ entry:
 define dso_local <16 x bfloat> @v16bf16_identity(<16 x bfloat> %value) {
 entry:
   ret <16 x bfloat> %value
+}
+
+define dso_local double @f64_unordered_select(double %lhs, double %rhs, double %true_value, double %false_value) {
+entry:
+  %mask = fcmp uno double %lhs, %rhs
+  %selected = select i1 %mask, double %true_value, double %false_value
+  ret double %selected
+}
+
+define dso_local <16 x i32> @i32x16_vector_ops(<16 x i32> %lhs, <16 x i32> %rhs, <16 x i32> %fallback) {
+entry:
+  %sum = add <16 x i32> %lhs, %rhs
+  %shifted = shl <16 x i32> %sum, %rhs
+  %mask = icmp ugt <16 x i32> %shifted, %lhs
+  %selected = select <16 x i1> %mask, <16 x i32> %shifted, <16 x i32> %fallback
+  ret <16 x i32> %selected
+}
+
+define dso_local <16 x float> @f32x16_unordered_select(<16 x float> %lhs, <16 x float> %rhs, <16 x float> %fallback) {
+entry:
+  %mask = fcmp une <16 x float> %lhs, %rhs
+  %selected = select <16 x i1> %mask, <16 x float> %lhs, <16 x float> %fallback
+  ret <16 x float> %selected
+}
+
+define dso_local <4 x i8> @v4i8_select(<4 x i1> %mask, <4 x i8> %true_value, <4 x i8> %false_value) {
+entry:
+  %selected = select <4 x i1> %mask, <4 x i8> %true_value, <4 x i8> %false_value
+  ret <4 x i8> %selected
+}
+
+define dso_local <2 x i16> @v2i16_select(<2 x i1> %mask, <2 x i16> %true_value, <2 x i16> %false_value) {
+entry:
+  %selected = select <2 x i1> %mask, <2 x i16> %true_value, <2 x i16> %false_value
+  ret <2 x i16> %selected
+}
+
+define dso_local <16 x bfloat> @v16bf16_select(<16 x i1> %mask, <16 x bfloat> %true_value, <16 x bfloat> %false_value) {
+entry:
+  %selected = select <16 x i1> %mask, <16 x bfloat> %true_value, <16 x bfloat> %false_value
+  ret <16 x bfloat> %selected
 }
 
 // ====
