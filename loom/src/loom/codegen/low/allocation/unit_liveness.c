@@ -129,6 +129,18 @@ loom_low_allocation_unit_liveness_descriptor_packet_operand_index(
   return packet_operand_index;
 }
 
+static bool loom_low_allocation_unit_liveness_op_ties_result_to_operand(
+    const loom_op_t* op, uint16_t result_index, uint16_t operand_index) {
+  const loom_tied_result_t* tied_results = loom_op_tied_results(op);
+  for (uint16_t i = 0; i < op->tied_result_count; ++i) {
+    if (tied_results[i].result_index == result_index &&
+        tied_results[i].operand_index == operand_index) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static iree_status_t
 loom_low_allocation_unit_liveness_note_early_clobber_operand_uses(
     loom_low_allocation_unit_liveness_t* unit_liveness,
@@ -140,9 +152,7 @@ loom_low_allocation_unit_liveness_note_early_clobber_operand_uses(
   for (uint16_t i = descriptor->result_count; i < descriptor->operand_count;
        ++i) {
     if (!loom_low_allocation_unit_liveness_descriptor_operand_is_explicit_packet_value(
-            descriptor_set, descriptor, i) ||
-        loom_low_descriptor_operands_are_tied(descriptor_set, descriptor,
-                                              early_clobber_result_index, i)) {
+            descriptor_set, descriptor, i)) {
       continue;
     }
     const uint16_t operand_index =
@@ -153,6 +163,12 @@ loom_low_allocation_unit_liveness_note_early_clobber_operand_uses(
           IREE_STATUS_FAILED_PRECONDITION,
           "low allocation early-clobber operand index exceeds packet operand "
           "count");
+    }
+    if (loom_low_descriptor_operands_are_tied(descriptor_set, descriptor,
+                                              early_clobber_result_index, i) ||
+        loom_low_allocation_unit_liveness_op_ties_result_to_operand(
+            op, early_clobber_result_index, operand_index)) {
+      continue;
     }
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_unit_liveness_note_value_use_at_point(
