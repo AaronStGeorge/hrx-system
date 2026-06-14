@@ -35,6 +35,10 @@ class LoomPresubmitTest(unittest.TestCase):
 
         self.assertEqual(command[:3], ["bazel", "test", "--config=presubmit"])
         self.assertEqual(command[-1], "//loom/...")
+        self.assertIn(
+            "--//loom/config/target:enable=amdgpu,iree_vm,llvmir,spirv,x86",
+            command,
+        )
 
         tag_filter = next(
             arg for arg in command if arg.startswith("--test_tag_filters=")
