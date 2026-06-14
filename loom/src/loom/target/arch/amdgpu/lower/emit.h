@@ -41,6 +41,13 @@ iree_status_t loom_amdgpu_emit_sgpr_byte_offset(
     uint32_t dynamic_index_byte_shift, uint32_t static_byte_offset,
     loom_value_id_t* out_low_offset);
 
+// Emits an SGPR byte offset from one already-selected source memory dynamic
+// term.
+iree_status_t loom_amdgpu_emit_sgpr_byte_offset_term(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_source_memory_dynamic_term_t* term,
+    loom_value_id_t* out_low_offset);
+
 // Emits an SGPR byte offset from the scalar-address terms selected for a source
 // memory access plus a static byte offset.
 iree_status_t loom_amdgpu_emit_sgpr_byte_offset_terms(

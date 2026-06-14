@@ -567,20 +567,28 @@ static bool loom_amdgpu_source_access_view_range_facts(
     return false;
   }
 
-  int64_t static_base = 0;
-  if (!loom_value_facts_as_exact_i64(view_reference.base_byte_offset,
-                                     &static_base) ||
-      static_base < 0) {
+  if (!loom_value_facts_fit_unsigned_bit_count(view_reference.base_byte_offset,
+                                               32)) {
     return false;
   }
-  loom_value_facts_t range_facts = loom_value_facts_exact_i64(static_base);
+  const bool has_dynamic_view_base =
+      source_access->dynamic_view_base_term_count != 0;
+  int64_t static_base = 0;
+  if (!has_dynamic_view_base &&
+      !loom_value_facts_as_exact_i64(view_reference.base_byte_offset,
+                                     &static_base)) {
+    return false;
+  }
+  loom_value_facts_t range_facts = view_reference.base_byte_offset;
   loom_value_facts_addi(&range_facts, &view_reference.footprint_byte_length,
                         &range_facts);
   if (!loom_value_facts_fit_unsigned_bit_count(range_facts, 32)) {
     return false;
   }
 
-  *out_static_base = static_base;
+  *out_static_base = has_dynamic_view_base
+                         ? source_access->static_view_base_byte_offset
+                         : static_base;
   *out_range_facts = range_facts;
   return true;
 }
@@ -608,16 +616,113 @@ static bool loom_amdgpu_source_access_view_has_dense_layout(
          layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE;
 }
 
+static iree_status_t
+loom_amdgpu_source_access_dynamic_view_base_term_can_emit_u32(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_dynamic_term_t* term, bool* out_can_emit) {
+  *out_can_emit = false;
+  if (term->byte_stride < 0 || term->byte_stride > UINT32_MAX ||
+      !loom_value_facts_fit_unsigned_bit_count(term->byte_facts, 32)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t low_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, term->index, &low_index));
+  bool is_sgpr_b32 = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class(
+      context, low_index, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, &is_sgpr_b32));
+  if (!is_sgpr_b32) {
+    return iree_ok_status();
+  }
+
+  for (uint8_t i = 0; i < term->stride_value_count; ++i) {
+    loom_value_id_t low_stride = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+        context, term->stride_values[i], &low_stride));
+    bool stride_is_sgpr_b32 = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class(
+        context, low_stride, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1,
+        &stride_is_sgpr_b32));
+    if (!stride_is_sgpr_b32) {
+      return iree_ok_status();
+    }
+  }
+
+  *out_can_emit = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_source_access_dynamic_view_base_can_emit_u32(
+    loom_low_lower_context_t* context,
+    const loom_low_source_memory_access_plan_t* source_access,
+    bool* out_can_emit) {
+  *out_can_emit = false;
+  if (source_access->dynamic_view_base_term_count == 0) {
+    *out_can_emit = true;
+    return iree_ok_status();
+  }
+  IREE_ASSERT_LE(source_access->dynamic_view_base_term_count,
+                 source_access->dynamic_term_count);
+
+  for (uint8_t i = 0; i < source_access->dynamic_view_base_term_count; ++i) {
+    bool can_emit = false;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_source_access_dynamic_view_base_term_can_emit_u32(
+            context, &source_access->dynamic_terms[i], &can_emit));
+    if (!can_emit) {
+      return iree_ok_status();
+    }
+  }
+  *out_can_emit = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_emit_source_access_dynamic_view_base_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_source_memory_access_plan_t* source_access,
+    loom_type_t sgpr_type, loom_value_id_t* out_low_base, bool* out_emitted) {
+  *out_low_base = LOOM_VALUE_ID_INVALID;
+  *out_emitted = false;
+  if (source_access->dynamic_view_base_term_count == 0) {
+    return iree_ok_status();
+  }
+  bool can_emit = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_source_access_dynamic_view_base_can_emit_u32(
+      context, source_access, &can_emit));
+  if (!can_emit) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t low_accumulator = LOOM_VALUE_ID_INVALID;
+  for (uint8_t i = 0; i < source_access->dynamic_view_base_term_count; ++i) {
+    loom_value_id_t low_term = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_byte_offset_term(
+        context, source_op, &source_access->dynamic_terms[i], &low_term));
+    if (low_accumulator == LOOM_VALUE_ID_INVALID) {
+      low_accumulator = low_term;
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
+        low_accumulator, low_term, sgpr_type, &low_accumulator));
+  }
+
+  *out_low_base = low_accumulator;
+  *out_emitted = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_emit_source_access_dense_dynamic_range(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_source_memory_access_plan_t* source_access,
-    int64_t static_base, loom_value_id_t* out_dynamic_extent,
+    int64_t static_view_base, loom_value_id_t* out_dynamic_extent,
     bool* out_emitted) {
   *out_dynamic_extent = LOOM_VALUE_ID_INVALID;
   *out_emitted = false;
   if (!loom_amdgpu_source_access_view_has_dense_layout(context,
                                                        source_access) ||
-      static_base < 0 || static_base > UINT32_MAX) {
+      static_view_base < 0 || static_view_base > UINT32_MAX) {
     return iree_ok_status();
   }
 
@@ -637,6 +742,12 @@ static iree_status_t loom_amdgpu_emit_source_access_dense_dynamic_range(
   loom_value_id_t low_extent = LOOM_VALUE_ID_INVALID;
   loom_type_t sgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+  bool can_emit_dynamic_base = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_source_access_dynamic_view_base_can_emit_u32(
+      context, source_access, &can_emit_dynamic_base));
+  if (!can_emit_dynamic_base) {
+    return iree_ok_status();
+  }
 
   const uint8_t rank = loom_type_rank(view_type);
   for (uint8_t axis = 0; axis < rank; ++axis) {
@@ -668,19 +779,37 @@ static iree_status_t loom_amdgpu_emit_source_access_dense_dynamic_range(
         low_dim, sgpr_type, &low_extent));
   }
 
-  if (low_extent == LOOM_VALUE_ID_INVALID) {
+  if (low_extent == LOOM_VALUE_ID_INVALID &&
+      source_access->dynamic_view_base_term_count == 0) {
     return iree_ok_status();
   }
   if (static_scale < 0 || static_scale > UINT32_MAX) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_scale_u32(
-      context, source_op, low_extent, (uint32_t)static_scale, sgpr_type,
-      &low_extent));
-  if (static_base != 0) {
+  if (low_extent == LOOM_VALUE_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
+        (uint32_t)static_scale, sgpr_type, &low_extent));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_scale_u32(
+        context, source_op, low_extent, (uint32_t)static_scale, sgpr_type,
+        &low_extent));
+  }
+
+  loom_value_id_t low_dynamic_base = LOOM_VALUE_ID_INVALID;
+  bool emitted_dynamic_base = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_source_access_dynamic_view_base_u32(
+      context, source_op, source_access, sgpr_type, &low_dynamic_base,
+      &emitted_dynamic_base));
+  if (emitted_dynamic_base) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
+        low_dynamic_base, low_extent, sgpr_type, &low_extent));
+  }
+  if (static_view_base != 0) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_binary_immediate(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32, low_extent,
-        (uint32_t)static_base, sgpr_type, &low_extent));
+        (uint32_t)static_view_base, sgpr_type, &low_extent));
   }
 
   *out_dynamic_extent = low_extent;

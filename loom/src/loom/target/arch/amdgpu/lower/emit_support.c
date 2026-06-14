@@ -372,7 +372,7 @@ static iree_status_t loom_amdgpu_emit_sgpr_scale_byte_offset_u32(
       out_low_offset);
 }
 
-static iree_status_t loom_amdgpu_emit_sgpr_byte_offset_term(
+iree_status_t loom_amdgpu_emit_sgpr_byte_offset_term(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_source_memory_dynamic_term_t* term,
     loom_value_id_t* out_low_offset) {

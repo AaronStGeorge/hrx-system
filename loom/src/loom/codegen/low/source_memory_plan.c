@@ -1139,11 +1139,19 @@ static bool loom_low_source_memory_access_add_dynamic_view_base_byte_offset(
   int64_t index_multiplier = 1;
   int64_t index_offset = 0;
   int64_t byte_stride = 1;
-  int64_t static_byte_offset = *inout_static_byte_offset;
+  const int64_t original_static_byte_offset = *inout_static_byte_offset;
+  int64_t static_byte_offset = original_static_byte_offset;
   (void)loom_low_source_memory_access_scaled_dynamic_index(
       module, fact_table, byte_offset, byte_stride, static_byte_offset,
       &dynamic_index, &index_multiplier, &index_offset, &byte_stride,
       &static_byte_offset);
+  int64_t static_view_base_byte_offset = 0;
+  if (!loom_checked_sub_i64(static_byte_offset, original_static_byte_offset,
+                            &static_view_base_byte_offset)) {
+    diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE_OVERFLOW;
+    return false;
+  }
   *inout_static_byte_offset = static_byte_offset;
 
   loom_low_source_memory_dynamic_term_t term = {
@@ -1158,8 +1166,14 @@ static bool loom_low_source_memory_access_add_dynamic_view_base_byte_offset(
                                                          &term.byte_shift);
   loom_low_source_memory_dynamic_term_compute_scaled_byte_facts(
       fact_table, dynamic_index, byte_stride, NULL, 0, &term.byte_facts);
-  return loom_low_source_memory_access_append_dynamic_term(plan, &term,
-                                                           diagnostic);
+  IREE_ASSERT_EQ(plan->dynamic_term_count, 0u);
+  if (!loom_low_source_memory_access_append_dynamic_term(plan, &term,
+                                                         diagnostic)) {
+    return false;
+  }
+  plan->static_view_base_byte_offset = static_view_base_byte_offset;
+  plan->dynamic_view_base_term_count = 1;
+  return true;
 }
 
 static bool loom_low_source_memory_access_add_view_base_byte_offset(
@@ -1187,6 +1201,7 @@ static bool loom_low_source_memory_access_add_view_base_byte_offset(
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE_OVERFLOW;
       return false;
     }
+    plan->static_view_base_byte_offset = view_base_byte_offset;
     *inout_static_byte_offset = static_byte_offset;
   } else if (!loom_low_source_memory_access_add_dynamic_view_base_byte_offset(
                  module, fact_table, view_value_id, plan, diagnostic,

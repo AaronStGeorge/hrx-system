@@ -135,14 +135,19 @@ typedef struct loom_low_source_memory_access_plan_t {
   int64_t vector_lane_byte_stride;
   // Total static byte offset selected from the source view access.
   int64_t static_byte_offset;
+  // Static byte offset contributed by the source view base.
+  int64_t static_view_base_byte_offset;
   // Minimum provable byte alignment of the final accessed address.
   uint32_t minimum_alignment;
-  // Dynamic address terms. A dynamic view base, when present, precedes terms
-  // ordered by increasing view axis.
+  // Dynamic address terms. The first |dynamic_view_base_term_count| entries
+  // belong to the source view base; remaining entries describe indexed access.
   loom_low_source_memory_dynamic_term_t
       dynamic_terms[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
   // Number of populated dynamic address terms.
   uint8_t dynamic_term_count;
+  // Number of leading dynamic address terms contributed by the source view
+  // base.
+  uint8_t dynamic_view_base_term_count;
   // Optional cache policy copied from the source memory op.
   loom_vector_memory_cache_policy_t cache_policy;
 } loom_low_source_memory_access_plan_t;
