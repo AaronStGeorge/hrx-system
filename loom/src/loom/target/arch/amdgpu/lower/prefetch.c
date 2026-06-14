@@ -331,7 +331,7 @@ iree_status_t loom_amdgpu_lower_view_prefetch(
   };
   loom_value_id_t low_descriptor = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_hal_buffer_descriptor(
-      context, source_op, low_resource, &low_descriptor));
+      context, source_op, low_resource, &plan->source, &low_descriptor));
   loom_value_id_t operands[] = {
       low_descriptor,
       low_soffset,
