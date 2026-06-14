@@ -165,6 +165,32 @@ func.def @descriptor_dynamic_extent_load_f32(%input: buffer, %element_count_i32:
 
 // ====
 
+func.def @descriptor_static_extent_overflow_fallback_load_i32(%input: buffer, %element_i32: i32) -> (i32) {
+  %base = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1073741823)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<1073741824xi32, #dense>
+  %loaded = view.load %input_view[%element] : view<1073741824xi32, #dense> -> i32
+  func.return %loaded : i32
+}
+
+// ====
+
+func.def @descriptor_dynamic_extent_overflow_fallback_load_f32(%input: buffer, %element_count_i32: i32, %element_i32: i32) -> (f32) {
+  %base = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 1073741824)] : index
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1073741823), lt(%element0, %element_count)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %loaded = view.load %input_view[%element] : view<[%element_count]xf32, #dense> -> f32
+  func.return %loaded : f32
+}
+
+// ====
+
 func.def @descriptor_dynamic_base_extent_load_f32(%input: buffer, %base_i32: i32, %element_count_i32: i32, %element_i32: i32) -> (f32) {
   %base0 = index.cast %base_i32 : i32 to offset
   %base = index.assume %base0 [range(%base0, 0, 4096), mul(%base0, 4)] : offset
@@ -950,6 +976,30 @@ kernel.def @loaded_i32_row_stride_f32_to_f16_store() {
   %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
   %half = scalar.fptrunc %value : f32 to f16
   view.store %half, %output_view[%element] : f16, view<[%element_count]xf16, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def @loaded_i32_row_stride_f32_to_f16_bits_store() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%idx: buffer, %output: buffer, %value: f32, %stride_i32: i32, %element_count_i32: i32) {
+  %base = index.constant 0 : offset
+  %stride0 = index.cast %stride_i32 : i32 to index
+  %stride = index.assume %stride0 [range(%stride0, 1, 1073741823)] : index
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 2147483647)] : index
+  %idx_view = buffer.view %idx[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<[%element_count]xi16, #dense>
+  %row_i32 = view.load %idx_view[0] : view<1xi32, #dense> -> i32
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1073741823)] : index
+  %raw = index.mul %row, %stride : index
+  %element = index.assume %raw [range(%raw, 0, 1073741823), lt(%raw, %element_count)] : index
+  %half = scalar.fptrunc %value : f32 to f16
+  %bits = scalar.bitcast %half : f16 to i16
+  view.store %bits, %output_view[%element] : i16, view<[%element_count]xi16, #dense>
   kernel.return
 }
 

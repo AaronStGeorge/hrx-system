@@ -220,6 +220,34 @@ func.def @scalar_bitcast_f32_to_i32(%input: f32) -> (i32) {
 
 // ====
 
+func.def @scalar_bitcast_f16_to_i16(%input: f16) -> (i16) {
+  %bits = scalar.bitcast %input : f16 to i16
+  func.return %bits : i16
+}
+
+// ====
+
+func.def @scalar_bitcast_i16_to_f16(%input: i16) -> (f16) {
+  %half = scalar.bitcast %input : i16 to f16
+  func.return %half : f16
+}
+
+// ====
+
+func.def @scalar_bitcast_bf16_to_i16(%input: bf16) -> (i16) {
+  %bits = scalar.bitcast %input : bf16 to i16
+  func.return %bits : i16
+}
+
+// ====
+
+func.def @scalar_bitcast_i16_to_bf16(%input: i16) -> (bf16) {
+  %half = scalar.bitcast %input : i16 to bf16
+  func.return %half : bf16
+}
+
+// ====
+
 func.def @scalar_extsi_i8_to_i16(%input: i8) -> (i16) {
   %converted = scalar.extsi %input : i8 to i16
   func.return %converted : i16

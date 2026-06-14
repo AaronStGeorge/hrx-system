@@ -2031,6 +2031,10 @@ def _rules() -> tuple[ContractCase, ...]:
             ),
             _bitcast_alias_rule(_I32, _F32),
             _bitcast_alias_rule(_F32, _I32),
+            _bitcast_alias_rule(_I16, _F16),
+            _bitcast_alias_rule(_F16, _I16),
+            _bitcast_alias_rule(_I16, _BF16),
+            _bitcast_alias_rule(_BF16, _I16),
             _index_madd_power_of_two_rule(
                 scale_source="a",
                 value_source="b",
