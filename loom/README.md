@@ -110,9 +110,9 @@ live beside the source. `func.apply` requests an implementation contract,
 `func.template` providers satisfy those contracts, and per-case parameters can
 become compile-time facts before lowering.
 
-The authoring README includes the direct Q8 AMDGPU flow for `loom-compile`
-HSACO emission, artifact manifests, compile reports, IR dumps, target listings,
-and correctness-gated dispatch benchmark bundles.
+The authoring README includes the direct quantized AMDGPU flow for
+`loom-compile` HSACO emission, artifact manifests, compile reports, IR dumps,
+target listings, and correctness-gated dispatch benchmark bundles.
 
 ## Try The C API
 

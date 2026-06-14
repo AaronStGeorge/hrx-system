@@ -67,7 +67,7 @@ reduction, SiLU, and store. Higher-fidelity math oracles belong in the external
 fixture/reference layer when the expected values are too large or too expensive
 to express inline.
 
-### Q8 Command Flow
+### Quantized AMDGPU Command Flow
 
 Start with the host-only planner when editing source shape, check parameters,
 or benchmark rows:
