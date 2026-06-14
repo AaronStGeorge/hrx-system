@@ -217,3 +217,58 @@ low.func.def target(@target) abi(object_function) @guarded_loaded_i64_index_addr
 ^_bb2:
   return
 }
+
+// ====
+
+x86.target<scalar> @target
+
+func.def target(@target) @guarded_loaded_i32_index_address(%control: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %control_view = buffer.view %control[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32, #dense>
+  %row_i32 = view.load %control_view[0] : view<1xi32, #dense> -> i32
+  %row = index.cast %row_i32 : i32 to index
+  %zero_i32 = scalar.constant 0 : i32
+  %limit_i32 = scalar.constant 64 : i32
+  %nonnegative = scalar.cmpi sge, %row_i32, %zero_i32 : i32
+  %below = scalar.cmpi slt, %row_i32, %limit_i32 : i32
+  %guard = scalar.andi %nonnegative, %below : i1
+  scf.if %guard {
+    view.store %zero_i32, %output_view[%row] : i32, view<64xi32, #dense>
+  }
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @guarded_loaded_i32_index_address(%control_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>) asm<x86.scalar.core> {
+  %row_i32 = mov.load.gpr32 %control_view {disp32 = 0}
+  %row = movsxd.gpr64.gpr32 %row_i32
+  %zero_i32 = mov.imm32 0
+  %limit_i32 = mov.imm32 64
+  %nonnegative = cmp.sge.gpr32 %row_i32, %zero_i32
+  %below = cmp.slt.gpr32 %row_i32, %limit_i32
+  %21 = copy %nonnegative : reg<x86.gpr32> -> reg<x86.gpr32>
+  %guard = and.gpr32 %21, %below
+  low.cond_br %guard, ^_bb1, ^_bb2 : reg<x86.gpr32>
+^_bb1:
+  mov.store.indexed.gpr32 %zero_i32, %output_view, %row {disp32 = 0, scale = 4}
+  low.br ^_bb2
+^_bb2:
+  return
+}
+
+// ====
+
+x86.target<scalar> @target
+
+func.def target(@target) @nonnegative_i32_to_index(%value_i32: i32) -> (index) {
+  %bounded_i32 = scalar.assume %value_i32 [range(%value_i32, 0, 2147483647)] : i32
+  %index = index.cast %bounded_i32 : i32 to index
+  func.return %index : index
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @nonnegative_i32_to_index(%bounded_i32: reg<x86.gpr32>) -> (reg<x86.gpr64>) asm<x86.scalar.core> {
+  %index = movzx.gpr64.gpr32 %bounded_i32
+  return %index
+}

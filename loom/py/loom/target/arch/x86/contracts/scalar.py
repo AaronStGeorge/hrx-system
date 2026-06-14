@@ -69,6 +69,11 @@ _SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
     subject_name="x86-scalar",
     constraint_key="x86.scalar.source_memory",
 )
+_INDEX_CAST_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="index-cast",
+    subject_name="x86-scalar",
+    constraint_key="x86.scalar.index_cast",
+)
 
 _DescriptorLookup = Callable[[str], Descriptor]
 
@@ -471,6 +476,38 @@ def _index_cast_alias_rule(
         guards=(
             Guard.value_type("input", input_type),
             Guard.value_type("result", result_type),
+        ),
+    )
+
+
+def _index_cast_i32_extend_rule(
+    descriptor_key: str,
+    descriptor_lookup: _DescriptorLookup,
+    *,
+    unsigned: bool,
+) -> DescriptorRule:
+    descriptor = descriptor_lookup(descriptor_key)
+    value_guard = (
+        Guard.value_unsigned_bit_count("input", 32, diagnostic=_INDEX_CAST_DIAGNOSTIC)
+        if unsigned
+        else Guard.value_signed_bit_count(
+            "input", 32, diagnostic=_INDEX_CAST_DIAGNOSTIC
+        )
+    )
+    return DescriptorRule(
+        source_op=index.index_cast,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("input", _I32),
+            Guard.value_type("result", _INDEX),
+            value_guard,
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"src": ValueRef.operand("input")},
+                results={"dst": ValueRef.result("result")},
+            ),
         ),
     )
 
@@ -981,6 +1018,16 @@ def x86_scalar_core_cases(
         _const_scalar_i64_rule(descriptor_lookup),
         _index_const_i64_rule(_INDEX, descriptor_lookup),
         _index_const_i64_rule(_OFFSET, descriptor_lookup),
+        _index_cast_i32_extend_rule(
+            "x86.scalar.movzx.gpr64.gpr32",
+            descriptor_lookup,
+            unsigned=True,
+        ),
+        _index_cast_i32_extend_rule(
+            "x86.scalar.movsxd.gpr64.gpr32",
+            descriptor_lookup,
+            unsigned=False,
+        ),
         _index_cast_alias_rule(_I64, _INDEX),
         _add_disp_rule(
             _INDEX,
