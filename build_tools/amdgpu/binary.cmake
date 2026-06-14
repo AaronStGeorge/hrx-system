@@ -74,6 +74,30 @@ function(_iree_amdgpu_resolve_bitcode_deps out_paths out_targets)
   set(${out_targets} "${_DEP_TARGETS}" PARENT_SCOPE)
 endfunction()
 
+function(_iree_amdgpu_code_object_target_deps out_var code_object_target)
+  iree_amdgpu_target_label_fragment(
+    _CODE_OBJECT_TARGET_FRAGMENT
+    "${code_object_target}"
+  )
+  set(_TARGET_DEPS)
+  foreach(_DEP ${ARGN})
+    string(REPLACE
+      "{AMDGPU_CODE_OBJECT_TARGET}"
+      "${code_object_target}"
+      _TARGET_DEP
+      "${_DEP}"
+    )
+    string(REPLACE
+      "{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}"
+      "${_CODE_OBJECT_TARGET_FRAGMENT}"
+      _TARGET_DEP
+      "${_TARGET_DEP}"
+    )
+    list(APPEND _TARGET_DEPS "${_TARGET_DEP}")
+  endforeach()
+  set(${out_var} "${_TARGET_DEPS}" PARENT_SCOPE)
+endfunction()
+
 # Builds an LLVM bitcode archive for AMDGPU from input files via clang.
 #
 # Parameters:
@@ -198,6 +222,9 @@ endfunction()
 # ARCH: LLVM `-march` flag.
 # SRCS: source files to pass to clang.
 # DEPS: bitcode archive dependencies to link with `llvm-link -only-needed`.
+#       Entries may use `{AMDGPU_CODE_OBJECT_TARGET}` or
+#       `{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}` placeholders to refer to the
+#       code-object target being generated.
 # INTERNAL_HDRS: headers that should invalidate device compilation but are not
 #                compiled as translation units or exposed as interface headers.
 # COPTS: additional flags to pass to clang.
@@ -555,6 +582,11 @@ function(iree_amdgpu_binary_variants)
     )
     set(_VARIANT_NAME "${_BINARY_NAME_PREFIX}_${_TARGET_FRAGMENT}")
     set(_VARIANT_OUTPUT "${_VARIANT_NAME}.so")
+    _iree_amdgpu_code_object_target_deps(
+      _VARIANT_DEPS
+      "${_CODE_OBJECT_TARGET}"
+      ${_RULE_DEPS}
+    )
 
     set(_MINIMIZE)
     if(_RULE_MINIMIZE)
@@ -576,7 +608,7 @@ function(iree_amdgpu_binary_variants)
       SRCS
         ${_RULE_SRCS}
       DEPS
-        ${_RULE_DEPS}
+        ${_VARIANT_DEPS}
       INTERNAL_HDRS
         ${_RULE_INTERNAL_HDRS}
       COPTS

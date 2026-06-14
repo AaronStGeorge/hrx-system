@@ -75,6 +75,14 @@ def _amdgpu_base_copts(target, arch, builtin_headers_include_flag, copts):
         "-emit-llvm",
     ] + copts
 
+def _code_object_target_deps(deps, code_object_target):
+    code_object_target_fragment = iree_amdgpu_target_label_fragment(code_object_target)
+    return [
+        dep.replace("{AMDGPU_CODE_OBJECT_TARGET}", code_object_target)
+            .replace("{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}", code_object_target_fragment)
+        for dep in deps
+    ]
+
 def iree_amdgpu_library(
         name,
         target,
@@ -426,6 +434,7 @@ def iree_amdgpu_binary_variants(
         srcs,
         target_selectors_flag,
         binary_name_prefix = None,
+        deps = [],
         code_object_targets = IREE_AMDGPU_CODE_OBJECT_TARGETS,
         minimize = False,
         tags = [],
@@ -440,6 +449,10 @@ def iree_amdgpu_binary_variants(
         build setting controlling which variants are selected.
       binary_name_prefix: Prefix for generated per-code-object binary targets.
         Defaults to `name`.
+      deps: bitcode archives passed to each generated executable. Labels may
+        use `{AMDGPU_CODE_OBJECT_TARGET}` or
+        `{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}` placeholders to refer to the
+        code-object target being generated.
       code_object_targets: Code-object targets to build variants for.
       minimize: Whether generated binaries should apply post-link
         symbol-table minimization.
@@ -467,6 +480,7 @@ def iree_amdgpu_binary_variants(
             target = target,
             arch = code_object_target,
             srcs = srcs,
+            deps = _code_object_target_deps(deps, code_object_target),
             minimize = minimize,
             tags = tags,
             **kwargs
