@@ -242,10 +242,28 @@ loom_cc_library(
     deps = [
         ":register_class",
         "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/target/arch/amdgpu:error_defs",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
         "//loom/src/loom/target/emit/native:fragment",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "preflight_test",
+    srcs = ["preflight_test.cc"],
+    deps = [
+        ":preflight",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target/arch/amdgpu:error_defs",
+        "//loom/src/loom/target/arch/amdgpu/descriptors:low_registry",
+        "//loom/src/loom/testing:diagnostic_matchers",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

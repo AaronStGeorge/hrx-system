@@ -337,10 +337,34 @@ loom_cc_library(
     ::register_class
     iree::base
     loom::codegen::low::allocation
+    loom::codegen::low::diagnostics
     loom::codegen::low::schedule
+    loom::error::emitter
+    loom::error::error_defs
+    loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::emit::native::fragment
   PUBLIC
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+loom_cc_test(
+  NAME
+    preflight_test
+  SRCS
+    "preflight_test.cc"
+  DEPS
+    ::preflight
+    iree::testing::gtest
+    iree::testing::gtest_main
+    loom::codegen::low::descriptors
+    loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::error_defs
+    loom::testing::diagnostic_matchers
+  LABELS
+    "iree-build-requirement=loom.target.arch.amdgpu"
+    "iree-build-requirement=loom.emit.amdgpu"
 )
 endif()
 

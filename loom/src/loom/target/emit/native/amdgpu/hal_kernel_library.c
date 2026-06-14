@@ -500,8 +500,14 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
   if (diagnostic_emitter->error_count != 0) {
     return iree_ok_status();
   }
+  const loom_amdgpu_native_preflight_options_t preflight_options = {
+      .emitter = frame_options.emitter,
+  };
   IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
-      &frame.schedule, &frame.allocation, &preflight));
+      &frame.schedule, &frame.allocation, &preflight_options, &preflight));
+  if (preflight.error_count != 0) {
+    return iree_ok_status();
+  }
   if (report != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_record_low_emission_frame(report, &frame));

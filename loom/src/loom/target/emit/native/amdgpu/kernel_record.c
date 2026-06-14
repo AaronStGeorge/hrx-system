@@ -599,7 +599,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
     }
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
-        schedule, allocation, &derived_preflight));
+        schedule, allocation, /*options=*/NULL, &derived_preflight));
     preflight = &derived_preflight;
   }
   IREE_RETURN_IF_ERROR(

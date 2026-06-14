@@ -8,6 +8,8 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/diagnostics.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/emit/native/amdgpu/register_class.h"
 #include "loom/target/emit/native/fragment.h"
@@ -41,8 +43,67 @@ static iree_status_t loom_amdgpu_native_preflight_update_high_water(
   return iree_ok_status();
 }
 
+static iree_string_view_t
+loom_amdgpu_native_preflight_assignment_register_class_name(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* assignment) {
+  if (assignment->descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      assignment->descriptor_reg_class_id >=
+          allocation->target.descriptor_set->reg_class_count) {
+    return IREE_SV("<unknown>");
+  }
+  const loom_low_reg_class_t* reg_class =
+      &allocation->target.descriptor_set
+           ->reg_classes[assignment->descriptor_reg_class_id];
+  return loom_low_descriptor_set_string(allocation->target.descriptor_set,
+                                        reg_class->name_string_offset);
+}
+
+static iree_status_t
+loom_amdgpu_native_preflight_emit_unsupported_register_metadata(
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_allocation_assignment_t* assignment,
+    iree_string_view_t metadata_contract,
+    loom_amdgpu_native_preflight_t* preflight,
+    const loom_amdgpu_native_preflight_options_t* options) {
+  const iree_string_view_t register_class =
+      loom_amdgpu_native_preflight_assignment_register_class_name(allocation,
+                                                                  assignment);
+  if (!options || options->emitter.fn == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU native emission register class '%.*s' requires %.*s metadata",
+        (int)register_class.size, register_class.data,
+        (int)metadata_contract.size, metadata_contract.data);
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(&allocation->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&allocation->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&allocation->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          allocation->module, allocation->function_op)),
+      loom_param_string(loom_low_diagnostic_value_name(allocation->module,
+                                                       assignment->value_id)),
+      loom_param_string(loom_low_diagnostic_value_class_name(
+          allocation->target.descriptor_set, assignment->value_class)),
+      loom_param_string(register_class),
+      loom_param_string(metadata_contract),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = loom_low_diagnostic_value_origin_op(
+          allocation->module, assignment->value_id, allocation->function_op),
+      .error = LOOM_ERR_AMDGPU_035,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  IREE_RETURN_IF_ERROR(iree_diagnostic_emit(options->emitter, &emission));
+  ++preflight->error_count;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_native_preflight_collect_register_usage(
     const loom_low_allocation_table_t* allocation,
+    const loom_amdgpu_native_preflight_options_t* options,
     loom_amdgpu_native_preflight_t* preflight) {
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
@@ -69,24 +130,21 @@ static iree_status_t loom_amdgpu_native_preflight_collect_register_usage(
     if (loom_amdgpu_register_class_is_agpr(
             allocation->target.descriptor_set,
             assignment->descriptor_reg_class_id)) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU native emission register class 'amdgpu.agpr' requires "
-          "additional kernel descriptor metadata");
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_native_preflight_emit_unsupported_register_metadata(
+              allocation, assignment, IREE_SV("AGPR kernel-descriptor"),
+              preflight, options));
+      continue;
     }
     if (loom_amdgpu_native_preflight_metadata_free_register_class(
             allocation->target.descriptor_set,
             assignment->descriptor_reg_class_id)) {
       continue;
     }
-    iree_string_view_t register_class = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
-        allocation, assignment, &register_class));
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU native emission register class '%.*s' requires additional "
-        "kernel descriptor metadata",
-        (int)register_class.size, register_class.data);
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_native_preflight_emit_unsupported_register_metadata(
+            allocation, assignment, IREE_SV("kernel-descriptor"), preflight,
+            options));
   }
   return iree_ok_status();
 }
@@ -94,6 +152,7 @@ static iree_status_t loom_amdgpu_native_preflight_collect_register_usage(
 iree_status_t loom_amdgpu_native_preflight_analyze(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
+    const loom_amdgpu_native_preflight_options_t* options,
     loom_amdgpu_native_preflight_t* out_preflight) {
   *out_preflight = (loom_amdgpu_native_preflight_t){0};
   IREE_RETURN_IF_ERROR(
@@ -102,6 +161,6 @@ iree_status_t loom_amdgpu_native_preflight_analyze(
       .schedule = schedule,
       .allocation = allocation,
   };
-  return loom_amdgpu_native_preflight_collect_register_usage(allocation,
-                                                             out_preflight);
+  return loom_amdgpu_native_preflight_collect_register_usage(
+      allocation, options, out_preflight);
 }
