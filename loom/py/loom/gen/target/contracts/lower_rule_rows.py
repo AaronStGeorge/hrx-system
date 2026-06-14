@@ -73,7 +73,10 @@ def value_ref_row(row: LowerValueRef) -> list[str]:
     return fields
 
 
-def source_memory_row(row: LowerSourceMemory) -> list[str]:
+def source_memory_row(
+    descriptor_refs: Mapping[str, int],
+    row: LowerSourceMemory,
+) -> list[str]:
     constraint = row.constraint
     fields: list[str] = []
     flags: list[str] = []
@@ -165,12 +168,54 @@ def source_memory_row(row: LowerSourceMemory) -> list[str]:
         lower_rule_spelling.diagnostic_index(row.diagnostic_index),
         always=True,
     )
+    if row.byte_offset_materializer is not None:
+        materializer = row.byte_offset_materializer
+        _append_field(
+            fields,
+            "byte_offset_const_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.const_i64),
+            always=True,
+            default="0xFFFF",
+        )
+        _append_field(
+            fields,
+            "byte_offset_add_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.add_i64),
+            always=True,
+            default="0xFFFF",
+        )
+        _append_field(
+            fields,
+            "byte_offset_mul_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.mul_i64),
+            always=True,
+            default="0xFFFF",
+        )
+        _append_field(
+            fields,
+            "byte_offset_shl_i64_descriptor_ref",
+            _descriptor_ref_index(descriptor_refs, materializer.shl_i64),
+            always=True,
+            default="0xFFFF",
+        )
     return fields
 
 
 def descriptor_ref_keys(table: CompiledLowerRuleSet, source_contract: ContractFragment) -> tuple[str, ...]:
     used_keys = {row.descriptor.key for row in table.guards if row.kind == GuardKind.DESCRIPTOR_AVAILABLE and row.descriptor is not None}
     used_keys.update(row.descriptor.key for row in table.emits)
+    for row in table.source_memories:
+        if row.byte_offset_materializer is None:
+            continue
+        materializer = row.byte_offset_materializer
+        used_keys.update(
+            (
+                materializer.const_i64.key,
+                materializer.add_i64.key,
+                materializer.mul_i64.key,
+                materializer.shl_i64.key,
+            )
+        )
     return tuple(descriptor.key for descriptor in source_contract.descriptor_set.descriptors if descriptor.key in used_keys)
 
 

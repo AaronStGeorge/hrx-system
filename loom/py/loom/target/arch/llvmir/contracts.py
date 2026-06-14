@@ -38,6 +38,7 @@ from loom.target.contracts import (
     GuardDiagnostic,
     ResultTypeBinding,
     Scalar,
+    SourceMemoryByteOffsetMaterializer,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
     SourceMemoryOperation,
@@ -201,6 +202,15 @@ def _descriptor(key: str) -> Descriptor:
     return descriptor_by_key(LLVMIR_GENERIC_CORE_DESCRIPTOR_SET, key)
 
 
+def _source_memory_byte_offset_materializer() -> SourceMemoryByteOffsetMaterializer:
+    return SourceMemoryByteOffsetMaterializer(
+        const_i64=_descriptor("llvmir.const.i64"),
+        add_i64=_descriptor("llvmir.add.i64"),
+        mul_i64=_descriptor("llvmir.mul.i64"),
+        shl_i64=_descriptor("llvmir.shl.i64"),
+    )
+
+
 def _vector_type(element: str, lane_count: int) -> TypePattern:
     return Vector(element, lanes=lane_count)
 
@@ -224,6 +234,9 @@ def _op_emit(
     immediates: dict[str, AttrProject | SourceMemoryProject | ValueProject | int]
     | None = None,
     source_memory: SourceMemoryConstraint | None = None,
+    source_memory_byte_offset_materializer: (
+        SourceMemoryByteOffsetMaterializer | None
+    ) = None,
 ) -> EmitDescriptorOp:
     return EmitDescriptorOp(
         descriptor=descriptor,
@@ -233,6 +246,7 @@ def _op_emit(
         immediates={} if immediates is None else immediates,
         form=DescriptorEmitForm.OP,
         source_memory=source_memory,
+        source_memory_byte_offset_materializer=source_memory_byte_offset_materializer,
     )
 
 
@@ -536,10 +550,16 @@ def _select_rule(type_pattern: TypePattern, descriptor_key: str) -> DescriptorRu
 def _source_memory_constraint(
     operation: SourceMemoryOperation,
     *,
-    dynamic: bool,
+    dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
 ) -> SourceMemoryConstraint:
+    if dynamic_term_count == 0:
+        dynamic_index_source = SourceMemoryDynamicIndexSource.NONE
+        dynamic_byte_stride: int | None = 0
+    else:
+        dynamic_index_source = SourceMemoryDynamicIndexSource.VALUE
+        dynamic_byte_stride = None
     return SourceMemoryConstraint(
         operation=operation,
         root_kind=SourceMemoryRootKind.ANY,
@@ -557,21 +577,25 @@ def _source_memory_constraint(
         vector_lane_byte_stride=element_byte_count,
         static_byte_offset_minimum=-(2**63),
         static_byte_offset_maximum=(2**63) - 1,
-        dynamic_term_count=1 if dynamic else 0,
-        dynamic_index_source=(
-            SourceMemoryDynamicIndexSource.VALUE
-            if dynamic
-            else SourceMemoryDynamicIndexSource.NONE
-        ),
-        dynamic_byte_stride=None if dynamic else 0,
+        dynamic_term_count=dynamic_term_count,
+        dynamic_index_source=dynamic_index_source,
+        dynamic_byte_stride=dynamic_byte_stride,
         diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
     )
 
 
-def _memory_immediates(dynamic: bool) -> dict[str, SourceMemoryProject]:
-    immediates = {"byte_offset": SourceMemoryProject.static_byte_offset()}
-    if dynamic:
-        immediates["byte_stride"] = SourceMemoryProject.dynamic_byte_stride()
+def _memory_immediates(
+    *,
+    dynamic_term_count: int,
+    materialize_byte_offset: bool,
+) -> dict[str, SourceMemoryProject | int]:
+    immediates: dict[str, SourceMemoryProject | int] = {
+        "byte_offset": SourceMemoryProject.static_byte_offset()
+    }
+    if dynamic_term_count != 0:
+        immediates["byte_stride"] = (
+            1 if materialize_byte_offset else SourceMemoryProject.dynamic_byte_stride()
+        )
     return immediates
 
 
@@ -581,24 +605,26 @@ def _view_load_rule(
     result_type: TypePattern,
     descriptor_key: str,
     *,
-    source_dynamic: bool,
-    address_dynamic: bool,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
+    materialize_byte_offset = dynamic_term_count > 1
     operands = {"ptr": ValueRef.operand(view_field)}
-    if address_dynamic:
-        operands["index"] = (
-            ValueRef.operand("indices")
-            if source_dynamic
-            else ValueRef.source_memory_dynamic_term()
-        )
+    if dynamic_term_count != 0:
+        if materialize_byte_offset:
+            operands["index"] = ValueRef.source_memory_dynamic_byte_offset()
+        elif source_dynamic_count:
+            operands["index"] = ValueRef.operand("indices")
+        else:
+            operands["index"] = ValueRef.source_memory_dynamic_term()
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
         guards=(
-            Guard.operand_segment_count("indices", 1 if source_dynamic else 0),
+            Guard.operand_segment_count("indices", source_dynamic_count),
             Guard.value_type("result", result_type),
         ),
         emit=(
@@ -606,12 +632,20 @@ def _view_load_rule(
                 descriptor=descriptor,
                 operands=operands,
                 results={"dst": ValueRef.result("result")},
-                immediates=_memory_immediates(address_dynamic),
+                immediates=_memory_immediates(
+                    dynamic_term_count=dynamic_term_count,
+                    materialize_byte_offset=materialize_byte_offset,
+                ),
                 source_memory=_source_memory_constraint(
                     SourceMemoryOperation.LOAD,
-                    dynamic=address_dynamic,
+                    dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
+                ),
+                source_memory_byte_offset_materializer=(
+                    _source_memory_byte_offset_materializer()
+                    if materialize_byte_offset
+                    else None
                 ),
             ),
         ),
@@ -624,39 +658,49 @@ def _view_store_rule(
     value_type: TypePattern,
     descriptor_key: str,
     *,
-    source_dynamic: bool,
-    address_dynamic: bool,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
+    materialize_byte_offset = dynamic_term_count > 1
     operands = {
         "value": ValueRef.operand("value"),
         "ptr": ValueRef.operand(view_field),
     }
-    if address_dynamic:
-        operands["index"] = (
-            ValueRef.operand("indices")
-            if source_dynamic
-            else ValueRef.source_memory_dynamic_term()
-        )
+    if dynamic_term_count != 0:
+        if materialize_byte_offset:
+            operands["index"] = ValueRef.source_memory_dynamic_byte_offset()
+        elif source_dynamic_count:
+            operands["index"] = ValueRef.operand("indices")
+        else:
+            operands["index"] = ValueRef.source_memory_dynamic_term()
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
         guards=(
-            Guard.operand_segment_count("indices", 1 if source_dynamic else 0),
+            Guard.operand_segment_count("indices", source_dynamic_count),
             Guard.value_type("value", value_type),
         ),
         emit=(
             _op_emit(
                 descriptor=descriptor,
                 operands=operands,
-                immediates=_memory_immediates(address_dynamic),
+                immediates=_memory_immediates(
+                    dynamic_term_count=dynamic_term_count,
+                    materialize_byte_offset=materialize_byte_offset,
+                ),
                 source_memory=_source_memory_constraint(
                     SourceMemoryOperation.STORE,
-                    dynamic=address_dynamic,
+                    dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
+                ),
+                source_memory_byte_offset_materializer=(
+                    _source_memory_byte_offset_materializer()
+                    if materialize_byte_offset
+                    else None
                 ),
             ),
         ),
@@ -1605,20 +1649,24 @@ def _structural_vector_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
 def _memory_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for element, element_byte_count in _MEMORY_VALUE_TYPES:
-        for source_dynamic, address_dynamic in (
-            (False, False),
-            (False, True),
-            (True, False),
-            (True, True),
+        for source_dynamic_count, dynamic_term_count in (
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (1, 1),
+            (1, 2),
+            (2, 2),
         ):
             rules.append(
                 _view_load_rule(
                     view.view_load,
                     "view",
                     Scalar(element),
-                    _memory_descriptor_key("load", element, dynamic=address_dynamic),
-                    source_dynamic=source_dynamic,
-                    address_dynamic=address_dynamic,
+                    _memory_descriptor_key(
+                        "load", element, dynamic=dynamic_term_count != 0
+                    ),
+                    source_dynamic_count=source_dynamic_count,
+                    dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                 )
             )
@@ -1627,9 +1675,11 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     view.view_store,
                     "view",
                     Scalar(element),
-                    _memory_descriptor_key("store", element, dynamic=address_dynamic),
-                    source_dynamic=source_dynamic,
-                    address_dynamic=address_dynamic,
+                    _memory_descriptor_key(
+                        "store", element, dynamic=dynamic_term_count != 0
+                    ),
+                    source_dynamic_count=source_dynamic_count,
+                    dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                 )
             )
@@ -1642,10 +1692,10 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                         "view",
                         vector_type,
                         _memory_descriptor_key(
-                            "load", vector_suffix, dynamic=address_dynamic
+                            "load", vector_suffix, dynamic=dynamic_term_count != 0
                         ),
-                        source_dynamic=source_dynamic,
-                        address_dynamic=address_dynamic,
+                        source_dynamic_count=source_dynamic_count,
+                        dynamic_term_count=dynamic_term_count,
                         element_byte_count=element_byte_count,
                         vector_lane_count=lane_count,
                     )
@@ -1656,10 +1706,10 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                         "view",
                         vector_type,
                         _memory_descriptor_key(
-                            "store", vector_suffix, dynamic=address_dynamic
+                            "store", vector_suffix, dynamic=dynamic_term_count != 0
                         ),
-                        source_dynamic=source_dynamic,
-                        address_dynamic=address_dynamic,
+                        source_dynamic_count=source_dynamic_count,
+                        dynamic_term_count=dynamic_term_count,
                         element_byte_count=element_byte_count,
                         vector_lane_count=lane_count,
                     )
@@ -1670,9 +1720,11 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     vector.vector_load,
                     "view",
                     vector_type,
-                    _memory_descriptor_key("load", element, dynamic=address_dynamic),
-                    source_dynamic=source_dynamic,
-                    address_dynamic=address_dynamic,
+                    _memory_descriptor_key(
+                        "load", element, dynamic=dynamic_term_count != 0
+                    ),
+                    source_dynamic_count=source_dynamic_count,
+                    dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                 )
             )
@@ -1681,9 +1733,11 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     vector.vector_store,
                     "view",
                     vector_type,
-                    _memory_descriptor_key("store", element, dynamic=address_dynamic),
-                    source_dynamic=source_dynamic,
-                    address_dynamic=address_dynamic,
+                    _memory_descriptor_key(
+                        "store", element, dynamic=dynamic_term_count != 0
+                    ),
+                    source_dynamic_count=source_dynamic_count,
+                    dynamic_term_count=dynamic_term_count,
                     element_byte_count=element_byte_count,
                 )
             )

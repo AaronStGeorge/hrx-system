@@ -205,7 +205,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32x8_readonly_uniform_s
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -223,6 +222,22 @@ kernel.def target(@target) @i32_workgroup_global_saddr() {
   %loaded = view.load %input_view[%workgroup, %column] : view<16x64xf16, #dense> -> f16
   view.store %loaded, %output_view[%workgroup, %column] : f16, view<16x64xf16, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_workgroup_global_saddr() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %workgroup = kernel.workgroup_id.x
+  %column = kernel.workitem_id.x
+  %23 = const.i64 7
+  %24 = shl.i64 %workgroup, %23
+  %25 = const.i64 1
+  %26 = shl.i64 %column, %25
+  %27 = add.i64 %24, %26
+  %loaded = load.indexed.f16 %input_view, %27, 0, 1
+  store.indexed.f16 %loaded, %output_view, %27, 0, 1
+  return
 }
 
 // ====
@@ -775,7 +790,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32x4_dynamic_view_base_
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -801,6 +815,21 @@ kernel.def target(@target) @f32x4_dynamic_view_base_flat() {
   %loaded = vector.load %input_view[%tap, %channel_base] : view<7x1024xf32, #dense> -> vector<4xf32>
   vector.store %loaded, %output_view[%channel_base] : vector<4xf32>, view<1024xf32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(256, 1, 1) @f32x4_dynamic_view_base_flat(%offset_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %input_base = zext.i32.i64 %offset_i32
+  %lane = kernel.workitem_id.x
+  %32 = const.i64 2
+  %channel_base = shl.i64 %lane, %32
+  %36 = shl.i64 %channel_base, %32
+  %37 = add.i64 %input_base, %36
+  %loaded = load.indexed.v4f32 %input_view, %37, 24576, 1
+  store.indexed.v4f32 %loaded, %output_view, %channel_base, 0, 4
+  return
 }
 
 // ====

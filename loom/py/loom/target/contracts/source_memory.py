@@ -14,6 +14,7 @@ from enum import Enum, unique
 
 from loom.dsl import Op
 from loom.target.contracts.guards import GuardDiagnostic
+from loom.target.low_descriptors import Descriptor
 
 _MEMORY_SPACE_NAMES = frozenset(
     (
@@ -62,6 +63,16 @@ class SourceMemoryRootKind(Enum):
 
     ANY = "any"
     BLOCK_ARGUMENT = "block_argument"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceMemoryByteOffsetMaterializer:
+    """Low descriptors used to materialize a dynamic byte offset value."""
+
+    const_i64: Descriptor
+    add_i64: Descriptor
+    mul_i64: Descriptor
+    shl_i64: Descriptor
 
 
 @dataclass(frozen=True, slots=True)

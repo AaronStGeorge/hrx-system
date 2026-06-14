@@ -77,6 +77,8 @@ typedef enum loom_low_lower_value_ref_kind_e {
   LOOM_LOW_LOWER_VALUE_REF_TEMPORARY = 3,
   // Dynamic source-memory term at |index|.
   LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_TERM = 4,
+  // Dynamic byte offset materialized from all selected source-memory terms.
+  LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET = 5,
 } loom_low_lower_value_ref_kind_t;
 
 // Returns true when the materializer can produce a low value for the source
@@ -381,6 +383,14 @@ typedef struct loom_low_lower_source_memory_t {
   uint32_t cache_policy_build_flags;
   // Diagnostic table row emitted when this source-memory row rejects.
   uint16_t diagnostic_index;
+  // Descriptor ref used to materialize i64 constants for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_const_i64_descriptor_ref;
+  // Descriptor ref used to materialize i64 additions for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_add_i64_descriptor_ref;
+  // Descriptor ref used to materialize i64 multiplies for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_mul_i64_descriptor_ref;
+  // Descriptor ref used to materialize i64 shifts for dynamic byte offsets.
+  loom_low_lower_descriptor_ref_t byte_offset_shl_i64_descriptor_ref;
 } loom_low_lower_source_memory_t;
 
 typedef enum loom_low_lower_guard_kind_e {

@@ -446,6 +446,7 @@ static bool loom_low_lower_rule_value_ref_source_value(
       return true;
     case LOOM_LOW_LOWER_VALUE_REF_TEMPORARY:
     case LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_TERM:
+    case LOOM_LOW_LOWER_VALUE_REF_SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET:
       return false;
     default:
       IREE_ASSERT_UNREACHABLE("unknown source-low value ref kind");

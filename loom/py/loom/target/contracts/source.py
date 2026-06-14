@@ -56,6 +56,13 @@ class ValueRef:
             element=term,
         )
 
+    @classmethod
+    def source_memory_dynamic_byte_offset(cls) -> Self:
+        return cls(
+            kind=SourceValueKind.SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET,
+            field="",
+        )
+
     def validate(
         self,
         source_op: Op,
@@ -105,6 +112,18 @@ class ValueRef:
                 raise ValueError(
                     f"{source_op.name}: {subject} source-memory term must be "
                     "non-negative"
+                )
+            return
+        if self.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET:
+            if self.field:
+                raise ValueError(
+                    f"{source_op.name}: {subject} source-memory byte offset must "
+                    "not name a source field"
+                )
+            if self.element != 0:
+                raise ValueError(
+                    f"{source_op.name}: {subject} source-memory byte offset must "
+                    "not select an element"
                 )
             return
         if not self.field:

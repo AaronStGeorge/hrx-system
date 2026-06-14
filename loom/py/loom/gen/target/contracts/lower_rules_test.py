@@ -249,7 +249,7 @@ def test_source_memory_row_emits_dynamic_byte_stride_any_flag() -> None:
         dynamic_offset_diagnostic_index=4,
     )
 
-    fields = source_memory_row(row)
+    fields = source_memory_row({}, row)
 
     assert ".flags = LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY" in fields
     assert ".dynamic_term_count = 1" in fields

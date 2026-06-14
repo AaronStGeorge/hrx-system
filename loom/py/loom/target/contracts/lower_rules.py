@@ -54,7 +54,10 @@ from loom.target.contracts.kinds import SourceValueKind
 from loom.target.contracts.patterns import TypePattern
 from loom.target.contracts.rules import DescriptorRule, ValueAliasRule, ValueElideRule
 from loom.target.contracts.source import ValueRef
-from loom.target.contracts.source_memory import SourceMemoryConstraint
+from loom.target.contracts.source_memory import (
+    SourceMemoryByteOffsetMaterializer,
+    SourceMemoryConstraint,
+)
 from loom.target.low_descriptors import ConstraintKind, Descriptor, OperandRole
 
 
@@ -145,6 +148,7 @@ class LowerSourceMemory:
     constraint: SourceMemoryConstraint
     diagnostic_index: int
     dynamic_offset_diagnostic_index: int
+    byte_offset_materializer: SourceMemoryByteOffsetMaterializer | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1130,6 +1134,7 @@ class _LowerRuleSetCompiler:
             source_memory_ordinal = self._append_source_memory(
                 source_op,
                 emit.source_memory,
+                emit.source_memory_byte_offset_materializer,
             )
 
         self._emits.append(
@@ -1157,6 +1162,7 @@ class _LowerRuleSetCompiler:
         self,
         source_op: Op,
         constraint: SourceMemoryConstraint,
+        byte_offset_materializer: SourceMemoryByteOffsetMaterializer | None,
     ) -> int:
         row = LowerSourceMemory(
             constraint,
@@ -1168,6 +1174,7 @@ class _LowerRuleSetCompiler:
                 source_op,
                 _source_memory_dynamic_offset_diagnostic(constraint),
             ),
+            byte_offset_materializer=byte_offset_materializer,
         )
         for index, existing in enumerate(self._source_memories):
             if existing == row:
@@ -1645,6 +1652,8 @@ def _source_value_index(
             return ordinal
     if value_ref.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_TERM:
         return value_ref.element
+    if value_ref.kind == SourceValueKind.SOURCE_MEMORY_DYNAMIC_BYTE_OFFSET:
+        return 0
     raise ValueError(f"source value field '{value_ref.field}' is not declared")
 
 
