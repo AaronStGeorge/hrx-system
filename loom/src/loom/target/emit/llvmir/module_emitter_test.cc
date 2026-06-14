@@ -245,6 +245,49 @@ low.func.def target(@target) abi(object_function) @second(%input_view: reg<llvmi
   EXPECT_NE(text.find("store i32 %loaded"), std::string::npos) << text;
 }
 
+TEST_F(LlvmirModuleEmitterTest, EmitsFusedMultiplyAddIntrinsics) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
+low.func.def target(@target) abi(object_function) @fma_scalar(%a: reg<llvmir.f32>, %b: reg<llvmir.f32>, %c: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %result = fma.f32 %a, %b, %c
+  return %result
+}
+
+low.func.def target(@target) abi(object_function) @fma_vector(%a: reg<llvmir.f32 x4>, %b: reg<llvmir.f32 x4>, %c: reg<llvmir.f32 x4>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %result = fma.v4f32 %a, %b, %c
+  return %result
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  ASSERT_NE(llvmir_module, nullptr);
+  EXPECT_TRUE(capture.emissions.empty());
+
+  std::string text;
+  IREE_ASSERT_OK(WriteText(llvmir_module.get(), &text));
+  EXPECT_NE(text.find("%result = call float @llvm.fma.f32(float %a, float %b, "
+                      "float %c)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("%result = call <4 x float> @llvm.fma.v4f32(<4 x float> "
+                      "%a, <4 x float> %b, <4 x float> %c)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare float @llvm.fma.f32(float, float, float)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare <4 x float> @llvm.fma.v4f32(<4 x float>, "
+                      "<4 x float>, <4 x float>)"),
+            std::string::npos)
+      << text;
+}
+
 TEST_F(LlvmirModuleEmitterTest, EmitsKernelAbiFromLowKernelFacts) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {

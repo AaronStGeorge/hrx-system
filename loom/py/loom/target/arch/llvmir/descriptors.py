@@ -439,6 +439,35 @@ def _binary_descriptor(
     )
 
 
+def _ternary_descriptor(
+    *,
+    stem: str,
+    type_name: str,
+    semantic_stem: str,
+    unit_count: int = 1,
+    vector: bool = False,
+) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, unit_count, vector=vector)
+    return Descriptor(
+        key=f"llvmir.{stem}.{suffix}",
+        mnemonic=stem,
+        semantic_tag=f"llvmir.{semantic_stem}.{suffix}",
+        operands=(
+            _result(type_name, unit_count=unit_count),
+            _operand(type_name, "a", unit_count=unit_count),
+            _operand(type_name, "b", unit_count=unit_count),
+            _operand(type_name, "c", unit_count=unit_count),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"{stem}.{suffix}",
+            results=("dst",),
+            operands=("a", "b", "c"),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _compare_descriptor(
     *,
     predicate: str,
@@ -629,6 +658,13 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
             (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
             for stem in ("add", "sub", "mul", "div")
         )
+        descriptors.append(
+            _ternary_descriptor(
+                stem="fma",
+                type_name=type_name,
+                semantic_stem="fma",
+            )
+        )
     for type_name in ("i32", "f32"):
         descriptors.extend(
             (
@@ -643,6 +679,16 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
             for lane_count in _VECTOR_LANE_COUNTS
             for stem in ("add", "sub", "mul")
         )
+    descriptors.extend(
+        _ternary_descriptor(
+            stem="fma",
+            type_name="f32",
+            semantic_stem="fma",
+            unit_count=lane_count,
+            vector=True,
+        )
+        for lane_count in _VECTOR_LANE_COUNTS
+    )
     return tuple(descriptors)
 
 

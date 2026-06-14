@@ -19,6 +19,7 @@ from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import bitwise as scalar_bitwise
 from loom.dialect.scalar import comparison as scalar_comparison
 from loom.dialect.scalar import conversion as scalar_conversion
+from loom.dialect.scalar import math as scalar_math
 from loom.dialect.scf import ALL_SCF_OPS
 from loom.dialect.scf import defs as scf
 from loom.dialect.vector import ALL_VECTOR_OPS
@@ -378,6 +379,30 @@ def _binary_rule(
     )
 
 
+def _ternary_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=_typed_guards(("a", "b", "c", "result"), type_pattern),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={
+                    "a": ValueRef.operand("a"),
+                    "b": ValueRef.operand("b"),
+                    "c": ValueRef.operand("c"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _compare_rule(
     source_op: Op,
     operand_type: TypePattern,
@@ -641,6 +666,13 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             rules.append(
                 _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
             )
+        rules.append(
+            _ternary_rule(
+                scalar_math.scalar_fmaf,
+                type_pattern,
+                f"llvmir.fma.{suffix}",
+            )
+        )
     return tuple(rules)
 
 
@@ -713,6 +745,19 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             rules.append(
                 _binary_rule(source_op, vector_type, f"llvmir.{stem}.{element}")
             )
+    for lane_count in _VECTOR_LANE_COUNTS:
+        type_pattern = _vector_type("f32", lane_count)
+        suffix = _vector_suffix("f32", lane_count)
+        rules.append(
+            _ternary_rule(vector.vector_fmaf, type_pattern, f"llvmir.fma.{suffix}")
+        )
+    rules.append(
+        _ternary_rule(
+            vector.vector_fmaf,
+            _vector_type("f32", 1),
+            "llvmir.fma.f32",
+        )
+    )
     return tuple(rules)
 
 

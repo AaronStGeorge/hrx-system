@@ -79,6 +79,13 @@ typedef struct loom_llvmir_emit_binary_info_t {
   loom_llvmir_binop_t binop;
 } loom_llvmir_emit_binary_info_t;
 
+typedef struct loom_llvmir_emit_ternary_intrinsic_info_t {
+  // Generated descriptor reference ordinal.
+  uint32_t descriptor_ref;
+  // LLVM intrinsic symbol name.
+  iree_string_view_t intrinsic_name;
+} loom_llvmir_emit_ternary_intrinsic_info_t;
+
 typedef struct loom_llvmir_emit_const_info_t {
   // Generated descriptor reference ordinal.
   uint32_t descriptor_ref;
@@ -237,6 +244,25 @@ static const loom_llvmir_emit_binary_info_t kBinaryInfos[] = {
 #undef LOOM_LLVMIR_INTEGER_BINARY_INFOS
 #undef LOOM_LLVMIR_MASK_BINARY_INFOS
 #undef LOOM_LLVMIR_BINARY_INFO
+
+#define LOOM_LLVMIR_TERNARY_INTRINSIC_INFO(suffix, name) \
+  {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_##suffix, IREE_SVL(name)}
+
+#define LOOM_LLVMIR_FMA_INFO(suffix, name) \
+  LOOM_LLVMIR_TERNARY_INTRINSIC_INFO(FMA_##suffix, "llvm.fma." name)
+
+static const loom_llvmir_emit_ternary_intrinsic_info_t
+    kTernaryIntrinsicInfos[] = {
+        LOOM_LLVMIR_FMA_INFO(F32, "f32"),
+        LOOM_LLVMIR_FMA_INFO(F64, "f64"),
+        LOOM_LLVMIR_FMA_INFO(V2F32, "v2f32"),
+        LOOM_LLVMIR_FMA_INFO(V4F32, "v4f32"),
+        LOOM_LLVMIR_FMA_INFO(V8F32, "v8f32"),
+        LOOM_LLVMIR_FMA_INFO(V16F32, "v16f32"),
+};
+
+#undef LOOM_LLVMIR_FMA_INFO
+#undef LOOM_LLVMIR_TERNARY_INTRINSIC_INFO
 
 #define LOOM_LLVMIR_ICMP_INFO(suffix, predicate)                         \
   {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_CMP_##predicate##_##suffix, false, \
@@ -1104,6 +1130,17 @@ static const loom_llvmir_emit_binary_info_t* loom_llvmir_emit_lookup_binary(
   return NULL;
 }
 
+static const loom_llvmir_emit_ternary_intrinsic_info_t*
+loom_llvmir_emit_lookup_ternary_intrinsic(uint32_t descriptor_ref) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kTernaryIntrinsicInfos);
+       ++i) {
+    if (kTernaryIntrinsicInfos[i].descriptor_ref == descriptor_ref) {
+      return &kTernaryIntrinsicInfos[i];
+    }
+  }
+  return NULL;
+}
+
 static const loom_llvmir_emit_const_info_t* loom_llvmir_emit_lookup_const(
     uint32_t descriptor_ref) {
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kConstInfos); ++i) {
@@ -1227,6 +1264,74 @@ static iree_status_t loom_llvmir_emit_binary(
           .op = info->binop,
           .lhs = lhs,
           .rhs = rhs,
+      },
+      &llvmir_result));
+  return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
+}
+
+static iree_status_t loom_llvmir_emit_declare_same_type_ternary_intrinsic(
+    loom_llvmir_emit_function_state_t* state, iree_string_view_t name,
+    loom_llvmir_type_id_t type_id, loom_llvmir_function_t** out_function) {
+  *out_function = loom_llvmir_module_find_function(state->llvmir_module, name);
+  if (*out_function != NULL) return iree_ok_status();
+
+  loom_llvmir_function_desc_t desc = {
+      .kind = LOOM_LLVMIR_FUNCTION_DECLARATION,
+      .name = name,
+      .return_type = type_id,
+      .linkage = LOOM_LLVMIR_LINKAGE_DEFAULT,
+      .calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
+      .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(state->llvmir_module,
+                                                       &desc, out_function));
+  loom_llvmir_value_id_t ignored = LOOM_LLVMIR_VALUE_ID_INVALID;
+  for (uint32_t i = 0; i < 3; ++i) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
+        *out_function, &(loom_llvmir_parameter_desc_t){.type_id = type_id},
+        &ignored));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_emit_ternary_intrinsic(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_llvmir_emit_ternary_intrinsic_info_t* info) {
+  if (packet->op->operand_count != 3) {
+    return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                             IREE_SV("packet_operand"),
+                                             packet->op->operand_count, 3);
+  }
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_value_id_t result_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_prepare_packet_result(
+      state, packet, &result_type, &result_value));
+  if (result_type == LOOM_LLVMIR_TYPE_ID_INVALID) return iree_ok_status();
+
+  const loom_value_id_t* operands = loom_op_const_operands(packet->op);
+  loom_llvmir_value_id_t args[3] = {
+      LOOM_LLVMIR_VALUE_ID_INVALID,
+      LOOM_LLVMIR_VALUE_ID_INVALID,
+      LOOM_LLVMIR_VALUE_ID_INVALID,
+  };
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(args); ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_emit_lookup_value(state, operands[i], &args[i]));
+  }
+
+  loom_llvmir_function_t* intrinsic = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_declare_same_type_ternary_intrinsic(
+      state, info->intrinsic_name, result_type, &intrinsic));
+  loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      state->llvmir_block,
+      &(loom_llvmir_call_desc_t){
+          .result_name =
+              loom_llvmir_emit_value_name(state->module, result_value),
+          .callee = loom_llvmir_function_id(intrinsic),
+          .args = args,
+          .arg_count = IREE_ARRAYSIZE(args),
       },
       &llvmir_result));
   return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
@@ -2224,6 +2329,13 @@ static iree_status_t loom_llvmir_emit_packet(
       loom_llvmir_emit_lookup_binary(descriptor_ref);
   if (binary_info) {
     return loom_llvmir_emit_binary(state, packet, binary_info);
+  }
+
+  const loom_llvmir_emit_ternary_intrinsic_info_t* ternary_intrinsic_info =
+      loom_llvmir_emit_lookup_ternary_intrinsic(descriptor_ref);
+  if (ternary_intrinsic_info) {
+    return loom_llvmir_emit_ternary_intrinsic(state, packet,
+                                              ternary_intrinsic_info);
   }
 
   const loom_llvmir_emit_compare_info_t* compare_info =
