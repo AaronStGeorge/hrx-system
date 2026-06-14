@@ -63,7 +63,7 @@ _SCHEDULE_STORE = "llvmir.store"
 _CACHE_SCOPE_ENUM = "llvmir.cache_scope"
 _CACHE_TEMPORAL_ENUM = "llvmir.cache_temporal"
 
-_VECTOR_LANE_COUNTS = (2, 4, 8, 16)
+_VECTOR_LANE_COUNTS = (2, 3, 4, 8, 16)
 _KERNEL_DIMENSIONS = ("x", "y", "z")
 _STRUCTURAL_VECTOR_TYPES = (
     "i1",

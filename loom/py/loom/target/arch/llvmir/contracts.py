@@ -64,7 +64,7 @@ _F64 = Scalar("f64")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
 
-_VECTOR_LANE_COUNTS = (2, 4, 8, 16)
+_VECTOR_LANE_COUNTS = (2, 3, 4, 8, 16)
 _VECTOR_SELECT_TYPES = ("i8", "i16", "i32", "i64", "f16", "bf16", "f32", "f64")
 _STRUCTURAL_VECTOR_TYPES = (
     "i1",
