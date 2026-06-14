@@ -78,6 +78,7 @@ iree_py_library(
     "descriptors/control.py"
     "descriptors/matrix.py"
     "descriptors/memory.py"
+    "descriptors/rdna4.py"
     "descriptors/sets.py"
     "descriptors/workgroup.py"
     "target_info.py"
