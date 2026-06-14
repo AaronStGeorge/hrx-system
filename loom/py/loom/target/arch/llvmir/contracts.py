@@ -36,6 +36,7 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     GuardDiagnostic,
+    ResultTypeBinding,
     Scalar,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
@@ -219,6 +220,7 @@ def _op_emit(
     descriptor: Descriptor,
     operands: dict[str, ValueRef] | None = None,
     results: dict[str, ValueRef] | None = None,
+    result_types: dict[str, ResultTypeBinding] | None = None,
     immediates: dict[str, AttrProject | SourceMemoryProject | ValueProject | int]
     | None = None,
     source_memory: SourceMemoryConstraint | None = None,
@@ -227,6 +229,7 @@ def _op_emit(
         descriptor=descriptor,
         operands={} if operands is None else operands,
         results={} if results is None else results,
+        result_types=result_types,
         immediates={} if immediates is None else immediates,
         form=DescriptorEmitForm.OP,
         source_memory=source_memory,
@@ -973,6 +976,178 @@ def _select_rules() -> tuple[DescriptorRule, ...]:
     )
 
 
+def _clampf_number_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    maxnum_descriptor_key: str,
+    minnum_descriptor_key: str,
+) -> DescriptorRule:
+    maxnum_descriptor = _descriptor(maxnum_descriptor_key)
+    minnum_descriptor = _descriptor(minnum_descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=maxnum_descriptor,
+        guards=(
+            Guard.enum_attr_equals("mode", "number"),
+            *_typed_guards(("value", "lower", "upper", "result"), type_pattern),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=maxnum_descriptor,
+                operands={
+                    "lhs": ValueRef.operand("value"),
+                    "rhs": ValueRef.operand("lower"),
+                },
+                results={"dst": ValueRef.temporary("lower_clamped")},
+                result_types={"dst": type_pattern},
+            ),
+            _op_emit(
+                descriptor=minnum_descriptor,
+                operands={
+                    "lhs": ValueRef.temporary("lower_clamped"),
+                    "rhs": ValueRef.operand("upper"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _clampf_ordered_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    mask_pattern: TypePattern,
+    lower_compare_descriptor_key: str,
+    upper_compare_descriptor_key: str,
+    select_descriptor_key: str,
+) -> DescriptorRule:
+    lower_compare_descriptor = _descriptor(lower_compare_descriptor_key)
+    upper_compare_descriptor = _descriptor(upper_compare_descriptor_key)
+    select_descriptor = _descriptor(select_descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=lower_compare_descriptor,
+        guards=(
+            Guard.enum_attr_equals("mode", "ordered"),
+            *_typed_guards(("value", "lower", "upper", "result"), type_pattern),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=lower_compare_descriptor,
+                operands={
+                    "lhs": ValueRef.operand("value"),
+                    "rhs": ValueRef.operand("lower"),
+                },
+                results={"dst": ValueRef.temporary("below_lower")},
+                result_types={"dst": mask_pattern},
+            ),
+            _op_emit(
+                descriptor=select_descriptor,
+                operands={
+                    "condition": ValueRef.temporary("below_lower"),
+                    "true_value": ValueRef.operand("lower"),
+                    "false_value": ValueRef.operand("value"),
+                },
+                results={"dst": ValueRef.temporary("lower_clamped")},
+                result_types={"dst": type_pattern},
+            ),
+            _op_emit(
+                descriptor=upper_compare_descriptor,
+                operands={
+                    "lhs": ValueRef.temporary("lower_clamped"),
+                    "rhs": ValueRef.operand("upper"),
+                },
+                results={"dst": ValueRef.temporary("above_upper")},
+                result_types={"dst": mask_pattern},
+            ),
+            _op_emit(
+                descriptor=select_descriptor,
+                operands={
+                    "condition": ValueRef.temporary("above_upper"),
+                    "true_value": ValueRef.operand("upper"),
+                    "false_value": ValueRef.temporary("lower_clamped"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _scalar_clampf_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for type_pattern, suffix in ((_F32, "f32"), (_F64, "f64")):
+        rules.append(
+            _clampf_number_rule(
+                scalar_arithmetic.scalar_clampf,
+                type_pattern,
+                f"llvmir.maxnum.{suffix}",
+                f"llvmir.minnum.{suffix}",
+            )
+        )
+        rules.append(
+            _clampf_ordered_rule(
+                scalar_arithmetic.scalar_clampf,
+                type_pattern,
+                _I1,
+                f"llvmir.cmp.olt.{suffix}",
+                f"llvmir.cmp.ogt.{suffix}",
+                f"llvmir.select.{suffix}",
+            )
+        )
+    return tuple(rules)
+
+
+def _vector_clampf_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for lane_count in _VECTOR_LANE_COUNTS:
+        type_pattern = _vector_type("f32", lane_count)
+        mask_pattern = _vector_type("i1", lane_count)
+        suffix = _vector_suffix("f32", lane_count)
+        rules.append(
+            _clampf_number_rule(
+                vector.vector_clampf,
+                type_pattern,
+                f"llvmir.maxnum.{suffix}",
+                f"llvmir.minnum.{suffix}",
+            )
+        )
+        rules.append(
+            _clampf_ordered_rule(
+                vector.vector_clampf,
+                type_pattern,
+                mask_pattern,
+                f"llvmir.cmp.olt.{suffix}",
+                f"llvmir.cmp.ogt.{suffix}",
+                f"llvmir.select.{suffix}",
+            )
+        )
+    type_pattern = _vector_type("f32", 1)
+    mask_pattern = _vector_type("i1", 1)
+    rules.append(
+        _clampf_number_rule(
+            vector.vector_clampf,
+            type_pattern,
+            "llvmir.maxnum.f32",
+            "llvmir.minnum.f32",
+        )
+    )
+    rules.append(
+        _clampf_ordered_rule(
+            vector.vector_clampf,
+            type_pattern,
+            mask_pattern,
+            "llvmir.cmp.olt.f32",
+            "llvmir.cmp.ogt.f32",
+            "llvmir.select.f32",
+        )
+    )
+    return tuple(rules)
+
+
+def _clampf_rules() -> tuple[DescriptorRule, ...]:
+    return (*_scalar_clampf_rules(), *_vector_clampf_rules())
+
+
 def _vector_constant_rules() -> tuple[DescriptorRule, ...]:
     return (
         tuple(
@@ -1433,6 +1608,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _binary_rule(index.index_sub, _OFFSET, "llvmir.sub.i64"),
         *_vector_arithmetic_rules(),
         *_vector_bitwise_rules(),
+        *_clampf_rules(),
         *_compare_rules(),
         *_cast_rules(),
         *_select_rules(),

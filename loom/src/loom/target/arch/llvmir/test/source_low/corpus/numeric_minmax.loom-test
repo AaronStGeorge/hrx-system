@@ -43,7 +43,6 @@ low.func.def target(@target) abi(object_function) @vector_f32_minnum_maxnum(%lhs
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -55,9 +54,17 @@ func.def target(@target) @scalar_f32_clampf_number(%input: f32) -> (f32) {
   func.return %result : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_f32_clampf_number(%input: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %lower = const.f32 3212836864
+  %upper = const.f32 1065353216
+  %9 = maxnum.f32 %input, %lower
+  %result = minnum.f32 %9, %upper
+  return %result
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -69,9 +76,17 @@ func.def target(@target) @vector_f32_clampf_number(%input: vector<2xf32>) -> (ve
   func.return %result : vector<2xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @vector_f32_clampf_number(%input: reg<llvmir.f32 x2>) -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %lower = const.v2f32 3212836864
+  %upper = const.v2f32 1065353216
+  %9 = maxnum.v2f32 %input, %lower
+  %result = minnum.v2f32 %9, %upper
+  return %result
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -81,9 +96,17 @@ func.def target(@target) @scalar_f32_clampf_ordered(%input: f32, %lower: f32, %u
   func.return %result : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_f32_clampf_ordered(%input: reg<llvmir.f32>, %lower: reg<llvmir.f32>, %upper: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %9 = cmp.olt.f32 %input, %lower
+  %10 = select.f32 %9, %lower, %input
+  %11 = cmp.ogt.f32 %10, %upper
+  %result = select.f32 %11, %upper, %10
+  return %result
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -91,6 +114,15 @@ llvmir.target<object> @target {
 func.def target(@target) @vector_f32_clampf_ordered(%input: vector<2xf32>, %lower: vector<2xf32>, %upper: vector<2xf32>) -> (vector<2xf32>) {
   %result = vector.clampf<ordered> %input, %lower, %upper : vector<2xf32>
   func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @vector_f32_clampf_ordered(%input: reg<llvmir.f32 x2>, %lower: reg<llvmir.f32 x2>, %upper: reg<llvmir.f32 x2>) -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %9 = cmp.olt.v2f32 %input, %lower
+  %10 = select.v2f32 %9, %lower, %input
+  %11 = cmp.ogt.v2f32 %10, %upper
+  %result = select.v2f32 %11, %upper, %10
+  return %result
 }
 
 // ====
