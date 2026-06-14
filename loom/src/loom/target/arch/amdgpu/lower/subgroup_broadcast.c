@@ -51,12 +51,6 @@ static bool loom_amdgpu_subgroup_i32_lane_is_in_range(
   return !loom_value_facts_is_float(facts) && facts.range_lo >= 0 &&
          facts.range_hi < (int64_t)wavefront_size;
 }
-static bool loom_amdgpu_descriptor_set_has_ref(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
 iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_broadcast_plan_t* out_plan, bool* out_selected) {

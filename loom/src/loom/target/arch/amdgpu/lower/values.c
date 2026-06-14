@@ -232,13 +232,6 @@ typedef struct loom_amdgpu_scalar_conversion_rule_t {
   loom_amdgpu_descriptor_ref_t required_descriptor_refs[4];
 } loom_amdgpu_scalar_conversion_rule_t;
 
-static bool loom_amdgpu_descriptor_present(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
 static bool loom_amdgpu_descriptor_refs_present(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_descriptor_ref_t* descriptor_refs,
@@ -247,7 +240,8 @@ static bool loom_amdgpu_descriptor_refs_present(
     if (descriptor_refs[i] == LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
       return true;
     }
-    if (!loom_amdgpu_descriptor_present(descriptor_set, descriptor_refs[i])) {
+    if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                            descriptor_refs[i])) {
       return false;
     }
   }
@@ -355,38 +349,38 @@ static bool loom_amdgpu_offset_add_descriptors_supported(
     iree_string_view_t* out_constraint_key) {
   if (result_is_vgpr) {
     *out_constraint_key = IREE_SV("descriptor.v_mov_b32");
-    if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                        LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)) {
+    if (!loom_amdgpu_descriptor_set_has_ref(
+            descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)) {
       return false;
     }
     *out_constraint_key = IREE_SV("descriptor.v_mov_b32_copy");
-    if (!loom_amdgpu_descriptor_present(
+    if (!loom_amdgpu_descriptor_set_has_ref(
             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_COPY)) {
       return false;
     }
     *out_constraint_key = IREE_SV("descriptor.v_add_co_u32");
-    if (!loom_amdgpu_descriptor_present(
+    if (!loom_amdgpu_descriptor_set_has_ref(
             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_CO_U32)) {
       return false;
     }
     *out_constraint_key = IREE_SV("descriptor.v_add_co_ci_u32");
-    return loom_amdgpu_descriptor_present(
+    return loom_amdgpu_descriptor_set_has_ref(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_CO_CI_U32);
   }
 
   *out_constraint_key = IREE_SV("descriptor.s_mov_b32");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32)) {
     return false;
   }
   *out_constraint_key = IREE_SV("descriptor.s_add_u32");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32)) {
     return false;
   }
   *out_constraint_key = IREE_SV("descriptor.s_addc_u32");
-  return loom_amdgpu_descriptor_present(descriptor_set,
-                                        LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32);
+  return loom_amdgpu_descriptor_set_has_ref(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADDC_U32);
 }
 
 static bool loom_amdgpu_offset_cmp_needs_64bit(
@@ -529,39 +523,39 @@ static bool loom_amdgpu_i64_compare_descriptors_supported(
     const loom_amdgpu_i64_compare_plan_t* plan,
     iree_string_view_t* out_constraint_key) {
   *out_constraint_key = IREE_SV("descriptor.v_mov_b32");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)) {
     return false;
   }
   *out_constraint_key = IREE_SV("descriptor.v_mov_b32_copy");
-  if (!loom_amdgpu_descriptor_present(
+  if (!loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_COPY)) {
     return false;
   }
   *out_constraint_key = IREE_SV("descriptor.high_compare");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      plan->high_descriptor_ref)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                          plan->high_descriptor_ref)) {
     return false;
   }
   *out_constraint_key = IREE_SV("descriptor.low_compare");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      plan->low_descriptor_ref)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                          plan->low_descriptor_ref)) {
     return false;
   }
   *out_constraint_key = IREE_SV("descriptor.combine");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      plan->combine_descriptor_ref)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set,
+                                          plan->combine_descriptor_ref)) {
     return false;
   }
   if (plan->needs_high_equal) {
     *out_constraint_key = IREE_SV("descriptor.v_cmp_eq_i32");
-    if (!loom_amdgpu_descriptor_present(
+    if (!loom_amdgpu_descriptor_set_has_ref(
             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32)) {
       return false;
     }
     *out_constraint_key = IREE_SV("descriptor.s_and_b64");
-    return loom_amdgpu_descriptor_present(descriptor_set,
-                                          LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64);
+    return loom_amdgpu_descriptor_set_has_ref(
+        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_AND_B64);
   }
   return true;
 }
@@ -664,17 +658,17 @@ static bool loom_amdgpu_vector_iota_source_supported(
       }
     }
     *out_constraint_key = IREE_SV("descriptor.v_mov_b32");
-    return loom_amdgpu_descriptor_present(descriptor_set,
-                                          LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32);
+    return loom_amdgpu_descriptor_set_has_ref(
+        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32);
   }
 
   *out_constraint_key = IREE_SV("descriptor.v_mov_b32");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32)) {
     return false;
   }
   *out_constraint_key = IREE_SV("descriptor.v_mov_b32_copy");
-  if (!loom_amdgpu_descriptor_present(
+  if (!loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_COPY)) {
     return false;
   }
@@ -687,7 +681,7 @@ static bool loom_amdgpu_vector_iota_source_supported(
     }
     if (loom_amdgpu_vector_iota_needs_dynamic_add(element_count, step_value)) {
       *out_constraint_key = IREE_SV("descriptor.v_add_u32_lit");
-      if (!loom_amdgpu_descriptor_present(
+      if (!loom_amdgpu_descriptor_set_has_ref(
               descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT)) {
         return false;
       }
@@ -696,20 +690,20 @@ static bool loom_amdgpu_vector_iota_source_supported(
   }
 
   *out_constraint_key = IREE_SV("descriptor.v_add_u32");
-  if (!loom_amdgpu_descriptor_present(descriptor_set,
-                                      LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32)) {
     return false;
   }
   if (loom_amdgpu_vector_iota_needs_dynamic_step_shift(element_count)) {
     *out_constraint_key = IREE_SV("descriptor.v_lshlrev_b32_lit");
-    if (!loom_amdgpu_descriptor_present(
+    if (!loom_amdgpu_descriptor_set_has_ref(
             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT)) {
       return false;
     }
   }
   if (loom_amdgpu_vector_iota_needs_dynamic_step_multiply(element_count)) {
     *out_constraint_key = IREE_SV("descriptor.v_mul_lo_u32");
-    if (!loom_amdgpu_descriptor_present(
+    if (!loom_amdgpu_descriptor_set_has_ref(
             descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_LO_U32)) {
       return false;
     }

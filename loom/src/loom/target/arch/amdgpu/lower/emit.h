@@ -75,6 +75,16 @@ iree_status_t loom_amdgpu_resolve_descriptor_ref(
     loom_amdgpu_descriptor_ref_t descriptor_ref,
     loom_low_lower_resolved_descriptor_t* out_descriptor);
 
+// Returns true when |descriptor_set| contains the target-generated descriptor
+// reference.
+bool loom_amdgpu_descriptor_set_has_ref(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref);
+
+// Returns true when |descriptor_set| contains a descriptor with |key|.
+bool loom_amdgpu_descriptor_set_has_key(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key);
+
 // Returns true when a descriptor row has an implicit resource operand.
 bool loom_amdgpu_descriptor_has_implicit_resource_operand(
     const loom_low_descriptor_set_t* descriptor_set,

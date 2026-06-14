@@ -79,13 +79,6 @@ static bool loom_amdgpu_subgroup_reduce_active_lane_count(
   return true;
 }
 
-static bool loom_amdgpu_descriptor_set_has_ref(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
 static bool loom_amdgpu_subgroup_reduce_dpp_row_is_applicable(
     uint32_t wavefront_size, uint32_t active_lane_count) {
   // Keep the DPP row strategy on wave32. Wave64 targets use the lane-addressed

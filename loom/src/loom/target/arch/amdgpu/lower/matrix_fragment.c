@@ -111,14 +111,6 @@ static bool loom_amdgpu_fragment_memory_reject(
   return false;
 }
 
-static bool loom_amdgpu_fragment_memory_descriptor_present(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return descriptor_set != NULL &&
-         loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-             LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
 static bool loom_amdgpu_fragment_memory_role_from_vector_role(
     loom_vector_role_t role, loom_contract_operand_role_t* out_role) {
   *out_role = LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN;
@@ -350,8 +342,8 @@ static bool loom_amdgpu_fragment_memory_target_layout(
         loom_amdgpu_matrix_contract_descriptor_fragment_layout(descriptor);
     if (layout == NULL ||
         environment->bundle->snapshot->subgroup_size != layout->wave_size ||
-        !loom_amdgpu_fragment_memory_descriptor_present(
-            environment->descriptor_set, descriptor->low_descriptor_ref)) {
+        !loom_amdgpu_descriptor_set_has_ref(environment->descriptor_set,
+                                            descriptor->low_descriptor_ref)) {
       continue;
     }
     loom_scalar_type_t expected_element_type = LOOM_SCALAR_TYPE_COUNT_;
@@ -857,8 +849,8 @@ static bool loom_amdgpu_fragment_memory_analyze(
     return loom_amdgpu_fragment_memory_reject(
         diagnostic, IREE_SV("fragment_memory.memory_space"));
   }
-  if (!loom_amdgpu_fragment_memory_descriptor_present(
-          environment->descriptor_set, descriptor_ref)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(environment->descriptor_set,
+                                          descriptor_ref)) {
     return loom_amdgpu_fragment_memory_reject(
         diagnostic, IREE_SV("fragment_memory.packet"));
   }
@@ -1302,8 +1294,7 @@ static bool loom_amdgpu_fragment_memory_select_packet(
     if (!loom_amdgpu_fragment_memory_descriptor_ref(
             plan->operation_kind, plan->memory_space, candidate,
             &descriptor_ref) ||
-        !loom_amdgpu_fragment_memory_descriptor_present(descriptor_set,
-                                                        descriptor_ref) ||
+        !loom_amdgpu_descriptor_set_has_ref(descriptor_set, descriptor_ref) ||
         !loom_amdgpu_fragment_memory_register_group_is_contiguous(
             layout, plan, register_index, candidate,
             LOOM_AMDGPU_FRAGMENT_REGISTER_BYTE_COUNT)) {
@@ -1368,8 +1359,7 @@ static bool loom_amdgpu_fragment_memory_select_narrowed_store_packet(
     if (!loom_amdgpu_fragment_memory_narrowed_store_descriptor_ref(
             plan->memory_space, candidate, &packet_register_count,
             &descriptor_ref) ||
-        !loom_amdgpu_fragment_memory_descriptor_present(descriptor_set,
-                                                        descriptor_ref) ||
+        !loom_amdgpu_descriptor_set_has_ref(descriptor_set, descriptor_ref) ||
         !loom_amdgpu_fragment_memory_register_group_is_contiguous(
             layout, plan, register_index, candidate,
             plan->element_byte_count)) {

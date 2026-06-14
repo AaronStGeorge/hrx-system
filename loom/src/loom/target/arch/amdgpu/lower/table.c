@@ -260,26 +260,18 @@ iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
   return iree_ok_status();
 }
 
-static bool loom_amdgpu_table_lookup_descriptor_present(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return descriptor_set != NULL &&
-         loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-             LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
 static bool loom_amdgpu_table_lookup_plan_descriptors_present(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_table_lookup_plan_t* plan) {
   switch (plan->strategy) {
     case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_F32_LADDER:
-      return loom_amdgpu_table_lookup_descriptor_present(
+      return loom_amdgpu_descriptor_set_has_ref(
                  descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32) &&
-             loom_amdgpu_table_lookup_descriptor_present(
+             loom_amdgpu_descriptor_set_has_ref(
                  descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32);
     case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE:
     case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE:
-      return loom_amdgpu_table_lookup_descriptor_present(
+      return loom_amdgpu_descriptor_set_has_ref(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_PERM_B32);
     default:
       return false;

@@ -19,12 +19,6 @@ static bool loom_amdgpu_subgroup_wavefront_size_is_supported(
     uint32_t wavefront_size) {
   return wavefront_size == 32 || wavefront_size == 64;
 }
-static bool loom_amdgpu_descriptor_set_has_ref(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
 
 static bool loom_amdgpu_subgroup_mask_bit_count(const loom_module_t* module,
                                                 loom_value_id_t value_id,

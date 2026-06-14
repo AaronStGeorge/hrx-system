@@ -542,6 +542,25 @@ iree_status_t loom_amdgpu_resolve_descriptor_ref(
   return iree_ok_status();
 }
 
+bool loom_amdgpu_descriptor_set_has_ref(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref) {
+  if (descriptor_set == NULL) {
+    return false;
+  }
+  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
+         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+}
+
+bool loom_amdgpu_descriptor_set_has_key(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
+  if (descriptor_set == NULL) {
+    return false;
+  }
+  return loom_low_descriptor_set_lookup_descriptor(descriptor_set, key) !=
+         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+}
+
 bool loom_amdgpu_descriptor_has_implicit_resource_operand(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {

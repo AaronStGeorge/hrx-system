@@ -498,8 +498,7 @@ static bool loom_amdgpu_descriptor_ref_is_present(
   }
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
-  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, ref) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  return loom_amdgpu_descriptor_set_has_ref(descriptor_set, ref);
 }
 
 static bool loom_amdgpu_select_fma_mix_descriptor(
@@ -722,15 +721,6 @@ static bool loom_amdgpu_fmaf_literal_operand_form(
     return true;
   }
   return false;
-}
-
-static bool loom_amdgpu_descriptor_set_has_key(
-    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
-  if (descriptor_set == NULL) {
-    return false;
-  }
-  return loom_low_descriptor_set_lookup_descriptor(descriptor_set, key) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 }
 
 iree_status_t loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
