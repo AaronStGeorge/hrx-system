@@ -88,7 +88,6 @@ low.func.def target(@target) abi(object_function) @scalar_trunci_i32_to_i16(%inp
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -107,6 +106,16 @@ kernel.def target(@target) @scalar_sitofp_i8_load_store() {
   %converted = scalar.sitofp %loaded : i8 to f32
   view.store %converted, %output_view[%index] : f32, view<1xf32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @scalar_sitofp_i8_load_store() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %loaded = load.i8 %input_view, 0
+  %converted = sitofp.i8.f32 %loaded
+  store.f32 %converted, %output_view, 0
+  return
 }
 
 // ====
@@ -228,7 +237,6 @@ low.func.def target(@target) abi(object_function) @scalar_bitcast_f32_to_i32(%in
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -244,6 +252,14 @@ kernel.def target(@target) @scalar_bitcast_direct_i32_arg_f32_store() {
   %scaled = scalar.mulf %unit, %scale : f32
   view.store %scaled, %output_view[%zero_index] : f32, view<1xf32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @scalar_bitcast_direct_i32_arg_f32_store(%scale_bits: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %scale = bitcast.i32.f32 %scale_bits
+  store.f32 %scale, %output_view, 0
+  return
 }
 
 // ====
