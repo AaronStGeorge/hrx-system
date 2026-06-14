@@ -533,6 +533,27 @@ iree_status_t loom_amdgpu_low_type_register_class_is(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_low_type_is_register_class_count(
+    loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
+    uint32_t register_unit_count, bool* out_match) {
+  *out_match = false;
+  if (!loom_low_type_is_register(type) ||
+      loom_low_register_type_unit_count(type) != register_unit_count) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_low_type_register_class_is(context, type, reg_class_id,
+                                                out_match);
+}
+
+iree_status_t loom_amdgpu_low_value_is_register_class_count(
+    loom_low_lower_context_t* context, loom_value_id_t low_value,
+    uint16_t reg_class_id, uint32_t register_unit_count, bool* out_match) {
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  return loom_amdgpu_low_type_is_register_class_count(
+      context, loom_module_value_type(module, low_value), reg_class_id,
+      register_unit_count, out_match);
+}
+
 static bool loom_amdgpu_source_memory_root_is_read_only(
     const loom_low_source_memory_access_plan_t* plan,
     const loom_view_region_table_t* view_regions) {

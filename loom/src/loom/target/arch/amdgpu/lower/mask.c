@@ -444,18 +444,6 @@ static bool loom_amdgpu_select_payload_storage(
   return true;
 }
 
-static iree_status_t loom_amdgpu_low_type_is_register_class(
-    loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
-    uint32_t unit_count, bool* out_match) {
-  *out_match = false;
-  bool is_class = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
-      context, type, reg_class_id, &is_class));
-  *out_match =
-      is_class && loom_low_register_type_unit_count(type) == unit_count;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_resolve_compare_descriptor_if_present(
     loom_low_lower_context_t* context, loom_op_kind_t op_kind,
     uint8_t predicate, loom_low_lower_resolved_descriptor_t* out_descriptor,
@@ -596,7 +584,7 @@ static iree_status_t loom_amdgpu_select_scf_select_i1_mask_plan(
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op, result,
                                                    &result_low_type));
   bool result_is_mask = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
       context, result_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
       &result_is_mask));
   if (!result_is_mask) {
@@ -607,11 +595,11 @@ static iree_status_t loom_amdgpu_select_scf_select_i1_mask_plan(
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op, condition,
                                                 &condition_low_type));
   bool condition_is_scc = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
       context, condition_low_type, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1,
       &condition_is_scc));
   bool condition_is_mask = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
       context, condition_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
       &condition_is_mask));
   if (!condition_is_scc && !condition_is_mask) {
@@ -678,11 +666,11 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
                                                    &result_low_type));
 
   bool condition_is_scc = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
       context, condition_low_type, LOOM_AMDGPU_REG_CLASS_ID_SCC, 1,
       &condition_is_scc));
   bool result_is_sgpr = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
       context, result_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, register_count,
       &result_is_sgpr));
   if (condition_is_scc && result_is_sgpr) {
@@ -711,14 +699,14 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
   }
 
   bool condition_is_mask = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
       context, condition_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
       &condition_is_mask));
   if (!condition_is_mask) {
     return iree_ok_status();
   }
   bool result_is_vgpr = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
       context, result_low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, register_count,
       &result_is_vgpr));
   if (!result_is_vgpr) {

@@ -317,18 +317,6 @@ static uint32_t loom_amdgpu_target_index_bitwidth(
              : 0;
 }
 
-static iree_status_t loom_amdgpu_low_type_is_register_class_count(
-    loom_low_lower_context_t* context, loom_type_t type,
-    uint16_t register_class, uint32_t unit_count, bool* out_match) {
-  *out_match = false;
-  if (!loom_low_type_is_register(type) ||
-      loom_low_register_type_unit_count(type) != unit_count) {
-    return iree_ok_status();
-  }
-  return loom_amdgpu_low_type_register_class_is(context, type, register_class,
-                                                out_match);
-}
-
 static bool loom_amdgpu_offset_add_needs_64bit(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_op_t* source_op) {
