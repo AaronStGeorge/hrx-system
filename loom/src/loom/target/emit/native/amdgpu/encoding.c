@@ -1558,6 +1558,51 @@ static iree_status_t loom_amdgpu_encode_vopd_literal_fma_component(
   return loom_amdgpu_read_immediate_u32(state, packet, 0, out_literal_u32);
 }
 
+static iree_status_t loom_amdgpu_encode_vopd_mov_component(
+    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet,
+    loom_amdgpu_encoding_vopdxy_fields_t* fields,
+    loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
+    loom_amdgpu_vopd_component_slot_t slot) {
+  uint16_t* out_op =
+      slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y ? &fields->op_y : &fields->op_x;
+  uint16_t* out_vdst = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
+                           ? &fields->vdst_y
+                           : &fields->vdst_x;
+  uint16_t* out_src0 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
+                           ? &fields->src0_y
+                           : &fields->src0_x;
+  uint16_t* out_vsrc1 = slot == LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y
+                            ? &fields->vsrc1_y
+                            : &fields->vsrc1_x;
+  *out_op = 8;
+  *out_vdst = 0;
+  *out_src0 = 0;
+  *out_vsrc1 = 0;
+  *out_flags = LOOM_AMDGPU_VOPD_PAIR_FLAG_NONE;
+  *out_literal_u32 = 0;
+
+  const loom_op_t* op = packet->node->op;
+  if (op->result_count != 1 || op->operand_count != 0 ||
+      packet->descriptor->immediate_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU VOPD mov component has unexpected "
+                            "operand shape");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_packet_result_vgpr(state, packet, 0, out_vdst));
+  uint32_t imm32 = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_read_immediate_u32(state, packet, 0, &imm32));
+  if (!loom_amdgpu_encoding_inline_u32_source(state->encoding_table, imm32,
+                                              out_src0)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU VOPD mov component immediate %" PRIu32
+                            " does not have an inline source encoding",
+                            imm32);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_encode_vopd_component(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet,
     uint16_t vopd_op, loom_amdgpu_encoding_vopdxy_fields_t* fields,
@@ -1573,6 +1618,9 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
     case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
       return loom_amdgpu_encode_vopd_literal_fma_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
+    case LOOM_AMDGPU_VOPD_OP_MOV_B32:
+      return loom_amdgpu_encode_vopd_mov_component(
+          state, packet, fields, out_flags, out_literal_u32, slot);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "AMDGPU native encoding VOPD component op "
@@ -1586,7 +1634,8 @@ static iree_status_t loom_amdgpu_encode_vopd_pair(
     const loom_amdgpu_vopd_pair_t* pair) {
   if (pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 &&
       pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32) {
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32 &&
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32) {
     iree_string_view_t reason = loom_amdgpu_vopd_pair_reason_name(pair->reason);
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU native encoding VOPD pair reason '%.*s' "

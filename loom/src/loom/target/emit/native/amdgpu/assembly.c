@@ -2982,6 +2982,18 @@ static iree_status_t loom_amdgpu_append_vopd_fmamk_component(
   return loom_amdgpu_append_operand(&component_context, 1);
 }
 
+static iree_status_t loom_amdgpu_append_vopd_mov_component(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_packet_view_t* packet) {
+  loom_native_assembly_packet_context_t component_context = *context;
+  component_context.packet = packet;
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "v_dual_mov_b32 "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(&component_context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return loom_amdgpu_append_packet_immediate_i64(&component_context, 0);
+}
+
 static iree_status_t loom_amdgpu_append_vopd_component(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_packet_view_t* packet, uint16_t vopd_op,
@@ -2995,6 +3007,8 @@ static iree_status_t loom_amdgpu_append_vopd_component(
     case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
       return loom_amdgpu_append_vopd_fmamk_component(context, packet,
                                                      literal_u32);
+    case LOOM_AMDGPU_VOPD_OP_MOV_B32:
+      return loom_amdgpu_append_vopd_mov_component(context, packet);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "AMDGPU assembly VOPD component op %" PRIu16
@@ -3008,7 +3022,8 @@ static iree_status_t loom_amdgpu_append_vopd_pair_packet(
     const loom_amdgpu_vopd_pair_t* pair) {
   if (pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 &&
       pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32) {
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32 &&
+      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32) {
     iree_string_view_t reason = loom_amdgpu_vopd_pair_reason_name(pair->reason);
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU assembly VOPD pair reason '%.*s' is not "

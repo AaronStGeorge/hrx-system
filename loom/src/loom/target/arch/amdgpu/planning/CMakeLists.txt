@@ -186,6 +186,7 @@ loom_cc_library(
     loom::codegen::low::schedule
     loom::ir
     loom::ops::low
+    loom::target::arch::amdgpu::encoding
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::arch::amdgpu::target_info
     loom::util::json

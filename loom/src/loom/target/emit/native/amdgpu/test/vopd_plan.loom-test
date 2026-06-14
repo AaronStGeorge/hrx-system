@@ -11,6 +11,21 @@ low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmac_pair(%acc0: reg<amdgpu.
 
 // ====
 
+// RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_mov_pair fixed=%zero:physical_register:0:1 fixed=%answer:physical_register:1:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_plan_mov_pair(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %zero = v_mov_b32 0
+  %answer = v_mov_b32 42
+  buffer_store_dword %zero, %resource, %vaddr, %soffset
+  buffer_store_dword %answer, %resource, %vaddr, %soffset {offset = 4}
+  return
+}
+
+// ----
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_mov_pair","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":1,"rejection_count":0,"packet_count":5,"pairs":[{"index":0,"reason":"dual_mov_b32","block":0,"flags":0,"literal_u32":null,"x":{"packet":0,"node":0,"descriptor":"amdgpu.v_mov_b32","op_id":3,"op":"mov_b32","vdst":0,"src0":0,"vsrc1":0},"y":{"packet":1,"node":1,"descriptor":"amdgpu.v_mov_b32","op_id":3,"op":"mov_b32","vdst":1,"src0":0,"vsrc1":0}}],"rejections":[],"packets":[{"index":0,"role":"first","pair":0},{"index":1,"role":"second","pair":0},{"index":2,"role":"none","pair":null},{"index":3,"role":"none","pair":null},{"index":4,"role":"none","pair":null}]}
+
+// ====
+
 // RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_fmamk_pair
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_plan_fmamk_pair(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs0: reg<amdgpu.vgpr>, %addend0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %addend1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

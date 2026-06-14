@@ -46,6 +46,28 @@ llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
+func.def target(@target) @global_store_i32_constant_saddr(%output: buffer) {
+  %zero = index.constant 0 : offset
+  %output_global = buffer.assume.memory_space<global> %output : buffer
+  %output_view = buffer.view %output_global[%zero] : buffer -> view<1xi32, #dense>
+  %value = scalar.constant 42 : i32
+  view.store %value, %output_view[0] : i32, view<1xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @global_store_i32_constant_saddr(%output_view: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  %value = const.i32 42
+  store.i32 %value, %output_view, 0
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
 func.def target(@target) @global_store_i8_saddr(%output: buffer, %value: i8) {
   %base = index.constant 0 : offset
   %output_global = buffer.assume.memory_space<global> %output : buffer
