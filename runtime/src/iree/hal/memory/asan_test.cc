@@ -92,6 +92,39 @@ TEST(ASANAllocationLayoutTest, UserAlignmentCanDriveBackingOffsetAlignment) {
   EXPECT_EQ(layout.right_redzone_length, 16u);
 }
 
+TEST(ASANAllocationLayoutTest, ExtendsBackingIntoRightRedzone) {
+  iree_hal_asan_pool_options_t options = ShadowOptions();
+  iree_hal_asan_allocation_layout_t layout;
+  IREE_ASSERT_OK(
+      iree_hal_asan_calculate_allocation_layout(&options, 13, 16, &layout));
+
+  IREE_ASSERT_OK(iree_hal_asan_extend_allocation_layout(80, &layout));
+  EXPECT_EQ(layout.backing_length, 80u);
+  EXPECT_EQ(layout.user_offset, 16u);
+  EXPECT_EQ(layout.user_length, 13u);
+  EXPECT_EQ(layout.right_redzone_length, 51u);
+}
+
+TEST(ASANAllocationLayoutTest, ExtendRejectsShorterBackingLength) {
+  iree_hal_asan_pool_options_t options = ShadowOptions();
+  iree_hal_asan_allocation_layout_t layout;
+  IREE_ASSERT_OK(
+      iree_hal_asan_calculate_allocation_layout(&options, 13, 16, &layout));
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        iree_hal_asan_extend_allocation_layout(16, &layout));
+}
+
+TEST(ASANAllocationLayoutTest, ExtendRejectsMisalignedBackingLength) {
+  iree_hal_asan_pool_options_t options = ShadowOptions();
+  iree_hal_asan_allocation_layout_t layout;
+  IREE_ASSERT_OK(
+      iree_hal_asan_calculate_allocation_layout(&options, 13, 16, &layout));
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        iree_hal_asan_extend_allocation_layout(81, &layout));
+}
+
 TEST(ASANAllocationLayoutTest, RejectsDisabledOptions) {
   iree_hal_asan_pool_options_t options = {};
   iree_hal_asan_allocation_layout_t layout;

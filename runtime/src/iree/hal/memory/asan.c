@@ -113,3 +113,37 @@ IREE_API_EXPORT iree_status_t iree_hal_asan_calculate_allocation_layout(
       backing_length - left_redzone_length - user_length;
   return iree_ok_status();
 }
+
+IREE_API_EXPORT iree_status_t iree_hal_asan_extend_allocation_layout(
+    iree_device_size_t backing_length,
+    iree_hal_asan_allocation_layout_t* layout) {
+  IREE_ASSERT_ARGUMENT(layout);
+  if (backing_length < layout->backing_length) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "extended ASAN backing length %" PRIu64
+                            " is smaller than current backing length %" PRIu64,
+                            (uint64_t)backing_length,
+                            (uint64_t)layout->backing_length);
+  }
+  if (!iree_device_size_has_alignment(backing_length,
+                                      layout->backing_length_alignment)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "extended ASAN backing length %" PRIu64 " does not satisfy %" PRIu64
+        "-byte backing length alignment",
+        (uint64_t)backing_length, (uint64_t)layout->backing_length_alignment);
+  }
+  if (layout->user_offset > backing_length ||
+      layout->user_length > backing_length - layout->user_offset) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "extended ASAN backing length %" PRIu64
+        " cannot contain user range at offset %" PRIu64 " with length %" PRIu64,
+        (uint64_t)backing_length, (uint64_t)layout->user_offset,
+        (uint64_t)layout->user_length);
+  }
+  layout->backing_length = backing_length;
+  layout->right_redzone_length =
+      backing_length - layout->user_offset - layout->user_length;
+  return iree_ok_status();
+}

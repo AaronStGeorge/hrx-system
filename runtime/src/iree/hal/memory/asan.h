@@ -108,6 +108,16 @@ IREE_API_EXPORT iree_status_t iree_hal_asan_calculate_allocation_layout(
     iree_device_size_t user_alignment,
     iree_hal_asan_allocation_layout_t* out_layout);
 
+// Extends |layout| to consume at least |backing_length| backing bytes.
+//
+// Suballocating pools may reserve a larger physical range than the minimum
+// ASAN backing range because their allocator rounds to a block or slab
+// granularity. The user range remains unchanged and the extra backing bytes
+// become part of the right redzone.
+IREE_API_EXPORT iree_status_t iree_hal_asan_extend_allocation_layout(
+    iree_device_size_t backing_length,
+    iree_hal_asan_allocation_layout_t* layout);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

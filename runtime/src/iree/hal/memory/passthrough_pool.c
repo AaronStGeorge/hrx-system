@@ -36,6 +36,9 @@ typedef struct iree_hal_passthrough_pool_t {
   // Buffer usages supported by |slab_provider|.
   iree_hal_buffer_usage_t supported_usage;
 
+  // ASAN policy used to shape hidden backing ranges.
+  iree_hal_asan_pool_options_t asan_options;
+
   // Approximate live reservation bytes for lock-free stats queries.
   iree_atomic_int64_t bytes_reserved;
 
@@ -63,6 +66,9 @@ typedef struct iree_hal_passthrough_pool_reservation_state_t {
 
   // Backing bytes charged to this reservation.
   iree_device_size_t charged_length;
+
+  // ASAN backing layout for this reservation.
+  iree_hal_asan_allocation_layout_t asan_layout;
 
   // One reference for the live reservation token plus one reference for each
   // materialized buffer view. The slab is released when the last reference
@@ -109,7 +115,18 @@ static void iree_hal_passthrough_pool_reservation_state_release_reservation(
       &reservation_state->reservation_released, 1, iree_memory_order_acq_rel);
   IREE_ASSERT_EQ(already_released, 0);
 
-  iree_hal_memory_trace_free(&pool->trace, reservation_state->slab.base_ptr);
+  const iree_device_size_t user_offset =
+      iree_hal_asan_pool_options_is_enabled(&pool->asan_options)
+          ? reservation_state->asan_layout.user_offset
+          : 0;
+  iree_hal_memory_trace_free(&pool->trace,
+                             reservation_state->slab.base_ptr + user_offset);
+  if (iree_hal_asan_pool_options_is_enabled(&pool->asan_options)) {
+    iree_hal_slab_provider_advise_asan_range(
+        pool->slab_provider, &reservation_state->slab,
+        /*backing_offset=*/0, IREE_HAL_ASAN_RANGE_ADVICE_FLAG_RELEASED,
+        &reservation_state->asan_layout);
+  }
 
   iree_atomic_fetch_add(&pool->bytes_reserved,
                         -(int64_t)reservation_state->charged_length,
@@ -158,6 +175,10 @@ iree_status_t iree_hal_passthrough_pool_create(
   *out_pool = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
 
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(
+      z0, iree_hal_slab_provider_validate_asan_options(slab_provider,
+                                                       &options.asan));
+
   iree_hal_passthrough_pool_t* pool = NULL;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_allocator_malloc(host_allocator, sizeof(*pool), (void**)&pool));
@@ -165,6 +186,7 @@ iree_status_t iree_hal_passthrough_pool_create(
   iree_hal_resource_initialize(&iree_hal_passthrough_pool_vtable,
                                &pool->resource);
   pool->host_allocator = host_allocator;
+  pool->asan_options = options.asan;
 
   iree_hal_slab_provider_retain(slab_provider);
   pool->slab_provider = slab_provider;
@@ -231,9 +253,26 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservation(
                             (iree_device_size_t)IREE_HAL_HEAP_BUFFER_ALIGNMENT);
   }
 
+  iree_hal_asan_allocation_layout_t asan_layout = {0};
+  iree_device_size_t backing_length = size;
+  if (iree_hal_asan_pool_options_is_enabled(&pool->asan_options)) {
+    IREE_RETURN_IF_ERROR(iree_hal_asan_calculate_allocation_layout(
+        &pool->asan_options, size, alignment, &asan_layout));
+    backing_length = asan_layout.backing_length;
+  }
+
   iree_hal_slab_t slab;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_slab_provider_acquire_slab(pool->slab_provider, size, &slab));
+  IREE_RETURN_IF_ERROR(iree_hal_slab_provider_acquire_slab(
+      pool->slab_provider, backing_length, &slab));
+  if (iree_hal_asan_pool_options_is_enabled(&pool->asan_options) &&
+      slab.length != asan_layout.backing_length) {
+    iree_status_t status =
+        iree_hal_asan_extend_allocation_layout(slab.length, &asan_layout);
+    if (!iree_status_is_ok(status)) {
+      iree_hal_slab_provider_release_slab(pool->slab_provider, &slab);
+      return status;
+    }
+  }
 
   iree_hal_passthrough_pool_reservation_state_t* reservation_state = NULL;
   iree_status_t status =
@@ -246,15 +285,26 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservation(
   reservation_state->pool = base_pool;
   reservation_state->slab = slab;
   reservation_state->charged_length = slab.length;
+  reservation_state->asan_layout = asan_layout;
   iree_atomic_store(&reservation_state->reference_count, 1,
                     iree_memory_order_relaxed);
   iree_atomic_store(&reservation_state->reservation_released, 0,
                     iree_memory_order_relaxed);
 
   memset(out_reservation, 0, sizeof(*out_reservation));
-  out_reservation->offset = 0;
+  out_reservation->offset =
+      iree_hal_asan_pool_options_is_enabled(&pool->asan_options)
+          ? asan_layout.user_offset
+          : 0;
   out_reservation->byte_length = size;
   out_reservation->block_handle = (uint64_t)(uintptr_t)reservation_state;
+
+  if (iree_hal_asan_pool_options_is_enabled(&pool->asan_options)) {
+    iree_hal_slab_provider_advise_asan_range(
+        pool->slab_provider, &reservation_state->slab,
+        /*backing_offset=*/0, IREE_HAL_ASAN_RANGE_ADVICE_FLAG_ALLOCATED,
+        &reservation_state->asan_layout);
+  }
 
   iree_atomic_fetch_add(&pool->bytes_reserved, (int64_t)slab.length,
                         iree_memory_order_relaxed);
@@ -262,8 +312,9 @@ static iree_status_t iree_hal_passthrough_pool_acquire_reservation(
   iree_atomic_fetch_add(&pool->slab_count, 1, iree_memory_order_relaxed);
   iree_atomic_fetch_add(&pool->reserve_count, 1, iree_memory_order_relaxed);
 
-  iree_hal_memory_trace_alloc(&pool->trace, reservation_state->slab.base_ptr,
-                              out_reservation->byte_length);
+  iree_hal_memory_trace_alloc(
+      &pool->trace, reservation_state->slab.base_ptr + out_reservation->offset,
+      out_reservation->byte_length);
 
   memset(out_info, 0, sizeof(*out_info));
   *out_result = IREE_HAL_POOL_ACQUIRE_OK_FRESH;
