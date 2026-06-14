@@ -17,6 +17,20 @@ class HrxLoaderError : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+class HrxDynamicLibrary {
+ public:
+  HrxDynamicLibrary() = default;
+  HrxDynamicLibrary(const HrxDynamicLibrary&) = delete;
+  HrxDynamicLibrary& operator=(const HrxDynamicLibrary&) = delete;
+  ~HrxDynamicLibrary();
+
+  void load(const std::string& path);
+  void* loadSymbol(const char* name);
+
+ private:
+  void* handle_ = nullptr;
+};
+
 class HrxLoader {
  public:
   static HrxLoader& instance();
@@ -200,7 +214,7 @@ class HrxLoader {
   void load(const std::string& path);
   void* loadSymbol(const char* name);
 
-  void* handle_ = nullptr;
+  HrxDynamicLibrary library_;
   static std::string library_path_;
 };
 

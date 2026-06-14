@@ -1620,6 +1620,7 @@ class BuildFileFunctions(object):
         deps=None,
         timeout=None,
         args=None,
+        env=None,
         tags=None,
         includes=None,
         group=None,
@@ -1648,7 +1649,12 @@ class BuildFileFunctions(object):
         )
         data_block = self._convert_target_list_block("DATA", data, omit_empty=True)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
-        args_block = self._convert_string_list_block("ARGS", args)
+        args_block = self._convert_string_list_block(
+            "ARGS", self._convert_location_args(args), sort=False
+        )
+        env_block = self._convert_string_list_block(
+            "ENV", self._convert_native_test_env(env), sort=False
+        )
         labels_block = self._convert_string_list_block("LABELS", tags)
         timeout_block = self._convert_timeout_arg_block("TIMEOUT", timeout)
         includes_block = self._convert_includes_block(includes)
@@ -1680,6 +1686,7 @@ class BuildFileFunctions(object):
             f"{data_block}"
             f"{deps_block}"
             f"{args_block}"
+            f"{env_block}"
             f"{labels_block}"
             f"{timeout_block}"
             f"{includes_block}"
