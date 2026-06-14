@@ -708,6 +708,45 @@ ERR_AMDGPU_033 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_034: AMDGPU dynamic memory byte offset range is unsupported.
+ERR_AMDGPU_034 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=34,
+    severity=Severity.ERROR,
+    summary="AMDGPU dynamic memory byte offset range is unsupported.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': "
+        "{operation_kind} in {memory_space} memory has dynamic byte offset "
+        "range [{byte_offset_range_lo}, {byte_offset_range_hi}], which is "
+        "not proven to fit the non-negative 32-bit AMDGPU memory offset "
+        "domain; dynamic term {dynamic_term_index} has byte stride "
+        "{dynamic_term_byte_stride}, byte range "
+        "[{dynamic_term_byte_range_lo}, {dynamic_term_byte_range_hi}], and "
+        "byte shift {dynamic_term_byte_shift}; static byte offset is "
+        "{static_byte_offset}; constraint '{constraint_key}' is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("operation_kind", ParamKind.STRING),
+        ErrorParam("memory_space", ParamKind.STRING),
+        ErrorParam("byte_offset_range_lo", ParamKind.I64),
+        ErrorParam("byte_offset_range_hi", ParamKind.I64),
+        ErrorParam("dynamic_term_index", ParamKind.U32),
+        ErrorParam("dynamic_term_byte_stride", ParamKind.I64),
+        ErrorParam("dynamic_term_byte_range_lo", ParamKind.I64),
+        ErrorParam("dynamic_term_byte_range_hi", ParamKind.I64),
+        ErrorParam("dynamic_term_byte_shift", ParamKind.U32),
+        ErrorParam("static_byte_offset", ParamKind.I64),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Keep byte addresses in the offset domain, use index.scale when a "
+        "logical index is multiplied by an offset byte stride, and prove the "
+        "resulting byte offset range when target facts cannot infer it"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -741,4 +780,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_031,
     ERR_AMDGPU_032,
     ERR_AMDGPU_033,
+    ERR_AMDGPU_034,
 )

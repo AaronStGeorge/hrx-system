@@ -98,6 +98,11 @@ _ADDRESS_U32_DIAGNOSTIC = GuardDiagnostic(
     subject_name="u32",
     constraint_key="amdgpu.address.u32",
 )
+_BYTE_OFFSET_U32_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="byte-offset-width",
+    subject_name="u32",
+    constraint_key="amdgpu.byte_offset.u32",
+)
 _I32_LITERAL_EXACT_DIAGNOSTIC = GuardDiagnostic(
     subject_role="literal",
     subject_name="i32",
@@ -621,7 +626,7 @@ def _address_scale_rules() -> tuple[DescriptorRule, ...]:
                 Guard.value_unsigned_bit_count(
                     "result",
                     32,
-                    diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+                    diagnostic=_BYTE_OFFSET_U32_DIAGNOSTIC,
                 ),
                 Guard.low_value_register_class("result", "amdgpu.sgpr"),
                 Guard.low_value_register_class("index", "amdgpu.sgpr"),
@@ -649,7 +654,7 @@ def _address_scale_rules() -> tuple[DescriptorRule, ...]:
                 Guard.value_unsigned_bit_count(
                     "result",
                     32,
-                    diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+                    diagnostic=_BYTE_OFFSET_U32_DIAGNOSTIC,
                 ),
                 Guard.low_value_register_class("result", "amdgpu.vgpr"),
                 Guard.value_materializable("index", ADDRESS_VGPR_MATERIALIZER.name),
