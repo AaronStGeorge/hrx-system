@@ -2571,6 +2571,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_query_queue_pool_backend(
       .fn = iree_hal_amdgpu_logical_device_query_pool_epoch,
       .user_data = logical_device,
   };
+  out_backend->asan = physical_device->default_pool_options.asan;
   return iree_ok_status();
 }
 

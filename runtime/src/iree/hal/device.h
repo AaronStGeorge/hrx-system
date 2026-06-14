@@ -23,6 +23,7 @@
 #include "iree/hal/executable_cache.h"
 #include "iree/hal/fence.h"
 #include "iree/hal/file.h"
+#include "iree/hal/memory/asan.h"
 #include "iree/hal/pool.h"
 #include "iree/hal/profile_options.h"
 #include "iree/hal/queue.h"
@@ -285,18 +286,27 @@ typedef struct iree_hal_host_call_t {
 // device memory domain.
 //
 // |slab_provider| and |notification| are borrowed from the device. Pool
-// constructors retain those objects, but the objects themselves and
-// |epoch_query| may still read backend-owned state. The device must therefore
-// outlive all pools created from this bundle.
+// constructors retain those objects, but the objects themselves,
+// |epoch_query|, and |asan| may still read or describe backend-owned state. The
+// device must therefore outlive all pools created from this bundle.
 //
 // |notification| may be shared by multiple pools in the same physical-memory
 // domain and can wake callers whose own pool state did not change. Callers
 // should always retry reservations after wakeup instead of assuming precise
 // notification routing.
 typedef struct iree_hal_queue_pool_backend_t {
+  // Slab provider for the selected queue memory domain.
   iree_hal_slab_provider_t* slab_provider;
+
+  // Notification shared by pools over the selected queue memory domain.
   iree_async_notification_t* notification;
+
+  // Optional host-side epoch query for zero-sync block reuse.
   iree_hal_pool_epoch_query_t epoch_query;
+
+  // Active ASAN allocation-shaping policy for custom pools over this backend.
+  // Disabled when the device does not support or has not enabled ASAN pools.
+  iree_hal_asan_pool_options_t asan;
 } iree_hal_queue_pool_backend_t;
 
 // Returns a host call bound to the given function pointer and user data.

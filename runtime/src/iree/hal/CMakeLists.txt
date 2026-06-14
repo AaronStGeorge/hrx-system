@@ -89,6 +89,7 @@ iree_cc_library(
     iree::base::internal
     iree::base::internal::path
     iree::base::threading
+    iree::hal::memory::asan
     iree::hal::utils::platform_topology
     iree::io::file_handle
   PUBLIC

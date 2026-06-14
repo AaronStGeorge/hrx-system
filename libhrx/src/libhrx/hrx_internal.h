@@ -466,25 +466,53 @@ typedef struct hrx_buffer_s {
 // Memory pool (stream-ordered memory management).
 typedef struct hrx_mem_pool_s {
   iree_atomic_ref_count_t ref_count;
+
+  // Device whose HAL pool backend supplies this pool's backing storage.
   hrx_device_t device;
+
+  // HIP/CUDA-style creation properties used for attribute queries.
   hrx_mem_pool_props_t props;
 
+  // HAL pool lazily created on first allocation.
+  iree_hal_pool_t* hal_pool;
+
+  // HIP/CUDA release threshold attribute in bytes.
   uint64_t release_threshold;
+
+  // True when internal dependency insertion is allowed for reuse.
   bool reuse_allow_internal_dependencies;
+
+  // True when event dependencies are honored for reuse.
   bool reuse_follow_event_dependencies;
+
+  // True when opportunistic reuse is allowed.
   bool reuse_allow_opportunistic;
 
+  // Current bytes reserved from the system for this pool.
   uint64_t reserved_mem_current;
+
+  // Peak bytes reserved from the system for this pool.
   uint64_t reserved_mem_high;
+
+  // Current backing bytes charged to live allocations.
   uint64_t used_mem_current;
+
+  // Peak backing bytes charged to live allocations.
   uint64_t used_mem_high;
 
+  // Platform-native pool handle, if one is imported or exported.
   void* platform_handle;
 
+  // Guards mutable pool attributes and lazy HAL pool creation.
   iree_slim_mutex_t mutex;
 
+  // True when the device allocator exposes HAL virtual-memory operations.
   bool supports_virtual_memory;
+
+  // Minimum virtual-memory page size reported by the HAL allocator.
   iree_device_size_t vm_page_size_min;
+
+  // Recommended virtual-memory page size reported by the HAL allocator.
   iree_device_size_t vm_page_size_recommended;
 } hrx_mem_pool_s;
 
@@ -574,6 +602,14 @@ hrx_cpu_state_t* hrx_get_cpu_state(void);
 
 // Ensure shared infrastructure is created (idempotent).
 hrx_status_t hrx_ensure_shared_state(void);
+
+// Queries immutable total device memory from the HAL device spec.
+//
+// Returns OK with |out_known| false when the HAL spec does not describe a
+// known total capacity. Returns an error only when the spec data is invalid or
+// cannot be represented.
+hrx_status_t hrx_device_query_total_memory_from_spec(
+    hrx_device_t device, bool* out_known, iree_device_size_t* out_total);
 
 // Convert iree_status_t to hrx_status_t.
 hrx_status_t hrx_status_from_iree(iree_status_t iree_status);

@@ -816,6 +816,14 @@ HRX_API hrx_status_t hrx_mem_pool_set_attribute(hrx_mem_pool_t pool,
 HRX_API hrx_status_t hrx_mem_pool_trim(hrx_mem_pool_t pool,
                                        size_t min_bytes_to_keep);
 
+// Allocates a buffer from |pool| using the same parameter contract as
+// hrx_allocator_allocate_buffer. The returned buffer owns the allocation and
+// remains valid independently of the public |pool| handle.
+HRX_API hrx_status_t hrx_mem_pool_allocate_buffer(hrx_mem_pool_t pool,
+                                                  hrx_buffer_params_t params,
+                                                  size_t size,
+                                                  hrx_buffer_t* buffer);
+
 //===----------------------------------------------------------------------===//
 // Graphs (CUDA/HIP-style execution graphs)
 //===----------------------------------------------------------------------===//

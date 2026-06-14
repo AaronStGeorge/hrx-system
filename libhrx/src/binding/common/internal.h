@@ -682,6 +682,9 @@ typedef struct iree_hal_streaming_buffer_t {
   // Whether this wrapper owns a reference to |context|.
   iree_hal_streaming_buffer_context_ownership_t context_ownership;
 
+  // HRX memory pool retained while |buffer| may borrow its HAL pool.
+  hrx_mem_pool_t allocation_pool;
+
   // Platform-specific memory type.
   int memory_type;
 
@@ -1297,6 +1300,12 @@ iree_status_t iree_hal_streaming_memory_lookup_range(
 iree_status_t iree_hal_streaming_memory_allocate_device(
     iree_hal_streaming_context_t* context, iree_device_size_t size,
     iree_hal_streaming_memory_flags_t flags,
+    iree_hal_streaming_buffer_t** out_buffer);
+
+// Synchronization: none (allocates memory from a pool).
+iree_status_t iree_hal_streaming_memory_allocate_device_from_pool(
+    iree_hal_streaming_context_t* context, hrx_mem_pool_t pool,
+    iree_device_size_t size, iree_hal_streaming_memory_flags_t flags,
     iree_hal_streaming_buffer_t** out_buffer);
 
 // Synchronization: none (allocates pitched memory).
