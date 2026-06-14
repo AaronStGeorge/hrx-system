@@ -61,7 +61,7 @@ static void iree_hal_streaming_buffer_release_context(
 // Wraps a HAL buffer in a stream buffer and caches information.
 static iree_status_t iree_hal_streaming_buffer_wrap(
     iree_hal_streaming_context_t* context, iree_hal_buffer_t* buffer,
-    int memory_type, hrx_mem_pool_t allocation_pool,
+    int memory_type, void* imported_host_ptr, hrx_mem_pool_t allocation_pool,
     iree_hal_streaming_buffer_context_ownership_t context_ownership,
     iree_hal_streaming_buffer_t** out_wrapper) {
   IREE_ASSERT_ARGUMENT(context);
@@ -145,12 +145,20 @@ static iree_status_t iree_hal_streaming_buffer_wrap(
       iree_status_ignore(host_status);
     }
   }
+  if (imported_host_ptr) {
+    wrapper->host_ptr = imported_host_ptr;
+    have_host_ptr = true;
+  }
 
   // We need at least a device pointer for the buffer table.
   // For remote HAL buffers the allocator may not support export_buffer;
   // generate a synthetic device pointer so the buffer table can still map
   // this wrapper.
-  if (!have_device_ptr) {
+  if (!have_device_ptr && imported_host_ptr) {
+    status = iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "registered host allocation did not export a device-visible pointer");
+  } else if (!have_device_ptr) {
     static atomic_uintptr_t g_next_synthetic = 0xDEAD000000000000ULL;
     iree_device_size_t buf_size = iree_hal_buffer_byte_length(buffer);
     iree_device_size_t aligned_size =
@@ -214,7 +222,8 @@ iree_status_t iree_hal_streaming_memory_wrap_buffer(
 
   return iree_hal_streaming_buffer_wrap(
       context, buffer, (int)iree_hal_buffer_memory_type(buffer),
-      /*allocation_pool=*/NULL, context_ownership, out_buffer);
+      /*imported_host_ptr=*/NULL, /*allocation_pool=*/NULL, context_ownership,
+      out_buffer);
 }
 
 void iree_hal_streaming_memory_release_wrapped_buffer(
@@ -316,7 +325,7 @@ iree_status_t iree_hal_streaming_memory_allocate_device(
   // Wrap in stream buffer.
   iree_hal_streaming_buffer_t* wrapper = NULL;
   iree_status_t status = iree_hal_streaming_buffer_wrap(
-      context, buffer, (int)memory_type,
+      context, buffer, (int)memory_type, /*imported_host_ptr=*/NULL,
       /*allocation_pool=*/NULL, IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED,
       &wrapper);
 
@@ -373,7 +382,8 @@ iree_status_t iree_hal_streaming_memory_allocate_device_from_pool(
 
   iree_hal_streaming_buffer_t* wrapper = NULL;
   iree_status_t status = iree_hal_streaming_buffer_wrap(
-      context, hrx_buffer->hal_buffer, (int)params.type, pool,
+      context, hrx_buffer->hal_buffer, (int)params.type,
+      /*imported_host_ptr=*/NULL, pool,
       IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED, &wrapper);
   hrx_buffer_release(hrx_buffer);
 
@@ -487,7 +497,7 @@ static iree_status_t iree_hal_streaming_memory_allocate_host_with_context_mode(
 
   iree_hal_streaming_buffer_t* wrapper = NULL;
   iree_status_t status = iree_hal_streaming_buffer_wrap(
-      context, buffer, (int)memory_type,
+      context, buffer, (int)memory_type, /*imported_host_ptr=*/NULL,
       /*allocation_pool=*/NULL, context_ownership, &wrapper);
   iree_hal_buffer_release(buffer);
 
@@ -593,47 +603,33 @@ iree_status_t iree_hal_streaming_memory_register_host(
   *out_buffer = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  // For host registration, we simply track the existing host memory.
-  // We don't actually need to import it through HAL since we're just
-  // registering user-provided memory for use with the streaming layer.
-  iree_hal_streaming_buffer_t* wrapper = NULL;
+  iree_hal_buffer_params_t params = {
+      .usage = IREE_HAL_BUFFER_USAGE_DEFAULT,
+      .access = IREE_HAL_MEMORY_ACCESS_ALL,
+      .type =
+          IREE_HAL_MEMORY_TYPE_HOST_LOCAL | IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE,
+      .queue_affinity = IREE_HAL_QUEUE_AFFINITY_ANY,
+  };
+  iree_hal_external_buffer_t external_buffer = {
+      .type = IREE_HAL_EXTERNAL_BUFFER_TYPE_HOST_ALLOCATION,
+      .flags = IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE,
+      .size = (iree_device_size_t)size,
+      .handle.host_allocation.ptr = ptr,
+  };
+  iree_hal_buffer_t* buffer = NULL;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_allocator_malloc(context->host_allocator, sizeof(*wrapper),
-                                (void**)&wrapper));
+      z0, iree_hal_allocator_import_buffer(
+              context->device_allocator, params, &external_buffer,
+              iree_hal_buffer_release_callback_null(), &buffer));
 
-  // Create pyre buffer for registered host memory (no HAL buffer).
-  hrx_buffer_t hrx_buf = NULL;
-  hrx_device_t hrx_dev =
-      context->device_entry ? context->device_entry->hrx_device : NULL;
-  iree_status_t status = hrx_buffer_create_from_hal(
-      NULL, hrx_dev, HRX_MEMORY_TYPE_HOST_LOCAL, size, ptr, &hrx_buf);
-  if (!iree_status_is_ok(status)) {
-    iree_allocator_free(context->host_allocator, wrapper);
-    IREE_TRACE_ZONE_END(z0);
-    return status;
-  }
-
-  // Initialize wrapper for registered host memory.
-  memset(wrapper, 0, sizeof(*wrapper));
-  wrapper->hrx_buf = hrx_buf;
-  wrapper->buffer = NULL;
-  iree_hal_streaming_buffer_set_context(
-      wrapper, context, IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED);
-  wrapper->memory_type = IREE_HAL_MEMORY_TYPE_HOST_LOCAL;
-  wrapper->host_register_flags = flags;
-  wrapper->size = size;
-  wrapper->host_ptr = ptr;
-  wrapper->device_ptr = (iree_hal_streaming_deviceptr_t)ptr;
-  wrapper->read_mostly_hint = false;
-  wrapper->preferred_location = -2;
-  wrapper->last_prefetch_location = -2;
-
-  // Register in buffer table using host pointer as key.
-  status = HRX_CALL(hrx_buffer_table_insert(
-      &context->buffer_table, wrapper->device_ptr, wrapper->host_ptr,
-      wrapper->size, wrapper->hrx_buf, wrapper));
+  iree_hal_streaming_buffer_t* wrapper = NULL;
+  iree_status_t status = iree_hal_streaming_buffer_wrap(
+      context, buffer, (int)params.type, ptr, /*allocation_pool=*/NULL,
+      IREE_HAL_STREAMING_BUFFER_CONTEXT_RETAINED, &wrapper);
+  iree_hal_buffer_release(buffer);
 
   if (iree_status_is_ok(status)) {
+    wrapper->host_register_flags = flags;
     *out_buffer = wrapper;
   } else {
     iree_hal_streaming_buffer_free(wrapper);
@@ -687,9 +683,9 @@ iree_status_t iree_hal_streaming_memory_address_range(
     return status;
   }
 
-  // For registered host memory, the base is the registered pointer.
-  // For device memory, the base is the allocated device pointer.
-  if (wrapper->host_ptr) {
+  if (ptr >= wrapper->device_ptr && ptr - wrapper->device_ptr < wrapper->size) {
+    *out_base = wrapper->device_ptr;
+  } else if (wrapper->host_ptr) {
     *out_base = (iree_hal_streaming_deviceptr_t)wrapper->host_ptr;
   } else {
     *out_base = wrapper->device_ptr;
