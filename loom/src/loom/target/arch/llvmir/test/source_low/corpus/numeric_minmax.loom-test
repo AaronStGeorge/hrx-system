@@ -1,7 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_minmax.loom-test
 // RUN: emit source-low output=low
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -13,9 +12,16 @@ func.def target(@target) @scalar_f32_minnum_maxnum(%lhs: f32, %rhs: f32) -> (f32
   func.return %sum : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_f32_minnum_maxnum(%lhs: reg<llvmir.f32>, %rhs: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %min = minnum.f32 %lhs, %rhs
+  %max = maxnum.f32 %lhs, %rhs
+  %sum = add.f32 %min, %max
+  return %sum
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -25,6 +31,14 @@ func.def target(@target) @vector_f32_minnum_maxnum(%lhs: vector<2xf32>, %rhs: ve
   %max = vector.maxnumf %lhs, %rhs : vector<2xf32>
   %sum = vector.addf %min, %max : vector<2xf32>
   func.return %sum : vector<2xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @vector_f32_minnum_maxnum(%lhs: reg<llvmir.f32 x2>, %rhs: reg<llvmir.f32 x2>) -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %min = minnum.v2f32 %lhs, %rhs
+  %max = maxnum.v2f32 %lhs, %rhs
+  %sum = add.v2f32 %min, %max
+  return %sum
 }
 
 // ====
@@ -154,7 +168,6 @@ low.func.def target(@target) abi(object_function) @scf_select_vgpr(%lhs: reg<llv
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -166,6 +179,16 @@ func.def target(@target) @scf_select_chained_vgpr_i32(%values: vector<2xi32>, %l
   %is_selected = scalar.cmpi ne, %selected, %fallback : i32
   %result = scf.select %is_selected, %selected, %fallback : i32
   func.return %result : i32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @scf_select_chained_vgpr_i32(%values: reg<llvmir.i32 x2>, %limit: reg<llvmir.i32>, %fallback: reg<llvmir.i32>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %lane = extract.v2i32 %values, 0
+  %is_lane = cmp.slt.i32 %lane, %limit
+  %selected = select.i32 %is_lane, %lane, %fallback
+  %is_selected = cmp.ne.i32 %selected, %fallback
+  %result = select.i32 %is_selected, %selected, %fallback
+  return %result
 }
 
 // ====
@@ -195,7 +218,6 @@ kernel.def target(@target) @index_minmax_vgpr_select() {
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -212,4 +234,25 @@ func.def target(@target) @f32_reduce_minnum_maxnum(%input: buffer, %output: buff
   %stored = vector.from_elements %min, %max : vector<2xf32>
   vector.store %stored, %output_view[0] : vector<2xf32>, view<2xf32, #dense>
   func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32_reduce_minnum_maxnum(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  %min_init = const.f32 1148846080
+  %30 = load.f32 %input_view, 0
+  %31 = load.f32 %input_view, 4
+  %32 = minnum.f32 %30, %31
+  %33 = load.f32 %input_view, 8
+  %34 = load.f32 %input_view, 12
+  %35 = minnum.f32 %33, %34
+  %36 = minnum.f32 %32, %35
+  %min = minnum.f32 %min_init, %36
+  %max_init = const.f32 3296329728
+  %39 = maxnum.f32 %30, %31
+  %40 = maxnum.f32 %33, %34
+  %41 = maxnum.f32 %39, %40
+  %max = maxnum.f32 %max_init, %41
+  %stored = from_elements.v2f32 %min, %max
+  store.v2f32 %stored, %output_view, 0
+  return
 }

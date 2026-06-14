@@ -691,6 +691,8 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             (scalar_arithmetic.scalar_subf, "sub"),
             (scalar_arithmetic.scalar_mulf, "mul"),
             (scalar_arithmetic.scalar_divf, "div"),
+            (scalar_arithmetic.scalar_minnumf, "minnum"),
+            (scalar_arithmetic.scalar_maxnumf, "maxnum"),
         ):
             rules.append(
                 _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
@@ -759,6 +761,8 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
                 (vector.vector_addf, "add"),
                 (vector.vector_subf, "sub"),
                 (vector.vector_mulf, "mul"),
+                (vector.vector_minnumf, "minnum"),
+                (vector.vector_maxnumf, "maxnum"),
             ),
         ),
     ):

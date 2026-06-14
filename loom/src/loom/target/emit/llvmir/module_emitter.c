@@ -79,6 +79,13 @@ typedef struct loom_llvmir_emit_binary_info_t {
   loom_llvmir_binop_t binop;
 } loom_llvmir_emit_binary_info_t;
 
+typedef struct loom_llvmir_emit_binary_intrinsic_info_t {
+  // Generated descriptor reference ordinal.
+  uint32_t descriptor_ref;
+  // LLVM intrinsic symbol name.
+  iree_string_view_t intrinsic_name;
+} loom_llvmir_emit_binary_intrinsic_info_t;
+
 typedef struct loom_llvmir_emit_unary_info_t {
   // Generated descriptor reference ordinal.
   uint32_t descriptor_ref;
@@ -258,6 +265,35 @@ static const loom_llvmir_emit_binary_info_t kBinaryInfos[] = {
 #undef LOOM_LLVMIR_INTEGER_BINARY_INFOS
 #undef LOOM_LLVMIR_MASK_BINARY_INFOS
 #undef LOOM_LLVMIR_BINARY_INFO
+
+#define LOOM_LLVMIR_BINARY_INTRINSIC_INFO(suffix, name) \
+  {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_##suffix, IREE_SVL(name)}
+
+#define LOOM_LLVMIR_MINNUM_INFO(suffix, name) \
+  LOOM_LLVMIR_BINARY_INTRINSIC_INFO(MINNUM_##suffix, "llvm.minnum." name)
+
+#define LOOM_LLVMIR_MAXNUM_INFO(suffix, name) \
+  LOOM_LLVMIR_BINARY_INTRINSIC_INFO(MAXNUM_##suffix, "llvm.maxnum." name)
+
+static const loom_llvmir_emit_binary_intrinsic_info_t kBinaryIntrinsicInfos[] =
+    {
+        LOOM_LLVMIR_MINNUM_INFO(F32, "f32"),
+        LOOM_LLVMIR_MINNUM_INFO(F64, "f64"),
+        LOOM_LLVMIR_MINNUM_INFO(V2F32, "v2f32"),
+        LOOM_LLVMIR_MINNUM_INFO(V4F32, "v4f32"),
+        LOOM_LLVMIR_MINNUM_INFO(V8F32, "v8f32"),
+        LOOM_LLVMIR_MINNUM_INFO(V16F32, "v16f32"),
+        LOOM_LLVMIR_MAXNUM_INFO(F32, "f32"),
+        LOOM_LLVMIR_MAXNUM_INFO(F64, "f64"),
+        LOOM_LLVMIR_MAXNUM_INFO(V2F32, "v2f32"),
+        LOOM_LLVMIR_MAXNUM_INFO(V4F32, "v4f32"),
+        LOOM_LLVMIR_MAXNUM_INFO(V8F32, "v8f32"),
+        LOOM_LLVMIR_MAXNUM_INFO(V16F32, "v16f32"),
+};
+
+#undef LOOM_LLVMIR_MAXNUM_INFO
+#undef LOOM_LLVMIR_MINNUM_INFO
+#undef LOOM_LLVMIR_BINARY_INTRINSIC_INFO
 
 #define LOOM_LLVMIR_UNARY_INFO(suffix, op) \
   {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_##suffix, LOOM_LLVMIR_UNOP_##op}
@@ -1176,6 +1212,16 @@ static const loom_llvmir_emit_binary_info_t* loom_llvmir_emit_lookup_binary(
   return NULL;
 }
 
+static const loom_llvmir_emit_binary_intrinsic_info_t*
+loom_llvmir_emit_lookup_binary_intrinsic(uint32_t descriptor_ref) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kBinaryIntrinsicInfos); ++i) {
+    if (kBinaryIntrinsicInfos[i].descriptor_ref == descriptor_ref) {
+      return &kBinaryIntrinsicInfos[i];
+    }
+  }
+  return NULL;
+}
+
 static const loom_llvmir_emit_unary_info_t* loom_llvmir_emit_lookup_unary(
     uint32_t descriptor_ref) {
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kUnaryInfos); ++i) {
@@ -1391,6 +1437,49 @@ static iree_status_t loom_llvmir_emit_declare_same_type_intrinsic(
         &ignored));
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_emit_binary_intrinsic(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_llvmir_emit_binary_intrinsic_info_t* info) {
+  if (packet->op->operand_count != 2) {
+    return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                             IREE_SV("packet_operand"),
+                                             packet->op->operand_count, 2);
+  }
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_value_id_t result_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_prepare_packet_result(
+      state, packet, &result_type, &result_value));
+  if (result_type == LOOM_LLVMIR_TYPE_ID_INVALID) return iree_ok_status();
+
+  const loom_value_id_t* operands = loom_op_const_operands(packet->op);
+  loom_llvmir_value_id_t args[2] = {
+      LOOM_LLVMIR_VALUE_ID_INVALID,
+      LOOM_LLVMIR_VALUE_ID_INVALID,
+  };
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(args); ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_emit_lookup_value(state, operands[i], &args[i]));
+  }
+
+  loom_llvmir_function_t* intrinsic = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_declare_same_type_intrinsic(
+      state, info->intrinsic_name, result_type, IREE_ARRAYSIZE(args),
+      &intrinsic));
+  loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      state->llvmir_block,
+      &(loom_llvmir_call_desc_t){
+          .result_name =
+              loom_llvmir_emit_value_name(state->module, result_value),
+          .callee = loom_llvmir_function_id(intrinsic),
+          .args = args,
+          .arg_count = IREE_ARRAYSIZE(args),
+      },
+      &llvmir_result));
+  return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
 }
 
 static iree_status_t loom_llvmir_emit_unary_intrinsic(
@@ -2464,6 +2553,13 @@ static iree_status_t loom_llvmir_emit_packet(
       loom_llvmir_emit_lookup_binary(descriptor_ref);
   if (binary_info) {
     return loom_llvmir_emit_binary(state, packet, binary_info);
+  }
+
+  const loom_llvmir_emit_binary_intrinsic_info_t* binary_intrinsic_info =
+      loom_llvmir_emit_lookup_binary_intrinsic(descriptor_ref);
+  if (binary_intrinsic_info) {
+    return loom_llvmir_emit_binary_intrinsic(state, packet,
+                                             binary_intrinsic_info);
   }
 
   const loom_llvmir_emit_unary_info_t* unary_info =

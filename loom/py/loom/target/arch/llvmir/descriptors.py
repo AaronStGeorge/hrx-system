@@ -691,7 +691,7 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
         )
         descriptors.extend(
             (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
-            for stem in ("add", "sub", "mul", "div")
+            for stem in ("add", "sub", "mul", "div", "minnum", "maxnum")
         )
         descriptors.append(
             _ternary_descriptor(
@@ -727,6 +727,17 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
     for stem in ("neg", "abs"):
         descriptors.extend(
             _unary_descriptor(
+                stem=stem,
+                type_name="f32",
+                semantic_stem=stem,
+                unit_count=lane_count,
+                vector=True,
+            )
+            for lane_count in _VECTOR_LANE_COUNTS
+        )
+    for stem in ("minnum", "maxnum"):
+        descriptors.extend(
+            _binary_descriptor(
                 stem=stem,
                 type_name="f32",
                 semantic_stem=stem,

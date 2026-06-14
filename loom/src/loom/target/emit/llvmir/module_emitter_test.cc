@@ -334,6 +334,59 @@ low.func.def target(@target) abi(object_function) @unary_vector(%input: reg<llvm
       << text;
 }
 
+TEST_F(LlvmirModuleEmitterTest, EmitsFloatMinNumMaxNumIntrinsics) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
+low.func.def target(@target) abi(object_function) @minmax_scalar(%lhs: reg<llvmir.f32>, %rhs: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %min = minnum.f32 %lhs, %rhs
+  %result = maxnum.f32 %min, %rhs
+  return %result
+}
+
+low.func.def target(@target) abi(object_function) @minmax_vector(%lhs: reg<llvmir.f32 x2>, %rhs: reg<llvmir.f32 x2>) -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %min = minnum.v2f32 %lhs, %rhs
+  %result = maxnum.v2f32 %min, %rhs
+  return %result
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  ASSERT_NE(llvmir_module, nullptr);
+  EXPECT_TRUE(capture.emissions.empty());
+
+  std::string text;
+  IREE_ASSERT_OK(WriteText(llvmir_module.get(), &text));
+  EXPECT_NE(text.find("%min = call float @llvm.minnum.f32(float %lhs, float "
+                      "%rhs)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("%result = call float @llvm.maxnum.f32(float %min, float "
+                      "%rhs)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("%min = call <2 x float> @llvm.minnum.v2f32(<2 x float> "
+                      "%lhs, <2 x float> %rhs)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("%result = call <2 x float> @llvm.maxnum.v2f32(<2 x "
+                      "float> %min, <2 x float> %rhs)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare float @llvm.minnum.f32(float, float)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare <2 x float> @llvm.maxnum.v2f32(<2 x float>, "
+                      "<2 x float>)"),
+            std::string::npos)
+      << text;
+}
+
 TEST_F(LlvmirModuleEmitterTest, EmitsKernelAbiFromLowKernelFacts) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {
