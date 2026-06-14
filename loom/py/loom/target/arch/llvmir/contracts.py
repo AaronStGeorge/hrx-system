@@ -684,6 +684,11 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
                 rules.append(
                     _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
                 )
+        vector_type = _vector_type(element, 1)
+        for source_op, stem in source_ops:
+            rules.append(
+                _binary_rule(source_op, vector_type, f"llvmir.{stem}.{element}")
+            )
     return tuple(rules)
 
 
@@ -717,6 +722,11 @@ def _vector_bitwise_rules() -> tuple[DescriptorRule, ...]:
                 rules.append(
                     _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
                 )
+        vector_type = _vector_type(element, 1)
+        for source_op, stem in source_ops:
+            rules.append(
+                _binary_rule(source_op, vector_type, f"llvmir.{stem}.{element}")
+            )
     return tuple(rules)
 
 
@@ -760,49 +770,87 @@ def _compare_rules() -> tuple[DescriptorRule, ...]:
                 )
                 for predicate in predicates
             )
+    for element, source_op, predicates in (
+        ("i32", vector.vector_cmpi, _INTEGER_PREDICATES),
+        ("f32", vector.vector_cmpf, _FLOAT_PREDICATES),
+    ):
+        value_type = _vector_type(element, 1)
+        mask_type = _vector_type("i1", 1)
+        rules.extend(
+            (
+                _compare_rule(
+                    source_op,
+                    value_type,
+                    mask_type,
+                    predicate,
+                    f"llvmir.cmp.{predicate}.{element}",
+                )
+            )
+            for predicate in predicates
+        )
     return tuple(rules)
 
 
 def _cast_rules() -> tuple[DescriptorRule, ...]:
-    return tuple(
-        _cast_rule(
-            source_op,
-            Scalar(source_type),
-            Scalar(result_type),
-            f"llvmir.{stem}.{source_type}.{result_type}",
+    return (
+        tuple(
+            _cast_rule(
+                source_op,
+                Scalar(source_type),
+                Scalar(result_type),
+                f"llvmir.{stem}.{source_type}.{result_type}",
+            )
+            for source_op, stem, source_type, result_type in _SCALAR_CAST_SPECS
         )
-        for source_op, stem, source_type, result_type in _SCALAR_CAST_SPECS
-    ) + tuple(
-        _cast_rule(
-            source_op,
-            _vector_type(source_type, lane_count),
-            _vector_type(result_type, lane_count),
-            "llvmir."
-            f"{stem}."
-            f"{_vector_suffix(source_type, lane_count)}."
-            f"{_vector_suffix(result_type, lane_count)}",
+        + tuple(
+            _cast_rule(
+                source_op,
+                _vector_type(source_type, lane_count),
+                _vector_type(result_type, lane_count),
+                "llvmir."
+                f"{stem}."
+                f"{_vector_suffix(source_type, lane_count)}."
+                f"{_vector_suffix(result_type, lane_count)}",
+            )
+            for source_op, stem, source_type, result_type in _VECTOR_CAST_SPECS
+            for lane_count in _VECTOR_LANE_COUNTS
         )
-        for source_op, stem, source_type, result_type in _VECTOR_CAST_SPECS
-        for lane_count in _VECTOR_LANE_COUNTS
+        + tuple(
+            _cast_rule(
+                source_op,
+                _vector_type(source_type, 1),
+                _vector_type(result_type, 1),
+                f"llvmir.{stem}.{source_type}.{result_type}",
+            )
+            for source_op, stem, source_type, result_type in _VECTOR_CAST_SPECS
+        )
     )
 
 
 def _select_rules() -> tuple[DescriptorRule, ...]:
-    return tuple(
-        _select_rule(type_pattern, f"llvmir.select.{suffix}")
-        for type_pattern, suffix in (
-            (_I32, "i32"),
-            (_I64, "i64"),
-            (_F32, "f32"),
-            (_F64, "f64"),
+    return (
+        tuple(
+            _select_rule(type_pattern, f"llvmir.select.{suffix}")
+            for type_pattern, suffix in (
+                (_I32, "i32"),
+                (_I64, "i64"),
+                (_F32, "f32"),
+                (_F64, "f64"),
+            )
         )
-    ) + tuple(
-        _select_rule(
-            _vector_type(element, lane_count),
-            f"llvmir.select.{_vector_suffix(element, lane_count)}",
+        + tuple(
+            _select_rule(
+                _vector_type(element, lane_count),
+                f"llvmir.select.{_vector_suffix(element, lane_count)}",
+            )
+            for element in _VECTOR_SELECT_TYPES
+            for lane_count in _VECTOR_LANE_COUNTS
         )
-        for element in _VECTOR_SELECT_TYPES
-        for lane_count in _VECTOR_LANE_COUNTS
+        + tuple(
+            _select_rule(_vector_type(element, 1), f"llvmir.select.{element}")
+            for element in _VECTOR_SELECT_TYPES
+            if element in ("i32", "i64", "f32", "f64")
+        )
     )
 
 
@@ -821,6 +869,24 @@ def _vector_constant_rules() -> tuple[DescriptorRule, ...]:
             for element in ("f32", "f64")
             for lane_count in _VECTOR_LANE_COUNTS
         )
+        + (
+            _const_i32_rule(vector.vector_constant, _vector_type("i32", 1)),
+            _const_i64_rule(vector.vector_constant, _vector_type("i64", 1)),
+            _const_float_rule(_vector_type("f32", 1), "llvmir.const.f32"),
+            _const_float_rule(_vector_type("f64", 1), "llvmir.const.f64"),
+        )
+    )
+
+
+def _one_lane_splat_rule(element: str) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=vector.vector_splat,
+        source=ValueRef.operand("scalar"),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.value_type("scalar", Scalar(element)),
+            Guard.value_type("result", _vector_type(element, 1)),
+        ),
     )
 
 
@@ -841,6 +907,19 @@ def _splat_rule(element: str, lane_count: int) -> DescriptorRule:
                 operands={"value": ValueRef.operand("scalar")},
                 results={"dst": ValueRef.result("result")},
             ),
+        ),
+    )
+
+
+def _one_lane_from_elements_rule(element: str) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=vector.vector_from_elements,
+        source=ValueRef.operand("elements", element=0),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.operand_segment_count("elements", 1),
+            Guard.value_type("elements", Scalar(element)),
+            Guard.value_type("result", _vector_type(element, 1)),
         ),
     )
 
@@ -874,6 +953,23 @@ def _from_elements_rule(element: str, lane_count: int) -> DescriptorRule:
     )
 
 
+def _one_lane_extract_rule(element: str) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=vector.vector_extract,
+        source=ValueRef.operand("source"),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.value_type("source", _vector_type(element, 1)),
+            Guard.value_type("result", Scalar(element)),
+            Guard.operand_segment_count("indices", 0),
+            Guard.i64_array_count("static_indices", 1),
+            Guard.i64_array_element_range(
+                "static_indices", element=0, minimum=0, maximum=0
+            ),
+        ),
+    )
+
+
 def _extract_rule(element: str, lane_count: int) -> DescriptorRule:
     source_type = _vector_type(element, lane_count)
     result_type = Scalar(element)
@@ -898,6 +994,25 @@ def _extract_rule(element: str, lane_count: int) -> DescriptorRule:
                 immediates={
                     "lane": AttrProject.i64_array_element("static_indices", element=0)
                 },
+            ),
+        ),
+    )
+
+
+def _one_lane_insert_rule(element: str) -> ValueAliasRule:
+    vector_type = _vector_type(element, 1)
+    return ValueAliasRule(
+        source_op=vector.vector_insert,
+        source=ValueRef.operand("value"),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.value_type("value", Scalar(element)),
+            Guard.value_type("dest", vector_type),
+            Guard.value_type("result", vector_type),
+            Guard.operand_segment_count("indices", 0),
+            Guard.i64_array_count("static_indices", 1),
+            Guard.i64_array_element_range(
+                "static_indices", element=0, minimum=0, maximum=0
             ),
         ),
     )
@@ -1007,8 +1122,8 @@ def _slice_rule(
     )
 
 
-def _structural_vector_rules() -> tuple[DescriptorRule, ...]:
-    rules: list[DescriptorRule] = []
+def _structural_vector_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
+    rules: list[DescriptorRule | ValueAliasRule] = []
     for element in _STRUCTURAL_VECTOR_TYPES:
         for lane_count in _VECTOR_LANE_COUNTS:
             rules.append(_splat_rule(element, lane_count))
@@ -1017,6 +1132,10 @@ def _structural_vector_rules() -> tuple[DescriptorRule, ...]:
             rules.append(_insert_rule(element, lane_count))
             rules.append(_shuffle_rule(element, lane_count))
         rules.append(_slice_rule(element, source_lane_count=4, result_lane_count=2))
+        rules.append(_one_lane_splat_rule(element))
+        rules.append(_one_lane_from_elements_rule(element))
+        rules.append(_one_lane_extract_rule(element))
+        rules.append(_one_lane_insert_rule(element))
     return tuple(rules)
 
 
@@ -1069,6 +1188,27 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                         vector_lane_count=lane_count,
                     )
                 )
+            vector_type = _vector_type(element, 1)
+            rules.append(
+                _view_load_rule(
+                    vector.vector_load,
+                    "view",
+                    vector_type,
+                    _memory_descriptor_key("load", element, dynamic=dynamic),
+                    dynamic=dynamic,
+                    element_byte_count=element_byte_count,
+                )
+            )
+            rules.append(
+                _view_store_rule(
+                    vector.vector_store,
+                    "view",
+                    vector_type,
+                    _memory_descriptor_key("store", element, dynamic=dynamic),
+                    dynamic=dynamic,
+                    element_byte_count=element_byte_count,
+                )
+            )
     return tuple(rules)
 
 
