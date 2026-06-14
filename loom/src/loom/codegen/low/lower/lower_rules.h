@@ -474,6 +474,8 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE = 24,
   // Source value type storage schema element format must match u64.
   LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT = 25,
+  // Source value must have no ordinary operand uses. Type uses are ignored.
+  LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {

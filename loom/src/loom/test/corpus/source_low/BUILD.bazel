@@ -15,6 +15,7 @@ package(
 exports_files([
     "async_empty.loom-test",
     "async_gather.loom-test",
+    "config_decl_facts.loom-test",
     "index_addressing.loom-test",
     "lookup_table.loom-test",
     "memory_cache_policy_non_temporal.loom-test",
@@ -57,6 +58,7 @@ loom_check_test_suite(
     srcs = [
         "async_empty.loom-test",
         "async_gather.loom-test",
+        "config_decl_facts.loom-test",
         "index_addressing.loom-test",
         "lookup_table.loom-test",
         "memory_cache_policy_non_temporal.loom-test",

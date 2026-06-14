@@ -1424,6 +1424,13 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           match_context, rule_set, source_op, guard->value_ref_index,
           guard->u64);
       return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_NO_USES: {
+      const loom_value_id_t value_id = loom_low_lower_rule_source_value(
+          rule_set, source_op, guard->value_ref_index);
+      *out_matches = loom_value_has_no_uses(
+          loom_module_value(match_context->module, value_id));
+      return iree_ok_status();
+    }
     case LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL:
       *out_matches = iree_all_bits_set(source_op->instance_flags, guard->u64);
       return iree_ok_status();

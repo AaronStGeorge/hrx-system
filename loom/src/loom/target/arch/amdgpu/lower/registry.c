@@ -21,6 +21,8 @@
 #include "loom/target/arch/amdgpu/contracts/buffer_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/compare.h"
 #include "loom/target/arch/amdgpu/contracts/compare_lower_rules.h"
+#include "loom/target/arch/amdgpu/contracts/config.h"
+#include "loom/target/arch/amdgpu/contracts/config_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/dot.h"
 #include "loom/target/arch/amdgpu/contracts/dot_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/integer.h"
@@ -696,6 +698,8 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     loom_amdgpu_arithmetic_lower_rule_set)                                  \
   F(BUFFER, loom_amdgpu_buffer_contract_fragment,                           \
     loom_amdgpu_buffer_lower_rule_set)                                      \
+  F(CONFIG, loom_amdgpu_config_contract_fragment,                           \
+    loom_amdgpu_config_lower_rule_set)                                      \
   F(INTEGER, loom_amdgpu_integer_contract_fragment,                         \
     loom_amdgpu_integer_lower_rule_set)                                     \
   F(COMPARE, loom_amdgpu_compare_contract_fragment,                         \

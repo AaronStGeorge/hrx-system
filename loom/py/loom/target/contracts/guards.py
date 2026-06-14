@@ -64,6 +64,7 @@ class GuardKind(Enum):
     VALUE_I64_RANGE_GE = "value_i64_range_ge"
     VALUE_F64_EQUALS = "value_f64_equals"
     VALUE_STORAGE_ELEMENT_FORMAT = "value_storage_element_format"
+    VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
 
 
@@ -455,6 +456,19 @@ class Guard:
         )
 
     @classmethod
+    def value_no_uses(
+        cls,
+        field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_NO_USES,
+            field=field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def instance_flags_has_all(
         cls,
         field: str,
@@ -597,6 +611,9 @@ class Guard:
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
         ):
             _validate_value_fact_guard(self, source_op, subject)
+            return
+        if self.kind == GuardKind.VALUE_NO_USES:
+            _require_value(source_op, self.field, subject)
             return
         if self.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
             attr = _require_attr(source_op, self.field, subject)

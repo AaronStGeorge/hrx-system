@@ -257,6 +257,7 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.VALUE_I64_RANGE_GE,
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+        GuardKind.VALUE_NO_USES,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
     if row.kind in (

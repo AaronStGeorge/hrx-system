@@ -60,6 +60,13 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
         aliases=("amdgpu_buffer",),
     ),
     ContractFragmentRegistration(
+        key="amdgpu.config",
+        module_name="loom.target.arch.amdgpu.contracts.config",
+        symbol_name="AMDGPU_CONFIG_CONTRACT_FRAGMENT",
+        dialect_ops_symbol_name="AMDGPU_CONFIG_CONTRACT_DIALECT_OPS",
+        aliases=("amdgpu_config",),
+    ),
+    ContractFragmentRegistration(
         key="amdgpu.compare",
         module_name="loom.target.arch.amdgpu.contracts.compare",
         symbol_name="AMDGPU_COMPARE_CONTRACT_FRAGMENT",

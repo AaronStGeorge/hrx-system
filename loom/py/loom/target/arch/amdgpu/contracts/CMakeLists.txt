@@ -18,6 +18,7 @@ iree_py_library(
     "async.py"
     "buffer.py"
     "compare.py"
+    "config.py"
     "dot.py"
     "integer.py"
     "materializers.py"
@@ -28,6 +29,7 @@ iree_py_library(
   DEPS
     loom::py::loom::core
     loom::py::loom::dialect::buffer::buffer
+    loom::py::loom::dialect::config::config
     loom::py::loom::dialect::index::index
     loom::py::loom::dialect::kernel::kernel
     loom::py::loom::dialect::scalar::scalar

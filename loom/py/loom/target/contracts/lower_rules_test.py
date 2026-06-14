@@ -198,6 +198,34 @@ def test_compile_lower_rule_set_compiles_value_elide_cases() -> None:
     assert compiled.spans[0].source_op is vector.vector_extract
 
 
+def test_compile_lower_rule_set_compiles_guarded_value_elide_cases() -> None:
+    table = ContractFragment(
+        name="test.elide",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            ValueElideRule(
+                source_op=vector.vector_extract,
+                values=(ValueRef.result("result"),),
+                guards=(Guard.value_no_uses("result"),),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.authored_case_indices == (0,)
+    assert len(compiled.rules) == 1
+    assert compiled.rules[0].source_op is vector.vector_extract
+    assert compiled.rules[0].guard_count == 1
+    assert compiled.rules[0].emit_count == 0
+    assert compiled.rules[0].elide_ref_count == 1
+    assert len(compiled.guards) == 1
+    assert compiled.guards[0].kind == GuardKind.VALUE_NO_USES
+    assert compiled.guards[0].value_ref_index == compiled.rules[0].elide_ref_start
+    assert len(compiled.value_refs) == 1
+    assert compiled.spans[0].source_op is vector.vector_extract
+
+
 def test_compile_lower_rule_set_offsets_variadic_operand_elements() -> None:
     table = ContractFragment(
         name="test.from-elements",

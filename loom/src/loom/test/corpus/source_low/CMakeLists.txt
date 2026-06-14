@@ -33,6 +33,17 @@ iree_native_test(
 
 iree_native_test(
   NAME
+    "config_decl_facts"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/config_decl_facts.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
     "index_addressing"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/index_addressing.loom-test"

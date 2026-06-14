@@ -401,6 +401,10 @@ class _LowerRuleSetCompiler:
         authored_case_index: int,
         rule: ValueElideRule,
     ) -> None:
+        guard_start = len(self._guards)
+        type_patterns_by_field: dict[str, TypePattern] = {}
+        for guard in rule.guards:
+            self._append_guard(rule.source_op, guard, type_patterns_by_field)
         elide_ref_start = self._append_value_ref_sequence(
             tuple(
                 self._lower_value_ref(rule.source_op, value, {})
@@ -411,8 +415,8 @@ class _LowerRuleSetCompiler:
             LowerRule(
                 source_op=rule.source_op,
                 temporary_count=0,
-                guard_start=0,
-                guard_count=0,
+                guard_start=guard_start,
+                guard_count=len(self._guards) - guard_start,
                 emit_start=0,
                 emit_count=0,
                 elide_ref_start=elide_ref_start,
@@ -770,6 +774,25 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
         ):
             self._append_value_fact_guard(source_op, guard)
+            return
+
+        if guard.kind == GuardKind.VALUE_NO_USES:
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.field),
+                    ),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _value_no_uses_diagnostic(guard.field),
+                        ),
+                    ),
+                )
+            )
             return
 
         if guard.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
@@ -1911,6 +1934,10 @@ def _float_equals_diagnostic(field: str, value: float) -> DiagnosticRef:
 
 def _storage_element_format_diagnostic(field: str) -> DiagnosticRef:
     return _named_constraint_diagnostic("value", field, "storage_schema.element_format")
+
+
+def _value_no_uses_diagnostic(field: str) -> DiagnosticRef:
+    return _named_constraint_diagnostic("value", field, "no_ordinary_uses")
 
 
 def _instance_flags_diagnostic(field: str, enum_keyword: str) -> DiagnosticRef:

@@ -111,15 +111,18 @@ class ValueElideRule:
 
     source_op: Op
     values: tuple[ValueRef, ...]
+    guards: tuple[Guard, ...] = ()
 
     def __init__(
         self,
         *,
         source_op: Op,
         values: Sequence[ValueRef],
+        guards: Sequence[Guard] = (),
     ) -> None:
         object.__setattr__(self, "source_op", source_op)
         object.__setattr__(self, "values", tuple(values))
+        object.__setattr__(self, "guards", tuple(guards))
         if not values:
             raise ValueError(f"{source_op.name}: value-elide rule needs a result")
 
@@ -135,6 +138,8 @@ class ValueElideRule:
                     f"{self.source_op.name}: elided values must be results"
                 )
             value.validate(self.source_op, "elided value")
+        for guard in self.guards:
+            guard.validate(self.source_op)
 
 
 @dataclass(frozen=True, slots=True)
