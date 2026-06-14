@@ -25,6 +25,22 @@ llvmir.target<object> @target {
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
 
+func.def target(@target) @llvmir_extended_type_mapping(%i8: i8, %i16: i16, %f16: f16, %bf16: bf16, %bytes: vector<32xi8>, %halves: vector<8xf16>, %brain: vector<16xbf16>, %flags: vector<2xi1>, %wide: vector<2xf64>) -> (i8, i16, f16, bf16, vector<32xi8>, vector<8xf16>, vector<16xbf16>, vector<2xi1>, vector<2xf64>) {
+  func.return %i8, %i16, %f16, %bf16, %bytes, %halves, %brain, %flags, %wide : i8, i16, f16, bf16, vector<32xi8>, vector<8xf16>, vector<16xbf16>, vector<2xi1>, vector<2xf64>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @llvmir_extended_type_mapping(%i8: reg<llvmir.i8>, %i16: reg<llvmir.i16>, %f16: reg<llvmir.f16>, %bf16: reg<llvmir.bf16>, %bytes: reg<llvmir.i8 x32>, %halves: reg<llvmir.f16 x8>, %brain: reg<llvmir.bf16 x16>, %flags: reg<llvmir.i1 x2>, %wide: reg<llvmir.f64 x2>) -> (reg<llvmir.i8>, reg<llvmir.i16>, reg<llvmir.f16>, reg<llvmir.bf16>, reg<llvmir.i8 x32>, reg<llvmir.f16 x8>, reg<llvmir.bf16 x16>, reg<llvmir.i1 x2>, reg<llvmir.f64 x2>) asm<llvmir.generic.core> {
+  return %i8, %i16, %f16, %bf16, %bytes, %halves, %brain, %flags, %wide
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
 func.def target(@target) @llvmir_i64_compare_select(%lhs: i64, %rhs: i64, %true_value: i64, %false_value: i64) -> (i64) {
   %predicate = scalar.cmpi sgt, %lhs, %rhs : i64
   %selected = scf.select %predicate, %true_value, %false_value : i64

@@ -16,6 +16,34 @@ low.func.def target(@target) abi(object_function) @second(%input_view: reg<llvmi
   return %loaded
 }
 
+low.func.def target(@target) abi(object_function) @i8_identity(%value: reg<llvmir.i8>) -> (reg<llvmir.i8>) asm<llvmir.generic.core> {
+  return %value
+}
+
+low.func.def target(@target) abi(object_function) @i16_identity(%value: reg<llvmir.i16>) -> (reg<llvmir.i16>) asm<llvmir.generic.core> {
+  return %value
+}
+
+low.func.def target(@target) abi(object_function) @f16_identity(%value: reg<llvmir.f16>) -> (reg<llvmir.f16>) asm<llvmir.generic.core> {
+  return %value
+}
+
+low.func.def target(@target) abi(object_function) @bf16_identity(%value: reg<llvmir.bf16>) -> (reg<llvmir.bf16>) asm<llvmir.generic.core> {
+  return %value
+}
+
+low.func.def target(@target) abi(object_function) @v32i8_identity(%value: reg<llvmir.i8 x32>) -> (reg<llvmir.i8 x32>) asm<llvmir.generic.core> {
+  return %value
+}
+
+low.func.def target(@target) abi(object_function) @v8f16_identity(%value: reg<llvmir.f16 x8>) -> (reg<llvmir.f16 x8>) asm<llvmir.generic.core> {
+  return %value
+}
+
+low.func.def target(@target) abi(object_function) @v16bf16_identity(%value: reg<llvmir.bf16 x16>) -> (reg<llvmir.bf16 x16>) asm<llvmir.generic.core> {
+  return %value
+}
+
 // ----
 define dso_local i32 @first(i32 %lhs, i32 %rhs) {
 entry:
@@ -34,6 +62,41 @@ entry:
   %v16 = getelementptr i8, ptr %output_view, i64 %v15
   store i32 %loaded, ptr %v16
   ret i32 %loaded
+}
+
+define dso_local i8 @i8_identity(i8 %value) {
+entry:
+  ret i8 %value
+}
+
+define dso_local i16 @i16_identity(i16 %value) {
+entry:
+  ret i16 %value
+}
+
+define dso_local half @f16_identity(half %value) {
+entry:
+  ret half %value
+}
+
+define dso_local bfloat @bf16_identity(bfloat %value) {
+entry:
+  ret bfloat %value
+}
+
+define dso_local <32 x i8> @v32i8_identity(<32 x i8> %value) {
+entry:
+  ret <32 x i8> %value
+}
+
+define dso_local <8 x half> @v8f16_identity(<8 x half> %value) {
+entry:
+  ret <8 x half> %value
+}
+
+define dso_local <16 x bfloat> @v16bf16_identity(<16 x bfloat> %value) {
+entry:
+  ret <16 x bfloat> %value
 }
 
 // ====

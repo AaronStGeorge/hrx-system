@@ -38,8 +38,12 @@ from loom.target.low_descriptors import (
 )
 
 _REG_I1 = "llvmir.i1"
+_REG_I8 = "llvmir.i8"
+_REG_I16 = "llvmir.i16"
 _REG_I32 = "llvmir.i32"
 _REG_I64 = "llvmir.i64"
+_REG_F16 = "llvmir.f16"
+_REG_BF16 = "llvmir.bf16"
 _REG_F32 = "llvmir.f32"
 _REG_F64 = "llvmir.f64"
 _REG_PTR = "llvmir.ptr"
@@ -55,8 +59,12 @@ _SCHEDULE_STORE = "llvmir.store"
 
 _ALT_BY_TYPE = {
     "i1": (RegClassAlt(_REG_I1),),
+    "i8": (RegClassAlt(_REG_I8),),
+    "i16": (RegClassAlt(_REG_I16),),
     "i32": (RegClassAlt(_REG_I32),),
     "i64": (RegClassAlt(_REG_I64),),
+    "f16": (RegClassAlt(_REG_F16),),
+    "bf16": (RegClassAlt(_REG_BF16),),
     "f32": (RegClassAlt(_REG_F32),),
     "f64": (RegClassAlt(_REG_F64),),
     "ptr": (RegClassAlt(_REG_PTR),),
@@ -64,8 +72,12 @@ _ALT_BY_TYPE = {
 
 _UNIT_BITS_BY_TYPE = {
     "i1": 1,
+    "i8": 8,
+    "i16": 16,
     "i32": 32,
     "i64": 64,
+    "f16": 16,
+    "bf16": 16,
     "f32": 32,
     "f64": 64,
     "ptr": 64,
@@ -522,10 +534,22 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
             _REG_I1, 1, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
         ),
         RegClass(
+            _REG_I8, 8, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_I16, 16, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
             _REG_I32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
         ),
         RegClass(
             _REG_I64, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_F16, 16, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_BF16, 16, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
         ),
         RegClass(
             _REG_F32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)

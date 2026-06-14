@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <stdint.h>
+
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/target/arch/llvmir/contracts/generic_core.h"
@@ -32,6 +34,12 @@ static bool loom_llvmir_scalar_register_class_for_type(
     case LOOM_SCALAR_TYPE_I1:
       *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I1;
       return true;
+    case LOOM_SCALAR_TYPE_I8:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I8;
+      return true;
+    case LOOM_SCALAR_TYPE_I16:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I16;
+      return true;
     case LOOM_SCALAR_TYPE_I32:
       *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I32;
       return true;
@@ -39,6 +47,12 @@ static bool loom_llvmir_scalar_register_class_for_type(
     case LOOM_SCALAR_TYPE_INDEX:
     case LOOM_SCALAR_TYPE_OFFSET:
       *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I64;
+      return true;
+    case LOOM_SCALAR_TYPE_F16:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_F16;
+      return true;
+    case LOOM_SCALAR_TYPE_BF16:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_BF16;
       return true;
     case LOOM_SCALAR_TYPE_F32:
       *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_F32;
@@ -59,7 +73,7 @@ static bool loom_llvmir_vector_register_class_for_type(
     return false;
   }
   const int64_t lane_count = loom_type_dim_static_size_at(type, 0);
-  if (lane_count != 4) {
+  if (lane_count <= 0 || lane_count > UINT32_MAX) {
     return false;
   }
   *out_unit_count = (uint32_t)lane_count;
@@ -67,11 +81,29 @@ static bool loom_llvmir_vector_register_class_for_type(
     case LOOM_SCALAR_TYPE_I1:
       *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I1;
       return true;
+    case LOOM_SCALAR_TYPE_I8:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I8;
+      return true;
+    case LOOM_SCALAR_TYPE_I16:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I16;
+      return true;
     case LOOM_SCALAR_TYPE_I32:
       *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I32;
       return true;
+    case LOOM_SCALAR_TYPE_I64:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_I64;
+      return true;
+    case LOOM_SCALAR_TYPE_F16:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_F16;
+      return true;
+    case LOOM_SCALAR_TYPE_BF16:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_BF16;
+      return true;
     case LOOM_SCALAR_TYPE_F32:
       *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_F32;
+      return true;
+    case LOOM_SCALAR_TYPE_F64:
+      *out_register_class_id = LLVMIR_GENERIC_CORE_REG_CLASS_ID_F64;
       return true;
     default:
       return false;

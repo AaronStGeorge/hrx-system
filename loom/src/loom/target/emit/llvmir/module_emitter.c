@@ -29,11 +29,15 @@
 
 typedef enum loom_llvmir_emit_core_type_e {
   LOOM_LLVMIR_EMIT_CORE_TYPE_I1 = 0,
-  LOOM_LLVMIR_EMIT_CORE_TYPE_I32 = 1,
-  LOOM_LLVMIR_EMIT_CORE_TYPE_I64 = 2,
-  LOOM_LLVMIR_EMIT_CORE_TYPE_F32 = 3,
-  LOOM_LLVMIR_EMIT_CORE_TYPE_F64 = 4,
-  LOOM_LLVMIR_EMIT_CORE_TYPE_PTR = 5,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_I8 = 1,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_I16 = 2,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_I32 = 3,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_I64 = 4,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_F16 = 5,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_BF16 = 6,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_F32 = 7,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_F64 = 8,
+  LOOM_LLVMIR_EMIT_CORE_TYPE_PTR = 9,
 } loom_llvmir_emit_core_type_t;
 
 typedef enum loom_llvmir_emit_memory_flag_bits_e {
@@ -544,10 +548,20 @@ static iree_status_t loom_llvmir_emit_core_scalar_type(
   switch (type) {
     case LOOM_LLVMIR_EMIT_CORE_TYPE_I1:
       return loom_llvmir_module_get_integer_type(module, 1, out_type_id);
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_I8:
+      return loom_llvmir_module_get_integer_type(module, 8, out_type_id);
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_I16:
+      return loom_llvmir_module_get_integer_type(module, 16, out_type_id);
     case LOOM_LLVMIR_EMIT_CORE_TYPE_I32:
       return loom_llvmir_module_get_integer_type(module, 32, out_type_id);
     case LOOM_LLVMIR_EMIT_CORE_TYPE_I64:
       return loom_llvmir_module_get_integer_type(module, 64, out_type_id);
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_F16:
+      return loom_llvmir_module_get_float_type(module, LOOM_LLVMIR_FLOAT_F16,
+                                               out_type_id);
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_BF16:
+      return loom_llvmir_module_get_float_type(module, LOOM_LLVMIR_FLOAT_BF16,
+                                               out_type_id);
     case LOOM_LLVMIR_EMIT_CORE_TYPE_F32:
       return loom_llvmir_module_get_float_type(module, LOOM_LLVMIR_FLOAT_F32,
                                                out_type_id);
@@ -662,11 +676,23 @@ static iree_status_t loom_llvmir_emit_type_for_low_value(
     case LLVMIR_GENERIC_CORE_REG_CLASS_ID_I1:
       core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_I1;
       break;
+    case LLVMIR_GENERIC_CORE_REG_CLASS_ID_I8:
+      core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_I8;
+      break;
+    case LLVMIR_GENERIC_CORE_REG_CLASS_ID_I16:
+      core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_I16;
+      break;
     case LLVMIR_GENERIC_CORE_REG_CLASS_ID_I32:
       core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_I32;
       break;
     case LLVMIR_GENERIC_CORE_REG_CLASS_ID_I64:
       core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_I64;
+      break;
+    case LLVMIR_GENERIC_CORE_REG_CLASS_ID_F16:
+      core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_F16;
+      break;
+    case LLVMIR_GENERIC_CORE_REG_CLASS_ID_BF16:
+      core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_BF16;
       break;
     case LLVMIR_GENERIC_CORE_REG_CLASS_ID_F32:
       core_type = LOOM_LLVMIR_EMIT_CORE_TYPE_F32;
