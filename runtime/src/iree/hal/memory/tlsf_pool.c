@@ -22,7 +22,7 @@ enum {
 
 typedef struct iree_hal_tlsf_pool_release_node_t {
   // Intrusive next pointer in pool->pending_release_head or
-  // pool->release_node_free_head.
+  // pool-owned release-node lists.
   struct iree_hal_tlsf_pool_release_node_t* next;
 
   // Stable slab object holding |block_index|.
@@ -115,6 +115,15 @@ typedef struct iree_hal_tlsf_pool_t {
 
   // Free list of release nodes ready for reuse. Protected by |mutex|.
   iree_hal_tlsf_pool_release_node_t* release_node_free_head;
+
+  // Head of poisoned ASAN releases retained before TLSF reuse.
+  iree_hal_tlsf_pool_release_node_t* quarantine_head;
+
+  // Tail of poisoned ASAN releases retained before TLSF reuse.
+  iree_hal_tlsf_pool_release_node_t* quarantine_tail;
+
+  // Backing bytes currently retained in the ASAN quarantine list.
+  iree_device_size_t quarantine_size;
 
   // Optional completion predicate for try-before-fence reuse.
   iree_hal_pool_epoch_query_t epoch_query;
@@ -323,14 +332,85 @@ static void iree_hal_tlsf_pool_recycle_release_node(
   pool->release_node_free_head = node;
 }
 
-static void iree_hal_tlsf_pool_free_release_nodes(iree_hal_tlsf_pool_t* pool)
+static void iree_hal_tlsf_pool_free_release_node_list(
+    iree_hal_tlsf_pool_t* pool, iree_hal_tlsf_pool_release_node_t* node)
     IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
-  iree_hal_tlsf_pool_release_node_t* node = pool->release_node_free_head;
-  pool->release_node_free_head = NULL;
   while (node) {
     iree_hal_tlsf_pool_release_node_t* next = node->next;
     iree_allocator_free(pool->host_allocator, node);
     node = next;
+  }
+}
+
+static void iree_hal_tlsf_pool_free_release_nodes(iree_hal_tlsf_pool_t* pool)
+    IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
+  iree_hal_tlsf_pool_free_release_node_list(pool, pool->release_node_free_head);
+  pool->release_node_free_head = NULL;
+}
+
+static void iree_hal_tlsf_pool_return_release_node_to_tlsf(
+    iree_hal_tlsf_pool_t* pool, iree_hal_tlsf_pool_release_node_t* node)
+    IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
+  iree_async_frontier_t* death_frontier =
+      iree_hal_tlsf_pool_release_node_frontier(pool, node);
+  iree_hal_tlsf_pool_slab_t* slab = node->slab;
+  const uint16_t slab_index = node->slab_index;
+  iree_hal_memory_tlsf_free(
+      &slab->tlsf, node->block_index,
+      death_frontier->entry_count > 0 ? death_frontier : NULL);
+  if (death_frontier->entry_count == 0) {
+    pool->preferred_slab_index = slab_index;
+  } else {
+    iree_hal_tlsf_pool_note_reuse_candidate(pool, slab_index);
+  }
+  iree_hal_tlsf_pool_recycle_release_node(pool, node);
+}
+
+static bool iree_hal_tlsf_pool_asan_quarantine_is_enabled(
+    const iree_hal_tlsf_pool_t* pool) {
+  return iree_hal_asan_pool_options_is_enabled(&pool->asan_options) &&
+         pool->asan_options.quarantine_size > 0;
+}
+
+static void iree_hal_tlsf_pool_add_quarantine_size(iree_hal_tlsf_pool_t* pool,
+                                                   iree_device_size_t length)
+    IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
+  if (length > IREE_DEVICE_SIZE_MAX - pool->quarantine_size) {
+    pool->quarantine_size = IREE_DEVICE_SIZE_MAX;
+  } else {
+    pool->quarantine_size += length;
+  }
+}
+
+static void iree_hal_tlsf_pool_subtract_quarantine_size(
+    iree_hal_tlsf_pool_t* pool, iree_device_size_t length)
+    IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
+  pool->quarantine_size -= iree_min(pool->quarantine_size, length);
+}
+
+static void iree_hal_tlsf_pool_quarantine_release_node(
+    iree_hal_tlsf_pool_t* pool, iree_hal_tlsf_pool_release_node_t* node)
+    IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
+  node->next = NULL;
+  if (pool->quarantine_tail) {
+    pool->quarantine_tail->next = node;
+  } else {
+    pool->quarantine_head = node;
+  }
+  pool->quarantine_tail = node;
+  iree_hal_tlsf_pool_add_quarantine_size(pool, node->charged_length);
+
+  while (pool->quarantine_size > pool->asan_options.quarantine_size &&
+         pool->quarantine_head) {
+    iree_hal_tlsf_pool_release_node_t* release_node = pool->quarantine_head;
+    pool->quarantine_head = release_node->next;
+    if (!pool->quarantine_head) {
+      pool->quarantine_tail = NULL;
+    }
+    iree_hal_tlsf_pool_subtract_quarantine_size(pool,
+                                                release_node->charged_length);
+    release_node->next = NULL;
+    iree_hal_tlsf_pool_return_release_node_to_tlsf(pool, release_node);
   }
 }
 
@@ -341,19 +421,26 @@ static void iree_hal_tlsf_pool_drain_pending_releases(
       iree_hal_tlsf_pool_take_pending_releases(pool);
   while (node) {
     iree_hal_tlsf_pool_release_node_t* next = node->next;
-    iree_async_frontier_t* death_frontier =
-        iree_hal_tlsf_pool_release_node_frontier(pool, node);
-    iree_hal_tlsf_pool_slab_t* slab = node->slab;
-    const uint16_t slab_index = node->slab_index;
-    iree_hal_memory_tlsf_free(
-        &slab->tlsf, node->block_index,
-        death_frontier->entry_count > 0 ? death_frontier : NULL);
-    if (death_frontier->entry_count == 0) {
-      pool->preferred_slab_index = slab_index;
+    if (iree_hal_tlsf_pool_asan_quarantine_is_enabled(pool)) {
+      iree_hal_tlsf_pool_quarantine_release_node(pool, node);
     } else {
-      iree_hal_tlsf_pool_note_reuse_candidate(pool, slab_index);
+      node->next = NULL;
+      iree_hal_tlsf_pool_return_release_node_to_tlsf(pool, node);
     }
-    iree_hal_tlsf_pool_recycle_release_node(pool, node);
+    node = next;
+  }
+}
+
+static void iree_hal_tlsf_pool_flush_quarantine(iree_hal_tlsf_pool_t* pool)
+    IREE_THREAD_ANNOTATION_ATTRIBUTE(requires_capability(&pool->mutex)) {
+  iree_hal_tlsf_pool_release_node_t* node = pool->quarantine_head;
+  pool->quarantine_head = NULL;
+  pool->quarantine_tail = NULL;
+  pool->quarantine_size = 0;
+  while (node) {
+    iree_hal_tlsf_pool_release_node_t* next = node->next;
+    node->next = NULL;
+    iree_hal_tlsf_pool_return_release_node_to_tlsf(pool, node);
     node = next;
   }
 }
@@ -685,6 +772,7 @@ static void iree_hal_tlsf_pool_destroy(iree_hal_pool_t* base_pool) {
 
   iree_slim_mutex_lock(&pool->mutex);
   iree_hal_tlsf_pool_drain_pending_releases(pool);
+  iree_hal_tlsf_pool_flush_quarantine(pool);
   iree_hal_tlsf_pool_free_release_nodes(pool);
   iree_slim_mutex_unlock(&pool->mutex);
 

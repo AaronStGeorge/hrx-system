@@ -204,16 +204,36 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   EXPECT_EQ(shadow_map->mapping_mode,
             IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE);
   EXPECT_EQ(shadow_map->initial_slab_value, 0xFAu);
-  EXPECT_EQ(shadow_map->slab_count, 0u);
+  EXPECT_LE(shadow_map->slab_count,
+            shadow_map->reservation_size / shadow_map->slab_size);
   EXPECT_NE(asan_state->owned_application_base_ptr, nullptr);
   EXPECT_EQ(asan_state->owned_application_size,
             options.asan.owned_application_size);
   ASSERT_NE(asan_state->application_free_ranges, nullptr);
-  EXPECT_EQ(
-      asan_state->application_free_ranges->address,
-      reinterpret_cast<uintptr_t>(asan_state->owned_application_base_ptr));
-  EXPECT_EQ(asan_state->application_free_ranges->length,
-            options.asan.owned_application_size);
+  const uint64_t owned_application_base =
+      reinterpret_cast<uintptr_t>(asan_state->owned_application_base_ptr);
+  const uint64_t owned_application_end =
+      owned_application_base + asan_state->owned_application_size;
+  iree_device_size_t free_length = 0;
+  uint64_t previous_range_end = owned_application_base;
+  for (const iree_hal_amdgpu_asan_application_range_t* free_range =
+           asan_state->application_free_ranges;
+       free_range; free_range = free_range->next) {
+    ASSERT_GE(free_range->address, owned_application_base);
+    ASSERT_GE(free_range->address, previous_range_end);
+    ASSERT_LE(free_range->address, owned_application_end);
+    ASSERT_LE(free_range->length, owned_application_end - free_range->address);
+    ASSERT_LE(free_length,
+              asan_state->owned_application_size - free_range->length);
+    free_length += free_range->length;
+    previous_range_end = free_range->address + free_range->length;
+  }
+  ASSERT_LE(free_length, asan_state->owned_application_size);
+  const iree_device_size_t reserved_application_length =
+      asan_state->owned_application_size - free_length;
+  if (reserved_application_length > 0) {
+    EXPECT_GT(shadow_map->slab_count, 0u);
+  }
 
   iree_hal_amdgpu_asan_config_t config;
   iree_hal_amdgpu_asan_state_populate_config(asan_state, &config);
