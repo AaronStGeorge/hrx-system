@@ -816,6 +816,9 @@ static bool loom_low_lower_source_memory_dynamic_terms_match(
   if (source_memory->dynamic_term_count == 0) {
     return true;
   }
+  const bool any_byte_stride = iree_any_bit_set(
+      source_memory->flags,
+      LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY);
   for (uint8_t i = 0; i < access->dynamic_term_count; ++i) {
     const loom_low_source_memory_dynamic_term_t* term =
         &access->dynamic_terms[i];
@@ -824,7 +827,8 @@ static bool loom_low_lower_source_memory_dynamic_terms_match(
     }
     if (!loom_low_lower_source_memory_dynamic_index_source_matches(
             source_memory->dynamic_index_source, term->source) ||
-        term->byte_stride != source_memory->dynamic_byte_stride) {
+        (!any_byte_stride &&
+         term->byte_stride != source_memory->dynamic_byte_stride)) {
       return false;
     }
   }

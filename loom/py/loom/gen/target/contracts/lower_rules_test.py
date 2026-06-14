@@ -10,6 +10,7 @@ from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
+from loom.gen.target.contracts.lower_rule_rows import source_memory_row
 from loom.gen.target.contracts.lower_rules import generate_lower_rule_set
 from loom.target.contracts import (
     ContractFragment,
@@ -19,7 +20,11 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
+    LowerSourceMemory,
     Scalar,
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
     ValueProject,
     ValueRef,
     Vector,
@@ -224,3 +229,28 @@ def test_generate_lower_rule_set_emits_divisor_magic_projection() -> None:
     assert "LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_MULTIPLIER" in generated.source
     assert "LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_SHIFT" in generated.source
     assert "LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64_MINUS_ONE" in generated.source
+
+
+def test_source_memory_row_emits_dynamic_byte_stride_any_flag() -> None:
+    row = LowerSourceMemory(
+        constraint=SourceMemoryConstraint(
+            operation=SourceMemoryOperation.LOAD,
+            memory_spaces=("global",),
+            element_byte_count=4,
+            vector_lane_count=1,
+            vector_lane_byte_stride=4,
+            static_byte_offset_minimum=0,
+            static_byte_offset_maximum=128,
+            dynamic_term_count=1,
+            dynamic_index_source=SourceMemoryDynamicIndexSource.VALUE,
+            dynamic_byte_stride=None,
+        ),
+        diagnostic_index=3,
+        dynamic_offset_diagnostic_index=4,
+    )
+
+    fields = source_memory_row(row)
+
+    assert ".flags = LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY" in fields
+    assert ".dynamic_term_count = 1" in fields
+    assert ".dynamic_byte_stride = " not in "\n".join(fields)

@@ -338,7 +338,15 @@ typedef enum loom_low_lower_source_memory_root_kind_e {
 
 #define LOOM_LOW_LOWER_SOURCE_MEMORY_DYNAMIC_TERM_COUNT_ANY UINT8_MAX
 
+typedef uint16_t loom_low_lower_source_memory_flags_t;
+
+// Accept any byte stride for selected dynamic source-memory terms.
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY \
+  ((uint16_t)1u << 0)
+
 typedef struct loom_low_lower_source_memory_t {
+  // Bitfield of source-memory row option bits.
+  loom_low_lower_source_memory_flags_t flags;
   // Source memory operation category required by this row.
   loom_low_source_memory_operation_kind_t operation_kind;
   // Source provenance required for the root memory value.
@@ -361,7 +369,7 @@ typedef struct loom_low_lower_source_memory_t {
   uint8_t dynamic_term_count;
   // Required provenance for each dynamic address term.
   loom_low_source_memory_dynamic_index_source_t dynamic_index_source;
-  // Required byte stride for each dynamic address term.
+  // Required byte stride for each dynamic address term unless ANY is set.
   int64_t dynamic_byte_stride;
   // Required unsigned dynamic byte offset bit width, or zero if unconstrained.
   uint8_t dynamic_offset_unsigned_bit_count;

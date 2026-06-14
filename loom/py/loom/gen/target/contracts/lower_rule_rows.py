@@ -76,6 +76,11 @@ def value_ref_row(row: LowerValueRef) -> list[str]:
 def source_memory_row(row: LowerSourceMemory) -> list[str]:
     constraint = row.constraint
     fields: list[str] = []
+    flags: list[str] = []
+    if constraint.dynamic_byte_stride is None:
+        flags.append("LOOM_LOW_LOWER_SOURCE_MEMORY_FLAG_DYNAMIC_BYTE_STRIDE_ANY")
+    if flags:
+        _append_field(fields, "flags", " | ".join(flags))
     _append_field(
         fields,
         "operation_kind",
@@ -136,7 +141,8 @@ def source_memory_row(row: LowerSourceMemory) -> list[str]:
         lower_rule_spelling.SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_C_NAMES[constraint.dynamic_index_source],
         default="LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE",
     )
-    _append_field(fields, "dynamic_byte_stride", constraint.dynamic_byte_stride)
+    if constraint.dynamic_byte_stride is not None:
+        _append_field(fields, "dynamic_byte_stride", constraint.dynamic_byte_stride)
     _append_field(
         fields,
         "dynamic_offset_unsigned_bit_count",

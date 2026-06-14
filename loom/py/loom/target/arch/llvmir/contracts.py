@@ -540,7 +540,7 @@ def _source_memory_constraint(
             if dynamic
             else SourceMemoryDynamicIndexSource.NONE
         ),
-        dynamic_byte_stride=element_byte_count if dynamic else 0,
+        dynamic_byte_stride=None if dynamic else 0,
         diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
     )
 

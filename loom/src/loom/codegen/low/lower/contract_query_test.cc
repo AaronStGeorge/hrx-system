@@ -486,6 +486,7 @@ TEST_F(LowContractQuerySourceMemoryTest,
   loom_value_fact_table_t facts = {};
   ComputeFacts(&facts);
   const loom_low_lower_source_memory_t source_memory = {
+      /*.flags=*/0,
       /*.operation_kind=*/LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD,
       /*.root_kind=*/LOOM_LOW_LOWER_SOURCE_MEMORY_ROOT_BLOCK_ARGUMENT,
       /*.memory_space_mask=*/LOOM_LOW_LOWER_SOURCE_MEMORY_SPACE_UNKNOWN |

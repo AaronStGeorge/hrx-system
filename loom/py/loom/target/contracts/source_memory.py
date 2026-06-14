@@ -81,7 +81,7 @@ class SourceMemoryConstraint:
     dynamic_index_source: SourceMemoryDynamicIndexSource = (
         SourceMemoryDynamicIndexSource.NONE
     )
-    dynamic_byte_stride: int = 0
+    dynamic_byte_stride: int | None = 0
     dynamic_offset_unsigned_bit_count: int = 0
     dynamic_offset_diagnostic: GuardDiagnostic | None = None
     cache_policy_build_flags: int = 0
@@ -104,7 +104,7 @@ class SourceMemoryConstraint:
         dynamic_index_source: SourceMemoryDynamicIndexSource = (
             SourceMemoryDynamicIndexSource.NONE
         ),
-        dynamic_byte_stride: int = 0,
+        dynamic_byte_stride: int | None = 0,
         dynamic_offset_unsigned_bit_count: int = 0,
         dynamic_offset_diagnostic: GuardDiagnostic | None = None,
         cache_policy_build_flags: int = 0,
@@ -196,7 +196,9 @@ class SourceMemoryConstraint:
             raise ValueError("dynamic source memory needs an index source")
         elif self.dynamic_byte_stride == 0:
             raise ValueError("dynamic source memory stride must be non-zero")
-        if not _I64_MIN <= self.dynamic_byte_stride <= _I64_MAX:
+        if self.dynamic_byte_stride is not None and not (
+            _I64_MIN <= self.dynamic_byte_stride <= _I64_MAX
+        ):
             raise ValueError("source memory dynamic byte stride must fit in i64")
         if not 0 <= self.dynamic_offset_unsigned_bit_count <= 64:
             raise ValueError(
