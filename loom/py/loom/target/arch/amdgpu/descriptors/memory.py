@@ -93,6 +93,20 @@ def _buffer_operand_forms(
     return tuple(operand_forms)
 
 
+def _buffer_vaddr_offset_native_assembly_values(
+    *,
+    payload_kind: NativeAsmValueKind,
+    payload_field_name: str,
+    fixed_soffset_native_spelling: str,
+) -> tuple[NativeAsmValue, ...]:
+    return (
+        NativeAsmValue(payload_kind, field_name=payload_field_name),
+        _native_operand("vaddr"),
+        _native_operand("resource"),
+        _native_literal(f"{fixed_soffset_native_spelling} offen"),
+    )
+
+
 def _s_buffer_load_sized_overlay(
     *,
     descriptor_key: str,
@@ -809,6 +823,7 @@ def _buffer_load_off_zero_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -831,7 +846,7 @@ def _buffer_load_off_zero_overlay(
         ),
         fixed_encoding_fields=(
             ("VADDR", _predefined("v0")),
-            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("SOFFSET", fixed_soffset),
             ("IDXEN", 0),
             ("OFFEN", 0),
         ),
@@ -862,6 +877,8 @@ def _buffer_load_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -884,7 +901,7 @@ def _buffer_load_vaddr_offset_overlay(
             *_cache_immediates(cache_fields),
         ),
         fixed_encoding_fields=(
-            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("SOFFSET", fixed_soffset),
             ("IDXEN", 0),
             ("OFFEN", 1),
         ),
@@ -897,6 +914,11 @@ def _buffer_load_vaddr_offset_overlay(
             operands=("resource", "vaddr"),
             immediates=_memory_asm_immediate_names(cache_fields),
             named_immediates=True,
+            native_assembly_values=_buffer_vaddr_offset_native_assembly_values(
+                payload_kind=NativeAsmValueKind.RESULT,
+                payload_field_name="dst",
+                fixed_soffset_native_spelling=fixed_soffset_native_spelling,
+            ),
         ),
     )
 
@@ -932,6 +954,8 @@ def _buffer_load_dword_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_load_vaddr_offset_overlay(
         descriptor_key="amdgpu.buffer_load_dword_vaddr_offset",
@@ -946,6 +970,8 @@ def _buffer_load_dword_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -1001,6 +1027,8 @@ def _buffer_load_b16_d16_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_load_b16_d16_vaddr_offset",
@@ -1027,7 +1055,7 @@ def _buffer_load_b16_d16_vaddr_offset_overlay(
             *_cache_immediates(cache_fields),
         ),
         fixed_encoding_fields=(
-            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("SOFFSET", fixed_soffset),
             ("IDXEN", 0),
             ("OFFEN", 1),
         ),
@@ -1040,6 +1068,11 @@ def _buffer_load_b16_d16_vaddr_offset_overlay(
             operands=("resource", "vaddr"),
             immediates=_memory_asm_immediate_names(cache_fields),
             named_immediates=True,
+            native_assembly_values=_buffer_vaddr_offset_native_assembly_values(
+                payload_kind=NativeAsmValueKind.RESULT,
+                payload_field_name="dst",
+                fixed_soffset_native_spelling=fixed_soffset_native_spelling,
+            ),
         ),
     )
 
@@ -1102,6 +1135,8 @@ def _buffer_load_narrow_overlays(
     cache_fields: tuple[tuple[str, int], ...] = (),
     include_off_zero: bool = True,
     include_vaddr_offset: bool = True,
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return tuple(
         overlay
@@ -1154,6 +1189,7 @@ def _buffer_load_narrow_overlays(
                         offset_field_name=offset_field_name,
                         offset_bit_width=offset_bit_width,
                         cache_fields=cache_fields,
+                        fixed_soffset=fixed_soffset,
                     ),
                 )
                 if include_off_zero
@@ -1176,6 +1212,8 @@ def _buffer_load_narrow_overlays(
                         offset_field_name=offset_field_name,
                         offset_bit_width=offset_bit_width,
                         cache_fields=cache_fields,
+                        fixed_soffset=fixed_soffset,
+                        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
                     ),
                 )
                 if include_vaddr_offset
@@ -1251,6 +1289,8 @@ def _buffer_load_64_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_load_vaddr_offset_overlay(
         descriptor_key=descriptor_key,
@@ -1265,6 +1305,8 @@ def _buffer_load_64_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -1334,6 +1376,8 @@ def _buffer_load_96_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_load_vaddr_offset_overlay(
         descriptor_key=descriptor_key,
@@ -1348,6 +1392,8 @@ def _buffer_load_96_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -1417,6 +1463,8 @@ def _buffer_load_128_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_load_vaddr_offset_overlay(
         descriptor_key=descriptor_key,
@@ -1431,6 +1479,8 @@ def _buffer_load_128_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -1876,6 +1926,8 @@ def _buffer_store_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -1898,7 +1950,7 @@ def _buffer_store_vaddr_offset_overlay(
             *_cache_immediates(cache_fields),
         ),
         fixed_encoding_fields=(
-            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("SOFFSET", fixed_soffset),
             ("IDXEN", 0),
             ("OFFEN", 1),
         ),
@@ -1910,6 +1962,11 @@ def _buffer_store_vaddr_offset_overlay(
             operands=("value", "resource", "vaddr"),
             immediates=_memory_asm_immediate_names(cache_fields),
             named_immediates=True,
+            native_assembly_values=_buffer_vaddr_offset_native_assembly_values(
+                payload_kind=NativeAsmValueKind.OPERAND,
+                payload_field_name="value",
+                fixed_soffset_native_spelling=fixed_soffset_native_spelling,
+            ),
         ),
     )
 
@@ -1945,6 +2002,8 @@ def _buffer_store_dword_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_store_vaddr_offset_overlay(
         descriptor_key="amdgpu.buffer_store_dword_vaddr_offset",
@@ -1959,6 +2018,8 @@ def _buffer_store_dword_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -2012,6 +2073,8 @@ def _buffer_store_b16_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_store_b16_vaddr_offset",
@@ -2038,7 +2101,7 @@ def _buffer_store_b16_vaddr_offset_overlay(
             *_cache_immediates(cache_fields),
         ),
         fixed_encoding_fields=(
-            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("SOFFSET", fixed_soffset),
             ("IDXEN", 0),
             ("OFFEN", 1),
         ),
@@ -2050,6 +2113,11 @@ def _buffer_store_b16_vaddr_offset_overlay(
             operands=("value", "resource", "vaddr"),
             immediates=_memory_asm_immediate_names(cache_fields),
             named_immediates=True,
+            native_assembly_values=_buffer_vaddr_offset_native_assembly_values(
+                payload_kind=NativeAsmValueKind.OPERAND,
+                payload_field_name="value",
+                fixed_soffset_native_spelling=fixed_soffset_native_spelling,
+            ),
         ),
     )
 
@@ -2100,6 +2168,8 @@ def _buffer_store_b8_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_store_vaddr_offset_overlay(
         descriptor_key="amdgpu.buffer_store_b8_vaddr_offset",
@@ -2114,6 +2184,8 @@ def _buffer_store_b8_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -2229,6 +2301,8 @@ def _buffer_store_64_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_store_vaddr_offset_overlay(
         descriptor_key=descriptor_key,
@@ -2243,6 +2317,8 @@ def _buffer_store_64_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -2312,6 +2388,8 @@ def _buffer_store_96_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_store_vaddr_offset_overlay(
         descriptor_key=descriptor_key,
@@ -2326,6 +2404,8 @@ def _buffer_store_96_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -2395,6 +2475,8 @@ def _buffer_store_128_vaddr_offset_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> AmdgpuDescriptorOverlay:
     return _buffer_store_vaddr_offset_overlay(
         descriptor_key=descriptor_key,
@@ -2409,6 +2491,8 @@ def _buffer_store_128_vaddr_offset_overlay(
         offset_field_name=offset_field_name,
         offset_bit_width=offset_bit_width,
         cache_fields=cache_fields,
+        fixed_soffset=fixed_soffset,
+        fixed_soffset_native_spelling=fixed_soffset_native_spelling,
     )
 
 
@@ -2421,6 +2505,8 @@ def _buffer_b16_memory_overlays(
     cache_fields: tuple[tuple[str, int], ...] = (),
     include_off_zero: bool = True,
     include_vaddr_offset: bool = True,
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         *_buffer_load_narrow_overlays(
@@ -2432,6 +2518,8 @@ def _buffer_b16_memory_overlays(
             cache_fields=cache_fields,
             include_off_zero=include_off_zero,
             include_vaddr_offset=include_vaddr_offset,
+            fixed_soffset=fixed_soffset,
+            fixed_soffset_native_spelling=fixed_soffset_native_spelling,
         ),
         _buffer_load_b16_d16_overlay(
             encoding_name=encoding_name,
@@ -2453,6 +2541,8 @@ def _buffer_b16_memory_overlays(
                     offset_field_name=offset_field_name,
                     offset_bit_width=offset_bit_width,
                     cache_fields=cache_fields,
+                    fixed_soffset=fixed_soffset,
+                    fixed_soffset_native_spelling=fixed_soffset_native_spelling,
                 ),
             )
             if include_vaddr_offset
@@ -2476,6 +2566,8 @@ def _buffer_b16_memory_overlays(
                     offset_field_name=offset_field_name,
                     offset_bit_width=offset_bit_width,
                     cache_fields=cache_fields,
+                    fixed_soffset=fixed_soffset,
+                    fixed_soffset_native_spelling=fixed_soffset_native_spelling,
                 ),
             )
             if include_vaddr_offset
@@ -2493,6 +2585,8 @@ def _buffer_byte_memory_overlays(
     cache_fields: tuple[tuple[str, int], ...] = (),
     include_off_zero: bool = True,
     include_vaddr_offset: bool = True,
+    fixed_soffset: AmdgpuFixedEncodingValue = _MUBUF_SOFFSET_INLINE_ZERO,
+    fixed_soffset_native_spelling: str = "0",
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         *_buffer_load_narrow_overlays(
@@ -2504,6 +2598,8 @@ def _buffer_byte_memory_overlays(
             cache_fields=cache_fields,
             include_off_zero=include_off_zero,
             include_vaddr_offset=include_vaddr_offset,
+            fixed_soffset=fixed_soffset,
+            fixed_soffset_native_spelling=fixed_soffset_native_spelling,
         ),
         _buffer_store_b8_overlay(
             encoding_name=encoding_name,
@@ -2523,6 +2619,8 @@ def _buffer_byte_memory_overlays(
                     offset_field_name=offset_field_name,
                     offset_bit_width=offset_bit_width,
                     cache_fields=cache_fields,
+                    fixed_soffset=fixed_soffset,
+                    fixed_soffset_native_spelling=fixed_soffset_native_spelling,
                 ),
             )
             if include_vaddr_offset

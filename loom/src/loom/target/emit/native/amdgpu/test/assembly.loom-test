@@ -1725,6 +1725,23 @@ low.func.def target(@gfx12_target) @gfx12_narrow_vmem_loads(%resource: reg<amdgp
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx12_vbuffer_vaddr_offset_forms waits=none
+amdgpu.target<gfx1200> @gfx12_target
+low.func.def target(@gfx12_target) @gfx12_vbuffer_vaddr_offset_forms(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  %loaded = low.op<amdgpu.buffer_load_dword_vaddr_offset>(%resource, %vaddr) {offset = 4608} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_b16_vaddr_offset>(%loaded, %resource, %vaddr) {offset = 1031} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>)
+  %wide = low.op<amdgpu.buffer_load_b96_vaddr_offset>(%resource, %vaddr) {offset = 2049} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  low.return
+}
+
+// ----
+  buffer_load_dword v1, v0, s[0:3], null offen offset:4608 nv:0 scope:0 th:0
+  buffer_store_short v1, v0, s[0:3], null offen offset:1031 nv:0 scope:0 th:0
+  buffer_load_b96 v[0:2], v0, s[0:3], null offen offset:2049 nv:0 scope:0 th:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx950_packed_half_atomics waits=none
 amdgpu.target<gfx950> @gfx950_target
 low.func.def target(@gfx950_target) @gfx950_packed_half_atomics(%addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %m0: reg<amdgpu.m0>, %value0: reg<amdgpu.vgpr>, %value1: reg<amdgpu.vgpr>, %value2: reg<amdgpu.vgpr>) {

@@ -1025,8 +1025,39 @@ static iree_status_t loom_amdgpu_append_memory_immediate_suffixes(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_try_append_native_memory_packet(
+    const loom_native_assembly_packet_context_t* context, bool* out_matched) {
+  *out_matched = false;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  if (descriptor->canonical_asm_form_ordinal ==
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
+  const loom_low_asm_form_t* form = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_canonical_asm_form(context, &form));
+  if (form->native_assembly_value_count == 0) {
+    return iree_ok_status();
+  }
+  *out_matched = true;
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_asm_form_native_mnemonic(context, form, &mnemonic));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_string(context->builder, mnemonic));
+  bool in_list = false;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_native_asm_form_values(context, form, &in_list));
+  return loom_amdgpu_append_memory_immediate_suffixes(context);
+}
+
 static iree_status_t loom_amdgpu_append_memory_packet(
     const loom_native_assembly_packet_context_t* context) {
+  bool matched = false;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_try_append_native_memory_packet(context, &matched));
+  if (matched) {
+    return iree_ok_status();
+  }
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   if (descriptor->canonical_asm_form_ordinal ==
       LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
@@ -1077,6 +1108,12 @@ static bool loom_amdgpu_mubuf_store_uses_off_zero_form(
 
 static iree_status_t loom_amdgpu_append_mubuf_load_packet(
     const loom_native_assembly_packet_context_t* context) {
+  bool matched = false;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_try_append_native_memory_packet(context, &matched));
+  if (matched) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
@@ -1104,6 +1141,12 @@ static iree_status_t loom_amdgpu_append_mubuf_load_packet(
 
 static iree_status_t loom_amdgpu_append_mubuf_store_packet(
     const loom_native_assembly_packet_context_t* context) {
+  bool matched = false;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_try_append_native_memory_packet(context, &matched));
+  if (matched) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
