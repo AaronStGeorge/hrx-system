@@ -1658,7 +1658,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
     public_header="loom/target/arch/llvmir/contracts/generic_core.h",
     cases=(
         _const_i32_rule(scalar_conversion.scalar_constant, _I32),
-        _const_i32_rule(index.index_constant, _INDEX),
+        _const_i64_rule(index.index_constant, _INDEX),
         _const_i64_rule(scalar_conversion.scalar_constant, _I64),
         _const_i64_rule(index.index_constant, _OFFSET),
         _const_float_rule(

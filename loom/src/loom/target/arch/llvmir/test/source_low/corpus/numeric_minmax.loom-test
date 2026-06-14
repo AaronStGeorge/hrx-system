@@ -234,7 +234,6 @@ low.func.def target(@target) abi(object_function) @scf_select_chained_vgpr_i32(%
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -255,6 +254,21 @@ kernel.def target(@target) @index_minmax_vgpr_select() {
   %stored = vector.constant 1 : vector<1xi32>
   vector.store %stored, %output_view[%selected] : vector<1xi32>, view<64xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @index_minmax_vgpr_select() asm<llvmir.generic.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %tid = kernel.workitem_id.x
+  %limit = const.i64 31
+  %16 = cmp.slt.i64 %tid, %limit
+  %min = select.i64 %16, %tid, %limit
+  %18 = cmp.sgt.i64 %tid, %limit
+  %max = select.i64 %18, %tid, %limit
+  %selected = select.i64 %16, %min, %max
+  %stored = const.i32 1
+  store.indexed.i32 %stored, %output_view, %selected, 0, 4
+  return
 }
 
 // ====
