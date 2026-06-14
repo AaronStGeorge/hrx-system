@@ -15,6 +15,7 @@
 #include "loom/codegen/low/target_binding.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/attribute.h"
+#include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/low/ops.h"
@@ -116,6 +117,13 @@ typedef struct loom_llvmir_emit_memory_info_t {
   // Memory operation flags selecting load/store and indexed addressing.
   loom_llvmir_emit_memory_flags_t flags;
 } loom_llvmir_emit_memory_info_t;
+
+typedef struct loom_llvmir_emit_alloca_info_t {
+  // Generated descriptor reference ordinal.
+  uint32_t descriptor_ref;
+  // Source scratch memory space represented by the descriptor.
+  loom_value_fact_memory_space_t memory_space;
+} loom_llvmir_emit_alloca_info_t;
 
 typedef struct loom_llvmir_emit_kernel_query_info_t {
   // Generated descriptor reference ordinal.
@@ -536,6 +544,13 @@ static const loom_llvmir_emit_memory_info_t kMemoryInfos[] = {
 #undef LOOM_LLVMIR_MEMORY_INFOS
 #undef LOOM_LLVMIR_MEMORY_INFO
 
+static const loom_llvmir_emit_alloca_info_t kAllocaInfos[] = {
+    {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_ALLOCA_PRIVATE_I8,
+     LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE},
+    {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_ALLOCA_WORKGROUP_I8,
+     LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP},
+};
+
 static iree_string_view_t loom_llvmir_emit_string_or_empty(
     const loom_module_t* module, loom_string_id_t string_id) {
   if (string_id == LOOM_STRING_ID_INVALID ||
@@ -797,6 +812,48 @@ static iree_status_t loom_llvmir_emit_core_type(
                                             out_type_id);
 }
 
+static const loom_llvmir_emit_alloca_info_t* loom_llvmir_emit_lookup_alloca(
+    uint32_t descriptor_ref) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAllocaInfos); ++i) {
+    if (kAllocaInfos[i].descriptor_ref == descriptor_ref) {
+      return &kAllocaInfos[i];
+    }
+  }
+  return NULL;
+}
+
+static bool loom_llvmir_emit_memory_space_address_space(
+    const loom_llvmir_target_profile_t* profile,
+    loom_value_fact_memory_space_t memory_space, uint32_t* out_address_space) {
+  switch (memory_space) {
+    case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
+      *out_address_space = profile->target_env->address_spaces.generic;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
+      *out_address_space = profile->target_env->address_spaces.global;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
+      *out_address_space = profile->target_env->address_spaces.local;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
+      *out_address_space = profile->target_env->address_spaces.private_memory;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT:
+      *out_address_space = profile->target_env->address_spaces.constant;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR:
+      if (profile->target_env->address_spaces.buffer_resource == UINT32_MAX) {
+        return false;
+      }
+      *out_address_space = profile->target_env->address_spaces.buffer_resource;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_HOST:
+      return false;
+  }
+  return false;
+}
+
 static bool loom_llvmir_emit_low_value_is_pointer_register(
     loom_llvmir_emit_function_state_t* state, loom_value_id_t value_id) {
   if (value_id >= state->module->values.count) return false;
@@ -856,6 +913,27 @@ static iree_status_t loom_llvmir_emit_pointer_address_space_for_low_value(
         return loom_llvmir_emit_value_type_diagnostic(
             state, op, value_id, value_kind,
             IREE_SV("native_pointer or hal_binding pointer resource"));
+    }
+  }
+  if (def_op != NULL) {
+    loom_low_resolved_descriptor_packet_t packet = {0};
+    IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
+        state->module, state->target, def_op, &packet));
+    if (packet.descriptor != NULL) {
+      const uint32_t descriptor_ref =
+          loom_low_descriptor_set_descriptor_ordinal(
+              state->target->descriptor_set, packet.descriptor);
+      const loom_llvmir_emit_alloca_info_t* alloca_info =
+          loom_llvmir_emit_lookup_alloca(descriptor_ref);
+      if (alloca_info != NULL &&
+          !loom_llvmir_emit_memory_space_address_space(
+              state->target_profile, alloca_info->memory_space,
+              out_address_space)) {
+        *out_supported = false;
+        return loom_llvmir_emit_value_type_diagnostic(
+            state, op, value_id, value_kind,
+            IREE_SV("LLVMIR-addressable scratch pointer"));
+      }
     }
   }
   return iree_ok_status();
@@ -1999,6 +2077,62 @@ static iree_status_t loom_llvmir_emit_byte_pointer(
                                out_pointer);
 }
 
+static iree_status_t loom_llvmir_emit_alloca(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_llvmir_emit_alloca_info_t* info) {
+  if (packet->op->operand_count != 1) {
+    return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                             IREE_SV("packet_operand"),
+                                             packet->op->operand_count, 1);
+  }
+  if (packet->op->result_count != 1) {
+    return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                             IREE_SV("packet_result"),
+                                             packet->op->result_count, 1);
+  }
+
+  int64_t base_alignment = 0;
+  bool has_base_alignment = false;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_read_i64_immediate(
+      state, packet, IREE_SV("base_alignment"), &has_base_alignment,
+      &base_alignment));
+  if (!has_base_alignment) return iree_ok_status();
+
+  uint32_t pointer_address_space = 0;
+  if (!loom_llvmir_emit_memory_space_address_space(
+          state->target_profile, info->memory_space, &pointer_address_space)) {
+    return loom_llvmir_emit_shape_diagnostic(
+        state, packet->op, IREE_SV("memory_space_addressable"), 0, 1);
+  }
+
+  loom_llvmir_type_id_t i8_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(state->llvmir_module, 8, &i8_type));
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      state->llvmir_module, pointer_address_space, &result_type));
+
+  loom_llvmir_value_id_t byte_length = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
+      state, loom_op_const_operands(packet->op)[0], &byte_length));
+
+  const loom_value_id_t result_value = loom_op_const_results(packet->op)[0];
+  loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_alloca(
+      state->llvmir_block,
+      &(loom_llvmir_alloca_desc_t){
+          .result_name =
+              loom_llvmir_emit_value_name(state->module, result_value),
+          .result_type = result_type,
+          .element_type = i8_type,
+          .count = byte_length,
+          .alignment = (uint32_t)base_alignment,
+      },
+      &llvmir_result));
+  return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
+}
+
 static iree_status_t loom_llvmir_emit_memory(
     loom_llvmir_emit_function_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet,
@@ -2150,6 +2284,12 @@ static iree_status_t loom_llvmir_emit_packet(
           IREE_ARRAYSIZE(kSliceDescriptorRefs))) {
     return loom_llvmir_emit_shuffle_like(state, packet,
                                          LOOM_LLVMIR_EMIT_SHUFFLE_KIND_SLICE);
+  }
+
+  const loom_llvmir_emit_alloca_info_t* alloca_info =
+      loom_llvmir_emit_lookup_alloca(descriptor_ref);
+  if (alloca_info) {
+    return loom_llvmir_emit_alloca(state, packet, alloca_info);
   }
 
   const loom_llvmir_emit_memory_info_t* memory_info =
@@ -2387,6 +2527,7 @@ static iree_status_t loom_llvmir_emit_function_body(
   loom_op_t* op = NULL;
   loom_block_for_each_op(block, op) {
     IREE_RETURN_IF_ERROR(loom_llvmir_emit_low_op(state, op));
+    if (state->module_state->error_count != 0) return iree_ok_status();
     if (loom_low_return_isa(op)) {
       has_terminator = true;
       break;

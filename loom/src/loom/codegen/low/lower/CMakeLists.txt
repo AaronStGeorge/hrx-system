@@ -94,6 +94,13 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::error::error_defs
     loom::ir
+    loom::ops::buffer
+    loom::ops::encoding
+    loom::ops::index
+    loom::ops::kernel
+    loom::ops::test
+    loom::ops::vector
+    loom::util::fact_table
 )
 
 loom_cc_test(

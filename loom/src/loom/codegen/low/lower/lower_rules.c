@@ -790,6 +790,19 @@ static bool loom_low_lower_source_memory_space_matches(
   }
 }
 
+static bool loom_low_lower_source_memory_dynamic_index_source_matches(
+    loom_low_source_memory_dynamic_index_source_t required_source,
+    loom_low_source_memory_dynamic_index_source_t actual_source) {
+  if (required_source == LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE) {
+    return actual_source == LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE ||
+           actual_source ==
+               LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID ||
+           actual_source ==
+               LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
+  }
+  return actual_source == required_source;
+}
+
 static bool loom_low_lower_source_memory_dynamic_terms_match(
     const loom_low_lower_source_memory_t* source_memory,
     const loom_low_source_memory_access_plan_t* access) {
@@ -809,7 +822,8 @@ static bool loom_low_lower_source_memory_dynamic_terms_match(
     if (term->stride_value_count != 0) {
       return false;
     }
-    if (term->source != source_memory->dynamic_index_source ||
+    if (!loom_low_lower_source_memory_dynamic_index_source_matches(
+            source_memory->dynamic_index_source, term->source) ||
         term->byte_stride != source_memory->dynamic_byte_stride) {
       return false;
     }

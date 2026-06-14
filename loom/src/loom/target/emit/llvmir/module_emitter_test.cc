@@ -76,7 +76,15 @@ static const loom_llvmir_target_profile_t kTestKernelProfile = {
         /*.uniform_workgroup_size_attr_name=*/
         IREE_SVL("loom-test-uniform-workgroup-size"),
         /*.flags=*/LOOM_LLVMIR_KERNEL_PROFILE_FLAG_ALWAYSINLINE,
-        /*.coordinate_intrinsics=*/{},
+        /*.coordinate_intrinsics=*/
+        {
+            /*.workitem_id_x=*/IREE_SVL("llvm.loom.workitem.id.x"),
+            /*.workitem_id_y=*/{},
+            /*.workitem_id_z=*/{},
+            /*.workgroup_id_x=*/{},
+            /*.workgroup_id_y=*/{},
+            /*.workgroup_id_z=*/{},
+        },
         /*.binding_parameter_attrs=*/
         {
             {
@@ -279,6 +287,44 @@ low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch() asm<llvmir.
       << text;
 }
 
+TEST_F(LlvmirModuleEmitterTest, EmitsKernelScratchAllocaAddressSpace) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  triple = "loom-kernel64-unknown-none"
+}
+
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @dispatch() asm<llvmir.generic.core> {
+  %tid = kernel.workitem_id.x
+  %bytes = const.i64 256
+  %scratch = alloca.workgroup.i8 %bytes, 16
+  %one = const.i32 1
+  store.indexed.i32 %one, %scratch, %tid, 0, 4
+  %loaded = load.indexed.i32 %scratch, %tid, 0, 4
+  store.indexed.i32 %loaded, %scratch, %tid, 0, 4
+  return
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  ASSERT_NE(llvmir_module, nullptr);
+  EXPECT_TRUE(capture.emissions.empty());
+
+  std::string text;
+  IREE_ASSERT_OK(WriteText(llvmir_module.get(), &text));
+  EXPECT_NE(text.find("%scratch = alloca i8, i64 256, align 16, addrspace(3)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("mul i64 %tid, 4"), std::string::npos) << text;
+  EXPECT_NE(text.find("getelementptr i8, ptr addrspace(3) %scratch"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("store i32 1, ptr addrspace(3)"), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("load i32, ptr addrspace(3)"), std::string::npos) << text;
+}
+
 TEST_F(LlvmirModuleEmitterTest, ReportsHalKernelWithoutWorkgroupSize) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {
@@ -305,6 +351,34 @@ low.kernel.def target(@target) @dispatch() asm<llvmir.generic.core> {
   ASSERT_EQ(emission.u32_params.size(), 2u);
   EXPECT_EQ(emission.u32_params[0], 0u);
   EXPECT_EQ(emission.u32_params[1], 3u);
+}
+
+TEST_F(LlvmirModuleEmitterTest,
+       ReportsMissingKernelCoordinateIntrinsicAsDiagnostic) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  triple = "loom-kernel64-unknown-none"
+}
+
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @dispatch() asm<llvmir.generic.core> {
+  %tid = kernel.workitem_id.y
+  return
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  EXPECT_EQ(llvmir_module, nullptr);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_TARGET_053);
+  ASSERT_EQ(emission.string_params.size(), 4u);
+  EXPECT_EQ(emission.string_params[0], "dispatch");
+  EXPECT_EQ(emission.string_params[1], "llvmir.kernel.workitem_id.y");
+  EXPECT_EQ(emission.string_params[2], "llvmir.generic.core");
+  EXPECT_EQ(emission.string_params[3], "llvmir.low");
 }
 
 TEST_F(LlvmirModuleEmitterTest, ReportsDirectHalKernelPointerArgument) {

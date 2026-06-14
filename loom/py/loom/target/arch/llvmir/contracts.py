@@ -469,7 +469,7 @@ def _source_memory_constraint(
 ) -> SourceMemoryConstraint:
     return SourceMemoryConstraint(
         operation=operation,
-        root_kind=SourceMemoryRootKind.BLOCK_ARGUMENT,
+        root_kind=SourceMemoryRootKind.ANY,
         memory_spaces=(
             "unknown",
             "generic",
@@ -508,19 +508,20 @@ def _view_load_rule(
     result_type: TypePattern,
     descriptor_key: str,
     *,
-    dynamic: bool,
+    source_dynamic: bool,
+    address_dynamic: bool,
     element_byte_count: int,
     vector_lane_count: int = 1,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     operands = {"ptr": ValueRef.operand(view_field)}
-    if dynamic:
+    if address_dynamic:
         operands["index"] = ValueRef.operand("indices")
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
         guards=(
-            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            Guard.operand_segment_count("indices", 1 if source_dynamic else 0),
             Guard.value_type("result", result_type),
         ),
         emit=(
@@ -528,10 +529,10 @@ def _view_load_rule(
                 descriptor=descriptor,
                 operands=operands,
                 results={"dst": ValueRef.result("result")},
-                immediates=_memory_immediates(dynamic),
+                immediates=_memory_immediates(address_dynamic),
                 source_memory=_source_memory_constraint(
                     SourceMemoryOperation.LOAD,
-                    dynamic=dynamic,
+                    dynamic=address_dynamic,
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
                 ),
@@ -546,7 +547,8 @@ def _view_store_rule(
     value_type: TypePattern,
     descriptor_key: str,
     *,
-    dynamic: bool,
+    source_dynamic: bool,
+    address_dynamic: bool,
     element_byte_count: int,
     vector_lane_count: int = 1,
 ) -> DescriptorRule:
@@ -555,23 +557,23 @@ def _view_store_rule(
         "value": ValueRef.operand("value"),
         "ptr": ValueRef.operand(view_field),
     }
-    if dynamic:
+    if address_dynamic:
         operands["index"] = ValueRef.operand("indices")
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
         guards=(
-            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            Guard.operand_segment_count("indices", 1 if source_dynamic else 0),
             Guard.value_type("value", value_type),
         ),
         emit=(
             _op_emit(
                 descriptor=descriptor,
                 operands=operands,
-                immediates=_memory_immediates(dynamic),
+                immediates=_memory_immediates(address_dynamic),
                 source_memory=_source_memory_constraint(
                     SourceMemoryOperation.STORE,
-                    dynamic=dynamic,
+                    dynamic=address_dynamic,
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
                 ),
@@ -593,6 +595,28 @@ def _buffer_view_rule() -> ValueAliasRule:
         source_op=buffer.buffer_view,
         source=ValueRef.operand("buffer"),
         result=ValueRef.result("result"),
+    )
+
+
+def _buffer_alloca_rule(memory_space: str) -> DescriptorRule:
+    descriptor = _descriptor(f"llvmir.alloca.{memory_space}.i8")
+    return DescriptorRule(
+        source_op=buffer.buffer_alloca,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("byte_length", _OFFSET),
+            Guard.enum_attr_equals("memory_space", memory_space),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"byte_length": ValueRef.operand("byte_length")},
+                results={"ptr": ValueRef.result("result")},
+                immediates={
+                    "base_alignment": AttrProject.direct("base_alignment"),
+                },
+            ),
+        ),
     )
 
 
@@ -1142,14 +1166,19 @@ def _structural_vector_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
 def _memory_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for element, element_byte_count in _MEMORY_VALUE_TYPES:
-        for dynamic in (False, True):
+        for source_dynamic, address_dynamic in (
+            (False, False),
+            (True, False),
+            (True, True),
+        ):
             rules.append(
                 _view_load_rule(
                     view.view_load,
                     "view",
                     Scalar(element),
-                    _memory_descriptor_key("load", element, dynamic=dynamic),
-                    dynamic=dynamic,
+                    _memory_descriptor_key("load", element, dynamic=address_dynamic),
+                    source_dynamic=source_dynamic,
+                    address_dynamic=address_dynamic,
                     element_byte_count=element_byte_count,
                 )
             )
@@ -1158,8 +1187,9 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     view.view_store,
                     "view",
                     Scalar(element),
-                    _memory_descriptor_key("store", element, dynamic=dynamic),
-                    dynamic=dynamic,
+                    _memory_descriptor_key("store", element, dynamic=address_dynamic),
+                    source_dynamic=source_dynamic,
+                    address_dynamic=address_dynamic,
                     element_byte_count=element_byte_count,
                 )
             )
@@ -1171,8 +1201,11 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                         vector.vector_load,
                         "view",
                         vector_type,
-                        _memory_descriptor_key("load", vector_suffix, dynamic=dynamic),
-                        dynamic=dynamic,
+                        _memory_descriptor_key(
+                            "load", vector_suffix, dynamic=address_dynamic
+                        ),
+                        source_dynamic=source_dynamic,
+                        address_dynamic=address_dynamic,
                         element_byte_count=element_byte_count,
                         vector_lane_count=lane_count,
                     )
@@ -1182,8 +1215,11 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                         vector.vector_store,
                         "view",
                         vector_type,
-                        _memory_descriptor_key("store", vector_suffix, dynamic=dynamic),
-                        dynamic=dynamic,
+                        _memory_descriptor_key(
+                            "store", vector_suffix, dynamic=address_dynamic
+                        ),
+                        source_dynamic=source_dynamic,
+                        address_dynamic=address_dynamic,
                         element_byte_count=element_byte_count,
                         vector_lane_count=lane_count,
                     )
@@ -1194,8 +1230,9 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     vector.vector_load,
                     "view",
                     vector_type,
-                    _memory_descriptor_key("load", element, dynamic=dynamic),
-                    dynamic=dynamic,
+                    _memory_descriptor_key("load", element, dynamic=address_dynamic),
+                    source_dynamic=source_dynamic,
+                    address_dynamic=address_dynamic,
                     element_byte_count=element_byte_count,
                 )
             )
@@ -1204,8 +1241,9 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     vector.vector_store,
                     "view",
                     vector_type,
-                    _memory_descriptor_key("store", element, dynamic=dynamic),
-                    dynamic=dynamic,
+                    _memory_descriptor_key("store", element, dynamic=address_dynamic),
+                    source_dynamic=source_dynamic,
+                    address_dynamic=address_dynamic,
                     element_byte_count=element_byte_count,
                 )
             )
@@ -1271,6 +1309,8 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
             result=ValueRef.result("results"),
             guards=(Guard.operand_segment_count("values", 1),),
         ),
+        _buffer_alloca_rule("private"),
+        _buffer_alloca_rule("workgroup"),
         _buffer_view_rule(),
         *_scalar_arithmetic_rules(),
         *_scalar_bitwise_rules(),

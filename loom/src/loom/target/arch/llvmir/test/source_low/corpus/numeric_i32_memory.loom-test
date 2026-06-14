@@ -1,7 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_i32_memory.loom-test
 // RUN: emit source-low output=low
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -24,9 +23,22 @@ kernel.def target(@target) @i32_bitwise() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %loaded = load.i32 %input_view, 0
+  %mask = const.i32 15
+  %masked = and.i32 %loaded, %mask
+  %tag = const.i32 240
+  %with_tag = or.i32 %masked, %tag
+  %result = xor.i32 %with_tag, %loaded
+  store.i32 %result, %output_view, 0
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -50,9 +62,23 @@ kernel.def target(@target) @i32_shift() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %loaded = load.i32 %input_view, 0
+  %shift = const.i32 3
+  %left = shl.i32 %loaded, %shift
+  %logical = lshr.i32 %loaded, %shift
+  %arithmetic = ashr.i32 %loaded, %shift
+  %joined = or.i32 %left, %logical
+  %result = xor.i32 %joined, %arithmetic
+  store.i32 %result, %output_view, 0
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -70,6 +96,17 @@ kernel.def target(@target) @i32_negative_literal() {
   %result = vector.xori %loaded, %mask : vector<1xi32>
   vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %loaded = load.i32 %input_view, 0
+  %mask = const.i32 -1
+  %result = xor.i32 %loaded, %mask
+  store.i32 %result, %output_view, 0
+  return
 }
 
 // ====

@@ -289,6 +289,13 @@ _BYTE_STRIDE_IMMEDIATE = Immediate(
     unsigned_max=(2**63) - 1,
 )
 
+_BASE_ALIGNMENT_IMMEDIATE = Immediate(
+    "base_alignment",
+    ImmediateKind.UNSIGNED,
+    bit_width=32,
+    unsigned_max=(2**32) - 1,
+)
+
 
 def _lane_immediate(lane_count: int) -> Immediate:
     return Immediate(
@@ -585,6 +592,27 @@ def _store_descriptor(
         ),
         effects=(_write_effect(_UNIT_BITS_BY_TYPE[type_name] * unit_count),),
         schedule_class=_SCHEDULE_STORE,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _alloca_descriptor(memory_space: str) -> Descriptor:
+    return Descriptor(
+        key=f"llvmir.alloca.{memory_space}.i8",
+        mnemonic="alloca",
+        semantic_tag=f"llvmir.alloca.{memory_space}.i8",
+        operands=(
+            _result("ptr", "ptr"),
+            _operand("i64", "byte_length"),
+        ),
+        immediates=(_BASE_ALIGNMENT_IMMEDIATE,),
+        asm_forms=_asm(
+            mnemonic=f"alloca.{memory_space}.i8",
+            results=("ptr",),
+            operands=("byte_length",),
+            immediates=("base_alignment",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -929,6 +957,13 @@ def _memory_descriptors() -> tuple[Descriptor, ...]:
     return tuple(descriptors)
 
 
+def _allocation_descriptors() -> tuple[Descriptor, ...]:
+    return (
+        _alloca_descriptor("private"),
+        _alloca_descriptor("workgroup"),
+    )
+
+
 LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="llvmir.generic.core",
     target_key="llvmir",
@@ -1016,5 +1051,6 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_kernel_query_descriptors(),
         *_structural_vector_descriptors(),
         *_memory_descriptors(),
+        *_allocation_descriptors(),
     ),
 )

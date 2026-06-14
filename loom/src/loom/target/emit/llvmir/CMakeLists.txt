@@ -97,6 +97,7 @@ loom_cc_library(
     loom::error::emitter
     loom::error::error_defs
     loom::ir
+    loom::ir::facts
     loom::ops::llvmir
     loom::ops::low
     loom::target::arch::llvmir::descriptors::descriptors_ids
