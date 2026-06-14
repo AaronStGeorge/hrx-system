@@ -86,6 +86,7 @@ iree_amdgpu_hal_cts_testdata(
     "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
     "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
+    "testdata/asan_allocation_test.c"
     "testdata/manual_asan_noop_test.c"
     "testdata/manual_asan_test.c"
   DEPS
@@ -98,25 +99,11 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
-    asan_executable_test_util
-  HDRS
-    "asan_executable_test_util.h"
-  DEPS
-    iree::hal
-    iree::hal::cts::util::test_base
-  TESTONLY
-  PUBLIC
-)
-endif()
-
-if(IREE_HAL_DRIVER_AMDGPU)
-iree_cc_library(
-  NAME
     asan_executable_test
   SRCS
     "asan_executable_test.cc"
   DEPS
-    ::asan_executable_test_util
+    iree::hal::cts::sanitizer::asan_test_util
     iree::hal::drivers::amdgpu::abi
     iree::hal::drivers::amdgpu::headers
   TESTONLY
@@ -157,14 +144,39 @@ iree_cc_library(
   SRCS
     "manual_asan_executable_test.cc"
   DEPS
-    ::asan_executable_test_util
     iree::hal
+    iree::hal::cts::sanitizer::asan_test_util
     iree::hal::cts::util::registry
     iree::hal::cts::util::test_base
     iree::hal::drivers::amdgpu::buffer
   TESTONLY
   ALWAYSLINK
   PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    asan_allocation_tests
+  SRCS
+    "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/cts/util/test_main.cc"
+  DEPS
+    ::asan_testdata_amdgpu
+    ::backends
+    iree::base::tooling::flags
+    iree::hal::cts::sanitizer::asan_allocation_test
+    iree::hal::cts::util::registry
+    iree::hal::cts::util::test_base
+    iree::testing::gtest
+  ARGS
+    "--amdgpu_asan=true"
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 endif()
 

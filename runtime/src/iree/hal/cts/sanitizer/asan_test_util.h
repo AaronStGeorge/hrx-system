@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Shared helpers for AMDGPU ASAN executable CTS coverage.
+// Shared helpers for HAL ASAN executable CTS coverage.
 
-#ifndef IREE_HAL_DRIVERS_AMDGPU_CTS_ASAN_EXECUTABLE_TEST_UTIL_H_
-#define IREE_HAL_DRIVERS_AMDGPU_CTS_ASAN_EXECUTABLE_TEST_UTIL_H_
+#ifndef IREE_HAL_CTS_SANITIZER_ASAN_TEST_UTIL_H_
+#define IREE_HAL_CTS_SANITIZER_ASAN_TEST_UTIL_H_
 
 #include <condition_variable>
 #include <cstring>
@@ -130,6 +130,12 @@ GetAsanBackendCache() {
   return cache;
 }
 
+// Returns true if |status_code| means the CTS backend cannot run on this host.
+inline bool AsanStatusCodeIsBackendUnavailable(iree_status_code_t status_code) {
+  return status_code == IREE_STATUS_UNAVAILABLE ||
+         status_code == IREE_STATUS_NOT_FOUND;
+}
+
 // Borrows the cached ASAN CTS backend device for one test.
 class AsanCachedBackendDevice {
  public:
@@ -154,7 +160,7 @@ class AsanCachedBackendDevice {
         status =
             backend.factory(cached.create_context.params(), &driver, &device);
       }
-      if (iree_status_is_unavailable(status)) {
+      if (AsanStatusCodeIsBackendUnavailable(iree_status_code(status))) {
         iree_status_free(status);
         cached.unavailable = true;
         cached.create_context.Deinitialize();
@@ -253,7 +259,7 @@ inline iree_status_t AsanReadBufferBytes(iree_hal_device_t* device,
   out_data->clear();
   if (length > IREE_HOST_SIZE_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU ASAN CTS readback length %" PRIu64
+                            "HAL ASAN CTS readback length %" PRIu64
                             " exceeds host vector capacity",
                             (uint64_t)length);
   }
@@ -296,7 +302,7 @@ inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
   if (source_offset > iree_hal_buffer_byte_length(source_buffer)) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU ASAN CTS readback offset %" PRIu64
+        "HAL ASAN CTS readback offset %" PRIu64
         " exceeds buffer length %" PRIu64,
         (uint64_t)source_offset,
         (uint64_t)iree_hal_buffer_byte_length(source_buffer));
@@ -305,7 +311,7 @@ inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
       iree_hal_buffer_byte_length(source_buffer) - source_offset;
   if (byte_length % sizeof(T) != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU ASAN CTS readback length %" PRIu64
+                            "HAL ASAN CTS readback length %" PRIu64
                             " is not divisible by element size %" PRIhsz,
                             (uint64_t)byte_length, sizeof(T));
   }
@@ -330,4 +336,4 @@ inline iree_status_t AsanReadBufferData(iree_hal_device_t* device,
 
 }  // namespace iree::hal::cts
 
-#endif  // IREE_HAL_DRIVERS_AMDGPU_CTS_ASAN_EXECUTABLE_TEST_UTIL_H_
+#endif  // IREE_HAL_CTS_SANITIZER_ASAN_TEST_UTIL_H_

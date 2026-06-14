@@ -10,10 +10,10 @@
 #include <string_view>
 #include <vector>
 
+#include "iree/hal/cts/sanitizer/asan_test_util.h"
 #include "iree/hal/drivers/amdgpu/abi/asan.h"
 #include "iree/hal/drivers/amdgpu/abi/feedback.h"
 #include "iree/hal/drivers/amdgpu/api.h"
-#include "iree/hal/drivers/amdgpu/cts/asan_executable_test_util.h"
 
 namespace iree::hal::cts {
 

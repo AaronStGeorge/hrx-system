@@ -9,8 +9,8 @@
 #include <array>
 #include <cstdint>
 
+#include "iree/hal/cts/sanitizer/asan_test_util.h"
 #include "iree/hal/drivers/amdgpu/buffer.h"
-#include "iree/hal/drivers/amdgpu/cts/asan_executable_test_util.h"
 
 namespace iree::hal::cts {
 
