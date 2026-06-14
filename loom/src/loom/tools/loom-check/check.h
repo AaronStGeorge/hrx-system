@@ -39,7 +39,9 @@
 //                           [diagnostics=...] [class=units...]
 //                           [fixed=%value:<kind>:<base>:<count>],
 //                           low-allocation-json @function for the full
-//                           allocation table, and low-packet-json @function.
+//                           allocation table, diagnostics include
+//                           predicted-spills, copy-decisions, and
+//                           placement-decisions, and low-packet-json @function.
 //                           Source-to-low tests use source-low
 //                           [output=module|low]
 //                           [diagnostics=none|memory|all]. Linked providers

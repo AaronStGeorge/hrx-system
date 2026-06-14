@@ -675,6 +675,7 @@ loom_cc_library(
     loom::codegen::low::diagnostics
     loom::error::emitter
     loom::error::error_defs
+    loom::ir
   PUBLIC
 )
 

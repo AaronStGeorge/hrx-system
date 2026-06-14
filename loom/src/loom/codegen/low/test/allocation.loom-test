@@ -141,6 +141,30 @@ low.func.def target(@test_target) @dead_result_clobber_window(%leader: reg<test.
 
 // ====
 
+// RUN: emit low-allocation-json @placement_affinity_accepted diagnostics=placement-decisions output=none
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @placement_affinity_accepted(%state: reg<test.i32>) -> (reg<test.i32>) {
+  // REMARK@+1: BACKEND/043 {function_name="placement_affinity_accepted", op_name="low.copy", source_value_name="state", result_value_name="copy", value_class="test.i32", placement_cause="low.copy", decision="accepted", reason="assigned-locations-match"}
+  %copy = low.copy %state : reg<test.i32> -> reg<test.i32>
+  low.return %copy : reg<test.i32>
+}
+
+// ====
+
+// RUN: emit low-allocation-json @placement_affinity_rejected diagnostics=placement-decisions fixed=%state:target_id:0:1 fixed=%copy:target_id:1:1 output=none
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @placement_affinity_rejected(%state: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  // REMARK@+1: BACKEND/043 {function_name="placement_affinity_rejected", op_name="low.copy", source_value_name="state", result_value_name="copy", value_class="test.i32", placement_cause="low.copy", decision="rejected", reason="assigned-locations-differ"}
+  %copy = low.copy %state : reg<test.i32> -> reg<test.i32>
+  low.return %copy, %state : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
 // RUN: emit low-allocation-json @tied_copy_loop_carried_value
 
 test.target<low_core> @test_target

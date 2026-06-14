@@ -1031,6 +1031,41 @@ ERR_BACKEND_042 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_043: Allocation placement affinity decision was recorded.
+ERR_BACKEND_043 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=43,
+    severity=Severity.REMARK,
+    summary="Allocation placement affinity decision recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} {relation_weight} placement affinity '{placement_cause}' "
+        "between source value '{source_value_name}' and result value "
+        "'{result_value_name}' for value class '{value_class}' in "
+        "'@{function_name}' op '{op_name}' with relation kind "
+        "'{relation_kind}', result offset {result_unit_offset}, source offset "
+        "{source_unit_offset}, unit count {unit_count}, and reason '{reason}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("source_value_name", ParamKind.STRING),
+        ErrorParam("result_value_name", ParamKind.STRING),
+        ErrorParam("value_class", ParamKind.STRING),
+        ErrorParam("placement_cause", ParamKind.STRING),
+        ErrorParam("relation_kind", ParamKind.STRING),
+        ErrorParam("relation_weight", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("result_unit_offset", ParamKind.U32),
+        ErrorParam("source_unit_offset", ParamKind.U32),
+        ErrorParam("unit_count", ParamKind.U32),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -1068,4 +1103,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_040,
     ERR_BACKEND_041,
     ERR_BACKEND_042,
+    ERR_BACKEND_043,
 )
