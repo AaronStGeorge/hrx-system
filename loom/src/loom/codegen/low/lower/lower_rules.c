@@ -1316,6 +1316,16 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       return loom_low_lower_rule_mapped_value_register_class_matches(
           match_context, mapped_value, guard->register_class_id, out_matches);
     }
+    case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT: {
+      loom_low_lower_rule_mapped_value_t mapped_value =
+          loom_low_lower_rule_mapped_value_none();
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_value(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          &mapped_value));
+      *out_matches = mapped_value.is_register &&
+                     mapped_value.register_unit_count == guard->u64;
+      return iree_ok_status();
+    }
     case LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE: {
       IREE_ASSERT_GT(guard->u64, 0);
       loom_value_id_t value_id = loom_low_lower_rule_source_value(

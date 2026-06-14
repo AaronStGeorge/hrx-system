@@ -476,6 +476,8 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT = 25,
   // Source value must have no ordinary operand uses. Type uses are ignored.
   LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
+  // Source value ref must map to a low register with exactly |u64| units.
+  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 27,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -494,8 +496,8 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value, divisor, count, element index, bit-count payload, or
-  // exact f64 bit pattern.
+  // Required enum value, divisor, count, element index, bit-count payload,
+  // register unit count, or exact f64 bit pattern.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;

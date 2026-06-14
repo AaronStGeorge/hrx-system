@@ -1378,17 +1378,33 @@ iree_status_t loom_amdgpu_lookup_or_materialize_native_i1_mask(
     return iree_ok_status();
   }
 
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+
+  loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t condition = low_value;
   bool is_scc = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SCC, &is_scc));
-  if (!is_scc || loom_low_register_type_unit_count(low_type) != 1) {
+  if (is_sgpr && loom_low_register_type_unit_count(low_type) == 1) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0, sgpr_type,
+        &zero));
+    loom_type_t scc_type = loom_type_none();
+    IREE_RETURN_IF_ERROR(loom_amdgpu_make_scc_type(context, &scc_type));
+    const loom_value_id_t operands[] = {low_value, zero};
+    loom_op_t* compare_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_I32, operands,
+        IREE_ARRAYSIZE(operands), loom_named_attr_slice_empty(), &scc_type, 1,
+        &compare_op));
+    condition = loom_value_slice_get(loom_low_op_results(compare_op), 0);
+  } else if (!is_scc || loom_low_register_type_unit_count(low_type) != 1) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
         "AMDGPU i1 value cannot materialize as a native mask operand");
   }
 
-  loom_type_t sgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
   loom_type_t mask_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_make_sgpr_range_type(context, 2, &mask_type));
@@ -1410,10 +1426,11 @@ iree_status_t loom_amdgpu_lookup_or_materialize_native_i1_mask(
         context, source_op, exec_mask, i, sgpr_type, &exec_lanes[i]));
   }
 
-  loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0, sgpr_type,
-      &zero));
+  if (zero == LOOM_VALUE_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0, sgpr_type,
+        &zero));
+  }
 
   loom_value_id_t mask_lanes[2] = {
       LOOM_VALUE_ID_INVALID,
@@ -1423,7 +1440,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_native_i1_mask(
     const loom_value_id_t operands[] = {
         exec_lanes[i],
         zero,
-        low_value,
+        condition,
     };
     loom_op_t* select_op = NULL;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(

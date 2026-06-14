@@ -606,6 +606,34 @@ class _LowerRuleSetCompiler:
             )
             return
 
+        if guard.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
+            if guard.count is None or guard.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: register-unit-count guard needs a "
+                    "positive count"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.field),
+                    ),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _register_unit_count_exact_diagnostic(
+                                guard.field,
+                                guard.count,
+                            ),
+                        ),
+                    ),
+                    u64=guard.count,
+                )
+            )
+            return
+
         if guard.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
             if guard.count is None or guard.count <= 0:
                 raise ValueError(
@@ -1820,6 +1848,15 @@ def _register_unit_count_diagnostic(
         field,
         other_field,
         "low_register_unit_count_eq",
+    )
+
+
+def _register_unit_count_exact_diagnostic(field: str, count: int) -> DiagnosticRef:
+    return _count_constraint_diagnostic(
+        "field",
+        field,
+        "low_register_unit_count",
+        count,
     )
 
 

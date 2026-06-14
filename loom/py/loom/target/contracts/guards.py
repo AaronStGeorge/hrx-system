@@ -47,6 +47,7 @@ class GuardKind(Enum):
     DESCRIPTOR_AVAILABLE = "descriptor_available"
     VALUE_MATERIALIZABLE = "value_materializable"
     LOW_VALUE_REGISTER_CLASS = "low_value_register_class"
+    LOW_VALUE_REGISTER_UNIT_COUNT = "low_value_register_unit_count"
     VALUE_STATIC_DIM0_MULTIPLE = "value_static_dim0_multiple"
     LOW_VALUE_REGISTER_UNIT_COUNT_EQ = "low_value_register_unit_count_eq"
     OPERAND_SEGMENT_COUNT = "operand_segment_count"
@@ -223,6 +224,21 @@ class Guard:
             kind=GuardKind.LOW_VALUE_REGISTER_CLASS,
             field=field,
             register_class=register_class,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def low_value_register_unit_count(
+        cls,
+        field: str,
+        count: int,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
+            field=field,
+            count=count,
             diagnostic=diagnostic,
         )
 
@@ -573,6 +589,13 @@ class Guard:
             _require_value(source_op, self.field, subject)
             if self.register_class is None:
                 raise ValueError(f"{source_op.name}: {subject} needs a register class")
+            return
+        if self.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
+            _require_value(source_op, self.field, subject)
+            if self.count is None or self.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: {subject} needs a positive unit count"
+                )
             return
         if self.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
             _require_value(source_op, self.field, subject)

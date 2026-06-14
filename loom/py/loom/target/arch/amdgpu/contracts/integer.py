@@ -406,66 +406,74 @@ def _i1_sgpr_mask_rule(
     )
 
 
-def _i1_scc_rule(
+_I1_SCALAR_BOOL_CLASSES = ("amdgpu.scc", "amdgpu.sgpr")
+
+
+def _i1_scalar_bool_operand(field: str, register_class: str) -> ValueRef:
+    if register_class == "amdgpu.scc":
+        return ValueRef.temporary(f"{field}_i32")
+    return ValueRef.operand(field)
+
+
+def _i1_scalar_bool_project_emit(
+    field: str,
+    register_class: str,
+    select: Descriptor,
+) -> tuple[EmitDescriptorOp, ...]:
+    if register_class != "amdgpu.scc":
+        return ()
+    return (
+        EmitDescriptorOp(
+            descriptor=select,
+            operands={
+                "true_value": ValueRef.temporary("one"),
+                "false_value": ValueRef.temporary("zero"),
+                "condition": ValueRef.operand(field),
+            },
+            results={"dst": ValueRef.temporary(f"{field}_i32")},
+            result_types={"dst": _I32},
+        ),
+    )
+
+
+def _i1_scalar_bool_bitwise_rule(
     source_op: Op,
     descriptor_key: str,
+    lhs_class: str,
+    rhs_class: str,
+    result_class: str,
 ) -> DescriptorRule:
     move = _descriptor("amdgpu.s_mov_b32")
     select = _descriptor("amdgpu.s_cselect_b32")
     bitwise = _descriptor(descriptor_key)
     compare = _descriptor("amdgpu.s_cmp_lg_i32")
-    return DescriptorRule(
-        source_op=source_op,
-        descriptor=bitwise,
-        guards=(
-            *_typed_binary_guards(_I1),
-            Guard.low_value_register_class("lhs", "amdgpu.scc"),
-            Guard.low_value_register_class("rhs", "amdgpu.scc"),
-            Guard.low_value_register_class("result", "amdgpu.scc"),
-            *_descriptor_available_guards(move, select, bitwise, compare),
-        ),
-        emit=(
+    result_is_scc = result_class == "amdgpu.scc"
+    projects_scc_operand = lhs_class == "amdgpu.scc" or rhs_class == "amdgpu.scc"
+    bitwise_result = (
+        ValueRef.temporary("result_i32") if result_is_scc else ValueRef.result("result")
+    )
+    prefix: tuple[EmitDescriptorOp, ...] = ()
+    if result_is_scc or projects_scc_operand:
+        prefix += (
             EmitDescriptorOp(
                 descriptor=move,
                 results={"dst": ValueRef.temporary("zero")},
                 result_types={"dst": _I32},
                 immediates={"imm32": 0},
             ),
+        )
+    if projects_scc_operand:
+        prefix += (
             EmitDescriptorOp(
                 descriptor=move,
                 results={"dst": ValueRef.temporary("one")},
                 result_types={"dst": _I32},
                 immediates={"imm32": 1},
             ),
-            EmitDescriptorOp(
-                descriptor=select,
-                operands={
-                    "true_value": ValueRef.temporary("one"),
-                    "false_value": ValueRef.temporary("zero"),
-                    "condition": ValueRef.operand("lhs"),
-                },
-                results={"dst": ValueRef.temporary("lhs_i32")},
-                result_types={"dst": _I32},
-            ),
-            EmitDescriptorOp(
-                descriptor=select,
-                operands={
-                    "true_value": ValueRef.temporary("one"),
-                    "false_value": ValueRef.temporary("zero"),
-                    "condition": ValueRef.operand("rhs"),
-                },
-                results={"dst": ValueRef.temporary("rhs_i32")},
-                result_types={"dst": _I32},
-            ),
-            EmitDescriptorOp(
-                descriptor=bitwise,
-                operands={
-                    "lhs": ValueRef.temporary("lhs_i32"),
-                    "rhs": ValueRef.temporary("rhs_i32"),
-                },
-                results={"dst": ValueRef.temporary("result_i32")},
-                result_types={"dst": _I32},
-            ),
+        )
+    suffix: tuple[EmitDescriptorOp, ...] = ()
+    if result_is_scc:
+        suffix = (
             EmitDescriptorOp(
                 descriptor=compare,
                 operands={
@@ -474,7 +482,53 @@ def _i1_scc_rule(
                 },
                 results={"scc": ValueRef.result("result")},
             ),
+        )
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=bitwise,
+        guards=(
+            *_typed_binary_guards(_I1),
+            Guard.low_value_register_class("lhs", lhs_class),
+            Guard.low_value_register_unit_count("lhs", 1),
+            Guard.low_value_register_class("rhs", rhs_class),
+            Guard.low_value_register_unit_count("rhs", 1),
+            Guard.low_value_register_class("result", result_class),
+            Guard.low_value_register_unit_count("result", 1),
+            *_descriptor_available_guards(move, select, bitwise, compare),
         ),
+        emit=(
+            *prefix,
+            *_i1_scalar_bool_project_emit("lhs", lhs_class, select),
+            *_i1_scalar_bool_project_emit("rhs", rhs_class, select),
+            EmitDescriptorOp(
+                descriptor=bitwise,
+                operands={
+                    "lhs": _i1_scalar_bool_operand("lhs", lhs_class),
+                    "rhs": _i1_scalar_bool_operand("rhs", rhs_class),
+                },
+                results={"dst": bitwise_result},
+                result_types={"dst": _I32},
+            ),
+            *suffix,
+        ),
+    )
+
+
+def _i1_scalar_bool_bitwise_rules(
+    source_op: Op,
+    descriptor_key: str,
+) -> tuple[DescriptorRule, ...]:
+    return tuple(
+        _i1_scalar_bool_bitwise_rule(
+            source_op,
+            descriptor_key,
+            lhs_class,
+            rhs_class,
+            result_class,
+        )
+        for result_class in _I1_SCALAR_BOOL_CLASSES
+        for lhs_class in _I1_SCALAR_BOOL_CLASSES
+        for rhs_class in _I1_SCALAR_BOOL_CLASSES
     )
 
 
@@ -1232,8 +1286,8 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_mul_lo_u32",
         )
     )
-    rules.append(
-        _i1_scc_rule(
+    rules.extend(
+        _i1_scalar_bool_bitwise_rules(
             scalar_bitwise.scalar_andi,
             "amdgpu.s_and_b32",
         )
@@ -1252,8 +1306,8 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_and_b32.lit",
         )
     )
-    rules.append(
-        _i1_scc_rule(
+    rules.extend(
+        _i1_scalar_bool_bitwise_rules(
             scalar_bitwise.scalar_ori,
             "amdgpu.s_or_b32",
         )
@@ -1272,8 +1326,8 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_or_b32.lit",
         )
     )
-    rules.append(
-        _i1_scc_rule(
+    rules.extend(
+        _i1_scalar_bool_bitwise_rules(
             scalar_bitwise.scalar_xori,
             "amdgpu.s_xor_b32",
         )
