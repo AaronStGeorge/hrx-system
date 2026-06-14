@@ -1895,6 +1895,15 @@ static iree_status_t loom_low_lower_rule_build_attrs(
                        source_op->attribute_count);
         attrs[i].value = source_attrs[attr_copy->source_attr_index];
         break;
+      case LOOM_LOW_LOWER_ATTR_COPY_ENUM_ORDINAL: {
+        IREE_ASSERT_LT(attr_copy->source_attr_index,
+                       source_op->attribute_count);
+        loom_attribute_t source_attr =
+            source_attrs[attr_copy->source_attr_index];
+        IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_ENUM);
+        attrs[i].value = loom_attr_i64(loom_attr_as_enum(source_attr));
+        break;
+      }
       case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT: {
         IREE_ASSERT_LT(attr_copy->source_attr_index,
                        source_op->attribute_count);

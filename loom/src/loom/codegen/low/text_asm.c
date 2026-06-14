@@ -98,6 +98,56 @@ static iree_status_t loom_low_descriptor_text_asm_immediate_info(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_descriptor_text_asm_descriptor_immediate_info(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_immediate_index,
+    loom_text_low_asm_immediate_descriptor_t* out_immediate) {
+  if (descriptor_immediate_index >= descriptor->immediate_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor immediate index is out of range");
+  }
+  const uint32_t immediate_index =
+      descriptor->immediate_start + descriptor_immediate_index;
+  if (immediate_index >= descriptor_set->immediate_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor immediate field is out of range");
+  }
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[immediate_index];
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_string(
+      descriptor_set, immediate->field_name_string_offset,
+      &out_immediate->field_name));
+  out_immediate->has_default_value =
+      iree_any_bit_set(immediate->flags, LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE);
+  out_immediate->default_value = immediate->default_value;
+  out_immediate->spelling = out_immediate->field_name;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_descriptor_text_asm_form_references_immediate(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_asm_form_t* asm_form, uint16_t descriptor_immediate_index,
+    bool* out_references) {
+  *out_references = false;
+  if (asm_form->immediate_start > descriptor_set->asm_immediate_count ||
+      asm_form->immediate_count >
+          descriptor_set->asm_immediate_count - asm_form->immediate_start) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low asm form immediate span is out of range");
+  }
+  for (uint16_t i = 0; i < asm_form->immediate_count; ++i) {
+    const loom_low_asm_immediate_t* asm_immediate =
+        &descriptor_set
+             ->asm_immediates[asm_form->immediate_start + (uint32_t)i];
+    if (asm_immediate->immediate_index == descriptor_immediate_index) {
+      *out_references = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_descriptor_text_asm_lookup_descriptor_set(
     const loom_text_low_asm_environment_state_t* state, iree_string_view_t key,
     const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
@@ -215,7 +265,8 @@ static iree_status_t loom_low_descriptor_text_asm_make_packet(
       .mnemonic = mnemonic,
       .result_count = asm_form->result_operand_index_count,
       .operand_count = asm_form->operand_index_count,
-      .immediate_count = asm_form->immediate_count,
+      .asm_immediate_count = asm_form->immediate_count,
+      .immediate_count = descriptor->immediate_count,
       .immediate_attribute_field_index = builds_as_const
                                              ? loom_low_const_attrs_ATTR_INDEX
                                              : loom_low_op_attrs_ATTR_INDEX,
@@ -801,16 +852,38 @@ static iree_status_t loom_low_descriptor_text_asm_immediate_descriptor(
       loom_low_descriptor_text_asm_descriptor(packet->descriptor);
   const loom_low_asm_form_t* asm_form =
       loom_low_descriptor_text_asm_form(packet->form);
-  const uint32_t asm_immediate_index =
-      asm_form->immediate_start + immediate_index;
-  if (asm_immediate_index >= descriptor_set->asm_immediate_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "low asm immediate row is out of range");
+  if (immediate_index < packet->asm_immediate_count) {
+    const uint32_t asm_immediate_index =
+        asm_form->immediate_start + immediate_index;
+    if (asm_immediate_index >= descriptor_set->asm_immediate_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low asm immediate row is out of range");
+    }
+    const loom_low_asm_immediate_t* asm_immediate =
+        &descriptor_set->asm_immediates[asm_immediate_index];
+    return loom_low_descriptor_text_asm_immediate_info(
+        descriptor_set, descriptor, asm_immediate, out_immediate);
   }
-  const loom_low_asm_immediate_t* asm_immediate =
-      &descriptor_set->asm_immediates[asm_immediate_index];
-  return loom_low_descriptor_text_asm_immediate_info(
-      descriptor_set, descriptor, asm_immediate, out_immediate);
+
+  uint16_t extra_immediate_index =
+      (uint16_t)(immediate_index - packet->asm_immediate_count);
+  for (uint16_t descriptor_immediate_index = 0;
+       descriptor_immediate_index < descriptor->immediate_count;
+       ++descriptor_immediate_index) {
+    bool referenced_by_form = false;
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_form_references_immediate(
+        descriptor_set, asm_form, descriptor_immediate_index,
+        &referenced_by_form));
+    if (referenced_by_form) continue;
+    if (extra_immediate_index == 0) {
+      return loom_low_descriptor_text_asm_descriptor_immediate_info(
+          descriptor_set, descriptor, descriptor_immediate_index,
+          out_immediate);
+    }
+    --extra_immediate_index;
+  }
+  return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                          "low asm immediate row is out of range");
 }
 
 static iree_status_t loom_low_descriptor_text_asm_tied_result_count(

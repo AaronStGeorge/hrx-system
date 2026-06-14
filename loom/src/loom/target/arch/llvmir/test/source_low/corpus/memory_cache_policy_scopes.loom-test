@@ -1,7 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_cache_policy_scopes.loom-test
 // RUN: emit source-low output=low
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -17,4 +16,13 @@ kernel.def target(@target) @cache_system_bypass_load_device_writeback_store() {
   %loaded = vector.load %input_view[%tid, 0] {cache_scope = system, cache_temporal = bypass} : view<64x4xi32, #dense> -> vector<4xi32>
   vector.store %loaded, %output_view[%tid, 0] {cache_scope = device, cache_temporal = non_temporal_writeback} : vector<4xi32>, view<64x4xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @cache_system_bypass_load_device_writeback_store() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %loaded = load.v4i32 %input_view, 0 {cache_scope = 3, cache_temporal = 9}
+  store.v4i32 %loaded, %output_view, 0 {cache_scope = 2, cache_temporal = 8}
+  return
 }

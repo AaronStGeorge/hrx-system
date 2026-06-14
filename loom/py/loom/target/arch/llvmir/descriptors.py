@@ -19,7 +19,10 @@ from loom.target.low_descriptors import (
     Effect,
     EffectFlag,
     EffectKind,
+    EnumDomain,
+    EnumValue,
     Immediate,
+    ImmediateFlag,
     ImmediateKind,
     IssueUse,
     LatencyKind,
@@ -56,6 +59,9 @@ _SCHEDULE_CONST = "llvmir.const"
 _SCHEDULE_ALU = "llvmir.alu"
 _SCHEDULE_LOAD = "llvmir.load"
 _SCHEDULE_STORE = "llvmir.store"
+
+_CACHE_SCOPE_ENUM = "llvmir.cache_scope"
+_CACHE_TEMPORAL_ENUM = "llvmir.cache_temporal"
 
 _VECTOR_LANE_COUNTS = (2, 4, 8, 16)
 _KERNEL_DIMENSIONS = ("x", "y", "z")
@@ -308,6 +314,22 @@ _BASE_ALIGNMENT_IMMEDIATE = Immediate(
     ImmediateKind.UNSIGNED,
     bit_width=32,
     unsigned_max=(2**32) - 1,
+)
+
+_CACHE_SCOPE_IMMEDIATE = Immediate(
+    "cache_scope",
+    ImmediateKind.ENUM,
+    flags=(ImmediateFlag.DEFAULT_VALUE,),
+    enum_domain=_CACHE_SCOPE_ENUM,
+    default_value=0,
+)
+
+_CACHE_TEMPORAL_IMMEDIATE = Immediate(
+    "cache_temporal",
+    ImmediateKind.ENUM,
+    flags=(ImmediateFlag.DEFAULT_VALUE,),
+    enum_domain=_CACHE_TEMPORAL_ENUM,
+    default_value=0,
 )
 
 
@@ -604,7 +626,11 @@ def _load_descriptor(
 ) -> Descriptor:
     suffix = _descriptor_suffix(type_name, unit_count)
     operands = [_result(type_name, unit_count=unit_count), _ptr_operand("ptr")]
-    immediates = [_BYTE_OFFSET_IMMEDIATE]
+    immediates = [
+        _BYTE_OFFSET_IMMEDIATE,
+        _CACHE_SCOPE_IMMEDIATE,
+        _CACHE_TEMPORAL_IMMEDIATE,
+    ]
     asm_operands = ["ptr"]
     asm_immediates = ["byte_offset"]
     key_suffix = f"indexed.{suffix}" if indexed else suffix
@@ -643,7 +669,11 @@ def _store_descriptor(
         _operand(type_name, "value", unit_count=unit_count),
         _ptr_operand("ptr"),
     ]
-    immediates = [_BYTE_OFFSET_IMMEDIATE]
+    immediates = [
+        _BYTE_OFFSET_IMMEDIATE,
+        _CACHE_SCOPE_IMMEDIATE,
+        _CACHE_TEMPORAL_IMMEDIATE,
+    ]
     asm_operands = ["value", "ptr"]
     asm_immediates = ["byte_offset"]
     key_suffix = f"indexed.{suffix}" if indexed else suffix
@@ -1160,6 +1190,32 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
             issue_uses=(IssueUse(_RESOURCE_STORE, cycles=1, units=1),),
             model_quality=ModelQuality.FALLBACK,
             flags=(ScheduleClassFlag.MAY_STORE,),
+        ),
+    ),
+    enum_domains=(
+        EnumDomain(
+            _CACHE_SCOPE_ENUM,
+            (
+                EnumValue("cu", 0),
+                EnumValue("se", 1),
+                EnumValue("device", 2),
+                EnumValue("system", 3),
+            ),
+        ),
+        EnumDomain(
+            _CACHE_TEMPORAL_ENUM,
+            (
+                EnumValue("regular", 0),
+                EnumValue("non_temporal", 1),
+                EnumValue("high_temporal", 2),
+                EnumValue("last_use", 3),
+                EnumValue("writeback", 4),
+                EnumValue("non_temporal_regular", 5),
+                EnumValue("regular_non_temporal", 6),
+                EnumValue("non_temporal_high_temporal", 7),
+                EnumValue("non_temporal_writeback", 8),
+                EnumValue("bypass", 9),
+            ),
         ),
     ),
     descriptors=(

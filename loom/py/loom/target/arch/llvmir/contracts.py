@@ -87,6 +87,12 @@ _MEMORY_VALUE_TYPES = (
     ("f64", 8),
 )
 
+_CACHE_POLICY_BUILD_FLAG_SCOPE = 1 << 0
+_CACHE_POLICY_BUILD_FLAG_TEMPORAL = 1 << 1
+_CACHE_POLICY_BUILD_FLAGS_PRESENT = (
+    _CACHE_POLICY_BUILD_FLAG_SCOPE | _CACHE_POLICY_BUILD_FLAG_TEMPORAL
+)
+
 _KERNEL_DIMENSIONS = ("x", "y", "z")
 
 _INTEGER_PREDICATES = (
@@ -560,6 +566,7 @@ def _source_memory_constraint(
     element_byte_count: int,
     vector_lane_count: int = 1,
     allow_dynamic_stride_values: bool = False,
+    cache_policy: bool = False,
 ) -> SourceMemoryConstraint:
     if dynamic_term_count == 0:
         dynamic_index_source = SourceMemoryDynamicIndexSource.NONE
@@ -588,6 +595,9 @@ def _source_memory_constraint(
         dynamic_index_source=dynamic_index_source,
         dynamic_byte_stride=dynamic_byte_stride,
         allow_dynamic_stride_values=allow_dynamic_stride_values,
+        cache_policy_build_flags=(
+            _CACHE_POLICY_BUILD_FLAGS_PRESENT if cache_policy else 0
+        ),
         diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
     )
 
@@ -596,15 +606,28 @@ def _memory_immediates(
     *,
     dynamic_term_count: int,
     materialize_byte_offset: bool,
-) -> dict[str, SourceMemoryProject | int]:
-    immediates: dict[str, SourceMemoryProject | int] = {
+    cache_policy: bool = False,
+) -> dict[str, SourceMemoryProject | AttrProject | int]:
+    immediates: dict[str, SourceMemoryProject | AttrProject | int] = {
         "byte_offset": SourceMemoryProject.static_byte_offset()
     }
     if dynamic_term_count != 0:
         immediates["byte_stride"] = (
             1 if materialize_byte_offset else SourceMemoryProject.dynamic_byte_stride()
         )
+    if cache_policy:
+        immediates["cache_scope"] = AttrProject.enum_ordinal("cache_scope")
+        immediates["cache_temporal"] = AttrProject.enum_ordinal("cache_temporal")
     return immediates
+
+
+def _cache_policy_guards(cache_policy: bool) -> tuple[Guard, ...]:
+    if not cache_policy:
+        return ()
+    return (
+        Guard.attr_kind("cache_scope", "enum"),
+        Guard.attr_kind("cache_temporal", "enum"),
+    )
 
 
 def _view_load_rule(
@@ -619,6 +642,7 @@ def _view_load_rule(
     vector_lane_count: int = 1,
     materialize_byte_offset: bool | None = None,
     allow_dynamic_stride_values: bool = False,
+    cache_policy: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     if materialize_byte_offset is None:
@@ -641,6 +665,7 @@ def _view_load_rule(
         guards=(
             Guard.operand_segment_count("indices", source_dynamic_count),
             Guard.value_type("result", result_type),
+            *_cache_policy_guards(cache_policy),
         ),
         emit=(
             _op_emit(
@@ -650,6 +675,7 @@ def _view_load_rule(
                 immediates=_memory_immediates(
                     dynamic_term_count=dynamic_term_count,
                     materialize_byte_offset=materialize_byte_offset,
+                    cache_policy=cache_policy,
                 ),
                 source_memory=_source_memory_constraint(
                     SourceMemoryOperation.LOAD,
@@ -657,6 +683,7 @@ def _view_load_rule(
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
                     allow_dynamic_stride_values=allow_dynamic_stride_values,
+                    cache_policy=cache_policy,
                 ),
                 source_memory_byte_offset_materializer=(
                     _source_memory_byte_offset_materializer()
@@ -680,6 +707,7 @@ def _view_store_rule(
     vector_lane_count: int = 1,
     materialize_byte_offset: bool | None = None,
     allow_dynamic_stride_values: bool = False,
+    cache_policy: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     if materialize_byte_offset is None:
@@ -705,6 +733,7 @@ def _view_store_rule(
         guards=(
             Guard.operand_segment_count("indices", source_dynamic_count),
             Guard.value_type("value", value_type),
+            *_cache_policy_guards(cache_policy),
         ),
         emit=(
             _op_emit(
@@ -713,6 +742,7 @@ def _view_store_rule(
                 immediates=_memory_immediates(
                     dynamic_term_count=dynamic_term_count,
                     materialize_byte_offset=materialize_byte_offset,
+                    cache_policy=cache_policy,
                 ),
                 source_memory=_source_memory_constraint(
                     SourceMemoryOperation.STORE,
@@ -720,6 +750,7 @@ def _view_store_rule(
                     element_byte_count=element_byte_count,
                     vector_lane_count=vector_lane_count,
                     allow_dynamic_stride_values=allow_dynamic_stride_values,
+                    cache_policy=cache_policy,
                 ),
                 source_memory_byte_offset_materializer=(
                     _source_memory_byte_offset_materializer()
@@ -758,6 +789,20 @@ def _view_load_rule_variants(
             allow_dynamic_stride_values=materializes_byte_offset,
         )
     ]
+    rules.append(
+        _view_load_rule(
+            source_op,
+            view_field,
+            result_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            vector_lane_count=vector_lane_count,
+            allow_dynamic_stride_values=materializes_byte_offset,
+            cache_policy=True,
+        )
+    )
     if dynamic_term_count == 1 and not materializes_byte_offset:
         rules.append(
             _view_load_rule(
@@ -771,6 +816,21 @@ def _view_load_rule_variants(
                 vector_lane_count=vector_lane_count,
                 materialize_byte_offset=True,
                 allow_dynamic_stride_values=True,
+            )
+        )
+        rules.append(
+            _view_load_rule(
+                source_op,
+                view_field,
+                result_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                vector_lane_count=vector_lane_count,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+                cache_policy=True,
             )
         )
     return tuple(rules)
@@ -803,6 +863,20 @@ def _view_store_rule_variants(
             allow_dynamic_stride_values=materializes_byte_offset,
         )
     ]
+    rules.append(
+        _view_store_rule(
+            source_op,
+            view_field,
+            value_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            vector_lane_count=vector_lane_count,
+            allow_dynamic_stride_values=materializes_byte_offset,
+            cache_policy=True,
+        )
+    )
     if dynamic_term_count == 1 and not materializes_byte_offset:
         rules.append(
             _view_store_rule(
@@ -816,6 +890,21 @@ def _view_store_rule_variants(
                 vector_lane_count=vector_lane_count,
                 materialize_byte_offset=True,
                 allow_dynamic_stride_values=True,
+            )
+        )
+        rules.append(
+            _view_store_rule(
+                source_op,
+                view_field,
+                value_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                vector_lane_count=vector_lane_count,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+                cache_policy=True,
             )
         )
     return tuple(rules)

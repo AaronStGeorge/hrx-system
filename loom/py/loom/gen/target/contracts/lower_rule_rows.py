@@ -336,6 +336,7 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
     )
     if row.kind in (
         LowerAttrCopyKind.DIRECT,
+        LowerAttrCopyKind.ENUM_ORDINAL,
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,

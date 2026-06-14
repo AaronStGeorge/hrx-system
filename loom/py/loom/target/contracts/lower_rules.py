@@ -77,6 +77,7 @@ class LowerAttrCopyKind(Enum):
     """Interpreter attribute-copy operation used by a compiled emit row."""
 
     DIRECT = "direct"
+    ENUM_ORDINAL = "enum_ordinal"
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     I64_LITERAL = "i64_literal"
@@ -1286,6 +1287,12 @@ class _LowerRuleSetCompiler:
         if project.kind == AttrProjectKind.DIRECT:
             return LowerAttrCopy(
                 kind=LowerAttrCopyKind.DIRECT,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+            )
+        if project.kind == AttrProjectKind.ENUM_ORDINAL:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.ENUM_ORDINAL,
                 target_name=target_name,
                 source_attr_index=source_attr_index,
             )

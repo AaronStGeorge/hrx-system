@@ -13,10 +13,10 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Self
 
-from loom.dsl import ATTR_TYPE_I64_ARRAY, Op
+from loom.dsl import ATTR_TYPE_ENUM, ATTR_TYPE_I64_ARRAY, Op
 from loom.target.contracts.descriptors import _require_immediate
 from loom.target.contracts.source import _require_attr, _require_value
-from loom.target.low_descriptors import Descriptor
+from loom.target.low_descriptors import Descriptor, ImmediateKind
 
 
 @unique
@@ -24,6 +24,7 @@ class AttrProjectKind(Enum):
     """Projection from source op attributes to descriptor immediates."""
 
     DIRECT = "direct"
+    ENUM_ORDINAL = "enum_ordinal"
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     EXPAND_LANE_I64_ARRAY_TO_BYTE_LANES = "expand_lane_i64_array_to_byte_lanes"
@@ -71,6 +72,10 @@ class AttrProject:
     @classmethod
     def direct(cls, source_attr: str) -> Self:
         return cls(kind=AttrProjectKind.DIRECT, source_attr=source_attr)
+
+    @classmethod
+    def enum_ordinal(cls, source_attr: str) -> Self:
+        return cls(kind=AttrProjectKind.ENUM_ORDINAL, source_attr=source_attr)
 
     @classmethod
     def i64_array_element(
@@ -157,6 +162,23 @@ class AttrProject:
                     f"{source_op.name}: {subject} must bind one descriptor immediate"
                 )
             _require_immediate(descriptor, bound_immediate_name, subject)
+            return
+        if self.kind == AttrProjectKind.ENUM_ORDINAL:
+            if bound_immediate_name is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} must bind one descriptor immediate"
+                )
+            immediate = _require_immediate(descriptor, bound_immediate_name, subject)
+            if attr.attr_type != ATTR_TYPE_ENUM:
+                raise ValueError(
+                    f"{source_op.name}: {subject} source attr "
+                    f"'{self.source_attr}' must be an enum attr"
+                )
+            if immediate.kind != ImmediateKind.ENUM:
+                raise ValueError(
+                    f"{source_op.name}: {subject} descriptor immediate "
+                    f"'{bound_immediate_name}' must be an enum immediate"
+                )
             return
         if attr.attr_type != ATTR_TYPE_I64_ARRAY:
             raise ValueError(
