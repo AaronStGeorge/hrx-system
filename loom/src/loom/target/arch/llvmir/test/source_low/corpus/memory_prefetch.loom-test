@@ -42,9 +42,9 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @prefetch_workgroup_id() 
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
-  triple = "amdgcn-amd-amdhsa"
+  triple = "amdgcn-amd-amdhsa",
+  subgroup_size = 64
 }
 kernel.def target(@target) @prefetch_fixed_query_offset() {
   %c1 = index.constant 1 : index
@@ -63,4 +63,9 @@ kernel.def target(@target) @prefetch_fixed_query_offset() {
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   view.prefetch %input_view[%offset] {intent = read, locality = l1} : view<64xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() asm<llvmir.generic.core> {
+  return
 }

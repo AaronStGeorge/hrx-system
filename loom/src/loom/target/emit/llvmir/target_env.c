@@ -171,6 +171,9 @@ void loom_llvmir_target_profile_storage_initialize_from_bundle(
         flat_workgroup_size_min;
     out_storage->profile.kernel.flat_workgroup_size_max =
         flat_workgroup_size_max;
+    out_storage->profile.kernel.subgroup_size =
+        snapshot->subgroup_size != 0 ? snapshot->subgroup_size
+                                     : projected_profile->kernel.subgroup_size;
     out_storage->profile.kernel.binding_resource_flags = buffer_resource_flags;
   }
 }

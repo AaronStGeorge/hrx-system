@@ -64,6 +64,8 @@ typedef enum loom_llvmir_emit_kernel_query_kind_e {
   LOOM_LLVMIR_EMIT_KERNEL_QUERY_WORKGROUP_ID = 1,
   LOOM_LLVMIR_EMIT_KERNEL_QUERY_WORKGROUP_SIZE = 2,
   LOOM_LLVMIR_EMIT_KERNEL_QUERY_WORKITEM_DISPATCH_ID = 3,
+  LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_SIZE = 4,
+  LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_COUNT = 5,
 } loom_llvmir_emit_kernel_query_kind_t;
 
 typedef enum loom_llvmir_emit_dimension_e {
@@ -540,6 +542,10 @@ static const uint32_t kSelectDescriptorRefs[] = {
   {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_KERNEL_##query##_##suffix, kind, \
    dimension}
 
+#define LOOM_LLVMIR_KERNEL_SCALAR_QUERY_INFO(query, kind)   \
+  {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_KERNEL_##query, kind, \
+   LOOM_LLVMIR_EMIT_DIMENSION_X}
+
 #define LOOM_LLVMIR_KERNEL_QUERY_INFOS(query, kind)                            \
   LOOM_LLVMIR_KERNEL_QUERY_INFO(query, X, kind, LOOM_LLVMIR_EMIT_DIMENSION_X), \
       LOOM_LLVMIR_KERNEL_QUERY_INFO(query, Y, kind,                            \
@@ -557,9 +563,14 @@ static const loom_llvmir_emit_kernel_query_info_t kKernelQueryInfos[] = {
     LOOM_LLVMIR_KERNEL_QUERY_INFOS(
         WORKITEM_DISPATCH_ID,
         LOOM_LLVMIR_EMIT_KERNEL_QUERY_WORKITEM_DISPATCH_ID),
+    LOOM_LLVMIR_KERNEL_SCALAR_QUERY_INFO(
+        SUBGROUP_SIZE, LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_SIZE),
+    LOOM_LLVMIR_KERNEL_SCALAR_QUERY_INFO(
+        SUBGROUP_COUNT, LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_COUNT),
 };
 
 #undef LOOM_LLVMIR_KERNEL_QUERY_INFOS
+#undef LOOM_LLVMIR_KERNEL_SCALAR_QUERY_INFO
 #undef LOOM_LLVMIR_KERNEL_QUERY_INFO
 
 #define LOOM_LLVMIR_CONST_INFO(suffix, type, units, const_kind) \
@@ -1829,6 +1840,8 @@ static iree_string_view_t loom_llvmir_emit_kernel_coordinate_intrinsic(
       break;
     case LOOM_LLVMIR_EMIT_KERNEL_QUERY_WORKGROUP_SIZE:
     case LOOM_LLVMIR_EMIT_KERNEL_QUERY_WORKITEM_DISPATCH_ID:
+    case LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_SIZE:
+    case LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_COUNT:
       break;
   }
   return iree_string_view_empty();
@@ -1846,6 +1859,26 @@ static uint32_t loom_llvmir_emit_workgroup_size_dimension(
       return size->z;
   }
   return 0;
+}
+
+static bool loom_llvmir_emit_flat_workgroup_size(
+    const loom_llvmir_workgroup_size_t* size, uint32_t* out_flat_size) {
+  *out_flat_size = 0;
+  if (size->x == 0 || size->y == 0 || size->z == 0) {
+    return false;
+  }
+  const uint64_t flat_size = (uint64_t)size->x * size->y * size->z;
+  if (flat_size == 0 || flat_size > UINT32_MAX) {
+    return false;
+  }
+  *out_flat_size = (uint32_t)flat_size;
+  return true;
+}
+
+static uint32_t loom_llvmir_emit_ceil_div_u32(uint32_t numerator,
+                                              uint32_t denominator) {
+  IREE_ASSERT_NE(denominator, 0u);
+  return numerator == 0 ? 0 : 1u + (numerator - 1u) / denominator;
 }
 
 static iree_status_t loom_llvmir_emit_declare_i32_zero_arg_intrinsic(
@@ -2015,6 +2048,38 @@ static iree_status_t loom_llvmir_emit_kernel_query(
           state, packet, info->dimension, result_type,
           loom_llvmir_emit_value_name(state->module, result_value),
           &llvmir_result));
+      break;
+    }
+    case LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_SIZE: {
+      const uint32_t subgroup_size =
+          state->target_profile->kernel.subgroup_size;
+      if (subgroup_size == 0) {
+        return loom_llvmir_emit_shape_diagnostic(
+            state, packet->op, IREE_SV("subgroup_size"), subgroup_size, 1);
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_emit_i64_constant(state, subgroup_size, &llvmir_result));
+      break;
+    }
+    case LOOM_LLVMIR_EMIT_KERNEL_QUERY_SUBGROUP_COUNT: {
+      const uint32_t subgroup_size =
+          state->target_profile->kernel.subgroup_size;
+      if (subgroup_size == 0) {
+        return loom_llvmir_emit_shape_diagnostic(
+            state, packet->op, IREE_SV("subgroup_size"), subgroup_size, 1);
+      }
+      uint32_t flat_workgroup_size = 0;
+      if (!loom_llvmir_emit_flat_workgroup_size(
+              &state->target_profile->kernel.required_workgroup_size,
+              &flat_workgroup_size)) {
+        return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                                 IREE_SV("workgroup_size"),
+                                                 flat_workgroup_size, 1);
+      }
+      const uint32_t subgroup_count =
+          loom_llvmir_emit_ceil_div_u32(flat_workgroup_size, subgroup_size);
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_emit_i64_constant(state, subgroup_count, &llvmir_result));
       break;
     }
   }

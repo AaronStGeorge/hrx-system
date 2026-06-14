@@ -974,8 +974,23 @@ def _kernel_query_descriptor(query: str, dimension: str) -> Descriptor:
     )
 
 
+def _kernel_scalar_query_descriptor(query: str) -> Descriptor:
+    return Descriptor(
+        key=f"llvmir.kernel.{query}",
+        mnemonic="kernel",
+        semantic_tag=f"llvmir.kernel.{query}",
+        operands=(_result("i64"),),
+        asm_forms=_asm(
+            mnemonic=f"kernel.{query}",
+            results=("dst",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _kernel_query_descriptors() -> tuple[Descriptor, ...]:
-    return tuple(
+    dimensioned = tuple(
         _kernel_query_descriptor(query, dimension)
         for query in (
             "workitem_id",
@@ -985,6 +1000,14 @@ def _kernel_query_descriptors() -> tuple[Descriptor, ...]:
         )
         for dimension in _KERNEL_DIMENSIONS
     )
+    scalar = tuple(
+        _kernel_scalar_query_descriptor(query)
+        for query in (
+            "subgroup_size",
+            "subgroup_count",
+        )
+    )
+    return dimensioned + scalar
 
 
 def _splat_descriptor(type_name: str, lane_count: int) -> Descriptor:

@@ -2195,6 +2195,21 @@ def _kernel_query_rule(source_op: Op, query: str, dimension: str) -> DescriptorR
     )
 
 
+def _kernel_scalar_query_rule(source_op: Op, query: str) -> DescriptorRule:
+    descriptor = _descriptor(f"llvmir.kernel.{query}")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(Guard.value_type("result", _INDEX),),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _kernel_query_rules() -> tuple[DescriptorRule, ...]:
     source_ops = (
         (kernel.kernel_workitem_id, "workitem_id"),
@@ -2202,11 +2217,19 @@ def _kernel_query_rules() -> tuple[DescriptorRule, ...]:
         (kernel.kernel_workgroup_size, "workgroup_size"),
         (kernel.kernel_workitem_dispatch_id, "workitem_dispatch_id"),
     )
-    return tuple(
+    dimensioned = tuple(
         _kernel_query_rule(source_op, query, dimension)
         for source_op, query in source_ops
         for dimension in _KERNEL_DIMENSIONS
     )
+    scalar = tuple(
+        _kernel_scalar_query_rule(source_op, query)
+        for source_op, query in (
+            (kernel.kernel_subgroup_size, "subgroup_size"),
+            (kernel.kernel_subgroup_count, "subgroup_count"),
+        )
+    )
+    return dimensioned + scalar
 
 
 LLVMIR_GENERIC_CORE_CONTRACT_DIALECT_OPS = {
