@@ -979,6 +979,7 @@ static bool iree_hal_amdgpu_allocator_should_use_asan_pool(
 static iree_status_t iree_hal_amdgpu_allocator_allocate_asan_pool_buffer(
     iree_hal_amdgpu_allocator_t* allocator,
     const iree_hal_amdgpu_allocator_placement_t* memory_placement,
+    iree_hal_queue_affinity_t requested_queue_affinity,
     iree_hal_buffer_params_t params, iree_device_size_t byte_length,
     iree_hal_buffer_t** out_buffer) {
   IREE_ASSERT_ARGUMENT(out_buffer);
@@ -1002,6 +1003,30 @@ static iree_status_t iree_hal_amdgpu_allocator_allocate_asan_pool_buffer(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU ASAN persistent allocation requires assigned default pools");
   }
+
+  const iree_hal_amdgpu_queue_affinity_domain_t domain =
+      iree_hal_amdgpu_allocator_queue_affinity_domain(allocator);
+  iree_hal_queue_affinity_t pool_queue_affinity = 0;
+  if (iree_hal_queue_affinity_is_any(requested_queue_affinity)) {
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_queue_affinity_for_physical_device(
+        domain, memory_placement->physical_device_ordinal,
+        &pool_queue_affinity));
+    iree_hal_queue_affinity_and_into(pool_queue_affinity,
+                                     domain.supported_affinity);
+  } else if (iree_hal_amdgpu_queue_affinity_is_physical_device_local(
+                 domain, requested_queue_affinity,
+                 memory_placement->physical_device_ordinal)) {
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_queue_affinity_normalize(
+        domain.supported_affinity, requested_queue_affinity,
+        &pool_queue_affinity));
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU ASAN pool allocation queue affinity 0x%016" PRIx64
+        " spans queues outside physical device %" PRIu32,
+        requested_queue_affinity, memory_placement->physical_device_ordinal);
+  }
+  params.queue_affinity = pool_queue_affinity;
 
   const iree_device_size_t pool_allocation_size =
       byte_length == 0 ? 4 : byte_length;
@@ -1036,6 +1061,8 @@ static iree_status_t iree_hal_amdgpu_allocator_allocate_buffer(
 
   // Coerce options into those required by the current device.
   iree_hal_buffer_params_t compat_params = *params;
+  const iree_hal_queue_affinity_t requested_queue_affinity =
+      params->queue_affinity;
   iree_hal_amdgpu_allocator_placement_t memory_placement;
   if (!iree_hal_amdgpu_allocator_resolve_placement(allocator, &compat_params,
                                                    &memory_placement)) {
@@ -1083,7 +1110,8 @@ static iree_status_t iree_hal_amdgpu_allocator_allocate_buffer(
   if (iree_hal_amdgpu_allocator_should_use_asan_pool(allocator,
                                                      &memory_placement)) {
     iree_status_t status = iree_hal_amdgpu_allocator_allocate_asan_pool_buffer(
-        allocator, &memory_placement, compat_params, byte_length, out_buffer);
+        allocator, &memory_placement, requested_queue_affinity, compat_params,
+        byte_length, out_buffer);
     if (iree_status_is_ok(status)) {
       IREE_STATISTICS(iree_hal_allocator_statistics_record_alloc(
           &allocator->statistics, iree_hal_buffer_memory_type(*out_buffer),
