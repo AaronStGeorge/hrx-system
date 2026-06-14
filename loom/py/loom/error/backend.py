@@ -998,6 +998,39 @@ ERR_BACKEND_041 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_042: Low operand-form selection decision was recorded.
+ERR_BACKEND_042 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=42,
+    severity=Severity.REMARK,
+    summary="Low operand-form selection decision recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} operand form '{replacement_descriptor_key}' for "
+        "'@{function_name}' op '{op_name}' from descriptor "
+        "'{source_descriptor_key}': reason '{reason}', source operand "
+        "'{source_operand_name}', immediate '{immediate_name}' value "
+        "{immediate_value}, destructive tied operand '{tied_operand_name}' "
+        "value '{tied_value_name}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("source_descriptor_key", ParamKind.STRING),
+        ErrorParam("replacement_descriptor_key", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("source_operand_name", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+        ErrorParam("immediate_value", ParamKind.I64),
+        ErrorParam("tied_operand_name", ParamKind.STRING),
+        ErrorParam("tied_value_name", ParamKind.STRING),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -1034,4 +1067,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_039,
     ERR_BACKEND_040,
     ERR_BACKEND_041,
+    ERR_BACKEND_042,
 )

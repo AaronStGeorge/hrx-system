@@ -305,6 +305,7 @@ loom_check_test_suite(
         "test/source_low/low_hal_materialization_diagnostics.loom-test",
         "test/source_low/low_hal_structural.loom-test",
         "test/source_low/low_occupancy.loom-test",
+        "test/source_low/low_operand_form_diagnostics.loom-test",
         "test/source_low/low_operand_forms.loom-test",
         "test/source_low/low_packet_diagnostics.loom-test",
         "test/source_low/low_partial_register.loom-test",

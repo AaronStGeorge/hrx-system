@@ -7,14 +7,20 @@
 #include "loom/codegen/low/transforms/operand_forms.h"
 
 #include <inttypes.h>
+#include <string.h>
 
 #include "loom/codegen/low/builder.h"
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
 #include "loom/codegen/low/target_binding.h"
+#include "loom/error/error_catalog.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/pass/pipeline.h"
+#include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/math.h"
@@ -22,6 +28,8 @@
 #define LOOM_LOW_SELECT_OPERAND_FORMS_STATISTICS(V, statistics_type) \
   V(statistics_type, forms_selected, "forms-selected",               \
     "Number of low packets rewritten to descriptor operand forms.")  \
+  V(statistics_type, forms_rejected, "forms-rejected",               \
+    "Number of matched descriptor operand forms rejected.")          \
   V(statistics_type, packets_folded, "packets-folded",               \
     "Number of descriptor-backed low packets folded away.")
 
@@ -29,17 +37,116 @@ LOOM_PASS_STATISTICS_DEFINE(loom_low_select_operand_forms_statistics,
                             loom_low_select_operand_forms_statistics_t,
                             LOOM_LOW_SELECT_OPERAND_FORMS_STATISTICS)
 
+typedef struct loom_low_select_operand_forms_pass_state_t {
+  // True when the pass should emit operand-form selection diagnostics.
+  bool emit_operand_form_diagnostics;
+  // True once the diagnostics option has been parsed.
+  bool has_diagnostics_option;
+} loom_low_select_operand_forms_pass_state_t;
+
+typedef struct loom_low_select_operand_forms_parse_context_t {
+  // Mutable pass state being populated.
+  loom_low_select_operand_forms_pass_state_t* state;
+} loom_low_select_operand_forms_parse_context_t;
+
+static const loom_pass_option_def_t kLowSelectOperandFormsOptions[] = {
+    {IREE_SVL("diagnostics"),
+     IREE_SVL("Diagnostic feedback to emit: none or operand-forms.")},
+};
+
 static const loom_pass_info_t loom_low_select_operand_forms_pass_info_storage =
     {
         .name = IREE_SVL("low-select-operand-forms"),
         .description = IREE_SVL(
             "Rewrite low packets to descriptor-selected operand forms."),
         .kind = LOOM_PASS_FUNCTION,
+        .option_defs = kLowSelectOperandFormsOptions,
+        .option_count = IREE_ARRAYSIZE(kLowSelectOperandFormsOptions),
         .statistic_layout = &loom_low_select_operand_forms_statistics_layout,
 };
 
 const loom_pass_info_t* loom_low_select_operand_forms_pass_info(void) {
   return &loom_low_select_operand_forms_pass_info_storage;
+}
+
+static iree_status_t loom_low_select_operand_forms_parse_diagnostics(
+    iree_string_view_t text,
+    loom_low_select_operand_forms_parse_context_t* context) {
+  if (context->state->has_diagnostics_option) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "duplicate option 'diagnostics' for pass 'low-select-operand-forms'");
+  }
+  text = iree_string_view_trim(text);
+  if (iree_string_view_equal(text, IREE_SV("none"))) {
+    context->state->emit_operand_form_diagnostics = false;
+  } else if (iree_string_view_equal(text, IREE_SV("operand-forms"))) {
+    context->state->emit_operand_form_diagnostics = true;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-select-operand-forms' option 'diagnostics' expected "
+        "'none' or 'operand-forms', got '%.*s'",
+        (int)text.size, text.data);
+  }
+  context->state->has_diagnostics_option = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_select_operand_forms_parse_option(
+    void* user_data, iree_string_view_t name, iree_string_view_t value) {
+  loom_low_select_operand_forms_parse_context_t* context =
+      (loom_low_select_operand_forms_parse_context_t*)user_data;
+  if (iree_string_view_equal(name, IREE_SV("diagnostics"))) {
+    return loom_low_select_operand_forms_parse_diagnostics(value, context);
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "unknown option '%.*s' for pass 'low-select-operand-forms'",
+      (int)name.size, name.data);
+}
+
+iree_status_t loom_low_select_operand_forms_create(loom_pass_t* pass,
+                                                   iree_string_view_t options) {
+  loom_low_select_operand_forms_pass_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena, sizeof(*state),
+                                           (void**)&state));
+  memset(state, 0, sizeof(*state));
+
+  loom_low_select_operand_forms_parse_context_t context = {
+      .state = state,
+  };
+  if (pass->decoded_options) {
+    for (uint16_t i = 0; i < pass->decoded_options->option_count; ++i) {
+      const loom_pass_decoded_option_t* option =
+          &pass->decoded_options->options[i];
+      if (!option->present) {
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name,
+                                 IREE_SV("diagnostics"))) {
+        iree_string_view_t value =
+            option->schema->enum_values[option->enum_value_index].value;
+        IREE_RETURN_IF_ERROR(
+            loom_low_select_operand_forms_parse_diagnostics(value, &context));
+        continue;
+      }
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown decoded option '%.*s' for pass "
+                              "'low-select-operand-forms'",
+                              (int)option->schema->name.size,
+                              option->schema->name.data);
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_pass_options_parse(
+        pass->info->name, options,
+        (loom_pass_option_parse_callback_t){
+            .fn = loom_low_select_operand_forms_parse_option,
+            .user_data = &context,
+        }));
+  }
+  pass->state = state;
+  return iree_ok_status();
 }
 
 typedef struct loom_low_select_operand_forms_state_t {
@@ -49,10 +156,14 @@ typedef struct loom_low_select_operand_forms_state_t {
   loom_low_select_operand_forms_statistics_t* statistics;
   // Module being rewritten.
   loom_module_t* module;
+  // Function op that owns the current rewrite walk.
+  const loom_op_t* function_op;
   // Resolved target for the low function.
   const loom_low_resolved_target_t* target;
   // Scoped function facts used to match descriptor operand-form predicates.
   loom_value_fact_table_t* value_facts;
+  // True when the pass should emit operand-form selection diagnostics.
+  bool emit_operand_form_diagnostics;
   // True once this pass has rewritten at least one packet.
   bool changed;
 } loom_low_select_operand_forms_state_t;
@@ -262,6 +373,172 @@ static uint16_t loom_low_descriptor_packet_operand_index(
   return packet_operand_index;
 }
 
+typedef struct loom_low_select_operand_form_destructive_info_t {
+  // True when the replacement descriptor has a destructive operand.
+  bool has_destructive_operand;
+  // Replacement descriptor operand index named by the destructive constraint.
+  uint16_t tied_descriptor_operand_index;
+  // Source packet operand index that supplies the replacement operand.
+  uint16_t tied_source_packet_operand_index;
+  // SSA value carried by the tied replacement operand.
+  loom_value_id_t tied_value_id;
+} loom_low_select_operand_form_destructive_info_t;
+
+static void loom_low_select_operand_form_reset_destructive_info(
+    loom_low_select_operand_form_destructive_info_t* out_info) {
+  *out_info = (loom_low_select_operand_form_destructive_info_t){
+      .tied_descriptor_operand_index = LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE,
+      .tied_source_packet_operand_index = LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE,
+      .tied_value_id = LOOM_VALUE_ID_INVALID,
+  };
+}
+
+static iree_string_view_t loom_low_descriptor_key(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        descriptor->key_string_offset);
+}
+
+static iree_string_view_t loom_low_descriptor_operand_name(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_operand_index) {
+  if (descriptor_operand_index == LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+      descriptor_operand_index >= descriptor->operand_count) {
+    return IREE_SV("<none>");
+  }
+  const loom_low_operand_t* operand =
+      &descriptor_set
+           ->operands[descriptor->operand_start + descriptor_operand_index];
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        operand->field_name_string_offset);
+}
+
+static iree_string_view_t loom_low_descriptor_immediate_name(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t immediate_index) {
+  if (immediate_index == LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+      immediate_index >= descriptor->immediate_count) {
+    return IREE_SV("<none>");
+  }
+  const loom_low_immediate_t* immediate =
+      &descriptor_set
+           ->immediates[descriptor->immediate_start + immediate_index];
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        immediate->field_name_string_offset);
+}
+
+static uint16_t loom_low_select_operand_form_diagnostic_source_operand_index(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_form_t* form) {
+  IREE_ASSERT(form->match_count > 0);
+  uint16_t match_index = 0;
+  if (form->immediate_match_index != LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+    IREE_ASSERT(form->immediate_match_index < form->match_count);
+    match_index = form->immediate_match_index;
+  }
+  const loom_low_operand_form_match_t* match =
+      &descriptor_set->operand_form_matches[form->match_start + match_index];
+  return match->source_operand_index;
+}
+
+static uint16_t
+loom_low_select_operand_form_diagnostic_source_packet_operand_index(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_form_t* form) {
+  IREE_ASSERT(form->match_count > 0);
+  uint16_t match_index = 0;
+  if (form->immediate_match_index != LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+    IREE_ASSERT(form->immediate_match_index < form->match_count);
+    match_index = form->immediate_match_index;
+  }
+  const loom_low_operand_form_match_t* match =
+      &descriptor_set->operand_form_matches[form->match_start + match_index];
+  return match->source_packet_operand_index;
+}
+
+static loom_diagnostic_param_t loom_low_select_operand_form_operand_param(
+    iree_string_view_t value, uint16_t packet_operand_index) {
+  loom_diagnostic_param_t param = loom_param_string(value);
+  if (packet_operand_index != LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+    param = loom_param_with_field_ref(
+        param, loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                         packet_operand_index));
+  }
+  return param;
+}
+
+static iree_status_t loom_low_select_operand_form_emit_decision(
+    loom_low_select_operand_forms_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* source_descriptor,
+    const loom_low_descriptor_t* replacement_descriptor,
+    const loom_low_operand_form_t* form, iree_string_view_t decision,
+    iree_string_view_t reason, int64_t immediate_value,
+    const loom_low_select_operand_form_destructive_info_t* destructive_info) {
+  if (!state->emit_operand_form_diagnostics) {
+    return iree_ok_status();
+  }
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->target->descriptor_set;
+  const uint16_t source_operand_index =
+      loom_low_select_operand_form_diagnostic_source_operand_index(
+          descriptor_set, form);
+  const uint16_t source_packet_operand_index =
+      loom_low_select_operand_form_diagnostic_source_packet_operand_index(
+          descriptor_set, form);
+  const iree_string_view_t source_operand_name =
+      loom_low_descriptor_operand_name(descriptor_set, source_descriptor,
+                                       source_operand_index);
+  iree_string_view_t tied_operand_name = IREE_SV("<none>");
+  iree_string_view_t tied_value_name = IREE_SV("<none>");
+  uint16_t tied_source_packet_operand_index =
+      LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE;
+  if (destructive_info && destructive_info->has_destructive_operand) {
+    tied_operand_name = loom_low_descriptor_operand_name(
+        descriptor_set, replacement_descriptor,
+        destructive_info->tied_descriptor_operand_index);
+    tied_source_packet_operand_index =
+        destructive_info->tied_source_packet_operand_index;
+    if (destructive_info->tied_value_id != LOOM_VALUE_ID_INVALID) {
+      tied_value_name = loom_low_diagnostic_value_name(
+          state->module, destructive_info->tied_value_id);
+    }
+  }
+
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(state->target)),
+      loom_param_string(loom_low_diagnostic_export_name(state->target)),
+      loom_param_string(loom_low_diagnostic_config_key(state->target)),
+      loom_param_string(
+          loom_low_diagnostic_function_name(state->module, state->function_op)),
+      loom_param_string(loom_op_name(state->module, op)),
+      loom_param_string(
+          loom_low_descriptor_key(descriptor_set, source_descriptor)),
+      loom_param_string(
+          loom_low_descriptor_key(descriptor_set, replacement_descriptor)),
+      loom_param_string(decision),
+      loom_param_string(reason),
+      loom_low_select_operand_form_operand_param(source_operand_name,
+                                                 source_packet_operand_index),
+      loom_param_string(loom_low_descriptor_immediate_name(
+          descriptor_set, replacement_descriptor,
+          form->replacement_immediate_index)),
+      loom_param_i64(immediate_value),
+      loom_low_select_operand_form_operand_param(
+          tied_operand_name, tied_source_packet_operand_index),
+      loom_param_string(tied_value_name),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = LOOM_ERR_BACKEND_042,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission);
+}
+
 static iree_status_t loom_low_descriptor_build_tied_results(
     iree_arena_allocator_t* arena,
     const loom_low_descriptor_set_t* descriptor_set,
@@ -316,8 +593,10 @@ static bool loom_low_select_operand_form_can_rewrite_destructive(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* replacement_descriptor,
-    const loom_value_id_t* replacement_operands,
-    iree_host_size_t replacement_operand_count) {
+    const loom_low_operand_form_t* form, const loom_value_id_t* operands,
+    iree_host_size_t operand_count,
+    loom_low_select_operand_form_destructive_info_t* out_info) {
+  loom_low_select_operand_form_reset_destructive_info(out_info);
   for (uint16_t i = 0; i < replacement_descriptor->constraint_count; ++i) {
     const loom_low_constraint_t* constraint =
         &descriptor_set
@@ -329,9 +608,26 @@ static bool loom_low_select_operand_form_can_rewrite_destructive(
         loom_low_descriptor_packet_operand_index(descriptor_set,
                                                  replacement_descriptor,
                                                  constraint->rhs_operand_index);
+    IREE_ASSERT(tied_packet_operand_index < operand_count);
+    const uint16_t source_packet_operand_index =
+        descriptor_set->operand_form_operand_indices[form->operand_map_start +
+                                                     tied_packet_operand_index];
+    if (!out_info->has_destructive_operand) {
+      *out_info = (loom_low_select_operand_form_destructive_info_t){
+          .has_destructive_operand = true,
+          .tied_descriptor_operand_index = constraint->rhs_operand_index,
+          .tied_source_packet_operand_index = source_packet_operand_index,
+          .tied_value_id = operands[tied_packet_operand_index],
+      };
+    }
     if (!loom_low_select_operand_form_operand_has_single_use(
-            module, replacement_operands, replacement_operand_count,
-            tied_packet_operand_index)) {
+            module, operands, operand_count, tied_packet_operand_index)) {
+      *out_info = (loom_low_select_operand_form_destructive_info_t){
+          .has_destructive_operand = true,
+          .tied_descriptor_operand_index = constraint->rhs_operand_index,
+          .tied_source_packet_operand_index = source_packet_operand_index,
+          .tied_value_id = operands[tied_packet_operand_index],
+      };
       return false;
     }
   }
@@ -428,15 +724,16 @@ static iree_status_t loom_low_select_operand_form_read_i64_immediate(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_select_operand_form_build_attrs(
+static iree_status_t loom_low_select_operand_form_resolve_immediate_value(
     loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* source_descriptor,
     const loom_low_descriptor_t* replacement_descriptor,
     const loom_low_operand_form_t* form, int64_t matched_value,
-    loom_named_attr_slice_t source_attrs, loom_named_attr_slice_t* out_attrs,
-    bool* out_can_rewrite) {
-  *out_attrs = source_attrs;
+    loom_named_attr_slice_t source_attrs, int64_t* out_immediate_value,
+    bool* out_can_rewrite, iree_string_view_t* out_reject_reason) {
+  *out_immediate_value = 0;
   *out_can_rewrite = true;
+  *out_reject_reason = IREE_SV("selected");
 
   int64_t replacement_value = 0;
   switch (form->immediate_action) {
@@ -452,10 +749,15 @@ static iree_status_t loom_low_select_operand_form_build_attrs(
           module, descriptor_set, source_descriptor,
           form->source_immediate_index, source_attrs, &has_source_value,
           &source_value));
-      if (!has_source_value ||
-          !loom_checked_add_i64(source_value, matched_value,
+      if (!has_source_value) {
+        *out_can_rewrite = false;
+        *out_reject_reason = IREE_SV("missing_source_immediate");
+        return iree_ok_status();
+      }
+      if (!loom_checked_add_i64(source_value, matched_value,
                                 &replacement_value)) {
         *out_can_rewrite = false;
+        *out_reject_reason = IREE_SV("immediate_overflow");
         return iree_ok_status();
       }
       break;
@@ -471,23 +773,44 @@ static iree_status_t loom_low_select_operand_form_build_attrs(
   const loom_low_immediate_t* immediate =
       &descriptor_set->immediates[replacement_descriptor->immediate_start +
                                   form->replacement_immediate_index];
+  *out_immediate_value = replacement_value;
   if (!loom_low_immediate_accepts_i64(descriptor_set, immediate,
                                       replacement_value)) {
     *out_can_rewrite = false;
+    *out_reject_reason = IREE_SV("immediate_out_of_range");
+    return iree_ok_status();
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_select_operand_form_build_attrs(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* replacement_descriptor,
+    const loom_low_operand_form_t* form, int64_t immediate_value,
+    loom_named_attr_slice_t source_attrs, loom_named_attr_slice_t* out_attrs) {
+  *out_attrs = source_attrs;
+  if (form->immediate_action == LOOM_LOW_OPERAND_FORM_IMMEDIATE_NONE) {
     return iree_ok_status();
   }
 
+  IREE_ASSERT(form->replacement_immediate_index <
+              replacement_descriptor->immediate_count);
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[replacement_descriptor->immediate_start +
+                                  form->replacement_immediate_index];
+  IREE_ASSERT(loom_low_immediate_accepts_i64(descriptor_set, immediate,
+                                             immediate_value));
   iree_string_view_t immediate_name = loom_low_descriptor_set_string(
       descriptor_set, immediate->field_name_string_offset);
   loom_string_id_t immediate_name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(module, immediate_name, &immediate_name_id));
   const bool remove_default = loom_low_immediate_has_default(immediate) &&
-                              replacement_value == immediate->default_value;
+                              immediate_value == immediate->default_value;
   loom_named_attr_update_t update =
       remove_default ? loom_named_attr_remove(immediate_name_id)
-                     : loom_named_attr_replace(
-                           immediate_name_id, loom_attr_i64(replacement_value));
+                     : loom_named_attr_replace(immediate_name_id,
+                                               loom_attr_i64(immediate_value));
   loom_attribute_t attr = {0};
   IREE_RETURN_IF_ERROR(loom_module_replace_canonical_attr_dict(
       module, source_attrs, loom_make_named_attr_update_slice(&update, 1),
@@ -526,9 +849,33 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
     }
   }
 
+  int64_t immediate_value = 0;
+  bool can_rewrite = false;
+  iree_string_view_t reject_reason = IREE_SV("selected");
+  IREE_RETURN_IF_ERROR(loom_low_select_operand_form_resolve_immediate_value(
+      state->module, descriptor_set, source_descriptor, replacement_descriptor,
+      form, matched_value, loom_low_op_attrs(op), &immediate_value,
+      &can_rewrite, &reject_reason));
+  if (!can_rewrite) {
+    loom_low_select_operand_form_destructive_info_t no_destructive_info;
+    loom_low_select_operand_form_reset_destructive_info(&no_destructive_info);
+    ++state->statistics->forms_rejected;
+    IREE_RETURN_IF_ERROR(loom_low_select_operand_form_emit_decision(
+        state, op, source_descriptor, replacement_descriptor, form,
+        IREE_SV("rejected"), reject_reason, immediate_value,
+        &no_destructive_info));
+    return iree_ok_status();
+  }
+
+  loom_low_select_operand_form_destructive_info_t destructive_info;
   if (!loom_low_select_operand_form_can_rewrite_destructive(
-          state->module, descriptor_set, replacement_descriptor, operands,
-          form->operand_map_count)) {
+          state->module, descriptor_set, replacement_descriptor, form, operands,
+          form->operand_map_count, &destructive_info)) {
+    ++state->statistics->forms_rejected;
+    IREE_RETURN_IF_ERROR(loom_low_select_operand_form_emit_decision(
+        state, op, source_descriptor, replacement_descriptor, form,
+        IREE_SV("rejected"), IREE_SV("destructive_operand_not_single_use"),
+        immediate_value, &destructive_info));
     return iree_ok_status();
   }
 
@@ -550,14 +897,13 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
       &tied_result_count));
 
   loom_named_attr_slice_t replacement_attrs = {0};
-  bool can_rewrite = false;
   IREE_RETURN_IF_ERROR(loom_low_select_operand_form_build_attrs(
-      state->module, descriptor_set, source_descriptor, replacement_descriptor,
-      form, matched_value, loom_low_op_attrs(op), &replacement_attrs,
-      &can_rewrite));
-  if (!can_rewrite) {
-    return iree_ok_status();
-  }
+      state->module, descriptor_set, replacement_descriptor, form,
+      immediate_value, loom_low_op_attrs(op), &replacement_attrs));
+  IREE_RETURN_IF_ERROR(loom_low_select_operand_form_emit_decision(
+      state, op, source_descriptor, replacement_descriptor, form,
+      IREE_SV("selected"), IREE_SV("selected"), immediate_value,
+      &destructive_info));
 
   const loom_value_id_t value_checkpoint =
       loom_rewriter_value_checkpoint(rewriter);
@@ -679,12 +1025,17 @@ static iree_status_t loom_low_select_operand_forms_function(
   loom_rewriter_t rewriter;
   IREE_RETURN_IF_ERROR(
       loom_rewriter_initialize(&rewriter, module, pass->arena));
+  const loom_low_select_operand_forms_pass_state_t* pass_state =
+      (const loom_low_select_operand_forms_pass_state_t*)pass->state;
   loom_low_select_operand_forms_state_t state = {
       .pass = pass,
       .statistics = loom_low_select_operand_forms_statistics(pass),
       .module = module,
+      .function_op = function.op,
       .target = &target,
       .value_facts = value_facts,
+      .emit_operand_form_diagnostics =
+          pass_state && pass_state->emit_operand_form_diagnostics,
   };
 
   loom_region_t* body = loom_func_like_body(function);

@@ -108,6 +108,22 @@ static const loom_pass_requirement_def_t kLowSelectOperandFormsRequirements[] =
         },
 };
 
+static const loom_pass_option_enum_value_t
+    kLowSelectOperandFormsDiagnosticsValues[] = {
+        {.value = IREE_SVL("none")},
+        {.value = IREE_SVL("operand-forms")},
+};
+
+static const loom_pass_option_schema_t kLowSelectOperandFormsOptionSchema[] = {
+    {
+        .name = IREE_SVL("diagnostics"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kLowSelectOperandFormsDiagnosticsValues,
+        .enum_value_count =
+            IREE_ARRAYSIZE(kLowSelectOperandFormsDiagnosticsValues),
+    },
+};
+
 static const loom_pass_option_enum_value_t kLowSourceToLowDiagnosticsValues[] =
     {
         {.value = IREE_SVL("all")},
@@ -331,6 +347,10 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("low-select-operand-forms"),
         .info = loom_low_select_operand_forms_pass_info,
         .function_run = loom_low_select_operand_forms_run,
+        .create = loom_low_select_operand_forms_create,
+        .option_schema = kLowSelectOperandFormsOptionSchema,
+        .option_schema_count =
+            IREE_ARRAYSIZE(kLowSelectOperandFormsOptionSchema),
         .requirement_defs = kLowSelectOperandFormsRequirements,
         .requirement_count = IREE_ARRAYSIZE(kLowSelectOperandFormsRequirements),
     },
