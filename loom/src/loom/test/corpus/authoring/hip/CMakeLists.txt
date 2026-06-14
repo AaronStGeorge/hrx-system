@@ -20,6 +20,7 @@ iree_execution_test_suite(
     "loom-opt=loom::tools::loom-opt"
   DATA
     "lane_distribution.loom"
+    "packed_field_contracts.loom"
     "q8_block_unroll.loom"
     "q8_hip_shaped_unroll_unresolved.loom"
     "q8_load_width.loom"
