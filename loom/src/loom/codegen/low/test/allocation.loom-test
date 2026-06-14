@@ -61,6 +61,20 @@ low.func.def target(@test_target) @structural_physical_span_rebased_at_capacity(
 
 // ====
 
+// RUN: emit low-allocation-json @slice_uses_source_subrange fixed=%wide:target_id:4:4
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @slice_uses_source_subrange(%wide: reg<test.i32 x4>) -> (reg<test.i32>) asm<test.low.core> {
+  %middle = slice %wide[2] : reg<test.i32 x4> -> reg<test.i32>
+  return %middle
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"slice_uses_source_subrange","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":2,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"wide","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":0,"end_point":1,"unit_count":4,"location":{"kind":"target_id","base":4,"count":4}},{"index":1,"value":{"id":2,"name":"middle","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":6,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+
+// ====
+
 // RUN: emit low-allocation-json @fixed_physical_span_exceeds_capacity fixed=%value:physical_register:32:1 output=none
 
 test.target<low_core> @test_target
