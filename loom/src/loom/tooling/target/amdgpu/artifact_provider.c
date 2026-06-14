@@ -55,7 +55,7 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
     }
     const loom_target_bundle_t* target_bundle =
         loom_amdgpu_target_bundle_for_descriptor_set(
-            processor->descriptor_set_ordinal);
+            processor->descriptor_set.ordinal);
     if (target_bundle == NULL) {
       continue;
     }
@@ -71,7 +71,7 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_device_target(
       *out_target = (loom_run_hal_device_target_t){
           .data = processor,
           .target_bundle = target_bundle,
-          .target_key = processor->processor,
+          .target_key = processor->name,
       };
     }
   }
@@ -112,20 +112,20 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_select_target_key(
 
   const loom_target_bundle_t* target_bundle =
       loom_amdgpu_target_bundle_for_descriptor_set(
-          processor->descriptor_set_ordinal);
+          processor->descriptor_set.ordinal);
   if (target_bundle == NULL) {
     return iree_make_status(IREE_STATUS_UNAVAILABLE,
                             "AMDGPU processor '%.*s' has no Loom target "
                             "bundle for descriptor set '%.*s'",
                             (int)target_key.size, target_key.data,
-                            (int)processor->descriptor_set_key.size,
-                            processor->descriptor_set_key.data);
+                            (int)processor->descriptor_set.key.size,
+                            processor->descriptor_set.key.data);
   }
 
   *out_target = (loom_run_hal_device_target_t){
       .data = processor,
       .target_bundle = target_bundle,
-      .target_key = processor->processor,
+      .target_key = processor->name,
   };
   return iree_ok_status();
 }
@@ -156,7 +156,7 @@ static iree_status_t loom_amdgpu_hal_artifact_provider_emit_artifact(
   *storage = (loom_amdgpu_hal_artifact_storage_t){0};
 
   const loom_amdgpu_hal_kernel_library_options_t library_options = {
-      .processor = processor ? processor->processor : iree_string_view_empty(),
+      .processor = processor ? processor->name : iree_string_view_empty(),
       .target_selection =
           {
               .bundle = target->target_bundle,

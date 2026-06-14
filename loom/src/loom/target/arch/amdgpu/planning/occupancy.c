@@ -577,7 +577,7 @@ iree_status_t loom_amdgpu_occupancy_build(
 
   loom_amdgpu_occupancy_table_t table = {
       .allocation = allocation,
-      .processor = processor->processor,
+      .processor = processor->name,
       .wave_size = wave_size,
       .max_waves_per_simd = model->max_waves_per_simd,
       .resident_waves_per_simd = model->max_waves_per_simd,

@@ -137,7 +137,7 @@ TEST_F(AmdgpuHalArtifactProviderTest, SelectTargetKeyBuildsOfflineTarget) {
   EXPECT_TRUE(iree_string_view_equal(target.target_key, IREE_SV("gfx1100")));
   const loom_amdgpu_processor_info_t* processor =
       static_cast<const loom_amdgpu_processor_info_t*>(target.data);
-  EXPECT_TRUE(iree_string_view_equal(processor->processor, IREE_SV("gfx1100")));
+  EXPECT_TRUE(iree_string_view_equal(processor->name, IREE_SV("gfx1100")));
 }
 
 TEST_F(AmdgpuHalArtifactProviderTest, RecordsDetailedReportRows) {
@@ -159,14 +159,14 @@ TEST_F(AmdgpuHalArtifactProviderTest, RecordsDetailedReportRows) {
 
   const loom_target_bundle_t* target_bundle =
       loom_amdgpu_target_bundle_for_descriptor_set(
-          processor->descriptor_set_ordinal);
+          processor->descriptor_set.ordinal);
   ASSERT_NE(target_bundle, nullptr);
 
   loom_run_hal_device_target_t target = {
       /*.data=*/processor,
       /*.target_storage=*/{},
       /*.target_bundle=*/target_bundle,
-      /*.target_key=*/processor->processor,
+      /*.target_key=*/processor->name,
   };
   loom_run_hal_artifact_t artifact = {};
   bool emitted = false;

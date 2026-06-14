@@ -108,7 +108,7 @@ static iree_status_t loomc_amdgpu_emit_module_artifact(
       (const loom_amdgpu_processor_info_t*)request->target_selection.data;
   iree_diagnostic_emitter_t diagnostic_emitter = request->diagnostic_emitter;
   const loom_amdgpu_hal_kernel_library_options_t library_options = {
-      .processor = processor ? processor->processor : iree_string_view_empty(),
+      .processor = processor ? processor->name : iree_string_view_empty(),
       .target_selection = request->target_selection,
       .diagnostic_sink =
           {
@@ -232,7 +232,7 @@ loomc_status_t loomc_target_profile_create_amdgpu(
   }
   const loom_target_bundle_t* target_bundle =
       loom_amdgpu_target_bundle_for_descriptor_set(
-          processor->descriptor_set_ordinal);
+          processor->descriptor_set.ordinal);
   if (target_bundle == NULL) {
     return loomc_make_status(
         LOOMC_STATUS_UNAVAILABLE,
@@ -261,7 +261,7 @@ loomc_string_view_t loomc_amdgpu_target_profile_processor(
   const loom_amdgpu_processor_info_t* processor =
       (const loom_amdgpu_processor_info_t*)loomc_target_profile_payload(
           profile, &loomc_amdgpu_profile_payload_type);
-  return processor ? loomc_string_view_from_iree(processor->processor)
+  return processor ? loomc_string_view_from_iree(processor->name)
                    : loomc_string_view_empty();
 }
 
@@ -278,6 +278,6 @@ loomc_status_t loomc_amdgpu_processor_from_hsa_isa_name(
   LOOMC_RETURN_IF_ERROR(
       loomc_status_from_iree(loom_amdgpu_target_info_parse_amdhsa_target_id(
           iree_string_view_from_loomc(hsa_isa_name), &target_id)));
-  *out_processor = loomc_string_view_from_iree(target_id.processor->processor);
+  *out_processor = loomc_string_view_from_iree(target_id.processor->name);
   return loomc_ok_status();
 }

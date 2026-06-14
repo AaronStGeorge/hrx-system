@@ -393,7 +393,7 @@ loom_amdgpu_wait_state_matrix_wait_profile(
       LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950;
   if (builder->processor != NULL &&
       !loom_amdgpu_matrix_wait_profile_from_feature_profile(
-          builder->processor->matrix_feature_profile, &wait_profile)) {
+          builder->processor->features.matrix, &wait_profile)) {
     return LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
   }
   return wait_profile;
@@ -474,7 +474,7 @@ static bool loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES);
 }
 
@@ -482,7 +482,7 @@ static bool loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES);
 }
 
@@ -490,7 +490,7 @@ static bool loom_amdgpu_wait_state_processor_has_dst_sel_forwarding_hazard(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES);
 }
 

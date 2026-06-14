@@ -203,7 +203,7 @@ std::string StringViewToString(iree_string_view_t value) {
 std::string AmdhsaTargetIdForProcessor(
     const loom_amdgpu_processor_info_t* processor) {
   return std::string("amdgcn-amd-amdhsa--") +
-         StringViewToString(processor->processor);
+         StringViewToString(processor->name);
 }
 
 TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
@@ -389,7 +389,7 @@ TEST(AmdgpuHsacoTest, WritesSupportedProcessorCodeObjectFlags) {
 
     loom_amdgpu_metadata_kernel_t metadata =
         MinimalKernel(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd"));
-    metadata.wavefront_size = processor->default_wavefront_size;
+    metadata.wavefront_size = processor->wavefront.default_size;
     const loom_amdgpu_hsaco_kernel_t kernel = {
         /*.metadata=*/metadata,
         /*.descriptor_options=*/{},
@@ -398,7 +398,7 @@ TEST(AmdgpuHsacoTest, WritesSupportedProcessorCodeObjectFlags) {
     const std::string target_id = AmdhsaTargetIdForProcessor(processor);
     const loom_amdgpu_hsaco_file_t file = {
         /*.target=*/iree_make_string_view(target_id.data(), target_id.size()),
-        /*.processor=*/processor->processor,
+        /*.processor=*/processor->name,
         /*.kernels=*/&kernel,
         /*.kernel_count=*/1,
     };
@@ -407,19 +407,19 @@ TEST(AmdgpuHsacoTest, WritesSupportedProcessorCodeObjectFlags) {
     TestArena arena;
     IREE_ASSERT_OK(
         loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()))
-        << StringViewToString(processor->processor);
+        << StringViewToString(processor->name);
     const std::string bytes = StreamBytes(stream.get());
 
-    ASSERT_GE(bytes.size(), 64u) << StringViewToString(processor->processor);
+    ASSERT_GE(bytes.size(), 64u) << StringViewToString(processor->name);
     EXPECT_EQ(LoadLeU32(bytes, 48),
-              processor->elf_machine_flags | processor->elf_feature_flags)
-        << StringViewToString(processor->processor);
+              processor->elf.machine_flags | processor->elf.feature_flags)
+        << StringViewToString(processor->name);
     const std::vector<Section> sections = ReadSections(bytes);
     const Section& note = FindSection(sections, ".note");
     const std::string note_contents =
         bytes.substr((size_t)note.offset, (size_t)note.size);
     EXPECT_NE(note_contents.find(target_id), std::string::npos)
-        << StringViewToString(processor->processor);
+        << StringViewToString(processor->name);
   }
   EXPECT_GE(supported_count, 9u);
 }

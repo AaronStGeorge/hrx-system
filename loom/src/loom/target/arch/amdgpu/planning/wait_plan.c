@@ -356,7 +356,7 @@ static bool loom_amdgpu_wait_plan_processor_has_valu_trans_use_depctr(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR);
 }
 
@@ -364,7 +364,7 @@ static bool loom_amdgpu_wait_plan_processor_has_valu_sgpr_read_depctr(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR);
 }
 

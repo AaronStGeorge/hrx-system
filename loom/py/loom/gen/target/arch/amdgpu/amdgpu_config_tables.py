@@ -51,7 +51,7 @@ def _selected_descriptor_set_infos() -> tuple[AmdgpuDescriptorSetInfo, ...]:
         processor = processors_by_name.get(record.processor)
         if processor is None:
             raise ValueError(f"AMDGPU target record '{record.processor}' has no processor row")
-        descriptor_set_key = processor.descriptor_set_key
+        descriptor_set_key = processor.descriptor_set.key
         if not descriptor_set_key:
             raise ValueError(f"AMDGPU target record '{record.processor}' has no descriptor-set key")
         if descriptor_set_key not in descriptor_sets_by_key:
