@@ -284,6 +284,190 @@ low.func.def target(@target) abi(object_function) @descriptor_b128_off_zero(%inp
 // ====
 
 llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_dynamic_base_static_extent_load_i32(%input: buffer, %base_i32: i32) -> (i32) {
+  %base0 = index.cast %base_i32 : i32 to offset
+  %base = index.assume %base0 [range(%base0, 0, 4092), mul(%base0, 4)] : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<4xi32, #dense>
+  %loaded = view.load %input_view[2] : view<4xi32, #dense> -> i32
+  func.return %loaded : i32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_dynamic_base_static_extent_load_i32(%input_view: reg<llvmir.ptr>, %base_i32: reg<llvmir.i32>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %base = zext.i32.i64 %base_i32
+  %loaded = load.indexed.i32 %input_view, %base, 8, 1
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_dynamic_extent_load_f32(%input: buffer, %element_count_i32: i32, %element_i32: i32) -> (f32) {
+  %base = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 1024)] : index
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1023), lt(%element0, %element_count)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %loaded = view.load %input_view[%element] : view<[%element_count]xf32, #dense> -> f32
+  func.return %loaded : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_dynamic_extent_load_f32(%input_view: reg<llvmir.ptr>, %element_count_i32: reg<llvmir.i32>, %element_i32: reg<llvmir.i32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %element = sext.i32.i64 %element_i32
+  %loaded = load.indexed.f32 %input_view, %element, 0, 4
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_static_extent_overflow_fallback_load_i32(%input: buffer, %element_i32: i32) -> (i32) {
+  %base = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1073741823)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<1073741824xi32, #dense>
+  %loaded = view.load %input_view[%element] : view<1073741824xi32, #dense> -> i32
+  func.return %loaded : i32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_static_extent_overflow_fallback_load_i32(%input_view: reg<llvmir.ptr>, %element_i32: reg<llvmir.i32>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %element = sext.i32.i64 %element_i32
+  %loaded = load.indexed.i32 %input_view, %element, 0, 4
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_dynamic_extent_overflow_fallback_load_f32(%input: buffer, %element_count_i32: i32, %element_i32: i32) -> (f32) {
+  %base = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 1073741824)] : index
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1073741823), lt(%element0, %element_count)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %loaded = view.load %input_view[%element] : view<[%element_count]xf32, #dense> -> f32
+  func.return %loaded : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_dynamic_extent_overflow_fallback_load_f32(%input_view: reg<llvmir.ptr>, %element_count_i32: reg<llvmir.i32>, %element_i32: reg<llvmir.i32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %element = sext.i32.i64 %element_i32
+  %loaded = load.indexed.f32 %input_view, %element, 0, 4
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_dynamic_base_extent_load_f32(%input: buffer, %base_i32: i32, %element_count_i32: i32, %element_i32: i32) -> (f32) {
+  %base0 = index.cast %base_i32 : i32 to offset
+  %base = index.assume %base0 [range(%base0, 0, 4096), mul(%base0, 4)] : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 1024)] : index
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1023), lt(%element0, %element_count)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %loaded = view.load %input_view[%element] : view<[%element_count]xf32, #dense> -> f32
+  func.return %loaded : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_dynamic_base_extent_load_f32(%input_view: reg<llvmir.ptr>, %base_i32: reg<llvmir.i32>, %element_count_i32: reg<llvmir.i32>, %element_i32: reg<llvmir.i32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %base = zext.i32.i64 %base_i32
+  %element = sext.i32.i64 %element_i32
+  %22 = const.i64 2
+  %23 = shl.i64 %element, %22
+  %24 = add.i64 %base, %23
+  %loaded = load.indexed.f32 %input_view, %24, 0, 1
+  return %loaded
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_dynamic_extent_store_f32x4(%output: buffer, %value: vector<4xf32>, %row_count_i32: i32, %row_i32: i32) {
+  %base = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %row_count0 = index.cast %row_count_i32 : i32 to index
+  %row_count = index.assume %row_count0 [range(%row_count0, 1, 1024)] : index
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 1023), lt(%row0, %row_count)] : index
+  %output_view = buffer.view %output_descriptor[%base] : buffer -> view<[%row_count]x4xf32, #dense>
+  vector.store %value, %output_view[%row, %zero] : vector<4xf32>, view<[%row_count]x4xf32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_dynamic_extent_store_f32x4(%output_view: reg<llvmir.ptr>, %value: reg<llvmir.f32 x4>, %row_count_i32: reg<llvmir.i32>, %row_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %row = sext.i32.i64 %row_i32
+  %18 = const.i64 4
+  %19 = shl.i64 %row, %18
+  store.indexed.v4f32 %value, %output_view, %19, 0, 1
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+func.def target(@target) @descriptor_dynamic_base_extent_store_f32x4(%output: buffer, %value: vector<4xf32>, %base_i32: i32, %row_count_i32: i32, %row_i32: i32) {
+  %base0 = index.cast %base_i32 : i32 to offset
+  %base = index.assume %base0 [range(%base0, 0, 8192), mul(%base0, 16)] : offset
+  %zero = index.constant 0 : index
+  %output_descriptor = buffer.assume.memory_space<descriptor> %output : buffer
+  %row_count0 = index.cast %row_count_i32 : i32 to index
+  %row_count = index.assume %row_count0 [range(%row_count0, 1, 512)] : index
+  %row0 = index.cast %row_i32 : i32 to index
+  %row = index.assume %row0 [range(%row0, 0, 511), lt(%row0, %row_count)] : index
+  %output_view = buffer.view %output_descriptor[%base] : buffer -> view<[%row_count]x4xf32, #dense>
+  vector.store %value, %output_view[%row, %zero] : vector<4xf32>, view<[%row_count]x4xf32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @descriptor_dynamic_base_extent_store_f32x4(%output_view: reg<llvmir.ptr>, %value: reg<llvmir.f32 x4>, %base_i32: reg<llvmir.i32>, %row_count_i32: reg<llvmir.i32>, %row_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %base = zext.i32.i64 %base_i32
+  %row = sext.i32.i64 %row_i32
+  %22 = const.i64 4
+  %23 = shl.i64 %row, %22
+  %24 = add.i64 %base, %23
+  store.indexed.v4f32 %value, %output_view, %24, 0, 1
+  return
+}
+
+// ====
+
+llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
 kernel.def target(@target) @i32_readonly_uniform_smem() {

@@ -378,6 +378,68 @@ low.func.def target(@target) abi(hal_kernel) @descriptor_dynamic_extent_load_f32
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @descriptor_static_extent_overflow_fallback_load_i32(%input: buffer, %element_i32: i32) -> (i32) {
+  %base = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1073741823)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<1073741824xi32, #dense>
+  %loaded = view.load %input_view[%element] : view<1073741824xi32, #dense> -> i32
+  func.return %loaded : i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @descriptor_static_extent_overflow_fallback_load_i32(%element: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4294967296} : reg<amdgpu.sgpr x2>
+  %12 = v_mov_b32 0
+  %13 = s_lshl_b32_rhs_inline %element, 2
+  %16 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %17 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %18 = s_mov_b32 65535
+  %19 = s_and_b32 %17, %18
+  %20 = concat(%16, %19) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %21 = s_mov_b32 4294967295
+  %22 = s_mov_b32 822243328
+  %23 = concat(%20, %21, %22) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  %loaded = buffer_load_dword %23, %12, %13
+  return %loaded
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @descriptor_dynamic_extent_overflow_fallback_load_f32(%input: buffer, %element_count_i32: i32, %element_i32: i32) -> (f32) {
+  %base = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space<descriptor> %input : buffer
+  %element_count0 = index.cast %element_count_i32 : i32 to index
+  %element_count = index.assume %element_count0 [range(%element_count0, 1, 1073741824)] : index
+  %element0 = index.cast %element_i32 : i32 to index
+  %element = index.assume %element0 [range(%element0, 0, 1073741823), lt(%element0, %element_count)] : index
+  %input_view = buffer.view %input_descriptor[%base] : buffer -> view<[%element_count]xf32, #dense>
+  %loaded = view.load %input_view[%element] : view<[%element_count]xf32, #dense> -> f32
+  func.return %loaded : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @descriptor_dynamic_extent_overflow_fallback_load_f32(%element_count: reg<amdgpu.sgpr>, %element: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %16 = v_mov_b32 0
+  %17 = s_lshl_b32_rhs_inline %element, 2
+  %20 = slice %input_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %21 = slice %input_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %22 = s_mov_b32 65535
+  %23 = s_and_b32 %21, %22
+  %24 = concat(%20, %23) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %25 = s_mov_b32 4294967295
+  %26 = s_mov_b32 822243328
+  %27 = concat(%24, %25, %26) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  %loaded = buffer_load_dword %27, %16, %17
+  return %loaded
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @descriptor_dynamic_base_extent_load_f32(%input: buffer, %base_i32: i32, %element_count_i32: i32, %element_i32: i32) -> (f32) {
   %base0 = index.cast %base_i32 : i32 to offset
   %base = index.assume %base0 [range(%base0, 0, 4096), mul(%base0, 4)] : offset
