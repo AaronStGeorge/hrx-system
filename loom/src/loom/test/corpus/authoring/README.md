@@ -25,6 +25,7 @@ belong to `iree-benchmark-loom` flags or embedding APIs.
 | --- | --- |
 | Concrete helper call | `ffn_gate_up_swiglu_q6q8.loom` calls `@q6_signed_pack_dot4i` with `func.call` because it is exact bit manipulation. |
 | Dynamic extent byte fill | `memset_i8.loom` keeps a 64-bit pattern argument and narrows it at the byte store, matching runtime-style ABI pressure without runtime-specific names. |
+| Loaded row-index gather | `indexed_row_gather_f32.loom` guards loaded i32 row ids before `index.cast` and uses real dynamic view extents instead of sentinel shapes. |
 | Template provider selection | `ffn_gate_up_swiglu_q6q8.loom` applies `model.q6q8.accumulate_part` so libraries can provide alternate packed-dot implementations. |
 | Local unroll intent | `ffn_gate_up_swiglu_q6q8.loom` keeps block/part loops structured and marks the tiny trip-count loops with `unroll`. |
 | Logical indexing | The examples use index/view math for logical rows, blocks, lanes, byte positions, and dense tensor coordinates. |
