@@ -41,6 +41,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
     AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS,
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
+    AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAGS_PROFILELESS,
     AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
@@ -300,6 +301,9 @@ def _validate_processors(
         raise ValueError("AMDGPU processor target-info keys must be unique")
     descriptor_set_keys = {info.key for info in descriptor_sets}
     for info in processors:
+        kernel_descriptor = info.kernel_descriptor
+        profile = kernel_descriptor.profile
+        vgpr_granules = kernel_descriptor.vgpr_granules
         if not info.processor:
             raise ValueError("AMDGPU processor is required")
         if info.descriptor_set.key and info.descriptor_set.key not in descriptor_set_keys:
@@ -312,20 +316,25 @@ def _validate_processors(
             raise ValueError(f"AMDGPU ELF feature flags for {info.processor} must not overlap EF_AMDGPU_MACH")
         if info.wavefront.default_size not in (32, 64):
             raise ValueError(f"AMDGPU default wavefront size for {info.processor} must be 32 or 64")
-        if info.kernel_descriptor.profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and not kernel_descriptor_profile_supports_wavefront_size(
-            info.kernel_descriptor.profile, info.wavefront.default_size
-        ):
-            raise ValueError(f"AMDGPU default wavefront size for {info.processor} is not supported by its kernel descriptor profile")
         _matrix_feature_profile_expr(info.features.matrix)
-        if info.kernel_descriptor.profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and (info.kernel_descriptor.vgpr_granules.wave32 == 0 or info.kernel_descriptor.vgpr_granules.wave64 == 0):
-            raise ValueError(f"AMDGPU processor {info.processor} has descriptor profile but no VGPR encoding granules")
-        if info.kernel_descriptor.profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and info.elf.machine_flags == 0:
-            raise ValueError(f"AMDGPU processor {info.processor} has a kernel descriptor profile but no ELF machine flags")
-        if info.kernel_descriptor.flags < 0 or info.kernel_descriptor.flags > 0xFFFFFFFFFFFFFFFF:
+        if kernel_descriptor.flags < 0 or kernel_descriptor.flags > 0xFFFFFFFFFFFFFFFF:
             raise ValueError(f"AMDGPU kernel descriptor ABI flags for {info.processor} must fit u64")
-        unknown_descriptor_flags = info.kernel_descriptor.flags & ~AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS
+        unknown_descriptor_flags = kernel_descriptor.flags & ~AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS
         if unknown_descriptor_flags != 0:
             raise ValueError(f"AMDGPU processor {info.processor} has unknown kernel descriptor ABI flags 0x{unknown_descriptor_flags:x}")
+        if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE:
+            if vgpr_granules.wave32 != 0 or vgpr_granules.wave64 != 0:
+                raise ValueError(f"AMDGPU processor {info.processor} has no kernel descriptor profile but has VGPR encoding granules")
+            profileless_flags = kernel_descriptor.flags & ~AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAGS_PROFILELESS
+            if profileless_flags != 0:
+                raise ValueError(f"AMDGPU processor {info.processor} has no kernel descriptor profile but has profile-owned ABI flags 0x{profileless_flags:x}")
+        else:
+            if not kernel_descriptor_profile_supports_wavefront_size(profile, info.wavefront.default_size):
+                raise ValueError(f"AMDGPU default wavefront size for {info.processor} is not supported by its kernel descriptor profile")
+            if vgpr_granules.wave32 == 0 or vgpr_granules.wave64 == 0:
+                raise ValueError(f"AMDGPU processor {info.processor} has descriptor profile but no VGPR encoding granules")
+            if info.elf.machine_flags == 0:
+                raise ValueError(f"AMDGPU processor {info.processor} has a kernel descriptor profile but no ELF machine flags")
         if info.features.scheduling < 0 or info.features.scheduling > 0xFFFFFFFF:
             raise ValueError(f"AMDGPU scheduling bits for {info.processor} must fit u32")
         unknown_scheduling_bits = info.features.scheduling & ~AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS
