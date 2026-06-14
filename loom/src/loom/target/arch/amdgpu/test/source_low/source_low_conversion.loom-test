@@ -483,6 +483,32 @@ low.func.def target(@target) abi(hal_kernel) @scalar_bitcast_f32_to_i32(%bits: r
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_bitcast_i64_to_f64(%input: i64) -> (f64) {
+  %value = scalar.bitcast %input : i64 to f64
+  func.return %value : f64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_bitcast_i64_to_f64(%value: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  return %value
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_bitcast_f64_to_i64(%input: f64) -> (i64) {
+  %bits = scalar.bitcast %input : f64 to i64
+  func.return %bits : i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_bitcast_f64_to_i64(%bits: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  return %bits
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @scalar_bitcast_f16_to_i16(%input: f16) -> (i16) {
   %bits = scalar.bitcast %input : f16 to i16
   func.return %bits : i16

@@ -137,9 +137,11 @@ _VEC_I16_PACKED = Vector(
 _I8 = Scalar("i8")
 _I16 = Scalar("i16")
 _I32 = Scalar("i32")
+_I64 = Scalar("i64")
 _F16 = Scalar("f16")
 _BF16 = Scalar("bf16")
 _F32 = Scalar("f32")
+_F64 = Scalar("f64")
 _INDEX = Scalar("index")
 _F32_ABS_MASK = 0x7FFFFFFF
 _F32_SIGN_MASK = 0x80000000
@@ -191,6 +193,11 @@ _I32_DIAGNOSTIC = GuardDiagnostic(
     subject_name="i32",
     constraint_key="amdgpu.arithmetic.i32",
 )
+_I64_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="i64",
+    constraint_key="amdgpu.arithmetic.i64",
+)
 _I8_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
     subject_name="i8",
@@ -215,6 +222,11 @@ _F32_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
     subject_name="f32",
     constraint_key="amdgpu.arithmetic.f32",
+)
+_F64_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="f64",
+    constraint_key="amdgpu.arithmetic.f64",
 )
 _INDEX_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
@@ -293,6 +305,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _VEC_I16_PACKED_DIAGNOSTIC
     if type_pattern == _I32:
         return _I32_DIAGNOSTIC
+    if type_pattern == _I64:
+        return _I64_DIAGNOSTIC
     if type_pattern == _I8:
         return _I8_DIAGNOSTIC
     if type_pattern == _I16:
@@ -303,6 +317,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _BF16_DIAGNOSTIC
     if type_pattern == _F32:
         return _F32_DIAGNOSTIC
+    if type_pattern == _F64:
+        return _F64_DIAGNOSTIC
     if type_pattern == _INDEX:
         return _INDEX_DIAGNOSTIC
     raise ValueError(f"unknown AMDGPU arithmetic type pattern: {type_pattern!r}")
@@ -2031,6 +2047,8 @@ def _rules() -> tuple[ContractCase, ...]:
             ),
             _bitcast_alias_rule(_I32, _F32),
             _bitcast_alias_rule(_F32, _I32),
+            _bitcast_alias_rule(_I64, _F64),
+            _bitcast_alias_rule(_F64, _I64),
             _bitcast_alias_rule(_I16, _F16),
             _bitcast_alias_rule(_F16, _I16),
             _bitcast_alias_rule(_I16, _BF16),
