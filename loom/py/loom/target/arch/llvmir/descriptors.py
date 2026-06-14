@@ -58,6 +58,17 @@ _SCHEDULE_LOAD = "llvmir.load"
 _SCHEDULE_STORE = "llvmir.store"
 
 _VECTOR_LANE_COUNTS = (2, 4, 8, 16)
+_STRUCTURAL_VECTOR_TYPES = (
+    "i1",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "f16",
+    "bf16",
+    "f32",
+    "f64",
+)
 
 _INTEGER_PREDICATES = (
     "eq",
@@ -212,6 +223,33 @@ _BYTE_STRIDE_IMMEDIATE = Immediate(
 )
 
 
+def _lane_immediate(lane_count: int) -> Immediate:
+    return Immediate(
+        "lane",
+        ImmediateKind.UNSIGNED,
+        bit_width=32,
+        unsigned_max=lane_count - 1,
+    )
+
+
+def _offset_immediate(maximum: int) -> Immediate:
+    return Immediate(
+        "offset",
+        ImmediateKind.UNSIGNED,
+        bit_width=32,
+        unsigned_max=maximum,
+    )
+
+
+def _shuffle_lane_immediate(name: str, lane_count: int) -> Immediate:
+    return Immediate(
+        name,
+        ImmediateKind.UNSIGNED,
+        bit_width=32,
+        unsigned_max=lane_count - 1,
+    )
+
+
 def _read_effect(width_bits: int) -> Effect:
     return Effect(
         EffectKind.READ,
@@ -230,15 +268,21 @@ def _write_effect(width_bits: int) -> Effect:
     )
 
 
-def _const_i_descriptor(type_name: str) -> Descriptor:
+def _const_i_descriptor(
+    type_name: str,
+    unit_count: int = 1,
+    *,
+    vector: bool = False,
+) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, unit_count, vector=vector)
     return Descriptor(
-        key=f"llvmir.const.{type_name}",
+        key=f"llvmir.const.{suffix}",
         mnemonic="const",
-        semantic_tag=f"llvmir.const.{type_name}",
-        operands=(_result(type_name),),
+        semantic_tag=f"llvmir.const.{suffix}",
+        operands=(_result(type_name, unit_count=unit_count),),
         immediates=(_I64_VALUE_IMMEDIATE,),
         asm_forms=_asm(
-            mnemonic=f"const.{type_name}",
+            mnemonic=f"const.{suffix}",
             results=("dst",),
             immediates=("value",),
         ),
@@ -247,20 +291,49 @@ def _const_i_descriptor(type_name: str) -> Descriptor:
     )
 
 
-def _const_f_descriptor(type_name: str, immediate: Immediate) -> Descriptor:
+def _const_f_descriptor(
+    type_name: str,
+    immediate: Immediate,
+    unit_count: int = 1,
+    *,
+    vector: bool = False,
+) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, unit_count, vector=vector)
     return Descriptor(
-        key=f"llvmir.const.{type_name}",
+        key=f"llvmir.const.{suffix}",
         mnemonic="const",
-        semantic_tag=f"llvmir.const.{type_name}",
-        operands=(_result(type_name),),
+        semantic_tag=f"llvmir.const.{suffix}",
+        operands=(_result(type_name, unit_count=unit_count),),
         immediates=(immediate,),
         asm_forms=_asm(
-            mnemonic=f"const.{type_name}",
+            mnemonic=f"const.{suffix}",
             results=("dst",),
             immediates=("bits",),
         ),
         schedule_class=_SCHEDULE_CONST,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _constant_descriptors() -> tuple[Descriptor, ...]:
+    return (
+        _const_i_descriptor("i32"),
+        _const_i_descriptor("i64"),
+        _const_f_descriptor("f32", _F32_BITS_IMMEDIATE),
+        _const_f_descriptor("f64", _F64_BITS_IMMEDIATE),
+        *(
+            _const_i_descriptor(type_name, lane_count, vector=True)
+            for type_name in ("i32", "i64")
+            for lane_count in _VECTOR_LANE_COUNTS
+        ),
+        *(
+            _const_f_descriptor(type_name, immediate, lane_count, vector=True)
+            for type_name, immediate in (
+                ("f32", _F32_BITS_IMMEDIATE),
+                ("f64", _F64_BITS_IMMEDIATE),
+            )
+            for lane_count in _VECTOR_LANE_COUNTS
+        ),
     )
 
 
@@ -525,6 +598,162 @@ def _select_descriptors() -> tuple[Descriptor, ...]:
     )
 
 
+def _splat_descriptor(type_name: str, lane_count: int) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.splat.{suffix}",
+        mnemonic="splat",
+        semantic_tag=f"llvmir.splat.{suffix}",
+        operands=(
+            _result(type_name, unit_count=lane_count),
+            _operand(type_name, "value"),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"splat.{suffix}",
+            results=("dst",),
+            operands=("value",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _from_elements_descriptor(type_name: str, lane_count: int) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.from_elements.{suffix}",
+        mnemonic="from_elements",
+        semantic_tag=f"llvmir.from_elements.{suffix}",
+        operands=(
+            _result(type_name, unit_count=lane_count),
+            *(
+                _operand(type_name, f"lane{lane_index}")
+                for lane_index in range(lane_count)
+            ),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"from_elements.{suffix}",
+            results=("dst",),
+            operands=tuple(f"lane{lane_index}" for lane_index in range(lane_count)),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _extract_descriptor(type_name: str, lane_count: int) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.extract.{suffix}",
+        mnemonic="extract",
+        semantic_tag=f"llvmir.extract.{suffix}",
+        operands=(
+            _result(type_name),
+            _operand(type_name, "source", unit_count=lane_count),
+        ),
+        immediates=(_lane_immediate(lane_count),),
+        asm_forms=_asm(
+            mnemonic=f"extract.{suffix}",
+            results=("dst",),
+            operands=("source",),
+            immediates=("lane",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _insert_descriptor(type_name: str, lane_count: int) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.insert.{suffix}",
+        mnemonic="insert",
+        semantic_tag=f"llvmir.insert.{suffix}",
+        operands=(
+            _result(type_name, unit_count=lane_count),
+            _operand(type_name, "dest", unit_count=lane_count),
+            _operand(type_name, "value"),
+        ),
+        immediates=(_lane_immediate(lane_count),),
+        asm_forms=_asm(
+            mnemonic=f"insert.{suffix}",
+            results=("dst",),
+            operands=("dest", "value"),
+            immediates=("lane",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _shuffle_descriptor(type_name: str, lane_count: int) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.shuffle.{suffix}",
+        mnemonic="shuffle",
+        semantic_tag=f"llvmir.shuffle.{suffix}",
+        operands=(
+            _result(type_name, unit_count=lane_count),
+            _operand(type_name, "source", unit_count=lane_count),
+        ),
+        immediates=tuple(
+            _shuffle_lane_immediate(f"lane{lane_index}", lane_count)
+            for lane_index in range(lane_count)
+        ),
+        asm_forms=_asm(
+            mnemonic=f"shuffle.{suffix}",
+            results=("dst",),
+            operands=("source",),
+            immediates=tuple(f"lane{lane_index}" for lane_index in range(lane_count)),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _slice_descriptor(
+    type_name: str,
+    *,
+    source_lane_count: int,
+    result_lane_count: int,
+) -> Descriptor:
+    source_suffix = _descriptor_suffix(type_name, source_lane_count, vector=True)
+    result_suffix = _descriptor_suffix(type_name, result_lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.slice.{source_suffix}.{result_suffix}",
+        mnemonic="slice",
+        semantic_tag=f"llvmir.slice.{source_suffix}.{result_suffix}",
+        operands=(
+            _result(type_name, unit_count=result_lane_count),
+            _operand(type_name, "source", unit_count=source_lane_count),
+        ),
+        immediates=(_offset_immediate(source_lane_count - result_lane_count),),
+        asm_forms=_asm(
+            mnemonic=f"slice.{source_suffix}.{result_suffix}",
+            results=("dst",),
+            operands=("source",),
+            immediates=("offset",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _structural_vector_descriptors() -> tuple[Descriptor, ...]:
+    descriptors: list[Descriptor] = []
+    for type_name in _STRUCTURAL_VECTOR_TYPES:
+        for lane_count in _VECTOR_LANE_COUNTS:
+            descriptors.append(_splat_descriptor(type_name, lane_count))
+            descriptors.append(_from_elements_descriptor(type_name, lane_count))
+            descriptors.append(_extract_descriptor(type_name, lane_count))
+            descriptors.append(_insert_descriptor(type_name, lane_count))
+            descriptors.append(_shuffle_descriptor(type_name, lane_count))
+        descriptors.append(
+            _slice_descriptor(type_name, source_lane_count=4, result_lane_count=2)
+        )
+    return tuple(descriptors)
+
+
 def _memory_descriptors() -> tuple[Descriptor, ...]:
     descriptors: list[Descriptor] = []
     for type_name, unit_count in (
@@ -631,14 +860,12 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
     descriptors=(
-        _const_i_descriptor("i32"),
-        _const_i_descriptor("i64"),
-        _const_f_descriptor("f32", _F32_BITS_IMMEDIATE),
-        _const_f_descriptor("f64", _F64_BITS_IMMEDIATE),
+        *_constant_descriptors(),
         *_arithmetic_descriptors(),
         *_bitwise_descriptors(),
         *_compare_descriptors(),
         *_select_descriptors(),
+        *_structural_vector_descriptors(),
         *_memory_descriptors(),
     ),
 )

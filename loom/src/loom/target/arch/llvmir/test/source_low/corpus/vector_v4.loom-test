@@ -39,7 +39,6 @@ low.func.def target(@target) abi(object_function) @f32x4_arith(%lhs: reg<llvmir.
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -50,9 +49,15 @@ func.def target(@target) @f32x4_lane_extract(%v: vector<4xf32>, %x: f32) -> (f32
   func.return %sum : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_lane_extract(%v: reg<llvmir.f32 x4>, %x: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %lane = extract.v4f32 %v, 2
+  %sum = add.f32 %lane, %x
+  return %sum
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -64,9 +69,16 @@ func.def target(@target) @f32x4_lane_edit(%v: vector<4xf32>, %x: f32) -> (vector
   func.return %updated : vector<4xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_lane_edit(%v: reg<llvmir.f32 x4>, %x: reg<llvmir.f32>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %lane = extract.v4f32 %v, 1
+  %sum = add.f32 %lane, %x
+  %updated = insert.v4f32 %v, %sum, 2
+  return %updated
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -77,9 +89,15 @@ func.def target(@target) @i32x4_splat_add(%value: i32, %rhs: vector<4xi32>) -> (
   func.return %sum : vector<4xi32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_splat_add(%value: reg<llvmir.i32>, %rhs: reg<llvmir.i32 x4>) -> (reg<llvmir.i32 x4>) asm<llvmir.generic.core> {
+  %splat = splat.v4i32 %value
+  %sum = add.v4i32 %splat, %rhs
+  return %sum
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -91,9 +109,16 @@ func.def target(@target) @i32x4_lane_edit(%v: vector<4xi32>, %x: i32) -> (vector
   func.return %updated : vector<4xi32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_lane_edit(%v: reg<llvmir.i32 x4>, %x: reg<llvmir.i32>) -> (reg<llvmir.i32 x4>) asm<llvmir.generic.core> {
+  %lane = extract.v4i32 %v, 1
+  %sum = add.i32 %lane, %x
+  %updated = insert.v4i32 %v, %sum, 2
+  return %updated
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -103,9 +128,14 @@ func.def target(@target) @i32x4_shuffle(%v: vector<4xi32>) -> (vector<4xi32>) {
   func.return %shuffled : vector<4xi32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_shuffle(%v: reg<llvmir.i32 x4>) -> (reg<llvmir.i32 x4>) asm<llvmir.generic.core> {
+  %shuffled = shuffle.v4i32 %v, 3, 2, 1, 0
+  return %shuffled
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -116,9 +146,21 @@ func.def target(@target) @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) ->
   func.return %sum : i32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_shuffle_reduce(%v: reg<llvmir.i32 x4>, %init: reg<llvmir.i32>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %16 = extract.v4i32 %v, 3
+  %17 = add.i32 %init, %16
+  %18 = extract.v4i32 %v, 2
+  %19 = add.i32 %17, %18
+  %20 = extract.v4i32 %v, 1
+  %21 = add.i32 %19, %20
+  %22 = extract.v4i32 %v, 0
+  %sum = add.i32 %21, %22
+  return %sum
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -128,9 +170,14 @@ func.def target(@target) @f32x4_shuffle(%v: vector<4xf32>) -> (vector<4xf32>) {
   func.return %shuffled : vector<4xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_shuffle(%v: reg<llvmir.f32 x4>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %shuffled = shuffle.v4f32 %v, 3, 1, 2, 0
+  return %shuffled
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -139,6 +186,19 @@ func.def target(@target) @f32x4_shuffle_reduce(%v: vector<4xf32>, %init: f32) ->
   %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
   %sum = vector.reduce<addf> %shuffled, %init : vector<4xf32>, f32
   func.return %sum : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_shuffle_reduce(%v: reg<llvmir.f32 x4>, %init: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %16 = extract.v4f32 %v, 3
+  %17 = add.f32 %init, %16
+  %18 = extract.v4f32 %v, 1
+  %19 = add.f32 %17, %18
+  %20 = extract.v4f32 %v, 2
+  %21 = add.f32 %19, %20
+  %22 = extract.v4f32 %v, 0
+  %sum = add.f32 %21, %22
+  return %sum
 }
 
 // ====

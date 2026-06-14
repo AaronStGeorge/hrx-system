@@ -1,7 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/vector_slice.loom-test
 // RUN: emit source-low output=low
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -11,9 +10,14 @@ func.def target(@target) @i32x4_slice_middle(%values: vector<4xi32>) -> (vector<
   func.return %middle : vector<2xi32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_slice_middle(%values: reg<llvmir.i32 x4>) -> (reg<llvmir.i32 x2>) asm<llvmir.generic.core> {
+  %middle = slice.v4i32.v2i32 %values, 1
+  return %middle
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -23,9 +27,14 @@ func.def target(@target) @i8x4_slice_low_half(%bytes: vector<4xi8>) -> (vector<2
   func.return %low : vector<2xi8>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i8x4_slice_low_half(%bytes: reg<llvmir.i8 x4>) -> (reg<llvmir.i8 x2>) asm<llvmir.generic.core> {
+  %low = slice.v4i8.v2i8 %bytes, 0
+  return %low
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -35,9 +44,14 @@ func.def target(@target) @i8x4_slice_high_half(%bytes: vector<4xi8>) -> (vector<
   func.return %high : vector<2xi8>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i8x4_slice_high_half(%bytes: reg<llvmir.i8 x4>) -> (reg<llvmir.i8 x2>) asm<llvmir.generic.core> {
+  %high = slice.v4i8.v2i8 %bytes, 2
+  return %high
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -47,9 +61,14 @@ func.def target(@target) @f16x4_slice_low_half(%values: vector<4xf16>) -> (vecto
   func.return %low : vector<2xf16>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f16x4_slice_low_half(%values: reg<llvmir.f16 x4>) -> (reg<llvmir.f16 x2>) asm<llvmir.generic.core> {
+  %low = slice.v4f16.v2f16 %values, 0
+  return %low
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -59,9 +78,14 @@ func.def target(@target) @f16x4_slice_high_half(%values: vector<4xf16>) -> (vect
   func.return %high : vector<2xf16>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f16x4_slice_high_half(%values: reg<llvmir.f16 x4>) -> (reg<llvmir.f16 x2>) asm<llvmir.generic.core> {
+  %high = slice.v4f16.v2f16 %values, 2
+  return %high
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -71,9 +95,14 @@ func.def target(@target) @bf16x4_slice_high_half(%values: vector<4xbf16>) -> (ve
   func.return %high : vector<2xbf16>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @bf16x4_slice_high_half(%values: reg<llvmir.bf16 x4>) -> (reg<llvmir.bf16 x2>) asm<llvmir.generic.core> {
+  %high = slice.v4bf16.v2bf16 %values, 2
+  return %high
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -83,9 +112,14 @@ func.def target(@target) @f32x4_insert_static(%values: vector<4xf32>, %value: f3
   func.return %updated : vector<4xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_insert_static(%values: reg<llvmir.f32 x4>, %value: reg<llvmir.f32>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %updated = insert.v4f32 %values, %value, 2
+  return %updated
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -93,6 +127,12 @@ llvmir.target<object> @target {
 func.def target(@target) @f16x4_insert_static(%values: vector<4xf16>, %value: f16) -> (vector<4xf16>) {
   %updated = vector.insert %value into %values[1] : f16, vector<4xf16>
   func.return %updated : vector<4xf16>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f16x4_insert_static(%values: reg<llvmir.f16 x4>, %value: reg<llvmir.f16>) -> (reg<llvmir.f16 x4>) asm<llvmir.generic.core> {
+  %updated = insert.v4f16 %values, %value, 1
+  return %updated
 }
 
 // ====

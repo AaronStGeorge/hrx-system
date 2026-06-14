@@ -183,6 +183,36 @@ llvmir.target<object> @target {
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
 
+func.def target(@target) @llvmir_structural_vectors(%value: i32, %source: vector<4xi32>, %float_value: f32) -> (vector<4xi32>, i32, vector<2xi32>, vector<4xf32>) {
+  %splat = vector.splat %value : vector<4xi32>
+  %lane = vector.extract %source[2] : vector<4xi32> -> i32
+  %from = vector.from_elements %value, %lane, %value, %lane : vector<4xi32>
+  %updated = vector.insert %lane into %splat[3] : i32, vector<4xi32>
+  %shuffled = vector.shuffle<[3, 2, 1, 0]> %from : vector<4xi32>
+  %slice = vector.slice %shuffled[1] : vector<4xi32> -> vector<2xi32>
+  %float_splat = vector.splat %float_value : vector<4xf32>
+  func.return %updated, %lane, %slice, %float_splat : vector<4xi32>, i32, vector<2xi32>, vector<4xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @llvmir_structural_vectors(%value: reg<llvmir.i32>, %source: reg<llvmir.i32 x4>, %float_value: reg<llvmir.f32>) -> (reg<llvmir.i32 x4>, reg<llvmir.i32>, reg<llvmir.i32 x2>, reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %splat = splat.v4i32 %value
+  %lane = extract.v4i32 %source, 2
+  %from = from_elements.v4i32 %value, %lane, %value, %lane
+  %updated = insert.v4i32 %splat, %lane, 3
+  %shuffled = shuffle.v4i32 %from, 3, 2, 1, 0
+  %slice = slice.v4i32.v2i32 %shuffled, 1
+  %float_splat = splat.v4f32 %float_value
+  return %updated, %lane, %slice, %float_splat
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
 func.def target(@target) @llvmir_i32_dynamic_memory(%input: buffer, %output: buffer, %i: index) -> (i32) {
   %input_base = index.constant 16 : offset
   %output_base = index.constant 32 : offset

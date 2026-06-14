@@ -79,6 +79,45 @@ low.func.def target(@target) abi(object_function) @v16bf16_select(%mask: reg<llv
   return %selected
 }
 
+low.func.def target(@target) abi(object_function) @structural_i32_vector(%value: reg<llvmir.i32>, %source: reg<llvmir.i32 x4>) -> (reg<llvmir.i32 x4>) asm<llvmir.generic.core> {
+  %splat = splat.v4i32 %value
+  %lane = extract.v4i32 %source, 2
+  %from = from_elements.v4i32 %value, %lane, %value, %lane
+  %updated = insert.v4i32 %splat, %lane, 3
+  %shuffled = shuffle.v4i32 %from, 3, 2, 1, 0
+  return %shuffled
+}
+
+low.func.def target(@target) abi(object_function) @structural_slice(%source: reg<llvmir.i32 x4>) -> (reg<llvmir.i32 x2>) asm<llvmir.generic.core> {
+  %slice = slice.v4i32.v2i32 %source, 1
+  return %slice
+}
+
+low.func.def target(@target) abi(object_function) @structural_f32_splat(%float_value: reg<llvmir.f32>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %float_splat = splat.v4f32 %float_value
+  return %float_splat
+}
+
+low.func.def target(@target) abi(object_function) @structural_f16_insert(%source: reg<llvmir.f16 x4>, %value: reg<llvmir.f16>) -> (reg<llvmir.f16 x4>) asm<llvmir.generic.core> {
+  %updated = insert.v4f16 %source, %value, 1
+  return %updated
+}
+
+low.func.def target(@target) abi(object_function) @structural_bf16_slice(%source: reg<llvmir.bf16 x4>) -> (reg<llvmir.bf16 x2>) asm<llvmir.generic.core> {
+  %slice = slice.v4bf16.v2bf16 %source, 2
+  return %slice
+}
+
+low.func.def target(@target) abi(object_function) @integer_vector_constant() -> (reg<llvmir.i32 x2>) asm<llvmir.generic.core> {
+  %int = const.v2i32 7
+  return %int
+}
+
+low.func.def target(@target) abi(object_function) @float_vector_constant() -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %float = const.v2f32 1073741824
+  return %float
+}
+
 // ----
 define dso_local i32 @first(i32 %lhs, i32 %rhs) {
 entry:
@@ -173,6 +212,61 @@ define dso_local <16 x bfloat> @v16bf16_select(<16 x i1> %mask, <16 x bfloat> %t
 entry:
   %selected = select <16 x i1> %mask, <16 x bfloat> %true_value, <16 x bfloat> %false_value
   ret <16 x bfloat> %selected
+}
+
+define dso_local <4 x i32> @structural_i32_vector(i32 %value, <4 x i32> %source) {
+entry:
+  %v58 = insertelement <4 x i32> poison, i32 %value, i64 0
+  %v60 = insertelement <4 x i32> %v58, i32 %value, i64 1
+  %v62 = insertelement <4 x i32> %v60, i32 %value, i64 2
+  %splat = insertelement <4 x i32> %v62, i32 %value, i64 3
+  %lane = extractelement <4 x i32> %source, i64 2
+  %v69 = insertelement <4 x i32> poison, i32 %value, i64 0
+  %v71 = insertelement <4 x i32> %v69, i32 %lane, i64 1
+  %v73 = insertelement <4 x i32> %v71, i32 %value, i64 2
+  %from = insertelement <4 x i32> %v73, i32 %lane, i64 3
+  %updated = insertelement <4 x i32> %splat, i32 %lane, i64 3
+  %shuffled = shufflevector <4 x i32> %from, <4 x i32> poison, <4 x i32> <i32 3, i32 2, i32 1, i32 0>
+  ret <4 x i32> %shuffled
+}
+
+define dso_local <2 x i32> @structural_slice(<4 x i32> %source) {
+entry:
+  %slice = shufflevector <4 x i32> %source, <4 x i32> poison, <2 x i32> <i32 1, i32 2>
+  ret <2 x i32> %slice
+}
+
+define dso_local <4 x float> @structural_f32_splat(float %float_value) {
+entry:
+  %v88 = insertelement <4 x float> poison, float %float_value, i64 0
+  %v90 = insertelement <4 x float> %v88, float %float_value, i64 1
+  %v92 = insertelement <4 x float> %v90, float %float_value, i64 2
+  %float_splat = insertelement <4 x float> %v92, float %float_value, i64 3
+  ret <4 x float> %float_splat
+}
+
+define dso_local <4 x half> @structural_f16_insert(<4 x half> %source, half %value) {
+entry:
+  %updated = insertelement <4 x half> %source, half %value, i64 1
+  ret <4 x half> %updated
+}
+
+define dso_local <2 x bfloat> @structural_bf16_slice(<4 x bfloat> %source) {
+entry:
+  %slice = shufflevector <4 x bfloat> %source, <4 x bfloat> poison, <2 x i32> <i32 2, i32 3>
+  ret <2 x bfloat> %slice
+}
+
+define dso_local <2 x i32> @integer_vector_constant() {
+entry:
+  ret <2 x i32> <i32 7, i32 7>
+}
+
+define dso_local <2 x float> @float_vector_constant() {
+entry:
+  %v107 = insertelement <2 x float> poison, float 0x0000000040000000, i64 0
+  %float = insertelement <2 x float> %v107, float 0x0000000040000000, i64 1
+  ret <2 x float> %float
 }
 
 // ====

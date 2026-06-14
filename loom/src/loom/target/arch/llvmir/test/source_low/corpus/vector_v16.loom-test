@@ -59,7 +59,6 @@ low.func.def target(@target) abi(object_function) @i32x16_variable_shift(%value:
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -68,6 +67,13 @@ func.def target(@target) @i32x16_splat_add(%value: i32, %rhs: vector<16xi32>) ->
   %splat = vector.splat %value : vector<16xi32>
   %sum = vector.addi %splat, %rhs : vector<16xi32>
   func.return %sum : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_splat_add(%value: reg<llvmir.i32>, %rhs: reg<llvmir.i32 x16>) -> (reg<llvmir.i32 x16>) asm<llvmir.generic.core> {
+  %splat = splat.v16i32 %value
+  %sum = add.v16i32 %splat, %rhs
+  return %sum
 }
 
 // ====
@@ -137,7 +143,6 @@ func.def target(@target) @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -148,9 +153,15 @@ func.def target(@target) @f32x16_splat_add(%value: f32, %rhs: vector<16xf32>) ->
   func.return %sum : vector<16xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_splat_add(%value: reg<llvmir.f32>, %rhs: reg<llvmir.f32 x16>) -> (reg<llvmir.f32 x16>) asm<llvmir.generic.core> {
+  %splat = splat.v16f32 %value
+  %sum = add.v16f32 %splat, %rhs
+  return %sum
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -158,6 +169,43 @@ llvmir.target<object> @target {
 func.def target(@target) @f32x16_reduce_add(%v: vector<16xf32>, %init: f32) -> (f32) {
   %sum = vector.reduce<addf> %v, %init : vector<16xf32>, f32
   func.return %sum : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_reduce_add(%v: reg<llvmir.f32 x16>, %init: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %39 = extract.v16f32 %v, 0
+  %40 = add.f32 %init, %39
+  %41 = extract.v16f32 %v, 1
+  %42 = add.f32 %40, %41
+  %43 = extract.v16f32 %v, 2
+  %44 = add.f32 %42, %43
+  %45 = extract.v16f32 %v, 3
+  %46 = add.f32 %44, %45
+  %47 = extract.v16f32 %v, 4
+  %48 = add.f32 %46, %47
+  %49 = extract.v16f32 %v, 5
+  %50 = add.f32 %48, %49
+  %51 = extract.v16f32 %v, 6
+  %52 = add.f32 %50, %51
+  %53 = extract.v16f32 %v, 7
+  %54 = add.f32 %52, %53
+  %55 = extract.v16f32 %v, 8
+  %56 = add.f32 %54, %55
+  %57 = extract.v16f32 %v, 9
+  %58 = add.f32 %56, %57
+  %59 = extract.v16f32 %v, 10
+  %60 = add.f32 %58, %59
+  %61 = extract.v16f32 %v, 11
+  %62 = add.f32 %60, %61
+  %63 = extract.v16f32 %v, 12
+  %64 = add.f32 %62, %63
+  %65 = extract.v16f32 %v, 13
+  %66 = add.f32 %64, %65
+  %67 = extract.v16f32 %v, 14
+  %68 = add.f32 %66, %67
+  %69 = extract.v16f32 %v, 15
+  %sum = add.f32 %68, %69
+  return %sum
 }
 
 // ====

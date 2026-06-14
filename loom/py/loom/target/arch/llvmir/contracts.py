@@ -58,6 +58,17 @@ _OFFSET = Scalar("offset")
 
 _VECTOR_LANE_COUNTS = (2, 4, 8, 16)
 _VECTOR_SELECT_TYPES = ("i8", "i16", "i32", "i64", "f16", "bf16", "f32", "f64")
+_STRUCTURAL_VECTOR_TYPES = (
+    "i1",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "f16",
+    "bf16",
+    "f32",
+    "f64",
+)
 
 _INTEGER_PREDICATES = (
     "eq",
@@ -201,6 +212,62 @@ def _const_float_rule(result_type: TypePattern, descriptor_key: str) -> Descript
     )
     return DescriptorRule(
         source_op=scalar_conversion.scalar_constant,
+        descriptor=descriptor,
+        guards=(
+            Guard.attr_kind("value", "f64", diagnostic=_F64_ATTR_DIAGNOSTIC),
+            Guard.value_type("result", result_type),
+            Guard.value_exact_f64("result"),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                results={"dst": ValueRef.result("result")},
+                immediates={"bits": bits_project},
+                form=DescriptorEmitForm.CONST,
+            ),
+        ),
+    )
+
+
+def _vector_const_i_rule(
+    element: str,
+    lane_count: int,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> DescriptorRule:
+    descriptor = _descriptor(f"llvmir.const.{_vector_suffix(element, lane_count)}")
+    guards = [
+        Guard.attr_kind("value", "i64", diagnostic=_I64_ATTR_DIAGNOSTIC),
+        Guard.value_type("result", _vector_type(element, lane_count)),
+    ]
+    if minimum is not None and maximum is not None:
+        guards.append(Guard.i64_range("value", minimum, maximum))
+    return DescriptorRule(
+        source_op=vector.vector_constant,
+        descriptor=descriptor,
+        guards=tuple(guards),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                results={"dst": ValueRef.result("result")},
+                immediates={"value": AttrProject.direct("value")},
+                form=DescriptorEmitForm.CONST,
+            ),
+        ),
+    )
+
+
+def _vector_const_float_rule(element: str, lane_count: int) -> DescriptorRule:
+    result_type = _vector_type(element, lane_count)
+    descriptor = _descriptor(f"llvmir.const.{_vector_suffix(element, lane_count)}")
+    bits_project = (
+        ValueProject.f64_as_f32_bits("result")
+        if element == "f32"
+        else ValueProject.f64_as_f64_bits("result")
+    )
+    return DescriptorRule(
+        source_op=vector.vector_constant,
         descriptor=descriptor,
         guards=(
             Guard.attr_kind("value", "f64", diagnostic=_F64_ATTR_DIAGNOSTIC),
@@ -609,6 +676,220 @@ def _select_rules() -> tuple[DescriptorRule, ...]:
     )
 
 
+def _vector_constant_rules() -> tuple[DescriptorRule, ...]:
+    return (
+        tuple(
+            _vector_const_i_rule("i32", lane_count, minimum=_I32_MIN, maximum=_I32_MAX)
+            for lane_count in _VECTOR_LANE_COUNTS
+        )
+        + tuple(
+            _vector_const_i_rule("i64", lane_count)
+            for lane_count in _VECTOR_LANE_COUNTS
+        )
+        + tuple(
+            _vector_const_float_rule(element, lane_count)
+            for element in ("f32", "f64")
+            for lane_count in _VECTOR_LANE_COUNTS
+        )
+    )
+
+
+def _splat_rule(element: str, lane_count: int) -> DescriptorRule:
+    scalar_type = Scalar(element)
+    result_type = _vector_type(element, lane_count)
+    descriptor = _descriptor(f"llvmir.splat.{_vector_suffix(element, lane_count)}")
+    return DescriptorRule(
+        source_op=vector.vector_splat,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("scalar", scalar_type),
+            Guard.value_type("result", result_type),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"value": ValueRef.operand("scalar")},
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _from_elements_rule(element: str, lane_count: int) -> DescriptorRule:
+    scalar_type = Scalar(element)
+    result_type = _vector_type(element, lane_count)
+    descriptor = _descriptor(
+        f"llvmir.from_elements.{_vector_suffix(element, lane_count)}"
+    )
+    return DescriptorRule(
+        source_op=vector.vector_from_elements,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("elements", lane_count),
+            Guard.value_type("elements", scalar_type),
+            Guard.value_type("result", result_type),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={
+                    f"lane{lane_index}": ValueRef.operand(
+                        "elements", element=lane_index
+                    )
+                    for lane_index in range(lane_count)
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _extract_rule(element: str, lane_count: int) -> DescriptorRule:
+    source_type = _vector_type(element, lane_count)
+    result_type = Scalar(element)
+    descriptor = _descriptor(f"llvmir.extract.{_vector_suffix(element, lane_count)}")
+    return DescriptorRule(
+        source_op=vector.vector_extract,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("source", source_type),
+            Guard.value_type("result", result_type),
+            Guard.operand_segment_count("indices", 0),
+            Guard.i64_array_count("static_indices", 1),
+            Guard.i64_array_element_range(
+                "static_indices", element=0, minimum=0, maximum=lane_count - 1
+            ),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"source": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "lane": AttrProject.i64_array_element("static_indices", element=0)
+                },
+            ),
+        ),
+    )
+
+
+def _insert_rule(element: str, lane_count: int) -> DescriptorRule:
+    value_type = Scalar(element)
+    dest_type = _vector_type(element, lane_count)
+    descriptor = _descriptor(f"llvmir.insert.{_vector_suffix(element, lane_count)}")
+    return DescriptorRule(
+        source_op=vector.vector_insert,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("value", value_type),
+            Guard.value_type("dest", dest_type),
+            Guard.value_type("result", dest_type),
+            Guard.operand_segment_count("indices", 0),
+            Guard.i64_array_count("static_indices", 1),
+            Guard.i64_array_element_range(
+                "static_indices", element=0, minimum=0, maximum=lane_count - 1
+            ),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={
+                    "dest": ValueRef.operand("dest"),
+                    "value": ValueRef.operand("value"),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "lane": AttrProject.i64_array_element("static_indices", element=0)
+                },
+            ),
+        ),
+    )
+
+
+def _shuffle_rule(element: str, lane_count: int) -> DescriptorRule:
+    type_pattern = _vector_type(element, lane_count)
+    descriptor = _descriptor(f"llvmir.shuffle.{_vector_suffix(element, lane_count)}")
+    return DescriptorRule(
+        source_op=vector.vector_shuffle,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("source", type_pattern),
+            Guard.value_type("result", type_pattern),
+            Guard.i64_array_count("source_lanes", lane_count),
+            Guard.i64_array_elements_range(
+                "source_lanes", minimum=0, maximum=lane_count - 1
+            ),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"source": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    f"lane{lane_index}": AttrProject.i64_array_element(
+                        "source_lanes", element=lane_index
+                    )
+                    for lane_index in range(lane_count)
+                },
+            ),
+        ),
+    )
+
+
+def _slice_rule(
+    element: str,
+    *,
+    source_lane_count: int,
+    result_lane_count: int,
+) -> DescriptorRule:
+    source_type = _vector_type(element, source_lane_count)
+    result_type = _vector_type(element, result_lane_count)
+    descriptor = _descriptor(
+        "llvmir.slice."
+        f"{_vector_suffix(element, source_lane_count)}."
+        f"{_vector_suffix(element, result_lane_count)}"
+    )
+    return DescriptorRule(
+        source_op=vector.vector_slice,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("source", source_type),
+            Guard.value_type("result", result_type),
+            Guard.operand_segment_count("offsets", 0),
+            Guard.i64_array_count("static_offsets", 1),
+            Guard.i64_array_element_range(
+                "static_offsets",
+                element=0,
+                minimum=0,
+                maximum=source_lane_count - result_lane_count,
+            ),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"source": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                immediates={
+                    "offset": AttrProject.i64_array_element("static_offsets", element=0)
+                },
+            ),
+        ),
+    )
+
+
+def _structural_vector_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for element in _STRUCTURAL_VECTOR_TYPES:
+        for lane_count in _VECTOR_LANE_COUNTS:
+            rules.append(_splat_rule(element, lane_count))
+            rules.append(_from_elements_rule(element, lane_count))
+            rules.append(_extract_rule(element, lane_count))
+            rules.append(_insert_rule(element, lane_count))
+            rules.append(_shuffle_rule(element, lane_count))
+        rules.append(_slice_rule(element, source_lane_count=4, result_lane_count=2))
+    return tuple(rules)
+
+
 def _memory_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for value_type, suffix, element_byte_count, vector_lane_count in (
@@ -680,6 +961,8 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         *_vector_bitwise_rules(),
         *_compare_rules(),
         *_select_rules(),
+        *_vector_constant_rules(),
+        *_structural_vector_rules(),
         *_memory_rules(),
     ),
 )
