@@ -56,6 +56,8 @@ from loom.target.low_descriptors import Descriptor
 _I1 = Scalar("i1")
 _I32 = Scalar("i32")
 _I64 = Scalar("i64")
+_F16 = Scalar("f16")
+_BF16 = Scalar("bf16")
 _F32 = Scalar("f32")
 _F64 = Scalar("f64")
 _INDEX = Scalar("index")
@@ -291,15 +293,23 @@ def _const_i64_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
     )
 
 
+def _const_float_bits_project(element: str) -> ValueProject:
+    if element == "f16":
+        return ValueProject.f64_as_f16_bits("result")
+    if element == "bf16":
+        return ValueProject.f64_as_bf16_bits("result")
+    if element == "f32":
+        return ValueProject.f64_as_f32_bits("result")
+    if element == "f64":
+        return ValueProject.f64_as_f64_bits("result")
+    raise ValueError(f"unsupported LLVMIR float constant type '{element}'")
+
+
 def _const_float_rule(
     source_op: Op, result_type: TypePattern, descriptor_key: str
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
-    bits_project = (
-        ValueProject.f64_as_f32_bits("result")
-        if result_type.element == "f32"
-        else ValueProject.f64_as_f64_bits("result")
-    )
+    bits_project = _const_float_bits_project(result_type.element)
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
@@ -351,11 +361,7 @@ def _vector_const_i_rule(
 def _vector_const_float_rule(element: str, lane_count: int) -> DescriptorRule:
     result_type = _vector_type(element, lane_count)
     descriptor = _descriptor(f"llvmir.const.{_vector_suffix(element, lane_count)}")
-    bits_project = (
-        ValueProject.f64_as_f32_bits("result")
-        if element == "f32"
-        else ValueProject.f64_as_f64_bits("result")
-    )
+    bits_project = _const_float_bits_project(element)
     return DescriptorRule(
         source_op=vector.vector_constant,
         descriptor=descriptor,
@@ -1365,12 +1371,22 @@ def _vector_constant_rules() -> tuple[DescriptorRule, ...]:
         )
         + tuple(
             _vector_const_float_rule(element, lane_count)
-            for element in ("f32", "f64")
+            for element in ("f16", "bf16", "f32", "f64")
             for lane_count in _VECTOR_LANE_COUNTS
         )
         + (
             _const_i32_rule(vector.vector_constant, _vector_type("i32", 1)),
             _const_i64_rule(vector.vector_constant, _vector_type("i64", 1)),
+            _const_float_rule(
+                vector.vector_constant,
+                _vector_type("f16", 1),
+                "llvmir.const.f16",
+            ),
+            _const_float_rule(
+                vector.vector_constant,
+                _vector_type("bf16", 1),
+                "llvmir.const.bf16",
+            ),
             _const_float_rule(
                 vector.vector_constant,
                 _vector_type("f32", 1),
@@ -1795,6 +1811,16 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _const_i64_rule(index.index_constant, _INDEX),
         _const_i64_rule(scalar_conversion.scalar_constant, _I64),
         _const_i64_rule(index.index_constant, _OFFSET),
+        _const_float_rule(
+            scalar_conversion.scalar_constant,
+            _F16,
+            "llvmir.const.f16",
+        ),
+        _const_float_rule(
+            scalar_conversion.scalar_constant,
+            _BF16,
+            "llvmir.const.bf16",
+        ),
         _const_float_rule(
             scalar_conversion.scalar_constant,
             _F32,

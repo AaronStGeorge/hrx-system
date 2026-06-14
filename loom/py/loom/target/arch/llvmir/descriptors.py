@@ -266,6 +266,20 @@ _F32_BITS_IMMEDIATE = Immediate(
     unsigned_max=(2**32) - 1,
 )
 
+_F16_BITS_IMMEDIATE = Immediate(
+    "bits",
+    ImmediateKind.UNSIGNED,
+    bit_width=16,
+    unsigned_max=(2**16) - 1,
+)
+
+_BF16_BITS_IMMEDIATE = Immediate(
+    "bits",
+    ImmediateKind.UNSIGNED,
+    bit_width=16,
+    unsigned_max=(2**16) - 1,
+)
+
 _F64_BITS_IMMEDIATE = Immediate(
     "bits",
     ImmediateKind.UNSIGNED,
@@ -393,6 +407,8 @@ def _constant_descriptors() -> tuple[Descriptor, ...]:
     return (
         _const_i_descriptor("i32"),
         _const_i_descriptor("i64"),
+        _const_f_descriptor("f16", _F16_BITS_IMMEDIATE),
+        _const_f_descriptor("bf16", _BF16_BITS_IMMEDIATE),
         _const_f_descriptor("f32", _F32_BITS_IMMEDIATE),
         _const_f_descriptor("f64", _F64_BITS_IMMEDIATE),
         *(
@@ -403,6 +419,8 @@ def _constant_descriptors() -> tuple[Descriptor, ...]:
         *(
             _const_f_descriptor(type_name, immediate, lane_count, vector=True)
             for type_name, immediate in (
+                ("f16", _F16_BITS_IMMEDIATE),
+                ("bf16", _BF16_BITS_IMMEDIATE),
                 ("f32", _F32_BITS_IMMEDIATE),
                 ("f64", _F64_BITS_IMMEDIATE),
             )

@@ -834,7 +834,6 @@ low.kernel.def target(@target) workgroup_size(256, 1, 1) @f32x4_dynamic_view_bas
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -855,9 +854,20 @@ kernel.def target(@target) @f16_view_scalar() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @f16_view_scalar(%column_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %column = sext.i32.i64 %column_i32
+  %loaded = load.indexed.f16 %input_view, %column, 0, 2
+  store.indexed.f16 %loaded, %output_view, %column, 0, 2
+  %cleared = const.f16 0
+  store.f16 %cleared, %output_view, 0
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -876,6 +886,18 @@ kernel.def target(@target) @bf16_view_scalar() {
   %cleared = scalar.constant 0.0 : bf16
   view.store %cleared, %output_view[%zero] : bf16, view<8xbf16, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @bf16_view_scalar(%column_i32: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %column = sext.i32.i64 %column_i32
+  %loaded = load.indexed.bf16 %input_view, %column, 0, 2
+  store.indexed.bf16 %loaded, %output_view, %column, 0, 2
+  %cleared = const.bf16 0
+  store.bf16 %cleared, %output_view, 0
+  return
 }
 
 // ====

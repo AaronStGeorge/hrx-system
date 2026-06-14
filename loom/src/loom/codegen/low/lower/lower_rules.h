@@ -220,6 +220,12 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Emits one selected source-memory dynamic term byte stride as an i64
   // attribute.
   LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 15,
+  // Emits an exact f64 source value fact as a rounded f16 packet attribute bit
+  // pattern.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F16_BITS = 16,
+  // Emits an exact f64 source value fact as a rounded bf16 packet attribute bit
+  // pattern.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_BF16_BITS = 17,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {

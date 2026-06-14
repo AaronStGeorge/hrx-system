@@ -542,6 +542,10 @@ static const loom_llvmir_emit_kernel_query_info_t kKernelQueryInfos[] = {
                          LOOM_LLVMIR_EMIT_CONST_KIND_INTEGER),                 \
       LOOM_LLVMIR_CONST_INFO(V##lanes##I64, LOOM_LLVMIR_EMIT_CORE_TYPE_I64,    \
                              lanes, LOOM_LLVMIR_EMIT_CONST_KIND_INTEGER),      \
+      LOOM_LLVMIR_CONST_INFO(V##lanes##F16, LOOM_LLVMIR_EMIT_CORE_TYPE_F16,    \
+                             lanes, LOOM_LLVMIR_EMIT_CONST_KIND_FLOAT_BITS),   \
+      LOOM_LLVMIR_CONST_INFO(V##lanes##BF16, LOOM_LLVMIR_EMIT_CORE_TYPE_BF16,  \
+                             lanes, LOOM_LLVMIR_EMIT_CONST_KIND_FLOAT_BITS),   \
       LOOM_LLVMIR_CONST_INFO(V##lanes##F32, LOOM_LLVMIR_EMIT_CORE_TYPE_F32,    \
                              lanes, LOOM_LLVMIR_EMIT_CONST_KIND_FLOAT_BITS),   \
       LOOM_LLVMIR_CONST_INFO(V##lanes##F64, LOOM_LLVMIR_EMIT_CORE_TYPE_F64,    \
@@ -552,6 +556,10 @@ static const loom_llvmir_emit_const_info_t kConstInfos[] = {
                            LOOM_LLVMIR_EMIT_CONST_KIND_INTEGER),
     LOOM_LLVMIR_CONST_INFO(I64, LOOM_LLVMIR_EMIT_CORE_TYPE_I64, 1,
                            LOOM_LLVMIR_EMIT_CONST_KIND_INTEGER),
+    LOOM_LLVMIR_CONST_INFO(F16, LOOM_LLVMIR_EMIT_CORE_TYPE_F16, 1,
+                           LOOM_LLVMIR_EMIT_CONST_KIND_FLOAT_BITS),
+    LOOM_LLVMIR_CONST_INFO(BF16, LOOM_LLVMIR_EMIT_CORE_TYPE_BF16, 1,
+                           LOOM_LLVMIR_EMIT_CONST_KIND_FLOAT_BITS),
     LOOM_LLVMIR_CONST_INFO(F32, LOOM_LLVMIR_EMIT_CORE_TYPE_F32, 1,
                            LOOM_LLVMIR_EMIT_CONST_KIND_FLOAT_BITS),
     LOOM_LLVMIR_CONST_INFO(F64, LOOM_LLVMIR_EMIT_CORE_TYPE_F64, 1,

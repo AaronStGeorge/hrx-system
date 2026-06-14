@@ -753,6 +753,36 @@ static bool loom_low_lower_rule_float_immediate_facts(
   return true;
 }
 
+static double loom_low_lower_rule_attr_copy_exact_f64(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    const loom_low_lower_attr_copy_t* attr_copy) {
+  const loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
+      rule_set, source_op, attr_copy->value_ref_index);
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  const bool has_float_facts = loom_low_lower_rule_float_immediate_facts(
+      loom_low_lower_context_module(context), fact_table, source_value_id,
+      &facts);
+  IREE_ASSERT(has_float_facts);
+  IREE_ASSERT(loom_value_facts_is_exact(facts));
+  IREE_ASSERT(loom_value_facts_is_float(facts));
+  return loom_value_facts_as_f64(facts);
+}
+
+static void loom_low_lower_rule_set_projected_bits_attr(
+    const loom_low_lower_attr_copy_t* attr_copy, uint64_t bit_pattern,
+    loom_named_attr_t* attr) {
+  if (attr_copy->target_bit_offset != 0) {
+    IREE_ASSERT_LT(attr_copy->target_bit_offset, 63);
+    IREE_ASSERT_LE(bit_pattern,
+                   (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
+    bit_pattern <<= attr_copy->target_bit_offset;
+  }
+  attr->value = loom_attr_i64((int64_t)bit_pattern);
+}
+
 static bool loom_low_lower_rule_value_facts_fit_bit_count(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -2095,58 +2125,38 @@ static iree_status_t loom_low_lower_rule_build_attrs(
             (int64_t)((uint64_t)bit_pattern << attr_copy->target_bit_offset));
         break;
       }
+      case LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F16_BITS: {
+        const float f32_value = (float)loom_low_lower_rule_attr_copy_exact_f64(
+            context, rule_set, source_op, attr_copy);
+        const uint16_t bit_pattern = iree_math_f32_to_f16(f32_value);
+        loom_low_lower_rule_set_projected_bits_attr(attr_copy, bit_pattern,
+                                                    &attrs[i]);
+        break;
+      }
+      case LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_BF16_BITS: {
+        const float f32_value = (float)loom_low_lower_rule_attr_copy_exact_f64(
+            context, rule_set, source_op, attr_copy);
+        const uint16_t bit_pattern = iree_math_f32_to_bf16(f32_value);
+        loom_low_lower_rule_set_projected_bits_attr(attr_copy, bit_pattern,
+                                                    &attrs[i]);
+        break;
+      }
       case LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F32_BITS: {
-        const loom_value_id_t source_value_id =
-            loom_low_lower_rule_source_value(rule_set, source_op,
-                                             attr_copy->value_ref_index);
-        const loom_value_fact_table_t* fact_table =
-            loom_low_lower_context_fact_table(context);
-        loom_value_facts_t facts = loom_value_facts_unknown();
-        const bool has_float_facts = loom_low_lower_rule_float_immediate_facts(
-            loom_low_lower_context_module(context), fact_table, source_value_id,
-            &facts);
-        IREE_ASSERT(has_float_facts);
-        IREE_ASSERT(loom_value_facts_is_exact(facts));
-        IREE_ASSERT(loom_value_facts_is_float(facts));
-        const float f32_value = (float)loom_value_facts_as_f64(facts);
+        const float f32_value = (float)loom_low_lower_rule_attr_copy_exact_f64(
+            context, rule_set, source_op, attr_copy);
         uint32_t bit_pattern = 0;
         memcpy(&bit_pattern, &f32_value, sizeof(bit_pattern));
-        if (attr_copy->target_bit_offset == 0) {
-          attrs[i].value = loom_attr_i64(bit_pattern);
-          break;
-        }
-        IREE_ASSERT_LT(attr_copy->target_bit_offset, 63);
-        IREE_ASSERT_LE((uint64_t)bit_pattern,
-                       (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
-        attrs[i].value = loom_attr_i64(
-            (int64_t)((uint64_t)bit_pattern << attr_copy->target_bit_offset));
+        loom_low_lower_rule_set_projected_bits_attr(attr_copy, bit_pattern,
+                                                    &attrs[i]);
         break;
       }
       case LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F64_BITS: {
-        const loom_value_id_t source_value_id =
-            loom_low_lower_rule_source_value(rule_set, source_op,
-                                             attr_copy->value_ref_index);
-        const loom_value_fact_table_t* fact_table =
-            loom_low_lower_context_fact_table(context);
-        loom_value_facts_t facts = loom_value_facts_unknown();
-        const bool has_float_facts = loom_low_lower_rule_float_immediate_facts(
-            loom_low_lower_context_module(context), fact_table, source_value_id,
-            &facts);
-        IREE_ASSERT(has_float_facts);
-        IREE_ASSERT(loom_value_facts_is_exact(facts));
-        IREE_ASSERT(loom_value_facts_is_float(facts));
-        const double f64_value = loom_value_facts_as_f64(facts);
+        const double f64_value = loom_low_lower_rule_attr_copy_exact_f64(
+            context, rule_set, source_op, attr_copy);
         uint64_t bit_pattern = 0;
         memcpy(&bit_pattern, &f64_value, sizeof(bit_pattern));
-        if (attr_copy->target_bit_offset == 0) {
-          attrs[i].value = loom_attr_i64((int64_t)bit_pattern);
-          break;
-        }
-        IREE_ASSERT_LT(attr_copy->target_bit_offset, 63);
-        IREE_ASSERT_LE(bit_pattern,
-                       (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
-        attrs[i].value = loom_attr_i64(
-            (int64_t)(bit_pattern << attr_copy->target_bit_offset));
+        loom_low_lower_rule_set_projected_bits_attr(attr_copy, bit_pattern,
+                                                    &attrs[i]);
         break;
       }
       case LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET:

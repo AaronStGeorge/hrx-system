@@ -87,6 +87,8 @@ class LowerAttrCopyKind(Enum):
     VALUE_U32_DIVISOR_MAGIC_MULTIPLIER = "value_u32_divisor_magic_multiplier"
     VALUE_U32_DIVISOR_MAGIC_SHIFT = "value_u32_divisor_magic_shift"
     VALUE_I32_AS_U32_BITS = "value_i32_as_u32_bits"
+    VALUE_F64_AS_F16_BITS = "value_f64_as_f16_bits"
+    VALUE_F64_AS_BF16_BITS = "value_f64_as_bf16_bits"
     VALUE_F64_AS_F32_BITS = "value_f64_as_f32_bits"
     VALUE_F64_AS_F64_BITS = "value_f64_as_f64_bits"
     I64_ARRAY_LANE_BYTE = "i64_array_lane_byte"
@@ -1370,6 +1372,10 @@ class _LowerRuleSetCompiler:
             kind = LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_SHIFT
         elif project.kind == ValueProjectKind.I32_AS_U32_BITS:
             kind = LowerAttrCopyKind.VALUE_I32_AS_U32_BITS
+        elif project.kind == ValueProjectKind.F64_AS_F16_BITS:
+            kind = LowerAttrCopyKind.VALUE_F64_AS_F16_BITS
+        elif project.kind == ValueProjectKind.F64_AS_BF16_BITS:
+            kind = LowerAttrCopyKind.VALUE_F64_AS_BF16_BITS
         elif project.kind == ValueProjectKind.F64_AS_F32_BITS:
             kind = LowerAttrCopyKind.VALUE_F64_AS_F32_BITS
         elif project.kind == ValueProjectKind.F64_AS_F64_BITS:
