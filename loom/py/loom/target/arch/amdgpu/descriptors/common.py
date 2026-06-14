@@ -921,6 +921,21 @@ def _buffer_off_zero_operand_form(*, replacement_descriptor: str) -> OperandForm
     )
 
 
+def _buffer_soffset_offset_operand_form(*, replacement_descriptor: str) -> OperandForm:
+    return OperandForm(
+        replacement_descriptor=replacement_descriptor,
+        matches=(
+            OperandFormMatch(
+                source_operand="soffset",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+            ),
+        ),
+        immediate_action=OperandFormImmediateAction.ADD_MATCHED_I64,
+        immediate_field="offset",
+        immediate_source_operand="soffset",
+    )
+
+
 def _sgpr_result(
     field_name: str = "dst", *, units: int = 1, register_part: str | None = None
 ) -> Operand:
@@ -2718,6 +2733,7 @@ __all__ = (
     "_asm",
     "_atomic_effects",
     "_buffer_off_zero_operand_form",
+    "_buffer_soffset_offset_operand_form",
     "_cache_field_names",
     "_cache_immediate",
     "_cache_immediates",

@@ -21,6 +21,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _AMDGPU_TRANS_PROXY_LATENCY_CYCLES,
     _COUNTER_VMEM_LOAD,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
+    _MUBUF_SOFFSET_INLINE_ZERO,
     _REG_EXEC,
     _REG_MODE,
     _REG_PART_SGPR_LOW16,
@@ -1630,6 +1631,51 @@ def _assert_memory_width_overlay(
     )
 
 
+def _assert_memory_vaddr_offset_overlay(
+    descriptor: AmdgpuDescriptorOverlay,
+    *,
+    width_bits: int,
+    semantic_tag: str,
+    mnemonic: str,
+    operand_units: int,
+    payload_field_name: str,
+    effect_kind: EffectKind,
+    memory_space: MemorySpace,
+    implicit_data_format: str | None = None,
+    implicit_ignore_reason: str | None = None,
+) -> None:
+    _assert_memory_width_overlay(
+        descriptor,
+        width_bits=width_bits,
+        semantic_tag=semantic_tag,
+        mnemonic=mnemonic,
+        operand_units=operand_units,
+        payload_field_name=payload_field_name,
+        effect_kind=effect_kind,
+        memory_space=memory_space,
+        implicit_data_format=implicit_data_format,
+        implicit_ignore_reason=implicit_ignore_reason,
+    )
+    assert (
+        "SOFFSET",
+        _MUBUF_SOFFSET_INLINE_ZERO,
+    ) in descriptor.fixed_encoding_fields
+    assert ("IDXEN", 0) in descriptor.fixed_encoding_fields
+    assert ("OFFEN", 1) in descriptor.fixed_encoding_fields
+    forms = descriptor.asm_forms
+    assert forms is not None
+    form = forms[0]
+    assert form.mnemonic == f"{mnemonic}_vaddr_offset"
+    assert form.native_assembly_mnemonic == mnemonic
+    assert form.results == (("dst",) if effect_kind == EffectKind.READ else ())
+    assert form.operands == (
+        ("resource", "vaddr")
+        if effect_kind == EffectKind.READ
+        else ("value", "resource", "vaddr")
+    )
+    assert form.immediates[0].name == "offset"
+
+
 def _assert_global_load_lds_overlay(
     descriptor: AmdgpuDescriptorOverlay,
     *,
@@ -1681,8 +1727,20 @@ def _assert_buffer_load_lds_overlay(
     native_mnemonic: str,
     asm_mnemonic: str,
     implicit_data_format: str,
-    off_zero: bool,
+    address_form: str,
 ) -> None:
+    expected_operands_by_form = {
+        "full": (3, asm_mnemonic, ("resource", "vaddr", "soffset", "m0")),
+        "off_zero": (1, f"{asm_mnemonic}_off_zero", ("resource", "m0")),
+        "vaddr_offset": (
+            2,
+            f"{asm_mnemonic}_vaddr_offset",
+            ("resource", "vaddr", "m0"),
+        ),
+    }
+    expected_operand_count, expected_form_mnemonic, expected_asm_operands = (
+        expected_operands_by_form[address_form]
+    )
     assert descriptor.semantic_tag == semantic_tag
     assert descriptor.mnemonic == native_mnemonic
     assert descriptor.schedule_class == _SCHEDULE_VMEM_LOAD_LDS
@@ -1704,7 +1762,15 @@ def _assert_buffer_load_lds_overlay(
     )
     assert ("LDS", 1) in descriptor.fixed_encoding_fields
     assert ("IDXEN", 0) in descriptor.fixed_encoding_fields
-    assert ("OFFEN", 0 if off_zero else 1) in descriptor.fixed_encoding_fields
+    assert (
+        "OFFEN",
+        0 if address_form == "off_zero" else 1,
+    ) in descriptor.fixed_encoding_fields
+    if address_form != "full":
+        assert (
+            "SOFFSET",
+            _MUBUF_SOFFSET_INLINE_ZERO,
+        ) in descriptor.fixed_encoding_fields
     assert any(
         operand.xml_field_name == "VDATA"
         and operand.ignore_reason == "lds-bit-has-no-vgpr-result"
@@ -1727,17 +1793,14 @@ def _assert_buffer_load_lds_overlay(
         and operand.xml_operand_required
         for operand in descriptor.implicit_operands
     )
-    assert len(descriptor.operands) == (1 if off_zero else 3)
+    assert len(descriptor.operands) == expected_operand_count
     forms = descriptor.asm_forms
     assert forms is not None
     form = forms[0]
-    expected_form_mnemonic = f"{asm_mnemonic}_off_zero" if off_zero else asm_mnemonic
     assert form.mnemonic == expected_form_mnemonic
     assert form.native_assembly_mnemonic == native_mnemonic
     assert form.results == ()
-    assert form.operands == (
-        ("resource", "m0") if off_zero else ("resource", "vaddr", "soffset", "m0")
-    )
+    assert form.operands == expected_asm_operands
     assert form.immediates[0].name == "offset"
 
 
@@ -1820,6 +1883,41 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             effect_kind=EffectKind.WRITE,
             memory_space=MemorySpace.GLOBAL,
         )
+        buffer_load_vaddr_offset_key = f"{buffer_load_key}_vaddr_offset"
+        buffer_store_vaddr_offset_key = f"{buffer_store_key}_vaddr_offset"
+        if buffer_load_vaddr_offset_key in descriptors:
+            assert tuple(
+                form.replacement_descriptor
+                for form in descriptors[buffer_load_key].operand_forms
+            ) == (f"{buffer_load_key}_off_zero", buffer_load_vaddr_offset_key)
+            _assert_memory_vaddr_offset_overlay(
+                descriptors[buffer_load_vaddr_offset_key],
+                width_bits=96,
+                semantic_tag="memory.load.u96",
+                mnemonic=buffer_mnemonic,
+                operand_units=3,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+            )
+            assert tuple(
+                form.replacement_descriptor
+                for form in descriptors[buffer_store_key].operand_forms
+            ) == (f"{buffer_store_key}_off_zero", buffer_store_vaddr_offset_key)
+            _assert_memory_vaddr_offset_overlay(
+                descriptors[buffer_store_vaddr_offset_key],
+                width_bits=96,
+                semantic_tag="memory.store.u96",
+                mnemonic=buffer_mnemonic.replace("load", "store"),
+                operand_units=3,
+                payload_field_name="value",
+                effect_kind=EffectKind.WRITE,
+                memory_space=MemorySpace.GLOBAL,
+            )
+        else:
+            assert descriptors[buffer_load_key].operand_forms == ()
+            assert descriptors[buffer_store_key].operand_forms == ()
+            assert buffer_store_vaddr_offset_key not in descriptors
 
         global_load = descriptors["amdgpu.global_load_b96_saddr"]
         _assert_memory_width_overlay(
@@ -1994,7 +2092,7 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
                 native_mnemonic=f"buffer_load_{suffix}",
                 asm_mnemonic=f"buffer_load_lds_{suffix}",
                 implicit_data_format=implicit_data_format,
-                off_zero=False,
+                address_form="full",
             )
             _assert_buffer_load_lds_overlay(
                 descriptors[f"{descriptor_key}_off_zero"],
@@ -2004,17 +2102,29 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
                 native_mnemonic=f"buffer_load_{suffix}",
                 asm_mnemonic=f"buffer_load_lds_{suffix}",
                 implicit_data_format=implicit_data_format,
-                off_zero=True,
+                address_form="off_zero",
+            )
+            _assert_buffer_load_lds_overlay(
+                descriptors[f"{descriptor_key}_vaddr_offset"],
+                global_width_bits=global_width_bits,
+                workgroup_width_bits=workgroup_width_bits,
+                semantic_tag=semantic_tag,
+                native_mnemonic=f"buffer_load_{suffix}",
+                asm_mnemonic=f"buffer_load_lds_{suffix}",
+                implicit_data_format=implicit_data_format,
+                address_form="vaddr_offset",
             )
 
     for descriptors in (cdna3_descriptors, cdna4_descriptors):
         assert "amdgpu.buffer_load_lds_dwordx2" not in descriptors
         assert "amdgpu.buffer_load_lds_dwordx2_off_zero" not in descriptors
+        assert "amdgpu.buffer_load_lds_dwordx2_vaddr_offset" not in descriptors
 
     for suffix, width_bits in (("dwordx3", 96), ("dwordx4", 128)):
         descriptor_key = f"amdgpu.buffer_load_lds_{suffix}"
         assert descriptor_key not in cdna3_descriptors
         assert f"{descriptor_key}_off_zero" not in cdna3_descriptors
+        assert f"{descriptor_key}_vaddr_offset" not in cdna3_descriptors
         _assert_buffer_load_lds_overlay(
             cdna4_descriptors[descriptor_key],
             global_width_bits=width_bits,
@@ -2023,7 +2133,7 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
             native_mnemonic=f"buffer_load_{suffix}",
             asm_mnemonic=f"buffer_load_lds_{suffix}",
             implicit_data_format=f"FMT_NUM_B{width_bits}",
-            off_zero=False,
+            address_form="full",
         )
         _assert_buffer_load_lds_overlay(
             cdna4_descriptors[f"{descriptor_key}_off_zero"],
@@ -2033,7 +2143,17 @@ def test_cdna_buffer_load_lds_descriptors_cover_fixed_lds_rows() -> None:
             native_mnemonic=f"buffer_load_{suffix}",
             asm_mnemonic=f"buffer_load_lds_{suffix}",
             implicit_data_format=f"FMT_NUM_B{width_bits}",
-            off_zero=True,
+            address_form="off_zero",
+        )
+        _assert_buffer_load_lds_overlay(
+            cdna4_descriptors[f"{descriptor_key}_vaddr_offset"],
+            global_width_bits=width_bits,
+            workgroup_width_bits=width_bits,
+            semantic_tag=f"memory.global_to_workgroup.u{width_bits}",
+            native_mnemonic=f"buffer_load_{suffix}",
+            asm_mnemonic=f"buffer_load_lds_{suffix}",
+            implicit_data_format=f"FMT_NUM_B{width_bits}",
+            address_form="vaddr_offset",
         )
 
     for descriptors in (
@@ -2327,11 +2447,12 @@ def test_vmem_narrow_load_descriptors_cover_active_xml_families() -> None:
                 implicit_data_format=implicit_data_format,
             )
             buffer_load_off_zero_key = f"{buffer_load_key}_off_zero"
+            buffer_load_vaddr_offset_key = f"{buffer_load_key}_vaddr_offset"
             if buffer_has_off_zero:
                 assert tuple(
                     form.replacement_descriptor
                     for form in descriptors[buffer_load_key].operand_forms
-                ) == (buffer_load_off_zero_key,)
+                ) == (buffer_load_off_zero_key, buffer_load_vaddr_offset_key)
                 _assert_memory_width_overlay(
                     descriptors[buffer_load_off_zero_key],
                     width_bits=width_bits,
@@ -2350,9 +2471,21 @@ def test_vmem_narrow_load_descriptors_cover_active_xml_families() -> None:
                 assert off_zero_form.results == ("dst",)
                 assert off_zero_form.operands == ("resource",)
                 assert off_zero_form.immediates[0].name == "offset"
+                _assert_memory_vaddr_offset_overlay(
+                    descriptors[buffer_load_vaddr_offset_key],
+                    width_bits=width_bits,
+                    semantic_tag=global_semantic_tag,
+                    mnemonic=f"buffer_load_{suffix}",
+                    operand_units=1,
+                    payload_field_name="dst",
+                    effect_kind=EffectKind.READ,
+                    memory_space=MemorySpace.GLOBAL,
+                    implicit_data_format=implicit_data_format,
+                )
             else:
                 assert descriptors[buffer_load_key].operand_forms == ()
                 assert buffer_load_off_zero_key not in descriptors
+                assert buffer_load_vaddr_offset_key not in descriptors
 
             for descriptor_key_suffix, asm_suffix in (
                 ("", "_vaddr"),
@@ -2406,6 +2539,56 @@ def test_vmem_narrow_load_descriptors_cover_active_xml_families() -> None:
                 assert scratch_load.asm_forms[0].mnemonic == (
                     f"{scratch_mnemonic}{asm_suffix}"
                 )
+
+        for store_key, width_bits, semantic_tag, mnemonic in (
+            ("amdgpu.buffer_store_b8", 8, "memory.store.u8", "buffer_store_b8"),
+            (
+                "amdgpu.buffer_store_b16",
+                16,
+                "memory.store.u16.low",
+                "buffer_store_short",
+            ),
+        ):
+            vaddr_offset_key = f"{store_key}_vaddr_offset"
+            if buffer_has_off_zero:
+                assert tuple(
+                    form.replacement_descriptor
+                    for form in descriptors[store_key].operand_forms
+                ) == (vaddr_offset_key,)
+                _assert_memory_vaddr_offset_overlay(
+                    descriptors[vaddr_offset_key],
+                    width_bits=width_bits,
+                    semantic_tag=semantic_tag,
+                    mnemonic=mnemonic,
+                    operand_units=1,
+                    payload_field_name="value",
+                    effect_kind=EffectKind.WRITE,
+                    memory_space=MemorySpace.GLOBAL,
+                )
+            else:
+                assert descriptors[store_key].operand_forms == ()
+                assert vaddr_offset_key not in descriptors
+
+        b16_d16_load_key = "amdgpu.buffer_load_b16_d16"
+        b16_d16_vaddr_offset_key = f"{b16_d16_load_key}_vaddr_offset"
+        if buffer_has_off_zero:
+            assert tuple(
+                form.replacement_descriptor
+                for form in descriptors[b16_d16_load_key].operand_forms
+            ) == (b16_d16_vaddr_offset_key,)
+            _assert_memory_vaddr_offset_overlay(
+                descriptors[b16_d16_vaddr_offset_key],
+                width_bits=16,
+                semantic_tag="memory.load.u16.d16.low",
+                mnemonic="buffer_load_d16_b16",
+                operand_units=1,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+            )
+        else:
+            assert descriptors[b16_d16_load_key].operand_forms == ()
+            assert b16_d16_vaddr_offset_key not in descriptors
 
 
 def test_cdna_smem_dwordx4_store_and_scratch_descriptors_cover_xml() -> None:
