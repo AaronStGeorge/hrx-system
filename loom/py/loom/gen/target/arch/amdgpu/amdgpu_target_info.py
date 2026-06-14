@@ -38,6 +38,8 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_AMDHSA_TARGET_TRIPLE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
+    AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+    AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS,
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
     AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
@@ -69,17 +71,18 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
 
 
 @dataclass(frozen=True, slots=True)
+class _AmdgpuSoppOpcodeRow:
+    nop: int
+    endpgm: int
+    branch: int
+    conditional_branch_scc0: int
+    conditional_branch_scc1: int
+
+
+@dataclass(frozen=True, slots=True)
 class _AmdgpuDescriptorSetRow:
     info: AmdgpuDescriptorSetInfo
-    s_nop_opcode: int
-    s_endpgm_opcode: int
-    s_branch_opcode: int
-    s_cbranch_scc0_opcode: int
-    s_cbranch_scc1_opcode: int
-
-
-def _bool_literal(value: bool) -> str:
-    return "true" if value else "false"
+    sopp: _AmdgpuSoppOpcodeRow
 
 
 def _u16_expr(value: int) -> str:
@@ -121,6 +124,13 @@ _VECTOR_MEMORY_CACHE_POLICY_ENCODING_EXPRS = {
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1: "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1",
 }
 
+_DESCRIPTOR_SET_INFO_FLAG_EXPRS = (
+    (
+        AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        "LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING",
+    ),
+)
+
 
 def _enum_expr(value: str, table: Mapping[str, str], description: str) -> str:
     try:
@@ -151,6 +161,20 @@ def _vector_memory_cache_policy_encoding_expr(kind: str) -> str:
         _VECTOR_MEMORY_CACHE_POLICY_ENCODING_EXPRS,
         "vector-memory cache-policy encoding",
     )
+
+
+def _descriptor_set_info_flags_expr(flags: int) -> str:
+    if flags == 0:
+        return "UINT64_C(0)"
+    remaining_flags = flags
+    exprs: list[str] = []
+    for flag, expr in _DESCRIPTOR_SET_INFO_FLAG_EXPRS:
+        if flags & flag:
+            exprs.append(expr)
+            remaining_flags &= ~flag
+    if remaining_flags != 0:
+        raise ValueError(f"unknown AMDGPU descriptor-set info flags 0x{remaining_flags:x}")
+    return " | ".join(exprs)
 
 
 def _parse_isa_xml_argument(value: str) -> tuple[str, Path]:
@@ -194,11 +218,13 @@ def _materialize_descriptor_set_rows(
         rows.append(
             _AmdgpuDescriptorSetRow(
                 info=info,
-                s_nop_opcode=_sopp_opcode(spec, "S_NOP"),
-                s_endpgm_opcode=_sopp_opcode(spec, "S_ENDPGM"),
-                s_branch_opcode=_sopp_opcode(spec, "S_BRANCH"),
-                s_cbranch_scc0_opcode=_sopp_opcode(spec, "S_CBRANCH_SCC0"),
-                s_cbranch_scc1_opcode=_sopp_opcode(spec, "S_CBRANCH_SCC1"),
+                sopp=_AmdgpuSoppOpcodeRow(
+                    nop=_sopp_opcode(spec, "S_NOP"),
+                    endpgm=_sopp_opcode(spec, "S_ENDPGM"),
+                    branch=_sopp_opcode(spec, "S_BRANCH"),
+                    conditional_branch_scc0=_sopp_opcode(spec, "S_CBRANCH_SCC0"),
+                    conditional_branch_scc1=_sopp_opcode(spec, "S_CBRANCH_SCC1"),
+                ),
             )
         )
     return tuple(rows)
@@ -227,6 +253,12 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             raise ValueError(f"AMDGPU ISA XML architecture name is required for {info.key}")
         if info.isa_architecture_id <= 0:
             raise ValueError(f"AMDGPU ISA XML architecture id is required for {info.key}")
+        if info.flags < 0 or info.flags > 0xFFFFFFFFFFFFFFFF:
+            raise ValueError(f"AMDGPU descriptor-set info flags for {info.key} must fit u64")
+        unknown_descriptor_set_flags = info.flags & ~AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS
+        if unknown_descriptor_set_flags != 0:
+            raise ValueError(f"AMDGPU descriptor set {info.key} has unknown info flags 0x{unknown_descriptor_set_flags:x}")
+        _descriptor_set_info_flags_expr(info.flags)
         if info.storage_generator_target is not None:
             if not info.storage_generator_target:
                 raise ValueError(f"AMDGPU storage generator target is required for {info.key}")
@@ -239,22 +271,22 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
                 raise ValueError(f"AMDGPU descriptor set {info.key} uses view-only target '{storage_info.generator_target}' as storage")
             if storage_info.isa_xml_key != info.isa_xml_key:
                 raise ValueError(f"AMDGPU descriptor set {info.key} storage target '{storage_info.generator_target}' uses ISA XML key '{storage_info.isa_xml_key}', expected '{info.isa_xml_key}'")
-        _buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle)
-        _vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)
+        _buffer_resource_cache_swizzle_expr(info.buffer_resource.cache_swizzle)
+        _vector_memory_cache_policy_encoding_expr(info.vector_memory.cache_policy_encoding)
 
 
 def _validate_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> None:
     for row in rows:
-        if row.s_nop_opcode < 0 or row.s_nop_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_nop opcode for {row.info.key} must fit u16")
-        if row.s_endpgm_opcode < 0 or row.s_endpgm_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_endpgm opcode for {row.info.key} must fit u16")
-        if row.s_branch_opcode < 0 or row.s_branch_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_branch opcode for {row.info.key} must fit u16")
-        if row.s_cbranch_scc0_opcode < 0 or row.s_cbranch_scc0_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_cbranch_scc0 opcode for {row.info.key} must fit u16")
-        if row.s_cbranch_scc1_opcode < 0 or row.s_cbranch_scc1_opcode > 0xFFFF:
-            raise ValueError(f"AMDGPU s_cbranch_scc1 opcode for {row.info.key} must fit u16")
+        opcode_rows = (
+            ("s_nop", row.sopp.nop),
+            ("s_endpgm", row.sopp.endpgm),
+            ("s_branch", row.sopp.branch),
+            ("s_cbranch_scc0", row.sopp.conditional_branch_scc0),
+            ("s_cbranch_scc1", row.sopp.conditional_branch_scc1),
+        )
+        for name, opcode in opcode_rows:
+            if opcode < 0 or opcode > 0xFFFF:
+                raise ValueError(f"AMDGPU {name} opcode for {row.info.key} must fit u16")
 
 
 def _validate_processors(
@@ -372,39 +404,45 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
     key_width = max(len(_c_string_arg(row.info.key)) for row in rows)
     ordinal_width = len("UINT16_C(65535)")
     opcode_width = len("0x000")
-    packet_encoding_width = len("packet_encoding")
+    flags_width = max(len(_descriptor_set_info_flags_expr(row.info.flags)) for row in rows)
     cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(ordinal_, descriptor_set_key_, s_nop_opcode_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc0_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(ordinal_, key_, sopp_nop_, sopp_endpgm_, sopp_branch_, sopp_cbranch_scc0_, sopp_cbranch_scc1_, flags_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
         "  { \\",
-        "    .descriptor_set_ordinal = ordinal_, \\",
-        "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
-        "    .s_nop_opcode = UINT16_C(s_nop_opcode_), \\",
-        "    .s_endpgm_opcode = UINT16_C(s_endpgm_opcode_), \\",
-        "    .s_branch_opcode = UINT16_C(s_branch_opcode_), \\",
-        "    .s_cbranch_scc0_opcode = UINT16_C(s_cbranch_scc0_opcode_), \\",
-        "    .s_cbranch_scc1_opcode = UINT16_C(s_cbranch_scc1_opcode_), \\",
-        "    .supports_descriptor_packet_encoding = supports_descriptor_packet_encoding_, \\",
-        "    .buffer_resource_cache_swizzle = buffer_resource_cache_swizzle_, \\",
-        "    .vector_memory_cache_policy_encoding = vector_memory_cache_policy_encoding_, \\",
+        "    .key = IREE_SVL(key_), \\",
+        "    .ordinal = ordinal_, \\",
+        "    .sopp = { \\",
+        "      .nop = UINT16_C(sopp_nop_), \\",
+        "      .endpgm = UINT16_C(sopp_endpgm_), \\",
+        "      .branch = UINT16_C(sopp_branch_), \\",
+        "      .conditional_branch_scc0 = UINT16_C(sopp_cbranch_scc0_), \\",
+        "      .conditional_branch_scc1 = UINT16_C(sopp_cbranch_scc1_), \\",
+        "    }, \\",
+        "    .flags = flags_, \\",
+        "    .buffer_resource = { \\",
+        "      .cache_swizzle = buffer_resource_cache_swizzle_, \\",
+        "    }, \\",
+        "    .vector_memory = { \\",
+        "      .cache_policy_encoding = vector_memory_cache_policy_encoding_, \\",
+        "    }, \\",
         "  }",
         "",
         "const loom_amdgpu_descriptor_set_info_t loom_amdgpu_target_info_descriptor_set_infos[] = {",
-        "  // ordinal         descriptor_set_key     s_nop s_endpgm s_branch s_cbranch_scc0 s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
+        "  // ordinal         key                    s_nop s_endpgm s_branch s_cbranch_scc0 s_cbranch_scc1 flags cache_swizzle cache_policy",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_DESCRIPTOR_SET_INFO("
             f"{_padded_arg(_u16_expr(amdgpu_descriptor_set_ordinal(info.key)), ordinal_width)}"
             f"{_padded_arg(_c_string_arg(info.key), key_width)}"
-            f"{_padded_arg(f'0x{row.s_nop_opcode:03x}', opcode_width)}"
-            f"{_padded_arg(f'0x{row.s_endpgm_opcode:03x}', opcode_width)}"
-            f"{_padded_arg(f'0x{row.s_branch_opcode:03x}', opcode_width)}"
-            f"{_padded_arg(f'0x{row.s_cbranch_scc0_opcode:03x}', opcode_width)}"
-            f"{_padded_arg(f'0x{row.s_cbranch_scc1_opcode:03x}', opcode_width)}"
-            f"{_padded_arg(_bool_literal(info.supports_descriptor_packet_encoding), packet_encoding_width)}"
-            f"{_padded_arg(_buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle), cache_swizzle_width)}"
-            f"{_vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)}"
+            f"{_padded_arg(f'0x{row.sopp.nop:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.sopp.endpgm:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.sopp.branch:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.sopp.conditional_branch_scc0:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.sopp.conditional_branch_scc1:03x}', opcode_width)}"
+            f"{_padded_arg(_descriptor_set_info_flags_expr(info.flags), flags_width)}"
+            f"{_padded_arg(_buffer_resource_cache_swizzle_expr(info.buffer_resource.cache_swizzle), cache_swizzle_width)}"
+            f"{_vector_memory_cache_policy_encoding_expr(info.vector_memory.cache_policy_encoding)}"
             "),"
         )
         for row in rows

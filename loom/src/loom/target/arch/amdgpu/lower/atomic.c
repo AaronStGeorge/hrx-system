@@ -276,7 +276,7 @@ loom_amdgpu_atomic_vector_cache_encoding(
           descriptor_set->descriptor_set_ordinal);
   return descriptor_set_info == NULL
              ? LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
-             : descriptor_set_info->vector_memory_cache_policy_encoding;
+             : descriptor_set_info->vector_memory.cache_policy_encoding;
 }
 
 static bool loom_amdgpu_atomic_prefers_global_saddr(

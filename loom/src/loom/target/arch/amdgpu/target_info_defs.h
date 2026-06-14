@@ -93,6 +93,18 @@ typedef enum loom_amdgpu_processor_scheduling_bit_e {
 // Bitset of loom_amdgpu_processor_scheduling_bit_t values.
 typedef uint32_t loom_amdgpu_processor_scheduling_bits_t;
 
+typedef enum loom_amdgpu_descriptor_set_info_flag_bits_e {
+  // Descriptor packets have implemented native binary encoding.
+  LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING = UINT64_C(1)
+                                                                    << 0,
+  // Descriptor-set info flags known by the AMDGPU target package.
+  LOOM_AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS =
+      LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+} loom_amdgpu_descriptor_set_info_flag_bits_t;
+
+// Bitset of loom_amdgpu_descriptor_set_info_flag_bits_t values.
+typedef uint64_t loom_amdgpu_descriptor_set_info_flags_t;
+
 typedef enum loom_amdgpu_kernel_descriptor_abi_flag_bits_e {
   // Flat scratch is architected and legacy user SGPRs are invalid.
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH = UINT64_C(1)
@@ -136,28 +148,42 @@ typedef enum loom_amdgpu_vector_memory_cache_policy_encoding_e {
   LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = 3,
 } loom_amdgpu_vector_memory_cache_policy_encoding_t;
 
+typedef struct loom_amdgpu_descriptor_set_sopp_opcodes_t {
+  // Opcode for S_NOP.
+  uint16_t nop;
+  // Opcode for S_ENDPGM.
+  uint16_t endpgm;
+  // Opcode for S_BRANCH.
+  uint16_t branch;
+  // Opcode for S_CBRANCH_SCC0.
+  uint16_t conditional_branch_scc0;
+  // Opcode for S_CBRANCH_SCC1.
+  uint16_t conditional_branch_scc1;
+} loom_amdgpu_descriptor_set_sopp_opcodes_t;
+
+typedef struct loom_amdgpu_descriptor_set_buffer_resource_info_t {
+  // Buffer resource descriptor cache-swizzle encoding shape.
+  loom_amdgpu_buffer_resource_cache_swizzle_t cache_swizzle;
+} loom_amdgpu_descriptor_set_buffer_resource_info_t;
+
+typedef struct loom_amdgpu_descriptor_set_vector_memory_info_t {
+  // Vector memory packet cache-policy immediate encoding shape.
+  loom_amdgpu_vector_memory_cache_policy_encoding_t cache_policy_encoding;
+} loom_amdgpu_descriptor_set_vector_memory_info_t;
+
 typedef struct loom_amdgpu_descriptor_set_info_t {
   // Target-low descriptor set key such as `amdgpu.rdna3.core`.
-  iree_string_view_t descriptor_set_key;
+  iree_string_view_t key;
   // Dense generated descriptor-set ordinal within the AMDGPU target package.
-  uint16_t descriptor_set_ordinal;
-  // SOPP opcode used when materializing target wait-state noops.
-  uint16_t s_nop_opcode;
-  // SOPP opcode used when lowering structural `low.return` to `s_endpgm`.
-  uint16_t s_endpgm_opcode;
-  // SOPP opcode used when lowering structural `low.br` to `s_branch`.
-  uint16_t s_branch_opcode;
-  // SOPP opcode used when lowering structural `low.cond_br` on SCC=false.
-  uint16_t s_cbranch_scc0_opcode;
-  // SOPP opcode used when lowering structural `low.cond_br` on SCC=true.
-  uint16_t s_cbranch_scc1_opcode;
-  // True when descriptor packets have implemented native binary encoding.
-  bool supports_descriptor_packet_encoding;
-  // Buffer resource descriptor cache-swizzle encoding shape.
-  loom_amdgpu_buffer_resource_cache_swizzle_t buffer_resource_cache_swizzle;
-  // Vector memory packet cache-policy immediate encoding shape.
-  loom_amdgpu_vector_memory_cache_policy_encoding_t
-      vector_memory_cache_policy_encoding;
+  uint16_t ordinal;
+  // SOPP opcodes required by structural control-flow materialization.
+  loom_amdgpu_descriptor_set_sopp_opcodes_t sopp;
+  // Descriptor-set capability and encoding flags.
+  loom_amdgpu_descriptor_set_info_flags_t flags;
+  // Buffer resource descriptor encoding facts.
+  loom_amdgpu_descriptor_set_buffer_resource_info_t buffer_resource;
+  // Vector memory descriptor encoding facts.
+  loom_amdgpu_descriptor_set_vector_memory_info_t vector_memory;
 } loom_amdgpu_descriptor_set_info_t;
 
 typedef struct loom_amdgpu_processor_descriptor_set_info_t {
@@ -253,6 +279,15 @@ static inline bool loom_amdgpu_processor_kernel_descriptor_has_flags(
     loom_amdgpu_kernel_descriptor_abi_flags_t flags) {
   return processor != NULL &&
          iree_all_bits_set(processor->kernel_descriptor.flags, flags);
+}
+
+// Returns true when |descriptor_set| advertises every requested descriptor-set
+// info flag.
+static inline bool loom_amdgpu_descriptor_set_info_has_flags(
+    const loom_amdgpu_descriptor_set_info_t* descriptor_set,
+    loom_amdgpu_descriptor_set_info_flags_t flags) {
+  return descriptor_set != NULL &&
+         iree_all_bits_set(descriptor_set->flags, flags);
 }
 
 // Returns whether |processor| has enough native target information to emit an

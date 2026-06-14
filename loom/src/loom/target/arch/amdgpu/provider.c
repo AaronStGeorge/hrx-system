@@ -59,8 +59,7 @@ static bool loom_amdgpu_provider_matches_selection_bundle(
       continue;
     }
     const loom_target_bundle_t* amdgpu_bundle =
-        loom_amdgpu_target_bundle_for_descriptor_set(
-            descriptor_set->descriptor_set_ordinal);
+        loom_amdgpu_target_bundle_for_descriptor_set(descriptor_set->ordinal);
     if (amdgpu_bundle == candidate_bundle ||
         (amdgpu_bundle != NULL &&
          iree_string_view_equal(amdgpu_bundle->name, candidate_bundle->name))) {

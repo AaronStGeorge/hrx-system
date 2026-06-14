@@ -12,7 +12,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 from loom.gen.target.arch.amdgpu.descriptors import amdgpu_descriptors
-from loom.target.arch.amdgpu.target_info import AmdgpuDescriptorSetInfo
+from loom.target.arch.amdgpu.target_info import (
+    AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+    AmdgpuDescriptorSetInfo,
+)
 from loom.target.low_descriptors import Descriptor, DescriptorSet
 
 
@@ -57,7 +60,7 @@ def _descriptor_set_info(
         isa_xml_key="test",
         isa_architecture_name="AMDGPU Test",
         isa_architecture_id=0,
-        supports_descriptor_packet_encoding=True,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
         storage_generator_target=storage_target,
     )
 

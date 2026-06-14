@@ -205,7 +205,7 @@ loom_amdgpu_memory_cache_policy_descriptor_encoding(
       loom_amdgpu_target_info_descriptor_set_at(
           descriptor_set->descriptor_set_ordinal);
   return descriptor_set_info
-             ? descriptor_set_info->vector_memory_cache_policy_encoding
+             ? descriptor_set_info->vector_memory.cache_policy_encoding
              : LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE;
 }
 
@@ -250,7 +250,7 @@ bool loom_amdgpu_memory_cache_policy_encode(
   }
   const loom_amdgpu_memory_cache_policy_encoding_row_t* row =
       loom_amdgpu_memory_cache_policy_encoding_row(
-          descriptor_set_info->vector_memory_cache_policy_encoding);
+          descriptor_set_info->vector_memory.cache_policy_encoding);
   if (row == NULL ||
       !loom_amdgpu_memory_cache_policy_bits_contain(row->scope_bits,
                                                     policy->cache_scope) ||

@@ -60,6 +60,11 @@ AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES = (
     | AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES
 )
 
+AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING = 1 << 0
+AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS = (
+    AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING
+)
+
 AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH = 1 << 0
 AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING = 1 << 1
 AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET = 1 << 2
@@ -115,17 +120,29 @@ def kernel_descriptor_profile_supports_wavefront_size(
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuDescriptorSetBufferResourceInfo:
+    cache_swizzle: str = AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuDescriptorSetVectorMemoryInfo:
+    cache_policy_encoding: str = AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuDescriptorSetInfo:
     generator_target: str
     key: str
     isa_xml_key: str
     isa_architecture_name: str
     isa_architecture_id: int
-    supports_descriptor_packet_encoding: bool
+    flags: int
     storage_generator_target: str | None = None
-    buffer_resource_cache_swizzle: str = AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE
-    vector_memory_cache_policy_encoding: str = (
-        AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
+    buffer_resource: AmdgpuDescriptorSetBufferResourceInfo = (
+        AmdgpuDescriptorSetBufferResourceInfo()
+    )
+    vector_memory: AmdgpuDescriptorSetVectorMemoryInfo = (
+        AmdgpuDescriptorSetVectorMemoryInfo()
     )
 
 
@@ -335,8 +352,10 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_xml_key="cdna3",
         isa_architecture_name="AMD CDNA 3",
         isa_architecture_id=2,
-        supports_descriptor_packet_encoding=True,
-        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(
+            cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+        ),
     ),
     AmdgpuDescriptorSetInfo(
         generator_target="rdna4_gfx125x",
@@ -344,8 +363,10 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_xml_key="rdna4",
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
-        supports_descriptor_packet_encoding=True,
-        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(
+            cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+        ),
     ),
     AmdgpuDescriptorSetInfo(
         generator_target="rdna3",
@@ -353,8 +374,10 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_xml_key="rdna3",
         isa_architecture_name="AMD RDNA 3",
         isa_architecture_id=8,
-        supports_descriptor_packet_encoding=True,
-        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(
+            cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+        ),
     ),
     AmdgpuDescriptorSetInfo(
         generator_target="rdna3_5",
@@ -362,8 +385,10 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_xml_key="rdna3_5",
         isa_architecture_name="AMD RDNA 3.5",
         isa_architecture_id=9,
-        supports_descriptor_packet_encoding=True,
-        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(
+            cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+        ),
     ),
     AmdgpuDescriptorSetInfo(
         generator_target="rdna4",
@@ -371,8 +396,10 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_xml_key="rdna4",
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
-        supports_descriptor_packet_encoding=True,
-        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(
+            cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+        ),
     ),
     AmdgpuDescriptorSetInfo(
         generator_target="cdna4",
@@ -380,9 +407,13 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_xml_key="cdna4",
         isa_architecture_name="AMD CDNA 4",
         isa_architecture_id=3,
-        supports_descriptor_packet_encoding=True,
-        buffer_resource_cache_swizzle=AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
-        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        buffer_resource=AmdgpuDescriptorSetBufferResourceInfo(
+            cache_swizzle=AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
+        ),
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(
+            cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+        ),
     ),
 )
 

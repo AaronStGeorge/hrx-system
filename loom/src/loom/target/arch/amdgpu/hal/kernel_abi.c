@@ -1009,7 +1009,7 @@ loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
       descriptor_set->descriptor_set_ordinal, &descriptor_set_info));
-  cache_swizzle_kind = descriptor_set_info->buffer_resource_cache_swizzle;
+  cache_swizzle_kind = descriptor_set_info->buffer_resource.cache_swizzle;
   const bool supports_cache_swizzle =
       cache_swizzle_kind ==
       LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT;
@@ -1073,8 +1073,8 @@ loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
       }
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_hal_kernel_abi_emit_descriptor_cache_swizzle_error(
-              op, descriptor_set_info->descriptor_set_key,
-              (uint64_t)cache_swizzle_stride, max_errors, emitter, result));
+              op, descriptor_set_info->key, (uint64_t)cache_swizzle_stride,
+              max_errors, emitter, result));
     }
   }
   return iree_ok_status();

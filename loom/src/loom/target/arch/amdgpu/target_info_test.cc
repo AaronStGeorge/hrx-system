@@ -108,17 +108,18 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set(
       IREE_SV("amdgpu.cdna3.core"), &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
-  ASSERT_EQ(descriptor_set->descriptor_set_ordinal,
-            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3);
+  ASSERT_EQ(descriptor_set->ordinal, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3);
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_by_ordinal = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
-      descriptor_set->descriptor_set_ordinal, &descriptor_set_by_ordinal));
+      descriptor_set->ordinal, &descriptor_set_by_ordinal));
   EXPECT_EQ(descriptor_set_by_ordinal, descriptor_set);
-  EXPECT_NE(descriptor_set->s_endpgm_opcode, 0u);
-  EXPECT_TRUE(descriptor_set->supports_descriptor_packet_encoding);
-  EXPECT_EQ(descriptor_set->buffer_resource_cache_swizzle,
+  EXPECT_NE(descriptor_set->sopp.endpgm, 0u);
+  EXPECT_TRUE(loom_amdgpu_descriptor_set_info_has_flags(
+      descriptor_set,
+      LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING));
+  EXPECT_EQ(descriptor_set->buffer_resource.cache_swizzle,
             LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE);
-  EXPECT_EQ(descriptor_set->vector_memory_cache_policy_encoding,
+  EXPECT_EQ(descriptor_set->vector_memory.cache_policy_encoding,
             LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1);
 }
 
