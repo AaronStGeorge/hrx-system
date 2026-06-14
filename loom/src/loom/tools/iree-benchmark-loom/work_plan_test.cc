@@ -20,6 +20,9 @@
 namespace loom {
 namespace {
 
+using ::iree::testing::status::StatusIs;
+using ::testing::HasSubstr;
+
 class BenchmarkWorkPlanTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -63,12 +66,17 @@ class BenchmarkWorkPlanTest : public ::testing::Test {
     return module;
   }
 
-  loom_testbench_module_plan_t PlanModule(const char* source) {
+  loom_testbench_module_plan_t PlanModuleAllowingIssues(const char* source) {
     loom_module_t* module = ParseModule(source);
     owned_modules_.push_back(module);
     loom_testbench_module_plan_t module_plan = {};
     IREE_EXPECT_OK(loom_testbench_plan_module(module, nullptr, &plan_arena_,
                                               &module_plan));
+    return module_plan;
+  }
+
+  loom_testbench_module_plan_t PlanModule(const char* source) {
+    loom_testbench_module_plan_t module_plan = PlanModuleAllowingIssues(source);
     EXPECT_EQ(module_plan.issue_count, 0u);
     return module_plan;
   }
@@ -387,6 +395,54 @@ check.benchmark<@sampled> @all_b
   EXPECT_EQ(work_plan.work_items[0].case_sample_ordinal, 1u);
 
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
+}
+
+TEST_F(BenchmarkWorkPlanTest, RejectsSelectedBenchmarkWithZeroSamples) {
+  const loom_testbench_module_plan_t module_plan = PlanModuleAllowingIssues(R"(
+check.case @sampled {
+  %value = check.param.choice values([5, 7]) name("value") : i32
+  check.return
+}
+
+check.benchmark<@sampled> @missing_value {value = 9}
+)");
+  ASSERT_EQ(module_plan.benchmark_count, 1u);
+  ASSERT_EQ(module_plan.benchmarks[0].sample_count, 0u);
+
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  options.measure = IREE_SV("dispatch_complete");
+
+  iree_benchmark_loom_work_plan_t work_plan = {};
+  iree::Status status(iree_benchmark_loom_work_plan_initialize(
+      &module_plan, &options, iree_allocator_system(), &work_plan));
+
+  EXPECT_THAT(status, StatusIs(iree::StatusCode::kInvalidArgument));
+  EXPECT_THAT(status.ToString(), HasSubstr("zero executable samples"));
+  EXPECT_THAT(status.ToString(), HasSubstr("missing_value"));
+  EXPECT_THAT(status.ToString(), HasSubstr("sampled"));
+}
+
+TEST_F(BenchmarkWorkPlanTest, RejectsMissingBenchmarkSelector) {
+  const loom_testbench_module_plan_t module_plan = PlanModule(R"(
+check.case @sampled {
+  check.return
+}
+
+check.benchmark<@sampled> @available
+)");
+
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  options.selected_benchmark = IREE_SV("missing");
+
+  iree_benchmark_loom_work_plan_t work_plan = {};
+  iree::Status status(iree_benchmark_loom_work_plan_initialize(
+      &module_plan, &options, iree_allocator_system(), &work_plan));
+
+  EXPECT_THAT(status, StatusIs(iree::StatusCode::kNotFound));
+  EXPECT_THAT(status.ToString(), HasSubstr("no check.benchmark matched"));
+  EXPECT_THAT(status.ToString(), HasSubstr("missing"));
 }
 
 TEST(BenchmarkComparisonExecutionTest, AbabaSampleCapacityKeepsBaselinePairs) {
