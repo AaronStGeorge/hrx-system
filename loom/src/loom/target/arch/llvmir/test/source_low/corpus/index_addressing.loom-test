@@ -265,7 +265,6 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @index_div_rem_power_of_
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -287,9 +286,21 @@ kernel.def target(@target) @index_div_rem_magic_mul_global_b32() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(25, 1, 1) @index_div_rem_magic_mul_global_b32() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %x = kernel.workitem_id.x
+  %divisor = const.i64 5
+  %quotient = udiv.i64 %x, %divisor
+  %remainder = urem.i64 %x, %divisor
+  %loaded = load.indexed.i32 %input_view, %quotient, 0, 4
+  store.indexed.i32 %loaded, %output_view, %remainder, 0, 4
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -309,6 +320,19 @@ kernel.def target(@target) @index_div_rem_magic_add_global_b32() {
   %loaded = vector.load %input_view[%quotient] : view<7xi32, #dense> -> vector<1xi32>
   vector.store %loaded, %output_view[%remainder] : vector<1xi32>, view<7xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(49, 1, 1) @index_div_rem_magic_add_global_b32() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %x = kernel.workitem_id.x
+  %divisor = const.i64 7
+  %quotient = udiv.i64 %x, %divisor
+  %remainder = urem.i64 %x, %divisor
+  %loaded = load.indexed.i32 %input_view, %quotient, 0, 4
+  store.indexed.i32 %loaded, %output_view, %remainder, 0, 4
+  return
 }
 
 // ====

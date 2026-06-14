@@ -226,14 +226,21 @@ typedef struct loom_llvmir_emit_function_state_t {
       LOOM_LLVMIR_BINARY_INFO(OR_##suffix, OR), \
       LOOM_LLVMIR_BINARY_INFO(XOR_##suffix, XOR)
 
-#define LOOM_LLVMIR_INTEGER_BINARY_INFOS(suffix)    \
-  LOOM_LLVMIR_BINARY_INFO(ADD_##suffix, ADD),       \
-      LOOM_LLVMIR_BINARY_INFO(SUB_##suffix, SUB),   \
-      LOOM_LLVMIR_BINARY_INFO(MUL_##suffix, MUL),   \
-      LOOM_LLVMIR_MASK_BINARY_INFOS(suffix),        \
-      LOOM_LLVMIR_BINARY_INFO(SHL_##suffix, SHL),   \
-      LOOM_LLVMIR_BINARY_INFO(LSHR_##suffix, LSHR), \
+#define LOOM_LLVMIR_INTEGER_BASE_BINARY_INFOS(suffix) \
+  LOOM_LLVMIR_BINARY_INFO(ADD_##suffix, ADD),         \
+      LOOM_LLVMIR_BINARY_INFO(SUB_##suffix, SUB),     \
+      LOOM_LLVMIR_BINARY_INFO(MUL_##suffix, MUL),     \
+      LOOM_LLVMIR_MASK_BINARY_INFOS(suffix),          \
+      LOOM_LLVMIR_BINARY_INFO(SHL_##suffix, SHL),     \
+      LOOM_LLVMIR_BINARY_INFO(LSHR_##suffix, LSHR),   \
       LOOM_LLVMIR_BINARY_INFO(ASHR_##suffix, ASHR)
+
+#define LOOM_LLVMIR_INTEGER_BINARY_INFOS(suffix)    \
+  LOOM_LLVMIR_INTEGER_BASE_BINARY_INFOS(suffix),    \
+      LOOM_LLVMIR_BINARY_INFO(UDIV_##suffix, UDIV), \
+      LOOM_LLVMIR_BINARY_INFO(SDIV_##suffix, SDIV), \
+      LOOM_LLVMIR_BINARY_INFO(UREM_##suffix, UREM), \
+      LOOM_LLVMIR_BINARY_INFO(SREM_##suffix, SREM)
 
 #define LOOM_LLVMIR_FLOAT_BINARY_INFOS(suffix)     \
   LOOM_LLVMIR_BINARY_INFO(ADD_##suffix, FADD),     \
@@ -241,11 +248,11 @@ typedef struct loom_llvmir_emit_function_state_t {
       LOOM_LLVMIR_BINARY_INFO(MUL_##suffix, FMUL), \
       LOOM_LLVMIR_BINARY_INFO(DIV_##suffix, FDIV)
 
-#define LOOM_LLVMIR_VECTOR_BINARY_INFOS(lanes)          \
-  LOOM_LLVMIR_MASK_BINARY_INFOS(V##lanes##I1),          \
-      LOOM_LLVMIR_INTEGER_BINARY_INFOS(V##lanes##I32),  \
-      LOOM_LLVMIR_BINARY_INFO(ADD_V##lanes##F32, FADD), \
-      LOOM_LLVMIR_BINARY_INFO(SUB_V##lanes##F32, FSUB), \
+#define LOOM_LLVMIR_VECTOR_BINARY_INFOS(lanes)              \
+  LOOM_LLVMIR_MASK_BINARY_INFOS(V##lanes##I1),              \
+      LOOM_LLVMIR_INTEGER_BASE_BINARY_INFOS(V##lanes##I32), \
+      LOOM_LLVMIR_BINARY_INFO(ADD_V##lanes##F32, FADD),     \
+      LOOM_LLVMIR_BINARY_INFO(SUB_V##lanes##F32, FSUB),     \
       LOOM_LLVMIR_BINARY_INFO(MUL_V##lanes##F32, FMUL)
 
 static const loom_llvmir_emit_binary_info_t kBinaryInfos[] = {
@@ -263,6 +270,7 @@ static const loom_llvmir_emit_binary_info_t kBinaryInfos[] = {
 #undef LOOM_LLVMIR_VECTOR_BINARY_INFOS
 #undef LOOM_LLVMIR_FLOAT_BINARY_INFOS
 #undef LOOM_LLVMIR_INTEGER_BINARY_INFOS
+#undef LOOM_LLVMIR_INTEGER_BASE_BINARY_INFOS
 #undef LOOM_LLVMIR_MASK_BINARY_INFOS
 #undef LOOM_LLVMIR_BINARY_INFO
 

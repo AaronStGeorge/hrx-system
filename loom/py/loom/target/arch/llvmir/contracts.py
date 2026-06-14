@@ -677,6 +677,10 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             (scalar_arithmetic.scalar_addi, "add"),
             (scalar_arithmetic.scalar_subi, "sub"),
             (scalar_arithmetic.scalar_muli, "mul"),
+            (scalar_arithmetic.scalar_divui, "udiv"),
+            (scalar_arithmetic.scalar_divsi, "sdiv"),
+            (scalar_arithmetic.scalar_remui, "urem"),
+            (scalar_arithmetic.scalar_remsi, "srem"),
         ):
             rules.append(
                 _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
@@ -1714,6 +1718,8 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _binary_rule(index.index_add, _INDEX, "llvmir.add.i64"),
         _binary_rule(index.index_sub, _INDEX, "llvmir.sub.i64"),
         _binary_rule(index.index_mul, _INDEX, "llvmir.mul.i64"),
+        _binary_rule(index.index_div, _INDEX, "llvmir.udiv.i64"),
+        _binary_rule(index.index_rem, _INDEX, "llvmir.urem.i64"),
         _index_madd_rule(),
         *_index_minmax_rules(),
         *_index_bitwise_rules(),

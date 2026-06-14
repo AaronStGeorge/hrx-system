@@ -678,7 +678,7 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
     for type_name in ("i32", "i64"):
         descriptors.extend(
             (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
-            for stem in ("add", "sub", "mul")
+            for stem in ("add", "sub", "mul", "udiv", "sdiv", "urem", "srem")
         )
     for type_name in ("f32", "f64"):
         descriptors.extend(
