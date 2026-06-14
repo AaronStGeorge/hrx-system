@@ -143,9 +143,13 @@ def _s_add_u32_rhs_symbol_rel32_lo_overlay() -> AmdgpuDescriptorOverlay:
             _SYMBOL_BYTE_OFFSET_IMMEDIATE,
         ),
         fixed_encoding_fields=(("SSRC1", _predefined("SRC_LITERAL", "OPR_SSRC")),),
-        asm_forms=(),
-        asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
-        asm_surface_reason="emitted by AMDGPU PC-relative address lowering",
+        asm_forms=_asm(
+            mnemonic="s_add_u32_rhs_symbol_rel32_lo",
+            results=("dst",),
+            operands=("lhs",),
+            immediates=("symbol", "byte_offset"),
+            named_immediates=True,
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -194,9 +198,13 @@ def _s_addc_u32_rhs_symbol_rel32_hi_overlay() -> AmdgpuDescriptorOverlay:
             _SYMBOL_BYTE_OFFSET_IMMEDIATE,
         ),
         fixed_encoding_fields=(("SSRC1", _predefined("SRC_LITERAL", "OPR_SSRC")),),
-        asm_forms=(),
-        asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
-        asm_surface_reason="emitted by AMDGPU PC-relative address lowering",
+        asm_forms=_asm(
+            mnemonic="s_addc_u32_rhs_symbol_rel32_hi",
+            results=("sum",),
+            operands=("lhs",),
+            immediates=("symbol", "byte_offset"),
+            named_immediates=True,
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 

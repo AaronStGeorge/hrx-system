@@ -2873,9 +2873,13 @@ def _flat_load_overlay(
         immediates=(offset_immediate, *_cache_immediates(cache_fields)),
         effects=(_generic_read_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
-        asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
-        asm_surface_reason="emitted by AMDGPU sanitizer shadow access lowering",
+        asm_forms=_asm(
+            mnemonic=mnemonic,
+            results=("dst",),
+            operands=("addr",),
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
     )
 
 

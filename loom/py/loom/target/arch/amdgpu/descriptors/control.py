@@ -201,6 +201,12 @@ def _s_sendmsg_overlay() -> AmdgpuDescriptorOverlay:
         implicit_operands=(_implicit_m0_input(),),
         effects=(_CACHE_CONTROL_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=_asm(
+            mnemonic="s_sendmsg",
+            operands=("m0",),
+            immediates=("message",),
+            named_immediates=True,
+        ),
     )
 
 
