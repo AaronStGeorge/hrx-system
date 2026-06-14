@@ -105,6 +105,11 @@ def _run_lint() -> int:
         [sys.executable, "loom/py/loom/gen/run.py", "textmate"],
         cwd=REPO_ROOT,
     )
+    ok &= _run(
+        "source invariants",
+        [sys.executable, "loom/build_tools/linters/loom_source_lint.py"],
+        cwd=REPO_ROOT,
+    )
 
     print("loom-lint: ruff")
     ok &= _run(

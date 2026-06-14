@@ -19,3 +19,10 @@ py_test(
     ],
     deps = ["//build_tools/devtools"],
 )
+
+py_test(
+    name = "loom_source_lint_self_test",
+    srcs = ["linters/loom_source_lint.py"],
+    args = ["--self-test"],
+    main = "linters/loom_source_lint.py",
+)

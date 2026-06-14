@@ -307,6 +307,12 @@ When a logical coordinate selects a packed byte window, `index.scale` is the
 explicit boundary: it multiplies an `index` coordinate by an `offset` byte
 stride and produces the `offset` value expected by `buffer.view`.
 
+The authoring source linter keeps this reference surface aligned with those
+rules. It rejects redundant kernel-buffer memory-space assumes, sentinel-sized
+views, late `index.cast` byte-address conversions, and ggml-style `nb*` byte
+strides typed as `index`, because agents copy examples before they read design
+notes.
+
 `check.case` owns correctness policy for a workload. It creates inputs, calls
 the unit under test, and states expectations. `check.benchmark<@case>` selects
 which case samples should be timed. Benchmark rows name workloads; the runner
