@@ -172,7 +172,6 @@ loom_cc_library(
     loom::codegen::low::descriptors
     loom::codegen::low::placement
     loom::ir
-    loom::ops::low
   PUBLIC
 )
 
