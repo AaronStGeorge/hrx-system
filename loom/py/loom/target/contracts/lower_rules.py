@@ -47,6 +47,8 @@ from loom.target.contracts.immediates import (
     AttrProjectKind,
     SourceMemoryProject,
     SourceMemoryProjectKind,
+    SourceOpProject,
+    SourceOpProjectKind,
     ValueProject,
     ValueProjectKind,
 )
@@ -95,6 +97,7 @@ class LowerAttrCopyKind(Enum):
     I64_ARRAY_LANE_BYTE = "i64_array_lane_byte"
     SOURCE_MEMORY_STATIC_BYTE_OFFSET = "source_memory_static_byte_offset"
     SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = "source_memory_dynamic_byte_stride"
+    SOURCE_OP_INSTANCE_FLAGS = "source_op_instance_flags"
 
 
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
@@ -1267,6 +1270,11 @@ class _LowerRuleSetCompiler:
                     self._lower_attr_project(source_op, target_name, binding)
                 )
                 continue
+            if isinstance(binding, SourceOpProject):
+                attr_copies.append(
+                    self._lower_source_op_project(source_op, target_name, binding)
+                )
+                continue
             if isinstance(binding, SourceMemoryProject):
                 attr_copies.append(
                     self._lower_source_memory_project(target_name, binding)
@@ -1421,6 +1429,22 @@ class _LowerRuleSetCompiler:
             kind=kind,
             target_name=target_name,
             dynamic_term_index=project.dynamic_term_index,
+        )
+
+    def _lower_source_op_project(
+        self,
+        source_op: Op,
+        target_name: str,
+        project: SourceOpProject,
+    ) -> LowerAttrCopy:
+        if project.kind != SourceOpProjectKind.INSTANCE_FLAGS:
+            raise ValueError(
+                f"{source_op.name}: immediate projection '{project.kind.value}' is "
+                "not representable by generated lower rules yet"
+            )
+        return LowerAttrCopy(
+            kind=LowerAttrCopyKind.SOURCE_OP_INSTANCE_FLAGS,
+            target_name=target_name,
         )
 
     def _append_attr_copy_sequence(self, sequence: tuple[LowerAttrCopy, ...]) -> int:

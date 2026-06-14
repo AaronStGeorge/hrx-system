@@ -152,6 +152,11 @@ low.func.def target(@target) abi(object_function) @vector_casts(%i32_values: reg
   return %signed_fp
 }
 
+low.func.def target(@target) abi(object_function) @vector_fast_math(%lhs: reg<llvmir.f32 x4>, %rhs: reg<llvmir.f32 x4>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %quotient = div.v4f32 %lhs, %rhs {fast_math_flags = 30}
+  return %quotient
+}
+
 // ----
 define dso_local i32 @first(i32 %lhs, i32 %rhs) {
 entry:
@@ -350,6 +355,12 @@ entry:
   %unsigned_fp = uitofp <2 x i32> %i32_values to <2 x float>
   %bits = bitcast <2 x i32> %i32_values to <2 x float>
   ret <2 x float> %signed_fp
+}
+
+define dso_local <4 x float> @vector_fast_math(<4 x float> %lhs, <4 x float> %rhs) {
+entry:
+  %quotient = fdiv nnan ninf nsz arcp <4 x float> %lhs, %rhs
+  ret <4 x float> %quotient
 }
 
 // ====

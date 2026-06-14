@@ -438,7 +438,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_sm
   low.cond_br %39, ^_bb2, ^_bb3 : reg<llvmir.i1>
 ^_bb2:
   %loaded = load.indexed.f32 %input_view, %position, 0, 4
-  %next_sum = add.f32 %current_sum, %loaded
+  %next_sum = add.f32 %current_sum, %loaded {fast_math_flags = 11}
   %42 = add.i64 %position, %step
   low.br ^_bb1(%42: reg<llvmir.i64>, %next_sum: reg<llvmir.f32>)
 ^_bb3:

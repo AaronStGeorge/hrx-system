@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.vector import ALL_VECTOR_OPS
@@ -25,15 +27,36 @@ from loom.target.contracts import (
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
     SourceMemoryOperation,
+    SourceOpProject,
     ValueProject,
     ValueRef,
     Vector,
 )
+from loom.target.low_descriptors import Immediate, ImmediateKind
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_F32_DESCRIPTOR,
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
 )
+
+
+def _add_f32_flags_descriptor_set():
+    descriptor = replace(
+        TEST_LOW_ADD_F32_DESCRIPTOR,
+        key="test.add.f32.flags",
+        immediates=(
+            Immediate(
+                "fast_math_flags",
+                ImmediateKind.UNSIGNED,
+                bit_width=7,
+                unsigned_max=0x7F,
+            ),
+        ),
+    )
+    return descriptor, replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(*TEST_LOW_CORE_DESCRIPTOR_SET.descriptors, descriptor),
+    )
 
 
 def test_generate_lower_rule_set_emits_value_ref_for_f64_equals_guard() -> None:
@@ -109,6 +132,41 @@ def test_generate_lower_rule_set_emits_storage_element_format_guard() -> None:
     guard_text = generated.source[guard_start:guard_end]
     assert ".value_ref_index = 0," in guard_text
     assert ".u64 = LOOM_VALUE_FACT_NUMERIC_FORMAT_U8," in guard_text
+
+
+def test_generate_lower_rule_set_emits_source_instance_flags_projection() -> None:
+    descriptor, descriptor_set = _add_f32_flags_descriptor_set()
+    table = ContractFragment(
+        name="test.low.flags",
+        descriptor_set=descriptor_set,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_divf,
+                descriptor=descriptor,
+                guards=(
+                    Guard.value_type("lhs", Scalar("f32")),
+                    Guard.value_type("rhs", Scalar("f32")),
+                    Guard.value_type("result", Scalar("f32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=descriptor,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                        immediates={"fast_math_flags": SourceOpProject.instance_flags()},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert "LOOM_LOW_LOWER_ATTR_COPY_SOURCE_OP_INSTANCE_FLAGS" in generated.source
+    assert 'IREE_SVL("fast_math_flags")' in generated.source
 
 
 def test_generate_lower_rule_set_emits_balanced_accumulator_flag() -> None:

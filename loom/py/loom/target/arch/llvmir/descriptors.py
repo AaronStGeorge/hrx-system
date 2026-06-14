@@ -331,6 +331,14 @@ _CACHE_TEMPORAL_IMMEDIATE = Immediate(
     enum_domain=_CACHE_TEMPORAL_ENUM,
     default_value=0,
 )
+_FAST_MATH_FLAGS_IMMEDIATE = Immediate(
+    "fast_math_flags",
+    ImmediateKind.UNSIGNED,
+    flags=(ImmediateFlag.DEFAULT_VALUE,),
+    bit_width=7,
+    unsigned_max=0x7F,
+    default_value=0,
+)
 
 
 def _lane_immediate(lane_count: int) -> Immediate:
@@ -458,6 +466,7 @@ def _binary_descriptor(
     semantic_stem: str,
     unit_count: int = 1,
     vector: bool = False,
+    fast_math_flags: bool = False,
 ) -> Descriptor:
     suffix = _descriptor_suffix(type_name, unit_count, vector=vector)
     return Descriptor(
@@ -469,6 +478,7 @@ def _binary_descriptor(
             _operand(type_name, "lhs", unit_count=unit_count),
             _operand(type_name, "rhs", unit_count=unit_count),
         ),
+        immediates=(_FAST_MATH_FLAGS_IMMEDIATE,) if fast_math_flags else (),
         asm_forms=_asm(
             mnemonic=f"{stem}.{suffix}",
             results=("dst",),
@@ -738,8 +748,17 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
             for stem in ("neg", "abs")
         )
         descriptors.extend(
-            (_binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem))
-            for stem in ("add", "sub", "mul", "div", "minnum", "maxnum")
+            _binary_descriptor(
+                stem=stem,
+                type_name=type_name,
+                semantic_stem=stem,
+                fast_math_flags=True,
+            )
+            for stem in ("add", "sub", "mul", "div")
+        )
+        descriptors.extend(
+            _binary_descriptor(stem=stem, type_name=type_name, semantic_stem=stem)
+            for stem in ("minnum", "maxnum")
         )
         descriptors.append(
             _ternary_descriptor(
@@ -749,6 +768,11 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
             )
         )
     for type_name in ("i32", "f32"):
+        stems = (
+            ("add", "sub", "mul", "div")
+            if type_name == "f32"
+            else ("add", "sub", "mul")
+        )
         descriptors.extend(
             (
                 _binary_descriptor(
@@ -757,10 +781,11 @@ def _arithmetic_descriptors() -> tuple[Descriptor, ...]:
                     semantic_stem=stem,
                     unit_count=lane_count,
                     vector=True,
+                    fast_math_flags=type_name == "f32",
                 )
             )
             for lane_count in _VECTOR_LANE_COUNTS
-            for stem in ("add", "sub", "mul")
+            for stem in stems
         )
     descriptors.extend(
         _ternary_descriptor(

@@ -253,7 +253,8 @@ typedef struct loom_llvmir_emit_function_state_t {
       LOOM_LLVMIR_INTEGER_BASE_BINARY_INFOS(V##lanes##I32), \
       LOOM_LLVMIR_BINARY_INFO(ADD_V##lanes##F32, FADD),     \
       LOOM_LLVMIR_BINARY_INFO(SUB_V##lanes##F32, FSUB),     \
-      LOOM_LLVMIR_BINARY_INFO(MUL_V##lanes##F32, FMUL)
+      LOOM_LLVMIR_BINARY_INFO(MUL_V##lanes##F32, FMUL),     \
+      LOOM_LLVMIR_BINARY_INFO(DIV_V##lanes##F32, FDIV)
 
 static const loom_llvmir_emit_binary_info_t kBinaryInfos[] = {
     LOOM_LLVMIR_MASK_BINARY_INFOS(I1),
@@ -887,6 +888,25 @@ static iree_status_t loom_llvmir_emit_read_i64_immediate(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_emit_read_optional_i64_immediate(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    iree_string_view_t immediate_name, int64_t* inout_value) {
+  uint16_t attrs_attr_index = LOOM_ATTR_INDEX_NONE;
+  const loom_named_attr_slice_t attrs =
+      loom_llvmir_emit_packet_attrs(packet, &attrs_attr_index);
+  const loom_named_attr_t* attr =
+      loom_llvmir_emit_find_attr(state->module, attrs, immediate_name);
+  if (!attr) return iree_ok_status();
+  if (attr->value.kind != LOOM_ATTR_I64) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_immediate_kind_diagnostic(
+        state, packet, immediate_name, attrs_attr_index, attr->value.kind));
+    return iree_ok_status();
+  }
+  *inout_value = loom_attr_as_i64(attr->value);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_emit_core_scalar_type(
     loom_llvmir_module_t* module, loom_llvmir_emit_core_type_t type,
     uint32_t pointer_address_space, loom_llvmir_type_id_t* out_type_id) {
@@ -1382,6 +1402,9 @@ static iree_status_t loom_llvmir_emit_binary(
       state, loom_op_const_operands(packet->op)[0], &lhs));
   IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
       state, loom_op_const_operands(packet->op)[1], &rhs));
+  int64_t fast_math_flags = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_read_optional_i64_immediate(
+      state, packet, IREE_SV("fast_math_flags"), &fast_math_flags));
   loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_build_binop(
       state->llvmir_block,
@@ -1392,6 +1415,7 @@ static iree_status_t loom_llvmir_emit_binary(
           .op = info->binop,
           .lhs = lhs,
           .rhs = rhs,
+          .fast_math_flags = (loom_llvmir_fast_math_flags_t)fast_math_flags,
       },
       &llvmir_result));
   return loom_llvmir_emit_define_value(state, result_value, llvmir_result);

@@ -55,6 +55,13 @@ class SourceMemoryProjectKind(Enum):
     DYNAMIC_BYTE_STRIDE = "dynamic_byte_stride"
 
 
+@unique
+class SourceOpProjectKind(Enum):
+    """Projection from source op state to descriptor immediates."""
+
+    INSTANCE_FLAGS = "instance_flags"
+
+
 @dataclass(frozen=True, slots=True)
 class AttrProject:
     """Descriptor immediate projection from a source attribute."""
@@ -223,6 +230,40 @@ class AttrProject:
             )
         for name in self.target_names:
             _require_immediate(descriptor, name, subject)
+
+
+@dataclass(frozen=True, slots=True)
+class SourceOpProject:
+    """Descriptor immediate projection from source operation state."""
+
+    kind: SourceOpProjectKind
+
+    @classmethod
+    def instance_flags(cls) -> Self:
+        return cls(kind=SourceOpProjectKind.INSTANCE_FLAGS)
+
+    def validate(
+        self,
+        source_op: Op,
+        descriptor: Descriptor,
+        bound_immediate_name: str | None,
+    ) -> None:
+        subject = f"immediate projection {self.kind.value}"
+        if self.kind != SourceOpProjectKind.INSTANCE_FLAGS:
+            raise ValueError(
+                f"{source_op.name}: {subject} is not representable by "
+                "generated lower rules yet"
+            )
+        if bound_immediate_name is None:
+            raise ValueError(
+                f"{source_op.name}: {subject} must bind one descriptor immediate"
+            )
+        immediate = _require_immediate(descriptor, bound_immediate_name, subject)
+        if immediate.kind != ImmediateKind.UNSIGNED:
+            raise ValueError(
+                f"{source_op.name}: {subject} descriptor immediate "
+                f"'{bound_immediate_name}' must be an unsigned immediate"
+            )
 
 
 @dataclass(frozen=True, slots=True)

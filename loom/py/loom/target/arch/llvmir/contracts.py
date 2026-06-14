@@ -44,6 +44,7 @@ from loom.target.contracts import (
     SourceMemoryOperation,
     SourceMemoryProject,
     SourceMemoryRootKind,
+    SourceOpProject,
     TypePattern,
     ValueAliasRule,
     ValueProject,
@@ -391,8 +392,13 @@ def _binary_rule(
     source_op: Op,
     type_pattern: TypePattern,
     descriptor_key: str,
+    *,
+    source_instance_flags: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
+    immediates = {}
+    if source_instance_flags:
+        immediates["fast_math_flags"] = SourceOpProject.instance_flags()
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
@@ -405,6 +411,7 @@ def _binary_rule(
                     "rhs": ValueRef.operand("rhs"),
                 },
                 results={"dst": ValueRef.result("result")},
+                immediates=immediates,
             ),
         ),
     )
@@ -985,6 +992,16 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             (scalar_arithmetic.scalar_subf, "sub"),
             (scalar_arithmetic.scalar_mulf, "mul"),
             (scalar_arithmetic.scalar_divf, "div"),
+        ):
+            rules.append(
+                _binary_rule(
+                    source_op,
+                    type_pattern,
+                    f"llvmir.{stem}.{suffix}",
+                    source_instance_flags=True,
+                )
+            )
+        for source_op, stem in (
             (scalar_arithmetic.scalar_minnumf, "minnum"),
             (scalar_arithmetic.scalar_maxnumf, "maxnum"),
         ):
@@ -1153,8 +1170,7 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
                 (vector.vector_addf, "add"),
                 (vector.vector_subf, "sub"),
                 (vector.vector_mulf, "mul"),
-                (vector.vector_minnumf, "minnum"),
-                (vector.vector_maxnumf, "maxnum"),
+                (vector.vector_divf, "div"),
             ),
         ),
     ):
@@ -1163,13 +1179,36 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             suffix = _vector_suffix(element, lane_count)
             for source_op, stem in source_ops:
                 rules.append(
-                    _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+                    _binary_rule(
+                        source_op,
+                        type_pattern,
+                        f"llvmir.{stem}.{suffix}",
+                        source_instance_flags=element == "f32",
+                    )
                 )
         vector_type = _vector_type(element, 1)
         for source_op, stem in source_ops:
             rules.append(
-                _binary_rule(source_op, vector_type, f"llvmir.{stem}.{element}")
+                _binary_rule(
+                    source_op,
+                    vector_type,
+                    f"llvmir.{stem}.{element}",
+                    source_instance_flags=element == "f32",
+                )
             )
+    for source_op, stem in (
+        (vector.vector_minnumf, "minnum"),
+        (vector.vector_maxnumf, "maxnum"),
+    ):
+        for lane_count in _VECTOR_LANE_COUNTS:
+            type_pattern = _vector_type("f32", lane_count)
+            suffix = _vector_suffix("f32", lane_count)
+            rules.append(
+                _binary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+            )
+        rules.append(
+            _binary_rule(source_op, _vector_type("f32", 1), f"llvmir.{stem}.f32")
+        )
     for lane_count in _VECTOR_LANE_COUNTS:
         type_pattern = _vector_type("f32", lane_count)
         suffix = _vector_suffix("f32", lane_count)

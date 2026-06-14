@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
@@ -28,6 +29,7 @@ from loom.target.contracts import (
     SourceMemoryDynamicIndexSource,
     SourceMemoryOperation,
     SourceMemoryRootKind,
+    SourceOpProject,
     SourceValueKind,
     TypePattern,
     ValueAliasRule,
@@ -38,6 +40,7 @@ from loom.target.contracts import (
     binary_descriptor_rules,
     compile_lower_rule_set,
 )
+from loom.target.low_descriptors import Immediate, ImmediateKind
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_F32_DESCRIPTOR,
     TEST_LOW_ADD_I32_DESCRIPTOR,
@@ -46,6 +49,25 @@ from loom.target.test.descriptors import (
     TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
     TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
 )
+
+
+def _add_f32_flags_descriptor_set():
+    descriptor = replace(
+        TEST_LOW_ADD_F32_DESCRIPTOR,
+        key="test.add.f32.flags",
+        immediates=(
+            Immediate(
+                "fast_math_flags",
+                ImmediateKind.UNSIGNED,
+                bit_width=7,
+                unsigned_max=0x7F,
+            ),
+        ),
+    )
+    return descriptor, replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(*TEST_LOW_CORE_DESCRIPTOR_SET.descriptors, descriptor),
+    )
 
 
 def _expect_value_error(callable_obj: Callable[[], object], message: str) -> None:
@@ -348,6 +370,44 @@ def test_compile_lower_rule_set_compiles_instance_flags_guard() -> None:
     assert compiled.rules[0].guard_count == 4
     assert compiled.guards[0].kind == GuardKind.INSTANCE_FLAGS_HAS_ALL
     assert compiled.guards[0].u64 == 16
+
+
+def test_compile_lower_rule_set_projects_source_instance_flags() -> None:
+    descriptor, descriptor_set = _add_f32_flags_descriptor_set()
+    table = ContractFragment(
+        name="test.flags",
+        descriptor_set=descriptor_set,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_divf,
+                descriptor=descriptor,
+                guards=(
+                    Guard.value_type("lhs", Scalar("f32")),
+                    Guard.value_type("rhs", Scalar("f32")),
+                    Guard.value_type("result", Scalar("f32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=descriptor,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                        immediates={
+                            "fast_math_flags": SourceOpProject.instance_flags()
+                        },
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert compiled.emits[0].attr_copy_count == 1
+    assert len(compiled.attr_copies) == 1
+    assert compiled.attr_copies[0].kind == LowerAttrCopyKind.SOURCE_OP_INSTANCE_FLAGS
 
 
 def test_compile_lower_rule_set_compiles_f64_equals_guard() -> None:

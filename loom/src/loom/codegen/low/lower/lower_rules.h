@@ -228,6 +228,8 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_BF16_BITS = 17,
   // Emits a source enum attribute ordinal as an i64 packet attribute.
   LOOM_LOW_LOWER_ATTR_COPY_ENUM_ORDINAL = 18,
+  // Emits the source op instance flag bitmask as an i64 packet attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_OP_INSTANCE_FLAGS = 19,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {

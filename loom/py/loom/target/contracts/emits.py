@@ -27,6 +27,7 @@ from loom.target.contracts.immediates import (
     AttrProject,
     SourceMemoryProject,
     SourceMemoryProjectKind,
+    SourceOpProject,
     ValueProject,
 )
 from loom.target.contracts.kinds import SourceValueKind
@@ -79,7 +80,10 @@ class EmitDescriptorOp:
     results: Mapping[str, ValueRef] | None = None
     result_types: Mapping[str, ResultTypeBinding] | None = None
     immediates: (
-        Mapping[str, AttrProject | ValueProject | SourceMemoryProject | int]
+        Mapping[
+            str,
+            AttrProject | SourceOpProject | ValueProject | SourceMemoryProject | int,
+        ]
         | Sequence[AttrProject]
     ) = ()
     form: DescriptorEmitForm = DescriptorEmitForm.AUTO
@@ -332,7 +336,7 @@ class EmitDescriptorOp:
                     immediate_name,
                     "descriptor immediate binding",
                 )
-                if isinstance(binding, AttrProject | ValueProject):
+                if isinstance(binding, AttrProject | SourceOpProject | ValueProject):
                     binding.validate(source_op, self.descriptor, immediate_name)
                 elif isinstance(binding, SourceMemoryProject):
                     if self.source_memory is None:

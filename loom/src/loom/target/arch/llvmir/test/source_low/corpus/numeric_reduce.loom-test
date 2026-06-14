@@ -85,11 +85,11 @@ func.def target(@target) @f32_reduce_add_fastmath(%input: buffer, %output: buffe
 low.func.def target(@target) abi(object_function) @f32_reduce_add_fastmath(%input_view: reg<llvmir.ptr>, %output_view: reg<llvmir.ptr>) asm<llvmir.generic.core> {
   %20 = load.f32 %input_view, 0
   %21 = load.f32 %input_view, 4
-  %22 = add.f32 %20, %21
+  %22 = add.f32 %20, %21 {fast_math_flags = 11}
   %23 = load.f32 %input_view, 8
   %24 = load.f32 %input_view, 12
-  %25 = add.f32 %23, %24
-  %stored = add.f32 %22, %25
+  %25 = add.f32 %23, %24 {fast_math_flags = 11}
+  %stored = add.f32 %22, %25 {fast_math_flags = 11}
   store.f32 %stored, %output_view, 0
   return
 }

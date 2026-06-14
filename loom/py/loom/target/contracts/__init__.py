@@ -57,6 +57,8 @@ from loom.target.contracts.immediates import (
     AttrProjectKind,
     SourceMemoryProject,
     SourceMemoryProjectKind,
+    SourceOpProject,
+    SourceOpProjectKind,
     ValueProject,
     ValueProjectKind,
 )
@@ -181,6 +183,8 @@ __all__ = [
     "SourceMemoryDynamicIndexSource",
     "SourceMemoryOperation",
     "SourceMemoryRootKind",
+    "SourceOpProject",
+    "SourceOpProjectKind",
     "TypePattern",
     "ValueAliasRule",
     "ValueElideRule",
