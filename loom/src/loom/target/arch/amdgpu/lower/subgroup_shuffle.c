@@ -278,17 +278,6 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_low_legality_verify_subgroup_descriptor(
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    loom_amdgpu_descriptor_ref_t descriptor_ref,
-    iree_string_view_t constraint_key) {
-  if (!loom_amdgpu_descriptor_set_has_ref(
-          loom_target_low_legality_descriptor_set(context), descriptor_ref)) {
-    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
-  }
-  return iree_ok_status();
-}
-
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
@@ -342,15 +331,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_shuffle(
         context, op, IREE_SV("subgroup_shuffle.lane_range"));
   }
 
-  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
-      loom_target_low_legality_descriptor_set(context),
-      LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return loom_amdgpu_low_legality_reject(
-        context, op, IREE_SV("descriptor.ds_bpermute_b32"));
-  }
-
-  return iree_ok_status();
+  return loom_amdgpu_low_legality_verify_descriptor_requirement(
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_DS_BPERMUTE_B32,
+      IREE_SV("descriptor.ds_bpermute_b32"));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_match(
