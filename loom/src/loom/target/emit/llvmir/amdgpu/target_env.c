@@ -123,6 +123,15 @@ static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
             .uniform_workgroup_size_attr_name =
                 IREE_SVL("uniform-work-group-size"),
             .flags = LOOM_LLVMIR_KERNEL_PROFILE_FLAG_ALWAYSINLINE,
+            .coordinate_intrinsics =
+                {
+                    .workitem_id_x = IREE_SVL("llvm.amdgcn.workitem.id.x"),
+                    .workitem_id_y = IREE_SVL("llvm.amdgcn.workitem.id.y"),
+                    .workitem_id_z = IREE_SVL("llvm.amdgcn.workitem.id.z"),
+                    .workgroup_id_x = IREE_SVL("llvm.amdgcn.workgroup.id.x"),
+                    .workgroup_id_y = IREE_SVL("llvm.amdgcn.workgroup.id.y"),
+                    .workgroup_id_z = IREE_SVL("llvm.amdgcn.workgroup.id.z"),
+                },
             .binding_parameter_attrs =
                 {
                     {

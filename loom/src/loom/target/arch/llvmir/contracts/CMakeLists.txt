@@ -34,6 +34,7 @@ loom_target_table_cc_library(
     loom::codegen::low::lower
     loom::ops::buffer
     loom::ops::index
+    loom::ops::kernel
     loom::ops::scalar
     loom::ops::scf
     loom::ops::vector

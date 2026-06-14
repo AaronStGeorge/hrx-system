@@ -548,6 +548,15 @@ iree_status_t loom_llvmir_module_add_function(
   return iree_ok_status();
 }
 
+loom_llvmir_function_t* loom_llvmir_module_find_function(
+    loom_llvmir_module_t* module, iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < module->function_count; ++i) {
+    loom_llvmir_function_t* function = module->functions[i];
+    if (iree_string_view_equal(function->name, name)) return function;
+  }
+  return NULL;
+}
+
 loom_llvmir_function_id_t loom_llvmir_function_id(
     const loom_llvmir_function_t* function) {
   return function ? function->id : LOOM_LLVMIR_FUNCTION_ID_INVALID;

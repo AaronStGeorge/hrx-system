@@ -361,6 +361,21 @@ llvmir.target<object> @target {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @dispatch() asm<llvmir.generic.core> {
   %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
   %value = load.i32 %input, 4
+  %local_x = kernel.workitem_id.x
+  %local_y = kernel.workitem_id.y
+  %local_z = kernel.workitem_id.z
+  %workgroup_x = kernel.workgroup_id.x
+  %workgroup_y = kernel.workgroup_id.y
+  %workgroup_z = kernel.workgroup_id.z
+  %size_x = kernel.workgroup_size.x
+  %size_y = kernel.workgroup_size.y
+  %size_z = kernel.workgroup_size.z
+  %size_xy = add.i64 %size_x, %size_y
+  %size_xyz = add.i64 %size_xy, %size_z
+  store.i64 %size_xyz, %input, 8
+  %dispatch_x = kernel.workitem_dispatch_id.x
+  %dispatch_y = kernel.workitem_dispatch_id.y
+  %dispatch_z = kernel.workitem_dispatch_id.z
   return
 }
 
@@ -369,8 +384,52 @@ define amdgpu_kernel void @dispatch(ptr addrspace(1) inreg noundef %input) #0 !r
 entry:
   %v5 = getelementptr i8, ptr addrspace(1) %input, i64 4
   %value = load i32, ptr addrspace(1) %v5
+  %v7 = call i32 @llvm.amdgcn.workitem.id.x()
+  %local_x = zext i32 %v7 to i64
+  %v9 = call i32 @llvm.amdgcn.workitem.id.y()
+  %local_y = zext i32 %v9 to i64
+  %v11 = call i32 @llvm.amdgcn.workitem.id.z()
+  %local_z = zext i32 %v11 to i64
+  %v13 = call i32 @llvm.amdgcn.workgroup.id.x()
+  %workgroup_x = zext i32 %v13 to i64
+  %v15 = call i32 @llvm.amdgcn.workgroup.id.y()
+  %workgroup_y = zext i32 %v15 to i64
+  %v17 = call i32 @llvm.amdgcn.workgroup.id.z()
+  %workgroup_z = zext i32 %v17 to i64
+  %size_xy = add i64 64, 1
+  %size_xyz = add i64 %size_xy, 1
+  %v25 = getelementptr i8, ptr addrspace(1) %input, i64 8
+  store i64 %size_xyz, ptr addrspace(1) %v25
+  %v26 = call i32 @llvm.amdgcn.workgroup.id.x()
+  %v27 = zext i32 %v26 to i64
+  %v28 = call i32 @llvm.amdgcn.workitem.id.x()
+  %v29 = zext i32 %v28 to i64
+  %v31 = mul i64 %v27, 64
+  %dispatch_x = add i64 %v31, %v29
+  %v33 = call i32 @llvm.amdgcn.workgroup.id.y()
+  %v34 = zext i32 %v33 to i64
+  %v35 = call i32 @llvm.amdgcn.workitem.id.y()
+  %v36 = zext i32 %v35 to i64
+  %dispatch_y = add i64 %v34, %v36
+  %v38 = call i32 @llvm.amdgcn.workgroup.id.z()
+  %v39 = zext i32 %v38 to i64
+  %v40 = call i32 @llvm.amdgcn.workitem.id.z()
+  %v41 = zext i32 %v40 to i64
+  %dispatch_z = add i64 %v39, %v41
   ret void
 }
+
+declare i32 @llvm.amdgcn.workitem.id.x()
+
+declare i32 @llvm.amdgcn.workitem.id.y()
+
+declare i32 @llvm.amdgcn.workitem.id.z()
+
+declare i32 @llvm.amdgcn.workgroup.id.x()
+
+declare i32 @llvm.amdgcn.workgroup.id.y()
+
+declare i32 @llvm.amdgcn.workgroup.id.z()
 
 attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }
 

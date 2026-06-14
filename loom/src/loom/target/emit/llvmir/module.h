@@ -261,6 +261,10 @@ iree_status_t loom_llvmir_module_add_function(
     loom_llvmir_module_t* module, const loom_llvmir_function_desc_t* desc,
     loom_llvmir_function_t** out_function);
 
+// Finds a function declaration or definition by symbol name.
+loom_llvmir_function_t* loom_llvmir_module_find_function(
+    loom_llvmir_module_t* module, iree_string_view_t name);
+
 loom_llvmir_function_id_t loom_llvmir_function_id(
     const loom_llvmir_function_t* function);
 

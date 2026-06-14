@@ -58,6 +58,7 @@ _SCHEDULE_LOAD = "llvmir.load"
 _SCHEDULE_STORE = "llvmir.store"
 
 _VECTOR_LANE_COUNTS = (2, 4, 8, 16)
+_KERNEL_DIMENSIONS = ("x", "y", "z")
 _STRUCTURAL_VECTOR_TYPES = (
     "i1",
     "i8",
@@ -709,6 +710,34 @@ def _select_descriptors() -> tuple[Descriptor, ...]:
     )
 
 
+def _kernel_query_descriptor(query: str, dimension: str) -> Descriptor:
+    return Descriptor(
+        key=f"llvmir.kernel.{query}.{dimension}",
+        mnemonic="kernel",
+        semantic_tag=f"llvmir.kernel.{query}.{dimension}",
+        operands=(_result("i64"),),
+        asm_forms=_asm(
+            mnemonic=f"kernel.{query}.{dimension}",
+            results=("dst",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _kernel_query_descriptors() -> tuple[Descriptor, ...]:
+    return tuple(
+        _kernel_query_descriptor(query, dimension)
+        for query in (
+            "workitem_id",
+            "workgroup_id",
+            "workgroup_size",
+            "workitem_dispatch_id",
+        )
+        for dimension in _KERNEL_DIMENSIONS
+    )
+
+
 def _splat_descriptor(type_name: str, lane_count: int) -> Descriptor:
     suffix = _descriptor_suffix(type_name, lane_count, vector=True)
     return Descriptor(
@@ -984,6 +1013,7 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_compare_descriptors(),
         *_cast_descriptors(),
         *_select_descriptors(),
+        *_kernel_query_descriptors(),
         *_structural_vector_descriptors(),
         *_memory_descriptors(),
     ),

@@ -68,6 +68,27 @@ typedef struct loom_llvmir_workgroup_size_t {
   uint32_t z;
 } loom_llvmir_workgroup_size_t;
 
+typedef struct loom_llvmir_kernel_coordinate_intrinsics_t {
+  // LLVM intrinsic returning the x workitem coordinate, or empty if
+  // unsupported.
+  iree_string_view_t workitem_id_x;
+  // LLVM intrinsic returning the y workitem coordinate, or empty if
+  // unsupported.
+  iree_string_view_t workitem_id_y;
+  // LLVM intrinsic returning the z workitem coordinate, or empty if
+  // unsupported.
+  iree_string_view_t workitem_id_z;
+  // LLVM intrinsic returning the x workgroup coordinate, or empty if
+  // unsupported.
+  iree_string_view_t workgroup_id_x;
+  // LLVM intrinsic returning the y workgroup coordinate, or empty if
+  // unsupported.
+  iree_string_view_t workgroup_id_y;
+  // LLVM intrinsic returning the z workgroup coordinate, or empty if
+  // unsupported.
+  iree_string_view_t workgroup_id_z;
+} loom_llvmir_kernel_coordinate_intrinsics_t;
+
 typedef struct loom_llvmir_target_env_t {
   // Stable target environment name for diagnostics and tests.
   iree_string_view_t name;
@@ -107,6 +128,8 @@ typedef struct loom_llvmir_kernel_profile_t {
   iree_string_view_t uniform_workgroup_size_attr_name;
   // Kernel entry attribute flags.
   loom_llvmir_kernel_profile_flags_t flags;
+  // Target-specific LLVM intrinsics for kernel coordinate materialization.
+  loom_llvmir_kernel_coordinate_intrinsics_t coordinate_intrinsics;
   // ABI-required attrs for descriptor-backed binding pointer parameters.
   loom_llvmir_attr_t binding_parameter_attrs
       [LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];

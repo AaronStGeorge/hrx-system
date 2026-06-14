@@ -19,7 +19,6 @@ low.func.def target(@target) abi(object_function) @prefetch_static(%input: reg<l
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -34,6 +33,11 @@ kernel.def target(@target) @prefetch_workgroup_id() {
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   view.prefetch %input_view[%bounded_gid] {intent = read, locality = l2} : view<64xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @prefetch_workgroup_id() asm<llvmir.generic.core> {
+  return
 }
 
 // ====

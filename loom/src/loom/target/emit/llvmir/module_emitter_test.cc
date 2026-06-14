@@ -76,6 +76,7 @@ static const loom_llvmir_target_profile_t kTestKernelProfile = {
         /*.uniform_workgroup_size_attr_name=*/
         IREE_SVL("loom-test-uniform-workgroup-size"),
         /*.flags=*/LOOM_LLVMIR_KERNEL_PROFILE_FLAG_ALWAYSINLINE,
+        /*.coordinate_intrinsics=*/{},
         /*.binding_parameter_attrs=*/
         {
             {

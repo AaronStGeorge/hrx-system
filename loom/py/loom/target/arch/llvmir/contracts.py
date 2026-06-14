@@ -12,6 +12,8 @@ from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.buffer import defs as buffer
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
+from loom.dialect.kernel import ALL_KERNEL_OPS
+from loom.dialect.kernel import defs as kernel
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import bitwise as scalar_bitwise
@@ -79,6 +81,8 @@ _MEMORY_VALUE_TYPES = (
     ("f32", 4),
     ("f64", 8),
 )
+
+_KERNEL_DIMENSIONS = ("x", "y", "z")
 
 _INTEGER_PREDICATES = (
     "eq",
@@ -1068,9 +1072,42 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
     return tuple(rules)
 
 
+def _kernel_query_rule(source_op: Op, query: str, dimension: str) -> DescriptorRule:
+    descriptor = _descriptor(f"llvmir.kernel.{query}.{dimension}")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("dimension", dimension),
+            Guard.value_type("result", _INDEX),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _kernel_query_rules() -> tuple[DescriptorRule, ...]:
+    source_ops = (
+        (kernel.kernel_workitem_id, "workitem_id"),
+        (kernel.kernel_workgroup_id, "workgroup_id"),
+        (kernel.kernel_workgroup_size, "workgroup_size"),
+        (kernel.kernel_workitem_dispatch_id, "workitem_dispatch_id"),
+    )
+    return tuple(
+        _kernel_query_rule(source_op, query, dimension)
+        for source_op, query in source_ops
+        for dimension in _KERNEL_DIMENSIONS
+    )
+
+
 LLVMIR_GENERIC_CORE_CONTRACT_DIALECT_OPS = {
     "buffer": ALL_BUFFER_OPS,
     "index": ALL_INDEX_OPS,
+    "kernel": ALL_KERNEL_OPS,
     "scalar": ALL_SCALAR_OPS,
     "scf": ALL_SCF_OPS,
     "vector": ALL_VECTOR_OPS,
@@ -1108,6 +1145,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         *_compare_rules(),
         *_cast_rules(),
         *_select_rules(),
+        *_kernel_query_rules(),
         *_vector_constant_rules(),
         *_structural_vector_rules(),
         *_memory_rules(),
