@@ -404,6 +404,23 @@ static iree_status_t loom_llvmir_emit_shape_diagnostic(
                                      IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_llvmir_emit_value_type_diagnostic(
+    loom_llvmir_emit_function_state_t* state, const loom_op_t* op,
+    loom_value_id_t value_id, iree_string_view_t value_kind,
+    iree_string_view_t expected_constraint) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(state->function_name),
+      loom_param_string(value_kind),
+      loom_param_string(
+          loom_low_diagnostic_value_name(state->module, value_id)),
+      loom_param_type(loom_module_value_type(state->module, value_id)),
+      loom_param_string(LOOM_LLVMIR_LOW_EMITTER_KEY),
+      loom_param_string(expected_constraint),
+  };
+  return loom_llvmir_emit_diagnostic(state, op, LOOM_ERR_TARGET_056, params,
+                                     IREE_ARRAYSIZE(params));
+}
+
 static iree_status_t loom_llvmir_emit_missing_descriptor_diagnostic(
     loom_llvmir_emit_function_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet) {
@@ -520,7 +537,7 @@ static iree_status_t loom_llvmir_emit_read_i64_immediate(
 
 static iree_status_t loom_llvmir_emit_core_scalar_type(
     loom_llvmir_module_t* module, loom_llvmir_emit_core_type_t type,
-    loom_llvmir_type_id_t* out_type_id) {
+    uint32_t pointer_address_space, loom_llvmir_type_id_t* out_type_id) {
   switch (type) {
     case LOOM_LLVMIR_EMIT_CORE_TYPE_I1:
       return loom_llvmir_module_get_integer_type(module, 1, out_type_id);
@@ -535,7 +552,7 @@ static iree_status_t loom_llvmir_emit_core_scalar_type(
       return loom_llvmir_module_get_float_type(module, LOOM_LLVMIR_FLOAT_F64,
                                                out_type_id);
     case LOOM_LLVMIR_EMIT_CORE_TYPE_PTR:
-      return loom_llvmir_module_get_pointer_type(module, /*address_space=*/0,
+      return loom_llvmir_module_get_pointer_type(module, pointer_address_space,
                                                  out_type_id);
   }
   return iree_make_status(IREE_STATUS_INTERNAL,
@@ -544,16 +561,81 @@ static iree_status_t loom_llvmir_emit_core_scalar_type(
 
 static iree_status_t loom_llvmir_emit_core_type(
     loom_llvmir_module_t* module, loom_llvmir_emit_core_type_t type,
-    uint32_t unit_count, loom_llvmir_type_id_t* out_type_id) {
+    uint32_t unit_count, uint32_t pointer_address_space,
+    loom_llvmir_type_id_t* out_type_id) {
   loom_llvmir_type_id_t scalar_type = LOOM_LLVMIR_TYPE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_emit_core_scalar_type(module, type, &scalar_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_core_scalar_type(
+      module, type, pointer_address_space, &scalar_type));
   if (unit_count == 1) {
     *out_type_id = scalar_type;
     return iree_ok_status();
   }
   return loom_llvmir_module_get_vector_type(module, unit_count, scalar_type,
                                             out_type_id);
+}
+
+static bool loom_llvmir_emit_low_value_is_pointer_register(
+    loom_llvmir_emit_function_state_t* state, loom_value_id_t value_id) {
+  if (value_id >= state->module->values.count) return false;
+  const loom_type_t type = loom_module_value_type(state->module, value_id);
+  const loom_low_register_type_resolver_t resolver =
+      loom_low_register_type_resolver_for_descriptor_set(
+          state->target->descriptor_set);
+  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  if (!loom_low_register_type_resolver_try_resolve(&resolver, type,
+                                                   &reg_class_id, NULL)) {
+    return false;
+  }
+  return reg_class_id == LLVMIR_GENERIC_CORE_REG_CLASS_ID_PTR &&
+         loom_low_register_type_unit_count(type) == 1;
+}
+
+static iree_status_t loom_llvmir_emit_pointer_address_space_for_low_value(
+    loom_llvmir_emit_function_state_t* state, const loom_op_t* op,
+    loom_value_id_t value_id, iree_string_view_t value_kind,
+    iree_string_view_t expected_constraint, uint32_t* out_address_space,
+    bool* out_supported) {
+  *out_address_space =
+      state->target_profile->target_env->address_spaces.generic;
+  *out_supported = true;
+  if (!loom_llvmir_emit_low_value_is_pointer_register(state, value_id)) {
+    *out_supported = false;
+    return loom_llvmir_emit_value_type_diagnostic(
+        state, op, value_id, value_kind, expected_constraint);
+  }
+
+  const loom_value_t* value = loom_module_value(state->module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
+      *out_supported = false;
+      return loom_llvmir_emit_value_type_diagnostic(
+          state, op, value_id, value_kind,
+          IREE_SV("low.resource<hal_binding> pointer"));
+    }
+    return iree_ok_status();
+  }
+
+  const loom_op_t* def_op = loom_value_def_op(value);
+  if (def_op != NULL && loom_low_resource_isa(def_op)) {
+    switch (loom_low_resource_import_kind(def_op)) {
+      case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
+        *out_address_space =
+            state->target_profile->target_env->address_spaces.generic;
+        return iree_ok_status();
+      case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING:
+        *out_address_space =
+            state->target_profile->target_env->address_spaces.global;
+        return iree_ok_status();
+      case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
+      case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
+      default:
+        *out_supported = false;
+        return loom_llvmir_emit_value_type_diagnostic(
+            state, op, value_id, value_kind,
+            IREE_SV("native_pointer or hal_binding pointer resource"));
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_llvmir_emit_type_for_low_value(
@@ -598,25 +680,17 @@ static iree_status_t loom_llvmir_emit_type_for_low_value(
       return iree_ok_status();
     }
   }
+  uint32_t pointer_address_space = 0;
+  if (core_type == LOOM_LLVMIR_EMIT_CORE_TYPE_PTR) {
+    bool supported = true;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_pointer_address_space_for_low_value(
+        state, op, value_id, value_kind, IREE_SV("reg<llvmir.ptr>"),
+        &pointer_address_space, &supported));
+    if (!supported) return iree_ok_status();
+  }
   return loom_llvmir_emit_core_type(state->llvmir_module, core_type,
                                     loom_low_register_type_unit_count(type),
-                                    out_type_id);
-}
-
-static bool loom_llvmir_emit_low_value_is_pointer_register(
-    loom_llvmir_emit_function_state_t* state, loom_value_id_t value_id) {
-  if (value_id >= state->module->values.count) return false;
-  const loom_type_t type = loom_module_value_type(state->module, value_id);
-  const loom_low_register_type_resolver_t resolver =
-      loom_low_register_type_resolver_for_descriptor_set(
-          state->target->descriptor_set);
-  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-  if (!loom_low_register_type_resolver_try_resolve(&resolver, type,
-                                                   &reg_class_id, NULL)) {
-    return false;
-  }
-  return reg_class_id == LLVMIR_GENERIC_CORE_REG_CLASS_ID_PTR &&
-         loom_low_register_type_unit_count(type) == 1;
+                                    pointer_address_space, out_type_id);
 }
 
 static iree_status_t loom_llvmir_emit_descriptor_set_diagnostic(
@@ -947,8 +1021,8 @@ static iree_status_t loom_llvmir_emit_i64_constant(
 static iree_status_t loom_llvmir_emit_byte_pointer(
     loom_llvmir_emit_function_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet,
-    const loom_llvmir_emit_memory_info_t* info, loom_llvmir_value_id_t base,
-    loom_llvmir_value_id_t* out_pointer) {
+    const loom_llvmir_emit_memory_info_t* info, loom_value_id_t base_value_id,
+    loom_llvmir_value_id_t base, loom_llvmir_value_id_t* out_pointer) {
   int64_t byte_offset = 0;
   bool has_byte_offset = false;
   IREE_RETURN_IF_ERROR(loom_llvmir_emit_read_i64_immediate(
@@ -1031,8 +1105,18 @@ static iree_status_t loom_llvmir_emit_byte_pointer(
   loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(state->llvmir_module, 8, &i8_type));
+  uint32_t pointer_address_space = 0;
+  bool supported = true;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_pointer_address_space_for_low_value(
+      state, packet->op, base_value_id, IREE_SV("memory_pointer"),
+      IREE_SV("reg<llvmir.ptr> memory pointer"), &pointer_address_space,
+      &supported));
+  if (!supported) {
+    *out_pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
-      state->llvmir_module, /*address_space=*/0, &ptr_type));
+      state->llvmir_module, pointer_address_space, &ptr_type));
   return loom_llvmir_build_gep(state->llvmir_block,
                                &(loom_llvmir_gep_desc_t){
                                    .result_type = ptr_type,
@@ -1068,11 +1152,13 @@ static iree_status_t loom_llvmir_emit_memory(
 
   loom_llvmir_value_id_t base = LOOM_LLVMIR_VALUE_ID_INVALID;
   const uint32_t pointer_operand_index = is_load ? 0 : 1;
-  IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
-      state, loom_op_const_operands(packet->op)[pointer_operand_index], &base));
-  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  const loom_value_id_t base_value_id =
+      loom_op_const_operands(packet->op)[pointer_operand_index];
   IREE_RETURN_IF_ERROR(
-      loom_llvmir_emit_byte_pointer(state, packet, info, base, &pointer));
+      loom_llvmir_emit_lookup_value(state, base_value_id, &base));
+  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_byte_pointer(
+      state, packet, info, base_value_id, base, &pointer));
   if (pointer == LOOM_LLVMIR_VALUE_ID_INVALID) return iree_ok_status();
 
   if (is_load) {
@@ -1097,7 +1183,8 @@ static iree_status_t loom_llvmir_emit_memory(
 
   loom_llvmir_type_id_t value_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_emit_core_type(
-      state->llvmir_module, info->value_type, info->unit_count, &value_type));
+      state->llvmir_module, info->value_type, info->unit_count,
+      /*pointer_address_space=*/0, &value_type));
   loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
       state, loom_op_const_operands(packet->op)[0], &value));
@@ -1181,6 +1268,9 @@ static iree_status_t loom_llvmir_emit_low_op(
   if (loom_low_return_isa(op)) {
     return loom_llvmir_emit_return(state, op);
   }
+  if (loom_low_resource_isa(op)) {
+    return iree_ok_status();
+  }
   if (loom_low_copy_isa(op)) {
     return loom_llvmir_emit_copy(state, op);
   }
@@ -1204,6 +1294,56 @@ static iree_status_t loom_llvmir_emit_initialize_value_map(
       (void**)&state->value_map));
   for (iree_host_size_t i = 0; i < state->value_map_count; ++i) {
     state->value_map[i] = LOOM_LLVMIR_VALUE_ID_INVALID;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_emit_resource_parameter(
+    loom_llvmir_emit_function_state_t* state, const loom_op_t* resource_op) {
+  const loom_value_id_t result_value = loom_low_resource_result(resource_op);
+  uint32_t pointer_address_space = 0;
+  bool supported = true;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_pointer_address_space_for_low_value(
+      state, resource_op, result_value, IREE_SV("resource"),
+      IREE_SV("native_pointer or hal_binding pointer resource"),
+      &pointer_address_space, &supported));
+  if (!supported) return iree_ok_status();
+
+  loom_llvmir_type_id_t parameter_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      state->llvmir_module, pointer_address_space, &parameter_type));
+
+  loom_llvmir_attr_t
+      binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT] =
+          {{0}};
+  iree_host_size_t binding_attr_count = 0;
+  if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL &&
+      loom_low_resource_import_kind(resource_op) ==
+          LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING) {
+    loom_llvmir_target_profile_kernel_binding_attrs(
+        state->target_profile, binding_attrs, &binding_attr_count);
+  }
+
+  loom_llvmir_value_id_t parameter = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
+      state->llvmir_function,
+      &(loom_llvmir_parameter_desc_t){
+          .type_id = parameter_type,
+          .name = loom_llvmir_emit_value_name(state->module, result_value),
+          .attrs = binding_attrs,
+          .attr_count = binding_attr_count,
+      },
+      &parameter));
+  return loom_llvmir_emit_define_value(state, result_value, parameter);
+}
+
+static iree_status_t loom_llvmir_emit_resource_parameters(
+    loom_llvmir_emit_function_state_t* state) {
+  const loom_block_t* entry_block = loom_region_const_entry_block(state->body);
+  loom_op_t* op = NULL;
+  loom_block_for_each_op(entry_block, op) {
+    if (!loom_low_resource_isa(op)) continue;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_resource_parameter(state, op));
   }
   return iree_ok_status();
 }
@@ -1299,6 +1439,7 @@ static iree_status_t loom_llvmir_emit_function_signature(
     IREE_RETURN_IF_ERROR(
         loom_llvmir_emit_define_value(state, arg_value, parameter));
   }
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_resource_parameters(state));
   if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
     IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_attach_kernel_metadata(
         state->llvmir_function, state->target_profile));

@@ -167,7 +167,9 @@ llvmir.target<object> @target {
   data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"
 }
 
-low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch(%input: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch() asm<llvmir.generic.core> {
+  %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %value = load.i32 %input, 4
   return
 }
 )");
@@ -183,10 +185,14 @@ low.kernel.def target(@target) workgroup_size(128, 2, 1) @dispatch(%input: reg<l
   EXPECT_NE(text.find("target triple = \"amdgcn-amd-amdhsa\""),
             std::string::npos)
       << text;
-  EXPECT_NE(text.find("define amdgpu_kernel void @dispatch(ptr inreg noundef "
-                      "%input) #0 !reqd_work_group_size !0"),
+  EXPECT_NE(text.find("define amdgpu_kernel void @dispatch(ptr addrspace(1) "
+                      "inreg noundef %input) #0 !reqd_work_group_size !0"),
             std::string::npos)
       << text;
+  EXPECT_NE(text.find("getelementptr i8, ptr addrspace(1) %input, i64 4"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("load i32, ptr addrspace(1)"), std::string::npos) << text;
   EXPECT_NE(text.find("\"amdgpu-flat-work-group-size\"=\"1,1024\""),
             std::string::npos)
       << text;
@@ -226,6 +232,41 @@ low.kernel.def target(@target) @dispatch() asm<llvmir.generic.core> {
   ASSERT_EQ(emission.u32_params.size(), 2u);
   EXPECT_EQ(emission.u32_params[0], 0u);
   EXPECT_EQ(emission.u32_params[1], 3u);
+}
+
+TEST_F(LlvmirModuleEmitterTest, ReportsDirectHalKernelPointerArgument) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  default_pointer_bitwidth = 64,
+  index_bitwidth = 32,
+  offset_bitwidth = 64,
+  max_flat_workgroup_size = 1024,
+  memory_space_global = 1,
+  abi = hal_kernel,
+  contract_set_key = "llvmir.generic.core",
+  triple = "amdgcn-amd-amdhsa"
+}
+
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @dispatch(%input: reg<llvmir.ptr>) asm<llvmir.generic.core> {
+  return
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  EXPECT_EQ(llvmir_module, nullptr);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_TARGET_056);
+  ASSERT_EQ(emission.string_params.size(), 5u);
+  EXPECT_EQ(emission.string_params[0], "dispatch");
+  EXPECT_EQ(emission.string_params[1], "parameter");
+  EXPECT_EQ(emission.string_params[2], "input");
+  EXPECT_EQ(emission.string_params[3], "llvmir.low");
+  EXPECT_EQ(emission.string_params[4], "low.resource<hal_binding> pointer");
+  ASSERT_EQ(emission.type_params.size(), 1u);
 }
 
 TEST_F(LlvmirModuleEmitterTest, ReportsUnsupportedAbiProjection) {

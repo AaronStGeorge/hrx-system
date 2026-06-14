@@ -953,6 +953,27 @@ ERR_TARGET_055 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_056: Target emitter cannot represent a low value type.
+ERR_TARGET_056 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=56,
+    severity=Severity.ERROR,
+    summary="Target emitter cannot represent a low value type.",
+    message=(
+        "low function '@{function_name}' cannot emit {value_kind} "
+        "'{value_name}' with type {actual_type} through '{emitter_key}', "
+        "expected '{expected_constraint}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_kind", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("emitter_key", ParamKind.STRING),
+        ErrorParam("expected_constraint", ParamKind.STRING),
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1001,4 +1022,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_053,
     ERR_TARGET_054,
     ERR_TARGET_055,
+    ERR_TARGET_056,
 )
