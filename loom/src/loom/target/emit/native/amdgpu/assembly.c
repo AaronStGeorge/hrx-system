@@ -710,36 +710,21 @@ static iree_status_t loom_amdgpu_append_asm_form_separator(
 }
 
 typedef enum loom_amdgpu_assembly_value_kind_e {
-  LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_LITERAL,
   LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_RESULT,
   LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_OPERAND,
   LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_I64,
-  LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_UNSIGNED_HEX,
 } loom_amdgpu_assembly_value_kind_t;
-
-typedef enum loom_amdgpu_assembly_mnemonic_kind_e {
-  LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-  LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_DESCRIPTOR,
-} loom_amdgpu_assembly_mnemonic_kind_t;
 
 typedef struct loom_amdgpu_assembly_value_spec_t {
   // Kind of value appended at this position.
   loom_amdgpu_assembly_value_kind_t kind;
   // Result, operand, or immediate index for indexed value kinds.
   uint16_t index;
-  // Bit width for width-sensitive immediate renderings.
-  uint8_t bit_width;
-  // Literal assembly spelling for literal values.
-  const char* literal;
 } loom_amdgpu_assembly_value_spec_t;
 
 #define LOOM_AMDGPU_ASSEMBLY_PACKET_FORM_VALUE_CAPACITY 8
 
 typedef struct loom_amdgpu_assembly_packet_form_t {
-  // Source of the mnemonic printed before the value list.
-  loom_amdgpu_assembly_mnemonic_kind_t mnemonic_kind;
-  // Native mnemonic used when |mnemonic_kind| is fixed.
-  const char* fixed_mnemonic;
   // Number of rows in |values|.
   iree_host_size_t value_count;
   // Ordered values appended after the mnemonic.
@@ -747,63 +732,32 @@ typedef struct loom_amdgpu_assembly_packet_form_t {
       values[LOOM_AMDGPU_ASSEMBLY_PACKET_FORM_VALUE_CAPACITY];
 } loom_amdgpu_assembly_packet_form_t;
 
-#define LOOM_AMDGPU_ASM_VALUE_LITERAL(value)           \
-  {                                                    \
-      .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_LITERAL, \
-      .index = 0,                                      \
-      .bit_width = 0,                                  \
-      .literal = value,                                \
-  }
 #define LOOM_AMDGPU_ASM_VALUE_RESULT(value_index)     \
   {                                                   \
       .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_RESULT, \
       .index = value_index,                           \
-      .bit_width = 0,                                 \
-      .literal = NULL,                                \
   }
 #define LOOM_AMDGPU_ASM_VALUE_OPERAND(value_index)     \
   {                                                    \
       .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_OPERAND, \
       .index = value_index,                            \
-      .bit_width = 0,                                  \
-      .literal = NULL,                                 \
   }
 #define LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_I64(value_index)            \
   {                                                                 \
       .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_I64, \
       .index = value_index,                                         \
-      .bit_width = 0,                                               \
-      .literal = NULL,                                              \
-  }
-#define LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(value_index, bits)      \
-  {                                                                          \
-      .kind = LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_UNSIGNED_HEX, \
-      .index = value_index,                                                  \
-      .bit_width = bits,                                                     \
-      .literal = NULL,                                                       \
   }
 
 static iree_status_t loom_amdgpu_append_assembly_value(
     const loom_native_assembly_packet_context_t* context,
     const loom_amdgpu_assembly_value_spec_t* value) {
   switch (value->kind) {
-    case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_LITERAL:
-      if (value->literal == NULL) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "AMDGPU assembly literal value has no spelling");
-      }
-      return iree_string_builder_append_cstring(context->builder,
-                                                value->literal);
     case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_RESULT:
       return loom_amdgpu_append_result(context, value->index);
     case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_OPERAND:
       return loom_amdgpu_append_operand(context, value->index);
     case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_I64:
       return loom_amdgpu_append_packet_immediate_i64(context, value->index);
-    case LOOM_AMDGPU_ASSEMBLY_VALUE_KIND_PACKET_IMMEDIATE_UNSIGNED_HEX:
-      return loom_amdgpu_append_packet_immediate_unsigned_hex(
-          context, value->index, value->bit_width);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "AMDGPU assembly value kind %u is unsupported",
@@ -814,26 +768,7 @@ static iree_status_t loom_amdgpu_append_assembly_value(
 static iree_status_t loom_amdgpu_append_assembly_packet_form(
     const loom_native_assembly_packet_context_t* context,
     const loom_amdgpu_assembly_packet_form_t* form) {
-  switch (form->mnemonic_kind) {
-    case LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED: {
-      if (form->fixed_mnemonic == NULL) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "AMDGPU assembly fixed packet form has no mnemonic");
-      }
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-          context->builder, form->fixed_mnemonic));
-      break;
-    }
-    case LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_DESCRIPTOR: {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
-      break;
-    }
-    default:
-      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                              "AMDGPU assembly mnemonic kind %u is unsupported",
-                              (unsigned)form->mnemonic_kind);
-  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   bool in_list = false;
   if (form->value_count > IREE_ARRAYSIZE(form->values)) {
     return iree_make_status(
@@ -2406,199 +2341,6 @@ static iree_status_t loom_amdgpu_append_matrix_packet(
   return loom_amdgpu_append_canonical_asm_form_packet(context);
 }
 
-static const loom_amdgpu_assembly_packet_form_t kExecRestorePacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "s_mov_b64",
-    .value_count = 2,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_LITERAL("exec"),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kExecFullPacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "s_mov_b64",
-    .value_count = 2,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_LITERAL("exec"),
-            LOOM_AMDGPU_ASM_VALUE_LITERAL("-1"),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kFmaakPacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "v_fmaak_f32",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kFmamkPacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "v_fmamk_f32",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kSaluFmaakF32PacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "s_fmaak_f32",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kSaluFmamkF32PacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "s_fmamk_f32",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 32),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kFmaakF16PacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "v_fmaak_f16",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kFmamkF16PacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "v_fmamk_f16",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kMadakF16PacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "v_madak_f16",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
-        },
-};
-
-static const loom_amdgpu_assembly_packet_form_t kMadmkF16PacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_FIXED,
-    .fixed_mnemonic = "v_madmk_f16",
-    .value_count = 4,
-    .values =
-        {
-            LOOM_AMDGPU_ASM_VALUE_RESULT(0),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(0),
-            LOOM_AMDGPU_ASM_VALUE_IMMEDIATE_UNSIGNED_HEX(0, 16),
-            LOOM_AMDGPU_ASM_VALUE_OPERAND(1),
-        },
-};
-
-typedef struct loom_amdgpu_descriptor_ref_packet_rule_t {
-  // Target descriptor reference matched by this rule.
-  loom_amdgpu_descriptor_ref_t descriptor_ref;
-  // Native assembly form appended when |descriptor_ref| matches.
-  const loom_amdgpu_assembly_packet_form_t* form;
-} loom_amdgpu_descriptor_ref_packet_rule_t;
-
-static iree_status_t loom_amdgpu_try_append_descriptor_ref_packet(
-    const loom_native_assembly_packet_context_t* context, bool* out_matched) {
-  static const loom_amdgpu_descriptor_ref_packet_rule_t kRules[] = {
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC,
-          .form = &kExecRestorePacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_FULL,
-          .form = &kExecFullPacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F32,
-          .form = &kFmaakPacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32,
-          .form = &kFmamkPacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_FMAAK_F32,
-          .form = &kSaluFmaakF32PacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_FMAMK_F32,
-          .form = &kSaluFmamkF32PacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F16,
-          .form = &kFmaakF16PacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F16,
-          .form = &kFmamkF16PacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MADAK_F16,
-          .form = &kMadakF16PacketForm,
-      },
-      {
-          .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MADMK_F16,
-          .form = &kMadmkF16PacketForm,
-      },
-  };
-  *out_matched = false;
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
-  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kRules); ++i) {
-    const loom_amdgpu_descriptor_ref_packet_rule_t* rule = &kRules[i];
-    if (descriptor != loom_amdgpu_descriptor_ref_descriptor(
-                          descriptor_set, rule->descriptor_ref)) {
-      continue;
-    }
-    *out_matched = true;
-    return loom_amdgpu_append_assembly_packet_form(context, rule->form);
-  }
-  return iree_ok_status();
-}
-
 typedef struct loom_amdgpu_assembly_packet_shape_t {
   // Diagnostic name used when the packet does not match this shape.
   const char* diagnostic_name;
@@ -2722,7 +2464,6 @@ static iree_status_t loom_amdgpu_append_source_literal_asm_form_packet(
 }
 
 static const loom_amdgpu_assembly_packet_form_t kSource0ImmediatePacketForm = {
-    .mnemonic_kind = LOOM_AMDGPU_ASSEMBLY_MNEMONIC_KIND_DESCRIPTOR,
     .value_count = 3,
     .values =
         {
@@ -3097,7 +2838,6 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   static const loom_amdgpu_descriptor_packet_dispatch_rule_t kRules[] = {
-      {.try_append = loom_amdgpu_try_append_descriptor_ref_packet},
       {.try_append = loom_amdgpu_try_append_mnemonic_dispatch_packet},
       {.try_append = loom_amdgpu_try_append_canonical_asm_form_dispatch_packet},
       {.try_append = loom_amdgpu_try_append_effect_route_dispatch_packet},

@@ -804,8 +804,20 @@ def _native_operand(field_name: str) -> NativeAsmValue:
     return NativeAsmValue(NativeAsmValueKind.OPERAND, field_name=field_name)
 
 
+def _native_literal(spelling: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.LITERAL, literal=spelling)
+
+
 def _native_i64_immediate(field_name: str) -> NativeAsmValue:
     return NativeAsmValue(NativeAsmValueKind.IMMEDIATE_I64, field_name=field_name)
+
+
+def _native_unsigned_hex_immediate(field_name: str, bit_width: int) -> NativeAsmValue:
+    return NativeAsmValue(
+        NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX,
+        field_name=field_name,
+        bit_width=bit_width,
+    )
 
 
 def _global_vaddr_asm(
@@ -1337,7 +1349,15 @@ def _manual_scalar_descriptors(
                     spec.operand_predefined_value("OPR_SDST_EXEC", "EXEC_LO"),
                 ),
             ),
-            asm_forms=_asm(mnemonic="s_mov_b64_exec", operands=("src",)),
+            asm_forms=_asm(
+                mnemonic="s_mov_b64_exec",
+                native_assembly_mnemonic="s_mov_b64",
+                operands=("src",),
+                native_assembly_values=(
+                    _native_literal("exec"),
+                    _native_operand("src"),
+                ),
+            ),
             effects=(_CONVERGENT_EFFECT,),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
@@ -1359,7 +1379,14 @@ def _manual_scalar_descriptors(
                     spec.operand_predefined_value("OPR_SSRC", "-1"),
                 ),
             ),
-            asm_forms=_asm(mnemonic="s_mov_b64_exec_full"),
+            asm_forms=_asm(
+                mnemonic="s_mov_b64_exec_full",
+                native_assembly_mnemonic="s_mov_b64",
+                native_assembly_values=(
+                    _native_literal("exec"),
+                    _native_literal("-1"),
+                ),
+            ),
             effects=(_CONVERGENT_EFFECT,),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
@@ -2736,8 +2763,10 @@ __all__ = (
     "_memory_asm_immediate_names",
     "_mubuf_vaddr_operand",
     "_native_i64_immediate",
+    "_native_literal",
     "_native_operand",
     "_native_result",
+    "_native_unsigned_hex_immediate",
     "_named_offset_immediate",
     "_offset_immediate",
     "_predefined",
