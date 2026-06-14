@@ -178,6 +178,26 @@ TEST(AmdgpuEncodingTest, VMovB32UsesLiteralForLargeU32) {
   EXPECT_EQ(packet.bit_count, 64u);
 }
 
+TEST(AmdgpuEncodingTest, SMovB32UsesInlineSourceForSmallU32) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
+  loom_amdgpu_encoding_packet_t packet = {};
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_s_mov_b32_u32(table, /*sdst=*/1,
+                                                         /*imm32=*/2, &packet));
+  EXPECT_EQ(packet.word_count, 1u);
+  EXPECT_EQ(packet.bit_count, 32u);
+}
+
+TEST(AmdgpuEncodingTest, SMovB32UsesLiteralForLargeU32) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
+  loom_amdgpu_encoding_packet_t packet = {};
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_s_mov_b32_u32(
+      table, /*sdst=*/1, /*imm32=*/65536, &packet));
+  EXPECT_EQ(packet.word_count, 2u);
+  EXPECT_EQ(packet.bit_count, 64u);
+}
+
 TEST(AmdgpuEncodingTest, Vop2U32VgprUsesInlineSourceForSmallU32) {
   LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
       table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");

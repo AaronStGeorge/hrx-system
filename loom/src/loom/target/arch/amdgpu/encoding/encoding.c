@@ -488,6 +488,50 @@ iree_status_t loom_amdgpu_encoding_pack(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_encoding_pack_u32_source(
+    const loom_amdgpu_encoding_table_t* table, uint16_t inline_format,
+    uint16_t literal_format, uint16_t opcode, uint16_t destination_field_id,
+    uint64_t destination_value, uint16_t source_field_id, uint32_t imm32,
+    const loom_amdgpu_encoding_field_value_t* extra_field_values,
+    iree_host_size_t extra_field_value_count,
+    loom_amdgpu_encoding_packet_t* out_packet) {
+  enum {
+    LOOM_AMDGPU_ENCODING_U32_SOURCE_FIELD_CAPACITY = 4,
+  };
+  IREE_ASSERT(extra_field_value_count + 3 <=
+              LOOM_AMDGPU_ENCODING_U32_SOURCE_FIELD_CAPACITY);
+  loom_amdgpu_encoding_field_value_t
+      field_values[LOOM_AMDGPU_ENCODING_U32_SOURCE_FIELD_CAPACITY] = {
+          {
+              .field_id = destination_field_id,
+              .value = destination_value,
+          },
+          {
+              .field_id = source_field_id,
+              .value = 0,
+          },
+      };
+  iree_host_size_t field_value_count = 2;
+  for (iree_host_size_t i = 0; i < extra_field_value_count; ++i) {
+    field_values[field_value_count++] = extra_field_values[i];
+  }
+
+  uint16_t source = 0;
+  if (loom_amdgpu_encoding_inline_u32_source(table, imm32, &source)) {
+    field_values[1].value = source;
+    return loom_amdgpu_encoding_pack(table, inline_format, opcode, field_values,
+                                     field_value_count, out_packet);
+  }
+
+  field_values[1].value = table->source_literal;
+  field_values[field_value_count++] = (loom_amdgpu_encoding_field_value_t){
+      .field_id = LOOM_AMDGPU_ENCODING_FIELD_LITERAL,
+      .value = imm32,
+  };
+  return loom_amdgpu_encoding_pack(table, literal_format, opcode, field_values,
+                                   field_value_count, out_packet);
+}
+
 iree_status_t loom_amdgpu_encoding_pack_sopp_simm16(
     const loom_amdgpu_encoding_table_t* table, uint16_t opcode,
     uint16_t immediate, loom_amdgpu_encoding_packet_t* out_packet) {
@@ -538,39 +582,12 @@ iree_status_t loom_amdgpu_encoding_pack_s_mov_b32_u32(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU s_mov_b32 encoding requires an encoding table");
   }
-  uint16_t ssrc0 = 0;
-  if (loom_amdgpu_encoding_inline_u32_source(table, imm32, &ssrc0)) {
-    loom_amdgpu_encoding_field_value_t field_values[] = {
-        {
-            .field_id = LOOM_AMDGPU_ENCODING_FIELD_SDST,
-            .value = sdst,
-        },
-        {
-            .field_id = LOOM_AMDGPU_ENCODING_FIELD_SSRC0,
-            .value = ssrc0,
-        },
-    };
-    return loom_amdgpu_encoding_pack(table, LOOM_AMDGPU_ENCODING_FORMAT_SOP1,
-                                     table->s_mov_b32_opcode, field_values,
-                                     IREE_ARRAYSIZE(field_values), out_packet);
-  }
-  loom_amdgpu_encoding_field_value_t field_values[] = {
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SDST,
-          .value = sdst,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SSRC0,
-          .value = table->source_literal,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_LITERAL,
-          .value = imm32,
-      },
-  };
-  return loom_amdgpu_encoding_pack(
-      table, LOOM_AMDGPU_ENCODING_FORMAT_SOP1_LITERAL, table->s_mov_b32_opcode,
-      field_values, IREE_ARRAYSIZE(field_values), out_packet);
+  return loom_amdgpu_encoding_pack_u32_source(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_SOP1,
+      LOOM_AMDGPU_ENCODING_FORMAT_SOP1_LITERAL, table->s_mov_b32_opcode,
+      LOOM_AMDGPU_ENCODING_FIELD_SDST, sdst, LOOM_AMDGPU_ENCODING_FIELD_SSRC0,
+      imm32, /*extra_field_values=*/NULL, /*extra_field_value_count=*/0,
+      out_packet);
 }
 
 iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_vgpr(
@@ -604,39 +621,12 @@ iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_u32(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU v_mov_b32 encoding requires an encoding table");
   }
-  uint16_t src0 = 0;
-  if (loom_amdgpu_encoding_inline_u32_source(table, imm32, &src0)) {
-    loom_amdgpu_encoding_field_value_t field_values[] = {
-        {
-            .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
-            .value = vdst,
-        },
-        {
-            .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0,
-            .value = src0,
-        },
-    };
-    return loom_amdgpu_encoding_pack(table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1,
-                                     table->v_mov_b32_opcode, field_values,
-                                     IREE_ARRAYSIZE(field_values), out_packet);
-  }
-  loom_amdgpu_encoding_field_value_t field_values[] = {
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
-          .value = vdst,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0,
-          .value = table->source_literal,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_LITERAL,
-          .value = imm32,
-      },
-  };
-  return loom_amdgpu_encoding_pack(
-      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL, table->v_mov_b32_opcode,
-      field_values, IREE_ARRAYSIZE(field_values), out_packet);
+  return loom_amdgpu_encoding_pack_u32_source(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1,
+      LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL, table->v_mov_b32_opcode,
+      LOOM_AMDGPU_ENCODING_FIELD_VDST, vdst, LOOM_AMDGPU_ENCODING_FIELD_SRC0,
+      imm32, /*extra_field_values=*/NULL, /*extra_field_value_count=*/0,
+      out_packet);
 }
 
 iree_status_t loom_amdgpu_encoding_pack_vop2_u32_vgpr(
@@ -646,47 +636,17 @@ iree_status_t loom_amdgpu_encoding_pack_vop2_u32_vgpr(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU VOP2 encoding requires an encoding table");
   }
-  uint16_t src0 = 0;
-  if (loom_amdgpu_encoding_inline_u32_source(table, imm32, &src0)) {
-    loom_amdgpu_encoding_field_value_t field_values[] = {
-        {
-            .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
-            .value = vdst,
-        },
-        {
-            .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0,
-            .value = src0,
-        },
-        {
-            .field_id = LOOM_AMDGPU_ENCODING_FIELD_VSRC1,
-            .value = vsrc1,
-        },
-    };
-    return loom_amdgpu_encoding_pack(table, LOOM_AMDGPU_ENCODING_FORMAT_VOP2,
-                                     opcode, field_values,
-                                     IREE_ARRAYSIZE(field_values), out_packet);
-  }
   loom_amdgpu_encoding_field_value_t field_values[] = {
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
-          .value = vdst,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0,
-          .value = table->source_literal,
-      },
       {
           .field_id = LOOM_AMDGPU_ENCODING_FIELD_VSRC1,
           .value = vsrc1,
       },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_LITERAL,
-          .value = imm32,
-      },
   };
-  return loom_amdgpu_encoding_pack(
-      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP2_LITERAL, opcode, field_values,
-      IREE_ARRAYSIZE(field_values), out_packet);
+  return loom_amdgpu_encoding_pack_u32_source(
+      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP2,
+      LOOM_AMDGPU_ENCODING_FORMAT_VOP2_LITERAL, opcode,
+      LOOM_AMDGPU_ENCODING_FIELD_VDST, vdst, LOOM_AMDGPU_ENCODING_FIELD_SRC0,
+      imm32, field_values, IREE_ARRAYSIZE(field_values), out_packet);
 }
 
 static iree_status_t loom_amdgpu_encoding_verify_vopdxy_field(
