@@ -1,7 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/index_addressing.loom-test
 // RUN: emit source-low output=low
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -24,9 +23,22 @@ kernel.def target(@target) @index_madd_global_b32() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(4, 4, 1) @index_madd_global_b32() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %x = kernel.workitem_id.x
+  %y = kernel.workitem_id.y
+  %row_stride = const.i64 4
+  %19 = mul.i64 %y, %row_stride
+  %linear = add.i64 %19, %x
+  %loaded = load.indexed.i32 %input_view, %linear, 0, 4
+  store.indexed.i32 %loaded, %output_view, %linear, 0, 4
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -50,9 +62,22 @@ kernel.def target(@target) @index_madd_u24_global_b32() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_global_b32() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %x = kernel.workitem_id.x
+  %y = kernel.workitem_id.y
+  %row_stride = const.i64 9
+  %20 = mul.i64 %y, %row_stride
+  %linear = add.i64 %20, %x
+  %loaded = load.indexed.i32 %input_view, %linear, 0, 4
+  store.indexed.i32 %loaded, %output_view, %linear, 0, 4
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -76,9 +101,22 @@ kernel.def target(@target) @index_madd_u24_literal_lhs_global_b32() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_literal_lhs_global_b32() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %x = kernel.workitem_id.x
+  %y = kernel.workitem_id.y
+  %row_stride = const.i64 9
+  %20 = mul.i64 %row_stride, %y
+  %linear = add.i64 %20, %x
+  %loaded = load.indexed.i32 %input_view, %linear, 0, 4
+  store.indexed.i32 %loaded, %output_view, %linear, 0, 4
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -100,6 +138,20 @@ kernel.def target(@target) @index_madd_u24_literal_addend_global_b32() {
   %loaded = vector.load %input_view[%linear] : view<36xi32, #dense> -> vector<1xi32>
   vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<36xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_literal_addend_global_b32() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %x = kernel.workitem_id.x
+  %y = kernel.workitem_id.y
+  %column = const.i64 1
+  %20 = mul.i64 %y, %x
+  %linear = add.i64 %20, %column
+  %loaded = load.indexed.i32 %input_view, %linear, 0, 4
+  store.indexed.i32 %loaded, %output_view, %linear, 0, 4
+  return
 }
 
 // ====
@@ -176,7 +228,6 @@ kernel.def target(@target) @index_shli_previous_row_global_b128() {
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -196,6 +247,20 @@ kernel.def target(@target) @index_div_rem_power_of_two_global_b32() {
   %loaded = vector.load %input_view[%quotient] : view<4xi32, #dense> -> vector<1xi32>
   vector.store %loaded, %output_view[%remainder] : vector<1xi32>, view<8xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(32, 1, 1) @index_div_rem_power_of_two_global_b32() asm<llvmir.generic.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<llvmir.ptr>
+  %x = kernel.workitem_id.x
+  %20 = const.i64 3
+  %quotient = lshr.i64 %x, %20
+  %22 = const.i64 7
+  %remainder = and.i64 %x, %22
+  %loaded = load.indexed.i32 %input_view, %quotient, 0, 4
+  store.indexed.i32 %loaded, %output_view, %remainder, 0, 4
+  return
 }
 
 // ====
@@ -248,7 +313,6 @@ kernel.def target(@target) @index_div_rem_magic_add_global_b32() {
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -271,9 +335,21 @@ kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr() {
   kernel.return
 }
 
+// ----
+low.kernel.def target(@target) workgroup_size(1, 64, 1) @workitem_y_lds_uses_explicit_vaddr() asm<llvmir.generic.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %y = kernel.workitem_id.y
+  %bytes = const.i64 256
+  %scratch_view = alloca.workgroup.i8 %bytes, 16
+  %value = const.i32 7
+  store.indexed.i32 %value, %scratch_view, %y, 0, 4
+  %loaded = load.indexed.i32 %scratch_view, %y, 0, 4
+  store.indexed.i32 %loaded, %output_view, %y, 0, 4
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "amdgcn-amd-amdhsa"
 }
@@ -294,4 +370,17 @@ kernel.def target(@target) @dispatch_id_xy_global_b32() {
   %one = vector.constant 1 : vector<1xi32>
   vector.store %one, %output_view[%linear] : vector<1xi32>, view<512xi32, #dense>
   kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b32() asm<llvmir.generic.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<llvmir.ptr>
+  %dispatch_x = kernel.workitem_dispatch_id.x
+  %dispatch_y = kernel.workitem_dispatch_id.y
+  %row_stride = const.i64 32
+  %17 = mul.i64 %dispatch_y, %row_stride
+  %linear = add.i64 %17, %dispatch_x
+  %one = const.i32 1
+  store.indexed.i32 %one, %output_view, %linear, 0, 4
+  return
 }

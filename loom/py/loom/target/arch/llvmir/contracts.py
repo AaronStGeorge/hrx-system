@@ -774,6 +774,35 @@ def _scalar_bitwise_rules() -> tuple[DescriptorRule, ...]:
     return tuple(rules)
 
 
+def _index_madd_rule() -> DescriptorRule:
+    multiply = _descriptor("llvmir.mul.i64")
+    add = _descriptor("llvmir.add.i64")
+    return DescriptorRule(
+        source_op=index.index_madd,
+        descriptor=add,
+        guards=_typed_guards(("a", "b", "c", "result"), _INDEX),
+        emit=(
+            _op_emit(
+                descriptor=multiply,
+                operands={
+                    "lhs": ValueRef.operand("a"),
+                    "rhs": ValueRef.operand("b"),
+                },
+                results={"dst": ValueRef.temporary("product")},
+                result_types={"dst": _INDEX},
+            ),
+            _op_emit(
+                descriptor=add,
+                operands={
+                    "lhs": ValueRef.temporary("product"),
+                    "rhs": ValueRef.operand("c"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _index_bitwise_rules() -> tuple[DescriptorRule, ...]:
     return tuple(
         _binary_rule(source_op, _INDEX, f"llvmir.{stem}.i64")
@@ -1685,6 +1714,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _binary_rule(index.index_add, _INDEX, "llvmir.add.i64"),
         _binary_rule(index.index_sub, _INDEX, "llvmir.sub.i64"),
         _binary_rule(index.index_mul, _INDEX, "llvmir.mul.i64"),
+        _index_madd_rule(),
         *_index_minmax_rules(),
         *_index_bitwise_rules(),
         _binary_rule(index.index_add, _OFFSET, "llvmir.add.i64"),
