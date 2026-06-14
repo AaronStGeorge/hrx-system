@@ -68,9 +68,13 @@ loom_cc_library(
     srcs = ["cse.c"],
     hdrs = ["cse.h"],
     deps = [
+        "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/codegen/low/pipeline:pass_environment",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/pass:types",
+        "//loom/src/loom/target:selection",
         "//loom/src/loom/util:dominance",
         "//runtime/src/iree/base",
     ],

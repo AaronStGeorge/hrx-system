@@ -9,7 +9,6 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @duplicate_kernarg_live_
 }
 
 // ====
-// RUN: pass amdgpu-materialize-hal-kernel-abi
 
 amdgpu.target<gfx1100> @target
 // ERROR@+1: AMDGPU/025 {argument_index="0", expected_reg_class_id="0", expected_unit_count="2"}
@@ -18,7 +17,6 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @bad_direct_arg(%value: 
 }
 
 // ====
-// RUN: pass amdgpu-materialize-hal-kernel-abi
 
 amdgpu.target<gfx1100> @target
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @unsupported_swizzle() {

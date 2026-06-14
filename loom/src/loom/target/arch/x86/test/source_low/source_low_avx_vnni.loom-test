@@ -8,10 +8,10 @@ func.def target(@target) @dot4i_u8s8_256(%lhs: vector<32xi8>, %rhs: vector<32xi8
 }
 
 // ----
-low.func.def target(@target) abi(object_function) @dot4i_u8s8_256(%lhs: reg<x86.ymm>, %rhs: reg<x86.ymm>, %acc: reg<x86.ymm>) -> (reg<x86.ymm>) {
-  %9 = low.copy %acc : reg<x86.ymm> -> reg<x86.ymm>
-  %dot = low.op<x86.avx_vnni.vpdpbusd.ymm>(%9, %lhs, %rhs) : (reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>) -> %9 as reg<x86.ymm>
-  low.return %dot : reg<x86.ymm>
+low.func.def target(@target) abi(object_function) @dot4i_u8s8_256(%lhs: reg<x86.ymm>, %rhs: reg<x86.ymm>, %acc: reg<x86.ymm>) -> (reg<x86.ymm>) asm<x86.avx_vnni.core> {
+  %9 = copy %acc : reg<x86.ymm> -> reg<x86.ymm>
+  %dot = vpdpbusd.ymm %9, %lhs, %rhs
+  return %dot
 }
 
 // ====

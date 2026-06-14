@@ -11,6 +11,8 @@
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/diagnostics/packet_diagnostics.h"
 #include "loom/target/arch/amdgpu/legalization.h"
+#include "loom/target/arch/amdgpu/low_asm_diagnostics.h"
+#include "loom/target/arch/amdgpu/low_verify.h"
 #include "loom/target/arch/amdgpu/lower/lower.h"
 #include "loom/target/arch/amdgpu/math_policy.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
@@ -32,6 +34,15 @@ static const loom_target_legalizer_provider_t* kLoomAmdgpuLegalizerProviders[] =
 static const loom_target_low_packet_diagnostic_provider_t*
     kLoomAmdgpuLowPacketDiagnosticProviders[] = {
         &loom_amdgpu_low_packet_diagnostic_provider_storage,
+};
+
+static const loom_target_low_asm_diagnostic_provider_t*
+    kLoomAmdgpuLowAsmDiagnosticProviders[] = {
+        &loom_amdgpu_low_asm_diagnostic_provider,
+};
+
+static const loom_low_verify_provider_t* kLoomAmdgpuLowVerifyProviders[] = {
+    &loom_amdgpu_low_verify_provider,
 };
 
 static bool loom_amdgpu_provider_matches_selection_bundle(
@@ -207,18 +218,37 @@ static iree_status_t loom_amdgpu_provider_build_string_attr(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_provider_build_run_pass(
+    loom_builder_t* builder, iree_string_view_t key) {
+  loom_op_t* run_op = NULL;
+  return loom_pass_ir_build_run(builder, key, loom_named_attr_slice_empty(),
+                                &run_op);
+}
+
+static iree_status_t loom_amdgpu_provider_build_hal_buffer_descriptors_pass(
+    loom_builder_t* builder, void* user_data) {
+  (void)user_data;
+  return loom_amdgpu_provider_build_run_pass(
+      builder, IREE_SV("amdgpu-materialize-hal-buffer-descriptors"));
+}
+
 static iree_status_t loom_amdgpu_provider_build_hal_kernel_abi_pass(
     loom_builder_t* builder, void* user_data) {
-  loom_op_t* run_op = NULL;
-  return loom_pass_ir_build_run(builder,
-                                IREE_SV("amdgpu-materialize-hal-kernel-abi"),
-                                loom_named_attr_slice_empty(), &run_op);
+  (void)user_data;
+  return loom_amdgpu_provider_build_run_pass(
+      builder, IREE_SV("amdgpu-materialize-hal-kernel-abi"));
 }
 
 static iree_status_t loom_amdgpu_provider_contribute_pipeline(
     const loom_target_pipeline_contribution_t* contribution) {
-  if (contribution->phase !=
-      LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION) {
+  loom_pass_ir_body_build_fn_t build_body = NULL;
+  if (contribution->phase ==
+      LOOM_TARGET_PIPELINE_PHASE_SOURCE_LOW_ARTIFACT_PREPARATION) {
+    build_body = loom_amdgpu_provider_build_hal_buffer_descriptors_pass;
+  } else if (contribution->phase ==
+             LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION) {
+    build_body = loom_amdgpu_provider_build_hal_kernel_abi_pass;
+  } else {
     return iree_ok_status();
   }
 
@@ -235,8 +265,8 @@ static iree_status_t loom_amdgpu_provider_contribute_pipeline(
   loom_op_t* where_op = NULL;
   return loom_pass_ir_build_where(
       contribution->builder, IREE_SV("target"),
-      loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)),
-      loom_amdgpu_provider_build_hal_kernel_abi_pass, NULL, &where_op);
+      loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), build_body,
+      NULL, &where_op);
 }
 
 const loom_target_provider_t loom_amdgpu_target_provider = {
@@ -261,6 +291,16 @@ const loom_target_provider_t loom_amdgpu_target_provider = {
         {
             .count = IREE_ARRAYSIZE(kLoomAmdgpuLowPacketDiagnosticProviders),
             .values = kLoomAmdgpuLowPacketDiagnosticProviders,
+        },
+    .low_asm_diagnostic_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kLoomAmdgpuLowAsmDiagnosticProviders),
+            .values = kLoomAmdgpuLowAsmDiagnosticProviders,
+        },
+    .low_verify_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kLoomAmdgpuLowVerifyProviders),
+            .values = kLoomAmdgpuLowVerifyProviders,
         },
     .pass_registry = &loom_amdgpu_pass_registry,
     .contribute_pipeline = loom_amdgpu_provider_contribute_pipeline,

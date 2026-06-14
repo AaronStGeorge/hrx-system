@@ -180,6 +180,20 @@ static iree_status_t iree_benchmark_loom_selected_benchmark_initialize(
         "benchmark `%.*s` does not reference a planned check.case",
         (int)benchmark_plan->name.size, benchmark_plan->name.data);
   }
+  if (benchmark_plan->sample_count == 0) {
+    const loom_testbench_case_plan_t* case_plan =
+        &module_plan->cases[benchmark_plan->case_index];
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "selected benchmark `%.*s` for check.case `%.*s` has zero executable "
+        "samples; selected_benchmark='%.*s', selected_case='%.*s', "
+        "sample=%d",
+        (int)benchmark_plan->name.size, benchmark_plan->name.data,
+        (int)case_plan->name.size, case_plan->name.data,
+        (int)options->selected_benchmark.size, options->selected_benchmark.data,
+        (int)options->selected_case.size, options->selected_case.data,
+        options->sample_ordinal);
+  }
   memset(out_selection, 0, sizeof(*out_selection));
   snprintf(out_selection->candidate_id_storage,
            sizeof(out_selection->candidate_id_storage), "c%" PRIhsz,

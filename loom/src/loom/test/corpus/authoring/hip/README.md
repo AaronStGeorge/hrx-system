@@ -33,12 +33,13 @@ python dev.py bazel run //loom/src/loom/tools/loom-opt:loom-opt -- \
 | Tags / HIP terms | Loom feature | Recipe |
 | --- | --- | --- |
 | `#pragma unroll`, `pragma-unroll`, `loop-expansion`, `for`, `q8`, `WG64` | `scf.for ... unroll`, `unroll-scf-for`, range-fact trip count inference | `q8_block_unroll.loom` |
-| `blockIdx`, `threadIdx`, `lane`, `warp`, `wavefront` | `kernel.workgroup.id`, `kernel.workitem.id`, `kernel.subgroup.*`, `index.assume` | `q8_block_unroll.loom` |
+| `blockIdx`, `threadIdx`, `lane`, `warp`, `wavefront` | `kernel.launch.config`, `kernel.workgroup.id`, `kernel.workitem.id`, `kernel.subgroup.*` | `q8_block_unroll.loom` |
 | `threadIdx`, `lane_id`, `warp lane`, `wavefront lane`, `SGPR`, `VGPR`, `EXEC`, `scalarized`, `lane-varying`, `uniform`, `dot operand` | value distribution facts, `test.fact_uniform`, `test.fact_lane_varying`, `test.fact_lane_predicate` | `lane_distribution.loom` |
-| `__global__`, `restrict`, pointer casts, address arithmetic | `buffer.assume.memory_space`, `buffer.assume.noalias`, `buffer.view` | `q8_block_unroll.loom` |
+| `__global__`, `restrict`, pointer casts, address arithmetic | kernel ABI `buffer`, `buffer.assume.noalias`, `buffer.view`, `index`/`offset` math | `q8_block_unroll.loom` |
 | `global_load_b32`, packed bytes, `q8`, bitfield, unpack | `vector.load`, `vector.bitunpacks<8>`, `scalar.extf`, `vector.dotf` | `q8_block_unroll.loom` |
 | `global_load_b32`, `global_load_b128`, `uint4`, adjacent scalar loads, coalescing | `vector.load -> vector<1xi32>` versus `vector.load -> vector<4xi32>` | `q8_load_width.loom` |
 | `q8`, `q4`, `u8`, `s8`, `u4`, `s4`, `v_dot4_i32_iu8`, `dp4a` | `vector.bitunpacku`, `vector.bitunpacks`, `vector.dot4i<u8s8>` | `q8_q4_signedness.loom` |
+| `q2`, `q3`, `q4`, `q5`, `q6`, split high bits, lookup tables, offset-binary, packed-dot repack | `vector.bitunpacku`, `vector.bitfield.extractu`, `vector.bitfield.insert`, `vector.table.lookup`, `vector.dot8i4` | `packed_field_contracts.loom` |
 | dynamic lower-bound unroll, missing facts | structured diagnostic, exact/range facts | `q8_hip_shaped_unroll_unresolved.loom` |
 | `#if __gfx*__`, template, macro, arch-specialization, fallback | `func.apply`, `func.template`, `target(@...)`, `priority(...)` | `target_provider_selection.loom` |
 
@@ -149,10 +150,10 @@ the exact positive step. In this Q8 WG64 pattern, `%lane` is in `[0,63]`,
 `%block_slot = %lane / 8` is in `[0,7]`, `%blocks_per_row` is `16`, and
 `%block_step` is `8`, so every lane executes two local blocks.
 
-`index.assume` is the source-level contract for facts that are obvious from the
-kernel mapping but not present in the IR. The body-level
-`range(%block_idx_raw, 0, 15)` records the valid packed-block domain for later
-address and load reasoning.
+`kernel.launch.config` is the source-level contract for grid and workgroup
+range facts. `index.assume` records facts that are not already present in the
+IR; the body-level `range(%block_idx_raw, 0, 15)` records the valid packed-block
+domain for later address and load reasoning.
 
 Proof command:
 
@@ -224,9 +225,10 @@ Loom spelling:
 The scalar path and vector path are both correct source shapes. They are not
 the same storage contract. Use scalar loads when each word is independent; use
 the vector load when the source pattern expects one wide load. Alignment,
-address-range, and alias facts still live next to the view root:
-`buffer.assume.memory_space<global>`, `buffer.assume.noalias`, `buffer.view`,
-and `index.assume ... [mul(...)]` for dynamic aligned offsets.
+address-range, and alias facts still live next to the view root. Kernel ABI
+buffers already carry global memory-space facts; spell `buffer.assume.noalias`,
+`buffer.view`, and `index.assume ... [mul(...)]` for dynamic aligned offsets
+when those facts are part of the source contract.
 
 Proof command:
 
@@ -343,6 +345,70 @@ the lower bound, upper bound, and step; rewrite through an explicit local
 ordinal when the dynamic loop really cannot prove a range-independent trip
 count; or leave the loop structured.
 
+## Packed Field Contracts
+
+Tags: `q2`, `q3`, `q4`, `q5`, `q6`, `packed bits`, `split high bits`,
+`lookup table`, `offset-binary`, `dot8i4`, `i4 dot`.
+
+HIP habit:
+
+```c++
+// The exact helper varies by format, but the shape is usually:
+//   load packed bytes or words
+//   extract low fields
+//   merge side high-bit streams
+//   apply bias, table decode, or repack for a dot instruction
+```
+
+Loom spelling:
+
+```loom
+%codes = vector.bitunpacku<2> %packed : vector<1xi8> -> vector<4xi32>
+%field = vector.bitfield.extractu %word {offset = 3, width = 3} : vector<1xi32> -> vector<1xi32>
+%merged = vector.bitfield.insert %high4 into %low_codes {offset = 4, width = 1} : vector<4xi8>, vector<4xi8>
+%decoded = vector.table.lookup %grid[%codes] : vector<16xi8>, vector<4xi8> -> vector<4xi8>
+%dot = vector.dot8i4<s4u4> %signed_rows, %rhs, %acc : vector<2xi32>
+```
+
+The contract is the field interpretation, not the nickname of a model format.
+Regular q2/q4 fields can use `vector.bitunpacku` when the packed payload
+divides cleanly into lanes. Awkward widths such as q3 should keep explicit
+offsets with `vector.bitfield.extractu` so the source states the field order
+directly. Split formats such as q5/q6 should keep low fields and side high-bit
+streams as separate SSA values until `vector.bitfield.insert` assembles the
+logical code.
+
+Offset-binary and table formats are different contracts. Offset-binary uses an
+explicit bias or equivalent packed-bit repack, while table formats use
+`vector.table.lookup` with the grid as ordinary SSA data. Choosing
+`vector.dot8i4` is also explicit: it says the frontend/importer has already
+regrouped the lanes into the packed integer-dot semantics a target can map to a
+native instruction.
+
+Proof command:
+
+```bash
+iree-benchmark-loom packed_field_contracts.loom --dry-run
+loom-opt packed_field_contracts.loom --output=/tmp/packed-field-contracts.loom
+```
+
+Useful query:
+
+```bash
+rg 'bitunpacku<2>|offset = 3, width = 3|bitfield.insert|table.lookup|dot8i4' \
+  /tmp/packed-field-contracts.loom
+```
+
+Expected signal:
+
+```loom
+vector.bitunpacku<2>
+vector.bitfield.extractu %packed {offset = 3, width = 3}
+vector.bitfield.insert %high4 into %low_codes {offset = 4, width = 1}
+vector.table.lookup %grid[%codes]
+vector.dot8i4<s4u4>
+```
+
 ## Target Provider Selection
 
 Tags: `HIP template`, `CUDA template`, `macro`, `#if __gfx1100__`,
@@ -419,15 +485,18 @@ Tags: `blockIdx`, `threadIdx`, `workgroup`, `thread`, `lane`, `warp`,
 Loom names the launch grid and the executing invocation explicitly:
 `kernel.launch.config` declares workgroup count and workgroup size,
 `kernel.workgroup.id<x/y/z>` reads block IDs, `kernel.workitem.id<x/y/z>` reads
-thread IDs, and `kernel.subgroup.*` reads wave/subgroup IDs. Add `index.assume`
-range facts when later passes need bounded values.
+thread IDs, and `kernel.subgroup.*` reads wave/subgroup IDs. Grid and workgroup
+range facts come from the launch config. `index.assume` is for bounds or
+relations that the launch shape cannot express directly.
 
 Tags: `__global__`, `restrict`, pointer cast, typed pointer, `reinterpret_cast`.
 
-Kernel ABI buffers start as `buffer`. State memory space and alias facts with
-`buffer.assume.memory_space<global>` and `buffer.assume.noalias`, then form
-typed views with `buffer.view`. A typed C++ pointer arithmetic expression maps
-to index/offset math plus a typed `view<...>`.
+Kernel ABI buffers start as `buffer` and already carry global memory-space
+facts. State alias facts with `buffer.assume.noalias` when the source contract
+has `restrict`, then form typed views with `buffer.view`. Logical element
+coordinates stay in `index`; byte offsets and byte strides use `offset`.
+`index.scale` is the explicit boundary from an element coordinate and byte
+stride to the byte offset expected by `buffer.view`.
 
 Tags: `global_load_b128`, vectorized load, coalescing, packed load.
 

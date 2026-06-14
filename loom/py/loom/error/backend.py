@@ -236,18 +236,25 @@ ERR_BACKEND_015 = ErrorDef(
         "'@{function_name}' scheduler chose '{chosen_packet}' over "
         "'{rejected_packet}' at block '{block_name}' ordinal "
         "{scheduled_ordinal}: {candidate_count} ready candidate(s), chosen "
-        "dep-latency/latency/projected/killed/produced "
+        "dep-latency/latency/pair-affinity/projected/killed/produced "
         "{chosen_dependency_latency_cycles}/{chosen_latency_cycles}/"
-        "{chosen_projected_live_units}/"
+        "{chosen_pair_affinity_score}/{chosen_projected_live_units}/"
         "{chosen_killed_live_units}/{chosen_produced_live_units}, chosen "
+        "data/resource/hazard/effective stall "
+        "{chosen_data_ready_stall_cycles}/{chosen_resource_stall_cycles}/"
+        "{chosen_hazard_stall_cycles}/{chosen_effective_stall_cycles}, chosen "
         "cliff class/units/penalty/next "
         "{chosen_pressure_cliff_reg_class_id}/{chosen_pressure_cliff_units}/"
         "{chosen_pressure_cliff_penalty}/"
         "{chosen_units_until_pressure_cliff}, rejected "
-        "dep-latency/latency/projected/killed/produced "
+        "dep-latency/latency/pair-affinity/projected/killed/produced "
         "{rejected_dependency_latency_cycles}/{rejected_latency_cycles}/"
-        "{rejected_projected_live_units}/"
+        "{rejected_pair_affinity_score}/{rejected_projected_live_units}/"
         "{rejected_killed_live_units}/{rejected_produced_live_units}, rejected "
+        "data/resource/hazard/effective stall "
+        "{rejected_data_ready_stall_cycles}/{rejected_resource_stall_cycles}/"
+        "{rejected_hazard_stall_cycles}/{rejected_effective_stall_cycles}, "
+        "rejected "
         "cliff class/units/penalty/next "
         "{rejected_pressure_cliff_reg_class_id}/"
         "{rejected_pressure_cliff_units}/{rejected_pressure_cliff_penalty}/"
@@ -265,18 +272,28 @@ ERR_BACKEND_015 = ErrorDef(
         ErrorParam("rejected_packet", ParamKind.STRING),
         ErrorParam("chosen_dependency_latency_cycles", ParamKind.U32),
         ErrorParam("chosen_latency_cycles", ParamKind.U32),
+        ErrorParam("chosen_pair_affinity_score", ParamKind.U32),
         ErrorParam("chosen_projected_live_units", ParamKind.U64),
         ErrorParam("chosen_killed_live_units", ParamKind.U64),
         ErrorParam("chosen_produced_live_units", ParamKind.U64),
+        ErrorParam("chosen_data_ready_stall_cycles", ParamKind.U32),
+        ErrorParam("chosen_resource_stall_cycles", ParamKind.U32),
+        ErrorParam("chosen_hazard_stall_cycles", ParamKind.U32),
+        ErrorParam("chosen_effective_stall_cycles", ParamKind.U32),
         ErrorParam("chosen_pressure_cliff_reg_class_id", ParamKind.U32),
         ErrorParam("chosen_pressure_cliff_units", ParamKind.U32),
         ErrorParam("chosen_pressure_cliff_penalty", ParamKind.U32),
         ErrorParam("chosen_units_until_pressure_cliff", ParamKind.U32),
         ErrorParam("rejected_dependency_latency_cycles", ParamKind.U32),
         ErrorParam("rejected_latency_cycles", ParamKind.U32),
+        ErrorParam("rejected_pair_affinity_score", ParamKind.U32),
         ErrorParam("rejected_projected_live_units", ParamKind.U64),
         ErrorParam("rejected_killed_live_units", ParamKind.U64),
         ErrorParam("rejected_produced_live_units", ParamKind.U64),
+        ErrorParam("rejected_data_ready_stall_cycles", ParamKind.U32),
+        ErrorParam("rejected_resource_stall_cycles", ParamKind.U32),
+        ErrorParam("rejected_hazard_stall_cycles", ParamKind.U32),
+        ErrorParam("rejected_effective_stall_cycles", ParamKind.U32),
         ErrorParam("rejected_pressure_cliff_reg_class_id", ParamKind.U32),
         ErrorParam("rejected_pressure_cliff_units", ParamKind.U32),
         ErrorParam("rejected_pressure_cliff_penalty", ParamKind.U32),
@@ -981,6 +998,39 @@ ERR_BACKEND_041 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_042: Low operand-form selection decision was recorded.
+ERR_BACKEND_042 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=42,
+    severity=Severity.REMARK,
+    summary="Low operand-form selection decision recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} operand form '{replacement_descriptor_key}' for "
+        "'@{function_name}' op '{op_name}' from descriptor "
+        "'{source_descriptor_key}': reason '{reason}', source operand "
+        "'{source_operand_name}', immediate '{immediate_name}' value "
+        "{immediate_value}, destructive tied operand '{tied_operand_name}' "
+        "value '{tied_value_name}'"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("source_descriptor_key", ParamKind.STRING),
+        ErrorParam("replacement_descriptor_key", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("source_operand_name", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+        ErrorParam("immediate_value", ParamKind.I64),
+        ErrorParam("tied_operand_name", ParamKind.STRING),
+        ErrorParam("tied_value_name", ParamKind.STRING),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -1017,4 +1067,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_039,
     ERR_BACKEND_040,
     ERR_BACKEND_041,
+    ERR_BACKEND_042,
 )

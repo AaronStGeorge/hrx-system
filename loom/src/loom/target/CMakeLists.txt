@@ -213,6 +213,7 @@ loom_cc_library(
     ::registers
     iree::base
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
     loom::codegen::low::frame
     loom::codegen::low::lower
     loom::ir
@@ -354,6 +355,18 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    low_asm_diagnostics
+  HDRS
+    "low_asm_diagnostics.h"
+  DEPS
+    iree::base
+    loom::codegen::low::descriptors
+    loom::format::text::low_asm
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -363,6 +376,7 @@ loom_cc_library(
     ::artifact_manifest
     ::compile_report
     ::legalization
+    ::low_asm_diagnostics
     ::low_descriptor_registry
     ::low_legality
     ::low_packet_diagnostics

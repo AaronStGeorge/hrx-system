@@ -862,6 +862,16 @@ static iree_status_t loom_check_emit_symbol_kind_mismatch(
   return iree_diagnostic_emit(emitter, &emission);
 }
 
+static bool loom_check_diagnostic_collector_has_error(
+    const loom_check_diagnostic_collector_t* collector) {
+  for (iree_host_size_t i = 0; i < collector->count; ++i) {
+    if (collector->diagnostics[i].severity == LOOM_DIAGNOSTIC_ERROR) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static iree_status_t loom_check_emit_find_func_like(
     const loom_module_t* module, iree_string_view_t symbol_name,
     const loom_check_case_t* test_case, iree_string_view_t filename,
@@ -1260,6 +1270,20 @@ static iree_status_t loom_check_emit_write_low_packet_json(
                                      &result->actual_output);
 }
 
+static void loom_check_emit_initialize_source_low_print_options(
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    iree_string_view_t descriptor_set_key,
+    loom_text_low_asm_environment_t* low_asm_environment,
+    loom_text_print_options_t* print_options) {
+  loom_low_descriptor_text_asm_environment_initialize(descriptor_registry,
+                                                      low_asm_environment);
+  *print_options = (loom_text_print_options_t){
+      .flags = LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_REQUIRE_LOW_ASM,
+      .low_asm_environment = *low_asm_environment,
+      .low_asm_descriptor_set_key = descriptor_set_key,
+  };
+}
+
 static iree_status_t loom_check_emit_write_source_low_artifacts(
     const loom_module_t* module,
     const loom_low_descriptor_registry_t* descriptor_registry,
@@ -1270,13 +1294,10 @@ static iree_status_t loom_check_emit_write_source_low_artifacts(
         "source-low low output requires a selected descriptor-set key");
   }
   loom_text_low_asm_environment_t low_asm_environment = {0};
-  loom_low_descriptor_text_asm_environment_initialize(descriptor_registry,
-                                                      &low_asm_environment);
-  const loom_text_print_options_t print_options = {
-      .flags = LOOM_TEXT_PRINT_DEFAULT,
-      .low_asm_environment = low_asm_environment,
-      .low_asm_descriptor_set_key = descriptor_set_key,
-  };
+  loom_text_print_options_t print_options = {0};
+  loom_check_emit_initialize_source_low_print_options(
+      descriptor_registry, descriptor_set_key, &low_asm_environment,
+      &print_options);
   bool has_artifact = false;
   const loom_block_t* block = loom_region_const_entry_block(module->body);
   const loom_op_t* op = NULL;
@@ -1340,11 +1361,8 @@ static iree_status_t loom_check_emit_select_single_low_descriptor_set_key(
   return iree_ok_status();
 }
 
-static iree_string_view_t loom_check_emit_source_low_pipeline(
+static iree_string_view_t loom_check_emit_diagnostic_source_low_pipeline(
     const loom_check_emit_request_t* request) {
-  if (!request->has_source_low_diagnostics_option) {
-    return IREE_SV("default");
-  }
   const bool structured_control_flow =
       request->source_low_control_flow_lowering ==
       LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW;
@@ -1375,6 +1393,7 @@ void loom_check_prepare_source_low_options_initialize(
   IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_check_prepare_source_low_options_t){
       .pipeline = IREE_SVL("default"),
+      .default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW,
       .control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG,
   };
 }
@@ -1415,9 +1434,12 @@ iree_status_t loom_check_prepare_source_low_module(
   loom_compile_pipeline_options_t compile_options = {0};
   loom_compile_pipeline_options_initialize(&compile_options);
   compile_options.pipeline = options->pipeline;
-  compile_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  compile_options.default_pipeline = options->default_pipeline;
   compile_options.target_pipeline_options.control_flow_lowering =
       options->control_flow_lowering;
+  compile_options.target_pipeline_options
+      .source_to_low_legality_diagnostic_flags =
+      options->source_low_diagnostic_flags;
   compile_options.target_environment = environment->target_environment;
   compile_options.low_descriptor_registry = low_registry;
   compile_options.diagnostic_sink =
@@ -1429,7 +1451,8 @@ iree_status_t loom_check_prepare_source_low_module(
   loom_pass_run_result_t run_result = {0};
   IREE_RETURN_IF_ERROR(loom_compile_run_pipeline(module, &compile_options,
                                                  block_pool, &run_result));
-  if (run_result.error_count != 0 || diagnostic_collector->count != 0) {
+  if (run_result.error_count != 0 ||
+      loom_check_diagnostic_collector_has_error(diagnostic_collector)) {
     return iree_ok_status();
   }
 
@@ -1521,13 +1544,28 @@ static iree_status_t loom_check_emit_write_source_low_text(
 
   loom_check_prepare_source_low_options_t prepare_options = {0};
   loom_check_prepare_source_low_options_initialize(&prepare_options);
-  prepare_options.pipeline = loom_check_emit_source_low_pipeline(request);
+  if (request->has_source_low_diagnostics_option &&
+      request->source_low_output != LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
+    prepare_options.pipeline =
+        loom_check_emit_diagnostic_source_low_pipeline(request);
+    prepare_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  } else {
+    prepare_options.pipeline = IREE_SV("default");
+    prepare_options.default_pipeline =
+        request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW
+            ? (request->has_source_low_diagnostics_option
+                   ? LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_DIAGNOSTIC_ARTIFACTS
+                   : LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW_ARTIFACTS)
+            : LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  }
   prepare_options.control_flow_lowering =
       request->source_low_control_flow_lowering;
+  prepare_options.source_low_diagnostic_flags =
+      request->source_low_diagnostic_flags;
   IREE_RETURN_IF_ERROR(loom_check_prepare_source_low_module(
       module, &prepare_options, low_registry, environment, source_resolver,
       diagnostic_collector, block_pool));
-  if (diagnostic_collector->count != 0) {
+  if (loom_check_diagnostic_collector_has_error(diagnostic_collector)) {
     return iree_ok_status();
   }
 
@@ -1546,7 +1584,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
       module, &low_registry->registry, loom_target_entry_emitter(&pass_emitter),
       &selected_descriptor_set_key, &has_low_artifacts);
   IREE_RETURN_IF_ERROR(status);
-  if (diagnostic_collector->count != 0) {
+  if (loom_check_diagnostic_collector_has_error(diagnostic_collector)) {
     return iree_ok_status();
   }
   if (!has_low_artifacts) {
@@ -1569,8 +1607,13 @@ static iree_status_t loom_check_emit_write_source_low_text(
     if (iree_status_is_ok(status)) result->has_actual_output = true;
     return status;
   }
-  status = loom_text_print_module_to_builder(module, &result->actual_output,
-                                             LOOM_TEXT_PRINT_DEFAULT);
+  loom_text_low_asm_environment_t low_asm_environment = {0};
+  loom_text_print_options_t print_options = {0};
+  loom_check_emit_initialize_source_low_print_options(
+      &low_registry->registry, selected_descriptor_set_key,
+      &low_asm_environment, &print_options);
+  status = loom_text_print_module_to_builder_with_options(
+      module, &result->actual_output, &print_options);
   if (iree_status_is_ok(status)) result->has_actual_output = true;
   return status;
 }
@@ -1700,8 +1743,10 @@ iree_status_t loom_check_execute_emit(
                           .user_data = &diagnostic_collector},
       .max_errors = 20,
   };
-  loom_low_descriptor_text_asm_environment_initialize(
-      &low_registry.registry, &parse_options.low_asm_environment);
+  loom_low_descriptor_text_asm_environment_storage_t low_asm_storage = {0};
+  loom_low_descriptor_text_asm_environment_initialize_with_diagnostics(
+      &low_registry.registry, environment->low_asm_diagnostic_provider_list,
+      &low_asm_storage, &parse_options.low_asm_environment);
   iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
   if (iree_status_is_ok(status)) {
     status = loom_text_parse(stripped_view, filename, context, block_pool,

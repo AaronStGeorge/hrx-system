@@ -164,6 +164,7 @@ iree_status_t loom_index_assume_facts(loom_fact_context_t* context,
 LOOM_INDEX_BINARY_FACTS(loom_index_add_facts, loom_value_facts_addi)
 LOOM_INDEX_BINARY_FACTS(loom_index_sub_facts, loom_value_facts_subi)
 LOOM_INDEX_BINARY_FACTS(loom_index_mul_facts, loom_value_facts_muli)
+LOOM_INDEX_BINARY_FACTS(loom_index_scale_facts, loom_value_facts_muli)
 LOOM_INDEX_BINARY_FACTS(loom_index_div_facts, loom_value_facts_divui)
 
 iree_status_t loom_index_rem_facts(loom_fact_context_t* context,
@@ -284,6 +285,19 @@ LOOM_INDEX_BIT_COUNT_FACTS(loom_index_ctpopi_facts, loom_index_ctpopi_result,
 
 #undef LOOM_INDEX_BIT_COUNT_FACTS
 
+static void loom_index_mark_compare_distribution(
+    const loom_value_facts_t* operand_facts, loom_value_facts_t* result_facts) {
+  if (loom_value_facts_is_lane_predicate(operand_facts[0]) ||
+      loom_value_facts_is_lane_predicate(operand_facts[1]) ||
+      loom_value_facts_is_lane_varying(operand_facts[0]) ||
+      loom_value_facts_is_lane_varying(operand_facts[1])) {
+    loom_value_facts_mark_lane_predicate(result_facts);
+  } else if (loom_value_facts_is_uniform(operand_facts[0]) &&
+             loom_value_facts_is_uniform(operand_facts[1])) {
+    loom_value_facts_mark_uniform(result_facts);
+  }
+}
+
 iree_status_t loom_index_cmp_facts(loom_fact_context_t* context,
                                    const loom_module_t* module,
                                    const loom_op_t* op,
@@ -301,6 +315,7 @@ iree_status_t loom_index_cmp_facts(loom_fact_context_t* context,
     }
   }
   result_facts[0] = loom_value_facts_make(0, 1, 1);
+  loom_index_mark_compare_distribution(operand_facts, &result_facts[0]);
   return iree_ok_status();
 }
 

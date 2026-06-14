@@ -22,6 +22,12 @@ property, ABI, and resource cross-products are especially easy to turn into a
 large hand-maintained emitter. Backend source files must stay below the reviewed
 size ceiling and must not introduce broad `internal.h` umbrella headers as a
 cosmetic split.
+
+The authoring corpus is a user-facing reference surface. It rejects stale
+boundary-proof boilerplate that agents are likely to copy into generated
+kernels: redundant kernel-buffer memory-space assumes, sentinel-sized views,
+late index-to-offset byte-address casts, and ggml-style byte strides typed as
+logical indices.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LOOM_SOURCE_ROOT = REPO_ROOT / "loom" / "src" / "loom"
+AUTHORING_CORPUS_ROOT = LOOM_SOURCE_ROOT / "test" / "corpus" / "authoring"
 SOURCE_SUFFIXES = {".c", ".cc", ".h"}
 TARGET_SOURCE_ROOT = LOOM_SOURCE_ROOT / "target"
 SPIRV_BACKEND_RELATIVE_ROOTS = (
@@ -81,6 +88,19 @@ TARGET_PRIVATE_EXECUTION_SYMBOL_PATTERN = re.compile(
 
 SPIRV_INTERNAL_HEADER_INCLUDE_PATTERN = re.compile(
     r'#\s*include\s+"loom/target/(?:arch|emit)/spirv/.+' r'(?:^|/|_)internal\.h"'
+)
+
+AUTHORING_MEMORY_SPACE_ASSUME_PATTERN = re.compile(
+    r"\bbuffer\.assume\.memory_space<[^>]+>"
+)
+AUTHORING_SENTINEL_VIEW_EXTENT_PATTERN = re.compile(
+    r"\bview<[^>\n]*\b(?:2147483647|4294967295|9223372036854775807)x"
+)
+AUTHORING_INDEX_TO_OFFSET_CAST_PATTERN = re.compile(
+    r"\bindex\.cast\b.*:\s*index\s+to\s+offset\b"
+)
+AUTHORING_BYTE_STRIDE_INDEX_PATTERN = re.compile(
+    r"%nb(?:\d+|_[A-Za-z0-9_]*)?\b\s*:\s*index\b"
 )
 
 
@@ -305,6 +325,88 @@ def _iter_lint_files() -> list[Path]:
     )
 
 
+def _iter_authoring_loom_files() -> list[Path]:
+    return sorted(
+        path for path in AUTHORING_CORPUS_ROOT.rglob("*.loom") if path.is_file()
+    )
+
+
+def _scan_authoring_text(path: Path, text: str) -> list[Finding]:
+    findings: list[Finding] = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        stripped_line = _strip_line_comments(line).strip()
+        if not stripped_line:
+            continue
+        if AUTHORING_MEMORY_SPACE_ASSUME_PATTERN.search(stripped_line):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line_number,
+                    message=(
+                        "authoring corpus must not reassert kernel ABI "
+                        "memory-space facts"
+                    ),
+                    context=(
+                        "kernel buffer arguments already publish global "
+                        "memory-space facts; use the buffer directly and keep "
+                        "buffer.assume.noalias only when the source contract "
+                        "has restrict/noalias"
+                    ),
+                )
+            )
+        if AUTHORING_SENTINEL_VIEW_EXTENT_PATTERN.search(stripped_line):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line_number,
+                    message=(
+                        "authoring corpus must not use sentinel-sized view extents"
+                    ),
+                    context=(
+                        "views should carry real static or dynamic extents so "
+                        "bounds checks, sanitizer paths, and footprint facts "
+                        "see the accessible range"
+                    ),
+                )
+            )
+        if AUTHORING_INDEX_TO_OFFSET_CAST_PATTERN.search(stripped_line):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line_number,
+                    message=(
+                        "authoring corpus must spell byte addresses in the "
+                        "offset domain"
+                    ),
+                    context=(
+                        "use offset constants/arguments for byte offsets and "
+                        "index.scale for logical-index times byte-stride "
+                        "conversion before buffer.view"
+                    ),
+                )
+            )
+        if AUTHORING_BYTE_STRIDE_INDEX_PATTERN.search(stripped_line):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line_number,
+                    message=(
+                        "authoring corpus must type ggml-style byte strides as offset"
+                    ),
+                    context=(
+                        "nb* names conventionally mean byte strides; use "
+                        "offset or rename non-byte quantities before agents "
+                        "copy the pattern"
+                    ),
+                )
+            )
+    return findings
+
+
+def _scan_authoring_corpus(path: Path) -> list[Finding]:
+    return _scan_authoring_text(path, path.read_text())
+
+
 def _scan_target_execution_boundaries(path: Path) -> list[Finding]:
     if not path.is_relative_to(TARGET_SOURCE_ROOT):
         return []
@@ -386,6 +488,21 @@ def _expect_spirv_self_test(
     return False
 
 
+def _expect_authoring_self_test(
+    name: str, text: str, expected_messages: tuple[str, ...]
+) -> bool:
+    path = AUTHORING_CORPUS_ROOT / "self_test.loom"
+    findings = _scan_authoring_text(path, text)
+    messages = tuple(finding.message for finding in findings)
+    if messages == expected_messages:
+        print(f"  PASS  {name}")
+        return True
+    print(f"  FAIL  {name}")
+    print(f"        expected: {expected_messages!r}")
+    print(f"        actual:   {messages!r}")
+    return False
+
+
 def _run_self_tests() -> int:
     ok = True
     print("loom-source-lint: self-test")
@@ -419,6 +536,40 @@ def _run_self_tests() -> int:
         "",
         (),
     )
+    ok &= _expect_authoring_self_test(
+        "authoring happy-path source passes",
+        """
+kernel.def @copy(%n: index) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%n: index, %input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<[%n]xf32, #dense>
+  kernel.return
+}
+""",
+        (),
+    )
+    ok &= _expect_authoring_self_test(
+        "authoring memory-space assume fails",
+        "%global = buffer.assume.memory_space<global> %input : buffer\n",
+        ("authoring corpus must not reassert kernel ABI memory-space facts",),
+    )
+    ok &= _expect_authoring_self_test(
+        "authoring sentinel extent fails",
+        "%view = buffer.view %input[%zero] : buffer -> view<2147483647xi8, #dense>\n",
+        ("authoring corpus must not use sentinel-sized view extents",),
+    )
+    ok &= _expect_authoring_self_test(
+        "authoring index-to-offset cast fails",
+        "%byte_offset = index.cast %byte_index : index to offset\n",
+        ("authoring corpus must spell byte addresses in the offset domain",),
+    )
+    ok &= _expect_authoring_self_test(
+        "authoring byte-stride index argument fails",
+        "kernel.def @bad(%nb0: index) { kernel.return }\n",
+        ("authoring corpus must type ggml-style byte strides as offset",),
+    )
     return 0 if ok else 1
 
 
@@ -435,6 +586,8 @@ def main() -> int:
     for path in _iter_lint_files():
         findings.extend(_scan_target_execution_boundaries(path))
         findings.extend(_scan_spirv_backend_guardrails(path))
+    for path in _iter_authoring_loom_files():
+        findings.extend(_scan_authoring_corpus(path))
 
     if not findings:
         print("loom-source-lint: PASS")

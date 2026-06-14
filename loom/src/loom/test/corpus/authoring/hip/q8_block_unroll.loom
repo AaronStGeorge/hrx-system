@@ -12,25 +12,23 @@ kernel.def @q8_block_unroll_wg64() {
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %four = index.constant 4 : index
+  %four_bytes = index.constant 4 : offset
   %eight = index.constant 8 : index
   %qk = index.constant 32 : index
-  %block_bytes = index.constant 34 : index
+  %block_bytes = index.constant 34 : offset
   %block_f16s = index.constant 17 : index
-  %qs_offset = index.constant 2 : index
+  %qs_offset = index.constant 2 : offset
   %k = index.constant 512 : index
   %rows = index.constant 64 : index
   %blocks_per_row = index.constant 16 : index
   %workgroup_size = index.constant 64 : index
 
   // HIP concept: `blockIdx.x`, `blockIdx.y`, and `threadIdx.x`.
-  // Loom spelling: read workgroup/workitem IDs explicitly, then attach range
-  // facts that C++ authors usually get from launch geometry by inspection.
-  %row0 = kernel.workgroup.id<x> : index
-  %row = index.assume %row0 [range(%row0, 0, 63)] : index
-  %col0 = kernel.workgroup.id<y> : index
-  %col = index.assume %col0 [range(%col0, 0, 7)] : index
-  %lane0 = kernel.workitem.id<x> : index
-  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  // Loom spelling: read workgroup/workitem IDs explicitly. The launch config
+  // above publishes the grid and workgroup range facts used below.
+  %row = kernel.workgroup.id<x> : index
+  %col = kernel.workgroup.id<y> : index
+  %lane = kernel.workitem.id<x> : index
   %zero_f32 = scalar.constant 0.0 : f32
   %zero_i32 = scalar.constant 0 : i32
 
@@ -46,12 +44,10 @@ kernel.def @q8_block_unroll_wg64() {
   %block_step = index.div %workgroup_size, %eight : index
 
   // HIP concept: `const block_q8_0 *__restrict__`, `float *__restrict__`.
-  // Loom spelling: start with ABI `buffer`, state memory space/noalias facts,
-  // and form typed views at the point where pointer arithmetic becomes typed.
-  %src0_global = buffer.assume.memory_space<global> %src0 : buffer
-  %src1_global = buffer.assume.memory_space<global> %src1 : buffer
-  %dst_global = buffer.assume.memory_space<global> %dst : buffer
-  %src0_noalias, %src1_noalias, %dst_noalias = buffer.assume.noalias %src0_global, %src1_global, %dst_global : buffer, buffer, buffer
+  // Loom spelling: kernel ABI buffers already carry global memory-space facts.
+  // State the noalias fact from `__restrict__`, then form typed views at the
+  // point where pointer arithmetic becomes typed.
+  %src0_noalias, %src1_noalias, %dst_noalias = buffer.assume.noalias %src0, %src1, %dst : buffer, buffer, buffer
   %src0_f16_view = buffer.view %src0_noalias[%base] : buffer -> view<17408xf16, #dense>
   %src1_view = buffer.view %src1_noalias[%base] : buffer -> view<4096xf32, #dense>
   %dst_view = buffer.view %dst_noalias[%base] : buffer -> view<512xf32, #dense>
@@ -74,10 +70,10 @@ kernel.def @q8_block_unroll_wg64() {
     %src_base_block = index.mul %block_idx, %qk : index
     %src_base = index.add %src_base_block, %in_block_base : index
     %linear_block = index.add %row_block_base, %block_idx : index
-    %block_byte_base = index.mul %linear_block, %block_bytes : index
-    %q_byte_payload = index.add %block_byte_base, %qs_offset : index
-    %q_byte = index.add %q_byte_payload, %in_block_base : index
-    %q_byte_offset = index.cast %q_byte : index to offset
+    %block_byte_base = index.scale %linear_block, %block_bytes : index, offset -> offset
+    %q_byte_payload = index.add %block_byte_base, %qs_offset : offset
+    %in_block_byte = index.scale %block_lane, %four_bytes : index, offset -> offset
+    %q_byte_offset = index.add %q_byte_payload, %in_block_byte : offset
 
     // HIP concept: `global_load_b32` of four packed q8 bytes.
     // Loom spelling: build an i32 view at the byte offset, then vector-load one

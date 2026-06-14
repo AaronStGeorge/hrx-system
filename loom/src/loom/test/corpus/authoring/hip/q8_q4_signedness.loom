@@ -20,10 +20,7 @@ kernel.def @q8_q4_unpack_signedness() {
   // sign-extension by selecting `vector.bitunpacku<8>` or
   // `vector.bitunpacks<8>`. The all-ones check case below makes this visible:
   // unsigned bytes become 255, signed bytes become -1.
-  %q8_packed_global = buffer.assume.memory_space<global> %q8_packed : buffer
-  %q8_unsigned_global = buffer.assume.memory_space<global> %q8_unsigned_output : buffer
-  %q8_signed_global = buffer.assume.memory_space<global> %q8_signed_output : buffer
-  %q8_packed_noalias, %q8_unsigned_noalias, %q8_signed_noalias = buffer.assume.noalias %q8_packed_global, %q8_unsigned_global, %q8_signed_global : buffer, buffer, buffer
+  %q8_packed_noalias, %q8_unsigned_noalias, %q8_signed_noalias = buffer.assume.noalias %q8_packed, %q8_unsigned_output, %q8_signed_output : buffer, buffer, buffer
   %q8_words = buffer.view %q8_packed_noalias[%base] : buffer -> view<1xi32, #dense>
   %q8_unsigned_words = buffer.view %q8_unsigned_noalias[%base] : buffer -> view<4xi32, #dense>
   %q8_signed_words = buffer.view %q8_signed_noalias[%base] : buffer -> view<4xi32, #dense>
@@ -39,10 +36,7 @@ kernel.def @q8_q4_unpack_signedness() {
   // Loom spelling: the same unpack contract works for nibble storage. This is
   // not Q4_0 offset-binary dequantization; it is the raw unsigned/signed field
   // interpretation a packed dot or scalar reference path consumes.
-  %q4_packed_global = buffer.assume.memory_space<global> %q4_packed : buffer
-  %q4_unsigned_global = buffer.assume.memory_space<global> %q4_unsigned_output : buffer
-  %q4_signed_global = buffer.assume.memory_space<global> %q4_signed_output : buffer
-  %q4_packed_noalias, %q4_unsigned_noalias, %q4_signed_noalias = buffer.assume.noalias %q4_packed_global, %q4_unsigned_global, %q4_signed_global : buffer, buffer, buffer
+  %q4_packed_noalias, %q4_unsigned_noalias, %q4_signed_noalias = buffer.assume.noalias %q4_packed, %q4_unsigned_output, %q4_signed_output : buffer, buffer, buffer
   %q4_words = buffer.view %q4_packed_noalias[%base] : buffer -> view<1xi32, #dense>
   %q4_unsigned_words = buffer.view %q4_unsigned_noalias[%base] : buffer -> view<8xi32, #dense>
   %q4_signed_words = buffer.view %q4_signed_noalias[%base] : buffer -> view<8xi32, #dense>
@@ -70,8 +64,7 @@ kernel.def @q8_mixed_u8s8_dot4_all_ones() {
   %lhs0 = scalar.constant -1 : i8
   %rhs0 = scalar.constant -1 : i8
   %zero = scalar.constant 0 : i32
-  %output_global = buffer.assume.memory_space<global> %output : buffer
-  %output_words = buffer.view %output_global[%base] : buffer -> view<1xi32, #dense>
+  %output_words = buffer.view %output[%base] : buffer -> view<1xi32, #dense>
   %lhs = vector.from_elements %lhs0, %lhs0, %lhs0, %lhs0 : vector<4xi8>
   %rhs = vector.from_elements %rhs0, %rhs0, %rhs0, %rhs0 : vector<4xi8>
   %acc = vector.from_elements %zero : vector<1xi32>

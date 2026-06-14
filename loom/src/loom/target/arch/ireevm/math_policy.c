@@ -32,6 +32,8 @@ static bool loom_ireevm_math_op_is_native_scalar(
     case LOOM_TARGET_MATH_OP_LOG2F:
     case LOOM_TARGET_MATH_OP_SINF:
     case LOOM_TARGET_MATH_OP_COSF:
+    case LOOM_TARGET_MATH_OP_TANHF:
+    case LOOM_TARGET_MATH_OP_POWF:
     case LOOM_TARGET_MATH_OP_ERFF:
       return true;
     case LOOM_TARGET_MATH_OP_LOGISTICF:

@@ -25,6 +25,20 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    low_aliases
+  MAIN
+    "amdgpu_low_aliases.py"
+  SRCS
+    "__init__.py"
+    "amdgpu_low_aliases.py"
+  DEPS
+    loom::py::loom::gen::support::support
+    loom::py::loom::target::arch::amdgpu::descriptors
+    loom::py::loom::target::arch::amdgpu::low_aliases
+)
+
+iree_py_library(
+  NAME
     target_info
   MAIN
     "amdgpu_target_info.py"

@@ -13,7 +13,7 @@ from pathlib import Path
 from loom.target.low_descriptors import Descriptor, DescriptorSet
 
 from .avx512 import X86_AVX512_CORE_DESCRIPTOR_SET
-from .common import _T
+from .common import _T, _qualify_packed_dot_descriptor_asm_forms
 from .packed_dot import X86_PACKED_DOT_FEATURE_DESCRIPTOR_SETS
 
 _X86_DESCRIPTOR_SET_COMPONENTS = tuple[tuple[DescriptorSet, frozenset[str]], ...]
@@ -62,7 +62,7 @@ def _merge_component_descriptors(
                     "x86 descriptor set component repeats descriptor "
                     f"'{descriptor.key}'"
                 )
-            descriptors.append(descriptor)
+            descriptors.append(_qualify_packed_dot_descriptor_asm_forms(descriptor))
             seen_keys.add(descriptor.key)
     return tuple(descriptors)
 

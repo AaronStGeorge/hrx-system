@@ -49,6 +49,7 @@ from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64_ARRAY,
+    DISTRIBUTION_TRANSFER,
     I1,
     INDEX,
     PURE,
@@ -187,7 +188,7 @@ scf_select = Op(
     ],
     results=[Result("result", ANY)],
     constraints=[SameType("true_value", "false_value", "result")],
-    traits=[PURE, SAFE_TO_SPECULATE],
+    traits=[PURE, SAFE_TO_SPECULATE, DISTRIBUTION_TRANSFER],
     canonicalize="loom_scf_select_canonicalize",
     facts="loom_scf_select_facts",
     format=[

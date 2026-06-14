@@ -40,6 +40,7 @@ loom_cc_library(
     lower
   HDRS
     "abi.h"
+    "arithmetic.h"
     "async.h"
     "bitfield.h"
     "bitpack.h"
@@ -70,6 +71,7 @@ loom_cc_library(
     "registry_tables.inl"
   SRCS
     "abi.c"
+    "arithmetic.c"
     "async.c"
     "atomic.c"
     "bitfield.c"
@@ -106,7 +108,9 @@ loom_cc_library(
     ::kinds
     ::materializers
     iree::base
+    loom::analysis::condition_facts
     loom::analysis::contract_vector
+    loom::analysis::symbolic_expr
     loom::analysis::view_regions
     loom::codegen::low::descriptors
     loom::codegen::low::function

@@ -46,8 +46,11 @@ typedef struct loom_symbolic_term_t {
   // Signed coefficient multiplying value_id.
   int64_t coefficient;
 
-  // SSA value used as a symbolic variable.
+  // SSA value used for algebraic identity and cancellation.
   loom_value_id_t value_id;
+
+  // SSA value whose identity-chain predicates may prove term relations.
+  loom_value_id_t relation_value_id;
 } loom_symbolic_term_t;
 
 // Flags describing which parts of a symbolic expression are usable.

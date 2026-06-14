@@ -84,3 +84,26 @@ func.def @read_decl_config_predicate() -> (index) {
   %remainder = index.constant 0 : index
   func.return %remainder : index
 }
+
+// ====
+
+// Declaration predicates are ordinary facts on every config.get result.
+config.decl @runtime_tile_count : %value: index where [range(%value, 4, 64), mul(%value, 4)]
+
+func.def @read_decl_config_facts() -> (i64, i64, i64) {
+  %value = config.get @runtime_tile_count : index
+  %lo = test.fact_range_lo %value : index -> i64
+  %hi = test.fact_range_hi %value : index -> i64
+  %divisor = test.fact_divisor %value : index -> i64
+  func.return %lo, %hi, %divisor : i64, i64, i64
+}
+
+// ----
+config.decl @runtime_tile_count : %value: index where [range(%value, 4, 64), mul(%value, 4)]
+
+func.def @read_decl_config_facts() -> (i64, i64, i64) {
+  %lo = scalar.constant 4 : i64
+  %hi = scalar.constant 64 : i64
+  %divisor = scalar.constant 4 : i64
+  func.return %lo, %hi, %divisor : i64, i64, i64
+}

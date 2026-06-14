@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/encoding/storage.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
 #include "loom/util/math.h"
@@ -753,6 +754,59 @@ static bool loom_low_lower_rule_integer_element_range_facts(
   return false;
 }
 
+static bool loom_low_lower_rule_result_index_assume_facts(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_value_facts_t* out_facts) {
+  *out_facts = loom_value_facts_unknown();
+  const loom_low_lower_value_ref_t* value_ref =
+      &rule_set->value_refs[value_ref_index];
+  if (value_ref->kind != LOOM_LOW_LOWER_VALUE_REF_RESULT) {
+    return false;
+  }
+
+  // A single-use identity assume is the only observable result contract.
+  // Borrowing its facts here keeps target guards strict for unassumed or
+  // multiply-used producers while allowing authored postconditions to prove a
+  // dynamic address calculation.
+  const loom_value_id_t source_value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  const loom_value_t* source_value =
+      loom_module_value(match_context->module, source_value_id);
+  if (!loom_value_has_single_use(source_value)) return false;
+
+  const loom_use_t use = loom_value_uses(source_value)[0];
+  const loom_op_t* user_op = loom_use_user_op(use);
+  if (!user_op || !loom_index_assume_isa(user_op)) return false;
+
+  const uint16_t operand_index = loom_use_operand_index(use);
+  loom_value_slice_t assumed_values = loom_index_assume_values(user_op);
+  loom_value_slice_t assumed_results = loom_index_assume_results(user_op);
+  if (operand_index >= assumed_values.count ||
+      operand_index >= assumed_results.count ||
+      assumed_values.values[operand_index] != source_value_id) {
+    return false;
+  }
+
+  return loom_low_lower_rule_integer_element_range_facts(
+      match_context->module, match_context->fact_table,
+      assumed_results.values[operand_index], out_facts);
+}
+
+static bool loom_low_lower_rule_value_integer_element_range_facts(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_value_facts_t* out_facts) {
+  if (loom_low_lower_rule_result_index_assume_facts(
+          match_context, rule_set, source_op, value_ref_index, out_facts)) {
+    return true;
+  }
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  return loom_low_lower_rule_integer_element_range_facts(
+      match_context->module, match_context->fact_table, value_id, out_facts);
+}
+
 static bool loom_low_lower_rule_float_immediate_facts(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, loom_value_facts_t* out_facts) {
@@ -820,11 +874,9 @@ static bool loom_low_lower_rule_value_facts_fit_bit_count(
   if (bit_count > UINT8_MAX) {
     return false;
   }
-  const loom_value_id_t value_id =
-      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
   loom_value_facts_t facts = loom_value_facts_unknown();
-  if (!loom_low_lower_rule_integer_element_range_facts(
-          match_context->module, match_context->fact_table, value_id, &facts)) {
+  if (!loom_low_lower_rule_value_integer_element_range_facts(
+          match_context, rule_set, source_op, value_ref_index, &facts)) {
     return false;
   }
   if (is_signed_domain) {
@@ -1264,6 +1316,16 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       return loom_low_lower_rule_mapped_value_register_class_matches(
           match_context, mapped_value, guard->register_class_id, out_matches);
     }
+    case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT: {
+      loom_low_lower_rule_mapped_value_t mapped_value =
+          loom_low_lower_rule_mapped_value_none();
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_value(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          &mapped_value));
+      *out_matches = mapped_value.is_register &&
+                     mapped_value.register_unit_count == guard->u64;
+      return iree_ok_status();
+    }
     case LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE: {
       IREE_ASSERT_GT(guard->u64, 0);
       loom_value_id_t value_id = loom_low_lower_rule_source_value(
@@ -1372,6 +1434,13 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           match_context, rule_set, source_op, guard->value_ref_index,
           guard->u64);
       return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_NO_USES: {
+      const loom_value_id_t value_id = loom_low_lower_rule_source_value(
+          rule_set, source_op, guard->value_ref_index);
+      *out_matches = loom_value_has_no_uses(
+          loom_module_value(match_context->module, value_id));
+      return iree_ok_status();
+    }
     case LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL:
       *out_matches = iree_all_bits_set(source_op->instance_flags, guard->u64);
       return iree_ok_status();
@@ -1964,6 +2033,35 @@ static iree_status_t loom_low_lower_rule_build_attrs(
         for (uint16_t j = 0; j < attr_copy->source_element_count; ++j) {
           const int64_t source_value =
               source_attr.i64_array[attr_copy->source_element_index + j];
+          IREE_ASSERT_GE(source_value, 0);
+          IREE_ASSERT_LE((uint64_t)source_value, element_mask);
+          packed_value |= (uint64_t)source_value
+                          << (j * attr_copy->source_element_bit_width);
+        }
+        packed_value <<= attr_copy->target_bit_offset;
+        attrs[i].value = loom_attr_i64((int64_t)packed_value);
+        break;
+      }
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_ATTRS_PACK_CONSECUTIVE: {
+        IREE_ASSERT_LT(attr_copy->source_attr_index,
+                       source_op->attribute_count);
+        IREE_ASSERT_GT(attr_copy->source_element_count, 0);
+        IREE_ASSERT_GT(attr_copy->source_element_bit_width, 0);
+        const uint32_t packed_bit_count =
+            (uint32_t)attr_copy->source_element_count *
+            attr_copy->source_element_bit_width;
+        IREE_ASSERT_LE(packed_bit_count + attr_copy->target_bit_offset, 63);
+        IREE_ASSERT_LE((uint32_t)attr_copy->source_attr_index +
+                           attr_copy->source_element_count,
+                       source_op->attribute_count);
+        const uint64_t element_mask =
+            (UINT64_C(1) << attr_copy->source_element_bit_width) - 1u;
+        uint64_t packed_value = 0;
+        for (uint16_t j = 0; j < attr_copy->source_element_count; ++j) {
+          loom_attribute_t source_attr =
+              source_attrs[attr_copy->source_attr_index + j];
+          IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_I64);
+          const int64_t source_value = source_attr.i64;
           IREE_ASSERT_GE(source_value, 0);
           IREE_ASSERT_LE((uint64_t)source_value, element_mask);
           packed_value |= (uint64_t)source_value

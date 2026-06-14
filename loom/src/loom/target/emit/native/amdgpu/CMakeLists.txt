@@ -70,6 +70,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::planning::address_state
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::planning::storage_lease
+    loom::target::arch::amdgpu::planning::vopd_plan
     loom::tools::loom-check::execute
   TESTONLY
   PUBLIC
@@ -92,9 +93,35 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
+    "test_assembly_q8"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly_q8.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
     "test_assembly_wmma"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly_wmma.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
+    "test_vopd_plan"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/vopd_plan.loom-test"
   SRC
     loom::tools::loom-check::loom-check
   LABELS
@@ -413,6 +440,7 @@ loom_cc_library(
     loom::target::arch::amdgpu::planning::occupancy
     loom::target::arch::amdgpu::planning::packet_plan
     loom::target::arch::amdgpu::planning::storage_lease
+    loom::target::arch::amdgpu::planning::vopd_plan
     loom::target::arch::amdgpu::provider
     loom::target::arch::amdgpu::target_info
     loom::target::artifact_manifest_collect

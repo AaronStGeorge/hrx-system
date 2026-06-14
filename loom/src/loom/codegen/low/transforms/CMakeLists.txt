@@ -64,13 +64,18 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::codegen::low::builder
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
     loom::codegen::low::function
     loom::codegen::low::pipeline::pass_environment
     loom::codegen::low::target_binding
+    loom::error::error_defs
     loom::ir
     loom::ops::low
     loom::ops::op_defs
+    loom::pass::pipeline
+    loom::pass::registry
     loom::pass::types
     loom::pass::value_facts
     loom::rewrite::rewriter

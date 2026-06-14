@@ -18,8 +18,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %9 = v_mov_b32 0
   %loaded = global_load_b32_saddr %9, %input_view
-  %11 = v_lshrrev_b32_src0_inline %loaded, 4
-  %nibble = v_and_b32_src0_inline %11, 15
+  %nibble = v_bfe_u32_offset_width_inline %loaded {offset = 4, width = 4}
   global_store_b32_saddr %9, %nibble, %output_view
   return
 }
@@ -43,8 +42,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %9 = v_mov_b32 0
   %loaded = global_load_b32_saddr %9, %input_view
-  %11 = v_lshlrev_b32_src0_inline %loaded, 24
-  %nibble = v_ashrrev_i32_src0_inline %11, 28
+  %nibble = v_bfe_i32_offset_width_inline %loaded {offset = 4, width = 4}
   global_store_b32_saddr %9, %nibble, %output_view
   return
 }
@@ -72,10 +70,8 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.r
   %13 = v_mov_b32 0
   %field = global_load_b32_saddr %13, %field_view
   %base = global_load_b32_saddr %13, %base_view
-  %17 = v_and_b32_src0_inline %field, 15
-  %18 = v_lshlrev_b32_src0_inline %17, 8
-  %19 = v_and_b32_lit %base, 4294963455
-  %inserted = v_or_b32 %19, %18
+  %17 = v_lshlrev_b32_src0_inline %field, 8
+  %inserted = v_bfi_b32_src0_lit %17, %base, 3840
   global_store_b32_saddr %13, %inserted, %output_view
   return
 }
@@ -111,36 +107,24 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %20 = v_and_b32_src0_inline %19, 15
   %21 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %22 = v_and_b32_src0_inline %21, 15
-  %25 = v_lshrrev_b32_src0_inline %15, 4
-  %26 = v_and_b32_src0_inline %25, 3
-  %28 = v_lshrrev_b32_src0_inline %17, 4
-  %29 = v_and_b32_src0_inline %28, 3
-  %31 = v_lshrrev_b32_src0_inline %19, 4
-  %32 = v_and_b32_src0_inline %31, 3
-  %34 = v_lshrrev_b32_src0_inline %21, 4
-  %35 = v_and_b32_src0_inline %34, 3
-  %39 = v_and_b32_src0_inline %26, 3
-  %40 = v_lshlrev_b32_src0_inline %39, 4
-  %41 = v_and_b32_lit %16, 4294967247
-  %42 = v_or_b32 %41, %40
-  %45 = v_and_b32_src0_inline %29, 3
-  %46 = v_lshlrev_b32_src0_inline %45, 4
-  %47 = v_and_b32_lit %18, 4294967247
-  %48 = v_or_b32 %47, %46
-  %51 = v_and_b32_src0_inline %32, 3
-  %52 = v_lshlrev_b32_src0_inline %51, 4
-  %53 = v_and_b32_lit %20, 4294967247
-  %54 = v_or_b32 %53, %52
-  %57 = v_and_b32_src0_inline %35, 3
-  %58 = v_lshlrev_b32_src0_inline %57, 4
-  %59 = v_and_b32_lit %22, 4294967247
-  %60 = v_or_b32 %59, %58
-  %62 = v_mov_b32 32
-  %69 = v_sub_nc_u32 %42, %62
-  %72 = v_sub_nc_u32 %48, %62
-  %75 = v_sub_nc_u32 %54, %62
-  %78 = v_sub_nc_u32 %60, %62
-  %result = concat(%69, %72, %75, %78) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %25 = v_bfe_u32_offset_width_inline %15 {offset = 4, width = 2}
+  %27 = v_bfe_u32_offset_width_inline %17 {offset = 4, width = 2}
+  %29 = v_bfe_u32_offset_width_inline %19 {offset = 4, width = 2}
+  %31 = v_bfe_u32_offset_width_inline %21 {offset = 4, width = 2}
+  %35 = v_lshlrev_b32_src0_inline %25, 4
+  %36 = v_bfi_b32_src0_lit %35, %16, 48
+  %39 = v_lshlrev_b32_src0_inline %27, 4
+  %40 = v_bfi_b32_src0_lit %39, %18, 48
+  %43 = v_lshlrev_b32_src0_inline %29, 4
+  %44 = v_bfi_b32_src0_lit %43, %20, 48
+  %47 = v_lshlrev_b32_src0_inline %31, 4
+  %48 = v_bfi_b32_src0_lit %47, %22, 48
+  %50 = v_mov_b32 32
+  %57 = v_sub_nc_u32 %36, %50
+  %60 = v_sub_nc_u32 %40, %50
+  %63 = v_sub_nc_u32 %44, %50
+  %66 = v_sub_nc_u32 %48, %50
+  %result = concat(%57, %60, %63, %66) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   global_store_b128_saddr %13, %result, %output_view
   return
 }

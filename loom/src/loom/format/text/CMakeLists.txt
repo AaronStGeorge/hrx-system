@@ -16,6 +16,7 @@ loom_cc_library(
     "low_asm.h"
   DEPS
     iree::base
+    loom::error::error_defs
     loom::ir
     loom::ops::op_defs
   PUBLIC

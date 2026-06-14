@@ -3,30 +3,29 @@
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
-  %c1 = index.constant 1 : index
-  %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch() {
-  %tid0 = kernel.workitem.id<x> : index
-  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
   %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
   %one = vector.constant 1 : vector<1xi32>
-  vector.store %one, %scratch_view[%tid] : vector<1xi32>, view<64xi32, #dense>
-  %loaded = vector.load %scratch_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
-  vector.store %loaded, %scratch_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  vector.store %one, %scratch_view[%lane] : vector<1xi32>, view<64xi32, #dense>
+  %loaded = vector.load %scratch_view[%lane] : view<64xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%lane] : vector<1xi32>, view<64xi32, #dense>
   kernel.return
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
-  %12 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %15 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
-  low.op<amdgpu.ds_write_addtid_b32>(%one, %15) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
-  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%15) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.ds_write_addtid_b32>(%loaded, %15) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
-  low.return
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() asm<amdgpu.rdna3.core> {
+  %11 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %one = v_mov_b32 1
+  %14 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %one, %14
+  %loaded = ds_read_addtid_b32 %14
+  ds_write_addtid_b32 %loaded, %14
+  return
 }

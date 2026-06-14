@@ -1,5 +1,25 @@
 // RUN: emit source-low output=low
 
+x86.target<avx2> @target
+
+func.def target(@target) @scalar_powf_rejected_by_math_policy(%base: f32, %exponent: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.powf", phase_name="legalize-math", policy_name="x86-math", math_op="powf", lane_domain="scalar", element_type="f32", constraint_key="math.op.supported"}
+  %result = scalar.powf<afn> %base, %exponent : f32
+  func.return %result : f32
+}
+
+// ====
+
+x86.target<avx2> @target
+
+func.def target(@target) @scalar_tanhf_rejected_by_math_policy(%input: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.tanhf", phase_name="legalize-math", policy_name="x86-math", math_op="tanhf", lane_domain="scalar", element_type="f32", constraint_key="math.op.supported"}
+  %result = scalar.tanhf<afn> %input : f32
+  func.return %result : f32
+}
+
+// ====
+
 x86.target<scalar> @target
 
 func.def target(@target) @scalar_i64_dynamic_shift_rejected(%value: i64, %amount: i64) -> (i64) {

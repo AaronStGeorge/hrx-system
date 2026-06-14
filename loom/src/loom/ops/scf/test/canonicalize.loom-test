@@ -201,6 +201,49 @@ func.def @if_edge_rewrites_vector_type_reference(%x: i32, %n: index, %limit: ind
 
 // ====
 
+// Branch-edge facts also apply to value-preserving index.cast results that
+// dominate the branch. Agent-authored kernels commonly cast loaded i32/i64 row
+// IDs before the guard and then use the index value for memory addressing.
+func.def @if_edge_rewrites_precast_index_reference(%buffer: buffer, %offset: offset, %row: i32, %n: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %row_idx = index.cast %row : i32 to index
+  %n_idx = index.cast %n : i32 to index
+  %zero = scalar.constant 0 : i32
+  %nonnegative = scalar.cmpi sge, %row, %zero : i32
+  %below = scalar.cmpi slt, %row, %n : i32
+  %guard = scalar.andi %nonnegative, %below : i1
+  scf.if %guard {
+    %view = buffer.view %buffer[%offset] : buffer -> view<[%n_idx]x4xf32, %layout>
+    %loaded = vector.load %view[%row_idx, 0] : view<[%n_idx]x4xf32, %layout> -> vector<4xf32>
+    test.use %loaded : vector<4xf32>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @if_edge_rewrites_precast_index_reference(%buffer: buffer, %offset: offset, %row: i32, %n: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %row_idx = index.cast %row : i32 to index
+  %n_idx = index.cast %n : i32 to index
+  %zero = scalar.constant 0 : i32
+  %nonnegative = scalar.cmpi sge, %row, %zero : i32
+  %below = scalar.cmpi slt, %row, %n : i32
+  %guard = scalar.andi %nonnegative, %below : i1
+  scf.if %guard {
+    %13 = index.assume %row_idx [ge(%row_idx, 0), lt(%row_idx, %n)] : index
+    %view = buffer.view %buffer[%offset] : buffer -> view<[%n_idx]x4xf32, %layout>
+    %loaded = vector.load %view[%13, 0] : view<[%n_idx]x4xf32, %layout> -> vector<4xf32>
+    test.use %loaded : vector<4xf32>
+  } else {
+  }
+  func.return
+}
+
+// ====
+
 // The refinable-result-type-refs trait keeps branch-edge type rewriting
 // table-driven for ops that own SSA references embedded in result types.
 func.def @if_edge_rewrites_refinable_result_type_refs(%buffer: buffer, %offset: offset, %x: i32, %n: index, %limit: index) {

@@ -92,14 +92,20 @@ def test_storage_generation_emits_current_public_views() -> None:
     assert "static const loom_low_operand_t kX86Avx512PackedDotCoreStorageOperands[]" in source
     assert "static const loom_low_operand_t kX86Avx512CoreOperands[]" not in source
     assert "static const loom_low_operand_t kX86PackedDotCoreOperands[]" not in source
+    assert "static const loom_low_descriptor_t kX86Avx512PackedDotCoreStorageDescriptors[]" in source
     assert "static const loom_low_descriptor_t kX86Avx512CoreDescriptors[]" in source
     assert "static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[]" in source
+    assert "static const loom_low_asm_form_t kX86AvxVnniCoreAsmForms[]" in source
     assert ".descriptors = kX86Avx512CoreDescriptors," in source
     assert ".descriptors = kX86PackedDotCoreDescriptors," in source
-    assert ".descriptors = kX86Avx512PackedDotCoreDescriptors," in source
+    assert ".descriptors = kX86Avx512PackedDotCoreStorageDescriptors," in source
+    assert ".asm_forms = kX86AvxVnniCoreAsmForms," in source
+    assert ".asm_forms = kX86Avx512PackedDotCoreStorageAsmForms," in source
     assert ".descriptor_refs = kX86Avx512CoreDescriptorRefs," in source
     assert ".descriptor_refs = kX86PackedDotCoreDescriptorRefs," in source
     assert ".descriptor_refs = kX86ScalarCoreDescriptorRefs," in source
+    assert '"avx_vnni.vpdpbusd.ymm"' in source
+    assert '"vpdpbusd.ymm"' in source
     assert "loom_x86_avx512_core_descriptor_set" in avx512_header
     assert "loom_x86_avx2_core_descriptor_set" in avx2_header
     assert "loom_x86_avx_vnni_core_descriptor_set" in avx_vnni_header

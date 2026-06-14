@@ -107,14 +107,10 @@ kernel.def @ffn_gate_up_swiglu_q6q8() {
   kernel.launch.config workgroups(%rows, %channel_groups, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
 } launch(%q8_input: buffer, %gate_weight: buffer, %up_weight: buffer, %output: buffer) {
   %base = index.constant 0 : offset
-  %row0 = kernel.workgroup.id<x> : index
-  %channel_group0 = kernel.workgroup.id<y> : index
-  %subgroup_id0 = kernel.subgroup.id : index
-  %lane0 = kernel.subgroup.lane.id : index
-  %row = index.assume %row0 [range(%row0, 0, 30)] : index
-  %channel_group = index.assume %channel_group0 [range(%channel_group0, 0, 1183)] : index
-  %subgroup_id = index.assume %subgroup_id0 [range(%subgroup_id0, 0, 15)] : index
-  %lane = index.assume %lane0 [range(%lane0, 0, 31)] : index
+  %row = kernel.workgroup.id<x> : index
+  %channel_group = kernel.workgroup.id<y> : index
+  %subgroup_id = kernel.subgroup.id : index
+  %lane = kernel.subgroup.lane.id : index
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
   %two = index.constant 2 : index
@@ -152,11 +148,7 @@ kernel.def @ffn_gate_up_swiglu_q6q8() {
   %scale_lane_base0 = index.add %scale_hi_group, %lane_div4_in_16 : index
   %scale_lane_base = index.assume %scale_lane_base0 [range(%scale_lane_base0, 0, 11)] : index
 
-  %q8_global = buffer.assume.memory_space<global> %q8_input : buffer
-  %gate_global = buffer.assume.memory_space<global> %gate_weight : buffer
-  %up_global = buffer.assume.memory_space<global> %up_weight : buffer
-  %output_global = buffer.assume.memory_space<global> %output : buffer
-  %q8_noalias, %gate_noalias, %up_noalias, %output_noalias = buffer.assume.noalias %q8_global, %gate_global, %up_global, %output_global : buffer, buffer, buffer, buffer
+  %q8_noalias, %gate_noalias, %up_noalias, %output_noalias = buffer.assume.noalias %q8_input, %gate_weight, %up_weight, %output : buffer, buffer, buffer, buffer
   %q8_i32_view = buffer.view %q8_noalias[%base] : buffer -> view<31248xi32, #dense>
   %q8_f16_view = buffer.view %q8_noalias[%base] : buffer -> view<62496xf16, #dense>
   %gate_i8_view = buffer.view %gate_noalias[%base] : buffer -> view<55695360xi8, #dense>

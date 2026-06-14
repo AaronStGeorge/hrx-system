@@ -222,6 +222,37 @@ def _cdna_s_buffer_load_width_overlays(
     )
 
 
+def _cdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_mad_f16_overlay(),
+        _v_mac_f16_overlay(),
+        _v_madak_f16_overlay(),
+        _v_madmk_f16_overlay(),
+        _v_fma_f16_overlay(),
+        _v_fma_f64_overlay(),
+        _v_fmac_f64_overlay(),
+    )
+
+
+def _rdna_scalar_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_fma_f16_overlay(),
+        _v_fmac_f16_overlay(),
+        _v_fmaak_f16_overlay(),
+        _v_fmamk_f16_overlay(),
+        _v_fma_f64_overlay(),
+    )
+
+
+def _rdna_scalar_domain_fma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_fmaak_f32_overlay(),
+        _s_fmamk_f32_overlay(),
+        _s_fmac_f32_overlay(),
+        _s_fmac_f16_overlay(),
+    )
+
+
 def _cdna_core_overlays(
     *,
     global_load_lds_variants: tuple[tuple[str, str, str, int, int], ...],
@@ -236,10 +267,13 @@ def _cdna_core_overlays(
     return (
         _s_add_u32_overlay(),
         _s_add_u32_rhs_inline_overlay(),
+        _s_addk_i32_overlay(),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
         _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
+        _s_mul_i32_rhs_inline_overlay(),
+        _s_mulk_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
         _s_max_i32_overlay(),
@@ -273,6 +307,7 @@ def _cdna_core_overlays(
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
         *_integer_bitwise_shift_overlays(),
+        *_integer_bitwise_permute_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_add_f32_src0_inline_overlay(),
@@ -291,6 +326,16 @@ def _cdna_core_overlays(
         _v_fma_f32_overlay(),
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
+        _v_fmamk_f32_overlay(),
+        *_cdna_scalar_fma_overlays(),
+        _v_pk_fmac_f16_overlay(),
+        _v_pk_fma_f16_overlay(),
+        _v_pk_mad_i16_overlay(),
+        _v_pk_mad_u16_overlay(),
+        _v_pk_fma_f32_overlay(),
+        *_v_mad_mix_f32_overlays(op_sel_field="OP_SEL", op_sel_hi_field="OP_SEL_HI"),
+        *_v_mad_mixlo_f16_overlays(op_sel_field="OP_SEL", op_sel_hi_field="OP_SEL_HI"),
+        *_v_mad_mixhi_f16_overlays(op_sel_field="OP_SEL", op_sel_hi_field="OP_SEL_HI"),
         *_v_native_f32_math_overlays(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
@@ -301,6 +346,8 @@ def _cdna_core_overlays(
         *((_v_cvt_pk_bf16_f32_overlay(),) if include_v_cvt_pk_bf16_f32 else ()),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        _v_cvt_i32_f32_overlay(),
+        _v_cvt_u32_f32_overlay(),
         *_v_cmp_overlays(),
         *_v_cndmask_b32_overlays(include_literal_forms=False),
         *_s_load_dword_width_overlays(
@@ -706,10 +753,13 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_add_u32_rhs_inline_overlay(),
+        _s_addk_i32_overlay(),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
         _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
+        _s_mul_i32_rhs_inline_overlay(),
+        _s_mulk_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
         _s_max_i32_overlay(),
@@ -743,6 +793,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
         *_integer_bitwise_shift_overlays(),
+        *_integer_bitwise_permute_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_add_f32_src0_inline_overlay(),
@@ -761,6 +812,18 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fma_f32_overlay(),
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
+        _v_fmamk_f32_overlay(),
+        *_rdna_scalar_fma_overlays(),
+        _v_pk_fmac_f16_overlay(),
+        _v_pk_fma_f16_overlay(include_literal_forms=True),
+        *_v_pk_fma_f16_literal_overlays(),
+        _v_pk_mad_i16_overlay(include_literal_forms=True),
+        *_v_pk_mad_i16_literal_overlays(),
+        _v_pk_mad_u16_overlay(include_literal_forms=True),
+        *_v_pk_mad_u16_literal_overlays(),
+        *_v_fma_mix_f32_overlays(op_sel_field="OP_SEL", op_sel_hi_field="OP_SEL_HI"),
+        *_v_fma_mixlo_f16_overlays(op_sel_field="OP_SEL", op_sel_hi_field="OP_SEL_HI"),
+        *_v_fma_mixhi_f16_overlays(op_sel_field="OP_SEL", op_sel_hi_field="OP_SEL_HI"),
         *_v_native_f32_math_overlays(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
@@ -770,6 +833,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_pk_u16_u32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        _v_cvt_i32_f32_overlay(),
+        _v_cvt_u32_f32_overlay(),
         *_v_cmp_overlays(),
         *_v_cndmask_b32_overlays(),
         *_s_load_dword_width_overlays(),
@@ -1051,14 +1116,29 @@ def _gfx11_core_overlay_descriptors(
     )
 
 
+def _gfx117x_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (*_gfx11_core_overlays(), *_rdna_scalar_domain_fma_overlays())
+
+
+def _gfx117x_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx117x_core_overlays())
+    )
+
+
 def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_add_u32_rhs_inline_overlay(),
+        _s_addk_i32_overlay(instruction_name="S_ADDK_CO_I32", mnemonic="s_addk_co_i32"),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
         _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
+        _s_mul_i32_rhs_inline_overlay(),
+        _s_mulk_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
         _s_max_i32_overlay(),
@@ -1092,6 +1172,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
         *_integer_bitwise_shift_overlays(),
+        *_integer_bitwise_permute_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_add_f32_src0_inline_overlay(),
@@ -1110,6 +1191,19 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fma_f32_overlay(),
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
+        _v_fmamk_f32_overlay(),
+        *_rdna_scalar_domain_fma_overlays(),
+        *_rdna_scalar_fma_overlays(),
+        _v_pk_fmac_f16_overlay(),
+        _v_pk_fma_f16_overlay(include_literal_forms=True),
+        *_v_pk_fma_f16_literal_overlays(),
+        _v_pk_mad_i16_overlay(include_literal_forms=True),
+        *_v_pk_mad_i16_literal_overlays(),
+        _v_pk_mad_u16_overlay(include_literal_forms=True),
+        *_v_pk_mad_u16_literal_overlays(),
+        *_v_fma_mix_f32_overlays(),
+        *_v_fma_mixlo_f16_overlays(),
+        *_v_fma_mixhi_f16_overlays(),
         *_v_native_f32_math_overlays(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
@@ -1119,6 +1213,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_pk_u16_u32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        _v_cvt_i32_f32_overlay(),
+        _v_cvt_u32_f32_overlay(),
         *_v_cmp_overlays(),
         *_v_cndmask_b32_overlays(),
         *_s_load_dword_width_overlays("IOFFSET", offset_bit_width=24, include_b96=True),
@@ -1436,10 +1532,13 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_add_u32_rhs_inline_overlay(),
+        _s_addk_i32_overlay(instruction_name="S_ADDK_CO_I32", mnemonic="s_addk_co_i32"),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
         _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
+        _s_mul_i32_rhs_inline_overlay(),
+        _s_mulk_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
         _s_max_i32_overlay(),
@@ -1473,6 +1572,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_max_u32_overlay(),
         _v_readfirstlane_b32_overlay(),
         *_integer_bitwise_shift_overlays(),
+        *_integer_bitwise_permute_overlays(),
         _v_add_f32_overlay(),
         _v_add_f32_literal_overlay(),
         _v_add_f32_src0_inline_overlay(),
@@ -1491,6 +1591,19 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fma_f32_overlay(),
         _v_fmaak_f32_overlay(),
         _v_fmac_f32_overlay(),
+        _v_fmamk_f32_overlay(),
+        *_rdna_scalar_domain_fma_overlays(),
+        *_rdna_scalar_fma_overlays(),
+        _v_pk_fmac_f16_overlay(),
+        _v_pk_fma_f16_overlay(include_literal_forms=True),
+        *_v_pk_fma_f16_literal_overlays(),
+        _v_pk_mad_i16_overlay(include_literal_forms=True),
+        *_v_pk_mad_i16_literal_overlays(),
+        _v_pk_mad_u16_overlay(include_literal_forms=True),
+        *_v_pk_mad_u16_literal_overlays(),
+        *_v_fma_mix_f32_overlays(),
+        *_v_fma_mixlo_f16_overlays(),
+        *_v_fma_mixhi_f16_overlays(),
         *_v_native_f32_math_overlays(),
         _v_sqrt_f32_overlay(),
         _v_rsq_f32_overlay(),
@@ -1500,6 +1613,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_cvt_pk_u16_u32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        _v_cvt_i32_f32_overlay(),
+        _v_cvt_u32_f32_overlay(),
         *_v_cmp_overlays(),
         *_v_cndmask_b32_overlays(),
         *_s_load_dword_width_overlays("IOFFSET", offset_bit_width=24, include_b96=True),
@@ -1822,6 +1937,7 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -1860,7 +1976,7 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_MFMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -1919,6 +2035,7 @@ _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=102,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -1972,6 +2089,7 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -2003,7 +2121,7 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -2084,6 +2202,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             allocatable_count=106,
+            full_register_part_mask=_REG_PART_SGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_VGPR,
@@ -2115,7 +2234,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             allocatable_count=1,
         ),
     ),
-    register_parts=_VGPR_REGISTER_PARTS,
+    register_parts=_AMDGPU_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -2577,6 +2696,7 @@ def _amdgpu_descriptor_ref_key_set() -> set[str]:
         _gfx940_core_overlays(),
         _gfx950_core_overlays(),
         _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
         _gfx12_core_overlays(),
         _gfx1250_core_overlays(),
     ):
@@ -2597,6 +2717,8 @@ __all__ = (
     "_gfx125x_reg_classes",
     "_gfx11_core_overlay_descriptors",
     "_gfx11_core_overlays",
+    "_gfx117x_core_overlay_descriptors",
+    "_gfx117x_core_overlays",
     "_gfx1250_core_overlay_descriptors",
     "_gfx1250_core_overlays",
     "_gfx12_core_overlay_descriptors",

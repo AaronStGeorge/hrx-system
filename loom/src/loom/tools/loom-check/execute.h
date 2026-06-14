@@ -32,11 +32,13 @@
 #include "loom/ir/context.h"
 #include "loom/pass/registry.h"
 #include "loom/target/legalization.h"
+#include "loom/target/low_asm_diagnostics.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/target/math_policy.h"
 #include "loom/target/pipeline.h"
+#include "loom/tooling/compile/pipeline.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
@@ -237,6 +239,10 @@ typedef struct loom_check_prepare_source_low_options_t {
   // Pass pipeline spelling. Empty or "default" runs the default source-to-low
   // pipeline; "none" is accepted for already-low focused tests.
   iree_string_view_t pipeline;
+  // Default pipeline used when |pipeline| is empty or "default".
+  loom_compile_default_pipeline_t default_pipeline;
+  // Source-to-low legality diagnostics emitted while selecting target-low.
+  loom_target_low_legality_diagnostic_flags_t source_low_diagnostic_flags;
   // Control-flow lowering shape used when building the default pipeline.
   loom_target_control_flow_lowering_t control_flow_lowering;
 } loom_check_prepare_source_low_options_t;
@@ -346,6 +352,10 @@ struct loom_check_environment_t {
   // Optional target-low packet diagnostic providers linked into this runner.
   loom_target_low_packet_diagnostic_provider_list_t
       low_packet_diagnostic_provider_list;
+  // Optional target-owned text low-asm diagnostic providers linked into this
+  // runner.
+  loom_target_low_asm_diagnostic_provider_list_t
+      low_asm_diagnostic_provider_list;
   // Optional target-owned low verifier providers linked into this runner.
   loom_low_verify_provider_list_t low_verify_provider_list;
   // Optional emit providers linked into this runner.

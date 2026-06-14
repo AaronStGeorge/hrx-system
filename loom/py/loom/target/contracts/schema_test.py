@@ -68,6 +68,22 @@ def test_elide_rule_validates_source_results() -> None:
     assert table.cases[0].source_op == vector.vector_extract
 
 
+def test_elide_rule_validates_guards() -> None:
+    table = ContractFragment(
+        name="value.elide",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            ValueElideRule(
+                source_op=vector.vector_extract,
+                values=(ValueRef.result("result"),),
+                guards=(Guard.value_no_uses("result"),),
+            )
+        ],
+    )
+
+    assert table.cases[0].source_op == vector.vector_extract
+
+
 def test_elide_rule_rejects_operands() -> None:
     with pytest.raises(
         ValueError,

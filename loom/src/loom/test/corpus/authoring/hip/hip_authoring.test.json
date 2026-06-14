@@ -161,6 +161,76 @@
       ]
     },
     {
+      "name": "plans packed field contracts recipe",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/packed_field_contracts.loom",
+          "--dry-run"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "bench_packed_field_contracts",
+          "case_packed_field_contracts"
+        ]
+      }
+    },
+    {
+      "name": "preserves packed field contract source shape",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "{srcdir}/packed_field_contracts.loom",
+          "--output={tmp}/packed_field_contracts.loom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/packed_field_contracts.loom",
+          "contains": [
+            "vector.bitunpacku<2>",
+            "vector.bitfield.extractu %packed {offset = 3, width = 3}",
+            "vector.dot8i4<s4u4>",
+            "vector.bitunpacku<1>",
+            "vector.bitfield.insert %high4 into %low_codes {offset = 4, width = 1}",
+            "vector.bitunpacku<2> %high_packed",
+            "vector.table.lookup %grid[%codes]"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "folds packed field contract reference values",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "{srcdir}/packed_field_contracts.loom",
+          "--pass=canonicalize",
+          "--output={tmp}/packed_field_contracts_canonical.loom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/packed_field_contracts_canonical.loom",
+          "contains": [
+            "%r0 = scalar.constant -2 : i32",
+            "%r3 = scalar.constant 1 : i32",
+            "%r0 = scalar.constant -4 : i32",
+            "%r3 = scalar.constant 3 : i32",
+            "%r0 = scalar.constant -112 : i32",
+            "%r1 = scalar.constant 112 : i32",
+            "%r0 = scalar.constant -16 : i32",
+            "%r2 = scalar.constant -15 : i32",
+            "%r0 = scalar.constant -32 : i32",
+            "%r6 = scalar.constant -26 : i32",
+            "%r0 = scalar.constant -8 : i32",
+            "%r3 = scalar.constant 9 : i32"
+          ]
+        }
+      ]
+    },
+    {
       "name": "plans target provider selection recipe",
       "run": {
         "tool": "iree-benchmark-loom",

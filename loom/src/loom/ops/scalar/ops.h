@@ -117,8 +117,10 @@ enum {
   LOOM_OP_SCALAR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 95),
   LOOM_OP_SCALAR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 96),
   LOOM_OP_SCALAR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 97),
-  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 98),
-  LOOM_OP_SCALAR_COUNT_ = 99,
+  LOOM_OP_SCALAR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 98),
+  LOOM_OP_SCALAR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 99),
+  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 100),
+  LOOM_OP_SCALAR_COUNT_ = 101,
 };
 
 // Integer overflow behavior flags.
@@ -1833,6 +1835,48 @@ iree_status_t loom_scalar_ctpopi_build(
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_scalar_ctpopi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_SCALAR_BITFIELD_EXTRACTU: Extract one fixed integer bitfield and zero-extend it into the result.
+// %byte = scalar.bitfield.extractu %word {offset = 8, width = 8} : i32 -> i32
+LOOM_DEFINE_ISA(loom_scalar_bitfield_extractu_isa, LOOM_OP_SCALAR_BITFIELD_EXTRACTU)
+LOOM_DEFINE_OPERAND(loom_scalar_bitfield_extractu_source, 0)
+LOOM_DEFINE_RESULT(loom_scalar_bitfield_extractu_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_scalar_bitfield_extractu_offset, 0)
+LOOM_DEFINE_ATTR_I64(loom_scalar_bitfield_extractu_width, 1)
+iree_status_t loom_scalar_bitfield_extractu_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    int64_t offset,
+    int64_t width,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_scalar_bitfield_extractu_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_SCALAR_BITFIELD_EXTRACTS: Extract one fixed integer bitfield and sign-extend it into the result.
+// %signed_byte = scalar.bitfield.extracts %word {offset = 24, width = 8} : i32 -> i32
+LOOM_DEFINE_ISA(loom_scalar_bitfield_extracts_isa, LOOM_OP_SCALAR_BITFIELD_EXTRACTS)
+LOOM_DEFINE_OPERAND(loom_scalar_bitfield_extracts_source, 0)
+LOOM_DEFINE_RESULT(loom_scalar_bitfield_extracts_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_scalar_bitfield_extracts_offset, 0)
+LOOM_DEFINE_ATTR_I64(loom_scalar_bitfield_extracts_width, 1)
+iree_status_t loom_scalar_bitfield_extracts_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    int64_t offset,
+    int64_t width,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_scalar_bitfield_extracts_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

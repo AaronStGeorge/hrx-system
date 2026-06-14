@@ -28,18 +28,3 @@ kernel.def target(@target) @generic_dynamic_atomic_rejected() {
   view.atomic.reduce<addi> %one, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
   kernel.return
 }
-
-// ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @generic_dynamic_atomic_rejected() {
-  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %view = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
-  %11 = low.slice %view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %12 = low.slice %view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %13 = low.op<amdgpu.v_mov_b32_copy>(%11) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
-  %14 = low.op<amdgpu.v_mov_b32_copy>(%12) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
-  %15 = low.concat(%13, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  low.op<amdgpu.flat_atomic_add_u32>(%15, %16) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>)
-  low.return
-}

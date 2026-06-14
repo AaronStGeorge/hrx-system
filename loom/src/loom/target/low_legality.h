@@ -43,9 +43,13 @@ typedef enum loom_target_low_legality_diagnostic_flag_bits_e {
   // Emit target source-memory decision remarks from providers that support
   // them, including access, cache-policy, and prefetch selection.
   LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS = 1u << 0,
+  // Emit source-to-low operand-form selection remarks from targets that
+  // support them.
+  LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM = 1u << 1,
   // All target-low legality diagnostic flags known to this header.
   LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL =
-      LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS,
+      LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS |
+      LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_OPERAND_FORM,
 } loom_target_low_legality_diagnostic_flag_bits_t;
 typedef uint32_t loom_target_low_legality_diagnostic_flags_t;
 

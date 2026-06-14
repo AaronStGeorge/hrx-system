@@ -186,6 +186,7 @@ def _memory_store_schedule_class(vector_bit_width: int) -> str:
 def _asm(
     *,
     mnemonic: str | None = None,
+    native_assembly_mnemonic: str | None = None,
     results: tuple[str, ...] = (),
     operands: tuple[str, ...] = (),
     immediates: tuple[str, ...] = (),
@@ -194,6 +195,7 @@ def _asm(
     return (
         AsmForm(
             mnemonic=mnemonic,
+            native_assembly_mnemonic=native_assembly_mnemonic,
             results=results,
             operands=operands,
             immediates=tuple(
@@ -417,6 +419,78 @@ _PACKED_DOT_NUMERIC_TAGS = {
     NUMERIC_I32: "i32",
     NUMERIC_F32: "f32",
 }
+_PACKED_DOT_ASM_FAMILY_PREFIXES = frozenset(
+    (
+        "avx10_2",
+        "avx512_bf16",
+        "avx512_vnni",
+        "avx_vnni",
+        "avx_vnni_int8",
+        "avx_vnni_int16",
+    )
+)
+
+
+def _packed_dot_asm_family_prefix(descriptor_key: str) -> str:
+    key_parts = descriptor_key.split(".")
+    if (
+        len(key_parts) < 4
+        or key_parts[0] != "x86"
+        or key_parts[1] not in _PACKED_DOT_ASM_FAMILY_PREFIXES
+    ):
+        raise ValueError(
+            f"x86 packed-dot descriptor key '{descriptor_key}' has no family prefix"
+        )
+    return key_parts[1]
+
+
+def _packed_dot_asm_form(
+    descriptor: PackedDotDescriptor,
+    *,
+    qualify_family: bool,
+) -> tuple[AsmForm, ...]:
+    mnemonic = _vector_asm_mnemonic(descriptor.mnemonic, descriptor.vector_bit_width)
+    native_assembly_mnemonic: str | None = None
+    if qualify_family:
+        native_assembly_mnemonic = mnemonic
+        mnemonic = f"{_packed_dot_asm_family_prefix(descriptor.key)}.{mnemonic}"
+    return _asm(
+        mnemonic=mnemonic,
+        native_assembly_mnemonic=native_assembly_mnemonic,
+        results=("dst",),
+        operands=("acc", "lhs", "rhs"),
+    )
+
+
+def _qualify_packed_dot_descriptor_asm_forms(descriptor: Descriptor) -> Descriptor:
+    key_parts = descriptor.key.split(".")
+    if (
+        len(key_parts) < 4
+        or key_parts[0] != "x86"
+        or key_parts[1] not in _PACKED_DOT_ASM_FAMILY_PREFIXES
+    ):
+        return descriptor
+    qualified_forms = []
+    for asm_form in descriptor.asm_forms:
+        mnemonic = asm_form.mnemonic or descriptor.mnemonic
+        if mnemonic is None:
+            raise ValueError(
+                f"x86 packed-dot descriptor '{descriptor.key}' has no asm mnemonic"
+            )
+        family_prefix = _packed_dot_asm_family_prefix(descriptor.key)
+        if mnemonic.startswith(f"{family_prefix}."):
+            qualified_forms.append(asm_form)
+            continue
+        qualified_forms.append(
+            replace(
+                asm_form,
+                mnemonic=f"{family_prefix}.{mnemonic}",
+                native_assembly_mnemonic=(
+                    asm_form.native_assembly_mnemonic or mnemonic
+                ),
+            )
+        )
+    return replace(descriptor, asm_forms=tuple(qualified_forms))
 
 
 def _packed_dot_semantic_tag(descriptor: PackedDotDescriptor) -> str:
@@ -430,16 +504,11 @@ def _packed_dot_semantic_tag(descriptor: PackedDotDescriptor) -> str:
     )
 
 
-def _packed_dot_descriptor(descriptor: PackedDotDescriptor) -> Descriptor:
-    asm_forms: tuple[AsmForm, ...] = ()
-    if descriptor.vector_bit_width == 512:
-        asm_forms = _asm(
-            mnemonic=_vector_asm_mnemonic(
-                descriptor.mnemonic, descriptor.vector_bit_width
-            ),
-            results=("dst",),
-            operands=("acc", "lhs", "rhs"),
-        )
+def _packed_dot_descriptor(
+    descriptor: PackedDotDescriptor,
+    *,
+    qualify_asm_mnemonic: bool = False,
+) -> Descriptor:
     return Descriptor(
         key=descriptor.key,
         mnemonic=descriptor.mnemonic,
@@ -451,7 +520,10 @@ def _packed_dot_descriptor(descriptor: PackedDotDescriptor) -> Descriptor:
             _vector_operand(descriptor.vector_bit_width, "rhs"),
         ),
         constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
-        asm_forms=asm_forms,
+        asm_forms=_packed_dot_asm_form(
+            descriptor,
+            qualify_family=qualify_asm_mnemonic,
+        ),
         schedule_class=_vector_dot_schedule_class(descriptor.vector_bit_width),
         feature_mask_words=(descriptor.required_feature_bits,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),

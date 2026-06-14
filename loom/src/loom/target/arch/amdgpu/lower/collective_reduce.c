@@ -6,8 +6,12 @@
 
 #include <stdint.h>
 
+#include "loom/analysis/condition_facts.h"
+#include "loom/analysis/symbolic_expr.h"
 #include "loom/ir/context.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/target/arch/amdgpu/lower/collective_combine.h"
 #include "loom/target/arch/amdgpu/lower/collective_payload.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
@@ -113,6 +117,302 @@ static iree_status_t loom_amdgpu_select_subgroup_reduce_crosslane_kind(
   if (dpp_descriptor_present) {
     *out_crosslane_kind =
         LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE;
+  }
+  return iree_ok_status();
+}
+
+static bool loom_amdgpu_value_is_workitem_x(const loom_module_t* module,
+                                            loom_value_id_t value_id) {
+  if (module == NULL || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  return defining_op != NULL && loom_kernel_workitem_id_isa(defining_op) &&
+         loom_kernel_workitem_id_dimension(defining_op) ==
+             LOOM_KERNEL_DIMENSION_X;
+}
+
+static bool loom_amdgpu_value_is_subgroup_lane_id(const loom_module_t* module,
+                                                  loom_value_id_t value_id) {
+  if (module == NULL || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  return defining_op != NULL && loom_kernel_subgroup_lane_id_isa(defining_op);
+}
+
+typedef enum loom_amdgpu_participant_id_kind_e {
+  LOOM_AMDGPU_PARTICIPANT_ID_WORKITEM_X = 0,
+  LOOM_AMDGPU_PARTICIPANT_ID_SUBGROUP_LANE = 1,
+} loom_amdgpu_participant_id_kind_t;
+
+static bool loom_amdgpu_value_is_participant_id(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_amdgpu_participant_id_kind_t participant_id_kind) {
+  switch (participant_id_kind) {
+    case LOOM_AMDGPU_PARTICIPANT_ID_WORKITEM_X:
+      return loom_amdgpu_value_is_workitem_x(module, value_id);
+    case LOOM_AMDGPU_PARTICIPANT_ID_SUBGROUP_LANE:
+      return loom_amdgpu_value_is_subgroup_lane_id(module, value_id);
+    default:
+      return false;
+  }
+}
+
+static bool loom_amdgpu_symbolic_expr_is_participant_id(
+    const loom_module_t* module, const loom_symbolic_expr_t* expression,
+    loom_amdgpu_participant_id_kind_t participant_id_kind) {
+  return loom_symbolic_expr_is_linear(expression) &&
+         expression->constant == 0 && expression->term_count == 1 &&
+         expression->terms[0].coefficient == 1 &&
+         (loom_amdgpu_value_is_participant_id(
+              module, expression->terms[0].value_id, participant_id_kind) ||
+          loom_amdgpu_value_is_participant_id(
+              module, expression->terms[0].relation_value_id,
+              participant_id_kind));
+}
+
+static bool loom_amdgpu_symbolic_expr_is_zero(
+    const loom_symbolic_expr_t* expression) {
+  return loom_symbolic_expr_is_constant(expression) &&
+         expression->constant == 0;
+}
+
+static iree_status_t loom_amdgpu_condition_implies_participant_zero(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t condition,
+    loom_amdgpu_participant_id_kind_t participant_id_kind,
+    bool* out_implies_participant_zero) {
+  *out_implies_participant_zero = false;
+
+  loom_condition_integer_relation_t relation_storage[16];
+  loom_condition_fact_set_t condition_facts = {0};
+  loom_condition_fact_set_initialize(
+      relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
+  if (!loom_condition_facts_query(module, fact_table, condition,
+                                  /*assumed_truth=*/true, &condition_facts)) {
+    return iree_ok_status();
+  }
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(module->arena.block_pool, &arena);
+  loom_symbolic_expr_context_t symbolic_context = {0};
+  loom_symbolic_expr_context_initialize(module, fact_table, &arena,
+                                        &symbolic_context);
+
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < condition_facts.integer_relation_count && iree_status_is_ok(status);
+       ++i) {
+    const loom_condition_integer_relation_t* relation =
+        &condition_facts.integer_relations[i];
+    if (relation->relation != LOOM_SYMBOLIC_INTEGER_RELATION_EQ ||
+        relation->left.kind != LOOM_CONDITION_INTEGER_OPERAND_VALUE ||
+        relation->right.kind != LOOM_CONDITION_INTEGER_OPERAND_VALUE) {
+      continue;
+    }
+
+    loom_symbolic_expr_t left_expression = {0};
+    status = loom_symbolic_expr_from_value(
+        &symbolic_context, relation->left.value_id, &left_expression);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    loom_symbolic_expr_t right_expression = {0};
+    status = loom_symbolic_expr_from_value(
+        &symbolic_context, relation->right.value_id, &right_expression);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if ((loom_amdgpu_symbolic_expr_is_participant_id(module, &left_expression,
+                                                     participant_id_kind) &&
+         loom_amdgpu_symbolic_expr_is_zero(&right_expression)) ||
+        (loom_amdgpu_symbolic_expr_is_participant_id(module, &right_expression,
+                                                     participant_id_kind) &&
+         loom_amdgpu_symbolic_expr_is_zero(&left_expression))) {
+      *out_implies_participant_zero = true;
+      break;
+    }
+  }
+
+  iree_arena_deinitialize(&arena);
+  return status;
+}
+
+static const loom_op_t* loom_amdgpu_use_enclosing_resultless_then_if(
+    const loom_op_t* use_op) {
+  for (const loom_op_t* current = use_op; current != NULL;
+       current = current->parent_op) {
+    const loom_op_t* parent_op = current->parent_op;
+    if (parent_op == NULL || !loom_scf_if_isa(parent_op) ||
+        parent_op->result_count != 0) {
+      continue;
+    }
+    if (current->parent_block != NULL &&
+        current->parent_block->parent_region ==
+            loom_scf_if_then_region(parent_op)) {
+      return parent_op;
+    }
+  }
+  return NULL;
+}
+
+static loom_value_id_t loom_amdgpu_use_cfg_true_guard_condition(
+    const loom_op_t* use_op) {
+  const loom_block_t* block = use_op != NULL ? use_op->parent_block : NULL;
+  const loom_region_t* region = block != NULL ? block->parent_region : NULL;
+  if (region == NULL || block == loom_region_const_entry_block(region)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+
+  loom_value_id_t guard_condition = LOOM_VALUE_ID_INVALID;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* predecessor =
+        loom_region_const_block(region, block_index);
+    if (predecessor == NULL || predecessor->op_count == 0) {
+      continue;
+    }
+
+    const loom_op_t* terminator = loom_block_const_last_op(predecessor);
+    if (loom_cfg_br_isa(terminator)) {
+      if (loom_cfg_br_dest(terminator) == block) {
+        return LOOM_VALUE_ID_INVALID;
+      }
+      continue;
+    }
+    if (!loom_cfg_cond_br_isa(terminator)) {
+      continue;
+    }
+
+    const bool true_edge_reaches_block =
+        loom_cfg_cond_br_true_dest(terminator) == block;
+    const bool false_edge_reaches_block =
+        loom_cfg_cond_br_false_dest(terminator) == block;
+    if (!true_edge_reaches_block && !false_edge_reaches_block) {
+      continue;
+    }
+    if (!true_edge_reaches_block || false_edge_reaches_block ||
+        guard_condition != LOOM_VALUE_ID_INVALID) {
+      return LOOM_VALUE_ID_INVALID;
+    }
+    guard_condition = loom_cfg_cond_br_condition(terminator);
+  }
+  return guard_condition;
+}
+
+typedef enum loom_amdgpu_workgroup_reduce_result_demand_e {
+  LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_ALL_WORKITEMS = 0,
+  LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_LEADER_WORKITEM = 1,
+  LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_SUBGROUP_LEADER_LANE = 2,
+} loom_amdgpu_workgroup_reduce_result_demand_t;
+
+static iree_status_t loom_amdgpu_workgroup_reduce_result_demand(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_workgroup_reduce_result_demand_t* out_result_demand) {
+  *out_result_demand = LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_ALL_WORKITEMS;
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  loom_target_workgroup_size_t workgroup_size = {0};
+  const bool has_one_dimensional_workgroup =
+      loom_amdgpu_required_workgroup_size(
+          module, loom_low_lower_context_source_function(context),
+          loom_low_lower_context_bundle(context), &workgroup_size) &&
+      workgroup_size.x != 0 && workgroup_size.y == 1 && workgroup_size.z == 1;
+
+  if (module == NULL) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t result = loom_kernel_workgroup_reduce_result(source_op);
+  if (result >= module->values.count) {
+    return iree_ok_status();
+  }
+  const loom_value_t* result_value = loom_module_value(module, result);
+  if (result_value->use_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_workgroup_reduce_result_demand_t result_demand =
+      LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_LEADER_WORKITEM;
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  const loom_use_t* uses = loom_value_uses(result_value);
+  for (uint32_t i = 0; i < result_value->use_count; ++i) {
+    const loom_op_t* user_op = loom_use_user_op(uses[i]);
+    loom_value_id_t guard_condition = LOOM_VALUE_ID_INVALID;
+    const loom_op_t* guard_op =
+        loom_amdgpu_use_enclosing_resultless_then_if(user_op);
+    if (guard_op != NULL) {
+      guard_condition = loom_scf_if_condition(guard_op);
+    } else {
+      guard_condition = loom_amdgpu_use_cfg_true_guard_condition(user_op);
+    }
+    if (guard_condition == LOOM_VALUE_ID_INVALID) {
+      return iree_ok_status();
+    }
+
+    bool guard_is_leader_workitem = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_condition_implies_participant_zero(
+        module, fact_table, guard_condition,
+        LOOM_AMDGPU_PARTICIPANT_ID_WORKITEM_X, &guard_is_leader_workitem));
+    if (guard_is_leader_workitem && has_one_dimensional_workgroup) {
+      continue;
+    }
+
+    bool guard_is_subgroup_leader_lane = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_condition_implies_participant_zero(
+        module, fact_table, guard_condition,
+        LOOM_AMDGPU_PARTICIPANT_ID_SUBGROUP_LANE,
+        &guard_is_subgroup_leader_lane));
+    if (!guard_is_subgroup_leader_lane) {
+      return iree_ok_status();
+    }
+    result_demand =
+        LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_SUBGROUP_LEADER_LANE;
+  }
+
+  *out_result_demand = result_demand;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_select_workgroup_reduce_publication_kind(
+    uint32_t flat_workgroup_size, uint32_t wavefront_size,
+    uint32_t register_count, loom_low_lower_context_t* context,
+    const loom_op_t* source_op,
+    loom_amdgpu_workgroup_reduce_publication_kind_t* out_publication_kind) {
+  *out_publication_kind = LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LDS;
+  if (flat_workgroup_size <= wavefront_size) {
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_workgroup_reduce_result_demand_t result_demand =
+      LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_ALL_WORKITEMS;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_workgroup_reduce_result_demand(
+      context, source_op, &result_demand));
+  if (result_demand ==
+      LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_LEADER_WORKITEM) {
+    *out_publication_kind =
+        LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LEADER_WORKITEM;
+    return iree_ok_status();
+  }
+  if (register_count == 1) {
+    if (result_demand ==
+        LOOM_AMDGPU_WORKGROUP_REDUCE_RESULT_DEMAND_SUBGROUP_LEADER_LANE) {
+      *out_publication_kind =
+          LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP_LEADER_LANE;
+      return iree_ok_status();
+    }
+    *out_publication_kind =
+        LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP;
   }
   return iree_ok_status();
 }
@@ -385,6 +685,9 @@ iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
   out_plan->wavefront_size = wavefront_size;
   out_plan->flat_workgroup_size = flat_workgroup_size;
   out_plan->identity_bits = identity_bits;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_select_workgroup_reduce_publication_kind(
+      flat_workgroup_size, wavefront_size, register_count, context, source_op,
+      &out_plan->publication_kind));
   *out_selected = true;
   return iree_ok_status();
 }
@@ -1084,6 +1387,77 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_emit_workgroup_reduce_barrier(context, source_op, plan));
 
+    if (plan->publication_kind ==
+            LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP ||
+        plan->publication_kind ==
+            LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP_LEADER_LANE) {
+      loom_value_id_t wave_count_value = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, wave_count,
+          lane_type, &wave_count_value));
+      loom_value_id_t wave_participant_guard = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_lane_compare(
+          context, source_op, &plan->guard_descriptor, lane_id,
+          wave_count_value, mask_type, &wave_participant_guard));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_saveexec(
+          context, source_op, plan, wave_participant_guard, mask_type,
+          &saved_exec));
+
+      loom_value_id_t lane_byte_offset = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_lane_byte_offset(
+          context, source_op, lane_id, lane_type, &lane_byte_offset));
+      for (uint32_t i = 0; i < register_count; ++i) {
+        const uint32_t register_byte_offset = i * wave_count * 4u;
+        loom_value_id_t address = LOOM_VALUE_ID_INVALID;
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_address(
+            context, source_op, scratch_base, lane_byte_offset,
+            register_byte_offset, lane_type, &address));
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_read(
+            context, source_op, plan, address, lane_type,
+            &result_registers[i]));
+      }
+
+      const loom_amdgpu_subgroup_reduce_plan_t cross_wave_plan = {
+          .bpermute_descriptor = plan->bpermute_descriptor,
+          .combine_descriptor = plan->combine_descriptor,
+          .guard_descriptor = plan->guard_descriptor,
+          .select_descriptor = plan->select_descriptor,
+          .value = plan->value,
+          .result = plan->result,
+          .payload_kind = plan->payload_kind,
+          .register_count = register_count,
+          .wavefront_size = wavefront_size,
+          .active_lane_count = wave_count,
+          .identity_bits = plan->identity_bits,
+          .crosslane_kind = LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_BPERMUTE,
+      };
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_reduce_tree(
+          context, source_op, &cross_wave_plan, lane_id, lane_type,
+          LOOM_VALUE_ID_INVALID, result_registers));
+
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_restore_exec(
+          context, source_op, plan, saved_exec));
+
+      if (plan->publication_kind ==
+          LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP_LEADER_LANE) {
+        return loom_amdgpu_collective_bind_payload_result(
+            context, source_op, plan->result, register_count, result_registers);
+      }
+
+      loom_value_id_t first_lane_offset = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 0,
+          lane_type, &first_lane_offset));
+      for (uint32_t i = 0; i < register_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_bpermute_register(
+            context, source_op, &plan->bpermute_descriptor, first_lane_offset,
+            result_registers[i], lane_type, &result_registers[i]));
+      }
+
+      return loom_amdgpu_collective_bind_payload_result(
+          context, source_op, plan->result, register_count, result_registers);
+    }
+
     loom_value_id_t wave_count_value = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, wave_count,
@@ -1125,6 +1499,14 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_subgroup_reduce_tree(
         context, source_op, &cross_wave_plan, lane_id, lane_type,
         LOOM_VALUE_ID_INVALID, result_registers));
+
+    if (plan->publication_kind ==
+        LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LEADER_WORKITEM) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_restore_exec(
+          context, source_op, plan, saved_exec));
+      return loom_amdgpu_collective_bind_payload_result(
+          context, source_op, plan->result, register_count, result_registers);
+    }
 
     loom_value_id_t publish_saved_exec = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_saveexec(

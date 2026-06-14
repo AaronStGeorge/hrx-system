@@ -20,6 +20,12 @@ loom_low_descriptor_text_asm_state_registry(
   return (const loom_low_descriptor_registry_t*)state;
 }
 
+static const loom_low_descriptor_text_asm_environment_storage_t*
+loom_low_descriptor_text_asm_state_storage(
+    const loom_text_low_asm_environment_state_t* state) {
+  return (const loom_low_descriptor_text_asm_environment_storage_t*)state;
+}
+
 static const loom_text_low_asm_descriptor_set_t*
 loom_low_descriptor_text_asm_descriptor_set_handle(
     const loom_low_descriptor_set_t* descriptor_set) {
@@ -149,11 +155,9 @@ static iree_status_t loom_low_descriptor_text_asm_form_references_immediate(
 }
 
 static iree_status_t loom_low_descriptor_text_asm_lookup_descriptor_set(
-    const loom_text_low_asm_environment_state_t* state, iree_string_view_t key,
+    const loom_low_descriptor_registry_t* registry, iree_string_view_t key,
     const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
   *out_descriptor_set = NULL;
-  const loom_low_descriptor_registry_t* registry =
-      loom_low_descriptor_text_asm_state_registry(state);
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_descriptor_registry_lookup(registry, key);
   if (descriptor_set == NULL) {
@@ -164,9 +168,28 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_descriptor_set(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_descriptor_text_asm_lookup_target_descriptor_set(
-    const loom_text_low_asm_environment_state_t* state,
-    const loom_module_t* module, loom_attribute_t target_attr,
+static iree_status_t loom_low_descriptor_text_asm_lookup_descriptor_set_default(
+    const loom_text_low_asm_environment_state_t* state, iree_string_view_t key,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
+  return loom_low_descriptor_text_asm_lookup_descriptor_set(
+      loom_low_descriptor_text_asm_state_registry(state), key,
+      out_descriptor_set);
+}
+
+static iree_status_t
+loom_low_descriptor_text_asm_lookup_descriptor_set_with_diagnostics(
+    const loom_text_low_asm_environment_state_t* state, iree_string_view_t key,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
+  const loom_low_descriptor_text_asm_environment_storage_t* storage =
+      loom_low_descriptor_text_asm_state_storage(state);
+  return loom_low_descriptor_text_asm_lookup_descriptor_set(
+      storage->descriptor_registry, key, out_descriptor_set);
+}
+
+static iree_status_t
+loom_low_descriptor_text_asm_lookup_target_descriptor_set_from_registry(
+    const loom_low_descriptor_registry_t* registry, const loom_module_t* module,
+    loom_attribute_t target_attr,
     const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
   *out_descriptor_set = NULL;
   if (target_attr.kind != LOOM_ATTR_SYMBOL) {
@@ -188,8 +211,6 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_target_descriptor_set(
       iree_status_is_ok(status) ? loom_target_symbol_facts_cast(base_facts)
                                 : NULL;
   if (iree_status_is_ok(status) && target_facts != NULL) {
-    const loom_low_descriptor_registry_t* registry =
-        loom_low_descriptor_text_asm_state_registry(state);
     const loom_low_descriptor_set_t* descriptor_set =
         loom_low_descriptor_registry_lookup(
             registry, target_facts->storage.config.contract_set_key);
@@ -200,6 +221,27 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_target_descriptor_set(
   }
   iree_arena_deinitialize(&arena);
   return status;
+}
+
+static iree_status_t
+loom_low_descriptor_text_asm_lookup_target_descriptor_set_default(
+    const loom_text_low_asm_environment_state_t* state,
+    const loom_module_t* module, loom_attribute_t target_attr,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
+  return loom_low_descriptor_text_asm_lookup_target_descriptor_set_from_registry(
+      loom_low_descriptor_text_asm_state_registry(state), module, target_attr,
+      out_descriptor_set);
+}
+
+static iree_status_t
+loom_low_descriptor_text_asm_lookup_target_descriptor_set_with_diagnostics(
+    const loom_text_low_asm_environment_state_t* state,
+    const loom_module_t* module, loom_attribute_t target_attr,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
+  const loom_low_descriptor_text_asm_environment_storage_t* storage =
+      loom_low_descriptor_text_asm_state_storage(state);
+  return loom_low_descriptor_text_asm_lookup_target_descriptor_set_from_registry(
+      storage->descriptor_registry, module, target_attr, out_descriptor_set);
 }
 
 static iree_status_t loom_low_descriptor_text_asm_make_packet(
@@ -308,6 +350,38 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_packet(
 
   return loom_low_descriptor_text_asm_make_packet(descriptor_set, asm_form,
                                                   descriptor, out_packet);
+}
+
+static iree_status_t loom_low_descriptor_text_asm_diagnose_unknown_mnemonic(
+    const loom_text_low_asm_environment_state_t* state,
+    const loom_text_low_asm_descriptor_set_t* descriptor_set_handle,
+    iree_string_view_t mnemonic,
+    loom_text_low_asm_diagnostic_t* out_diagnostic) {
+  *out_diagnostic = (loom_text_low_asm_diagnostic_t){0};
+  const loom_low_descriptor_text_asm_environment_storage_t* storage =
+      loom_low_descriptor_text_asm_state_storage(state);
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_text_asm_descriptor_set(descriptor_set_handle);
+  if (storage->diagnostic_provider_list.count != 0 &&
+      storage->diagnostic_provider_list.values == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low asm diagnostic provider list has no provider table");
+  }
+  for (iree_host_size_t i = 0; i < storage->diagnostic_provider_list.count;
+       ++i) {
+    const loom_target_low_asm_diagnostic_provider_t* provider =
+        storage->diagnostic_provider_list.values[i];
+    if (provider == NULL || provider->try_unknown_mnemonic == NULL) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(provider->try_unknown_mnemonic(
+        provider, descriptor_set, mnemonic, out_diagnostic));
+    if (out_diagnostic->error != NULL) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_descriptor_text_asm_lookup_packet_by_opcode(
@@ -1355,15 +1429,13 @@ static iree_status_t loom_low_descriptor_text_asm_resolve_register_type(
 }
 
 static iree_status_t
-loom_low_descriptor_text_asm_lookup_register_descriptor_set(
-    const loom_text_low_asm_environment_state_t* state, loom_type_t type,
+loom_low_descriptor_text_asm_lookup_register_descriptor_set_from_registry(
+    const loom_low_descriptor_registry_t* registry, loom_type_t type,
     const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
   *out_descriptor_set = NULL;
   if (!loom_low_type_is_register(type)) {
     return iree_ok_status();
   }
-  const loom_low_descriptor_registry_t* registry =
-      loom_low_descriptor_text_asm_state_registry(state);
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_descriptor_registry_lookup_by_id(
           registry, loom_low_register_type_descriptor_set_stable_id(type));
@@ -1373,6 +1445,25 @@ loom_low_descriptor_text_asm_lookup_register_descriptor_set(
   *out_descriptor_set =
       loom_low_descriptor_text_asm_descriptor_set_handle(descriptor_set);
   return iree_ok_status();
+}
+
+static iree_status_t
+loom_low_descriptor_text_asm_lookup_register_descriptor_set_default(
+    const loom_text_low_asm_environment_state_t* state, loom_type_t type,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
+  return loom_low_descriptor_text_asm_lookup_register_descriptor_set_from_registry(
+      loom_low_descriptor_text_asm_state_registry(state), type,
+      out_descriptor_set);
+}
+
+static iree_status_t
+loom_low_descriptor_text_asm_lookup_register_descriptor_set_with_diagnostics(
+    const loom_text_low_asm_environment_state_t* state, loom_type_t type,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set) {
+  const loom_low_descriptor_text_asm_environment_storage_t* storage =
+      loom_low_descriptor_text_asm_state_storage(state);
+  return loom_low_descriptor_text_asm_lookup_register_descriptor_set_from_registry(
+      storage->descriptor_registry, type, out_descriptor_set);
 }
 
 static iree_status_t loom_low_descriptor_text_asm_describe_register_type(
@@ -1405,9 +1496,10 @@ static iree_status_t loom_low_descriptor_text_asm_describe_register_type(
 }
 
 static const loom_text_low_asm_vtable_t kLowDescriptorTextAsmVtable = {
-    .lookup_descriptor_set = loom_low_descriptor_text_asm_lookup_descriptor_set,
+    .lookup_descriptor_set =
+        loom_low_descriptor_text_asm_lookup_descriptor_set_default,
     .lookup_target_descriptor_set =
-        loom_low_descriptor_text_asm_lookup_target_descriptor_set,
+        loom_low_descriptor_text_asm_lookup_target_descriptor_set_default,
     .lookup_packet = loom_low_descriptor_text_asm_lookup_packet,
     .infer_result_type = loom_low_descriptor_text_asm_infer_result_type,
     .validate_result_type = loom_low_descriptor_text_asm_validate_result_type,
@@ -1422,7 +1514,33 @@ static const loom_text_low_asm_vtable_t kLowDescriptorTextAsmVtable = {
     .describe_operation = loom_low_descriptor_text_asm_describe_operation,
     .resolve_register_type = loom_low_descriptor_text_asm_resolve_register_type,
     .lookup_register_descriptor_set =
-        loom_low_descriptor_text_asm_lookup_register_descriptor_set,
+        loom_low_descriptor_text_asm_lookup_register_descriptor_set_default,
+    .describe_register_type =
+        loom_low_descriptor_text_asm_describe_register_type,
+};
+
+static const loom_text_low_asm_vtable_t kLowDescriptorTextAsmDiagnosticVtable = {
+    .lookup_descriptor_set =
+        loom_low_descriptor_text_asm_lookup_descriptor_set_with_diagnostics,
+    .lookup_target_descriptor_set =
+        loom_low_descriptor_text_asm_lookup_target_descriptor_set_with_diagnostics,
+    .lookup_packet = loom_low_descriptor_text_asm_lookup_packet,
+    .diagnose_unknown_mnemonic =
+        loom_low_descriptor_text_asm_diagnose_unknown_mnemonic,
+    .infer_result_type = loom_low_descriptor_text_asm_infer_result_type,
+    .validate_result_type = loom_low_descriptor_text_asm_validate_result_type,
+    .result_type_annotation_required =
+        loom_low_descriptor_text_asm_result_type_annotation_required,
+    .immediate_descriptor = loom_low_descriptor_text_asm_immediate_descriptor,
+    .build_packet = loom_low_descriptor_text_asm_build_packet,
+    .build_return = loom_low_descriptor_text_asm_build_return,
+    .structural_attr_descriptor =
+        loom_low_descriptor_text_asm_structural_attr_descriptor,
+    .build_structural = loom_low_descriptor_text_asm_build_structural,
+    .describe_operation = loom_low_descriptor_text_asm_describe_operation,
+    .resolve_register_type = loom_low_descriptor_text_asm_resolve_register_type,
+    .lookup_register_descriptor_set =
+        loom_low_descriptor_text_asm_lookup_register_descriptor_set_with_diagnostics,
     .describe_register_type =
         loom_low_descriptor_text_asm_describe_register_type,
 };
@@ -1434,6 +1552,21 @@ void loom_low_descriptor_text_asm_environment_initialize(
       .vtable = &kLowDescriptorTextAsmVtable,
       .state =
           (const loom_text_low_asm_environment_state_t*)descriptor_registry,
+  };
+}
+
+void loom_low_descriptor_text_asm_environment_initialize_with_diagnostics(
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_target_low_asm_diagnostic_provider_list_t diagnostic_provider_list,
+    loom_low_descriptor_text_asm_environment_storage_t* out_storage,
+    loom_text_low_asm_environment_t* out_environment) {
+  *out_storage = (loom_low_descriptor_text_asm_environment_storage_t){
+      .descriptor_registry = descriptor_registry,
+      .diagnostic_provider_list = diagnostic_provider_list,
+  };
+  *out_environment = (loom_text_low_asm_environment_t){
+      .vtable = &kLowDescriptorTextAsmDiagnosticVtable,
+      .state = (const loom_text_low_asm_environment_state_t*)out_storage,
   };
 }
 

@@ -49,6 +49,7 @@ loom_cc_library(
     name = "lower",
     srcs = [
         "abi.c",
+        "arithmetic.c",
         "async.c",
         "atomic.c",
         "bitfield.c",
@@ -84,6 +85,7 @@ loom_cc_library(
     ],
     hdrs = [
         "abi.h",
+        "arithmetic.h",
         "async.h",
         "bitfield.h",
         "bitpack.h",
@@ -118,7 +120,9 @@ loom_cc_library(
     deps = [
         ":kinds",
         ":materializers",
+        "//loom/src/loom/analysis:condition_facts",
         "//loom/src/loom/analysis:contract_vector",
+        "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/analysis:view_regions",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:function",

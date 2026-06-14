@@ -1,16 +1,14 @@
 # GENERATED FILE: DO NOT EDIT.
 # Generator: loom.gen.python.builders_pyi.
 # Regenerate: python3 loom/py/loom/gen/run.py builders_pyi --in-place
-# ruff: noqa
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Sequence
 
 from loom.builder import TiedResultSpec, ValueRef
-from loom.ir import Block, Predicate, Region, Type
 from loom.builders import DialectBuilder
+from loom.ir import Region, Type
 
 class ScfBuilder(DialectBuilder):
     def for_(

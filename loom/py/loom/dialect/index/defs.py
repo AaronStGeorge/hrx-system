@@ -13,20 +13,24 @@ agents can author address math without falling back to scalar integer syntax.
 """
 
 from loom.assembly import (
+    ARROW,
     COLON,
     COMMA,
     Attr,
     PredicateList,
     Ref,
     Refs,
+    ResultType,
     TypeOf,
     TypesOf,
 )
 from loom.dsl import (
     ADDRESS,
     CONSTANT_LIKE,
+    DISTRIBUTION_TRANSFER,
     FACT_IDENTITY,
     INDEX,
+    OFFSET,
     PURE,
     SCALAR,
     AttrDef,
@@ -108,6 +112,7 @@ index_cast = cast_op(
     doc=("Explicit conversion at an address boundary. At least one side must be index or offset; pure integer width changes use scalar.extsi, scalar.extui, or scalar.trunci."),
     canonicalize="loom_index_cast_canonicalize",
     facts="loom_index_cast_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     verify="loom_index_cast_verify",
     examples=[
         "%i = index.cast %n : i64 to index",
@@ -156,6 +161,7 @@ index_add = binary_op(
     commutative=True,
     canonicalize="loom_index_add_canonicalize",
     facts="loom_index_add_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=[
         "%r = index.add %lhs, %rhs : index",
         "%bytes = index.add %base, %delta : offset",
@@ -170,6 +176,7 @@ index_sub = binary_op(
     doc="Address-domain subtraction. Operands and result must all be index or all offset.",
     canonicalize="loom_index_sub_canonicalize",
     facts="loom_index_sub_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=[
         "%r = index.sub %lhs, %rhs : index",
         "%delta = index.sub %end, %base : offset",
@@ -185,7 +192,44 @@ index_mul = binary_op(
     commutative=True,
     canonicalize="loom_index_mul_canonicalize",
     facts="loom_index_mul_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.mul %lhs, %rhs : index"],
+)
+
+index_scale = Op(
+    "index.scale",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Scale a logical coordinate by a physical byte stride to produce a "
+        "physical byte offset. This is the address-domain boundary for packed "
+        "payload layouts: logical indices stay index values, byte strides stay "
+        "offset values, and the result feeds byte-addressed buffer/view bases."
+    ),
+    operands=[
+        Operand("index", INDEX, doc="Logical coordinate to scale."),
+        Operand(
+            "stride",
+            OFFSET,
+            doc="Physical byte stride for one coordinate step.",
+        ),
+    ],
+    results=[Result("result", OFFSET)],
+    traits=[PURE, DISTRIBUTION_TRANSFER],
+    canonicalize="loom_index_scale_canonicalize",
+    facts="loom_index_scale_facts",
+    format=[
+        Ref("index"),
+        COMMA,
+        Ref("stride"),
+        COLON,
+        TypeOf("index"),
+        COMMA,
+        TypeOf("stride"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=["%bytes = index.scale %lane, %byte_stride : index, offset -> offset"],
 )
 
 index_div = binary_op(
@@ -201,6 +245,7 @@ index_div = binary_op(
     ),
     canonicalize="loom_index_div_canonicalize",
     facts="loom_index_div_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%q = index.div %lane, %group_size : index"],
 )
 
@@ -217,6 +262,7 @@ index_rem = binary_op(
     ),
     canonicalize="loom_index_rem_canonicalize",
     facts="loom_index_rem_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.rem %lane, %group_size : index"],
 )
 
@@ -229,6 +275,7 @@ index_min = binary_op(
     commutative=True,
     canonicalize="loom_index_min_canonicalize",
     facts="loom_index_min_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.min %lhs, %rhs : index"],
 )
 
@@ -241,6 +288,7 @@ index_max = binary_op(
     commutative=True,
     canonicalize="loom_index_max_canonicalize",
     facts="loom_index_max_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.max %lhs, %rhs : index"],
 )
 
@@ -256,7 +304,7 @@ index_madd = Op(
     ],
     results=[Result("result", INDEX)],
     constraints=[SameType("a", "b", "c", "result")],
-    traits=[PURE],
+    traits=[PURE, DISTRIBUTION_TRANSFER],
     canonicalize="loom_index_madd_canonicalize",
     format=[
         Ref("a"),
@@ -284,6 +332,7 @@ index_andi = binary_op(
     commutative=True,
     canonicalize="loom_index_andi_canonicalize",
     facts="loom_index_andi_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.andi %lhs, %rhs : index"],
 )
 
@@ -296,6 +345,7 @@ index_ori = binary_op(
     commutative=True,
     canonicalize="loom_index_ori_canonicalize",
     facts="loom_index_ori_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.ori %lhs, %rhs : index"],
 )
 
@@ -308,6 +358,7 @@ index_xori = binary_op(
     commutative=True,
     canonicalize="loom_index_xori_canonicalize",
     facts="loom_index_xori_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.xori %lhs, %rhs : index"],
 )
 
@@ -319,6 +370,7 @@ index_shli = binary_op(
     doc="Left shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
     canonicalize="loom_index_shli_canonicalize",
     facts="loom_index_shli_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.shli %lhs, %rhs : index"],
 )
 
@@ -330,6 +382,7 @@ index_shrsi = binary_op(
     doc="Arithmetic right shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
     canonicalize="loom_index_shrsi_canonicalize",
     facts="loom_index_shrsi_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.shrsi %lhs, %rhs : index"],
 )
 
@@ -341,6 +394,7 @@ index_shrui = binary_op(
     doc="Logical right shift over logical coordinate values. Offsets are physical byte counts and cannot use this op.",
     canonicalize="loom_index_shrui_canonicalize",
     facts="loom_index_shrui_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.shrui %lhs, %rhs : index"],
 )
 
@@ -426,6 +480,7 @@ ALL_INDEX_OPS: tuple[Op, ...] = (
     index_add,
     index_sub,
     index_mul,
+    index_scale,
     index_div,
     index_rem,
     index_min,

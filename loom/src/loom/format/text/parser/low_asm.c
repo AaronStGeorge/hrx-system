@@ -645,6 +645,22 @@ static iree_status_t loom_parse_low_asm_instruction(
       parser->low_asm_environment.state, descriptor_set, mnemonic_token.text,
       &packet));
   if (packet.descriptor == NULL) {
+    if (parser->low_asm_environment.vtable->diagnose_unknown_mnemonic != NULL) {
+      loom_text_low_asm_diagnostic_t diagnostic = {0};
+      IREE_RETURN_IF_ERROR(
+          parser->low_asm_environment.vtable->diagnose_unknown_mnemonic(
+              parser->low_asm_environment.state, descriptor_set,
+              mnemonic_token.text, &diagnostic));
+      if (diagnostic.param_count > IREE_ARRAYSIZE(diagnostic.params)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low asm unknown-mnemonic diagnostic parameter capacity exceeded");
+      }
+      if (diagnostic.error != NULL) {
+        return loom_parser_emit(parser, diagnostic.error, diagnostic.params,
+                                diagnostic.param_count, mnemonic_token);
+      }
+    }
     return loom_parser_emit_low_asm_error(parser, mnemonic_token,
                                           IREE_SV("unknown low asm mnemonic"));
   }
@@ -785,16 +801,17 @@ static iree_status_t loom_parse_low_asm_packet(
   return status;
 }
 
-static bool loom_low_asm_token_is_canonical_control_op(loom_token_t token) {
+static bool loom_low_asm_token_is_canonical_structural_op(loom_token_t token) {
   return token.kind == LOOM_TOKEN_OP_NAME &&
          (iree_string_view_equal(token.text, IREE_SV("low.br")) ||
           iree_string_view_equal(token.text, IREE_SV("low.cond_br")) ||
+          iree_string_view_equal(token.text, IREE_SV("low.func.call")) ||
           iree_string_view_equal(token.text, IREE_SV("low.scf.yield")) ||
           iree_string_view_equal(token.text, IREE_SV("low.scf.if")) ||
           iree_string_view_equal(token.text, IREE_SV("low.scf.for")));
 }
 
-static iree_status_t loom_low_asm_next_statement_is_canonical_control_op(
+static iree_status_t loom_low_asm_next_statement_is_canonical_structural_op(
     loom_parser_t* parser, bool* out_canonical) {
   *out_canonical = false;
   loom_tokenizer_t lookahead = parser->tokenizer;
@@ -812,7 +829,7 @@ static iree_status_t loom_low_asm_next_statement_is_canonical_control_op(
       return loom_tokenizer_consume_status(&lookahead);
     }
   }
-  *out_canonical = loom_low_asm_token_is_canonical_control_op(
+  *out_canonical = loom_low_asm_token_is_canonical_structural_op(
       loom_tokenizer_peek(&lookahead));
   return loom_tokenizer_consume_status(&lookahead);
 }
@@ -829,10 +846,10 @@ static iree_status_t loom_parse_low_asm_block_body(
       break;
     }
     uint32_t errors_before = parser->error_count;
-    bool canonical_control = false;
-    IREE_RETURN_IF_ERROR(loom_low_asm_next_statement_is_canonical_control_op(
-        parser, &canonical_control));
-    if (canonical_control) {
+    bool canonical_structural = false;
+    IREE_RETURN_IF_ERROR(loom_low_asm_next_statement_is_canonical_structural_op(
+        parser, &canonical_structural));
+    if (canonical_structural) {
       IREE_RETURN_IF_ERROR(loom_parse_op(parser));
     } else {
       IREE_RETURN_IF_ERROR(loom_parse_low_asm_packet(parser, descriptor_set));

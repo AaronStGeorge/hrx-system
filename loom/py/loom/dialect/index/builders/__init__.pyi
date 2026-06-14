@@ -1,16 +1,15 @@
 # GENERATED FILE: DO NOT EDIT.
 # Generator: loom.gen.python.builders_pyi.
 # Regenerate: python3 loom/py/loom/gen/run.py builders_pyi --in-place
-# ruff: noqa
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from loom.builder import TiedResultSpec, ValueRef
-from loom.ir import Block, Predicate, Region, Type
 from loom.builders import DialectBuilder
+from loom.ir import Predicate, Type
 
 class IndexBuilder(DialectBuilder):
     def constant(
@@ -71,6 +70,17 @@ class IndexBuilder(DialectBuilder):
         *,
         lhs: ValueRef,
         rhs: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def scale(
+        self,
+        *,
+        index: ValueRef,
+        stride: ValueRef,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
         names: Sequence[str] | None = ...,

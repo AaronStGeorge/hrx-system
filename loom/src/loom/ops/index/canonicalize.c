@@ -785,6 +785,23 @@ iree_status_t loom_index_mul_canonicalize(loom_op_t* op,
   return iree_ok_status();
 }
 
+iree_status_t loom_index_scale_canonicalize(loom_op_t* op,
+                                            loom_rewriter_t* rewriter) {
+  loom_value_id_t index = loom_index_scale_index(op);
+  loom_value_id_t stride = loom_index_scale_stride(op);
+  loom_type_t result_type =
+      loom_module_value_type(rewriter->module, loom_index_scale_result(op));
+  if (loom_index_value_facts_are_exact_i64(rewriter, index, 0) ||
+      loom_index_value_facts_are_exact_i64(rewriter, stride, 0)) {
+    return loom_index_replace_single_result_with_index_constant(op, rewriter,
+                                                                result_type, 0);
+  }
+  if (loom_index_value_facts_are_exact_i64(rewriter, index, 1)) {
+    return loom_index_replace_single_result_with_value(op, rewriter, stride);
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_index_div_canonicalize(loom_op_t* op,
                                           loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_index_div_lhs(op);

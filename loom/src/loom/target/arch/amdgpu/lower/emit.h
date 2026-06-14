@@ -41,6 +41,13 @@ iree_status_t loom_amdgpu_emit_sgpr_byte_offset(
     uint32_t dynamic_index_byte_shift, uint32_t static_byte_offset,
     loom_value_id_t* out_low_offset);
 
+// Emits an SGPR byte offset from one already-selected source memory dynamic
+// term.
+iree_status_t loom_amdgpu_emit_sgpr_byte_offset_term(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_source_memory_dynamic_term_t* term,
+    loom_value_id_t* out_low_offset);
+
 // Emits an SGPR byte offset from the scalar-address terms selected for a source
 // memory access plus a static byte offset.
 iree_status_t loom_amdgpu_emit_sgpr_byte_offset_terms(
@@ -138,6 +145,12 @@ iree_status_t loom_amdgpu_emit_sgpr_binary(
     loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t lane_type, loom_value_id_t* out_value);
 
+// Emits one SGPR descriptor op with one SGPR operand and one imm32 immediate.
+iree_status_t loom_amdgpu_emit_sgpr_binary_immediate(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_descriptor_ref_t descriptor_ref, loom_value_id_t value,
+    uint32_t immediate, loom_type_t lane_type, loom_value_id_t* out_value);
+
 // Emits |value| scaled by an unsigned 32-bit constant into a one-unit SGPR.
 iree_status_t loom_amdgpu_emit_sgpr_scale_u32(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op,
@@ -188,6 +201,14 @@ iree_status_t loom_amdgpu_emit_vgpr_shift(
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t shift,
     loom_value_id_t value, loom_type_t lane_type, loom_value_id_t* out_value);
 
+// Tries to emit |value << shift| + |addend| using the V_LSHL_ADD_U32
+// immediate-shift form. If the active descriptor set lacks the packet or the
+// shift is not encodable, returns with |out_selected| false and emits nothing.
+iree_status_t loom_amdgpu_try_emit_vgpr_lshl_add_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t value, loom_value_id_t addend, uint32_t shift,
+    loom_type_t lane_type, loom_value_id_t* out_value, bool* out_selected);
+
 // Emits a VGPR x2 value zero-extending the supplied one-unit low register.
 iree_status_t loom_amdgpu_emit_vgpr64_from_u32(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -229,6 +250,24 @@ iree_status_t loom_amdgpu_try_emit_vgpr_b32_sdwa_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t value, uint32_t bit_offset, uint32_t bit_count,
     loom_amdgpu_vgpr_sdwa_extract_flags_t flags, loom_type_t lane_type,
+    loom_value_id_t* out_value, bool* out_selected);
+
+typedef enum loom_amdgpu_vgpr_bfe_extract_flag_bits_e {
+  // Selects the unsigned bitfield extraction form.
+  LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_NONE = 0u,
+  // Selects the signed bitfield extraction form.
+  LOOM_AMDGPU_VGPR_BFE_EXTRACT_FLAG_SIGN_EXTEND = 1u << 0,
+} loom_amdgpu_vgpr_bfe_extract_flag_bits_t;
+typedef uint32_t loom_amdgpu_vgpr_bfe_extract_flags_t;
+
+// Tries to emit a V_BFE offset/width-inline bitfield extract. If the active
+// descriptor set has no BFE form, or the selected bit range is not
+// representable by the descriptor, returns with |out_selected| false and emits
+// nothing.
+iree_status_t loom_amdgpu_try_emit_vgpr_b32_bfe_extract(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t value, uint32_t bit_offset, uint32_t bit_count,
+    loom_amdgpu_vgpr_bfe_extract_flags_t flags, loom_type_t lane_type,
     loom_value_id_t* out_value, bool* out_selected);
 
 typedef enum loom_amdgpu_vgpr_scale_u32_flag_bits_e {

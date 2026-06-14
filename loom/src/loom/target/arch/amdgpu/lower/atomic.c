@@ -390,34 +390,63 @@ static bool loom_amdgpu_atomic_value_kind_matches(
   return false;
 }
 
+static bool loom_amdgpu_atomic_value_as_i32_constant(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, int64_t* out_value) {
+  *out_value = 0;
+  return fact_table != NULL &&
+         loom_amdgpu_type_is_i32(loom_module_value_type(module, value_id)) &&
+         loom_amdgpu_value_facts_as_exact_i32(
+             loom_value_fact_table_lookup(fact_table, value_id), out_value);
+}
+
+static bool loom_amdgpu_atomic_value_as_f32_bit_pattern(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, uint32_t* out_bit_pattern) {
+  *out_bit_pattern = 0;
+  return fact_table != NULL &&
+         loom_amdgpu_type_is_f32(loom_module_value_type(module, value_id)) &&
+         loom_amdgpu_value_facts_as_f32_bit_pattern(
+             loom_value_fact_table_lookup(fact_table, value_id),
+             out_bit_pattern);
+}
+
+static bool loom_amdgpu_atomic_value_can_feed_vgpr(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, loom_amdgpu_atomic_value_kind_t value_kind) {
+  if (loom_amdgpu_source_value_prefers_vgpr(module, fact_table,
+                                            /*view_regions=*/NULL, value_id)) {
+    return true;
+  }
+  if (value_kind == LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32) {
+    uint32_t unused_bit_pattern = 0;
+    return loom_amdgpu_atomic_value_as_f32_bit_pattern(
+        module, fact_table, value_id, &unused_bit_pattern);
+  }
+  int64_t unused_value = 0;
+  return loom_amdgpu_atomic_value_as_i32_constant(module, fact_table, value_id,
+                                                  &unused_value);
+}
+
 static bool loom_amdgpu_atomic_value_can_feed_vgpr_operand(
-    const loom_module_t* module, const loom_op_t* source_op,
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_op_t* source_op,
     const loom_amdgpu_atomic_descriptor_candidate_t* candidate) {
   if (candidate->operation_kind == LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG) {
-    int64_t unused_value = 0;
     const loom_value_id_t expected =
         loom_view_atomic_cmpxchg_expected(source_op);
     const loom_value_id_t replacement =
         loom_view_atomic_cmpxchg_replacement(source_op);
-    return (loom_amdgpu_module_value_prefers_vgpr(module, expected) ||
-            loom_amdgpu_module_value_as_i32_constant(module, expected,
-                                                     &unused_value)) &&
-           (loom_amdgpu_module_value_prefers_vgpr(module, replacement) ||
-            loom_amdgpu_module_value_as_i32_constant(module, replacement,
-                                                     &unused_value));
-  }
-  if (candidate->value_kind == LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32) {
-    const loom_value_id_t value_id = loom_amdgpu_atomic_value(source_op);
-    uint32_t unused_bit_pattern = 0;
-    return loom_amdgpu_module_value_prefers_vgpr(module, value_id) ||
-           loom_amdgpu_module_value_as_f32_constant(module, value_id,
-                                                    &unused_bit_pattern);
+    return loom_amdgpu_atomic_value_can_feed_vgpr(
+               module, fact_table, expected,
+               LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32) &&
+           loom_amdgpu_atomic_value_can_feed_vgpr(
+               module, fact_table, replacement,
+               LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32);
   }
   const loom_value_id_t value_id = loom_amdgpu_atomic_value(source_op);
-  int64_t unused_value = 0;
-  return loom_amdgpu_module_value_prefers_vgpr(module, value_id) ||
-         loom_amdgpu_module_value_as_i32_constant(module, value_id,
-                                                  &unused_value);
+  return loom_amdgpu_atomic_value_can_feed_vgpr(module, fact_table, value_id,
+                                                candidate->value_kind);
 }
 
 static bool loom_amdgpu_atomic_source_plan_proves_workgroup_root(
@@ -436,7 +465,7 @@ static bool loom_amdgpu_atomic_source_plan_proves_workgroup_root(
 }
 
 static bool loom_amdgpu_atomic_select_descriptor(
-    const loom_module_t* module,
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
     loom_amdgpu_atomic_selection_t* selection, loom_type_t value_type,
     loom_amdgpu_atomic_diagnostic_t* diagnostic) {
@@ -479,8 +508,8 @@ static bool loom_amdgpu_atomic_select_descriptor(
         continue;
       }
       found_type = true;
-      if (!loom_amdgpu_atomic_value_can_feed_vgpr_operand(module, source_op,
-                                                          candidate)) {
+      if (!loom_amdgpu_atomic_value_can_feed_vgpr_operand(
+              module, fact_table, source_op, candidate)) {
         diagnostic->rejection_bits |=
             LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_PLACEMENT;
         return false;
@@ -960,9 +989,9 @@ static bool loom_amdgpu_atomic_select(
           ? loom_module_value_type(module,
                                    loom_view_atomic_cmpxchg_old(source_op))
           : loom_module_value_type(module, loom_amdgpu_atomic_value(source_op));
-  if (!loom_amdgpu_atomic_select_descriptor(module, descriptor_set, source_op,
-                                            out_selection, value_type,
-                                            diagnostic)) {
+  if (!loom_amdgpu_atomic_select_descriptor(module, fact_table, descriptor_set,
+                                            source_op, out_selection,
+                                            value_type, diagnostic)) {
     return false;
   }
   loom_amdgpu_atomic_select_packet_attrs(descriptor_set, out_selection);
@@ -1285,7 +1314,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   loom_value_id_t low_descriptor = LOOM_VALUE_ID_INVALID;
   if (loom_amdgpu_atomic_uses_buffer_resource(plan)) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_hal_buffer_descriptor(
-        context, source_op, low_resource, &low_descriptor));
+        context, source_op, low_resource, &access.source, &low_descriptor));
   }
   loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
   if (iree_any_bit_set(plan->flags, LOOM_AMDGPU_ATOMIC_PLAN_REQUIRES_M0)) {

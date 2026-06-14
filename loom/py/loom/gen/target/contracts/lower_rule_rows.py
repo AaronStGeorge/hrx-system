@@ -244,6 +244,7 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.VALUE_TYPE,
         GuardKind.VALUE_MATERIALIZABLE,
         GuardKind.LOW_VALUE_REGISTER_CLASS,
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
         GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
         GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
         GuardKind.VALUE_SIGNED_BIT_COUNT,
@@ -257,6 +258,7 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.VALUE_I64_RANGE_GE,
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+        GuardKind.VALUE_NO_USES,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
     if row.kind in (
@@ -296,6 +298,7 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
     if row.kind in (
         GuardKind.ENUM_ATTR_EQUALS,
         GuardKind.OPERAND_SEGMENT_COUNT,
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
         GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
         GuardKind.I64_ARRAY_COUNT,
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
@@ -344,6 +347,7 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.ENUM_ORDINAL,
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
     ):
         _append_field(fields, "source_attr_index", row.source_attr_index, always=True)
@@ -360,6 +364,7 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
         )
     if row.kind in (
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
     ):
         _append_field(
@@ -368,7 +373,10 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
             row.source_element_count,
             always=True,
         )
-    if row.kind == LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS:
+    if row.kind in (
+        LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
+    ):
         _append_field(
             fields,
             "source_element_bit_width",

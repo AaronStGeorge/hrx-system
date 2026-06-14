@@ -38,13 +38,12 @@ def generate_descriptor_set_shared_source(
 ) -> str:
     """Generates one C source containing shared storage and multiple set views.
 
-    Each view must be a descriptor prefix of |storage_spec|. The emitted
-    descriptor-set wrapper keeps the view's own identity and descriptor-ref
-    lookup table while pointing at the storage spec's dense backing arrays.
-    Supporting tables are shared as a storage superset, so extension rows must
-    only be reachable through descriptors that are hidden from smaller views.
-    Hidden asm rows may exist after descriptor_count; lookup helpers keep those
-    rows unreachable from smaller views.
+    Each view selects descriptors from |storage_spec| by stable key. Supporting
+    tables are shared as a storage superset, while descriptor, operand-form, and
+    asm-form tables are reused only when the selected view surface matches the
+    storage rows. A view may provide its own asm forms for the same descriptor
+    keys; those forms are compiled and validated against the shared storage
+    vocabulary during generation.
     """
 
     compiled = compiler.compile_descriptor_set(

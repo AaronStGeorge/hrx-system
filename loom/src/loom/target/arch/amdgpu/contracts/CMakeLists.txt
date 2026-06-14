@@ -97,6 +97,33 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
+    config
+  GENERATOR
+    loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
+  ARGS
+    "--contract-fragment=amdgpu.config"
+  DEPS
+    loom::target::contract
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_target_table_cc_library(
+  NAME
+    config_lower_rules
+  GENERATOR
+    loom::py::loom::gen::target::contracts::amdgpu_lower_rule_shard
+  ARGS
+    "--contract-fragment=amdgpu.config"
+  DEPS
+    loom::codegen::low::lower
+    loom::ops::config
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_target_table_cc_library(
+  NAME
     compare
   GENERATOR
     loom::py::loom::gen::target::contracts::amdgpu_contract_fragment
@@ -262,6 +289,8 @@ loom_cc_library(
     "buffer_lower_rules.h"
     "compare.h"
     "compare_lower_rules.h"
+    "config.h"
+    "config_lower_rules.h"
     "dot.h"
     "dot_lower_rules.h"
     "integer.h"
@@ -280,6 +309,8 @@ loom_cc_library(
     ::buffer_lower_rules
     ::compare
     ::compare_lower_rules
+    ::config
+    ::config_lower_rules
     ::dot
     ::dot_lower_rules
     ::integer

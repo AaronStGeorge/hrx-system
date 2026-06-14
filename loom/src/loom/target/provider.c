@@ -120,6 +120,26 @@ loom_target_environment_append_low_packet_diagnostic_providers(
   return iree_ok_status();
 }
 
+static iree_status_t
+loom_target_environment_append_low_asm_diagnostic_providers(
+    loom_target_environment_t* environment,
+    const loom_target_provider_t* provider) {
+  if (environment->low_asm_diagnostic_provider_count +
+          provider->low_asm_diagnostic_provider_list.count >
+      IREE_ARRAYSIZE(environment->low_asm_diagnostic_providers)) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "target low asm diagnostic provider capacity exceeded");
+  }
+  for (iree_host_size_t i = 0;
+       i < provider->low_asm_diagnostic_provider_list.count; ++i) {
+    environment->low_asm_diagnostic_providers
+        [environment->low_asm_diagnostic_provider_count++] =
+        provider->low_asm_diagnostic_provider_list.values[i];
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_target_environment_append_low_verify_providers(
     loom_target_environment_t* environment,
     const loom_target_provider_t* provider) {
@@ -187,6 +207,9 @@ iree_status_t loom_target_environment_initialize(
         out_environment, provider));
     IREE_RETURN_IF_ERROR(
         loom_target_environment_append_low_packet_diagnostic_providers(
+            out_environment, provider));
+    IREE_RETURN_IF_ERROR(
+        loom_target_environment_append_low_asm_diagnostic_providers(
             out_environment, provider));
     IREE_RETURN_IF_ERROR(loom_target_environment_append_low_verify_providers(
         out_environment, provider));
@@ -279,6 +302,15 @@ loom_target_environment_low_packet_diagnostic_provider_list(
   return loom_target_low_packet_diagnostic_provider_list_make(
       environment->low_packet_diagnostic_providers,
       environment->low_packet_diagnostic_provider_count);
+}
+
+loom_target_low_asm_diagnostic_provider_list_t
+loom_target_environment_low_asm_diagnostic_provider_list(
+    const loom_target_environment_t* environment) {
+  IREE_ASSERT_ARGUMENT(environment);
+  return loom_target_low_asm_diagnostic_provider_list_make(
+      environment->low_asm_diagnostic_providers,
+      environment->low_asm_diagnostic_provider_count);
 }
 
 loom_low_verify_provider_list_t

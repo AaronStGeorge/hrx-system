@@ -153,10 +153,18 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("sop1_literal");
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP2:
       return IREE_SV("sop2");
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOP2_LITERAL:
+      return IREE_SV("sop2_literal");
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPP:
       return IREE_SV("sopp");
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPC:
       return IREE_SV("sopc");
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOPC_LITERAL:
+      return IREE_SV("sopc_literal");
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOPK:
+      return IREE_SV("sopk");
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOPK_LITERAL:
+      return IREE_SV("sopk_literal");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
       return IREE_SV("vop2");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2_LITERAL:
@@ -183,8 +191,6 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("flat_global");
     case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_SCRATCH:
       return IREE_SV("flat_scratch");
-    case LOOM_AMDGPU_ENCODING_FORMAT_SOPK:
-      return IREE_SV("sopk");
     case LOOM_AMDGPU_ENCODING_FORMAT_VDS:
       return IREE_SV("vds");
     case LOOM_AMDGPU_ENCODING_FORMAT_VFLAT:
@@ -203,6 +209,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("vop1_dpp16");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_SDWA:
       return IREE_SV("vop1_sdwa");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL:
+      return IREE_SV("vop3p_literal");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA:
       return IREE_SV("vop3p_mfma");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_LITERAL:
@@ -265,6 +273,7 @@ static bool loom_amdgpu_encoding_format_uses_vop_vgpr_msb_slots(
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_LITERAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST:

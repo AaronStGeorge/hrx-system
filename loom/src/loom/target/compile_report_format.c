@@ -247,9 +247,10 @@ static void loom_target_compile_report_accumulate_move_cause(
   *unit_count += counts->unit_count;
 }
 
-static void loom_target_compile_report_move_cause_totals(
-    const loom_target_compile_report_t* report, uint64_t* out_kind_count,
-    uint64_t* out_packet_count, uint64_t* out_unit_count) {
+static void loom_target_compile_report_move_cause_counts_totals(
+    const loom_target_compile_report_move_cause_counts_t* counts,
+    uint64_t* out_kind_count, uint64_t* out_packet_count,
+    uint64_t* out_unit_count) {
   *out_kind_count = 0;
   *out_packet_count = 0;
   *out_unit_count = 0;
@@ -259,9 +260,16 @@ static void loom_target_compile_report_move_cause_totals(
     const loom_target_compile_report_move_cause_descriptor_t* descriptor =
         &loom_target_compile_report_move_cause_descriptors[i];
     loom_target_compile_report_accumulate_move_cause(
-        &report->move_causes[descriptor->cause], out_kind_count,
-        out_packet_count, out_unit_count);
+        &counts[descriptor->cause], out_kind_count, out_packet_count,
+        out_unit_count);
   }
+}
+
+static void loom_target_compile_report_move_cause_totals(
+    const loom_target_compile_report_t* report, uint64_t* out_kind_count,
+    uint64_t* out_packet_count, uint64_t* out_unit_count) {
+  loom_target_compile_report_move_cause_counts_totals(
+      report->move_causes, out_kind_count, out_packet_count, out_unit_count);
 }
 
 static iree_status_t loom_target_compile_report_append_string_field(
@@ -284,9 +292,17 @@ static iree_status_t loom_target_compile_report_format_summary(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, " status=%s", iree_status_code_string(report->status_code)));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+      builder, IREE_SV("function"), report->function_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("backend"), report->backend_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("bundle"), report->target_bundle_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+      builder, IREE_SV("export"), report->target_export_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+      builder, IREE_SV("export_symbol"), report->target_export_symbol));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
+      builder, IREE_SV("config"), report->target_config_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("lowered"), report->lowered_symbol));
   if (iree_any_bit_set(report->detail_flags,
@@ -426,6 +442,81 @@ static iree_status_t loom_target_compile_report_format_summary(
         report->spill_rows.count));
   }
 
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "COMPILE-REPORT: entries count=%" PRIhsz "\n",
+        report->entry_rows.count));
+  }
+
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_compile_report_format_entry_rows(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec = report->entry_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_entry_t* rows =
+        (const loom_target_compile_report_entry_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      const loom_target_compile_report_entry_t* row = &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
+      const iree_string_view_t source_function_name =
+          loom_target_compile_report_non_empty(row->source_function_name);
+      const iree_string_view_t target_bundle_name =
+          loom_target_compile_report_non_empty(row->target_bundle_name);
+      const iree_string_view_t target_export_name =
+          loom_target_compile_report_non_empty(row->target_export_name);
+      const iree_string_view_t target_export_symbol =
+          loom_target_compile_report_non_empty(row->target_export_symbol);
+      const iree_string_view_t target_config_name =
+          loom_target_compile_report_non_empty(row->target_config_name);
+      uint64_t move_kind_count = 0;
+      uint64_t move_packet_count = 0;
+      uint64_t move_unit_count = 0;
+      loom_target_compile_report_move_cause_counts_totals(
+          row->move_causes, &move_kind_count, &move_packet_count,
+          &move_unit_count);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: entry[%" PRIhsz
+          "] function=%.*s source=%.*s bundle=%.*s export=%.*s "
+          "export_symbol=%.*s config=%.*s schedule_nodes=%" PRIu64
+          " scheduled=%" PRIu64 " resource_uses=%" PRIu64
+          " hazard_gaps=%" PRIu64 " model_summaries=%" PRIu64
+          " pressure_summaries=%" PRIu64 " peak_live=%" PRIu64
+          " assignments=%" PRIu64 " spills=%" PRIu64 " spill_plans=%" PRIu64
+          " coalesced_copies=%" PRIu64 " materialized_copies=%" PRIu64
+          " move_kinds=%" PRIu64 " move_packets=%" PRIu64 " move_units=%" PRIu64
+          " instructions=%" PRIu64 " code_bytes=%" PRIu64
+          " storage_bytes=%" PRIu64 " private_bytes=%" PRIu64
+          " local_bytes=%" PRIu64 " pressure_rows=%" PRIhsz
+          " spill_rows=%" PRIhsz "\n",
+          row_index, (int)function_name.size, function_name.data,
+          (int)source_function_name.size, source_function_name.data,
+          (int)target_bundle_name.size, target_bundle_name.data,
+          (int)target_export_name.size, target_export_name.data,
+          (int)target_export_symbol.size, target_export_symbol.data,
+          (int)target_config_name.size, target_config_name.data,
+          row->schedule_node_count, row->scheduled_node_count,
+          row->schedule_resource_use_count, row->schedule_hazard_gap_count,
+          row->schedule_model_summary_count,
+          row->register_pressure_summary_count,
+          row->register_pressure_peak_live_units,
+          row->allocation_assignment_count, row->allocation_spill_count,
+          row->allocation_spill_plan_count,
+          row->allocation_coalesced_copy_count,
+          row->allocation_materialized_copy_count, move_kind_count,
+          move_packet_count, move_unit_count, row->emitted_instruction_count,
+          row->emitted_code_byte_count, row->emitted_code_storage_byte_count,
+          row->private_memory_bytes, row->local_memory_bytes,
+          row->pressure_row_count, row->spill_row_count));
+    }
+  }
   return iree_ok_status();
 }
 
@@ -469,6 +560,8 @@ static iree_status_t loom_target_compile_report_format_pressure_rows(
             loom_target_compile_report_vec_const_rows(vec);
     for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
       const loom_target_compile_report_pressure_row_t* row = &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
       const iree_string_view_t register_class =
           loom_target_compile_report_non_empty(row->register_class);
       const iree_string_view_t type_kind_name =
@@ -482,9 +575,11 @@ static iree_status_t loom_target_compile_report_format_pressure_rows(
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder,
           "COMPILE-REPORT: pressure[%" PRIhsz
-          "] class=%.*s type=%.*s element=%.*s peak_units=%" PRIu64
-          " peak_values=%" PRIu64 " point=%u block=%.*s op=%.*s\n",
-          row_index, (int)register_class.size, register_class.data,
+          "] function=%.*s class=%.*s type=%.*s element=%.*s "
+          "peak_units=%" PRIu64 " peak_values=%" PRIu64
+          " point=%u block=%.*s op=%.*s\n",
+          row_index, (int)function_name.size, function_name.data,
+          (int)register_class.size, register_class.data,
           (int)type_kind_name.size, type_kind_name.data,
           (int)element_type_name.size, element_type_name.data,
           row->peak_live_units, row->peak_live_values, row->peak_point,
@@ -506,6 +601,8 @@ static iree_status_t loom_target_compile_report_format_spill_rows(
             loom_target_compile_report_vec_const_rows(vec);
     for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
       const loom_target_compile_report_spill_row_t* row = &rows[i];
+      const iree_string_view_t function_name =
+          loom_target_compile_report_non_empty(row->function_name);
       const iree_string_view_t value_name =
           loom_target_compile_report_non_empty(row->value_name);
       const iree_string_view_t register_class =
@@ -519,12 +616,12 @@ static iree_status_t loom_target_compile_report_format_spill_rows(
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
           builder,
           "COMPILE-REPORT: spill[%" PRIhsz
-          "] value=%.*s class=%.*s type=%.*s element=%.*s assignment=%u"
-          " slot=%u space=%.*s bytes=%" PRIu64 " align=%" PRIu64
+          "] function=%.*s value=%.*s class=%.*s type=%.*s element=%.*s "
+          "assignment=%u slot=%u space=%.*s bytes=%" PRIu64 " align=%" PRIu64
           " stores=%" PRIu64 " reloads=%" PRIu64 "\n",
-          row_index, (int)value_name.size, value_name.data,
-          (int)register_class.size, register_class.data,
-          (int)type_kind_name.size, type_kind_name.data,
+          row_index, (int)function_name.size, function_name.data,
+          (int)value_name.size, value_name.data, (int)register_class.size,
+          register_class.data, (int)type_kind_name.size, type_kind_name.data,
           (int)element_type_name.size, element_type_name.data,
           row->assignment_index, row->slot_index, (int)slot_space.size,
           slot_space.data, row->byte_size, row->byte_alignment,
@@ -553,6 +650,7 @@ static iree_status_t loom_target_compile_report_format_source_low_rows(
       const iree_string_view_t selection_name =
           loom_target_compile_report_source_low_selection_name(
               row->selection_kind);
+      const iree_string_view_t plan_detail = row->plan_detail;
       if (row->selection_kind ==
           LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE) {
         IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -566,15 +664,28 @@ static iree_status_t loom_target_compile_report_format_source_low_rows(
             row->rule_index, row->descriptor_id, row->emitted_low_op_count));
         continue;
       }
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-          builder,
-          "COMPILE-REPORT: source_low[%" PRIhsz
-          "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
-          "descriptor=%" PRIu64 " emitted_ops=%u\n",
-          row_index, (int)function_name.size, function_name.data,
-          (int)source_op_name.size, source_op_name.data,
-          (int)selection_name.size, selection_name.data, row->plan_id,
-          row->descriptor_id, row->emitted_low_op_count));
+      if (!iree_string_view_is_empty(plan_detail)) {
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder,
+            "COMPILE-REPORT: source_low[%" PRIhsz
+            "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
+            " detail=%.*s descriptor=%" PRIu64 " emitted_ops=%u\n",
+            row_index, (int)function_name.size, function_name.data,
+            (int)source_op_name.size, source_op_name.data,
+            (int)selection_name.size, selection_name.data, row->plan_id,
+            (int)plan_detail.size, plan_detail.data, row->descriptor_id,
+            row->emitted_low_op_count));
+      } else {
+        IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+            builder,
+            "COMPILE-REPORT: source_low[%" PRIhsz
+            "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
+            " descriptor=%" PRIu64 " emitted_ops=%u\n",
+            row_index, (int)function_name.size, function_name.data,
+            (int)source_op_name.size, source_op_name.data,
+            (int)selection_name.size, selection_name.data, row->plan_id,
+            row->descriptor_id, row->emitted_low_op_count));
+      }
     }
   }
   return iree_ok_status();
@@ -847,15 +958,15 @@ static iree_status_t loom_target_compile_report_format_move_cause_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
-static iree_status_t loom_target_compile_report_format_move_causes_json(
-    const loom_target_compile_report_t* report,
+static iree_status_t loom_target_compile_report_format_move_cause_counts_json(
+    const loom_target_compile_report_move_cause_counts_t* counts,
     loom_target_compile_report_format_mode_t mode,
     loom_output_stream_t* stream) {
   uint64_t kind_count = 0;
   uint64_t packet_count = 0;
   uint64_t unit_count = 0;
-  loom_target_compile_report_move_cause_totals(report, &kind_count,
-                                               &packet_count, &unit_count);
+  loom_target_compile_report_move_cause_counts_totals(
+      counts, &kind_count, &packet_count, &unit_count);
   bool first_field = true;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
@@ -875,12 +986,19 @@ static iree_status_t loom_target_compile_report_format_move_causes_json(
       const loom_target_compile_report_move_cause_descriptor_t* descriptor =
           &loom_target_compile_report_move_cause_descriptors[i];
       IREE_RETURN_IF_ERROR(loom_target_compile_report_format_move_cause_json(
-          stream, descriptor, &report->move_causes[descriptor->cause],
-          &first_row));
+          stream, descriptor, &counts[descriptor->cause], &first_row));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
   }
   return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_target_compile_report_format_move_causes_json(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  return loom_target_compile_report_format_move_cause_counts_json(
+      report->move_causes, mode, stream);
 }
 
 static iree_status_t loom_target_compile_report_format_emission_json(
@@ -910,6 +1028,181 @@ static iree_status_t loom_target_compile_report_format_memory_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t loom_target_compile_report_format_entry_mix_json(
+    const loom_target_compile_report_static_instruction_mix_t* mix,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "descriptor_count", mix->descriptor_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "unknown_count", mix->unknown_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "scalar_alu_count", mix->scalar_alu_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "vector_alu_count", mix->vector_alu_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "matrix_count", mix->matrix_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "mfma_count", mix->mfma_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "wmma_count", mix->wmma_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "dot_count", mix->dot_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "global_memory_count", mix->global_memory_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "local_memory_count", mix->local_memory_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "scalar_memory_count", mix->scalar_memory_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "generic_memory_count", mix->generic_memory_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "atomic_count", mix->atomic_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "branch_count", mix->branch_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "barrier_count", mix->barrier_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "control_count", mix->control_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "conversion_count", mix->conversion_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "cache_count", mix->cache_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "register_move_count", mix->register_move_count));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_target_compile_report_format_entry_json(
+    const loom_target_compile_report_entry_t* row, iree_host_size_t row_index,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "source_function", row->source_function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_bundle", row->target_bundle_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_snapshot", row->target_snapshot_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_export", row->target_export_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_export_symbol",
+          row->target_export_symbol));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_config", row->target_config_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "detail_flags", row->detail_flags));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "schedule_node_count", row->schedule_node_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "scheduled_node_count", row->scheduled_node_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "schedule_dependency_count",
+      row->schedule_dependency_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "schedule_resource_use_count",
+      row->schedule_resource_use_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "schedule_hazard_gap_count",
+      row->schedule_hazard_gap_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "schedule_model_summary_count",
+      row->schedule_model_summary_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "register_pressure_summary_count",
+      row->register_pressure_summary_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "register_pressure_peak_live_units",
+      row->register_pressure_peak_live_units));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_assignment_count",
+      row->allocation_assignment_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_spill_count",
+      row->allocation_spill_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_spill_plan_count",
+      row->allocation_spill_plan_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_coalesced_copy_count",
+      row->allocation_coalesced_copy_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "allocation_materialized_copy_count",
+      row->allocation_materialized_copy_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+      stream, &first_field, "move_causes"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_format_move_cause_counts_json(
+      row->move_causes, mode, stream));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "instruction_count",
+      row->emitted_instruction_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "code_byte_count", row->emitted_code_byte_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "code_storage_byte_count",
+      row->emitted_code_storage_byte_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "private_memory_bytes", row->private_memory_bytes));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "local_memory_bytes", row->local_memory_bytes));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "pressure_row_count", row->pressure_row_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "spill_row_count", row->spill_row_count));
+  if (iree_any_bit_set(
+          row->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "static_instruction_mix"));
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entry_mix_json(
+        &row->static_instruction_mix, stream));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_target_compile_report_format_entries_json(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "count", report->entry_rows.count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+      stream, &first_field, "rows"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+  iree_host_size_t row_index = 0;
+  for (const loom_target_compile_report_vec_t* vec = report->entry_rows.head;
+       vec != NULL; vec = vec->next) {
+    const loom_target_compile_report_entry_t* rows =
+        (const loom_target_compile_report_entry_t*)
+            loom_target_compile_report_vec_const_rows(vec);
+    for (iree_host_size_t i = 0; i < vec->count; ++i, ++row_index) {
+      if (row_index != 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+      }
+      IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entry_json(
+          &rows[i], row_index, mode, stream));
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t loom_target_compile_report_format_pressure_row_json(
     const loom_target_compile_report_pressure_row_t* row,
     iree_host_size_t row_index, loom_output_stream_t* stream) {
@@ -917,6 +1210,9 @@ static iree_status_t loom_target_compile_report_format_pressure_row_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
       stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "register_class", row->register_class));
@@ -985,6 +1281,9 @@ static iree_status_t loom_target_compile_report_format_spill_row_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
       stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "value", row->value_name));
@@ -1075,6 +1374,9 @@ static iree_status_t loom_target_compile_report_format_source_low_row_json(
       stream, &first_field, "rule_index", row->rule_index));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u64_field(
       stream, &first_field, "plan_id", row->plan_id));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "plan_detail", row->plan_detail));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u64_field(
       stream, &first_field, "descriptor_id", row->descriptor_id));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
@@ -1259,6 +1561,11 @@ iree_status_t loom_target_compile_report_format_text(
   }
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_format_summary(report, builder));
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES)) {
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_entry_rows(report, builder));
+  }
   if (options->mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_move_causes(report, builder));
@@ -1298,6 +1605,9 @@ iree_status_t loom_target_compile_report_format_json(
           stream, &first_field, "module", report->module_name));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", report->function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "backend", report->backend_name));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
@@ -1317,6 +1627,10 @@ iree_status_t loom_target_compile_report_format_json(
           stream, &first_field, "target_export", report->target_export_name));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_export_symbol",
+          report->target_export_symbol));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
           stream, &first_field, "target_config", report->target_config_name));
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_json_write_optional_string_field(
@@ -1330,6 +1644,13 @@ iree_status_t loom_target_compile_report_format_json(
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_ARTIFACT_SIZE)) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
         stream, &first_field, "artifact_size", report->artifact_size));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_ENTRIES)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "entries"));
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_entries_json(
+        report, options->mode, stream));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE)) {

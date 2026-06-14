@@ -140,6 +140,10 @@ typedef struct loom_low_schedule_build_state_t {
   uint32_t* resource_ready_issue_cycles;
   // Earliest issue cycle at which each node's SSA inputs are ready.
   uint32_t* node_ready_issue_cycles;
+  // Per-node head of outgoing dependency lists during list scheduling.
+  const uint32_t* outgoing_heads;
+  // Per-dependency next link for outgoing dependency lists.
+  const uint32_t* outgoing_next_indices;
   // Most recent producer state for each minimum-distance hazard key.
   loom_low_schedule_hazard_state_t* hazard_states;
   // Descriptor register-class state read/write bits, dense by register class.
@@ -219,6 +223,8 @@ typedef struct loom_low_schedule_build_state_t {
   uint32_t current_block_index;
   // Current issue cycle within the block being scheduled.
   uint32_t current_issue_cycle;
+  // Pending visible descriptor node that can start a target pair.
+  uint32_t pending_pair_affinity_node;
 } loom_low_schedule_build_state_t;
 
 static inline uint32_t loom_low_schedule_saturating_add_u32(uint32_t lhs,

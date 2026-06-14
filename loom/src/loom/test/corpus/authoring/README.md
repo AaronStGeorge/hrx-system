@@ -25,12 +25,14 @@ belong to `iree-benchmark-loom` flags or embedding APIs.
 | --- | --- |
 | Concrete helper call | `ffn_gate_up_swiglu_q6q8.loom` calls `@q6_signed_pack_dot4i` with `func.call` because it is exact bit manipulation. |
 | Dynamic extent byte fill | `memset_i8.loom` keeps a 64-bit pattern argument and narrows it at the byte store, matching runtime-style ABI pressure without runtime-specific names. |
+| Loaded row-index gather | `indexed_row_gather_f32.loom` guards loaded i32 row ids before `index.cast` and uses real dynamic view extents instead of sentinel shapes. |
 | Template provider selection | `ffn_gate_up_swiglu_q6q8.loom` applies `model.q6q8.accumulate_part` so libraries can provide alternate packed-dot implementations. |
 | Local unroll intent | `ffn_gate_up_swiglu_q6q8.loom` keeps block/part loops structured and marks the tiny trip-count loops with `unroll`. |
 | Logical indexing | The examples use index/view math for logical rows, blocks, lanes, byte positions, and dense tensor coordinates. |
 | Dynamic case parameters | `mlp_down_projection_residual_bf16.loom` names `rows` on a `check.param.choice` and threads it through shapes, launch geometry, and the kernel ABI. |
 | Benchmark slices | `mlp_down_projection_residual_bf16.loom` has an anonymous full sweep plus named decode/full rows with assignment dictionaries. |
 | HIP C++ porting motifs | `hip/README.md` maps HIP/CUDA kernel habits to Loom source spellings, proof commands, diagnostics, and report queries. |
+| Packed field contracts | `hip/packed_field_contracts.loom` shows q2/q3/q4/q5/q6-style fields as explicit storage/decode/repack contracts instead of fake scalar element types. |
 
 ## FFN q6/q8 Gate-Up SwiGLU
 
@@ -66,7 +68,7 @@ reduction, SiLU, and store. Higher-fidelity math oracles belong in the external
 fixture/reference layer when the expected values are too large or too expensive
 to express inline.
 
-### Q8 Command Flow
+### Quantized AMDGPU Command Flow
 
 Start with the host-only planner when editing source shape, check parameters,
 or benchmark rows:
@@ -287,10 +289,29 @@ symbol when target lowering reaches it. `hot` and `cold` are separate
 temperature hints for cost models or profile feedback; they are not substitutes
 for authored inline policy.
 
-Facts are source facts, not global flags. The examples use `index.assume`,
-function signatures, named shape dimensions, and `check.param.choice` samples to
-make dimensions and alignment available to passes. Module-level configuration
-is reserved for values that are genuinely shared by the module or library.
+Facts are source facts, not global flags. Put reusable facts at the boundary
+that owns them: `config.decl` and function/kernel signatures for shape choices,
+`kernel.launch.config` for launch topology, kernel ABI buffer arguments for
+global memory space, and checked samples for benchmark-specific values. Local
+assumes are for facts discovered inside the body, such as guarded row IDs,
+clamped values, or dynamic alignment proof. They should not reassert config
+declarations, launch dimensions, or kernel buffer memory space.
+
+Use `index` for logical coordinates, extents, and tensor/view indices. Use
+`offset` for byte offsets and byte strides. Views should carry real extents
+from the source contract; large sentinel shapes that only make proofs pass
+destroy bounds-checking and sanitizer value because the compiler can no longer
+see the real accessible range.
+
+When a logical coordinate selects a packed byte window, `index.scale` is the
+explicit boundary: it multiplies an `index` coordinate by an `offset` byte
+stride and produces the `offset` value expected by `buffer.view`.
+
+The authoring source linter keeps this reference surface aligned with those
+rules. It rejects redundant kernel-buffer memory-space assumes, sentinel-sized
+views, late `index.cast` byte-address conversions, and ggml-style `nb*` byte
+strides typed as `index`, because agents copy examples before they read design
+notes.
 
 `check.case` owns correctness policy for a workload. It creates inputs, calls
 the unit under test, and states expectations. `check.benchmark<@case>` selects

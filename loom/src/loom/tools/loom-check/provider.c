@@ -182,6 +182,9 @@ int loom_check_provider_main(int argc, char** argv,
       .low_packet_diagnostic_provider_list =
           loom_target_environment_low_packet_diagnostic_provider_list(
               &state.target_environment),
+      .low_asm_diagnostic_provider_list =
+          loom_target_environment_low_asm_diagnostic_provider_list(
+              &state.target_environment),
       .low_verify_provider_list =
           loom_target_environment_low_verify_provider_list(
               &state.target_environment),

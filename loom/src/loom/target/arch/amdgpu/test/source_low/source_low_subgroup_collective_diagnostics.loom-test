@@ -321,7 +321,6 @@ kernel.def target(@target) @subgroup_vote_ballot_uniform_predicate_rejected() {
 }
 
 // ====
-// RUN: emit source-low output=low
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @subgroup_active_mask_i32_wave64_rejected() {

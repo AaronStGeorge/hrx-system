@@ -47,6 +47,7 @@ class GuardKind(Enum):
     DESCRIPTOR_AVAILABLE = "descriptor_available"
     VALUE_MATERIALIZABLE = "value_materializable"
     LOW_VALUE_REGISTER_CLASS = "low_value_register_class"
+    LOW_VALUE_REGISTER_UNIT_COUNT = "low_value_register_unit_count"
     VALUE_STATIC_DIM0_MULTIPLE = "value_static_dim0_multiple"
     LOW_VALUE_REGISTER_UNIT_COUNT_EQ = "low_value_register_unit_count_eq"
     OPERAND_SEGMENT_COUNT = "operand_segment_count"
@@ -64,6 +65,7 @@ class GuardKind(Enum):
     VALUE_I64_RANGE_GE = "value_i64_range_ge"
     VALUE_F64_EQUALS = "value_f64_equals"
     VALUE_STORAGE_ELEMENT_FORMAT = "value_storage_element_format"
+    VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
 
 
@@ -222,6 +224,21 @@ class Guard:
             kind=GuardKind.LOW_VALUE_REGISTER_CLASS,
             field=field,
             register_class=register_class,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def low_value_register_unit_count(
+        cls,
+        field: str,
+        count: int,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
+            field=field,
+            count=count,
             diagnostic=diagnostic,
         )
 
@@ -455,6 +472,19 @@ class Guard:
         )
 
     @classmethod
+    def value_no_uses(
+        cls,
+        field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_NO_USES,
+            field=field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def instance_flags_has_all(
         cls,
         field: str,
@@ -560,6 +590,13 @@ class Guard:
             if self.register_class is None:
                 raise ValueError(f"{source_op.name}: {subject} needs a register class")
             return
+        if self.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
+            _require_value(source_op, self.field, subject)
+            if self.count is None or self.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: {subject} needs a positive unit count"
+                )
+            return
         if self.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
             _require_value(source_op, self.field, subject)
             if self.count is None or self.count <= 0:
@@ -597,6 +634,9 @@ class Guard:
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
         ):
             _validate_value_fact_guard(self, source_op, subject)
+            return
+        if self.kind == GuardKind.VALUE_NO_USES:
+            _require_value(source_op, self.field, subject)
             return
         if self.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
             attr = _require_attr(source_op, self.field, subject)

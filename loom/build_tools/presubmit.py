@@ -36,6 +36,7 @@ RESOURCE_TEST_TAG_FILTERS = (
     "-iree-run-requirement=runtime.resource.webgpu_device",
 )
 CTEST_RESOURCE_LABEL_EXCLUDE_REGEX = "runtime-resource="
+CI_LOOM_TARGETS = "amdgpu,iree_vm,llvmir,spirv,x86"
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -94,6 +95,7 @@ def bazel_test_command() -> list[str]:
         "bazel",
         "test",
         "--config=presubmit",
+        f"--//loom/config/target:enable={CI_LOOM_TARGETS}",
         "--test_tag_filters=" + ",".join(RESOURCE_TEST_TAG_FILTERS),
         "//loom/...",
     ]

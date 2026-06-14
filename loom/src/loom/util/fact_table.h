@@ -660,11 +660,18 @@ iree_status_t loom_value_fact_table_initialize_with_arenas(
 // storage remain allocated for reuse.
 void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table);
 
-// Looks up facts for a value. Returns unknown facts if the value ID
-// is out of range or the entry is undefined (known_divisor == 0).
+// Returns true when |value_id| has explicitly defined facts in |table|.
+static inline bool loom_value_fact_table_has_entry(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id) {
+  return value_id < table->capacity &&
+         table->entries[value_id].known_divisor != 0;
+}
+
+// Looks up facts for a value. Returns unknown facts if the value ID is out of
+// range or the entry is undefined.
 static inline loom_value_facts_t loom_value_fact_table_lookup(
     const loom_value_fact_table_t* table, loom_value_id_t value_id) {
-  if (value_id >= table->count || table->entries[value_id].known_divisor == 0) {
+  if (!loom_value_fact_table_has_entry(table, value_id)) {
     return loom_value_facts_unknown();
   }
   return table->entries[value_id];

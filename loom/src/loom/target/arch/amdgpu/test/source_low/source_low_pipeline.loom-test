@@ -13,6 +13,8 @@ pass.pipeline<module> @__loom_check_source_low pipeline {
       legalize-math
       normalize-kernel-resources
       promote-private-fragments
+      canonicalize
+      cse
     }
   }
   select-templates(mode = "final")
@@ -78,16 +80,13 @@ low.func.def target(@gfx11) abi(hal_kernel) @target_template_prunes_nonmatching_
   %16 = v_and_b32_lit %15, 255
   %17 = slice %codes[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %18 = v_and_b32_lit %17, 255
-  %19 = v_lshlrev_b32_src0_inline %18, 8
-  %20 = v_or_b32 %16, %19
-  %21 = slice %codes[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %22 = v_and_b32_lit %21, 255
-  %23 = v_lshlrev_b32_src0_inline %22, 16
-  %24 = v_or_b32 %20, %23
-  %25 = slice %codes[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %26 = v_and_b32_lit %25, 255
-  %27 = v_lshlrev_b32_src0_inline %26, 24
-  %packed = v_or_b32 %24, %27
+  %19 = v_lshl_add_u32_shift_imm %18, %16, 8
+  %20 = slice %codes[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %21 = v_and_b32_lit %20, 255
+  %22 = v_lshl_add_u32_shift_imm %21, %19, 16
+  %23 = slice %codes[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %24 = v_and_b32_lit %23, 255
+  %packed = v_lshl_add_u32_shift_imm %24, %22, 24
   return %packed
 }
 
@@ -110,6 +109,8 @@ pass.pipeline<module> @__loom_check_prepared_low pipeline {
       legalize-math
       normalize-kernel-resources
       promote-private-fragments
+      canonicalize
+      cse
     }
   }
   select-templates(mode = "final")
@@ -153,4 +154,22 @@ pass.pipeline<module> @__loom_check_prepared_low pipeline {
       low-dce
     }
   }
+}
+
+// ====
+// RUN: emit source-low output=module
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @module_output_prints_low_asm(%lhs: i32, %rhs: i32) -> (i32) {
+  %product = scalar.muli %lhs, %rhs : i32
+  func.return %product : i32
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) abi(hal_kernel) @module_output_prints_low_asm(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %product = s_mul_i32 %lhs, %rhs
+  return %product
 }

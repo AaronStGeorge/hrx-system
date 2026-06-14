@@ -18,3 +18,11 @@ func.def @turn_trig_math(%x: f32) -> (f32, f32) {
   %cos = scalar.costurnsf<afn> %x : f32
   func.return %sin, %cos : f32, f32
 }
+
+// ====
+
+func.def @bitfield_extract(%word: i32) -> (i32, i32) {
+  %unsigned = scalar.bitfield.extractu %word {offset = 8, width = 8} : i32 -> i32
+  %signed = scalar.bitfield.extracts %word {offset = 24, width = 8} : i32 -> i32
+  func.return %unsigned, %signed : i32, i32
+}

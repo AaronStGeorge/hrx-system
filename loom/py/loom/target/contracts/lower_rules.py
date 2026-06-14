@@ -82,6 +82,7 @@ class LowerAttrCopyKind(Enum):
     ENUM_ORDINAL = "enum_ordinal"
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
+    I64_ATTRS_PACK_CONSECUTIVE = "i64_attrs_pack_consecutive"
     I64_LITERAL = "i64_literal"
     VALUE_EXACT_I64 = "value_exact_i64"
     VALUE_EXACT_I64_NEGATE = "value_exact_i64_negate"
@@ -401,6 +402,10 @@ class _LowerRuleSetCompiler:
         authored_case_index: int,
         rule: ValueElideRule,
     ) -> None:
+        guard_start = len(self._guards)
+        type_patterns_by_field: dict[str, TypePattern] = {}
+        for guard in rule.guards:
+            self._append_guard(rule.source_op, guard, type_patterns_by_field)
         elide_ref_start = self._append_value_ref_sequence(
             tuple(
                 self._lower_value_ref(rule.source_op, value, {})
@@ -411,8 +416,8 @@ class _LowerRuleSetCompiler:
             LowerRule(
                 source_op=rule.source_op,
                 temporary_count=0,
-                guard_start=0,
-                guard_count=0,
+                guard_start=guard_start,
+                guard_count=len(self._guards) - guard_start,
                 emit_start=0,
                 emit_count=0,
                 elide_ref_start=elide_ref_start,
@@ -602,6 +607,34 @@ class _LowerRuleSetCompiler:
             )
             return
 
+        if guard.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT:
+            if guard.count is None or guard.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: register-unit-count guard needs a "
+                    "positive count"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.field),
+                    ),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _register_unit_count_exact_diagnostic(
+                                guard.field,
+                                guard.count,
+                            ),
+                        ),
+                    ),
+                    u64=guard.count,
+                )
+            )
+            return
+
         if guard.kind == GuardKind.VALUE_STATIC_DIM0_MULTIPLE:
             if guard.count is None or guard.count <= 0:
                 raise ValueError(
@@ -770,6 +803,25 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
         ):
             self._append_value_fact_guard(source_op, guard)
+            return
+
+        if guard.kind == GuardKind.VALUE_NO_USES:
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.field),
+                    ),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _value_no_uses_diagnostic(guard.field),
+                        ),
+                    ),
+                )
+            )
             return
 
         if guard.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
@@ -1334,6 +1386,19 @@ class _LowerRuleSetCompiler:
                 source_element_bit_width=project.bit_width,
                 target_bit_offset=project.target_bit_offset,
             )
+        if project.kind == AttrProjectKind.I64_ATTRS_PACK_CONSECUTIVE:
+            if project.count is None or project.bit_width is None:
+                raise ValueError(
+                    f"{source_op.name}: i64-attrs pack projection needs payload"
+                )
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+                source_element_count=project.count,
+                source_element_bit_width=project.bit_width,
+                target_bit_offset=project.target_bit_offset,
+            )
         raise ValueError(
             f"{source_op.name}: immediate projection '{project.kind.value}' is "
             "not representable by generated lower rules yet"
@@ -1800,6 +1865,15 @@ def _register_unit_count_diagnostic(
     )
 
 
+def _register_unit_count_exact_diagnostic(field: str, count: int) -> DiagnosticRef:
+    return _count_constraint_diagnostic(
+        "field",
+        field,
+        "low_register_unit_count",
+        count,
+    )
+
+
 def _operand_segment_count_diagnostic(field: str, count: int) -> DiagnosticRef:
     return _count_constraint_diagnostic(
         "operand_segment",
@@ -1911,6 +1985,10 @@ def _float_equals_diagnostic(field: str, value: float) -> DiagnosticRef:
 
 def _storage_element_format_diagnostic(field: str) -> DiagnosticRef:
     return _named_constraint_diagnostic("value", field, "storage_schema.element_format")
+
+
+def _value_no_uses_diagnostic(field: str) -> DiagnosticRef:
+    return _named_constraint_diagnostic("value", field, "no_ordinary_uses")
 
 
 def _instance_flags_diagnostic(field: str, enum_keyword: str) -> DiagnosticRef:

@@ -33,6 +33,17 @@ iree_native_test(
 
 iree_native_test(
   NAME
+    "config_decl_facts"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/config_decl_facts.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
     "index_addressing"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/index_addressing.loom-test"
@@ -253,6 +264,17 @@ iree_native_test(
 
 iree_native_test(
   NAME
+    "numeric_scalar_i64"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/numeric_scalar_i64.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
     "packed_bitfield"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packed_bitfield.loom-test"
@@ -322,6 +344,28 @@ iree_native_test(
     "packed_dot_wide"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packed_dot_wide.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
+    "packed_payload_offsets"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_payload_offsets.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
+    "packed_q8_dequant_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_q8_dequant_dot.loom-test"
   SRC
     loom::tools::loom-check::loom-check
   LABELS

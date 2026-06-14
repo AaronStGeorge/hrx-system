@@ -203,8 +203,21 @@ def _immediate_has_default(immediate: Immediate) -> bool:
     return ImmediateFlag.DEFAULT_VALUE in immediate.flags
 
 
+def _enum_domain_values(
+    descriptor_set: DescriptorSet,
+    enum_domain_name: str,
+) -> tuple[int, ...]:
+    for enum_domain in descriptor_set.enum_domains:
+        if enum_domain.name == enum_domain_name:
+            return tuple(enum_value.value for enum_value in enum_domain.values)
+    raise ValueError(
+        f"descriptor set '{descriptor_set.key}' has no enum domain '{enum_domain_name}'"
+    )
+
+
 def _validate_immediate_literal(
     source_op: Op,
+    descriptor_set: DescriptorSet,
     descriptor: Descriptor,
     immediate: Immediate,
     value: int,
@@ -213,6 +226,20 @@ def _validate_immediate_literal(
         raise ValueError(
             f"{source_op.name}: descriptor '{descriptor.key}' immediate "
             f"'{immediate.field_name}' literal must be an integer"
+        )
+    if immediate.kind == ImmediateKind.ENUM:
+        if immediate.enum_domain is None:
+            raise ValueError(
+                f"{source_op.name}: descriptor '{descriptor.key}' immediate "
+                f"'{immediate.field_name}' has enum kind without enum domain"
+            )
+        enum_values = _enum_domain_values(descriptor_set, immediate.enum_domain)
+        if value in enum_values:
+            return
+        raise ValueError(
+            f"{source_op.name}: descriptor '{descriptor.key}' immediate "
+            f"'{immediate.field_name}' literal {value} is not in enum domain "
+            f"'{immediate.enum_domain}'"
         )
     if immediate.kind == ImmediateKind.SIGNED:
         if value < immediate.signed_min or value > immediate.unsigned_max:

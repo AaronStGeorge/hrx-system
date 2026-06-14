@@ -162,6 +162,55 @@ static iree_status_t loom_amdgpu_emit_memory_access_flat_dynamic_error(
       context, op, LOOM_ERR_AMDGPU_020_REF, params, IREE_ARRAYSIZE(params));
 }
 
+static loom_value_facts_t loom_amdgpu_source_memory_byte_offset_facts(
+    const loom_low_source_memory_access_plan_t* source) {
+  loom_value_facts_t offset_facts =
+      loom_value_facts_exact_i64(source->static_byte_offset);
+  for (uint8_t i = 0; i < source->dynamic_term_count; ++i) {
+    loom_value_facts_addi(&offset_facts, &source->dynamic_terms[i].byte_facts,
+                          &offset_facts);
+  }
+  return offset_facts;
+}
+
+static iree_status_t loom_amdgpu_emit_memory_access_dynamic_offset_error(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    const loom_low_source_memory_access_plan_t* source,
+    const loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  loom_low_source_memory_dynamic_term_t term = {0};
+  if (diagnostic->dynamic_term_index < source->dynamic_term_count) {
+    term = source->dynamic_terms[diagnostic->dynamic_term_index];
+  }
+  const loom_value_facts_t offset_facts =
+      loom_amdgpu_source_memory_byte_offset_facts(source);
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->export_plan->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_amdgpu_memory_diagnostic_nonempty(
+          bundle->config->name, IREE_SV("<empty>"))),
+      loom_param_string(loom_target_low_legality_function_name(context)),
+      loom_param_string(loom_op_name(module, op)),
+      loom_param_string(
+          loom_amdgpu_source_memory_operation_name(source->operation_kind)),
+      loom_param_string(loom_amdgpu_memory_space_name(source->memory_space)),
+      loom_param_i64(offset_facts.range_lo),
+      loom_param_i64(offset_facts.range_hi),
+      loom_param_u32(diagnostic->dynamic_term_index),
+      loom_param_i64(term.byte_stride),
+      loom_param_i64(term.byte_facts.range_lo),
+      loom_param_i64(term.byte_facts.range_hi),
+      loom_param_u32(term.byte_shift),
+      loom_param_i64(source->static_byte_offset),
+      loom_param_string(IREE_SV("memory_access.dynamic_offset_range")),
+  };
+  return loom_target_low_legality_emit_error_ref(
+      context, op, LOOM_ERR_AMDGPU_034_REF, params, IREE_ARRAYSIZE(params));
+}
+
 iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_low_source_memory_access_plan_t* source,
@@ -178,6 +227,12 @@ iree_status_t loom_amdgpu_emit_memory_access_rejection_diagnostic(
           diagnostic->rejection_bits,
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS)) {
     return loom_amdgpu_emit_memory_access_flat_dynamic_error(
+        context, op, source, diagnostic);
+  }
+  if (iree_any_bit_set(
+          diagnostic->rejection_bits,
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE)) {
+    return loom_amdgpu_emit_memory_access_dynamic_offset_error(
         context, op, source, diagnostic);
   }
   *out_handled = false;
@@ -279,6 +334,18 @@ static const loom_amdgpu_memory_access_rejection_key_t
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_MISSING,
             .constraint_key = IREE_SVL("memory_access.descriptor_missing"),
+        },
+        {
+            .rejection_bit =
+                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_LOW16_DESCRIPTOR_MISSING,
+            .constraint_key =
+                IREE_SVL("memory_access.low16_descriptor_missing"),
+        },
+        {
+            .rejection_bit =
+                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SIGNED_I16_REPAIR_DESCRIPTOR_MISSING,
+            .constraint_key =
+                IREE_SVL("memory_access.signed_i16_repair_descriptor_missing"),
         },
         {
             .rejection_bit =

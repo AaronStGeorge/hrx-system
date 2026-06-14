@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
 from loom.target.arch.amdgpu.encoding import (
+    AMDGPU_ENCODING_FORMAT_XML_NAMES_BY_ID,
     amdgpu_encoding_field_id,
     amdgpu_encoding_field_name,
     amdgpu_encoding_format_id,
@@ -37,6 +38,7 @@ from loom.target.low_descriptors import (
     Constraint,
     ConstraintKind,
     Descriptor,
+    DescriptorAsmSurface,
     DescriptorFlag,
     Effect,
     EncodingFieldValue,
@@ -134,6 +136,8 @@ class AmdgpuDescriptorOverlay:
     feature_mask_words: tuple[int, ...] = ()
     flags: tuple[DescriptorFlag, ...] = ()
     asm_forms: tuple[AsmForm, ...] | None = None
+    asm_surface: DescriptorAsmSurface = DescriptorAsmSurface.AUTHORABLE
+    asm_surface_reason: str = ""
 
 
 def _asm_forms_for_overlay(overlay: AmdgpuDescriptorOverlay) -> tuple[AsmForm, ...]:
@@ -195,6 +199,8 @@ def materialize_amdgpu_descriptor_overlay(
             spec, overlay, encoding
         ),
         asm_forms=_asm_forms_for_overlay(overlay),
+        asm_surface=overlay.asm_surface,
+        asm_surface_reason=overlay.asm_surface_reason,
         effects=overlay.effects,
         constraints=overlay.constraints,
         operand_forms=overlay.operand_forms,
@@ -218,6 +224,17 @@ def _encoding_format_id(overlay: AmdgpuDescriptorOverlay) -> int:
             f"descriptor overlay '{overlay.descriptor_key}' references "
             f"unmapped AMDGPU encoding format '{overlay.encoding_name}'"
         ) from exc
+
+
+def _immediate_field_is_synthetic_literal(
+    overlay: AmdgpuDescriptorOverlay, immediate_field: str
+) -> bool:
+    if immediate_field != "LITERAL":
+        return False
+    format_name = AMDGPU_ENCODING_FORMAT_XML_NAMES_BY_ID.get(
+        _encoding_format_id(overlay)
+    )
+    return format_name is not None and "INST_LITERAL" in format_name
 
 
 def _materialize_operand_overlay(operand_overlay: AmdgpuOperandOverlay) -> Operand:
@@ -526,6 +543,8 @@ def _validate_operand_overlay(
         elif immediate_field in partition_carriers:
             covered_fields.add(partition_carriers[immediate_field])
         elif immediate_field not in encoding_fields:
+            if _immediate_field_is_synthetic_literal(overlay, immediate_field):
+                continue
             raise AmdgpuDescriptorOverlayError(
                 f"descriptor overlay '{overlay.descriptor_key}' references "
                 f"missing immediate encoding field '{immediate_field}' on instruction "

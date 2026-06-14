@@ -61,8 +61,6 @@ typedef struct loom_math_legalize_lane_builders_t {
   loom_math_legalize_unary_build_fn_t sinturnsf;
   // Builds a lane-wise cosine over turns in the source lane domain.
   loom_math_legalize_unary_build_fn_t costurnsf;
-  // Builds a lane-wise hyperbolic tangent in the source lane domain.
-  loom_math_legalize_unary_build_fn_t tanhf;
   // Builds a lane-wise logistic op in the source lane domain.
   loom_math_legalize_unary_build_fn_t logisticf;
   // Builds a lane-wise floating-point precision extension.
@@ -72,8 +70,10 @@ typedef struct loom_math_legalize_lane_builders_t {
 } loom_math_legalize_lane_builders_t;
 
 typedef struct loom_math_legalize_source_t {
-  // Source op operand that feeds the semantic math op.
+  // Primary source op operand that feeds the semantic math op.
   loom_value_id_t input;
+  // Secondary source op operand for binary semantic math ops.
+  loom_value_id_t secondary_input;
   // Source result type preserved by the replacement expression.
   loom_type_t result_type;
   // Source fast-math flags forwarded to replacement floating-point ops.
@@ -131,7 +131,6 @@ static const loom_math_legalize_lane_builders_t kScalarLaneBuilders = {
     .log2f = loom_scalar_log2f_build,
     .sinturnsf = loom_scalar_sinturnsf_build,
     .costurnsf = loom_scalar_costurnsf_build,
-    .tanhf = loom_scalar_tanhf_build,
     .logisticf = loom_scalar_logisticf_build,
     .extf = loom_scalar_extf_build,
     .fptrunc = loom_scalar_fptrunc_build,
@@ -148,7 +147,6 @@ static const loom_math_legalize_lane_builders_t kVectorLaneBuilders = {
     .log2f = loom_vector_log2f_build,
     .sinturnsf = loom_vector_sinturnsf_build,
     .costurnsf = loom_vector_costurnsf_build,
-    .tanhf = loom_vector_tanhf_build,
     .logisticf = loom_vector_logisticf_build,
     .extf = loom_vector_extf_build,
     .fptrunc = loom_vector_fptrunc_build,
@@ -176,8 +174,11 @@ static iree_status_t loom_math_legalize_source_initialize(
         "math recipe selected for op with unsupported operand/result shape");
   }
 
+  const loom_value_id_t* operands = loom_op_const_operands(op);
   *out_source = (loom_math_legalize_source_t){
-      .input = loom_op_const_operands(op)[0],
+      .input = operands[0],
+      .secondary_input =
+          op->operand_count >= 2 ? operands[1] : LOOM_VALUE_ID_INVALID,
       .result_type =
           loom_module_value_type(context->module, loom_op_results(op)[0]),
       .fastmath_flags = op->instance_flags,
@@ -485,6 +486,45 @@ static iree_status_t loom_math_legalize_build_logistic_exp2(
                                            out_value);
 }
 
+static iree_status_t loom_math_legalize_build_tanh_logistic(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    loom_value_id_t input, loom_value_id_t* out_value) {
+  loom_value_id_t negative_one = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t two = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t scaled = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t logistic = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t doubled_logistic = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_math_legalize_build_constant(builder, source, -1.0, &negative_one));
+  IREE_RETURN_IF_ERROR(
+      loom_math_legalize_build_constant(builder, source, 2.0, &two));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->mulf, input, two, &scaled));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_unary(
+      builder, source, source->lane_builders->logisticf, scaled, &logistic));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->mulf, logistic, two,
+      &doubled_logistic));
+  return loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->addf, doubled_logistic,
+      negative_one, out_value);
+}
+
+static iree_status_t loom_math_legalize_build_pow_log2_exp2(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    loom_value_id_t* out_value) {
+  loom_value_id_t log2_base = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t exponent = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_unary(
+      builder, source, source->lane_builders->log2f, source->input,
+      &log2_base));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->mulf, log2_base,
+      source->secondary_input, &exponent));
+  return loom_math_legalize_build_unary(
+      builder, source, source->lane_builders->exp2f, exponent, out_value);
+}
+
 static iree_status_t loom_math_legalize_build_silu_logistic(
     loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_value_id_t* out_value) {
@@ -538,7 +578,7 @@ static iree_status_t loom_math_legalize_build_gelu_tanh(
   loom_value_id_t cubic_term = LOOM_VALUE_ID_INVALID;
   loom_value_id_t inner_sum = LOOM_VALUE_ID_INVALID;
   loom_value_id_t scaled = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t tanh = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t tanh_approximation = LOOM_VALUE_ID_INVALID;
   loom_value_id_t one_plus_tanh = LOOM_VALUE_ID_INVALID;
   loom_value_id_t half_input = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -564,10 +604,11 @@ static iree_status_t loom_math_legalize_build_gelu_tanh(
   IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
       builder, source, source->lane_builders->mulf, sqrt_2_over_pi, inner_sum,
       &scaled));
-  IREE_RETURN_IF_ERROR(loom_math_legalize_build_unary(
-      builder, source, source->lane_builders->tanhf, scaled, &tanh));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_tanh_logistic(
+      builder, source, scaled, &tanh_approximation));
   IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
-      builder, source, source->lane_builders->addf, one, tanh, &one_plus_tanh));
+      builder, source, source->lane_builders->addf, one, tanh_approximation,
+      &one_plus_tanh));
   IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
       builder, source, source->lane_builders->mulf, half, source->input,
       &half_input));
@@ -746,6 +787,12 @@ static iree_status_t loom_math_legalize_build_recipe(
     case LOOM_TARGET_MATH_RECIPE_LOG_LOG2_F32:
       return loom_math_legalize_build_log_log2(&rewriter->builder, &source,
                                                out_value);
+    case LOOM_TARGET_MATH_RECIPE_TANH_LOGISTIC_F32:
+      return loom_math_legalize_build_tanh_logistic(&rewriter->builder, &source,
+                                                    source.input, out_value);
+    case LOOM_TARGET_MATH_RECIPE_POW_LOG2_EXP2_F32:
+      return loom_math_legalize_build_pow_log2_exp2(&rewriter->builder, &source,
+                                                    out_value);
     case LOOM_TARGET_MATH_RECIPE_SIN_TURNS_F32:
       return loom_math_legalize_build_sin_turns(&rewriter->builder, &source,
                                                 out_value);
@@ -805,6 +852,8 @@ static bool loom_math_legalize_elementwise_recipe_is_supported(
     case LOOM_TARGET_MATH_RECIPE_LOG_LOG2_F32:
     case LOOM_TARGET_MATH_RECIPE_SIN_TURNS_F32:
     case LOOM_TARGET_MATH_RECIPE_COS_TURNS_F32:
+    case LOOM_TARGET_MATH_RECIPE_TANH_LOGISTIC_F32:
+    case LOOM_TARGET_MATH_RECIPE_POW_LOG2_EXP2_F32:
     case LOOM_TARGET_MATH_RECIPE_ERF_RATIONAL_F32:
     case LOOM_TARGET_MATH_RECIPE_LOGISTIC_EXP2_F32:
     case LOOM_TARGET_MATH_RECIPE_SILU_LOGISTIC_F32:

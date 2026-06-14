@@ -9,12 +9,16 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/move_sequence.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/encoding/encoding.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
+#include "loom/util/json.h"
+#include "loom/util/stream.h"
 
 typedef struct loom_amdgpu_vopd_candidate_component_t {
   // VOPD operation id encoded in this component slot.
@@ -44,6 +48,23 @@ typedef struct loom_amdgpu_vopd_candidate_pair_t {
   uint32_t literal_u32;
 } loom_amdgpu_vopd_candidate_pair_t;
 
+typedef struct loom_amdgpu_vopd_pair_analysis_t {
+  // Decoded first component facts.
+  loom_amdgpu_vopd_candidate_component_t first_component;
+  // True if the first packet decoded as a supported VOPD component form.
+  bool first_eligible;
+  // Decoded second component facts.
+  loom_amdgpu_vopd_candidate_component_t second_component;
+  // True if the second packet decoded as a supported VOPD component form.
+  bool second_eligible;
+  // Candidate pair facts populated when both components can be paired.
+  loom_amdgpu_vopd_candidate_pair_t candidate;
+  // True if the adjacent packets satisfy VOPD pair legality.
+  bool matched;
+  // Stable rejection reason when |matched| is false.
+  loom_amdgpu_vopd_rejection_reason_t rejection_reason;
+} loom_amdgpu_vopd_pair_analysis_t;
+
 typedef struct loom_amdgpu_vopd_plan_builder_t {
   // Schedule table being analyzed.
   const loom_low_schedule_table_t* schedule;
@@ -63,6 +84,12 @@ typedef struct loom_amdgpu_vopd_plan_builder_t {
   iree_host_size_t pair_count;
   // Allocated VOPD pair capacity.
   iree_host_size_t pair_capacity;
+  // Output rejected adjacent VOPD candidates.
+  loom_amdgpu_vopd_rejection_t* rejections;
+  // Number of populated VOPD rejection records.
+  iree_host_size_t rejection_count;
+  // Allocated VOPD rejection capacity.
+  iree_host_size_t rejection_capacity;
   // Output per-packet membership records.
   loom_amdgpu_vopd_packet_t* packets;
 } loom_amdgpu_vopd_plan_builder_t;
@@ -88,7 +115,45 @@ iree_string_view_t loom_amdgpu_vopd_pair_reason_name(
       return IREE_SV("dual_fmac_f32");
     case LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32:
       return IREE_SV("dual_fmaak_f32");
+    case LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32:
+      return IREE_SV("dual_fmamk_f32");
+    case LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32:
+      return IREE_SV("dual_mov_b32");
     case LOOM_AMDGPU_VOPD_PAIR_REASON_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_amdgpu_vopd_rejection_reason_name(
+    loom_amdgpu_vopd_rejection_reason_t reason) {
+  switch (reason) {
+    case LOOM_AMDGPU_VOPD_REJECTION_REASON_COMPONENT_OPCODE_MISMATCH:
+      return IREE_SV("component_opcode_mismatch");
+    case LOOM_AMDGPU_VOPD_REJECTION_REASON_FIRST_RESULT_USED_BY_SECOND:
+      return IREE_SV("first_result_used_by_second");
+    case LOOM_AMDGPU_VOPD_REJECTION_REASON_LITERAL_MISMATCH:
+      return IREE_SV("literal_mismatch");
+    case LOOM_AMDGPU_VOPD_REJECTION_REASON_REGISTER_CONSTRAINTS:
+      return IREE_SV("register_constraints");
+    case LOOM_AMDGPU_VOPD_REJECTION_REASON_SECOND_PACKET_HAS_INSERTION:
+      return IREE_SV("second_packet_has_insertion");
+    case LOOM_AMDGPU_VOPD_REJECTION_REASON_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_amdgpu_vopd_op_name(uint16_t op) {
+  switch (op) {
+    case LOOM_AMDGPU_VOPD_OP_FMAC_F32:
+      return IREE_SV("fmac_f32");
+    case LOOM_AMDGPU_VOPD_OP_FMAAK_F32:
+      return IREE_SV("fmaak_f32");
+    case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
+      return IREE_SV("fmamk_f32");
+    case LOOM_AMDGPU_VOPD_OP_MOV_B32:
+      return IREE_SV("mov_b32");
     default:
       return IREE_SV("unknown");
   }
@@ -117,6 +182,58 @@ static bool loom_amdgpu_vopd_target_supports_base_vopd(
     default:
       return false;
   }
+}
+
+static void loom_amdgpu_vopd_append_schedule_pair_affinity(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    loom_low_schedule_pair_affinity_t* affinities,
+    iree_host_size_t* affinity_count) {
+  const loom_low_descriptor_t* descriptor =
+      loom_amdgpu_descriptor_ref_descriptor(descriptor_set, descriptor_ref);
+  if (descriptor == NULL) {
+    return;
+  }
+  affinities[(*affinity_count)++] = (loom_low_schedule_pair_affinity_t){
+      .first_descriptor = descriptor,
+      .second_descriptor = descriptor,
+      .priority = 1,
+  };
+}
+
+iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_arena_allocator_t* arena,
+    loom_low_schedule_pair_affinity_list_t* out_affinities) {
+  *out_affinities = loom_low_schedule_pair_affinity_list_empty();
+  if (descriptor_set == NULL || arena == NULL ||
+      !loom_amdgpu_vopd_target_supports_base_vopd(descriptor_set)) {
+    return iree_ok_status();
+  }
+
+  enum { kMaxSchedulePairAffinities = 4 };
+  loom_low_schedule_pair_affinity_t* affinities = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(arena, kMaxSchedulePairAffinities,
+                                sizeof(*affinities), (void**)&affinities));
+  iree_host_size_t affinity_count = 0;
+  loom_amdgpu_vopd_append_schedule_pair_affinity(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAC_F32, affinities,
+      &affinity_count);
+  loom_amdgpu_vopd_append_schedule_pair_affinity(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F32, affinities,
+      &affinity_count);
+  loom_amdgpu_vopd_append_schedule_pair_affinity(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32, affinities,
+      &affinity_count);
+  loom_amdgpu_vopd_append_schedule_pair_affinity(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, affinities,
+      &affinity_count);
+  *out_affinities = (loom_low_schedule_pair_affinity_list_t){
+      .values = affinities,
+      .count = affinity_count,
+  };
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_vopd_verify_wait_packet_plan(
@@ -217,6 +334,7 @@ static iree_status_t loom_amdgpu_vopd_plan_allocate(
     loom_amdgpu_vopd_plan_builder_t* builder) {
   const iree_host_size_t packet_count = builder->schedule->scheduled_node_count;
   builder->pair_capacity = packet_count / 2;
+  builder->rejection_capacity = packet_count == 0 ? 0 : packet_count - 1;
   if (packet_count != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(builder->arena, packet_count,
                                                    sizeof(*builder->packets),
@@ -238,6 +356,11 @@ static iree_status_t loom_amdgpu_vopd_plan_allocate(
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         builder->arena, builder->pair_capacity, sizeof(*builder->pairs),
         (void**)&builder->pairs));
+  }
+  if (builder->rejection_capacity != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        builder->arena, builder->rejection_capacity,
+        sizeof(*builder->rejections), (void**)&builder->rejections));
   }
   IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_mark_wait_packet_insertions(builder));
   return loom_amdgpu_vopd_mark_wait_state_insertions(builder);
@@ -392,6 +515,9 @@ static bool loom_amdgpu_vopd_registers_satisfy_base_constraints(
   if (((candidate->x.vdst ^ candidate->y.vdst) & 1u) == 0) {
     return false;
   }
+  if (candidate->reason == LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32) {
+    return true;
+  }
   if (!loom_amdgpu_vopd_bank_compatible(candidate->x.src0, candidate->y.src0,
                                         3)) {
     return false;
@@ -402,6 +528,18 @@ static bool loom_amdgpu_vopd_registers_satisfy_base_constraints(
   }
   return loom_amdgpu_vopd_cross_component_destinations_are_independent(
       candidate);
+}
+
+static bool loom_amdgpu_vopd_immediate_is_inline_u32(
+    const loom_amdgpu_vopd_plan_builder_t* builder, uint32_t value) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      builder->schedule->target.descriptor_set;
+  const loom_amdgpu_encoding_table_t* encoding_table =
+      loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
+          descriptor_set->descriptor_set_ordinal);
+  uint16_t source_selector = 0;
+  return loom_amdgpu_encoding_inline_u32_source(encoding_table, value,
+                                                &source_selector);
 }
 
 static iree_status_t loom_amdgpu_vopd_read_fmac_component(
@@ -447,12 +585,12 @@ static iree_status_t loom_amdgpu_vopd_read_fmac_component(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_vopd_read_fmaak_component(
+static iree_status_t loom_amdgpu_vopd_read_literal_fma_component(
     const loom_amdgpu_vopd_plan_builder_t* builder,
-    const loom_low_packet_view_t* packet,
+    const loom_low_packet_view_t* packet, uint16_t component_op,
     loom_amdgpu_vopd_candidate_component_t* out_component, bool* out_eligible) {
   *out_component = (loom_amdgpu_vopd_candidate_component_t){
-      .op = LOOM_AMDGPU_VOPD_OP_FMAAK_F32,
+      .op = component_op,
       .flags = LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL,
   };
   *out_eligible = false;
@@ -488,6 +626,37 @@ static iree_status_t loom_amdgpu_vopd_read_fmaak_component(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_vopd_read_mov_component(
+    const loom_amdgpu_vopd_plan_builder_t* builder,
+    const loom_low_packet_view_t* packet,
+    loom_amdgpu_vopd_candidate_component_t* out_component, bool* out_eligible) {
+  *out_component = (loom_amdgpu_vopd_candidate_component_t){
+      .op = LOOM_AMDGPU_VOPD_OP_MOV_B32,
+  };
+  *out_eligible = false;
+
+  const loom_op_t* op = packet->node->op;
+  if (op->result_count != 1 || op->operand_count != 0 ||
+      packet->descriptor->immediate_count != 1) {
+    return iree_ok_status();
+  }
+  const loom_value_id_t* results = loom_op_const_results(op);
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_amdgpu_vopd_map_assignment(builder->allocation, results[0]);
+  if (!loom_amdgpu_vopd_assignment_single_physical_vgpr(result_assignment,
+                                                        &out_component->vdst)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_read_immediate_u32(
+      builder, packet, 0, &out_component->literal_u32));
+  if (!loom_amdgpu_vopd_immediate_is_inline_u32(builder,
+                                                out_component->literal_u32)) {
+    return iree_ok_status();
+  }
+  *out_eligible = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_vopd_read_component(
     const loom_amdgpu_vopd_plan_builder_t* builder,
     const loom_low_packet_view_t* packet,
@@ -508,8 +677,24 @@ static iree_status_t loom_amdgpu_vopd_read_component(
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAAK_F32);
   if (fmaak_descriptor != NULL && packet->descriptor == fmaak_descriptor) {
-    return loom_amdgpu_vopd_read_fmaak_component(builder, packet, out_component,
-                                                 out_eligible);
+    return loom_amdgpu_vopd_read_literal_fma_component(
+        builder, packet, LOOM_AMDGPU_VOPD_OP_FMAAK_F32, out_component,
+        out_eligible);
+  }
+  const loom_low_descriptor_t* fmamk_descriptor =
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_FMAMK_F32);
+  if (fmamk_descriptor != NULL && packet->descriptor == fmamk_descriptor) {
+    return loom_amdgpu_vopd_read_literal_fma_component(
+        builder, packet, LOOM_AMDGPU_VOPD_OP_FMAMK_F32, out_component,
+        out_eligible);
+  }
+  const loom_low_descriptor_t* mov_descriptor =
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32);
+  if (mov_descriptor != NULL && packet->descriptor == mov_descriptor) {
+    return loom_amdgpu_vopd_read_mov_component(builder, packet, out_component,
+                                               out_eligible);
   }
   return iree_ok_status();
 }
@@ -528,6 +713,12 @@ static bool loom_amdgpu_vopd_pair_reason_for_components(
       return true;
     case LOOM_AMDGPU_VOPD_OP_FMAAK_F32:
       *out_reason = LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32;
+      return true;
+    case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
+      *out_reason = LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32;
+      return true;
+    case LOOM_AMDGPU_VOPD_OP_MOV_B32:
+      *out_reason = LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32;
       return true;
     default:
       return false;
@@ -555,49 +746,59 @@ static bool loom_amdgpu_vopd_resolve_pair_literal(
   return true;
 }
 
-static iree_status_t loom_amdgpu_vopd_try_match_pair(
+static iree_status_t loom_amdgpu_vopd_analyze_pair(
     const loom_amdgpu_vopd_plan_builder_t* builder,
     const loom_low_packet_view_t* first, const loom_low_packet_view_t* second,
-    loom_amdgpu_vopd_candidate_pair_t* out_candidate, bool* out_matched) {
-  *out_candidate = (loom_amdgpu_vopd_candidate_pair_t){0};
-  *out_matched = false;
+    loom_amdgpu_vopd_pair_analysis_t* out_analysis) {
+  *out_analysis = (loom_amdgpu_vopd_pair_analysis_t){
+      .rejection_reason = LOOM_AMDGPU_VOPD_REJECTION_REASON_UNKNOWN,
+  };
 
-  loom_amdgpu_vopd_candidate_component_t first_component = {0};
-  bool first_eligible = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_read_component(
-      builder, first, &first_component, &first_eligible));
-  if (!first_eligible) {
+      builder, first, &out_analysis->first_component,
+      &out_analysis->first_eligible));
+  if (!out_analysis->first_eligible) {
     return iree_ok_status();
   }
 
-  loom_amdgpu_vopd_candidate_component_t second_component = {0};
-  bool second_eligible = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_read_component(
-      builder, second, &second_component, &second_eligible));
-  if (!second_eligible) {
+      builder, second, &out_analysis->second_component,
+      &out_analysis->second_eligible));
+  if (!out_analysis->second_eligible) {
     return iree_ok_status();
   }
 
   loom_amdgpu_vopd_candidate_pair_t candidate = {
-      .x = first_component,
-      .y = second_component,
+      .x = out_analysis->first_component,
+      .y = out_analysis->second_component,
   };
+  out_analysis->rejection_reason =
+      LOOM_AMDGPU_VOPD_REJECTION_REASON_COMPONENT_OPCODE_MISMATCH;
   if (!loom_amdgpu_vopd_pair_reason_for_components(
-          &first_component, &second_component, &candidate.reason)) {
+          &out_analysis->first_component, &out_analysis->second_component,
+          &candidate.reason)) {
     return iree_ok_status();
   }
+  out_analysis->rejection_reason =
+      LOOM_AMDGPU_VOPD_REJECTION_REASON_FIRST_RESULT_USED_BY_SECOND;
   if (loom_amdgpu_vopd_component_result_is_used_by(first, second)) {
     return iree_ok_status();
   }
-  if (!loom_amdgpu_vopd_resolve_pair_literal(&first_component,
-                                             &second_component, &candidate)) {
+  out_analysis->rejection_reason =
+      LOOM_AMDGPU_VOPD_REJECTION_REASON_LITERAL_MISMATCH;
+  if (!loom_amdgpu_vopd_resolve_pair_literal(&out_analysis->first_component,
+                                             &out_analysis->second_component,
+                                             &candidate)) {
     return iree_ok_status();
   }
+  out_analysis->rejection_reason =
+      LOOM_AMDGPU_VOPD_REJECTION_REASON_REGISTER_CONSTRAINTS;
   if (!loom_amdgpu_vopd_registers_satisfy_base_constraints(&candidate)) {
     return iree_ok_status();
   }
-  *out_candidate = candidate;
-  *out_matched = true;
+  out_analysis->candidate = candidate;
+  out_analysis->matched = true;
+  out_analysis->rejection_reason = LOOM_AMDGPU_VOPD_REJECTION_REASON_UNKNOWN;
   return iree_ok_status();
 }
 
@@ -621,6 +822,12 @@ static iree_status_t loom_amdgpu_vopd_append_pair(
       .second_node_index = second->node_index,
       .op_x = candidate->x.op,
       .op_y = candidate->y.op,
+      .x_vdst = candidate->x.vdst,
+      .x_src0 = candidate->x.src0,
+      .x_vsrc1 = candidate->x.vsrc1,
+      .y_vdst = candidate->y.vdst,
+      .y_src0 = candidate->y.src0,
+      .y_vsrc1 = candidate->y.vsrc1,
       .flags = candidate->flags,
       .literal_u32 = candidate->literal_u32,
   };
@@ -632,6 +839,48 @@ static iree_status_t loom_amdgpu_vopd_append_pair(
       .role = LOOM_AMDGPU_VOPD_PACKET_ROLE_SECOND,
       .pair_index = pair_index,
   };
+  return iree_ok_status();
+}
+
+static loom_amdgpu_vopd_rejection_component_t
+loom_amdgpu_vopd_rejection_component_from_candidate(
+    const loom_amdgpu_vopd_candidate_component_t* component) {
+  return (loom_amdgpu_vopd_rejection_component_t){
+      .op = component->op,
+      .vdst = component->vdst,
+      .src0 = component->src0,
+      .vsrc1 = component->vsrc1,
+      .flags = component->flags,
+      .literal_u32 = component->literal_u32,
+  };
+}
+
+static iree_status_t loom_amdgpu_vopd_append_rejection(
+    loom_amdgpu_vopd_plan_builder_t* builder,
+    const loom_low_packet_view_t* first, const loom_low_packet_view_t* second,
+    const loom_amdgpu_vopd_pair_analysis_t* analysis,
+    loom_amdgpu_vopd_rejection_reason_t reason) {
+  if (!analysis->first_eligible || !analysis->second_eligible) {
+    return iree_ok_status();
+  }
+  if (builder->rejection_count >= builder->rejection_capacity) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "AMDGPU VOPD plan exceeded precomputed rejection capacity");
+  }
+  builder->rejections[builder->rejection_count++] =
+      (loom_amdgpu_vopd_rejection_t){
+          .reason = reason,
+          .block_index = first->node->block_index,
+          .first_packet_index = (uint32_t)first->packet_index,
+          .second_packet_index = (uint32_t)second->packet_index,
+          .first_node_index = first->node_index,
+          .second_node_index = second->node_index,
+          .first = loom_amdgpu_vopd_rejection_component_from_candidate(
+              &analysis->first_component),
+          .second = loom_amdgpu_vopd_rejection_component_from_candidate(
+              &analysis->second_component),
+      };
   return iree_ok_status();
 }
 
@@ -719,27 +968,30 @@ static iree_status_t loom_amdgpu_vopd_plan_block(
     if (!found_second) {
       break;
     }
-    if (builder->insertion_blocked_packets[second_packet_index]) {
-      search_packet_index = first_packet_index + 1;
-      continue;
-    }
-
     loom_low_packet_view_t first = {0};
     IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
         builder->schedule, builder->allocation, first_packet_index, &first));
     loom_low_packet_view_t second = {0};
     IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
         builder->schedule, builder->allocation, second_packet_index, &second));
-    loom_amdgpu_vopd_candidate_pair_t candidate = {0};
-    bool matched = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_try_match_pair(
-        builder, &first, &second, &candidate, &matched));
-    if (!matched) {
+    loom_amdgpu_vopd_pair_analysis_t analysis = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_vopd_analyze_pair(builder, &first, &second, &analysis));
+    if (!analysis.matched) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_append_rejection(
+          builder, &first, &second, &analysis, analysis.rejection_reason));
       search_packet_index = first_packet_index + 1;
       continue;
     }
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_vopd_append_pair(builder, &first, &second, &candidate));
+    if (builder->insertion_blocked_packets[second_packet_index]) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_append_rejection(
+          builder, &first, &second, &analysis,
+          LOOM_AMDGPU_VOPD_REJECTION_REASON_SECOND_PACKET_HAS_INSERTION));
+      search_packet_index = first_packet_index + 1;
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_append_pair(builder, &first, &second,
+                                                      &analysis.candidate));
     search_packet_index = second_packet_index + 1;
   }
   return iree_ok_status();
@@ -782,6 +1034,11 @@ iree_status_t loom_amdgpu_vopd_plan_verify(
   if (plan->pair_count != 0 && (plan->pairs == NULL || plan->packets == NULL)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU VOPD plan pair records are incomplete");
+  }
+  if (plan->rejection_count != 0 && plan->rejections == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU VOPD plan rejection records are incomplete");
   }
   return iree_ok_status();
 }
@@ -839,6 +1096,209 @@ iree_status_t loom_amdgpu_vopd_plan_verify_wait_insertions(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_vopd_plan_write_packet_descriptor_json(
+    const loom_amdgpu_vopd_plan_t* plan, uint32_t packet_index,
+    loom_output_stream_t* stream) {
+  if (packet_index >= plan->packet_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU VOPD packet index %" PRIu32 " is out of range", packet_index);
+  }
+  loom_low_packet_view_t packet = {0};
+  IREE_RETURN_IF_ERROR(loom_low_packet_view_at(plan->schedule, plan->allocation,
+                                               packet_index, &packet));
+  if (packet.descriptor == NULL) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(
+          plan->schedule->target.descriptor_set, packet.descriptor);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU VOPD packet descriptor row does not belong to the selected "
+        "descriptor set");
+  }
+  iree_string_view_t descriptor_key =
+      loom_low_descriptor_set_string(plan->schedule->target.descriptor_set,
+                                     packet.descriptor->key_string_offset);
+  return loom_json_write_escaped_string(stream, descriptor_key);
+}
+
+static iree_status_t loom_amdgpu_vopd_plan_write_component_json(
+    const loom_amdgpu_vopd_plan_t* plan, uint32_t packet_index,
+    uint32_t node_index, uint16_t op, uint16_t vdst, uint16_t src0,
+    uint16_t vsrc1, loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"packet\":%" PRIu32 ",\"node\":%" PRIu32 ",\"descriptor\":",
+      packet_index, node_index));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_plan_write_packet_descriptor_json(
+      plan, packet_index, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"op_id\":%" PRIu16 ",\"op\":", op));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(stream, loom_amdgpu_vopd_op_name(op)));
+  return loom_output_stream_write_format(
+      stream,
+      ",\"vdst\":%" PRIu16 ",\"src0\":%" PRIu16 ",\"vsrc1\":%" PRIu16 "}", vdst,
+      src0, vsrc1);
+}
+
+static iree_status_t loom_amdgpu_vopd_plan_write_pair_json(
+    const loom_amdgpu_vopd_plan_t* plan, iree_host_size_t pair_index,
+    loom_output_stream_t* stream) {
+  const loom_amdgpu_vopd_pair_t* pair = &plan->pairs[pair_index];
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"index\":%zu,\"reason\":", pair_index));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_amdgpu_vopd_pair_reason_name(pair->reason)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"block\":%" PRIu32 ",\"flags\":%" PRIu32 ",\"literal_u32\":",
+      pair->block_index, pair->flags));
+  if (iree_any_bit_set(pair->flags, LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_format(stream, "%" PRIu32, pair->literal_u32));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"x\":"));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_plan_write_component_json(
+      plan, pair->first_packet_index, pair->first_node_index, pair->op_x,
+      pair->x_vdst, pair->x_src0, pair->x_vsrc1, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"y\":"));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_plan_write_component_json(
+      plan, pair->second_packet_index, pair->second_node_index, pair->op_y,
+      pair->y_vdst, pair->y_src0, pair->y_vsrc1, stream));
+  return loom_output_stream_write_char(stream, '}');
+}
+
+static iree_status_t loom_amdgpu_vopd_plan_write_rejection_component_json(
+    const loom_amdgpu_vopd_plan_t* plan, uint32_t packet_index,
+    uint32_t node_index,
+    const loom_amdgpu_vopd_rejection_component_t* component,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"packet\":%" PRIu32 ",\"node\":%" PRIu32 ",\"descriptor\":",
+      packet_index, node_index));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_plan_write_packet_descriptor_json(
+      plan, packet_index, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"op_id\":%" PRIu16 ",\"op\":", component->op));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_amdgpu_vopd_op_name(component->op)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"vdst\":%" PRIu16 ",\"src0\":%" PRIu16 ",\"vsrc1\":%" PRIu16
+      ",\"flags\":%" PRIu32 ",\"literal_u32\":",
+      component->vdst, component->src0, component->vsrc1, component->flags));
+  if (iree_any_bit_set(component->flags, LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, "%" PRIu32, component->literal_u32));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
+  }
+  return loom_output_stream_write_char(stream, '}');
+}
+
+static iree_status_t loom_amdgpu_vopd_plan_write_rejection_json(
+    const loom_amdgpu_vopd_plan_t* plan, iree_host_size_t rejection_index,
+    loom_output_stream_t* stream) {
+  const loom_amdgpu_vopd_rejection_t* rejection =
+      &plan->rejections[rejection_index];
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"index\":%zu,\"reason\":", rejection_index));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_amdgpu_vopd_rejection_reason_name(rejection->reason)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"block\":%" PRIu32 ",\"first\":", rejection->block_index));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_plan_write_rejection_component_json(
+      plan, rejection->first_packet_index, rejection->first_node_index,
+      &rejection->first, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"second\":"));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_plan_write_rejection_component_json(
+      plan, rejection->second_packet_index, rejection->second_node_index,
+      &rejection->second, stream));
+  return loom_output_stream_write_char(stream, '}');
+}
+
+static iree_status_t loom_amdgpu_vopd_plan_write_packet_json(
+    const loom_amdgpu_vopd_plan_t* plan, iree_host_size_t packet_index,
+    loom_output_stream_t* stream) {
+  const loom_amdgpu_vopd_packet_t* packet = &plan->packets[packet_index];
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"index\":%zu,\"role\":", packet_index));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_amdgpu_vopd_packet_role_name(packet->role)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"pair\":"));
+  if (packet->pair_index == LOOM_AMDGPU_VOPD_PAIR_NONE) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(stream, "%" PRIu32,
+                                                         packet->pair_index));
+  }
+  return loom_output_stream_write_char(stream, '}');
+}
+
+iree_status_t loom_amdgpu_vopd_plan_format_json(
+    const loom_amdgpu_vopd_plan_t* plan, iree_string_builder_t* builder) {
+  if (plan == NULL || builder == NULL || plan->schedule == NULL ||
+      plan->allocation == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU VOPD plan and builder are required");
+  }
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(builder, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      &stream, "\"format\":\"loom.amdgpu.vopd_plan.v0\""));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"function\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, loom_low_diagnostic_function_name(plan->schedule->module,
+                                                 plan->schedule->function_op)));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"target\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, plan->schedule->target.target_name));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"descriptor_set\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, plan->schedule->target.descriptor_set_key));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream,
+      ",\"pair_count\":%zu,\"rejection_count\":%zu,\"packet_count\":%zu"
+      ",\"pairs\":[",
+      plan->pair_count, plan->rejection_count, plan->packet_count));
+  for (iree_host_size_t i = 0; i < plan->pair_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_vopd_plan_write_pair_json(plan, i, &stream));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, "],\"rejections\":["));
+  for (iree_host_size_t i = 0; i < plan->rejection_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_vopd_plan_write_rejection_json(plan, i, &stream));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, "],\"packets\":["));
+  for (iree_host_size_t i = 0; i < plan->packet_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_vopd_plan_write_packet_json(plan, i, &stream));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]}"));
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_vopd_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -879,6 +1339,8 @@ iree_status_t loom_amdgpu_vopd_plan_build(
       .allocation = allocation,
       .pairs = builder.pairs,
       .pair_count = builder.pair_count,
+      .rejections = builder.rejections,
+      .rejection_count = builder.rejection_count,
       .packets = builder.packets,
       .packet_count = schedule->scheduled_node_count,
   };

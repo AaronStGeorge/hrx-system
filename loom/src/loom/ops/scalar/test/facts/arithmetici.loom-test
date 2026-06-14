@@ -63,6 +63,25 @@ func.def @assume_divisibility(%x: i64) -> (i64) {
 
 // ====
 
+// remui is bounded by the non-negative dividend as well as by the dynamic
+// divisor range.
+func.def @remui_dynamic_divisor_uses_dividend_bound(%x0: i32, %d0: i32) -> (i64, i64) {
+  %x = scalar.assume %x0 [range(%x0, 0, 63)] : i32
+  %d = scalar.assume %d0 [range(%d0, 1, 1024)] : i32
+  %r = scalar.remui %x, %d : i32
+  %lo = test.fact_range_lo %r : i32 -> i64
+  %hi = test.fact_range_hi %r : i32 -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @remui_dynamic_divisor_uses_dividend_bound(%x0: i32, %d0: i32) -> (i64, i64) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 63 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
 // addi of exact values produces exact result.
 func.def @addi_exact() -> (i64) {
   %a = scalar.constant 10 : i32

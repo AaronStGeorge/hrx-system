@@ -13,6 +13,7 @@
 #include "loom/target/arch/amdgpu/planning/address_state.h"
 #include "loom/target/arch/amdgpu/planning/packet_plan.h"
 #include "loom/target/arch/amdgpu/planning/storage_lease.h"
+#include "loom/target/arch/amdgpu/planning/vopd_plan.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/emit/native/amdgpu/spill_lowering.h"
@@ -58,6 +59,8 @@ static bool loom_amdgpu_loom_check_emit_provider_matches(
   (void)provider;
   return iree_string_view_equal(target_name, IREE_SV("amdgpu-assembly")) ||
          iree_string_view_equal(target_name, IREE_SV("amdgpu-asm")) ||
+         iree_string_view_equal(target_name,
+                                IREE_SV("amdgpu-vopd-plan-json")) ||
          iree_string_view_equal(target_name,
                                 IREE_SV("amdgpu-wait-counter-plan-json")) ||
          iree_string_view_equal(target_name,
@@ -235,10 +238,20 @@ static iree_status_t loom_amdgpu_loom_check_emit_wait_counter_plan_json(
   return loom_amdgpu_wait_plan_format_json(&packet_plan.wait_plan, builder);
 }
 
+static iree_status_t loom_amdgpu_loom_check_emit_vopd_plan_json(
+    const loom_low_emission_frame_t* frame, iree_string_builder_t* builder,
+    iree_arena_allocator_t* arena) {
+  loom_amdgpu_packet_plan_t packet_plan = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
+      &frame->schedule, &frame->allocation, arena, &packet_plan));
+  return loom_amdgpu_vopd_plan_format_json(&packet_plan.vopd_plan, builder);
+}
+
 static bool loom_amdgpu_loom_check_needs_storage_leases(
     iree_string_view_t target_name,
     const loom_amdgpu_loom_check_emit_options_t* options) {
-  if (iree_string_view_equal(target_name,
+  if (iree_string_view_equal(target_name, IREE_SV("amdgpu-vopd-plan-json")) ||
+      iree_string_view_equal(target_name,
                              IREE_SV("amdgpu-wait-counter-plan-json")) ||
       iree_string_view_equal(target_name, IREE_SV("amdgpu-wait-state-plan")) ||
       iree_string_view_equal(target_name,
@@ -273,6 +286,43 @@ static iree_status_t loom_amdgpu_loom_check_lower_spill_traffic(
                                          target.descriptor_set, arena);
 }
 
+static iree_status_t loom_amdgpu_loom_check_build_schedule_pair_affinities(
+    const loom_check_emit_provider_request_t* request,
+    iree_string_view_t function_symbol_name,
+    loom_low_schedule_pair_affinity_list_t* out_affinities) {
+  *out_affinities = loom_low_schedule_pair_affinity_list_empty();
+  loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
+      .diagnostic_collector = request->diagnostic_collector,
+      .module = request->module,
+      .source_resolver = request->source_resolver,
+      .emitter = LOOM_EMITTER_PASS,
+  };
+  iree_diagnostic_emitter_t emitter = {0};
+  if (request->diagnostic_collector != NULL) {
+    emitter = (iree_diagnostic_emitter_t){
+        .fn = loom_check_diagnostic_emitter_capture_emit,
+        .user_data = &diagnostic_capture,
+    };
+  }
+  loom_op_t* low_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
+      request->module, function_symbol_name, request->test_case,
+      request->filename, request->diagnostic_collector, emitter,
+      &low_function));
+  if (!low_function) {
+    return iree_ok_status();
+  }
+  loom_low_resolved_target_t target = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+      request->module, low_function, &request->low_registry->registry,
+      loom_target_selection_empty(), emitter, &target));
+  if (target.descriptor_set == NULL) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_vopd_build_schedule_pair_affinities(
+      target.descriptor_set, request->case_arena, out_affinities);
+}
+
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
@@ -303,11 +353,15 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
                                                   &options)
           ? &storage_lease_provider
           : NULL;
+  loom_low_schedule_pair_affinity_list_t schedule_pair_affinities =
+      loom_low_schedule_pair_affinity_list_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_loom_check_build_schedule_pair_affinities(
+      request, options.function_symbol_name, &schedule_pair_affinities));
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count,
+      options.allocation_fixed_value_spec_count, schedule_pair_affinities,
       selected_storage_lease_provider, &spill_free_options, &frame));
   if (request->diagnostic_collector != NULL &&
       request->diagnostic_collector->count != 0) {
@@ -332,6 +386,11 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
     return loom_amdgpu_loom_check_emit_wait_counter_plan_json(
         &frame, &request->result->actual_output, request->case_arena);
   }
+  if (iree_string_view_equal(request->target_name,
+                             IREE_SV("amdgpu-vopd-plan-json"))) {
+    return loom_amdgpu_loom_check_emit_vopd_plan_json(
+        &frame, &request->result->actual_output, request->case_arena);
+  }
   return loom_amdgpu_loom_check_emit_assembly(
       &frame, &options, &request->result->actual_output, request->case_arena);
 }
@@ -342,8 +401,9 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_append_names(
   (void)provider;
   return iree_string_builder_append_cstring(
       builder,
-      "amdgpu-assembly, amdgpu-asm, amdgpu-wait-counter-plan-json, "
-      "amdgpu-wait-state-plan, amdgpu-wait-state-plan-json, amdgpu-native");
+      "amdgpu-assembly, amdgpu-asm, amdgpu-vopd-plan-json, "
+      "amdgpu-wait-counter-plan-json, amdgpu-wait-state-plan, "
+      "amdgpu-wait-state-plan-json, amdgpu-native");
 }
 
 const loom_check_emit_provider_t loom_amdgpu_native_loom_check_emit_provider = {

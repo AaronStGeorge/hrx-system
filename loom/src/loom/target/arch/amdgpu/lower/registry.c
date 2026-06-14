@@ -21,6 +21,8 @@
 #include "loom/target/arch/amdgpu/contracts/buffer_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/compare.h"
 #include "loom/target/arch/amdgpu/contracts/compare_lower_rules.h"
+#include "loom/target/arch/amdgpu/contracts/config.h"
+#include "loom/target/arch/amdgpu/contracts/config_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/dot.h"
 #include "loom/target/arch/amdgpu/contracts/dot_lower_rules.h"
 #include "loom/target/arch/amdgpu/contracts/integer.h"
@@ -32,6 +34,7 @@
 #include "loom/target/arch/amdgpu/contracts/view_lower_rules.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/abi.h"
+#include "loom/target/arch/amdgpu/lower/arithmetic.h"
 #include "loom/target/arch/amdgpu/lower/async.h"
 #include "loom/target/arch/amdgpu/lower/bitfield.h"
 #include "loom/target/arch/amdgpu/lower/bitpack.h"
@@ -395,6 +398,42 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bitfield_insert_dispatch,
                              loom_amdgpu_bitfield_insert_plan_t,
                              loom_amdgpu_lower_vector_bitfield_insert)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_fmaf_mix_dispatch,
+                               loom_amdgpu_fma_mix_plan_t,
+                               loom_amdgpu_select_scalar_fmaf_mix_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_fmaf_mix_dispatch,
+                             loom_amdgpu_fma_mix_plan_t,
+                             loom_amdgpu_lower_scalar_fmaf_mix)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_packed_fmaf_dispatch,
+                               loom_amdgpu_packed_ternary_plan_t,
+                               loom_amdgpu_select_vector_packed_fmaf_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_packed_fmai_dispatch,
+                               loom_amdgpu_packed_ternary_plan_t,
+                               loom_amdgpu_select_vector_packed_fmai_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_packed_ternary_dispatch,
+                             loom_amdgpu_packed_ternary_plan_t,
+                             loom_amdgpu_lower_vector_packed_ternary)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_mulf_mix_dispatch,
+                               loom_amdgpu_mulf_mix_plan_t,
+                               loom_amdgpu_select_scalar_mulf_mix_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_mulf_mix_dispatch,
+                             loom_amdgpu_mulf_mix_plan_t,
+                             loom_amdgpu_lower_mulf_mix)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_mulf_mix_dispatch,
+                               loom_amdgpu_mulf_mix_plan_t,
+                               loom_amdgpu_select_vector_mulf_mix_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_mulf_mix_dispatch,
+                             loom_amdgpu_mulf_mix_plan_t,
+                             loom_amdgpu_lower_mulf_mix)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_bitpack_dispatch,
                                loom_amdgpu_bitpack_plan_t,
                                loom_amdgpu_select_vector_bitpack_plan)
@@ -582,11 +621,84 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
                                               loom_low_lower_plan_t* out_plan) {
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
+  if (loom_amdgpu_value_plan_needs_preselection(source_op)) {
+    return loom_amdgpu_preselect_value_plan(context, source_op, out_plan);
+  }
   if (!loom_vector_dotf_isa(source_op) && !loom_index_add_isa(source_op) &&
-      !loom_index_cmp_isa(source_op)) {
+      !loom_index_cmp_isa(source_op) && !loom_scalar_fmaf_isa(source_op) &&
+      !loom_vector_fmaf_isa(source_op) && !loom_vector_fmai_isa(source_op) &&
+      !loom_scalar_mulf_isa(source_op) && !loom_vector_mulf_isa(source_op)) {
     return iree_ok_status();
   }
-  return loom_amdgpu_select_plan_id(context, source_op, out_plan);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_select_plan_id(context, source_op, out_plan));
+  if (loom_low_lower_plan_is_empty(*out_plan) &&
+      (loom_scalar_fmaf_isa(source_op) || loom_vector_fmaf_isa(source_op))) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
+        context, source_op));
+  }
+  return iree_ok_status();
+}
+
+static void loom_amdgpu_mark_plan_storage_demands(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t plan) {
+  (void)user_data;
+  if (plan.id == LOOM_OP_SCALAR_FMAF) {
+    loom_amdgpu_mark_fma_mix_plan_storage_demands(
+        context, source_op,
+        (const loom_amdgpu_fma_mix_plan_t*)plan.target_data);
+    return;
+  }
+  if (plan.id == LOOM_OP_VECTOR_FMAF || plan.id == LOOM_OP_VECTOR_FMAI) {
+    loom_amdgpu_mark_packed_ternary_plan_storage_demands(
+        context, source_op,
+        (const loom_amdgpu_packed_ternary_plan_t*)plan.target_data);
+    return;
+  }
+  if (plan.id == LOOM_OP_SCALAR_MULF || plan.id == LOOM_OP_VECTOR_MULF) {
+    loom_amdgpu_mark_mulf_mix_plan_storage_demands(
+        context, source_op,
+        (const loom_amdgpu_mulf_mix_plan_t*)plan.target_data);
+    return;
+  }
+  if (plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS ||
+      plan.id == LOOM_OP_VECTOR_SPLAT || plan.id == LOOM_OP_VECTOR_INSERT) {
+    loom_amdgpu_mark_value_plan_storage_demands(context, source_op, plan);
+    return;
+  }
+  loom_low_lower_require_source_operands_storage(context, source_op);
+}
+
+static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_detail(
+    const loom_amdgpu_workgroup_reduce_plan_t* plan) {
+  switch (plan->publication_kind) {
+    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LDS:
+      return IREE_SV("amdgpu.workgroup_reduce.publication.lds");
+    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP:
+      return IREE_SV("amdgpu.workgroup_reduce.publication.redundant_subgroup");
+    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LEADER_WORKITEM:
+      return IREE_SV("amdgpu.workgroup_reduce.publication.leader_workitem");
+    case LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP_LEADER_LANE:
+      return IREE_SV(
+          "amdgpu.workgroup_reduce.publication."
+          "redundant_subgroup_leader_lane");
+    default:
+      return iree_string_view_empty();
+  }
+}
+
+static iree_string_view_t loom_amdgpu_describe_plan(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t plan) {
+  (void)user_data;
+  (void)context;
+  (void)source_op;
+  if (plan.id == LOOM_OP_KERNEL_WORKGROUP_REDUCE && plan.target_data != NULL) {
+    return loom_amdgpu_workgroup_reduce_plan_detail(
+        (const loom_amdgpu_workgroup_reduce_plan_t*)plan.target_data);
+  }
+  return iree_string_view_empty();
 }
 
 static iree_status_t loom_amdgpu_emit_op(void* user_data,
@@ -617,6 +729,8 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     loom_amdgpu_arithmetic_lower_rule_set)                                  \
   F(BUFFER, loom_amdgpu_buffer_contract_fragment,                           \
     loom_amdgpu_buffer_lower_rule_set)                                      \
+  F(CONFIG, loom_amdgpu_config_contract_fragment,                           \
+    loom_amdgpu_config_lower_rule_set)                                      \
   F(INTEGER, loom_amdgpu_integer_contract_fragment,                         \
     loom_amdgpu_integer_lower_rule_set)                                     \
   F(COMPARE, loom_amdgpu_compare_contract_fragment,                         \
@@ -686,6 +800,9 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
         },
     .preselect_op = {.fn = loom_amdgpu_preselect_op, .user_data = NULL},
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
+    .mark_plan_storage_demands = {.fn = loom_amdgpu_mark_plan_storage_demands,
+                                  .user_data = NULL},
+    .describe_plan = {.fn = loom_amdgpu_describe_plan, .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };
 
@@ -694,8 +811,8 @@ const loom_target_low_legality_provider_t
         .name = IREE_SVL("amdgpu"),
         .builtin_dialect_bits =
             (1u << LOOM_DIALECT_INDEX) | (1u << LOOM_DIALECT_BUFFER) |
-            (1u << LOOM_DIALECT_VIEW) | (1u << LOOM_DIALECT_VECTOR) |
-            (1u << LOOM_DIALECT_KERNEL),
+            (1u << LOOM_DIALECT_SCALAR) | (1u << LOOM_DIALECT_VIEW) |
+            (1u << LOOM_DIALECT_VECTOR) | (1u << LOOM_DIALECT_KERNEL),
         .try_verify_op = loom_amdgpu_low_legality_try_verify_op,
 };
 

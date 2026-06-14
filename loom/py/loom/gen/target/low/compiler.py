@@ -253,12 +253,34 @@ def _compile_asm_form(
     descriptor_ordinal: int,
     asm_form: AsmForm,
     form_ordinal: int,
+    *,
+    label_scope: str | None = None,
 ) -> CompiledAsmForm:
     mnemonic = validation.asm_form_mnemonic(descriptor, asm_form)
     validation.validate_unique_asm_fields(descriptor, asm_form, mnemonic)
     operand_indices, immediate_indices = _index_descriptor_fields(descriptor)
 
-    mnemonic_label = string_pool.intern(f"asm_mnemonic_{descriptor.key}_{form_ordinal}", mnemonic)
+    def scoped_label(prefix: str, *parts: str) -> str:
+        label_parts = [prefix]
+        if label_scope is not None:
+            label_parts.append(label_scope)
+        label_parts.extend((descriptor.key, str(form_ordinal), *parts))
+        return "_".join(label_parts)
+
+    mnemonic_label = string_pool.intern(scoped_label("asm_mnemonic"), mnemonic)
+    native_assembly_mnemonic_label = None
+    native_assembly_mnemonic = asm_form.native_assembly_mnemonic
+    if native_assembly_mnemonic is not None:
+        if native_assembly_mnemonic == "":
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' has an empty native assembly mnemonic")
+        if native_assembly_mnemonic == mnemonic:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' repeats its low asm mnemonic as a native assembly override")
+        if len(native_assembly_mnemonic.encode()) > 255:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native assembly mnemonic '{native_assembly_mnemonic}' exceeds 255 bytes")
+        native_assembly_mnemonic_label = string_pool.intern(
+            scoped_label("asm_native_mnemonic"),
+            native_assembly_mnemonic,
+        )
 
     result_indices = []
     for field_name in asm_form.results:
@@ -301,7 +323,7 @@ def _compile_asm_form(
                 raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' uses immediate name '{immediate.name}' more than once")
             seen_immediate_names.add(immediate.name)
             name_label = string_pool.intern(
-                f"asm_immediate_{descriptor.key}_{form_ordinal}_{immediate.field_name}",
+                scoped_label("asm_immediate", immediate.field_name),
                 immediate.name,
             )
         immediate_order.append(
@@ -316,6 +338,8 @@ def _compile_asm_form(
         descriptor_ordinal=descriptor_ordinal,
         mnemonic_label=mnemonic_label,
         mnemonic=mnemonic,
+        native_assembly_mnemonic_label=native_assembly_mnemonic_label,
+        native_assembly_mnemonic=native_assembly_mnemonic,
         result_indices=tuple(result_indices),
         operand_indices=tuple(operand_order),
         immediates=tuple(immediate_order),
@@ -327,18 +351,55 @@ def _compile_asm_forms(
     descriptors: Sequence[Descriptor],
     *,
     allow_ambiguous_mnemonics: bool = False,
+    label_scope: str | None = None,
 ) -> list[CompiledAsmForm]:
     compiled_forms: list[CompiledAsmForm] = []
     seen_mnemonics: dict[str, str] = {}
     for descriptor_ordinal, descriptor in enumerate(descriptors):
         for form_ordinal, asm_form in enumerate(descriptor.asm_forms):
-            compiled_form = _compile_asm_form(string_pool, descriptor, descriptor_ordinal, asm_form, form_ordinal)
+            compiled_form = _compile_asm_form(
+                string_pool,
+                descriptor,
+                descriptor_ordinal,
+                asm_form,
+                form_ordinal,
+                label_scope=label_scope,
+            )
             previous_descriptor_key = seen_mnemonics.get(compiled_form.mnemonic)
             if previous_descriptor_key is not None and not allow_ambiguous_mnemonics:
                 raise ValueError(f"asm mnemonic '{compiled_form.mnemonic}' is ambiguous between descriptors '{previous_descriptor_key}' and '{descriptor.key}'")
             seen_mnemonics[compiled_form.mnemonic] = descriptor.key
             compiled_forms.append(compiled_form)
     return sorted(compiled_forms, key=lambda form: form.mnemonic)
+
+
+def compile_asm_forms_for_descriptors(
+    string_pool: CStringPool,
+    descriptors: Sequence[Descriptor],
+    *,
+    allow_ambiguous_mnemonics: bool = False,
+    label_scope: str | None = None,
+) -> list[CompiledAsmForm]:
+    return _compile_asm_forms(
+        string_pool,
+        descriptors,
+        allow_ambiguous_mnemonics=allow_ambiguous_mnemonics,
+        label_scope=label_scope,
+    )
+
+
+def append_asm_form_table_spans(
+    asm_forms: Sequence[CompiledAsmForm],
+    asm_operand_indices: list[int],
+    asm_immediates: list[CompiledAsmImmediate],
+) -> None:
+    for asm_form in asm_forms:
+        asm_form.result_index_start = len(asm_operand_indices)
+        asm_operand_indices.extend(asm_form.result_indices)
+        asm_form.operand_index_start = len(asm_operand_indices)
+        asm_operand_indices.extend(asm_form.operand_indices)
+        asm_form.immediate_start = len(asm_immediates)
+        asm_immediates.extend(asm_form.immediates)
 
 
 def compile_descriptor_set(
@@ -359,6 +420,7 @@ def compile_descriptor_set(
     selected_descriptors = _select_descriptors(spec, allowlist)
     if not selected_descriptors:
         raise ValueError(f"descriptor set '{spec.key}' selected no descriptors")
+    validation.validate_descriptor_asm_surface(spec, selected_descriptors)
     descriptor_ordinals = {descriptor.key: i for i, descriptor in enumerate(selected_descriptors)}
     for reg_class in spec.reg_classes:
         if reg_class.full_register_part_mask == 0:
@@ -572,7 +634,7 @@ def compile_descriptor_set(
                 lease.release_reason_name,
             )
 
-    asm_forms = _compile_asm_forms(
+    asm_forms = compile_asm_forms_for_descriptors(
         string_pool,
         selected_descriptors,
         allow_ambiguous_mnemonics=allow_ambiguous_asm_mnemonics,
@@ -589,13 +651,7 @@ def compile_descriptor_set(
 
     asm_operand_indices: list[int] = []
     asm_immediates: list[CompiledAsmImmediate] = []
-    for asm_form in asm_forms:
-        asm_form.result_index_start = len(asm_operand_indices)
-        asm_operand_indices.extend(asm_form.result_indices)
-        asm_form.operand_index_start = len(asm_operand_indices)
-        asm_operand_indices.extend(asm_form.operand_indices)
-        asm_form.immediate_start = len(asm_immediates)
-        asm_immediates.extend(asm_form.immediates)
+    append_asm_form_table_spans(asm_forms, asm_operand_indices, asm_immediates)
 
     reg_class_alts: list[tuple[int | None, tuple[RegClassAltFlag, ...]]] = []
     reg_alt_group_starts: dict[tuple[tuple[int | None, tuple[RegClassAltFlag, ...]], ...], int] = {}

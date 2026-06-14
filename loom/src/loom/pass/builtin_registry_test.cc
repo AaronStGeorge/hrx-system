@@ -115,6 +115,14 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
   EXPECT_TRUE(
       iree_string_view_equal(operand_forms->requirement_defs[0].key,
                              IREE_SV("target.low-descriptor-registry")));
+  IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
+      operand_forms, IREE_SV("diagnostics=operand-forms")));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_descriptor_validate_options(
+                            operand_forms, IREE_SV("diagnostics=verbose")));
+  IREE_ASSERT_OK(CreateBuiltinPass(operand_forms, IREE_SV("diagnostics=none")));
+  IREE_ASSERT_OK(
+      CreateBuiltinPass(operand_forms, IREE_SV("diagnostics=operand-forms")));
 
   const loom_pass_descriptor_t* low_dce = LookupBuiltinPass(IREE_SV("low-dce"));
   ASSERT_NE(low_dce, nullptr);

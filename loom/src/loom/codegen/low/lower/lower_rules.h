@@ -234,6 +234,9 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   LOOM_LOW_LOWER_ATTR_COPY_ENUM_ORDINAL = 18,
   // Emits the source op instance flag bitmask as an i64 packet attribute.
   LOOM_LOW_LOWER_ATTR_COPY_SOURCE_OP_INSTANCE_FLAGS = 19,
+  // Packs contiguous i64 source op attributes into an i64 attribute, with the
+  // first source attribute occupying the least-significant bitfield.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ATTRS_PACK_CONSECUTIVE = 20,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -245,8 +248,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint16_t source_attr_index;
   // First source i64_array element ordinal consumed by array projection rows.
   uint16_t source_element_index;
-  // Number of source i64_array elements consumed by PACK_ELEMENTS rows or byte
-  // stride used by I64_ARRAY_LANE_BYTE rows.
+  // Number of source elements consumed by PACK_ELEMENTS rows or byte stride
+  // used by I64_ARRAY_LANE_BYTE rows.
   uint16_t source_element_count;
   // Bit width of each packed source element for PACK_ELEMENTS rows.
   uint8_t source_element_bit_width;
@@ -474,6 +477,10 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE = 24,
   // Source value type storage schema element format must match u64.
   LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT = 25,
+  // Source value must have no ordinary operand uses. Type uses are ignored.
+  LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
+  // Source value ref must map to a low register with exactly |u64| units.
+  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 27,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -492,8 +499,8 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value, divisor, count, element index, bit-count payload, or
-  // exact f64 bit pattern.
+  // Required enum value, divisor, count, element index, bit-count payload,
+  // register unit count, or exact f64 bit pattern.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;

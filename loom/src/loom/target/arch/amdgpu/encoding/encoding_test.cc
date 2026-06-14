@@ -220,7 +220,30 @@ TEST(AmdgpuEncodingTest, NamesDppFormats) {
       IREE_SV("vop1_sdwa")));
 }
 
+TEST(AmdgpuEncodingTest, NamesScalarLiteralFormats) {
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOP1_LITERAL),
+                             IREE_SV("sop1_literal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOP2_LITERAL),
+                             IREE_SV("sop2_literal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOPC_LITERAL),
+                             IREE_SV("sopc_literal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_SOPK_LITERAL),
+                             IREE_SV("sopk_literal")));
+}
+
 TEST(AmdgpuEncodingTest, NamesGfx1250SupplementalFormats) {
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL),
+                             IREE_SV("vop3p_literal")));
   EXPECT_TRUE(iree_string_view_equal(
       loom_amdgpu_encoding_format_name(LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2),
       IREE_SV("vop3px2")));
@@ -490,6 +513,31 @@ TEST(AmdgpuEncodingTest, PacksVopdxyDualFmacPair) {
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0xc8000504));
   EXPECT_EQ(packet.words[1], UINT32_C(0xff060701));
+}
+
+TEST(AmdgpuEncodingTest, PacksVopdxyDualMovPair) {
+  LOOM_AMDGPU_REQUIRE_ENCODING_TABLE(
+      table, LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, "amdgpu.rdna3.core");
+  uint16_t source_42 = 0;
+  ASSERT_TRUE(loom_amdgpu_encoding_inline_u32_source(table, 42, &source_42));
+  uint16_t source_0 = 0;
+  ASSERT_TRUE(loom_amdgpu_encoding_inline_u32_source(table, 0, &source_0));
+
+  loom_amdgpu_encoding_packet_t packet = {};
+  loom_amdgpu_encoding_vopdxy_fields_t fields = {};
+  fields.op_x = 8;
+  fields.op_y = 8;
+  fields.src0_x = source_42;
+  fields.vsrc1_x = 0;
+  fields.vdst_x = 0;
+  fields.src0_y = source_0;
+  fields.vsrc1_y = 0;
+  fields.vdst_y = 1;
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+  EXPECT_EQ(packet.word_count, 2u);
+  EXPECT_EQ(packet.bit_count, 64u);
+  EXPECT_EQ(packet.words[0], UINT32_C(0xca1000aa));
+  EXPECT_EQ(packet.words[1], UINT32_C(0x00000080));
 }
 
 TEST(AmdgpuEncodingTest, PacksVopdxyLiteralDualFmaakPair) {

@@ -1757,6 +1757,22 @@ static iree_status_t loom_low_verify_run_op_providers(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_run_missing_descriptor_providers(
+    loom_low_function_verify_state_t* function_state,
+    const loom_low_resolved_descriptor_packet_t* packet, bool* out_handled) {
+  const uint32_t starting_error_count =
+      function_state->state->result->error_count;
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_run_op_providers(function_state, packet));
+  *out_handled =
+      function_state->state->result->error_count != starting_error_count;
+  if (*out_handled) {
+    return loom_low_verify_define_full_register_results(function_state,
+                                                        packet->op);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_end_function_providers(
     loom_low_function_verify_state_t* function_state) {
   loom_low_verify_provider_list_t provider_list =
@@ -1807,9 +1823,18 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
     }
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_run_op_providers(function_state, &packet));
+  if (packet.descriptor == NULL) {
+    bool handled = false;
+    IREE_RETURN_IF_ERROR(loom_low_verify_run_missing_descriptor_providers(
+        function_state, &packet, &handled));
+    if (!handled) {
+      IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_run_op_providers(function_state, &packet));
+  }
   if (loom_low_verify_should_stop(function_state->state)) {
     *out_result = LOOM_WALK_ABORT;
   }

@@ -26,6 +26,7 @@
 #include "loom/target/artifact_manifest.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/legalization.h"
+#include "loom/target/low_asm_diagnostics.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
@@ -211,10 +212,12 @@ typedef enum loom_target_pipeline_phase_e {
   LOOM_TARGET_PIPELINE_PHASE_SOURCE_NORMALIZATION = 0,
   // Source-to-target-low lowering.
   LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW = 1,
+  // Target-owned cleanup for human-facing source-low asm artifacts.
+  LOOM_TARGET_PIPELINE_PHASE_SOURCE_LOW_ARTIFACT_PREPARATION = 2,
   // Target ABI/resource materialization after source-to-low.
-  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION = 2,
+  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_MATERIALIZATION = 3,
   // Target-low cleanup and operand-form preparation before emission.
-  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_PREPARATION = 3,
+  LOOM_TARGET_PIPELINE_PHASE_TARGET_LOW_PREPARATION = 4,
   LOOM_TARGET_PIPELINE_PHASE_COUNT_,
 } loom_target_pipeline_phase_t;
 
@@ -253,6 +256,9 @@ struct loom_target_provider_t {
   // Optional low-packet diagnostic providers contributed by this target.
   loom_target_low_packet_diagnostic_provider_list_t
       low_packet_diagnostic_provider_list;
+  // Optional text low-asm diagnostic providers contributed by this target.
+  loom_target_low_asm_diagnostic_provider_list_t
+      low_asm_diagnostic_provider_list;
   // Optional target-owned low verifier providers contributed by this target.
   loom_low_verify_provider_list_t low_verify_provider_list;
   // Optional target-owned emitters contributed by this target.
@@ -280,6 +286,7 @@ enum {
   LOOM_TARGET_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_LEGALIZER_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
+  LOOM_TARGET_PROVIDER_LOW_ASM_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_LOW_VERIFY_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_EMITTER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_PASS_REGISTRY_CAPACITY = 64,
@@ -320,6 +327,11 @@ struct loom_target_environment_t {
           [LOOM_TARGET_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY];
   // Number of entries in |low_packet_diagnostic_providers|.
   iree_host_size_t low_packet_diagnostic_provider_count;
+  // Text low-asm diagnostic provider table assembled once.
+  const loom_target_low_asm_diagnostic_provider_t* low_asm_diagnostic_providers
+      [LOOM_TARGET_PROVIDER_LOW_ASM_DIAGNOSTIC_PROVIDER_CAPACITY];
+  // Number of entries in |low_asm_diagnostic_providers|.
+  iree_host_size_t low_asm_diagnostic_provider_count;
   // Target-owned low verifier provider table assembled once.
   const loom_low_verify_provider_t*
       low_verify_providers[LOOM_TARGET_PROVIDER_LOW_VERIFY_PROVIDER_CAPACITY];
@@ -385,6 +397,11 @@ loom_target_environment_legalizer_provider_list(
 // Returns target-low packet diagnostic providers linked into |environment|.
 loom_target_low_packet_diagnostic_provider_list_t
 loom_target_environment_low_packet_diagnostic_provider_list(
+    const loom_target_environment_t* environment);
+
+// Returns target text low-asm diagnostic providers linked into |environment|.
+loom_target_low_asm_diagnostic_provider_list_t
+loom_target_environment_low_asm_diagnostic_provider_list(
     const loom_target_environment_t* environment);
 
 // Returns target-owned low verifier providers linked into |environment|.

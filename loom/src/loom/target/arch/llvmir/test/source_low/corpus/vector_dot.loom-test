@@ -33,6 +33,36 @@ llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
+func.def target(@target) @f32_dotf_zero_seed(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (f32) {
+  %zero = scalar.constant 0.0 : f32
+  %dot = vector.dotf %lhs, %rhs, %zero : vector<4xf32>, vector<4xf32>, f32
+  func.return %dot : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32_dotf_zero_seed(%lhs: reg<llvmir.f32 x4>, %rhs: reg<llvmir.f32 x4>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %zero = const.f32 0
+  %21 = extract.v4f32 %lhs, 0
+  %22 = extract.v4f32 %rhs, 0
+  %23 = fma.f32 %21, %22, %zero
+  %24 = extract.v4f32 %lhs, 1
+  %25 = extract.v4f32 %rhs, 1
+  %26 = fma.f32 %24, %25, %23
+  %27 = extract.v4f32 %lhs, 2
+  %28 = extract.v4f32 %rhs, 2
+  %29 = fma.f32 %27, %28, %26
+  %30 = extract.v4f32 %lhs, 3
+  %31 = extract.v4f32 %rhs, 3
+  %dot = fma.f32 %30, %31, %29
+  return %dot
+}
+
+// ====
+
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
 func.def target(@target) @f32_contract_product_reduce(%lhs: vector<8xf32>, %rhs: vector<8xf32>, %acc: f32) -> (f32) {
   %product = vector.mulf<reassoc|nnan|ninf|nsz|contract> %lhs, %rhs : vector<8xf32>
   %dot = vector.reduce<addf, reassoc|nnan|ninf|nsz|contract> %product, %acc : vector<8xf32>, f32
@@ -41,33 +71,30 @@ func.def target(@target) @f32_contract_product_reduce(%lhs: vector<8xf32>, %rhs:
 
 // ----
 low.func.def target(@target) abi(object_function) @f32_contract_product_reduce(%lhs: reg<llvmir.f32 x8>, %rhs: reg<llvmir.f32 x8>, %acc: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
-  %37 = extract.v8f32 %lhs, 0
-  %38 = extract.v8f32 %rhs, 0
-  %39 = fma.f32 %37, %38, %acc
-  %40 = extract.v8f32 %lhs, 1
-  %41 = extract.v8f32 %rhs, 1
-  %42 = mul.f32 %40, %41 {fast_math_flags = 47}
-  %43 = extract.v8f32 %lhs, 2
-  %44 = extract.v8f32 %rhs, 2
-  %45 = mul.f32 %43, %44 {fast_math_flags = 47}
-  %46 = extract.v8f32 %lhs, 3
-  %47 = extract.v8f32 %rhs, 3
-  %48 = mul.f32 %46, %47 {fast_math_flags = 47}
-  %49 = extract.v8f32 %lhs, 4
-  %50 = extract.v8f32 %rhs, 4
-  %51 = fma.f32 %49, %50, %39
-  %52 = extract.v8f32 %lhs, 5
-  %53 = extract.v8f32 %rhs, 5
-  %54 = fma.f32 %52, %53, %42
-  %55 = extract.v8f32 %lhs, 6
-  %56 = extract.v8f32 %rhs, 6
-  %57 = fma.f32 %55, %56, %45
-  %58 = extract.v8f32 %lhs, 7
-  %59 = extract.v8f32 %rhs, 7
-  %60 = fma.f32 %58, %59, %48
-  %61 = add.f32 %51, %54 {fast_math_flags = 47}
-  %62 = add.f32 %57, %60 {fast_math_flags = 47}
-  %dot = add.f32 %61, %62 {fast_math_flags = 47}
+  %35 = extract.v8f32 %lhs, 0
+  %36 = extract.v8f32 %rhs, 0
+  %37 = fma.f32 %35, %36, %acc
+  %38 = extract.v8f32 %lhs, 1
+  %39 = extract.v8f32 %rhs, 1
+  %40 = fma.f32 %38, %39, %37
+  %41 = extract.v8f32 %lhs, 2
+  %42 = extract.v8f32 %rhs, 2
+  %43 = fma.f32 %41, %42, %40
+  %44 = extract.v8f32 %lhs, 3
+  %45 = extract.v8f32 %rhs, 3
+  %46 = fma.f32 %44, %45, %43
+  %47 = extract.v8f32 %lhs, 4
+  %48 = extract.v8f32 %rhs, 4
+  %49 = fma.f32 %47, %48, %46
+  %50 = extract.v8f32 %lhs, 5
+  %51 = extract.v8f32 %rhs, 5
+  %52 = fma.f32 %50, %51, %49
+  %53 = extract.v8f32 %lhs, 6
+  %54 = extract.v8f32 %rhs, 6
+  %55 = fma.f32 %53, %54, %52
+  %56 = extract.v8f32 %lhs, 7
+  %57 = extract.v8f32 %rhs, 7
+  %dot = fma.f32 %56, %57, %55
   return %dot
 }
 

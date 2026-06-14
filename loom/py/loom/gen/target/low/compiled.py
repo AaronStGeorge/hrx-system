@@ -127,6 +127,8 @@ class CompiledAsmForm:
     descriptor_ordinal: int
     mnemonic_label: str
     mnemonic: str
+    native_assembly_mnemonic_label: str | None
+    native_assembly_mnemonic: str | None
     result_indices: tuple[int, ...]
     operand_indices: tuple[int, ...]
     immediates: tuple[CompiledAsmImmediate, ...]

@@ -29,6 +29,7 @@ from loom.target.arch.amdgpu.encoding import (
     AMDGPU_ENCODING_FORMAT_MUBUF,
     AMDGPU_ENCODING_FORMAT_SOP1,
     AMDGPU_ENCODING_FORMAT_SOP2,
+    AMDGPU_ENCODING_FORMAT_SOP2_LITERAL,
     AMDGPU_ENCODING_FORMAT_SOPP,
     AMDGPU_ENCODING_FORMAT_VBUFFER,
     AMDGPU_ENCODING_FORMAT_VDS,
@@ -45,6 +46,7 @@ from loom.target.arch.amdgpu.encoding import (
     AMDGPU_ENCODING_FORMAT_VOP3_LITERAL,
     AMDGPU_ENCODING_FORMAT_VOP3_SDST,
     AMDGPU_ENCODING_FORMAT_VOP3P,
+    AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL,
     AMDGPU_ENCODING_FORMAT_VOP3PX2,
     AMDGPU_ENCODING_FORMAT_VSCRATCH,
     amdgpu_encoding_field_id,
@@ -67,6 +69,7 @@ from loom.target.low_descriptors import (
     Constraint,
     ConstraintKind,
     Descriptor,
+    DescriptorAsmSurface,
     DescriptorCategory,
     DescriptorFlag,
     DescriptorSet,
@@ -119,6 +122,9 @@ _REG_SCC = "amdgpu.scc"
 _REG_EXEC = "amdgpu.exec"
 _REG_MODE = "amdgpu.mode"
 
+_REG_PART_SGPR_LOW16 = "amdgpu.sgpr.low16"
+_REG_PART_SGPR_HIGH16 = "amdgpu.sgpr.high16"
+_REG_PART_SGPR_FULL32_MASK = 0x3
 _REG_PART_VGPR_LOW16 = "amdgpu.vgpr.low16"
 _REG_PART_VGPR_HIGH16 = "amdgpu.vgpr.high16"
 _REG_PART_VGPR_FULL32_MASK = 0x3
@@ -279,6 +285,7 @@ AMDGPU_DESCRIPTOR_CATEGORIES = (
 _AMDGPU_DESCRIPTOR_SOURCE_DIR = Path("loom/src/loom/target/arch/amdgpu/descriptors")
 _AMDGPU_DESCRIPTOR_PUBLIC_HEADER_DIR = "loom/target/arch/amdgpu/descriptors"
 _AMDGPU_INLINE_F32_ENUM_DOMAIN_NAME = "amdgpu.source_inline_f32"
+_AMDGPU_INLINE_U32_16_ENUM_DOMAIN_NAME = "amdgpu.source_inline_u32_16"
 
 
 def _f32_bits(value: float) -> int:
@@ -298,6 +305,10 @@ _AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN = EnumDomain(
         EnumValue("f32_n4_0", _f32_bits(-4.0)),
         EnumValue("f32_inv_2pi", _f32_bits(0.15915494)),
     ),
+)
+_AMDGPU_SOURCE_INLINE_U32_16_ENUM_DOMAIN = EnumDomain(
+    _AMDGPU_INLINE_U32_16_ENUM_DOMAIN_NAME,
+    values=(EnumValue("u32_16", 16),),
 )
 
 
@@ -324,7 +335,10 @@ def _amdgpu_core_descriptor_set(
     schedule_classes: tuple[ScheduleClass, ...],
     descriptors: tuple[Descriptor, ...] = (),
     register_parts: tuple[RegisterPart, ...] = (),
-    enum_domains: tuple[EnumDomain, ...] = (_AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN,),
+    enum_domains: tuple[EnumDomain, ...] = (
+        _AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN,
+        _AMDGPU_SOURCE_INLINE_U32_16_ENUM_DOMAIN,
+    ),
     categories: tuple[DescriptorCategory, ...] = AMDGPU_DESCRIPTOR_CATEGORIES,
 ) -> DescriptorSet:
     file_stem = _amdgpu_descriptor_set_file_stem(key)
@@ -353,6 +367,7 @@ def _amdgpu_core_descriptor_set(
         descriptors=descriptors,
         descriptor_set_ordinal=amdgpu_descriptor_set_ordinal(key),
         categories=categories,
+        requires_explicit_asm_surface=True,
     )
 
 
@@ -494,6 +509,11 @@ _VGPR_REGISTER_PARTS = (
     RegisterPart(_REG_PART_VGPR_LOW16, _REG_VGPR, 0x1),
     RegisterPart(_REG_PART_VGPR_HIGH16, _REG_VGPR, 0x2),
 )
+_SGPR_REGISTER_PARTS = (
+    RegisterPart(_REG_PART_SGPR_LOW16, _REG_SGPR, 0x1),
+    RegisterPart(_REG_PART_SGPR_HIGH16, _REG_SGPR, 0x2),
+)
+_AMDGPU_REGISTER_PARTS = (*_VGPR_REGISTER_PARTS, *_SGPR_REGISTER_PARTS)
 
 
 class AmdgpuAtomicMemorySpace(CEnum):
@@ -752,6 +772,7 @@ def _common_scalar_vector_memory_schedule_classes(
 def _asm(
     *,
     mnemonic: str | None = None,
+    native_assembly_mnemonic: str | None = None,
     results: tuple[str, ...] = (),
     operands: tuple[str, ...] = (),
     immediates: tuple[str, ...] = (),
@@ -760,6 +781,7 @@ def _asm(
     return (
         AsmForm(
             mnemonic=mnemonic,
+            native_assembly_mnemonic=native_assembly_mnemonic,
             results=results,
             operands=operands,
             immediates=tuple(
@@ -871,12 +893,28 @@ def _buffer_off_zero_operand_form(*, replacement_descriptor: str) -> OperandForm
     )
 
 
-def _sgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
-    return Operand(field_name, OperandRole.RESULT, _SGPR_ALT, unit_count=units)
+def _sgpr_result(
+    field_name: str = "dst", *, units: int = 1, register_part: str | None = None
+) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.RESULT,
+        _SGPR_ALT,
+        unit_count=units,
+        register_part=register_part,
+    )
 
 
-def _sgpr_operand(field_name: str, *, units: int = 1) -> Operand:
-    return Operand(field_name, OperandRole.OPERAND, _SGPR_ALT, unit_count=units)
+def _sgpr_operand(
+    field_name: str, *, units: int = 1, register_part: str | None = None
+) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.OPERAND,
+        _SGPR_ALT,
+        unit_count=units,
+        register_part=register_part,
+    )
 
 
 def _sgpr_predicate(field_name: str, *, units: int = 1) -> Operand:
@@ -972,7 +1010,11 @@ def _exec_state_read(field_name: str = "exec_in") -> Operand:
         field_name,
         OperandRole.IMPLICIT,
         _EXEC_ALT,
-        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        flags=(
+            OperandFlag.IMPLICIT,
+            OperandFlag.STATE_READ,
+            OperandFlag.SCHEDULE_ONLY_STATE,
+        ),
         unit_count=1,
     )
 
@@ -1120,6 +1162,18 @@ def _source_inline_u32_immediate(field_name: str = "imm32") -> Immediate:
     )
 
 
+def _source_inline_u32_16_immediate(field_name: str = "imm32") -> Immediate:
+    return Immediate(
+        field_name,
+        ImmediateKind.ENUM,
+        bit_width=32,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        enum_domain=_AMDGPU_INLINE_U32_16_ENUM_DOMAIN_NAME,
+        encoding_id=_SOURCE_INLINE_U32_ENCODING_ID,
+        default_value=16,
+    )
+
+
 def _source_inline_f32_immediate(field_name: str = "imm32") -> Immediate:
     return Immediate(
         field_name,
@@ -1133,6 +1187,7 @@ def _source_inline_f32_immediate(field_name: str = "imm32") -> Immediate:
 _U32_IMMEDIATE = _u32_immediate()
 
 _SOURCE_INLINE_U32_IMMEDIATE = _source_inline_u32_immediate()
+_SOURCE_INLINE_U32_16_IMMEDIATE = _source_inline_u32_16_immediate()
 _SOURCE_INLINE_F32_IMMEDIATE = _source_inline_f32_immediate()
 
 _LITERAL_U32_IMMEDIATE = replace(
@@ -1745,6 +1800,8 @@ def _hal_buffer_descriptor_pseudos() -> tuple[Descriptor, ...]:
             schedule_class=_SCHEDULE_SALU,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
+            asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
+            asm_surface_reason="expanded by AMDGPU HAL buffer descriptor lowering",
         ),
         Descriptor(
             key="amdgpu.hal.buffer_descriptor.extent",
@@ -1759,6 +1816,8 @@ def _hal_buffer_descriptor_pseudos() -> tuple[Descriptor, ...]:
             schedule_class=_SCHEDULE_SALU,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
+            asm_surface=DescriptorAsmSurface.GENERATED_ONLY,
+            asm_surface_reason="expanded by AMDGPU HAL buffer descriptor lowering",
         ),
     )
 
@@ -2311,6 +2370,7 @@ __all__ = (
     "AMDGPU_ENCODING_FORMAT_MUBUF",
     "AMDGPU_ENCODING_FORMAT_SOP1",
     "AMDGPU_ENCODING_FORMAT_SOP2",
+    "AMDGPU_ENCODING_FORMAT_SOP2_LITERAL",
     "AMDGPU_ENCODING_FORMAT_SOPP",
     "AMDGPU_ENCODING_FORMAT_VBUFFER",
     "AMDGPU_ENCODING_FORMAT_VDS",
@@ -2326,6 +2386,7 @@ __all__ = (
     "AMDGPU_ENCODING_FORMAT_VOP3",
     "AMDGPU_ENCODING_FORMAT_VOP3_LITERAL",
     "AMDGPU_ENCODING_FORMAT_VOP3P",
+    "AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL",
     "AMDGPU_ENCODING_FORMAT_VOP3PX2",
     "AMDGPU_ENCODING_FORMAT_VOP3_SDST",
     "AMDGPU_ENCODING_FORMAT_VSCRATCH",
@@ -2355,6 +2416,7 @@ __all__ = (
     "Constraint",
     "ConstraintKind",
     "Descriptor",
+    "DescriptorAsmSurface",
     "DescriptorCategory",
     "DescriptorFlag",
     "DescriptorSet",
@@ -2414,6 +2476,7 @@ __all__ = (
     "_AMDGPU_DESCRIPTOR_PUBLIC_HEADER_DIR",
     "_AMDGPU_DESCRIPTOR_SOURCE_DIR",
     "_AMDGPU_INLINE_F32_ENUM_DOMAIN_NAME",
+    "_AMDGPU_REGISTER_PARTS",
     "_AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN",
     "_AMDGPU_TRANS_DESCRIPTOR_KEYS",
     "_AMDGPU_TRANS_DESCRIPTOR_LATENCY_CYCLES",
@@ -2512,6 +2575,9 @@ __all__ = (
     "_REG_EXEC",
     "_REG_M0",
     "_REG_MODE",
+    "_REG_PART_SGPR_FULL32_MASK",
+    "_REG_PART_SGPR_HIGH16",
+    "_REG_PART_SGPR_LOW16",
     "_REG_PART_VGPR_FULL32_MASK",
     "_REG_PART_VGPR_HIGH16",
     "_REG_PART_VGPR_LOW16",
@@ -2562,6 +2628,7 @@ __all__ = (
     "_SCHEDULE_WMMA",
     "_SCHEDULE_WMMA_SCALE",
     "_SGPR_ALT",
+    "_SGPR_REGISTER_PARTS",
     "_SGPR_VGPR_ALT",
     "_SMEM_COUNTER_HAZARD",
     "_SMEM_WAIT_EFFECT",
@@ -2569,6 +2636,7 @@ __all__ = (
     "_SMFMAC_VDST_ACCUMULATOR_REASON",
     "_SOURCE_INLINE_F32_ENCODING_ID",
     "_SOURCE_INLINE_F32_IMMEDIATE",
+    "_SOURCE_INLINE_U32_16_IMMEDIATE",
     "_SOURCE_INLINE_U32_ENCODING_ID",
     "_SOURCE_INLINE_U32_IMMEDIATE",
     "_STORECNT_IMMEDIATE",
@@ -2668,6 +2736,7 @@ __all__ = (
     "_soffset_offset_operand_form",
     "_soffset_zero_operand_form",
     "_source_inline_f32_immediate",
+    "_source_inline_u32_16_immediate",
     "_source_inline_u32_immediate",
     "_stack_memory_effect",
     "_u32_immediate",

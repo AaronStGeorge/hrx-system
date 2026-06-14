@@ -189,6 +189,28 @@ def _gpr_destructive_shift_descriptor(
     )
 
 
+def _gpr32_to_gpr64_extend_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+    asm_mnemonic: str,
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        operands=(_gpr64_result(), _gpr32_operand("src")),
+        asm_forms=_asm(
+            mnemonic=asm_mnemonic,
+            results=("dst",),
+            operands=("src",),
+        ),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _gpr32_compare_descriptor(
     *,
     predicate: str,
@@ -543,6 +565,18 @@ X86_SCALAR_SUFFIX_DESCRIPTORS = (
         asm_forms=_asm(results=("dst",), operands=("src",)),
         schedule_class=_SCHEDULE_SCALAR,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+    _gpr32_to_gpr64_extend_descriptor(
+        key="x86.scalar.movsxd.gpr64.gpr32",
+        mnemonic="movsxd",
+        semantic_tag="integer.extsi.i32.i64",
+        asm_mnemonic="movsxd.gpr64.gpr32",
+    ),
+    _gpr32_to_gpr64_extend_descriptor(
+        key="x86.scalar.movzx.gpr64.gpr32",
+        mnemonic="movzx",
+        semantic_tag="integer.extui.i32.i64",
+        asm_mnemonic="movzx.gpr64.gpr32",
     ),
     Descriptor(
         key="x86.scalar.movimm.gpr64",

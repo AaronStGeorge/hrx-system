@@ -744,6 +744,7 @@ class LowKernelEmitter {
         /*.target_selection=*/{},
         /*.memory_access_table=*/{},
         /*.schedule_pressure_cliffs=*/{},
+        /*.schedule_pair_affinities=*/{},
         /*.schedule_strategy=*/{},
         /*.schedule_diagnostic_flags=*/{},
         /*.allocation_budgets=*/{},

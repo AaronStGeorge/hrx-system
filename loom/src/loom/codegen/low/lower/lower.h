@@ -331,6 +331,8 @@ typedef struct loom_low_lower_selected_plan_view_t {
   // Target-owned plan selected during planning. Table-driven rule rows return
   // an empty plan because their rule data is owned by core lowering.
   loom_low_lower_plan_t plan;
+  // True when demand analysis proved the source op has no required low storage.
+  bool elided;
 } loom_low_lower_selected_plan_view_t;
 
 typedef enum loom_low_lower_report_selection_kind_e {
@@ -358,6 +360,8 @@ typedef struct loom_low_lower_report_row_t {
   uint16_t rule_index;
   // Target-owned plan id for callback selections, or PLAN_ID_NONE otherwise.
   loom_low_lower_plan_id_t plan_id;
+  // Stable target-owned description of the selected plan variant, if any.
+  iree_string_view_t plan_detail;
   // First stable low descriptor id emitted by a table rule, or none for plans.
   uint64_t descriptor_id;
   // Number of low operations emitted for this source operation.
@@ -422,6 +426,32 @@ typedef struct loom_low_lower_emit_op_callback_t {
   void* user_data;
 } loom_low_lower_emit_op_callback_t;
 
+typedef void (*loom_low_lower_mark_plan_storage_demands_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t plan);
+
+typedef struct loom_low_lower_mark_plan_storage_demands_callback_t {
+  // Optional callback invoked during demand analysis for one target-owned
+  // callback plan. Targets must mark every source SSA value that emission may
+  // look up through the low value map.
+  loom_low_lower_mark_plan_storage_demands_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_mark_plan_storage_demands_callback_t;
+
+typedef iree_string_view_t (*loom_low_lower_describe_plan_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t plan);
+
+typedef struct loom_low_lower_describe_plan_callback_t {
+  // Optional callback returning a stable target-owned detail string for one
+  // selected callback plan. The string is used only for production compile
+  // reports and must remain borrowed/static.
+  loom_low_lower_describe_plan_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_describe_plan_callback_t;
+
 typedef struct loom_low_lower_policy_t {
   // Stable policy name used in diagnostics and status messages.
   iree_string_view_t name;
@@ -478,6 +508,11 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_select_op_callback_t preselect_op;
   // Optional target-owned selector used before a target has table rules.
   loom_low_lower_select_op_callback_t select_op;
+  // Optional target-owned source storage demand marker for callback-selected
+  // plans. Missing preserves the conservative all-operands behavior.
+  loom_low_lower_mark_plan_storage_demands_callback_t mark_plan_storage_demands;
+  // Optional target-owned callback plan detail formatter for compile reports.
+  loom_low_lower_describe_plan_callback_t describe_plan;
   // Optional target-owned emitter for plans selected by |select_op|.
   loom_low_lower_emit_op_callback_t emit_op;
 } loom_low_lower_policy_t;
@@ -557,7 +592,8 @@ typedef struct loom_low_lower_options_t {
 typedef struct loom_low_lower_result_t {
   // Number of error diagnostics emitted.
   uint32_t error_count;
-  // Number of remark diagnostics emitted by legality providers.
+  // Number of remark diagnostics emitted by legality providers and lowering
+  // callbacks.
   uint32_t remark_count;
   // Descriptor set selected by |options.bundle|.
   const loom_low_descriptor_set_t* descriptor_set;
@@ -652,12 +688,21 @@ loom_builder_t* loom_low_lower_context_builder(
 loom_func_like_t loom_low_lower_context_source_function(
     const loom_low_lower_context_t* context);
 
+// Returns the source function name used in source-to-low diagnostics.
+iree_string_view_t loom_low_lower_context_function_name(
+    const loom_low_lower_context_t* context);
+
 // Returns the emitted target-low function op, or NULL during planning.
 loom_op_t* loom_low_lower_context_low_function(
     const loom_low_lower_context_t* context);
 
 // Returns the number of error diagnostics emitted by the current lowering run.
 uint32_t loom_low_lower_context_error_count(
+    const loom_low_lower_context_t* context);
+
+// Returns enabled source-to-low diagnostic categories.
+loom_target_low_legality_diagnostic_flags_t
+loom_low_lower_context_diagnostic_flags(
     const loom_low_lower_context_t* context);
 
 // Returns the selected target bundle.
@@ -704,6 +749,18 @@ iree_host_size_t loom_low_lower_context_selected_plan_count(
 // Returns one selected lowering plan view.
 loom_low_lower_selected_plan_view_t loom_low_lower_context_selected_plan_view(
     const loom_low_lower_context_t* context, iree_host_size_t index);
+
+// Requires low SSA storage for one source value during plan demand analysis.
+// Target-owned mark_plan_storage_demands callbacks use this for each source
+// value they may look up while emitting the selected callback plan.
+void loom_low_lower_require_source_value_storage(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id);
+
+// Requires low SSA storage for every operand of |source_op|. This is the
+// conservative callback-plan fallback used when a target does not provide exact
+// storage demands for a selected plan.
+void loom_low_lower_require_source_operands_storage(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
 
 // Allocates transient storage from the current lowering arena. The allocation
 // remains valid until the current loom_low_lower_function call returns.

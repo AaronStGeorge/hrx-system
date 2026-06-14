@@ -1,4 +1,4 @@
-// RUN: pass low-select-operand-forms,low-dce
+// RUN: pass low-select-operand-forms,cse,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -19,7 +19,21 @@ low.func.def target(@target) @wmma_zero_accumulator(%lhs: reg<amdgpu.vgpr x8>, %
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @select_equal_payloads(%value: reg<amdgpu.vgpr>, %mask: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) {
+  %selected = low.op<amdgpu.v_cndmask_b32>(%value, %value, %mask) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return %selected : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @select_equal_payloads(%value: reg<amdgpu.vgpr>, %mask: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) {
+  low.return %value : reg<amdgpu.vgpr>
+}
+
+// ====
 
 amdgpu.target<gfx1100> @target
 
@@ -39,8 +53,6 @@ low.func.def target(@target) @vop2_inline_add(%rhs: reg<amdgpu.vgpr>) -> (reg<am
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop2_inline_shift(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -58,8 +70,6 @@ low.func.def target(@target) @vop2_inline_shift(%value: reg<amdgpu.vgpr>) -> (re
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -79,8 +89,6 @@ low.func.def target(@target) @vop2_literal_fallback_add(%rhs: reg<amdgpu.vgpr>) 
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop2_f32_inline_add(%rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -98,8 +106,6 @@ low.func.def target(@target) @vop2_f32_inline_add(%rhs: reg<amdgpu.vgpr>) -> (re
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -119,8 +125,6 @@ low.func.def target(@target) @vop2_f32_literal_fallback_add(%rhs: reg<amdgpu.vgp
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop3_literal_mad(%a: reg<amdgpu.sgpr>, %addend: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
@@ -139,7 +143,77 @@ low.func.def target(@target) @vop3_literal_mad(%a: reg<amdgpu.sgpr>, %addend: re
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_fma_mix_src2_literal_zero(%a: reg<amdgpu.vgpr>, %scale: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %zero = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_fma_mix_f32.f32_f16lo_f32>(%a, %scale, %zero) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_fma_mix_src2_literal_zero(%a: reg<amdgpu.vgpr>, %scale: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.v_fma_mix_f32.f32_f16lo_f32.src2_lit>(%a, %scale) {imm32 = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_fma_source2_literal(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %literal = low.const<amdgpu.v_mov_b32> {imm32 = 1006632960} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_pk_fma_f16>(%a, %b, %literal) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_fma_source2_literal(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.v_pk_fma_f16.src2_lit>(%a, %b) {imm32 = 1006632960} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_mad_source1_literal(%a: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %literal = low.const<amdgpu.v_mov_b32> {imm32 = 305419896} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_pk_mad_i16>(%a, %literal, %c) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_mad_source1_literal(%a: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.v_pk_mad_i16.src1_lit>(%a, %c) {imm32 = 305419896} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_mad_u16_source0_literal(%b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %literal = low.const<amdgpu.v_mov_b32> {imm32 = 1048580} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_pk_mad_u16>(%literal, %b, %c) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3p_packed_mad_u16_source0_literal(%b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.v_pk_mad_u16.src0_lit>(%b, %c) {imm32 = 1048580} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
 
 amdgpu.target<gfx1100> @target
 
@@ -159,8 +233,6 @@ low.func.def target(@target) @vop3_compare_inline(%value: reg<amdgpu.vgpr>) -> (
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @vop3_cndmask_false_inline(%true_value: reg<amdgpu.vgpr>, %mask: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) {
@@ -178,8 +250,6 @@ low.func.def target(@target) @vop3_cndmask_false_inline(%true_value: reg<amdgpu.
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -199,8 +269,6 @@ low.func.def target(@target) @vop3_cndmask_false_literal(%true_value: reg<amdgpu
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @sop2_rhs_inline_shift(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
@@ -219,11 +287,9 @@ low.func.def target(@target) @sop2_rhs_inline_shift(%value: reg<amdgpu.sgpr>) ->
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
-low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+low.func.def target(@target) @sopk_immediate_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
   %step = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
   %result = low.op<amdgpu.s_add_u32>(%position, %step) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
   low.return %result : reg<amdgpu.sgpr>
@@ -232,14 +298,68 @@ low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -
 // ----
 amdgpu.target<gfx1100> @target
 
-low.func.def target(@target) @sop2_rhs_inline_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
-  %result = low.op<amdgpu.s_add_u32.rhs_inline>(%position) {imm32 = 3} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+low.func.def target(@target) @sopk_immediate_add(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+  %result = low.op<amdgpu.s_addk_i32>(%position) {imm16 = 3} : (reg<amdgpu.sgpr>) -> %position as reg<amdgpu.sgpr>
   low.return %result : reg<amdgpu.sgpr>
 }
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sop2_rhs_inline_add_cses_write_only_scc_state(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %step0 = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
+  %sum0 = low.op<amdgpu.s_add_u32>(%position, %step0) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %step1 = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
+  %sum1 = low.op<amdgpu.s_add_u32>(%position, %step1) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %sum0, %sum1 : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sop2_rhs_inline_add_cses_write_only_scc_state(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %sum0 = low.op<amdgpu.s_add_u32.rhs_inline>(%position) {imm32 = 3} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %sum0, %sum0 : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sop2_rhs_inline_add_keeps_live_lhs(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %step = low.const<amdgpu.s_mov_b32> {imm32 = 3} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.s_add_u32>(%position, %step) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %result, %position : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sop2_rhs_inline_add_keeps_live_lhs(%position: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) {
+  %result = low.op<amdgpu.s_add_u32.rhs_inline>(%position) {imm32 = 3} : (reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %result, %position : reg<amdgpu.sgpr>, reg<amdgpu.sgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sopk_immediate_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+  %scale = low.const<amdgpu.s_mov_b32> {imm32 = 12} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.s_mul_i32>(%value, %scale) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %result : reg<amdgpu.sgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @sopk_immediate_mul(%value: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+  %result = low.op<amdgpu.s_mulk_i32>(%value) {imm16 = 12} : (reg<amdgpu.sgpr>) -> %value as reg<amdgpu.sgpr>
+  low.return %result : reg<amdgpu.sgpr>
+}
+
+// ====
 
 amdgpu.target<gfx1100> @target
 
@@ -259,8 +379,6 @@ low.func.def target(@target) @s_load_dword_zero_soffset(%base: reg<amdgpu.sgpr x
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @s_load_dword_soffset_adds_to_offset(%base: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) {
@@ -278,8 +396,6 @@ low.func.def target(@target) @s_load_dword_soffset_adds_to_offset(%base: reg<amd
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -300,8 +416,6 @@ low.func.def target(@target) @buffer_load_dword_off_zero(%resource: reg<amdgpu.s
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @buffer_store_dword_off_zero(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>) {
@@ -320,8 +434,6 @@ low.func.def target(@target) @buffer_store_dword_off_zero(%value: reg<amdgpu.vgp
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx1100> @target
 
@@ -342,8 +454,6 @@ low.func.def target(@target) @buffer_load_b128_off_zero(%resource: reg<amdgpu.sg
 
 // ====
 
-// RUN: pass low-select-operand-forms,low-dce
-
 amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @buffer_store_b64_off_zero(%value: reg<amdgpu.vgpr x2>, %resource: reg<amdgpu.sgpr x4>) {
@@ -362,8 +472,6 @@ low.func.def target(@target) @buffer_store_b64_off_zero(%value: reg<amdgpu.vgpr 
 }
 
 // ====
-
-// RUN: pass low-select-operand-forms,low-dce
 
 amdgpu.target<gfx950> @target
 

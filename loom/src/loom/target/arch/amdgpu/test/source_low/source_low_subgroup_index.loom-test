@@ -91,7 +91,6 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
 }
 
 // ====
-// RUN: emit source-low output=low
 
 amdgpu.target<gfx1200> @target
 kernel.def target(@target) @subgroup_lane_id_xyz_wave32_gfx12() {
@@ -130,7 +129,6 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
 }
 
 // ====
-// RUN: emit source-low output=low
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @subgroup_id_x_wave64() {
@@ -159,7 +157,6 @@ low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64()
 }
 
 // ====
-// RUN: emit source-low output=low
 
 amdgpu.target<gfx950> @target
 kernel.def target(@target) @subgroup_lane_id_x_wave64() {

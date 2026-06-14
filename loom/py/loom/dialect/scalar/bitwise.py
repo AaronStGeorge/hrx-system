@@ -6,11 +6,21 @@
 
 """Scalar bitwise: bitwise ops, shifts, rotates, bit counting."""
 
+from loom.assembly import ARROW, COLON, AttrDict, Ref, ResultType, TypeOf
 from loom.dialect.scalar import IntOverflowFlags, scalar_ops
 from loom.dsl import (
+    ATTR_TYPE_I64,
+    DISTRIBUTION_TRANSFER,
     INTEGER,
+    PURE,
+    AttrDef,
+    BitRangeWithinElementWidth,
+    ElementWidthAtLeastAttr,
     Op,
+    Operand,
     OpPhase,
+    Result,
+    SameKind,
     binary_op,
     unary_op,
 )
@@ -29,6 +39,7 @@ scalar_andi = binary_op(
     doc="Bitwise AND.",
     commutative=True,
     facts="loom_scalar_andi_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_andi_canonicalize",
     examples=["%result = scalar.andi %lhs, %rhs : i32"],
 )
@@ -40,6 +51,7 @@ scalar_ori = binary_op(
     doc="Bitwise OR.",
     commutative=True,
     facts="loom_scalar_ori_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_ori_canonicalize",
     examples=["%result = scalar.ori %lhs, %rhs : i32"],
 )
@@ -51,6 +63,7 @@ scalar_xori = binary_op(
     doc="Bitwise XOR.",
     commutative=True,
     facts="loom_scalar_xori_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_xori_canonicalize",
     examples=["%result = scalar.xori %lhs, %rhs : i32"],
 )
@@ -67,6 +80,7 @@ scalar_shli = binary_op(
     doc="Left shift.",
     flags=("overflow", IntOverflowFlags),
     facts="loom_scalar_shli_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_shli_canonicalize",
     examples=["%result = scalar.shli %lhs, %rhs : i32"],
 )
@@ -77,6 +91,7 @@ scalar_shrsi = binary_op(
     type_constraint=INTEGER,
     doc="Arithmetic right shift (sign-extending).",
     facts="loom_scalar_shrsi_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_shrsi_canonicalize",
     examples=["%result = scalar.shrsi %lhs, %rhs : i32"],
 )
@@ -87,6 +102,7 @@ scalar_shrui = binary_op(
     type_constraint=INTEGER,
     doc="Logical right shift (zero-extending).",
     facts="loom_scalar_shrui_facts",
+    traits=[DISTRIBUTION_TRANSFER],
     canonicalize="loom_scalar_shrui_canonicalize",
     examples=["%result = scalar.shrui %lhs, %rhs : i32"],
 )
@@ -144,6 +160,82 @@ scalar_ctpopi = unary_op(
 )
 
 # ============================================================================
+# Bitfield extraction
+# ============================================================================
+
+
+def _bitfield_attrs() -> list[AttrDef]:
+    return [
+        AttrDef(
+            "offset",
+            ATTR_TYPE_I64,
+            doc="Least-significant bit position of the field within the source.",
+        ),
+        AttrDef(
+            "width",
+            ATTR_TYPE_I64,
+            doc="Number of bits in the extracted field.",
+        ),
+    ]
+
+
+scalar_bitfield_extractu = Op(
+    "scalar.bitfield.extractu",
+    group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Extract one fixed integer bitfield and zero-extend it into the result.",
+    operands=[Operand("source", INTEGER)],
+    results=[Result("result", INTEGER)],
+    attrs=_bitfield_attrs(),
+    constraints=[
+        SameKind("source", "result"),
+        BitRangeWithinElementWidth("source", "offset", "width"),
+        ElementWidthAtLeastAttr("result", "width"),
+    ],
+    facts="loom_scalar_bitfield_extractu_facts",
+    traits=[PURE, DISTRIBUTION_TRANSFER],
+    format=[
+        Ref("source"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%byte = scalar.bitfield.extractu %word {offset = 8, width = 8} : i32 -> i32",
+    ],
+)
+
+scalar_bitfield_extracts = Op(
+    "scalar.bitfield.extracts",
+    group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Extract one fixed integer bitfield and sign-extend it into the result.",
+    operands=[Operand("source", INTEGER)],
+    results=[Result("result", INTEGER)],
+    attrs=_bitfield_attrs(),
+    constraints=[
+        SameKind("source", "result"),
+        BitRangeWithinElementWidth("source", "offset", "width"),
+        ElementWidthAtLeastAttr("result", "width"),
+    ],
+    facts="loom_scalar_bitfield_extracts_facts",
+    traits=[PURE, DISTRIBUTION_TRANSFER],
+    format=[
+        Ref("source"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%signed_byte = scalar.bitfield.extracts %word {offset = 24, width = 8} : i32 -> i32",
+    ],
+)
+
+# ============================================================================
 # Registry
 # ============================================================================
 
@@ -159,4 +251,6 @@ ALL_BITWISE_OPS: tuple[Op, ...] = (
     scalar_ctlzi,
     scalar_cttzi,
     scalar_ctpopi,
+    scalar_bitfield_extractu,
+    scalar_bitfield_extracts,
 )

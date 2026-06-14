@@ -82,12 +82,12 @@
           "--pipeline=source-low"
         ],
         "stdin": {
-          "text": "amdgpu.target<gfx1100> @target\nkernel.def target(@target) @f32_arith() {\n  %c1 = index.constant 1 : index\n  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index\n} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {\n  %tid0 = kernel.workitem.id<x> : index\n  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index\n  %zero = index.constant 0 : offset\n  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>\n  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %sum = vector.addf %lhs, %rhs : vector<1xf32>\n  vector.store %sum, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>\n  kernel.return\n}\n"
+          "text": "amdgpu.target<gfx1100> @target\nkernel.def target(@target) @f32_arith() {\n  %c1 = index.constant 1 : index\n  %c64 = index.constant 64 : index\n  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index\n} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {\n  %tid = kernel.workitem.id<x> : index\n  %zero = index.constant 0 : offset\n  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>\n  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %sum = vector.addf %lhs, %rhs : vector<1xf32>\n  vector.store %sum, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>\n  kernel.return\n}\n"
         }
       },
       "stdout": {
         "contains": [
-          "low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_arith()",
+          "low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_arith()",
           "reg<amdgpu.sgpr x2>",
           "low.op<amdgpu.v_add_f32>"
         ],
@@ -108,7 +108,7 @@
           "--output={tmp}/source-low.loom"
         ],
         "stdin": {
-          "text": "amdgpu.target<gfx1100> @target\nkernel.def target(@target) @f32_arith() {\n  %c1 = index.constant 1 : index\n  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index\n} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {\n  %tid0 = kernel.workitem.id<x> : index\n  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index\n  %zero = index.constant 0 : offset\n  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>\n  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %sum = vector.addf %lhs, %rhs : vector<1xf32>\n  vector.store %sum, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>\n  kernel.return\n}\n"
+          "text": "amdgpu.target<gfx1100> @target\nkernel.def target(@target) @f32_arith() {\n  %c1 = index.constant 1 : index\n  %c64 = index.constant 64 : index\n  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index\n} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {\n  %tid = kernel.workitem.id<x> : index\n  %zero = index.constant 0 : offset\n  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>\n  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %sum = vector.addf %lhs, %rhs : vector<1xf32>\n  vector.store %sum, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>\n  kernel.return\n}\n"
         }
       },
       "stderr": {
@@ -135,7 +135,7 @@
           "--pipeline=default"
         ],
         "stdin": {
-          "text": "amdgpu.target<gfx1100> @target\nkernel.def target(@target) @f32_arith() {\n  %c1 = index.constant 1 : index\n  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index\n} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {\n  %tid0 = kernel.workitem.id<x> : index\n  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index\n  %zero = index.constant 0 : offset\n  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>\n  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %sum = vector.addf %lhs, %rhs : vector<1xf32>\n  vector.store %sum, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>\n  kernel.return\n}\n"
+          "text": "amdgpu.target<gfx1100> @target\nkernel.def target(@target) @f32_arith() {\n  %c1 = index.constant 1 : index\n  %c64 = index.constant 64 : index\n  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index\n} launch(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {\n  %tid = kernel.workitem.id<x> : index\n  %zero = index.constant 0 : offset\n  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>\n  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>\n  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>\n  %sum = vector.addf %lhs, %rhs : vector<1xf32>\n  vector.store %sum, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>\n  kernel.return\n}\n"
         }
       },
       "stdout": {

@@ -149,6 +149,7 @@ static const loom_target_provider_t kFakeElfProvider = {
     /*.low_legality_provider_list=*/{},
     /*.legalizer_provider_list=*/{},
     /*.low_packet_diagnostic_provider_list=*/{},
+    /*.low_asm_diagnostic_provider_list=*/{},
     /*.low_verify_provider_list=*/{},
     /*.emitter_list=*/
     {
@@ -167,6 +168,7 @@ static const loom_target_provider_t kFakeWasmProvider = {
     /*.low_legality_provider_list=*/{},
     /*.legalizer_provider_list=*/{},
     /*.low_packet_diagnostic_provider_list=*/{},
+    /*.low_asm_diagnostic_provider_list=*/{},
     /*.low_verify_provider_list=*/{},
     /*.emitter_list=*/
     {

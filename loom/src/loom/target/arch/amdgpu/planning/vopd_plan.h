@@ -18,6 +18,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/planning/wait_packets.h"
@@ -34,6 +35,10 @@ extern "C" {
 #define LOOM_AMDGPU_VOPD_OP_FMAC_F32 UINT16_C(0)
 // Component opcode for v_fmaak_f32 in a VOPD X/Y slot.
 #define LOOM_AMDGPU_VOPD_OP_FMAAK_F32 UINT16_C(1)
+// Component opcode for v_fmamk_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_FMAMK_F32 UINT16_C(2)
+// Component opcode for v_mov_b32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_MOV_B32 UINT16_C(3)
 
 typedef enum loom_amdgpu_vopd_packet_role_e {
   // Packet is not part of a VOPD pair.
@@ -51,7 +56,27 @@ typedef enum loom_amdgpu_vopd_pair_reason_e {
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 = 1,
   // Two independent v_fmaak_f32 packets were fused into v_dual_fmaak_f32.
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 = 2,
+  // Two independent v_fmamk_f32 packets were fused into v_dual_fmamk_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32 = 3,
+  // Two independent inline-source v_mov_b32 packets were fused into
+  // v_dual_mov_b32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32 = 4,
 } loom_amdgpu_vopd_pair_reason_t;
+
+typedef enum loom_amdgpu_vopd_rejection_reason_e {
+  // Unknown or uninitialized VOPD rejection reason.
+  LOOM_AMDGPU_VOPD_REJECTION_REASON_UNKNOWN = 0,
+  // Component opcodes cannot form one dual packet.
+  LOOM_AMDGPU_VOPD_REJECTION_REASON_COMPONENT_OPCODE_MISMATCH = 1,
+  // First component result is consumed by the second component.
+  LOOM_AMDGPU_VOPD_REJECTION_REASON_FIRST_RESULT_USED_BY_SECOND = 2,
+  // Component literal payloads cannot share one VOPD literal word.
+  LOOM_AMDGPU_VOPD_REJECTION_REASON_LITERAL_MISMATCH = 3,
+  // Physical register parity, bank, or cross-component constraints failed.
+  LOOM_AMDGPU_VOPD_REJECTION_REASON_REGISTER_CONSTRAINTS = 4,
+  // Native wait insertion before the second component prevents fusion.
+  LOOM_AMDGPU_VOPD_REJECTION_REASON_SECOND_PACKET_HAS_INSERTION = 5,
+} loom_amdgpu_vopd_rejection_reason_t;
 
 typedef enum loom_amdgpu_vopd_pair_flag_bits_e {
   // VOPD pair has no additional payload flags.
@@ -68,6 +93,22 @@ typedef struct loom_amdgpu_vopd_packet_t {
   // VOPD pair index, or LOOM_AMDGPU_VOPD_PAIR_NONE.
   uint32_t pair_index;
 } loom_amdgpu_vopd_packet_t;
+
+// Component facts captured for a rejected VOPD component.
+typedef struct loom_amdgpu_vopd_rejection_component_t {
+  // VOPD operation id encoded in this component slot.
+  uint16_t op;
+  // Destination VGPR encoded in this component slot.
+  uint16_t vdst;
+  // First explicit source VGPR encoded in this component slot.
+  uint16_t src0;
+  // Second explicit source VGPR encoded in this component slot.
+  uint16_t vsrc1;
+  // Component-local payload and encoding flags.
+  loom_amdgpu_vopd_pair_flags_t flags;
+  // Component literal payload when LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL is set.
+  uint32_t literal_u32;
+} loom_amdgpu_vopd_rejection_component_t;
 
 // One native VOPD packet replacing two schedule-visible component packets.
 typedef struct loom_amdgpu_vopd_pair_t {
@@ -87,11 +128,44 @@ typedef struct loom_amdgpu_vopd_pair_t {
   uint16_t op_x;
   // VOPD operation id encoded in the Y slot.
   uint16_t op_y;
+  // Destination VGPR encoded in the X slot.
+  uint16_t x_vdst;
+  // First explicit source VGPR encoded in the X slot.
+  uint16_t x_src0;
+  // Second explicit source VGPR encoded in the X slot.
+  uint16_t x_vsrc1;
+  // Destination VGPR encoded in the Y slot.
+  uint16_t y_vdst;
+  // First explicit source VGPR encoded in the Y slot.
+  uint16_t y_src0;
+  // Second explicit source VGPR encoded in the Y slot.
+  uint16_t y_vsrc1;
   // Pair-local payload and encoding flags.
   loom_amdgpu_vopd_pair_flags_t flags;
   // Shared literal payload when LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL is set.
   uint32_t literal_u32;
 } loom_amdgpu_vopd_pair_t;
+
+// One adjacent packet pair that looked like a VOPD opportunity but was
+// rejected.
+typedef struct loom_amdgpu_vopd_rejection_t {
+  // Why this adjacent packet pair could not form a VOPD pair.
+  loom_amdgpu_vopd_rejection_reason_t reason;
+  // Region block containing both component packets.
+  uint32_t block_index;
+  // Scheduled packet index for the first visible component.
+  uint32_t first_packet_index;
+  // Scheduled packet index for the second visible component.
+  uint32_t second_packet_index;
+  // Schedule node index for the first visible component.
+  uint32_t first_node_index;
+  // Schedule node index for the second visible component.
+  uint32_t second_node_index;
+  // Decoded first-component facts.
+  loom_amdgpu_vopd_rejection_component_t first;
+  // Decoded second-component facts.
+  loom_amdgpu_vopd_rejection_component_t second;
+} loom_amdgpu_vopd_rejection_t;
 
 // AMDGPU VOPD packetization table for one scheduled and allocated low function.
 typedef struct loom_amdgpu_vopd_plan_t {
@@ -103,6 +177,10 @@ typedef struct loom_amdgpu_vopd_plan_t {
   const loom_amdgpu_vopd_pair_t* pairs;
   // Number of VOPD pair records.
   iree_host_size_t pair_count;
+  // Rejected adjacent VOPD candidates in scheduled order.
+  const loom_amdgpu_vopd_rejection_t* rejections;
+  // Number of VOPD rejection records.
+  iree_host_size_t rejection_count;
   // Per-scheduled-packet VOPD membership records.
   const loom_amdgpu_vopd_packet_t* packets;
   // Number of packet membership records.
@@ -117,6 +195,10 @@ iree_string_view_t loom_amdgpu_vopd_packet_role_name(
 iree_string_view_t loom_amdgpu_vopd_pair_reason_name(
     loom_amdgpu_vopd_pair_reason_t reason);
 
+// Returns the stable spelling for a VOPD rejection reason.
+iree_string_view_t loom_amdgpu_vopd_rejection_reason_name(
+    loom_amdgpu_vopd_rejection_reason_t reason);
+
 // Builds conservative AMDGPU VOPD pairings from a scheduled and allocated low
 // function. Optional wait packet/state plans suppress pairs that would consume
 // an insertion point before the second component. The caller must keep
@@ -128,6 +210,14 @@ iree_status_t loom_amdgpu_vopd_plan_build(
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
     const loom_amdgpu_wait_state_plan_t* wait_states,
     iree_arena_allocator_t* arena, loom_amdgpu_vopd_plan_t* out_plan);
+
+// Builds AMDGPU scheduling affinities for descriptors that can later form VOPD
+// pairs. These are scheduling hints only; loom_amdgpu_vopd_plan_build remains
+// the final post-allocation legality check.
+iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_arena_allocator_t* arena,
+    loom_low_schedule_pair_affinity_list_t* out_affinities);
 
 // Verifies that |plan| describes |schedule| and |allocation|.
 iree_status_t loom_amdgpu_vopd_plan_verify(
@@ -146,6 +236,10 @@ iree_status_t loom_amdgpu_vopd_plan_verify_wait_insertions(
 // Returns the VOPD membership record for |packet_index|, or NULL.
 const loom_amdgpu_vopd_packet_t* loom_amdgpu_vopd_plan_packet_at(
     const loom_amdgpu_vopd_plan_t* plan, iree_host_size_t packet_index);
+
+// Appends a compact JSON representation of |plan| to |builder|.
+iree_status_t loom_amdgpu_vopd_plan_format_json(
+    const loom_amdgpu_vopd_plan_t* plan, iree_string_builder_t* builder);
 
 #ifdef __cplusplus
 }  // extern "C"

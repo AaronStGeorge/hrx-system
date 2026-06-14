@@ -19,6 +19,9 @@ extern "C" {
 
 const loom_pass_info_t* loom_low_select_operand_forms_pass_info(void);
 
+iree_status_t loom_low_select_operand_forms_create(loom_pass_t* pass,
+                                                   iree_string_view_t options);
+
 iree_status_t loom_low_select_operand_forms_run(loom_pass_t* pass,
                                                 loom_module_t* module,
                                                 loom_func_like_t function);

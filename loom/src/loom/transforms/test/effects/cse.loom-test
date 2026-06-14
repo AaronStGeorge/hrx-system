@@ -192,6 +192,60 @@ low.func.def target(@test_target) @descriptor_low_convergent_ops_do_not_cse(%val
 
 // ====
 
+// Descriptor-backed packets with hidden target-state reads must not CSE across
+// an intervening write to the same state register class.
+// RUN: pass cse
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @descriptor_low_implicit_state_ops_do_not_cse_across_write(%lhs: reg<test.i32>, %rhs: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm<test.low.core> {
+  %a = test.state.add.i32 %lhs, %rhs
+  %clobber = test.state.add.i32 %other, %rhs
+  %b = test.state.add.i32 %lhs, %rhs
+  return %a, %clobber, %b
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @descriptor_low_implicit_state_ops_do_not_cse_across_write(%lhs: reg<test.i32>, %rhs: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) {
+  %a = low.op<test.state.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %clobber = low.op<test.state.add.i32>(%other, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %b = low.op<test.state.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %a, %clobber, %b : reg<test.i32>, reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
+// Operand-form rewrites must preserve descriptor-derived traits on the
+// replacement packet. The rhs-zero form still reads/writes hidden target state,
+// so an intervening state write keeps the two replacements in distinct state
+// epochs.
+// RUN: pass low-select-operand-forms,cse,low-dce
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @descriptor_low_operand_form_implicit_state_ops_do_not_cse_across_write(%lhs: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) asm<test.low.core> {
+  %zero0 = test.const.i32 0
+  %a = test.state.add.i32 %lhs, %zero0
+  %clobber = test.state.add.i32 %other, %lhs
+  %zero1 = test.const.i32 0
+  %b = test.state.add.i32 %lhs, %zero1
+  return %a, %clobber, %b
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @descriptor_low_operand_form_implicit_state_ops_do_not_cse_across_write(%lhs: reg<test.i32>, %other: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32>) {
+  %a = low.op<test.state.add.i32.rhs_zero>(%lhs) : (reg<test.i32>) -> reg<test.i32>
+  %clobber = low.op<test.state.add.i32>(%other, %lhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  %b = low.op<test.state.add.i32.rhs_zero>(%lhs) : (reg<test.i32>) -> reg<test.i32>
+  low.return %a, %clobber, %b : reg<test.i32>, reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
 // Convergent ops are execution-state barriers for pure materializations. A
 // value before the barrier may be defined only for the old dynamic participant
 // set and must not be reused by a later op.

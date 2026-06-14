@@ -48,6 +48,11 @@ iree_py_library(
 )
 
 iree_py_library(
+    name = "low_aliases",
+    srcs = ["low_aliases.py"],
+)
+
+iree_py_library(
     name = "matrix_contracts",
     srcs = ["matrix_contracts.py"],
 )
@@ -105,16 +110,19 @@ iree_py_test(
         "descriptor_overlay_test.py",
         "descriptors_test.py",
         "isa_xml_test.py",
+        "low_aliases_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
         "loom.target.arch.amdgpu.descriptor_overlay_test",
         "loom.target.arch.amdgpu.descriptors_test",
+        "loom.target.arch.amdgpu.low_aliases_test",
     ],
     main = "pytest_style_runner.py",
     deps = [
         ":descriptors",
         ":isa_xml",
+        ":low_aliases",
         "//loom/py/loom/target:low_descriptors",
     ],
 )

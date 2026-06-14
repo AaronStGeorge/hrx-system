@@ -493,6 +493,265 @@ ERR_AMDGPU_026 = ErrorDef(
     fix_hint="Use a wavefront size supported by the selected AMDGPU processor",
 )
 
+# ERR_AMDGPU_027: AMDGPU mixed FMA operand-form decision was recorded.
+ERR_AMDGPU_027 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=27,
+    severity=Severity.REMARK,
+    summary="AMDGPU mixed FMA operand-form decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' selected mixed FMA descriptor '{descriptor_name}' for "
+        "'{op_name}' in '@{function_name}' and {decision} source operand "
+        "{source_operand_index} constant form '{constant_form}' in descriptor "
+        "set '{descriptor_set_name}': reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("source_operand_index", ParamKind.U32),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("constant_form", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded descriptor and operand-form fields to explain why "
+        "source-to-low selected or rejected the literal mixed-FMA form"
+    ),
+)
+
+# ERR_AMDGPU_028: AMDGPU dot FMAC operand-form decision was recorded.
+ERR_AMDGPU_028 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=28,
+    severity=Severity.REMARK,
+    summary="AMDGPU dot FMAC operand-form decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' selected dot accumulation descriptor "
+        "'{descriptor_name}' for '{op_name}' in '@{function_name}' and "
+        "{decision} tied accumulator form at lane {lane_index} in descriptor "
+        "set '{descriptor_set_name}': accumulator '{accumulator_kind}', "
+        "reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("lane_index", ParamKind.U32),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("accumulator_kind", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded descriptor, lane, and accumulator fields to explain "
+        "why source-to-low selected or rejected tied FMAC accumulation"
+    ),
+)
+
+# ERR_AMDGPU_029: AMDGPU half-result mixed FMA lane decision was recorded.
+ERR_AMDGPU_029 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=29,
+    severity=Severity.REMARK,
+    summary="AMDGPU half-result mixed FMA lane decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' {decision} half-result mixed FMA descriptor "
+        "'{descriptor_name}' for '{op_name}' in '@{function_name}' at "
+        "destination lane {destination_lane_index} ({result_half}) in "
+        "descriptor set '{descriptor_set_name}': sources [{source0_kind}, "
+        "{source1_kind}, {source2_kind}], rounding '{rounding_contract}', "
+        "reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("destination_lane_index", ParamKind.U32),
+        ErrorParam("result_half", ParamKind.STRING),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("source0_kind", ParamKind.STRING),
+        ErrorParam("source1_kind", ParamKind.STRING),
+        ErrorParam("source2_kind", ParamKind.STRING),
+        ErrorParam("rounding_contract", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded lane, source-kind, and rounding-contract fields to "
+        "explain why source-to-low selected or rejected v_fma_mixlo/hi_f16 or "
+        "v_mad_mixlo/hi_f16"
+    ),
+)
+
+# ERR_AMDGPU_030: AMDGPU literal FMA operand-form decision was recorded.
+ERR_AMDGPU_030 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=30,
+    severity=Severity.REMARK,
+    summary="AMDGPU literal FMA operand-form decision was recorded.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' {decision} literal FMA descriptor "
+        "'{descriptor_name}' for '{op_name}' in '@{function_name}' using "
+        "{operand_form} source operand {source_operand_index} ({literal_role}) "
+        "constant form '{constant_form}' in descriptor set "
+        "'{descriptor_set_name}': reason '{reason}'"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("operand_form", ParamKind.STRING),
+        ErrorParam("source_operand_index", ParamKind.U32),
+        ErrorParam("literal_role", ParamKind.STRING),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("constant_form", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use the recorded descriptor, operand-form, and literal-role fields to "
+        "explain why source-to-low selected or rejected v_fmaak_f32 or "
+        "v_fmamk_f32"
+    ),
+)
+
+# ERR_AMDGPU_031: AMDGPU FMA alias has compatibility-only semantics.
+ERR_AMDGPU_031 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=31,
+    severity=Severity.ERROR,
+    summary="AMDGPU FMA alias has compatibility-only semantics.",
+    message=(
+        "low function '@{function_name}' uses AMDGPU FMA alias "
+        "'{descriptor_name}' in descriptor set '{descriptor_set_name}', but "
+        "mnemonic '{alias_mnemonic}' has '{alias_semantics}' compatibility "
+        "semantics and is not an ordinary f32 FMA; use descriptor "
+        "'{replacement_descriptor_name}' with mnemonic "
+        "'{replacement_mnemonic}' instead: {decision}, reason '{reason}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("descriptor_name", ParamKind.STRING),
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("alias_mnemonic", ParamKind.STRING),
+        ErrorParam("alias_semantics", ParamKind.STRING),
+        ErrorParam("replacement_descriptor_name", ParamKind.STRING),
+        ErrorParam("replacement_mnemonic", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use ordinary v_fma_f32 or v_fmac_f32 descriptors for IEEE f32 FMA; "
+        "DX9-zero aliases are compatibility opcodes with different zero "
+        "semantics"
+    ),
+)
+
+# ERR_AMDGPU_032: AMDGPU FMA asm mnemonic has compatibility-only semantics.
+ERR_AMDGPU_032 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=32,
+    severity=Severity.ERROR,
+    summary="AMDGPU FMA asm mnemonic has compatibility-only semantics.",
+    message=(
+        "low asm descriptor set '{descriptor_set_name}' rejects mnemonic "
+        "'{alias_mnemonic}': it has '{alias_semantics}' compatibility "
+        "semantics and is not an ordinary f32 FMA; use descriptor "
+        "'{replacement_descriptor_name}' with mnemonic "
+        "'{replacement_mnemonic}' instead: {decision}, reason '{reason}'"
+    ),
+    params=(
+        ErrorParam("descriptor_set_name", ParamKind.STRING),
+        ErrorParam("alias_mnemonic", ParamKind.STRING),
+        ErrorParam("alias_semantics", ParamKind.STRING),
+        ErrorParam("replacement_descriptor_name", ParamKind.STRING),
+        ErrorParam("replacement_mnemonic", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use ordinary v_fma_f32 or v_fmac_f32 mnemonics for IEEE f32 FMA; "
+        "DX9-zero aliases are compatibility opcodes with different zero "
+        "semantics"
+    ),
+)
+
+# ERR_AMDGPU_033: AMDGPU index cast source range does not fit target index width.
+ERR_AMDGPU_033 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=33,
+    severity=Severity.ERROR,
+    summary="AMDGPU index cast source range does not fit target index width.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': "
+        "index cast from {source_type} to {result_type} has source range "
+        "[{source_range_lo}, {source_range_hi}], which is not proven to fit "
+        "the {index_bitwidth}-bit target index domain "
+        "[{required_range_lo}, {required_range_hi}]; constraint "
+        "'{constraint_key}' is not satisfied; accepted proof sources are "
+        "{accepted_proof_sources}"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("source_type", ParamKind.TYPE),
+        ErrorParam("result_type", ParamKind.TYPE),
+        ErrorParam("source_range_lo", ParamKind.I64),
+        ErrorParam("source_range_hi", ParamKind.I64),
+        ErrorParam("index_bitwidth", ParamKind.U32),
+        ErrorParam("required_range_lo", ParamKind.I64),
+        ErrorParam("required_range_hi", ParamKind.I64),
+        ErrorParam("constraint_key", ParamKind.STRING),
+        ErrorParam("accepted_proof_sources", ParamKind.STRING_LIST),
+    ),
+    fix_hint=(
+        "Assume the integer source before the index cast, after any required "
+        "runtime guard, so value facts prove it fits the target index width; "
+        "use an offset path when the value is a byte address"
+    ),
+)
+
+# ERR_AMDGPU_034: AMDGPU dynamic memory byte offset range is unsupported.
+ERR_AMDGPU_034 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=34,
+    severity=Severity.ERROR,
+    summary="AMDGPU dynamic memory byte offset range is unsupported.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' in '@{function_name}': "
+        "{operation_kind} in {memory_space} memory has dynamic byte offset "
+        "range [{byte_offset_range_lo}, {byte_offset_range_hi}], which is "
+        "not proven to fit the non-negative 32-bit AMDGPU memory offset "
+        "domain; dynamic term {dynamic_term_index} has byte stride "
+        "{dynamic_term_byte_stride}, byte range "
+        "[{dynamic_term_byte_range_lo}, {dynamic_term_byte_range_hi}], and "
+        "byte shift {dynamic_term_byte_shift}; static byte offset is "
+        "{static_byte_offset}; constraint '{constraint_key}' is not satisfied"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("operation_kind", ParamKind.STRING),
+        ErrorParam("memory_space", ParamKind.STRING),
+        ErrorParam("byte_offset_range_lo", ParamKind.I64),
+        ErrorParam("byte_offset_range_hi", ParamKind.I64),
+        ErrorParam("dynamic_term_index", ParamKind.U32),
+        ErrorParam("dynamic_term_byte_stride", ParamKind.I64),
+        ErrorParam("dynamic_term_byte_range_lo", ParamKind.I64),
+        ErrorParam("dynamic_term_byte_range_hi", ParamKind.I64),
+        ErrorParam("dynamic_term_byte_shift", ParamKind.U32),
+        ErrorParam("static_byte_offset", ParamKind.I64),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Keep byte addresses in the offset domain, use index.scale when a "
+        "logical index is multiplied by an offset byte stride, and prove the "
+        "resulting byte offset range when target facts cannot infer it"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -519,4 +778,12 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_024,
     ERR_AMDGPU_025,
     ERR_AMDGPU_026,
+    ERR_AMDGPU_027,
+    ERR_AMDGPU_028,
+    ERR_AMDGPU_029,
+    ERR_AMDGPU_030,
+    ERR_AMDGPU_031,
+    ERR_AMDGPU_032,
+    ERR_AMDGPU_033,
+    ERR_AMDGPU_034,
 )

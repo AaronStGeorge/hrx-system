@@ -6,6 +6,7 @@
 
 #include "loom/target/compile_report_low.h"
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
@@ -230,6 +231,32 @@ static void loom_target_compile_report_record_low_static_instruction_mix(
     mix.unknown_count += recognized ? 0 : 1;
   }
   loom_target_compile_report_record_static_instruction_mix(report, &mix);
+}
+
+static iree_string_view_t
+loom_target_compile_report_low_frame_emitted_function_name(
+    const loom_low_emission_frame_t* frame) {
+  const iree_string_view_t export_symbol =
+      frame->target.bundle_storage.export_plan.export_symbol;
+  if (!iree_string_view_is_empty(export_symbol)) {
+    return export_symbol;
+  }
+  return loom_low_diagnostic_function_name(frame->module, frame->function_op);
+}
+
+static void loom_target_compile_report_record_low_frame_identity(
+    loom_target_compile_report_t* report,
+    const loom_low_emission_frame_t* frame) {
+  report->function_name =
+      loom_target_compile_report_low_frame_emitted_function_name(frame);
+  report->lowered_symbol =
+      loom_low_diagnostic_function_name(frame->module, frame->function_op);
+  report->target_bundle_name = frame->target.bundle_storage.bundle.name;
+  report->target_snapshot_name = frame->target.bundle_storage.snapshot.name;
+  report->target_export_name = frame->target.bundle_storage.export_plan.name;
+  report->target_export_symbol =
+      frame->target.bundle_storage.export_plan.export_symbol;
+  report->target_config_name = frame->target.bundle_storage.config.name;
 }
 
 static iree_string_view_t loom_target_compile_report_module_string(
@@ -587,6 +614,7 @@ iree_status_t loom_target_compile_report_record_low_lowering(
           .rule_set_index = source_row->rule_set_index,
           .rule_index = source_row->rule_index,
           .plan_id = source_row->plan_id,
+          .plan_detail = source_row->plan_detail,
           .descriptor_id = source_row->descriptor_id,
           .emitted_low_op_count = source_row->emitted_low_op_count,
       };
@@ -608,6 +636,7 @@ static iree_status_t loom_target_compile_report_record_pressure_rows(
     const loom_liveness_pressure_summary_t* summary =
         &liveness->pressure_summaries[i];
     const loom_target_compile_report_pressure_row_t row = {
+        .function_name = report->function_name,
         .register_class = loom_target_compile_report_value_class_name(
             liveness->module, summary->value_class),
         .type_kind = summary->value_class.type_kind,
@@ -646,6 +675,7 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
         assignment != NULL ? assignment->value_class
                            : (loom_liveness_value_class_t){0};
     const loom_target_compile_report_spill_row_t row = {
+        .function_name = report->function_name,
         .value_name = loom_target_compile_report_value_name(
             allocation->module, spill_plan->value_id),
         .register_class = loom_target_compile_report_value_class_name(
@@ -669,6 +699,7 @@ static iree_status_t loom_target_compile_report_record_spill_rows(
 iree_status_t loom_target_compile_report_record_low_emission_frame(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame) {
+  loom_target_compile_report_record_low_frame_identity(report, frame);
   loom_low_allocation_value_scratch_t value_scratch = {0};
   IREE_RETURN_IF_ERROR(loom_low_allocation_acquire_value_scratch(
       &frame->allocation, &value_scratch));

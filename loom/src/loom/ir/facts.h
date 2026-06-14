@@ -195,6 +195,48 @@ loom_value_facts_t loom_value_facts_clamp_domain(loom_value_facts_t facts,
 loom_value_facts_t loom_value_facts_non_negative_extent(
     loom_value_facts_t facts);
 
+// Returns the exact integer value masked to |bit_count| raw bits. This is
+// useful for transfer functions whose semantics operate on two's-complement
+// bit patterns instead of signed fact ranges.
+bool loom_value_facts_as_exact_raw_bits(loom_value_facts_t facts,
+                                        int32_t bit_count, uint64_t* out_bits);
+
+// Returns exact facts for a zero-extended raw bit pattern. Returns false when
+// the unsigned value cannot be represented in the signed i64 fact domain.
+bool loom_value_facts_make_unsigned_raw_bits(uint64_t raw_bits,
+                                             int32_t bit_count,
+                                             loom_value_facts_t* out_facts);
+
+// Returns exact facts for a sign-extended raw bit pattern.
+loom_value_facts_t loom_value_facts_make_signed_raw_bits(uint64_t raw_bits,
+                                                         int32_t bit_count);
+
+// Returns conservative unsigned range facts for a value with |bit_count|
+// meaningful bits.
+loom_value_facts_t loom_value_facts_make_unsigned_bit_count_range(
+    int64_t bit_count);
+
+// Returns conservative signed range facts for a value with |bit_count|
+// meaningful bits.
+loom_value_facts_t loom_value_facts_make_signed_bit_count_range(
+    int64_t bit_count);
+
+// Extracts a fixed unsigned bitfield from an integer fact summary. Returns
+// false only for invalid transfer parameters; unknown source facts produce the
+// conservative range implied by |width|.
+bool loom_value_facts_extract_unsigned_bitfield(loom_value_facts_t source,
+                                                int32_t source_bit_count,
+                                                int64_t offset, int64_t width,
+                                                loom_value_facts_t* out_facts);
+
+// Extracts a fixed signed bitfield from an integer fact summary. Returns false
+// only for invalid transfer parameters; unknown source facts produce the
+// conservative range implied by |width|.
+bool loom_value_facts_extract_signed_bitfield(loom_value_facts_t source,
+                                              int32_t source_bit_count,
+                                              int64_t offset, int64_t width,
+                                              loom_value_facts_t* out_facts);
+
 //===----------------------------------------------------------------------===//
 // Predicates
 //===----------------------------------------------------------------------===//
@@ -270,6 +312,23 @@ static inline void loom_value_facts_mark_subgroup_lane_mask(
   facts->flags &= ~LOOM_VALUE_FACT_LANE_PREDICATE;
   facts->flags |= LOOM_VALUE_FACT_SUBGROUP_LANE_MASK;
 }
+
+// Applies the conservative execution-distribution transfer for a unary op. An
+// exact result is uniform; otherwise lane-varying inputs produce lane-varying
+// results and uniform inputs produce uniform results.
+void loom_value_facts_propagate_unary_distribution(loom_value_facts_t input,
+                                                   loom_value_facts_t* out);
+
+// Applies the conservative execution-distribution transfer for a binary op.
+void loom_value_facts_propagate_binary_distribution(loom_value_facts_t lhs,
+                                                    loom_value_facts_t rhs,
+                                                    loom_value_facts_t* out);
+
+// Applies the conservative execution-distribution transfer for a ternary op.
+void loom_value_facts_propagate_ternary_distribution(loom_value_facts_t a,
+                                                     loom_value_facts_t b,
+                                                     loom_value_facts_t c,
+                                                     loom_value_facts_t* out);
 
 // Returns true when the integer fact domain proves the value is exactly zero.
 static inline bool loom_value_facts_is_zero(loom_value_facts_t facts) {

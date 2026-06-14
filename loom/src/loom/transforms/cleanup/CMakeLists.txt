@@ -69,9 +69,13 @@ loom_cc_library(
     "cse.c"
   DEPS
     iree::base
+    loom::codegen::low::function
+    loom::codegen::low::pipeline::pass_environment
+    loom::codegen::low::target_binding
     loom::ir
     loom::ops::op_defs
     loom::pass::types
+    loom::target::selection
     loom::util::dominance
   PUBLIC
 )

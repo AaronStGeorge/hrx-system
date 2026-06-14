@@ -18,5 +18,6 @@ loom_check_test_suite(
         "arithmeticf.loom-test",
         "arithmetici.loom-test",
         "bitwisei.loom-test",
+        "conversioni.loom-test",
     ],
 )

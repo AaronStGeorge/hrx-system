@@ -13,7 +13,8 @@ from typing import Protocol
 
 
 class AmdgpuDescriptorSetNameInfo(Protocol):
-    generator_target: str
+    @property
+    def generator_target(self) -> str: ...
 
 
 def amdgpu_label_fragment(value: str) -> str:

@@ -285,6 +285,7 @@ def _s_load_sized_overlay(
         operand_forms = ()
         asm_forms = _asm(
             mnemonic=f"{mnemonic}_offset_only",
+            native_assembly_mnemonic=mnemonic,
             results=("dst",),
             operands=("base",),
             immediates=("offset",),
@@ -428,6 +429,7 @@ def _s_store_sized_overlay(
         operand_forms = ()
         asm_forms = _asm(
             mnemonic=f"{mnemonic}_offset_only",
+            native_assembly_mnemonic=mnemonic,
             operands=("value", "base"),
             immediates=("offset",),
             named_immediates=True,
@@ -817,7 +819,14 @@ def _buffer_load_off_zero_overlay(
         ),
         effects=(memory_effect,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_asm(
+            mnemonic=f"{mnemonic}_off_zero",
+            native_assembly_mnemonic=mnemonic,
+            results=("dst",),
+            operands=("resource",),
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
     )
 
 
@@ -856,7 +865,7 @@ def _buffer_load_b16_d16_overlay(
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_load_b16_d16",
         instruction_name="BUFFER_LOAD_SHORT_D16",
-        mnemonic="buffer_load_short_d16",
+        mnemonic="buffer_load_d16_b16",
         encoding_name=encoding_name,
         semantic_tag="memory.load.u16.d16.low",
         schedule_class=_SCHEDULE_VMEM_LOAD,
@@ -1167,6 +1176,7 @@ def _buffer_load_lds_overlay(
     descriptor_key: str,
     instruction_name: str,
     mnemonic: str,
+    asm_mnemonic: str,
     semantic_tag: str,
     global_width_bits: int,
     workgroup_width_bits: int,
@@ -1222,7 +1232,13 @@ def _buffer_load_lds_overlay(
         ),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         operand_forms=operand_forms,
-        asm_forms=(),
+        asm_forms=_asm(
+            mnemonic=asm_mnemonic,
+            native_assembly_mnemonic=mnemonic,
+            operands=("resource", "vaddr", "soffset", "m0"),
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
     )
 
 
@@ -1231,6 +1247,7 @@ def _buffer_load_lds_off_zero_overlay(
     descriptor_key: str,
     instruction_name: str,
     mnemonic: str,
+    asm_mnemonic: str,
     semantic_tag: str,
     global_width_bits: int,
     workgroup_width_bits: int,
@@ -1281,7 +1298,13 @@ def _buffer_load_lds_off_zero_overlay(
             workgroup_width_bits=workgroup_width_bits,
         ),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_asm(
+            mnemonic=f"{asm_mnemonic}_off_zero",
+            native_assembly_mnemonic=mnemonic,
+            operands=("resource", "m0"),
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
     )
 
 
@@ -1373,6 +1396,7 @@ def _buffer_load_lds_overlays(
                 descriptor_key=f"amdgpu.buffer_load_lds_{mnemonic_suffix}",
                 instruction_name=f"BUFFER_LOAD_{instruction_suffix}",
                 mnemonic=f"buffer_load_{mnemonic_suffix}",
+                asm_mnemonic=f"buffer_load_lds_{mnemonic_suffix}",
                 semantic_tag=semantic_tag,
                 global_width_bits=global_width_bits,
                 workgroup_width_bits=workgroup_width_bits,
@@ -1388,6 +1412,7 @@ def _buffer_load_lds_overlays(
                 descriptor_key=f"amdgpu.buffer_load_lds_{mnemonic_suffix}_off_zero",
                 instruction_name=f"BUFFER_LOAD_{instruction_suffix}",
                 mnemonic=f"buffer_load_{mnemonic_suffix}",
+                asm_mnemonic=f"buffer_load_lds_{mnemonic_suffix}",
                 semantic_tag=semantic_tag,
                 global_width_bits=global_width_bits,
                 workgroup_width_bits=workgroup_width_bits,
@@ -1486,7 +1511,13 @@ def _buffer_store_off_zero_overlay(
         ),
         effects=(memory_effect,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_asm(
+            mnemonic=f"{mnemonic}_off_zero",
+            native_assembly_mnemonic=mnemonic,
+            operands=("value", "resource"),
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
     )
 
 
@@ -1969,7 +2000,7 @@ def _global_load_b16_d16_overlay(
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name="GLOBAL_LOAD_SHORT_D16",
-        mnemonic="global_load_short_d16",
+        mnemonic="global_load_d16_b16",
         encoding_name=encoding_name,
         semantic_tag="memory.load.u16.d16.low",
         schedule_class=_SCHEDULE_VMEM_LOAD,
@@ -1984,7 +2015,7 @@ def _global_load_b16_d16_overlay(
         effects=(_global_read_effect(16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_global_saddr_asm(
-            mnemonic="global_load_short_d16",
+            mnemonic="global_load_d16_b16",
             results=("dst",),
             operands=("addr", "saddr"),
             implicit_m0=implicit_m0,
@@ -1992,7 +2023,7 @@ def _global_load_b16_d16_overlay(
         )
         if saddr_off is None
         else _global_vaddr_asm(
-            mnemonic="global_load_short_d16",
+            mnemonic="global_load_d16_b16",
             results=("dst",),
             operands=("addr",),
             immediates=_memory_asm_immediate_names(cache_fields),
@@ -2122,6 +2153,9 @@ def _scratch_load_overlay(
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_asm(
             mnemonic=asm_mnemonic,
+            native_assembly_mnemonic=mnemonic
+            if asm_mnemonic.endswith("_offset_only")
+            else None,
             results=("dst",),
             operands=asm_operands,
             immediates=_memory_asm_immediate_names(cache_fields),
@@ -2204,6 +2238,9 @@ def _scratch_store_overlay(
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=_asm(
             mnemonic=asm_mnemonic,
+            native_assembly_mnemonic=mnemonic
+            if asm_mnemonic.endswith("_offset_only")
+            else None,
             operands=asm_operands,
             immediates=_memory_asm_immediate_names(cache_fields),
             named_immediates=True,
@@ -2556,7 +2593,19 @@ def _global_load_lds_overlay(
             workgroup_width_bits=workgroup_width_bits,
         ),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_global_saddr_asm(
+            mnemonic=mnemonic,
+            operands=("addr", "saddr"),
+            implicit_m0=True,
+            immediates=_memory_asm_immediate_names(cache_fields),
+        )
+        if saddr_off is None
+        else _asm(
+            mnemonic=f"{mnemonic}_vaddr",
+            operands=("addr", "m0"),
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
     )
 
 
