@@ -288,6 +288,52 @@ low.func.def target(@target) abi(object_function) @fma_vector(%a: reg<llvmir.f32
       << text;
 }
 
+TEST_F(LlvmirModuleEmitterTest, EmitsUnaryFloatOps) {
+  ModulePtr module = ParseModule(R"(
+llvmir.target<object> @target {
+  triple = "loom-direct64-unknown-none",
+  data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
+}
+
+low.func.def target(@target) abi(object_function) @unary_scalar(%input: reg<llvmir.f32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %negated = neg.f32 %input
+  %result = abs.f32 %negated
+  return %result
+}
+
+low.func.def target(@target) abi(object_function) @unary_vector(%input: reg<llvmir.f32 x4>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %negated = neg.v4f32 %input
+  %result = abs.v4f32 %negated
+  return %result
+}
+)");
+
+  DiagnosticEmissionCapture capture;
+  LlvmirModulePtr llvmir_module(nullptr, loom_llvmir_module_free);
+  IREE_ASSERT_OK(EmitLowModule(module.get(), &capture, &llvmir_module));
+  ASSERT_NE(llvmir_module, nullptr);
+  EXPECT_TRUE(capture.emissions.empty());
+
+  std::string text;
+  IREE_ASSERT_OK(WriteText(llvmir_module.get(), &text));
+  EXPECT_NE(text.find("%negated = fneg float %input"), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("%result = call float @llvm.fabs.f32(float %negated)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("%negated = fneg <4 x float> %input"), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("%result = call <4 x float> @llvm.fabs.v4f32(<4 x float> "
+                      "%negated)"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare float @llvm.fabs.f32(float)"), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare <4 x float> @llvm.fabs.v4f32(<4 x float>)"),
+            std::string::npos)
+      << text;
+}
+
 TEST_F(LlvmirModuleEmitterTest, EmitsKernelAbiFromLowKernelFacts) {
   ModulePtr module = ParseModule(R"(
 llvmir.target<object> @target {

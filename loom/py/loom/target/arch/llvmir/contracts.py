@@ -274,15 +274,17 @@ def _const_i64_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
     )
 
 
-def _const_float_rule(result_type: TypePattern, descriptor_key: str) -> DescriptorRule:
+def _const_float_rule(
+    source_op: Op, result_type: TypePattern, descriptor_key: str
+) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     bits_project = (
         ValueProject.f64_as_f32_bits("result")
-        if result_type == _F32
+        if result_type.element == "f32"
         else ValueProject.f64_as_f64_bits("result")
     )
     return DescriptorRule(
-        source_op=scalar_conversion.scalar_constant,
+        source_op=source_op,
         descriptor=descriptor,
         guards=(
             Guard.attr_kind("value", "f64", diagnostic=_F64_ATTR_DIAGNOSTIC),
@@ -373,6 +375,26 @@ def _binary_rule(
                     "lhs": ValueRef.operand("lhs"),
                     "rhs": ValueRef.operand("rhs"),
                 },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _unary_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=_typed_guards(("input", "result"), type_pattern),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"input": ValueRef.operand("input")},
                 results={"dst": ValueRef.result("result")},
             ),
         ),
@@ -658,6 +680,13 @@ def _scalar_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             )
     for type_pattern, suffix in ((_F32, "f32"), (_F64, "f64")):
         for source_op, stem in (
+            (scalar_arithmetic.scalar_negf, "neg"),
+            (scalar_arithmetic.scalar_absf, "abs"),
+        ):
+            rules.append(
+                _unary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+            )
+        for source_op, stem in (
             (scalar_arithmetic.scalar_addf, "add"),
             (scalar_arithmetic.scalar_subf, "sub"),
             (scalar_arithmetic.scalar_mulf, "mul"),
@@ -745,6 +774,23 @@ def _vector_arithmetic_rules() -> tuple[DescriptorRule, ...]:
             rules.append(
                 _binary_rule(source_op, vector_type, f"llvmir.{stem}.{element}")
             )
+    for lane_count in _VECTOR_LANE_COUNTS:
+        type_pattern = _vector_type("f32", lane_count)
+        suffix = _vector_suffix("f32", lane_count)
+        for source_op, stem in (
+            (vector.vector_negf, "neg"),
+            (vector.vector_absf, "abs"),
+        ):
+            rules.append(
+                _unary_rule(source_op, type_pattern, f"llvmir.{stem}.{suffix}")
+            )
+    for source_op, stem in (
+        (vector.vector_negf, "neg"),
+        (vector.vector_absf, "abs"),
+    ):
+        rules.append(
+            _unary_rule(source_op, _vector_type("f32", 1), f"llvmir.{stem}.f32")
+        )
     for lane_count in _VECTOR_LANE_COUNTS:
         type_pattern = _vector_type("f32", lane_count)
         suffix = _vector_suffix("f32", lane_count)
@@ -941,8 +987,16 @@ def _vector_constant_rules() -> tuple[DescriptorRule, ...]:
         + (
             _const_i32_rule(vector.vector_constant, _vector_type("i32", 1)),
             _const_i64_rule(vector.vector_constant, _vector_type("i64", 1)),
-            _const_float_rule(_vector_type("f32", 1), "llvmir.const.f32"),
-            _const_float_rule(_vector_type("f64", 1), "llvmir.const.f64"),
+            _const_float_rule(
+                vector.vector_constant,
+                _vector_type("f32", 1),
+                "llvmir.const.f32",
+            ),
+            _const_float_rule(
+                vector.vector_constant,
+                _vector_type("f64", 1),
+                "llvmir.const.f64",
+            ),
         )
     )
 
@@ -1346,8 +1400,16 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _const_i32_rule(index.index_constant, _INDEX),
         _const_i64_rule(scalar_conversion.scalar_constant, _I64),
         _const_i64_rule(index.index_constant, _OFFSET),
-        _const_float_rule(_F32, "llvmir.const.f32"),
-        _const_float_rule(_F64, "llvmir.const.f64"),
+        _const_float_rule(
+            scalar_conversion.scalar_constant,
+            _F32,
+            "llvmir.const.f32",
+        ),
+        _const_float_rule(
+            scalar_conversion.scalar_constant,
+            _F64,
+            "llvmir.const.f64",
+        ),
         ValueAliasRule(
             source_op=index.index_assume,
             source=ValueRef.operand("values"),
