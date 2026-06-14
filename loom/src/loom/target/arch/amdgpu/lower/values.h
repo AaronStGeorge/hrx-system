@@ -60,6 +60,12 @@ iree_status_t loom_amdgpu_low_legality_verify_offset_compare(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+// Verifies AMDGPU low legality for i64 scalar compares owned by value lowering.
+iree_status_t loom_amdgpu_low_legality_verify_scalar_cmpi_i64(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Verifies AMDGPU low legality for scalar conversions owned by value lowering.
 iree_status_t loom_amdgpu_low_legality_verify_scalar_conversion(
     const loom_target_low_legality_provider_t* provider,

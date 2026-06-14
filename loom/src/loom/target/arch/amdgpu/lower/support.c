@@ -895,6 +895,27 @@ static bool loom_amdgpu_scf_select_payload_prefers_vgpr(
                                                         condition_value_id);
 }
 
+static bool loom_amdgpu_scalar_cmpi_i64_requires_native_mask(
+    const loom_module_t* module, const loom_op_t* source_op) {
+  if (!loom_scalar_cmpi_isa(source_op)) {
+    return false;
+  }
+  const loom_value_id_t lhs = loom_scalar_cmpi_lhs(source_op);
+  const loom_value_id_t rhs = loom_scalar_cmpi_rhs(source_op);
+  if (lhs >= module->values.count || rhs >= module->values.count ||
+      !loom_amdgpu_type_is_i64(loom_module_value_type(module, lhs)) ||
+      !loom_amdgpu_type_is_i64(loom_module_value_type(module, rhs))) {
+    return false;
+  }
+  switch (loom_scalar_cmpi_predicate(source_op)) {
+    case LOOM_SCALAR_CMPI_PREDICATE_EQ:
+    case LOOM_SCALAR_CMPI_PREDICATE_NE:
+      return false;
+    default:
+      return true;
+  }
+}
+
 static bool loom_amdgpu_source_value_is_direct_native_i1_mask_except(
     const loom_module_t* module, loom_value_id_t source_value_id,
     loom_value_id_t excluded_value_id) {
@@ -915,7 +936,9 @@ static bool loom_amdgpu_source_value_is_direct_native_i1_mask_except(
   }
 
   if (loom_scalar_cmpi_isa(defining_op) && loom_value_def_index(value) == 0) {
-    return loom_amdgpu_source_value_directly_prefers_vgpr(
+    return loom_amdgpu_scalar_cmpi_i64_requires_native_mask(module,
+                                                            defining_op) ||
+           loom_amdgpu_source_value_directly_prefers_vgpr(
                module, loom_scalar_cmpi_lhs(defining_op), excluded_value_id) ||
            loom_amdgpu_source_value_directly_prefers_vgpr(
                module, loom_scalar_cmpi_rhs(defining_op), excluded_value_id);
@@ -1191,7 +1214,9 @@ static bool loom_amdgpu_source_value_can_lower_as_scc_i1(
   }
 
   if (loom_scalar_cmpi_isa(defining_op)) {
-    return !loom_amdgpu_source_value_prefers_vgpr(
+    return !loom_amdgpu_scalar_cmpi_i64_requires_native_mask(module,
+                                                             defining_op) &&
+           !loom_amdgpu_source_value_prefers_vgpr(
                module, fact_table, view_regions,
                loom_scalar_cmpi_lhs(defining_op)) &&
            !loom_amdgpu_source_value_prefers_vgpr(
@@ -1320,7 +1345,9 @@ static bool loom_amdgpu_source_value_is_native_i1_mask_excluding(
   }
 
   if (loom_scalar_cmpi_isa(defining_op) && loom_value_def_index(value) == 0) {
-    return loom_amdgpu_source_value_prefers_vgpr(
+    return loom_amdgpu_scalar_cmpi_i64_requires_native_mask(module,
+                                                            defining_op) ||
+           loom_amdgpu_source_value_prefers_vgpr(
                module, fact_table, view_regions,
                loom_scalar_cmpi_lhs(defining_op)) ||
            loom_amdgpu_source_value_prefers_vgpr(

@@ -412,6 +412,29 @@ kernel.def target(@target) @i32_readonly_uniform_smem_guarded_index_address() {
 
 // ====
 
+kernel.def target(@target) @i64_readonly_uniform_smem_guarded_index_address() {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch(%control: buffer, %output: buffer) {
+  %base = index.constant 0 : offset
+  %control_view = buffer.view %control[%base] : buffer -> view<1xi64, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32, #dense>
+  %column_i64 = view.load %control_view[0] : view<1xi64, #dense> -> i64
+  %column = index.cast %column_i64 : i64 to index
+  %zero_i64 = scalar.constant 0 : i64
+  %limit_i64 = scalar.constant 64 : i64
+  %nonnegative = scalar.cmpi sge, %column_i64, %zero_i64 : i64
+  %below = scalar.cmpi slt, %column_i64, %limit_i64 : i64
+  %guard = scalar.andi %nonnegative, %below : i1
+  %zero_i32 = scalar.constant 0 : i32
+  scf.if %guard {
+    view.store %zero_i32, %output_view[%column] : i32, view<64xi32, #dense>
+  }
+  kernel.return
+}
+
+// ====
+
 kernel.def @i32_b128() {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

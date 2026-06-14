@@ -264,6 +264,17 @@ iree_native_test(
 
 iree_native_test(
   NAME
+    "numeric_scalar_i64"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/numeric_scalar_i64.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
     "packed_bitfield"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packed_bitfield.loom-test"
