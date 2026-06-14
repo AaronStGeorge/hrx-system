@@ -485,6 +485,29 @@ def _cast_rule(
     )
 
 
+def _index_cast_rule(
+    source_type: TypePattern,
+    result_type: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    return _cast_rule(index.index_cast, source_type, result_type, descriptor_key)
+
+
+def _index_cast_alias_rule(
+    source_type: TypePattern,
+    result_type: TypePattern,
+) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=index.index_cast,
+        source=ValueRef.operand("input"),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.value_type("input", source_type),
+            Guard.value_type("result", result_type),
+        ),
+    )
+
+
 def _select_rule(type_pattern: TypePattern, descriptor_key: str) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     vector_select = type_pattern.kind == "vector"
@@ -1059,6 +1082,21 @@ def _cast_rules() -> tuple[DescriptorRule, ...]:
             )
             for source_op, stem, source_type, result_type in _VECTOR_CAST_SPECS
         )
+    )
+
+
+def _index_cast_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
+    return (
+        _index_cast_rule(_I32, _INDEX, "llvmir.sext.i32.i64"),
+        _index_cast_rule(_I32, _OFFSET, "llvmir.zext.i32.i64"),
+        _index_cast_rule(_INDEX, _I32, "llvmir.trunc.i64.i32"),
+        _index_cast_rule(_OFFSET, _I32, "llvmir.trunc.i64.i32"),
+        _index_cast_alias_rule(_I64, _INDEX),
+        _index_cast_alias_rule(_I64, _OFFSET),
+        _index_cast_alias_rule(_INDEX, _I64),
+        _index_cast_alias_rule(_OFFSET, _I64),
+        _index_cast_alias_rule(_INDEX, _OFFSET),
+        _index_cast_alias_rule(_OFFSET, _INDEX),
     )
 
 
@@ -1730,6 +1768,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         *_clampf_rules(),
         *_compare_rules(),
         *_cast_rules(),
+        *_index_cast_rules(),
         *_select_rules(),
         *_kernel_query_rules(),
         *_vector_constant_rules(),
