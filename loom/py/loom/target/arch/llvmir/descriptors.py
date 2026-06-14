@@ -172,6 +172,12 @@ _VECTOR_CAST_SPECS = (
     ("bitcast", "i64", "f64"),
     ("bitcast", "f64", "i64"),
 )
+_BITCAST_RESHAPE_SPECS = (
+    ("i32", 1, "i8", 4),
+    ("i32", 2, "i8", 8),
+    ("f16", 2, "i32", 1),
+    ("bf16", 2, "i32", 1),
+)
 
 _ALT_BY_TYPE = {
     "i1": (RegClassAlt(_REG_I1),),
@@ -580,16 +586,28 @@ def _cast_descriptor(
     result_type: str,
     unit_count: int = 1,
     vector: bool = False,
+    source_unit_count: int | None = None,
+    result_unit_count: int | None = None,
+    source_vector: bool | None = None,
+    result_vector: bool | None = None,
 ) -> Descriptor:
-    source_suffix = _descriptor_suffix(source_type, unit_count, vector=vector)
-    result_suffix = _descriptor_suffix(result_type, unit_count, vector=vector)
+    source_unit_count = unit_count if source_unit_count is None else source_unit_count
+    result_unit_count = unit_count if result_unit_count is None else result_unit_count
+    source_vector = vector if source_vector is None else source_vector
+    result_vector = vector if result_vector is None else result_vector
+    source_suffix = _descriptor_suffix(
+        source_type, source_unit_count, vector=source_vector
+    )
+    result_suffix = _descriptor_suffix(
+        result_type, result_unit_count, vector=result_vector
+    )
     return Descriptor(
         key=f"llvmir.{stem}.{source_suffix}.{result_suffix}",
         mnemonic=stem,
         semantic_tag=f"llvmir.{stem}.{source_suffix}.{result_suffix}",
         operands=(
-            _result(result_type, unit_count=unit_count),
-            _operand(source_type, "value", unit_count=unit_count),
+            _result(result_type, unit_count=result_unit_count),
+            _operand(source_type, "value", unit_count=source_unit_count),
         ),
         asm_forms=_asm(
             mnemonic=f"{stem}.{source_suffix}.{result_suffix}",
@@ -882,19 +900,41 @@ def _compare_descriptors() -> tuple[Descriptor, ...]:
 
 
 def _cast_descriptors() -> tuple[Descriptor, ...]:
-    return tuple(
-        _cast_descriptor(stem=stem, source_type=source_type, result_type=result_type)
-        for stem, source_type, result_type in _SCALAR_CAST_SPECS
-    ) + tuple(
-        _cast_descriptor(
-            stem=stem,
-            source_type=source_type,
-            result_type=result_type,
-            unit_count=lane_count,
-            vector=True,
+    return (
+        tuple(
+            _cast_descriptor(
+                stem=stem, source_type=source_type, result_type=result_type
+            )
+            for stem, source_type, result_type in _SCALAR_CAST_SPECS
         )
-        for stem, source_type, result_type in _VECTOR_CAST_SPECS
-        for lane_count in _VECTOR_LANE_COUNTS
+        + tuple(
+            _cast_descriptor(
+                stem=stem,
+                source_type=source_type,
+                result_type=result_type,
+                unit_count=lane_count,
+                vector=True,
+            )
+            for stem, source_type, result_type in _VECTOR_CAST_SPECS
+            for lane_count in _VECTOR_LANE_COUNTS
+        )
+        + tuple(
+            _cast_descriptor(
+                stem="bitcast",
+                source_type=source_type,
+                result_type=result_type,
+                source_unit_count=source_unit_count,
+                result_unit_count=result_unit_count,
+                source_vector=source_unit_count != 1,
+                result_vector=result_unit_count != 1,
+            )
+            for (
+                source_type,
+                source_unit_count,
+                result_type,
+                result_unit_count,
+            ) in _BITCAST_RESHAPE_SPECS
+        )
     )
 
 

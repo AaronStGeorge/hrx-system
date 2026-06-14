@@ -181,6 +181,12 @@ _VECTOR_CAST_SPECS = (
     (vector.vector_bitcast, "bitcast", "i64", "f64"),
     (vector.vector_bitcast, "bitcast", "f64", "i64"),
 )
+_BITCAST_RESHAPE_SPECS = (
+    ("i32", 1, "i8", 4),
+    ("i32", 2, "i8", 8),
+    ("f16", 2, "i32", 1),
+    ("bf16", 2, "i32", 1),
+)
 
 _I32_MIN = -(2**31)
 _I32_MAX = (2**31) - 1
@@ -516,6 +522,10 @@ def _cast_rule(
             ),
         ),
     )
+
+
+def _low_vector_suffix(element: str, lane_count: int) -> str:
+    return element if lane_count == 1 else _vector_suffix(element, lane_count)
 
 
 def _index_cast_rule(
@@ -1375,6 +1385,23 @@ def _cast_rules() -> tuple[DescriptorRule, ...]:
                 f"llvmir.{stem}.{source_type}.{result_type}",
             )
             for source_op, stem, source_type, result_type in _VECTOR_CAST_SPECS
+        )
+        + tuple(
+            _cast_rule(
+                vector.vector_bitcast,
+                _vector_type(source_type, source_lane_count),
+                _vector_type(result_type, result_lane_count),
+                "llvmir."
+                f"bitcast."
+                f"{_low_vector_suffix(source_type, source_lane_count)}."
+                f"{_low_vector_suffix(result_type, result_lane_count)}",
+            )
+            for (
+                source_type,
+                source_lane_count,
+                result_type,
+                result_lane_count,
+            ) in _BITCAST_RESHAPE_SPECS
         )
     )
 
