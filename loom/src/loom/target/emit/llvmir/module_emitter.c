@@ -86,6 +86,13 @@ typedef struct loom_llvmir_emit_compare_info_t {
   uint8_t predicate;
 } loom_llvmir_emit_compare_info_t;
 
+typedef struct loom_llvmir_emit_cast_info_t {
+  // Generated descriptor reference ordinal.
+  uint32_t descriptor_ref;
+  // LLVMIR builder cast opcode.
+  loom_llvmir_cast_op_t cast_op;
+} loom_llvmir_emit_cast_info_t;
+
 typedef struct loom_llvmir_emit_memory_info_t {
   // Generated descriptor reference ordinal.
   uint32_t descriptor_ref;
@@ -240,6 +247,98 @@ static const loom_llvmir_emit_compare_info_t kCompareInfos[] = {
 #undef LOOM_LLVMIR_ICMP_INFOS
 #undef LOOM_LLVMIR_FCMP_INFO
 #undef LOOM_LLVMIR_ICMP_INFO
+
+#define LOOM_LLVMIR_CAST_INFO(stem, source, result, op) \
+  {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_##stem##_##source##_##result, op}
+
+#define LOOM_LLVMIR_SCALAR_CAST_INFOS()                                        \
+  LOOM_LLVMIR_CAST_INFO(TRUNC, I32, I8, LOOM_LLVMIR_CAST_TRUNCATE),            \
+      LOOM_LLVMIR_CAST_INFO(TRUNC, I32, I16, LOOM_LLVMIR_CAST_TRUNCATE),       \
+      LOOM_LLVMIR_CAST_INFO(TRUNC, I64, I32, LOOM_LLVMIR_CAST_TRUNCATE),       \
+      LOOM_LLVMIR_CAST_INFO(SEXT, I8, I32, LOOM_LLVMIR_CAST_SIGN_EXTEND),      \
+      LOOM_LLVMIR_CAST_INFO(SEXT, I16, I32, LOOM_LLVMIR_CAST_SIGN_EXTEND),     \
+      LOOM_LLVMIR_CAST_INFO(SEXT, I32, I64, LOOM_LLVMIR_CAST_SIGN_EXTEND),     \
+      LOOM_LLVMIR_CAST_INFO(ZEXT, I8, I32, LOOM_LLVMIR_CAST_ZERO_EXTEND),      \
+      LOOM_LLVMIR_CAST_INFO(ZEXT, I16, I32, LOOM_LLVMIR_CAST_ZERO_EXTEND),     \
+      LOOM_LLVMIR_CAST_INFO(ZEXT, I32, I64, LOOM_LLVMIR_CAST_ZERO_EXTEND),     \
+      LOOM_LLVMIR_CAST_INFO(SITOFP, I8, F32,                                   \
+                            LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP),                \
+      LOOM_LLVMIR_CAST_INFO(SITOFP, I32, F32,                                  \
+                            LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP),                \
+      LOOM_LLVMIR_CAST_INFO(SITOFP, I64, F64,                                  \
+                            LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP),                \
+      LOOM_LLVMIR_CAST_INFO(UITOFP, I8, F32,                                   \
+                            LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP),              \
+      LOOM_LLVMIR_CAST_INFO(UITOFP, I32, F32,                                  \
+                            LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP),              \
+      LOOM_LLVMIR_CAST_INFO(UITOFP, I64, F64,                                  \
+                            LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP),              \
+      LOOM_LLVMIR_CAST_INFO(FPTOSI, F32, I32,                                  \
+                            LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT),                \
+      LOOM_LLVMIR_CAST_INFO(FPTOSI, F64, I64,                                  \
+                            LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT),                \
+      LOOM_LLVMIR_CAST_INFO(FPTOUI, F32, I32,                                  \
+                            LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT),              \
+      LOOM_LLVMIR_CAST_INFO(FPTOUI, F64, I64,                                  \
+                            LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT),              \
+      LOOM_LLVMIR_CAST_INFO(FPTRUNC, F32, F16, LOOM_LLVMIR_CAST_FP_TRUNCATE),  \
+      LOOM_LLVMIR_CAST_INFO(FPTRUNC, F32, BF16, LOOM_LLVMIR_CAST_FP_TRUNCATE), \
+      LOOM_LLVMIR_CAST_INFO(FPTRUNC, F64, F32, LOOM_LLVMIR_CAST_FP_TRUNCATE),  \
+      LOOM_LLVMIR_CAST_INFO(FPEXT, F16, F32, LOOM_LLVMIR_CAST_FP_EXTEND),      \
+      LOOM_LLVMIR_CAST_INFO(FPEXT, BF16, F32, LOOM_LLVMIR_CAST_FP_EXTEND),     \
+      LOOM_LLVMIR_CAST_INFO(FPEXT, F32, F64, LOOM_LLVMIR_CAST_FP_EXTEND),      \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, I16, F16, LOOM_LLVMIR_CAST_BITCAST),      \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, I16, BF16, LOOM_LLVMIR_CAST_BITCAST),     \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, F16, I16, LOOM_LLVMIR_CAST_BITCAST),      \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, BF16, I16, LOOM_LLVMIR_CAST_BITCAST),     \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, F16, BF16, LOOM_LLVMIR_CAST_BITCAST),     \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, BF16, F16, LOOM_LLVMIR_CAST_BITCAST),     \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, I32, F32, LOOM_LLVMIR_CAST_BITCAST),      \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, F32, I32, LOOM_LLVMIR_CAST_BITCAST),      \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, I64, F64, LOOM_LLVMIR_CAST_BITCAST),      \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, F64, I64, LOOM_LLVMIR_CAST_BITCAST)
+
+#define LOOM_LLVMIR_VECTOR_CAST_INFOS(lanes)                        \
+  LOOM_LLVMIR_CAST_INFO(SEXT, V##lanes##I32, V##lanes##I64,         \
+                        LOOM_LLVMIR_CAST_SIGN_EXTEND),              \
+      LOOM_LLVMIR_CAST_INFO(ZEXT, V##lanes##I32, V##lanes##I64,     \
+                            LOOM_LLVMIR_CAST_ZERO_EXTEND),          \
+      LOOM_LLVMIR_CAST_INFO(TRUNC, V##lanes##I64, V##lanes##I32,    \
+                            LOOM_LLVMIR_CAST_TRUNCATE),             \
+      LOOM_LLVMIR_CAST_INFO(SITOFP, V##lanes##I32, V##lanes##F32,   \
+                            LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP),     \
+      LOOM_LLVMIR_CAST_INFO(UITOFP, V##lanes##I32, V##lanes##F32,   \
+                            LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP),   \
+      LOOM_LLVMIR_CAST_INFO(FPTOSI, V##lanes##F32, V##lanes##I32,   \
+                            LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT),     \
+      LOOM_LLVMIR_CAST_INFO(FPTOUI, V##lanes##F32, V##lanes##I32,   \
+                            LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT),   \
+      LOOM_LLVMIR_CAST_INFO(FPTRUNC, V##lanes##F32, V##lanes##F16,  \
+                            LOOM_LLVMIR_CAST_FP_TRUNCATE),          \
+      LOOM_LLVMIR_CAST_INFO(FPTRUNC, V##lanes##F32, V##lanes##BF16, \
+                            LOOM_LLVMIR_CAST_FP_TRUNCATE),          \
+      LOOM_LLVMIR_CAST_INFO(FPEXT, V##lanes##F16, V##lanes##F32,    \
+                            LOOM_LLVMIR_CAST_FP_EXTEND),            \
+      LOOM_LLVMIR_CAST_INFO(FPEXT, V##lanes##BF16, V##lanes##F32,   \
+                            LOOM_LLVMIR_CAST_FP_EXTEND),            \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, V##lanes##I32, V##lanes##F32,  \
+                            LOOM_LLVMIR_CAST_BITCAST),              \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, V##lanes##F32, V##lanes##I32,  \
+                            LOOM_LLVMIR_CAST_BITCAST),              \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, V##lanes##I64, V##lanes##F64,  \
+                            LOOM_LLVMIR_CAST_BITCAST),              \
+      LOOM_LLVMIR_CAST_INFO(BITCAST, V##lanes##F64, V##lanes##I64,  \
+                            LOOM_LLVMIR_CAST_BITCAST)
+
+static const loom_llvmir_emit_cast_info_t kCastInfos[] = {
+    LOOM_LLVMIR_SCALAR_CAST_INFOS(),   LOOM_LLVMIR_VECTOR_CAST_INFOS(2),
+    LOOM_LLVMIR_VECTOR_CAST_INFOS(4),  LOOM_LLVMIR_VECTOR_CAST_INFOS(8),
+    LOOM_LLVMIR_VECTOR_CAST_INFOS(16),
+};
+
+#undef LOOM_LLVMIR_VECTOR_CAST_INFOS
+#undef LOOM_LLVMIR_SCALAR_CAST_INFOS
+#undef LOOM_LLVMIR_CAST_INFO
 
 #define LOOM_LLVMIR_SELECT_REF(suffix) \
   LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_SELECT_##suffix
@@ -899,6 +998,16 @@ static const loom_llvmir_emit_compare_info_t* loom_llvmir_emit_lookup_compare(
   return NULL;
 }
 
+static const loom_llvmir_emit_cast_info_t* loom_llvmir_emit_lookup_cast(
+    uint32_t descriptor_ref) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kCastInfos); ++i) {
+    if (kCastInfos[i].descriptor_ref == descriptor_ref) {
+      return &kCastInfos[i];
+    }
+  }
+  return NULL;
+}
+
 static bool loom_llvmir_emit_descriptor_ref_in(
     uint32_t descriptor_ref, const uint32_t* descriptor_refs,
     iree_host_size_t descriptor_ref_count) {
@@ -1035,6 +1144,38 @@ static iree_status_t loom_llvmir_emit_compare(
         },
         &llvmir_result));
   }
+  return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
+}
+
+static iree_status_t loom_llvmir_emit_cast(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_llvmir_emit_cast_info_t* info) {
+  if (packet->op->operand_count != 1) {
+    return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                             IREE_SV("packet_operand"),
+                                             packet->op->operand_count, 1);
+  }
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_value_id_t result_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_prepare_packet_result(
+      state, packet, &result_type, &result_value));
+  if (result_type == LOOM_LLVMIR_TYPE_ID_INVALID) return iree_ok_status();
+
+  loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
+      state, loom_op_const_operands(packet->op)[0], &value));
+  loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_cast(
+      state->llvmir_block,
+      &(loom_llvmir_cast_desc_t){
+          .result_name =
+              loom_llvmir_emit_value_name(state->module, result_value),
+          .result_type = result_type,
+          .op = info->cast_op,
+          .value = value,
+      },
+      &llvmir_result));
   return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
 }
 
@@ -1672,6 +1813,12 @@ static iree_status_t loom_llvmir_emit_packet(
       loom_llvmir_emit_lookup_compare(descriptor_ref);
   if (compare_info) {
     return loom_llvmir_emit_compare(state, packet, compare_info);
+  }
+
+  const loom_llvmir_emit_cast_info_t* cast_info =
+      loom_llvmir_emit_lookup_cast(descriptor_ref);
+  if (cast_info) {
+    return loom_llvmir_emit_cast(state, packet, cast_info);
   }
 
   if (loom_llvmir_emit_is_select(descriptor_ref)) {

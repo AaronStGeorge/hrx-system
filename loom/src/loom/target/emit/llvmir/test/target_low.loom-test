@@ -130,6 +130,28 @@ low.func.def target(@target) abi(object_function) @float_vector_constant() -> (r
   return %float
 }
 
+low.func.def target(@target) abi(object_function) @scalar_casts(%i8_value: reg<llvmir.i8>, %i32_value: reg<llvmir.i32>, %f16_value: reg<llvmir.f16>, %bf16_value: reg<llvmir.bf16>, %f32_value: reg<llvmir.f32>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %truncated = trunc.i32.i8 %i32_value
+  %sext = sext.i8.i32 %i8_value
+  %zext = zext.i8.i32 %i8_value
+  %signed_fp = sitofp.i32.f32 %i32_value
+  %unsigned_fp = uitofp.i32.f32 %i32_value
+  %fp_to_signed = fptosi.f32.i32 %f32_value
+  %fp_to_unsigned = fptoui.f32.i32 %f32_value
+  %fp_truncated = fptrunc.f32.f16 %f32_value
+  %fp_extended = fpext.f16.f32 %f16_value
+  %bf16_extended = fpext.bf16.f32 %bf16_value
+  %bits = bitcast.f32.i32 %f32_value
+  return %bits
+}
+
+low.func.def target(@target) abi(object_function) @vector_casts(%i32_values: reg<llvmir.i32 x2>, %f32_values: reg<llvmir.f32 x2>) -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %signed_fp = sitofp.v2i32.v2f32 %i32_values
+  %unsigned_fp = uitofp.v2i32.v2f32 %i32_values
+  %bits = bitcast.v2i32.v2f32 %i32_values
+  return %signed_fp
+}
+
 // ----
 define dso_local i32 @first(i32 %lhs, i32 %rhs) {
 entry:
@@ -304,6 +326,30 @@ entry:
   %v136 = insertelement <2 x float> poison, float 0x0000000040000000, i64 0
   %float = insertelement <2 x float> %v136, float 0x0000000040000000, i64 1
   ret <2 x float> %float
+}
+
+define dso_local i32 @scalar_casts(i8 %i8_value, i32 %i32_value, half %f16_value, bfloat %bf16_value, float %f32_value) {
+entry:
+  %truncated = trunc i32 %i32_value to i8
+  %sext = sext i8 %i8_value to i32
+  %zext = zext i8 %i8_value to i32
+  %signed_fp = sitofp i32 %i32_value to float
+  %unsigned_fp = uitofp i32 %i32_value to float
+  %fp_to_signed = fptosi float %f32_value to i32
+  %fp_to_unsigned = fptoui float %f32_value to i32
+  %fp_truncated = fptrunc float %f32_value to half
+  %fp_extended = fpext half %f16_value to float
+  %bf16_extended = fpext bfloat %bf16_value to float
+  %bits = bitcast float %f32_value to i32
+  ret i32 %bits
+}
+
+define dso_local <2 x float> @vector_casts(<2 x i32> %i32_values, <2 x float> %f32_values) {
+entry:
+  %signed_fp = sitofp <2 x i32> %i32_values to <2 x float>
+  %unsigned_fp = uitofp <2 x i32> %i32_values to <2 x float>
+  %bits = bitcast <2 x i32> %i32_values to <2 x float>
+  ret <2 x float> %signed_fp
 }
 
 // ====

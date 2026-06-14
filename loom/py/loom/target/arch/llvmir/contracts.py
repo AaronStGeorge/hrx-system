@@ -110,6 +110,62 @@ _FLOAT_PREDICATES = (
     "uno",
 )
 
+_SCALAR_CAST_SPECS = (
+    (scalar_conversion.scalar_trunci, "trunc", "i32", "i8"),
+    (scalar_conversion.scalar_trunci, "trunc", "i32", "i16"),
+    (scalar_conversion.scalar_trunci, "trunc", "i64", "i32"),
+    (scalar_conversion.scalar_extsi, "sext", "i8", "i32"),
+    (scalar_conversion.scalar_extsi, "sext", "i16", "i32"),
+    (scalar_conversion.scalar_extsi, "sext", "i32", "i64"),
+    (scalar_conversion.scalar_extui, "zext", "i8", "i32"),
+    (scalar_conversion.scalar_extui, "zext", "i16", "i32"),
+    (scalar_conversion.scalar_extui, "zext", "i32", "i64"),
+    (scalar_conversion.scalar_sitofp, "sitofp", "i8", "f32"),
+    (scalar_conversion.scalar_sitofp, "sitofp", "i32", "f32"),
+    (scalar_conversion.scalar_sitofp, "sitofp", "i64", "f64"),
+    (scalar_conversion.scalar_uitofp, "uitofp", "i8", "f32"),
+    (scalar_conversion.scalar_uitofp, "uitofp", "i32", "f32"),
+    (scalar_conversion.scalar_uitofp, "uitofp", "i64", "f64"),
+    (scalar_conversion.scalar_fptosi, "fptosi", "f32", "i32"),
+    (scalar_conversion.scalar_fptosi, "fptosi", "f64", "i64"),
+    (scalar_conversion.scalar_fptoui, "fptoui", "f32", "i32"),
+    (scalar_conversion.scalar_fptoui, "fptoui", "f64", "i64"),
+    (scalar_conversion.scalar_fptrunc, "fptrunc", "f32", "f16"),
+    (scalar_conversion.scalar_fptrunc, "fptrunc", "f32", "bf16"),
+    (scalar_conversion.scalar_fptrunc, "fptrunc", "f64", "f32"),
+    (scalar_conversion.scalar_extf, "fpext", "f16", "f32"),
+    (scalar_conversion.scalar_extf, "fpext", "bf16", "f32"),
+    (scalar_conversion.scalar_extf, "fpext", "f32", "f64"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "i16", "f16"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "i16", "bf16"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "f16", "i16"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "bf16", "i16"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "f16", "bf16"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "bf16", "f16"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "i32", "f32"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "f32", "i32"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "i64", "f64"),
+    (scalar_conversion.scalar_bitcast, "bitcast", "f64", "i64"),
+)
+
+_VECTOR_CAST_SPECS = (
+    (vector.vector_extsi, "sext", "i32", "i64"),
+    (vector.vector_extui, "zext", "i32", "i64"),
+    (vector.vector_trunci, "trunc", "i64", "i32"),
+    (vector.vector_sitofp, "sitofp", "i32", "f32"),
+    (vector.vector_uitofp, "uitofp", "i32", "f32"),
+    (vector.vector_fptosi, "fptosi", "f32", "i32"),
+    (vector.vector_fptoui, "fptoui", "f32", "i32"),
+    (vector.vector_fptrunc, "fptrunc", "f32", "f16"),
+    (vector.vector_fptrunc, "fptrunc", "f32", "bf16"),
+    (vector.vector_extf, "fpext", "f16", "f32"),
+    (vector.vector_extf, "fpext", "bf16", "f32"),
+    (vector.vector_bitcast, "bitcast", "i32", "f32"),
+    (vector.vector_bitcast, "bitcast", "f32", "i32"),
+    (vector.vector_bitcast, "bitcast", "i64", "f64"),
+    (vector.vector_bitcast, "bitcast", "f64", "i64"),
+)
+
 _I32_MIN = -(2**31)
 _I32_MAX = (2**31) - 1
 
@@ -345,6 +401,30 @@ def _compare_rule(
                     "lhs": ValueRef.operand("lhs"),
                     "rhs": ValueRef.operand("rhs"),
                 },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _cast_rule(
+    source_op: Op,
+    source_type: TypePattern,
+    result_type: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("input", source_type),
+            Guard.value_type("result", result_type),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"value": ValueRef.operand("input")},
                 results={"dst": ValueRef.result("result")},
             ),
         ),
@@ -679,6 +759,30 @@ def _compare_rules() -> tuple[DescriptorRule, ...]:
     return tuple(rules)
 
 
+def _cast_rules() -> tuple[DescriptorRule, ...]:
+    return tuple(
+        _cast_rule(
+            source_op,
+            Scalar(source_type),
+            Scalar(result_type),
+            f"llvmir.{stem}.{source_type}.{result_type}",
+        )
+        for source_op, stem, source_type, result_type in _SCALAR_CAST_SPECS
+    ) + tuple(
+        _cast_rule(
+            source_op,
+            _vector_type(source_type, lane_count),
+            _vector_type(result_type, lane_count),
+            "llvmir."
+            f"{stem}."
+            f"{_vector_suffix(source_type, lane_count)}."
+            f"{_vector_suffix(result_type, lane_count)}",
+        )
+        for source_op, stem, source_type, result_type in _VECTOR_CAST_SPECS
+        for lane_count in _VECTOR_LANE_COUNTS
+    )
+
+
 def _select_rules() -> tuple[DescriptorRule, ...]:
     return tuple(
         _select_rule(type_pattern, f"llvmir.select.{suffix}")
@@ -1002,6 +1106,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         *_vector_arithmetic_rules(),
         *_vector_bitwise_rules(),
         *_compare_rules(),
+        *_cast_rules(),
         *_select_rules(),
         *_vector_constant_rules(),
         *_structural_vector_rules(),

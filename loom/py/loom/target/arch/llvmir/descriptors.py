@@ -110,6 +110,62 @@ _FLOAT_PREDICATES = (
     "uno",
 )
 
+_SCALAR_CAST_SPECS = (
+    ("trunc", "i32", "i8"),
+    ("trunc", "i32", "i16"),
+    ("trunc", "i64", "i32"),
+    ("sext", "i8", "i32"),
+    ("sext", "i16", "i32"),
+    ("sext", "i32", "i64"),
+    ("zext", "i8", "i32"),
+    ("zext", "i16", "i32"),
+    ("zext", "i32", "i64"),
+    ("sitofp", "i8", "f32"),
+    ("sitofp", "i32", "f32"),
+    ("sitofp", "i64", "f64"),
+    ("uitofp", "i8", "f32"),
+    ("uitofp", "i32", "f32"),
+    ("uitofp", "i64", "f64"),
+    ("fptosi", "f32", "i32"),
+    ("fptosi", "f64", "i64"),
+    ("fptoui", "f32", "i32"),
+    ("fptoui", "f64", "i64"),
+    ("fptrunc", "f32", "f16"),
+    ("fptrunc", "f32", "bf16"),
+    ("fptrunc", "f64", "f32"),
+    ("fpext", "f16", "f32"),
+    ("fpext", "bf16", "f32"),
+    ("fpext", "f32", "f64"),
+    ("bitcast", "i16", "f16"),
+    ("bitcast", "i16", "bf16"),
+    ("bitcast", "f16", "i16"),
+    ("bitcast", "bf16", "i16"),
+    ("bitcast", "f16", "bf16"),
+    ("bitcast", "bf16", "f16"),
+    ("bitcast", "i32", "f32"),
+    ("bitcast", "f32", "i32"),
+    ("bitcast", "i64", "f64"),
+    ("bitcast", "f64", "i64"),
+)
+
+_VECTOR_CAST_SPECS = (
+    ("sext", "i32", "i64"),
+    ("zext", "i32", "i64"),
+    ("trunc", "i64", "i32"),
+    ("sitofp", "i32", "f32"),
+    ("uitofp", "i32", "f32"),
+    ("fptosi", "f32", "i32"),
+    ("fptoui", "f32", "i32"),
+    ("fptrunc", "f32", "f16"),
+    ("fptrunc", "f32", "bf16"),
+    ("fpext", "f16", "f32"),
+    ("fpext", "bf16", "f32"),
+    ("bitcast", "i32", "f32"),
+    ("bitcast", "f32", "i32"),
+    ("bitcast", "i64", "f64"),
+    ("bitcast", "f64", "i64"),
+)
+
 _ALT_BY_TYPE = {
     "i1": (RegClassAlt(_REG_I1),),
     "i8": (RegClassAlt(_REG_I8),),
@@ -403,6 +459,34 @@ def _compare_descriptor(
     )
 
 
+def _cast_descriptor(
+    *,
+    stem: str,
+    source_type: str,
+    result_type: str,
+    unit_count: int = 1,
+    vector: bool = False,
+) -> Descriptor:
+    source_suffix = _descriptor_suffix(source_type, unit_count, vector=vector)
+    result_suffix = _descriptor_suffix(result_type, unit_count, vector=vector)
+    return Descriptor(
+        key=f"llvmir.{stem}.{source_suffix}.{result_suffix}",
+        mnemonic=stem,
+        semantic_tag=f"llvmir.{stem}.{source_suffix}.{result_suffix}",
+        operands=(
+            _result(result_type, unit_count=unit_count),
+            _operand(source_type, "value", unit_count=unit_count),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"{stem}.{source_suffix}.{result_suffix}",
+            results=("dst",),
+            operands=("value",),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _select_descriptor(
     type_name: str,
     unit_count: int = 1,
@@ -590,6 +674,23 @@ def _compare_descriptors() -> tuple[Descriptor, ...]:
             for predicate in predicates
         )
     return tuple(descriptors)
+
+
+def _cast_descriptors() -> tuple[Descriptor, ...]:
+    return tuple(
+        _cast_descriptor(stem=stem, source_type=source_type, result_type=result_type)
+        for stem, source_type, result_type in _SCALAR_CAST_SPECS
+    ) + tuple(
+        _cast_descriptor(
+            stem=stem,
+            source_type=source_type,
+            result_type=result_type,
+            unit_count=lane_count,
+            vector=True,
+        )
+        for stem, source_type, result_type in _VECTOR_CAST_SPECS
+        for lane_count in _VECTOR_LANE_COUNTS
+    )
 
 
 def _select_descriptors() -> tuple[Descriptor, ...]:
@@ -881,6 +982,7 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_arithmetic_descriptors(),
         *_bitwise_descriptors(),
         *_compare_descriptors(),
+        *_cast_descriptors(),
         *_select_descriptors(),
         *_structural_vector_descriptors(),
         *_memory_descriptors(),

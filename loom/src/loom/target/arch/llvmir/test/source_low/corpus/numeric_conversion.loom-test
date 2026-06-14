@@ -1,7 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_conversion.loom-test
 // RUN: emit source-low output=low
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -12,9 +11,15 @@ func.def target(@target) @vector_sitofp_i32x2(%input: vector<2xi32>, %scale: vec
   func.return %scaled : vector<2xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @vector_sitofp_i32x2(%input: reg<llvmir.i32 x2>, %scale: reg<llvmir.f32 x2>) -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %converted = sitofp.v2i32.v2f32 %input
+  %scaled = mul.v2f32 %converted, %scale
+  return %scaled
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -24,9 +29,14 @@ func.def target(@target) @scalar_uitofp_i32(%input: i32) -> (f32) {
   func.return %converted : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_uitofp_i32(%input: reg<llvmir.i32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %converted = uitofp.i32.f32 %input
+  return %converted
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -36,9 +46,14 @@ func.def target(@target) @scalar_sitofp_i32(%input: i32) -> (f32) {
   func.return %converted : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_sitofp_i32(%input: reg<llvmir.i32>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %converted = sitofp.i32.f32 %input
+  return %converted
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -48,9 +63,14 @@ func.def target(@target) @scalar_trunci_i32_to_i8(%input: i32) -> (i8) {
   func.return %converted : i8
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_trunci_i32_to_i8(%input: reg<llvmir.i32>) -> (reg<llvmir.i8>) asm<llvmir.generic.core> {
+  %converted = trunc.i32.i8 %input
+  return %converted
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -58,6 +78,12 @@ llvmir.target<object> @target {
 func.def target(@target) @scalar_trunci_i32_to_i16(%input: i32) -> (i16) {
   %converted = scalar.trunci %input : i32 to i16
   func.return %converted : i16
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @scalar_trunci_i32_to_i16(%input: reg<llvmir.i32>) -> (reg<llvmir.i16>) asm<llvmir.generic.core> {
+  %converted = trunc.i32.i16 %input
+  return %converted
 }
 
 // ====
@@ -85,7 +111,6 @@ kernel.def target(@target) @scalar_sitofp_i8_load_store() {
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -95,9 +120,14 @@ func.def target(@target) @scalar_extf_f16(%input: f16) -> (f32) {
   func.return %converted : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_extf_f16(%input: reg<llvmir.f16>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %converted = fpext.f16.f32 %input
+  return %converted
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -107,9 +137,14 @@ func.def target(@target) @scalar_extf_bf16(%input: bf16) -> (f32) {
   func.return %converted : f32
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_extf_bf16(%input: reg<llvmir.bf16>) -> (reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %converted = fpext.bf16.f32 %input
+  return %converted
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -122,9 +157,15 @@ func.def target(@target) @scalar_fptrunc_f32_store(%output: buffer, %input: f32)
   func.return
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @scalar_fptrunc_f32_store(%output_view: reg<llvmir.ptr>, %input: reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %converted = fptrunc.f32.f16 %input
+  store.f16 %converted, %output_view, 0
+  return
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -135,6 +176,13 @@ func.def target(@target) @scalar_fptrunc_bf16_store(%output: buffer, %input: f32
   %converted = scalar.fptrunc %input : f32 to bf16
   view.store %converted, %output_view[0] : bf16, view<1xbf16, #dense>
   func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @scalar_fptrunc_bf16_store(%output_view: reg<llvmir.ptr>, %input: reg<llvmir.f32>) asm<llvmir.generic.core> {
+  %converted = fptrunc.f32.bf16 %input
+  store.bf16 %converted, %output_view, 0
+  return
 }
 
 // ====
@@ -163,7 +211,6 @@ func.def target(@target) @vector_fptrunc_bf16x3(%input: vector<3xf32>) -> (vecto
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -171,6 +218,12 @@ llvmir.target<object> @target {
 func.def target(@target) @scalar_bitcast_f32_to_i32(%input: f32) -> (i32) {
   %bits = scalar.bitcast %input : f32 to i32
   func.return %bits : i32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @scalar_bitcast_f32_to_i32(%input: reg<llvmir.f32>) -> (reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %bits = bitcast.f32.i32 %input
+  return %bits
 }
 
 // ====
@@ -195,7 +248,6 @@ kernel.def target(@target) @scalar_bitcast_direct_i32_arg_f32_store() {
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -205,9 +257,14 @@ func.def target(@target) @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<
   func.return %converted : vector<2xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @vector_uitofp_i32x2(%input: reg<llvmir.i32 x2>) -> (reg<llvmir.f32 x2>) asm<llvmir.generic.core> {
+  %converted = uitofp.v2i32.v2f32 %input
+  return %converted
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -218,4 +275,11 @@ func.def target(@target) @scalar_extsi_i32_store(%output: buffer, %input: i32) {
   %converted = scalar.extsi %input : i32 to i64
   view.store %converted, %output_view[0] : i64, view<1xi64, #dense>
   func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @scalar_extsi_i32_store(%output_view: reg<llvmir.ptr>, %input: reg<llvmir.i32>) asm<llvmir.generic.core> {
+  %converted = sext.i32.i64 %input
+  store.i64 %converted, %output_view, 0
+  return
 }
