@@ -12,11 +12,12 @@ kernel.def @q8_block_unroll_wg64() {
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %four = index.constant 4 : index
+  %four_bytes = index.constant 4 : offset
   %eight = index.constant 8 : index
   %qk = index.constant 32 : index
-  %block_bytes = index.constant 34 : index
+  %block_bytes = index.constant 34 : offset
   %block_f16s = index.constant 17 : index
-  %qs_offset = index.constant 2 : index
+  %qs_offset = index.constant 2 : offset
   %k = index.constant 512 : index
   %rows = index.constant 64 : index
   %blocks_per_row = index.constant 16 : index
@@ -72,10 +73,10 @@ kernel.def @q8_block_unroll_wg64() {
     %src_base_block = index.mul %block_idx, %qk : index
     %src_base = index.add %src_base_block, %in_block_base : index
     %linear_block = index.add %row_block_base, %block_idx : index
-    %block_byte_base = index.mul %linear_block, %block_bytes : index
-    %q_byte_payload = index.add %block_byte_base, %qs_offset : index
-    %q_byte = index.add %q_byte_payload, %in_block_base : index
-    %q_byte_offset = index.cast %q_byte : index to offset
+    %block_byte_base = index.scale %linear_block, %block_bytes : index, offset -> offset
+    %q_byte_payload = index.add %block_byte_base, %qs_offset : offset
+    %in_block_byte = index.scale %block_lane, %four_bytes : index, offset -> offset
+    %q_byte_offset = index.add %q_byte_payload, %in_block_byte : offset
 
     // HIP concept: `global_load_b32` of four packed q8 bytes.
     // Loom spelling: build an i32 view at the byte offset, then vector-load one

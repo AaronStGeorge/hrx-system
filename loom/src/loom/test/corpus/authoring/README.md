@@ -302,6 +302,10 @@ from the source contract; large sentinel shapes that only make proofs pass
 destroy bounds-checking and sanitizer value because the compiler can no longer
 see the real accessible range.
 
+When a logical coordinate selects a packed byte window, `index.scale` is the
+explicit boundary: it multiplies an `index` coordinate by an `offset` byte
+stride and produces the `offset` value expected by `buffer.view`.
+
 `check.case` owns correctness policy for a workload. It creates inputs, calls
 the unit under test, and states expectations. `check.benchmark<@case>` selects
 which case samples should be timed. Benchmark rows name workloads; the runner

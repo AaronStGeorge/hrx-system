@@ -607,6 +607,73 @@ def _address_rules(
     )
 
 
+def _address_scale_rules() -> tuple[DescriptorRule, ...]:
+    sgpr_descriptor = _descriptor("amdgpu.s_mul_i32")
+    vgpr_descriptor = _descriptor("amdgpu.v_mul_lo_u32")
+    return (
+        DescriptorRule(
+            source_op=index.index_scale,
+            descriptor=sgpr_descriptor,
+            guards=(
+                Guard.value_type("index", _INDEX),
+                Guard.value_type("stride", _OFFSET),
+                Guard.value_type("result", _OFFSET),
+                Guard.value_unsigned_bit_count(
+                    "result",
+                    32,
+                    diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+                ),
+                Guard.low_value_register_class("result", "amdgpu.sgpr"),
+                Guard.low_value_register_class("index", "amdgpu.sgpr"),
+                Guard.low_value_register_class("stride", "amdgpu.sgpr"),
+                Guard.descriptor_available(sgpr_descriptor),
+            ),
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=sgpr_descriptor,
+                    operands={
+                        "lhs": ValueRef.operand("index"),
+                        "rhs": ValueRef.operand("stride"),
+                    },
+                    results={"dst": _RESULT},
+                ),
+            ),
+        ),
+        DescriptorRule(
+            source_op=index.index_scale,
+            descriptor=vgpr_descriptor,
+            guards=(
+                Guard.value_type("index", _INDEX),
+                Guard.value_type("stride", _OFFSET),
+                Guard.value_type("result", _OFFSET),
+                Guard.value_unsigned_bit_count(
+                    "result",
+                    32,
+                    diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+                ),
+                Guard.low_value_register_class("result", "amdgpu.vgpr"),
+                Guard.value_materializable("index", ADDRESS_VGPR_MATERIALIZER.name),
+                Guard.value_materializable("stride", ADDRESS_VGPR_MATERIALIZER.name),
+                Guard.descriptor_available(vgpr_descriptor),
+            ),
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=vgpr_descriptor,
+                    operands={
+                        "lhs": _materialized_operand(
+                            "index", ADDRESS_VGPR_MATERIALIZER
+                        ),
+                        "rhs": _materialized_operand(
+                            "stride", ADDRESS_VGPR_MATERIALIZER
+                        ),
+                    },
+                    results={"dst": _RESULT},
+                ),
+            ),
+        ),
+    )
+
+
 def _address_shift_rules(
     source_op: Op,
     sgpr_descriptor_key: str,
@@ -1384,6 +1451,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_mul_lo_u32",
         )
     )
+    rules.extend(_address_scale_rules())
     rules.extend(
         (
             _index_div_power_of_two_sgpr_rule(),

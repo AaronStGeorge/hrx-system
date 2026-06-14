@@ -20,6 +20,7 @@ kernel.def @q8_packed_word_global_dequant_dot4_kernel() {
   %base = index.constant 0 : offset
   %zero = index.constant 0 : index
   %four = index.constant 4 : index
+  %four_bytes = index.constant 4 : offset
   %eight = index.constant 8 : index
   %lane0 = kernel.workitem.id<x> : index
   %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
@@ -27,8 +28,7 @@ kernel.def @q8_packed_word_global_dequant_dot4_kernel() {
   %rhs_global = buffer.assume.memory_space<global> %rhs_buffer : buffer
   %output_global = buffer.assume.memory_space<global> %output : buffer
   %weights_noalias, %rhs_noalias, %output_noalias = buffer.assume.noalias %weights_global, %rhs_global, %output_global : buffer, buffer, buffer
-  %q_byte_index = index.mul %lane, %four : index
-  %q_byte_offset = index.cast %q_byte_index : index to offset
+  %q_byte_offset = index.scale %lane, %four_bytes : index, offset -> offset
   %scale_index = index.div %lane, %eight : index
   %rhs_index = index.mul %lane, %four : index
   %q_word_view = buffer.view %weights_noalias[%q_byte_offset] : buffer -> view<1xi32, #dense>

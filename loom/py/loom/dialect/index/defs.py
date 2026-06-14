@@ -13,12 +13,14 @@ agents can author address math without falling back to scalar integer syntax.
 """
 
 from loom.assembly import (
+    ARROW,
     COLON,
     COMMA,
     Attr,
     PredicateList,
     Ref,
     Refs,
+    ResultType,
     TypeOf,
     TypesOf,
 )
@@ -28,6 +30,7 @@ from loom.dsl import (
     DISTRIBUTION_TRANSFER,
     FACT_IDENTITY,
     INDEX,
+    OFFSET,
     PURE,
     SCALAR,
     AttrDef,
@@ -191,6 +194,42 @@ index_mul = binary_op(
     facts="loom_index_mul_facts",
     traits=[DISTRIBUTION_TRANSFER],
     examples=["%r = index.mul %lhs, %rhs : index"],
+)
+
+index_scale = Op(
+    "index.scale",
+    group=index_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Scale a logical coordinate by a physical byte stride to produce a "
+        "physical byte offset. This is the address-domain boundary for packed "
+        "payload layouts: logical indices stay index values, byte strides stay "
+        "offset values, and the result feeds byte-addressed buffer/view bases."
+    ),
+    operands=[
+        Operand("index", INDEX, doc="Logical coordinate to scale."),
+        Operand(
+            "stride",
+            OFFSET,
+            doc="Physical byte stride for one coordinate step.",
+        ),
+    ],
+    results=[Result("result", OFFSET)],
+    traits=[PURE, DISTRIBUTION_TRANSFER],
+    canonicalize="loom_index_scale_canonicalize",
+    facts="loom_index_scale_facts",
+    format=[
+        Ref("index"),
+        COMMA,
+        Ref("stride"),
+        COLON,
+        TypeOf("index"),
+        COMMA,
+        TypeOf("stride"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=["%bytes = index.scale %lane, %byte_stride : index, offset -> offset"],
 )
 
 index_div = binary_op(
@@ -441,6 +480,7 @@ ALL_INDEX_OPS: tuple[Op, ...] = (
     index_add,
     index_sub,
     index_mul,
+    index_scale,
     index_div,
     index_rem,
     index_min,

@@ -622,6 +622,7 @@ static bool loom_low_source_memory_access_value_has_affine_index_op(
     return false;
   }
   return loom_index_add_isa(defining_op) || loom_index_mul_isa(defining_op) ||
+         loom_index_scale_isa(defining_op) ||
          loom_index_madd_isa(defining_op) || loom_index_shli_isa(defining_op);
 }
 
@@ -723,6 +724,23 @@ static bool loom_low_source_memory_access_affine_index_terms_from_value(
     return loom_low_source_memory_access_affine_index_terms_from_value(
         module, fact_table, scaled_value, combined_multiplier,
         recursion_depth + 1, terms, inout_count, inout_offset);
+  }
+
+  if (loom_index_scale_isa(defining_op)) {
+    int64_t byte_stride = 0;
+    if (!loom_low_source_memory_access_exact_positive_i64(
+            fact_table, loom_index_scale_stride(defining_op), &byte_stride)) {
+      return loom_low_source_memory_access_append_affine_index_term(
+          value_id, multiplier, terms, inout_count);
+    }
+    int64_t combined_multiplier = 0;
+    if (!loom_checked_mul_i64(multiplier, byte_stride, &combined_multiplier)) {
+      return false;
+    }
+    return loom_low_source_memory_access_affine_index_terms_from_value(
+        module, fact_table, loom_index_scale_index(defining_op),
+        combined_multiplier, recursion_depth + 1, terms, inout_count,
+        inout_offset);
   }
 
   if (loom_index_madd_isa(defining_op)) {
@@ -852,6 +870,37 @@ static bool loom_low_source_memory_access_scaled_index_from_value(
     loom_low_source_memory_scaled_index_t inner_scaled_index = {0};
     if (!loom_low_source_memory_access_scaled_index_from_value(
             module, fact_table, scaled_value, recursion_depth + 1,
+            &inner_scaled_index)) {
+      return false;
+    }
+    int64_t scaled_multiplier = 0;
+    int64_t scaled_offset = 0;
+    if (!loom_checked_mul_i64(inner_scaled_index.multiplier, multiplier,
+                              &scaled_multiplier) ||
+        !loom_checked_mul_i64(inner_scaled_index.offset, multiplier,
+                              &scaled_offset)) {
+      return false;
+    }
+    *out_scaled_index = (loom_low_source_memory_scaled_index_t){
+        .index = inner_scaled_index.index,
+        .multiplier = scaled_multiplier,
+        .offset = scaled_offset,
+    };
+    return true;
+  }
+
+  if (loom_index_scale_isa(defining_op)) {
+    loom_value_id_t index = loom_index_scale_index(defining_op);
+    loom_value_id_t stride = loom_index_scale_stride(defining_op);
+    int64_t multiplier = 0;
+    if (!loom_low_source_memory_access_exact_positive_i64(fact_table, stride,
+                                                          &multiplier)) {
+      return true;
+    }
+
+    loom_low_source_memory_scaled_index_t inner_scaled_index = {0};
+    if (!loom_low_source_memory_access_scaled_index_from_value(
+            module, fact_table, index, recursion_depth + 1,
             &inner_scaled_index)) {
       return false;
     }

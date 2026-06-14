@@ -552,6 +552,55 @@ def _mul_scale_rule(
     )
 
 
+def _index_scale_literal_rule(
+    *,
+    scale: int,
+    descriptor_lookup: _DescriptorLookup,
+) -> DescriptorRule:
+    descriptor = descriptor_lookup("x86.scalar.lea.scale.gpr64")
+    return DescriptorRule(
+        source_op=index.index_scale,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("index", _INDEX),
+            Guard.value_type("stride", _OFFSET),
+            Guard.value_type("result", _OFFSET),
+            *_exact_i64_literal_guards("stride", scale),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"index": ValueRef.operand("index")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"disp32": 0, "scale": scale},
+            ),
+        ),
+    )
+
+
+def _index_scale_rule(descriptor_lookup: _DescriptorLookup) -> DescriptorRule:
+    descriptor = descriptor_lookup("x86.scalar.imul.gpr64")
+    return DescriptorRule(
+        source_op=index.index_scale,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("index", _INDEX),
+            Guard.value_type("stride", _OFFSET),
+            Guard.value_type("result", _OFFSET),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.operand("index"),
+                    "rhs": ValueRef.operand("stride"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _shli_scale_rule(
     *,
     shift_amount: int,
@@ -696,7 +745,14 @@ def _index_madd_rule(descriptor_lookup: _DescriptorLookup) -> DescriptorRule:
 
 
 def _scale_rules(descriptor_lookup: _DescriptorLookup) -> tuple[DescriptorRule, ...]:
-    rules: list[DescriptorRule] = []
+    rules = [
+        _index_scale_literal_rule(
+            scale=scale,
+            descriptor_lookup=descriptor_lookup,
+        )
+        for scale in (1, 2, 4, 8)
+    ]
+    rules.append(_index_scale_rule(descriptor_lookup))
     for scale in (2, 4, 8):
         rules.append(
             _mul_scale_rule(

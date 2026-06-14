@@ -216,6 +216,37 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_shli_global_b32() 
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @index_scale_byte_offset_global_b32() {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
+} launch(%input: buffer, %output: buffer) {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 3)] : index
+  %zero = index.constant 0 : index
+  %byte_stride = index.constant 4 : offset
+  %byte_offset = index.scale %x, %byte_stride : index, offset -> offset
+  %input_view = buffer.view %input[%byte_offset] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xi32, #dense>
+  %loaded = vector.load %input_view[%zero] : view<1xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%zero] : vector<1xi32>, view<1xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_scale_byte_offset_global_b32() asm<amdgpu.rdna3.core> {
+  %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %19 = v_lshlrev_b32_src0_inline %x, 2
+  %loaded = global_load_b32_saddr %19, %input_view
+  global_store_b32_saddr %19, %loaded, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @index_shli_previous_row_global_b128() {
   %c1 = index.constant 1 : index
   %c32 = index.constant 32 : index

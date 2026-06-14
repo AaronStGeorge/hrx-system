@@ -59,6 +59,24 @@ low.func.def target(@target) abi(hal_kernel) @index_uniform_madd(%row: reg<amdgp
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @index_uniform_scale_offset(%index_i32: i32, %stride_i32: i32) -> (offset) {
+  %index0 = index.cast %index_i32 : i32 to index
+  %index = index.assume %index0 [range(%index0, 0, 1023)] : index
+  %stride0 = index.cast %stride_i32 : i32 to offset
+  %stride = index.assume %stride0 [range(%stride0, 0, 4096)] : offset
+  %bytes = index.scale %index, %stride : index, offset -> offset
+  func.return %bytes : offset
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_uniform_scale_offset(%index: reg<amdgpu.sgpr>, %stride: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %bytes = s_mul_i32 %index, %stride
+  return %bytes
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @index_uniform_shift_mask(%value: i32) -> (index, index) {
   %value_index = index.cast %value : i32 to index
   %bounded_value = index.assume %value_index [range(%value_index, 0, 1024)] : index
