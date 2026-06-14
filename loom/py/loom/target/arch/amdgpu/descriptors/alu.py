@@ -3864,6 +3864,7 @@ def _v_mov_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
         immediate_fields=("LITERAL",),
         immediates=(_U32_IMMEDIATE,),
         fixed_encoding_fields=(("SRC0", _predefined("SRC_LITERAL", "OPR_SRC")),),
+        constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 

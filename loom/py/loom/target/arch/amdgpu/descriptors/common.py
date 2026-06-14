@@ -1275,6 +1275,7 @@ def _s_mov_b32_contract_overlay() -> AmdgpuDescriptorOverlay:
         operands=(AmdgpuOperandOverlay("SDST", _sgpr_result()),),
         asm_forms=_asm(results=("dst",), immediates=("imm32",)),
         immediates=(_U32_IMMEDIATE,),
+        constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1296,6 +1297,7 @@ def _manual_scalar_descriptors(
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             encoding_id=s_mov_b32_opcode,
+            constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
