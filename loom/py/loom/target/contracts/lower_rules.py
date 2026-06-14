@@ -1714,6 +1714,9 @@ def _type_pattern_text(type_pattern: TypePattern) -> str:
         return element_text
     if type_pattern.kind == "view":
         return f"view<{element_text}>"
+    if type_pattern.dims:
+        dims_text = "x".join(str(dim) for dim in type_pattern.dims)
+        return f"vector<{dims_text}x{element_text}>"
     if type_pattern.lanes is not None:
         return f"vector<{type_pattern.lanes}x{element_text}>"
     return f"vector<{element_text}>"

@@ -177,6 +177,84 @@ static iree_status_t loom_llvmir_bitcode_memory_volatile(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_bitcode_atomic_rmw_op(
+    loom_llvmir_atomic_rmw_op_t op, uint64_t* out_op) {
+  switch (op) {
+    case LOOM_LLVMIR_ATOMIC_RMW_XCHG:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_XCHG;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_ADD:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_ADD;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_SUB:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_SUB;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_AND:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_AND;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_OR:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_OR;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_XOR:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_XOR;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_MAX:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_MAX;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_MIN:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_MIN;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_UMAX:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_UMAX;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_UMIN:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_UMIN;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_FADD:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_FADD;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_FMAX:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_FMAX;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_FMIN:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_FMIN;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_FMAXIMUM:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_FMAXIMUM;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_RMW_FMINIMUM:
+      *out_op = LOOM_LLVMIR_BITCODE_RMW_FMINIMUM;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown LLVM atomicrmw op");
+  }
+}
+
+static iree_status_t loom_llvmir_bitcode_atomic_ordering(
+    loom_llvmir_atomic_ordering_t ordering, uint64_t* out_ordering) {
+  switch (ordering) {
+    case LOOM_LLVMIR_ATOMIC_ORDERING_MONOTONIC:
+      *out_ordering = LOOM_LLVMIR_BITCODE_ORDERING_MONOTONIC;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_ORDERING_ACQUIRE:
+      *out_ordering = LOOM_LLVMIR_BITCODE_ORDERING_ACQUIRE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_ORDERING_RELEASE:
+      *out_ordering = LOOM_LLVMIR_BITCODE_ORDERING_RELEASE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_ORDERING_ACQ_REL:
+      *out_ordering = LOOM_LLVMIR_BITCODE_ORDERING_ACQ_REL;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ATOMIC_ORDERING_SEQ_CST:
+      *out_ordering = LOOM_LLVMIR_BITCODE_ORDERING_SEQ_CST;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown LLVM atomic ordering");
+  }
+}
+
 static iree_status_t loom_llvmir_bitcode_append_string_ref(
     iree_string_view_t string, uint64_t* operands,
     iree_host_size_t* inout_operand_count) {
@@ -572,6 +650,34 @@ static iree_status_t loom_llvmir_bitcode_write_type_block(
             loom_llvmir_bitcode_record_writer_write_unabbrev_record(
                 writer, LOOM_LLVMIR_BITCODE_TYPE_CODE_VECTOR, operands,
                 IREE_ARRAYSIZE(operands)));
+        break;
+      }
+      case LOOM_LLVMIR_TYPE_STRUCT: {
+        iree_host_size_t operand_count = 1 + type->element_count;
+        uint64_t stack_operands[8];
+        uint64_t* operands = stack_operands;
+        if (operand_count > IREE_ARRAYSIZE(stack_operands)) {
+          if (operand_count > IREE_HOST_SIZE_MAX / sizeof(*operands)) {
+            return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                    "LLVM bitcode struct operand storage "
+                                    "overflows");
+          }
+          IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+              iree_allocator_system(), operand_count * sizeof(*operands),
+              (void**)&operands));
+        }
+        operands[0] = 0;
+        for (uint32_t j = 0; j < type->element_count; ++j) {
+          operands[j + 1] = type->element_types[j];
+        }
+        iree_status_t status =
+            loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+                writer, LOOM_LLVMIR_BITCODE_TYPE_CODE_STRUCT_ANON, operands,
+                operand_count);
+        if (operands != stack_operands) {
+          iree_allocator_free(iree_allocator_system(), operands);
+        }
+        IREE_RETURN_IF_ERROR(status);
         break;
       }
     }
@@ -1043,12 +1149,29 @@ static iree_status_t loom_llvmir_bitcode_map_mark_instruction_constants(
       return loom_llvmir_bitcode_map_mark_constant(module, map,
                                                    instruction->store.pointer);
     }
+    case LOOM_LLVMIR_INST_ATOMIC_RMW: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->atomic_rmw.value));
+      return loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->atomic_rmw.pointer);
+    }
+    case LOOM_LLVMIR_INST_CMPXCHG: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->cmpxchg.expected));
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->cmpxchg.replacement));
+      return loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->cmpxchg.pointer);
+    }
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT: {
       IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->extract_element.vector));
       return loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->extract_element.index);
     }
+    case LOOM_LLVMIR_INST_EXTRACT_VALUE:
+      return loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->extract_value.aggregate);
     case LOOM_LLVMIR_INST_INSERT_ELEMENT: {
       IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->insert_element.vector));
@@ -1881,7 +2004,36 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
       return loom_llvmir_bitcode_memory_volatile(instruction->store.flags,
                                                  &is_volatile);
     }
+    case LOOM_LLVMIR_INST_ATOMIC_RMW: {
+      uint64_t encoded_op = 0;
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_atomic_rmw_op(
+          instruction->atomic_rmw.op, &encoded_op));
+      uint64_t encoded_alignment = 0;
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_encode_alignment(
+          instruction->atomic_rmw.alignment, &encoded_alignment));
+      uint64_t is_volatile = 0;
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_memory_volatile(
+          instruction->atomic_rmw.flags, &is_volatile));
+      uint64_t encoded_ordering = 0;
+      return loom_llvmir_bitcode_atomic_ordering(
+          instruction->atomic_rmw.ordering, &encoded_ordering);
+    }
+    case LOOM_LLVMIR_INST_CMPXCHG: {
+      uint64_t encoded_alignment = 0;
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_encode_alignment(
+          instruction->cmpxchg.alignment, &encoded_alignment));
+      uint64_t is_volatile = 0;
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_memory_volatile(
+          instruction->cmpxchg.flags, &is_volatile));
+      uint64_t encoded_success_ordering = 0;
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_atomic_ordering(
+          instruction->cmpxchg.success_ordering, &encoded_success_ordering));
+      uint64_t encoded_failure_ordering = 0;
+      return loom_llvmir_bitcode_atomic_ordering(
+          instruction->cmpxchg.failure_ordering, &encoded_failure_ordering);
+    }
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
+    case LOOM_LLVMIR_INST_EXTRACT_VALUE:
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:
     case LOOM_LLVMIR_INST_SHUFFLE_VECTOR:
       return iree_ok_status();
@@ -2610,6 +2762,161 @@ static iree_status_t loom_llvmir_bitcode_write_metadata_kind_block(
   return status;
 }
 
+static bool loom_llvmir_bitcode_instruction_sync_scope(
+    const loom_llvmir_instruction_t* instruction,
+    iree_string_view_t* out_sync_scope) {
+  switch (instruction->kind) {
+    case LOOM_LLVMIR_INST_ATOMIC_RMW:
+      *out_sync_scope = instruction->atomic_rmw.sync_scope;
+      return true;
+    case LOOM_LLVMIR_INST_CMPXCHG:
+      *out_sync_scope = instruction->cmpxchg.sync_scope;
+      return true;
+    default:
+      *out_sync_scope = iree_string_view_empty();
+      return false;
+  }
+}
+
+static bool loom_llvmir_bitcode_module_has_scoped_atomic(
+    const loom_llvmir_module_t* module) {
+  for (iree_host_size_t i = 0; i < module->function_count; ++i) {
+    const loom_llvmir_function_t* function = module->functions[i];
+    for (iree_host_size_t j = 0; j < function->block_count; ++j) {
+      const loom_llvmir_block_t* block = function->blocks[j];
+      for (iree_host_size_t k = 0; k < block->instruction_count; ++k) {
+        iree_string_view_t sync_scope = iree_string_view_empty();
+        if (loom_llvmir_bitcode_instruction_sync_scope(&block->instructions[k],
+                                                       &sync_scope)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+static bool loom_llvmir_bitcode_sync_scope_seen(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* stop_instruction,
+    iree_string_view_t sync_scope) {
+  if (iree_string_view_equal(sync_scope, IREE_SV("singlethread")) ||
+      iree_string_view_is_empty(sync_scope)) {
+    return true;
+  }
+  for (iree_host_size_t i = 0; i < module->function_count; ++i) {
+    const loom_llvmir_function_t* function = module->functions[i];
+    for (iree_host_size_t j = 0; j < function->block_count; ++j) {
+      const loom_llvmir_block_t* block = function->blocks[j];
+      for (iree_host_size_t k = 0; k < block->instruction_count; ++k) {
+        const loom_llvmir_instruction_t* instruction = &block->instructions[k];
+        if (instruction == stop_instruction) {
+          return false;
+        }
+        iree_string_view_t current_scope = iree_string_view_empty();
+        if (!loom_llvmir_bitcode_instruction_sync_scope(instruction,
+                                                        &current_scope)) {
+          continue;
+        }
+        if (iree_string_view_equal(current_scope, sync_scope)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_llvmir_bitcode_sync_scope_id(
+    const loom_llvmir_module_t* module, iree_string_view_t sync_scope,
+    uint64_t* out_scope_id) {
+  if (iree_string_view_equal(sync_scope, IREE_SV("singlethread"))) {
+    *out_scope_id = 0;
+    return iree_ok_status();
+  }
+  if (iree_string_view_is_empty(sync_scope)) {
+    *out_scope_id = 1;
+    return iree_ok_status();
+  }
+  uint64_t scope_id = 2;
+  for (iree_host_size_t i = 0; i < module->function_count; ++i) {
+    const loom_llvmir_function_t* function = module->functions[i];
+    for (iree_host_size_t j = 0; j < function->block_count; ++j) {
+      const loom_llvmir_block_t* block = function->blocks[j];
+      for (iree_host_size_t k = 0; k < block->instruction_count; ++k) {
+        const loom_llvmir_instruction_t* instruction = &block->instructions[k];
+        iree_string_view_t current_scope = iree_string_view_empty();
+        if (!loom_llvmir_bitcode_instruction_sync_scope(instruction,
+                                                        &current_scope)) {
+          continue;
+        }
+        if (iree_string_view_equal(current_scope, IREE_SV("singlethread")) ||
+            iree_string_view_is_empty(current_scope) ||
+            loom_llvmir_bitcode_sync_scope_seen(module, instruction,
+                                                current_scope)) {
+          continue;
+        }
+        if (iree_string_view_equal(current_scope, sync_scope)) {
+          *out_scope_id = scope_id;
+          return iree_ok_status();
+        }
+        scope_id += 1;
+      }
+    }
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "LLVM bitcode syncscope name is unknown");
+}
+
+static iree_status_t loom_llvmir_bitcode_write_sync_scope_names_block(
+    const loom_llvmir_module_t* module,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  if (!loom_llvmir_bitcode_module_has_scoped_atomic(module)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_record_writer_enter_subblock(
+      writer, LOOM_LLVMIR_BITCODE_SYNC_SCOPE_NAMES_BLOCK,
+      LOOM_LLVMIR_BITCODE_SYNC_SCOPE_NAMES_ABBREV_WIDTH));
+
+  iree_status_t status = loom_llvmir_bitcode_record_writer_write_string_record(
+      writer, LOOM_LLVMIR_BITCODE_SYNC_SCOPE_NAMES_CODE_NAME,
+      IREE_SV("singlethread"));
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_bitcode_record_writer_write_string_record(
+        writer, LOOM_LLVMIR_BITCODE_SYNC_SCOPE_NAMES_CODE_NAME,
+        iree_string_view_empty());
+  }
+  for (iree_host_size_t i = 0;
+       i < module->function_count && iree_status_is_ok(status); ++i) {
+    const loom_llvmir_function_t* function = module->functions[i];
+    for (iree_host_size_t j = 0;
+         j < function->block_count && iree_status_is_ok(status); ++j) {
+      const loom_llvmir_block_t* block = function->blocks[j];
+      for (iree_host_size_t k = 0;
+           k < block->instruction_count && iree_status_is_ok(status); ++k) {
+        const loom_llvmir_instruction_t* instruction = &block->instructions[k];
+        iree_string_view_t sync_scope = iree_string_view_empty();
+        if (!loom_llvmir_bitcode_instruction_sync_scope(instruction,
+                                                        &sync_scope)) {
+          continue;
+        }
+        if (iree_string_view_equal(sync_scope, IREE_SV("singlethread")) ||
+            iree_string_view_is_empty(sync_scope) ||
+            loom_llvmir_bitcode_sync_scope_seen(module, instruction,
+                                                sync_scope)) {
+          continue;
+        }
+        status = loom_llvmir_bitcode_record_writer_write_string_record(
+            writer, LOOM_LLVMIR_BITCODE_SYNC_SCOPE_NAMES_CODE_NAME, sync_scope);
+      }
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_bitcode_record_writer_exit_block(writer);
+  }
+  return status;
+}
+
 static bool loom_llvmir_bitcode_function_metadata_node_seen(
     const loom_llvmir_function_t* function, iree_host_size_t stop_index,
     loom_llvmir_metadata_id_t metadata_id) {
@@ -3076,6 +3383,88 @@ static iree_status_t loom_llvmir_bitcode_write_store(
       operand_count);
 }
 
+static iree_status_t loom_llvmir_bitcode_write_atomic_rmw(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t encoded_op = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_atomic_rmw_op(
+      instruction->atomic_rmw.op, &encoded_op));
+  uint64_t encoded_alignment = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_encode_alignment(
+      instruction->atomic_rmw.alignment, &encoded_alignment));
+  uint64_t is_volatile = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_memory_volatile(
+      instruction->atomic_rmw.flags, &is_volatile));
+  uint64_t encoded_ordering = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_atomic_ordering(
+      instruction->atomic_rmw.ordering, &encoded_ordering));
+  uint64_t sync_scope_id = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_sync_scope_id(
+      module, instruction->atomic_rmw.sync_scope, &sync_scope_id));
+
+  uint64_t operands[7];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->atomic_rmw.pointer, instruction_value_id,
+      operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->atomic_rmw.value, instruction_value_id, operands,
+      &operand_count));
+  operands[operand_count++] = encoded_op;
+  operands[operand_count++] = is_volatile;
+  operands[operand_count++] = encoded_ordering;
+  operands[operand_count++] = sync_scope_id;
+  operands[operand_count++] = encoded_alignment;
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_ATOMICRMW, operands,
+      operand_count);
+}
+
+static iree_status_t loom_llvmir_bitcode_write_cmpxchg(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t encoded_alignment = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_encode_alignment(
+      instruction->cmpxchg.alignment, &encoded_alignment));
+  uint64_t is_volatile = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_memory_volatile(
+      instruction->cmpxchg.flags, &is_volatile));
+  uint64_t encoded_success_ordering = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_atomic_ordering(
+      instruction->cmpxchg.success_ordering, &encoded_success_ordering));
+  uint64_t encoded_failure_ordering = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_atomic_ordering(
+      instruction->cmpxchg.failure_ordering, &encoded_failure_ordering));
+  uint64_t sync_scope_id = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_sync_scope_id(
+      module, instruction->cmpxchg.sync_scope, &sync_scope_id));
+
+  uint64_t operands[9];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->cmpxchg.pointer, instruction_value_id,
+      operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->cmpxchg.expected, instruction_value_id, operands,
+      &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->cmpxchg.replacement, instruction_value_id,
+      operands, &operand_count));
+  operands[operand_count++] = is_volatile;
+  operands[operand_count++] = encoded_success_ordering;
+  operands[operand_count++] = sync_scope_id;
+  operands[operand_count++] = encoded_failure_ordering;
+  operands[operand_count++] = instruction->cmpxchg.is_weak ? 1 : 0;
+  operands[operand_count++] = encoded_alignment;
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_CMPXCHG, operands,
+      operand_count);
+}
+
 static iree_status_t loom_llvmir_bitcode_write_extract_element(
     const loom_llvmir_module_t* module,
     const loom_llvmir_bitcode_function_value_map_t* value_map,
@@ -3091,6 +3480,23 @@ static iree_status_t loom_llvmir_bitcode_write_extract_element(
       instruction_value_id, operands, &operand_count));
   return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
       writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_EXTRACTELT, operands,
+      operand_count);
+}
+
+static iree_status_t loom_llvmir_bitcode_write_extract_value(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  (void)module;
+  uint64_t operands[2];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->extract_value.aggregate, instruction_value_id,
+      operands, &operand_count));
+  operands[operand_count++] = instruction->extract_value.index;
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_EXTRACTVAL, operands,
       operand_count);
 }
 
@@ -3365,8 +3771,17 @@ static iree_status_t loom_llvmir_bitcode_write_instruction(
     case LOOM_LLVMIR_INST_STORE:
       return loom_llvmir_bitcode_write_store(module, value_map, instruction,
                                              instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_ATOMIC_RMW:
+      return loom_llvmir_bitcode_write_atomic_rmw(
+          module, value_map, instruction, instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_CMPXCHG:
+      return loom_llvmir_bitcode_write_cmpxchg(module, value_map, instruction,
+                                               instruction_value_id, writer);
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
       return loom_llvmir_bitcode_write_extract_element(
+          module, value_map, instruction, instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_EXTRACT_VALUE:
+      return loom_llvmir_bitcode_write_extract_value(
           module, value_map, instruction, instruction_value_id, writer);
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:
       return loom_llvmir_bitcode_write_insert_element(
@@ -3754,6 +4169,10 @@ iree_status_t loom_llvmir_bitcode_write_module(
   if (iree_status_is_ok(status)) {
     status =
         loom_llvmir_bitcode_write_metadata_kind_block(module, &record_writer);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_bitcode_write_sync_scope_names_block(module,
+                                                              &record_writer);
   }
   if (iree_status_is_ok(status)) {
     status = loom_llvmir_bitcode_write_function_bodies(module, &record_writer);

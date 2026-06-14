@@ -92,6 +92,42 @@ _MEMORY_VALUE_TYPES = (
     ("f32", 4),
     ("f64", 8),
 )
+_ATOMIC_INTEGER_VALUE_TYPES = (
+    ("i8", 1),
+    ("i16", 2),
+    ("i32", 4),
+    ("i64", 8),
+)
+_ATOMIC_FLOAT_VALUE_TYPES = (
+    ("f32", 4),
+    ("f64", 8),
+)
+_ATOMIC_INTEGER_KINDS = (
+    ("addi", "add"),
+    ("subi", "sub"),
+    ("andi", "and"),
+    ("ori", "or"),
+    ("xori", "xor"),
+    ("minsi", "min"),
+    ("maxsi", "max"),
+    ("minui", "umin"),
+    ("maxui", "umax"),
+)
+_ATOMIC_INTEGER_RMW_KINDS = (
+    ("xchgi", "xchg"),
+    *_ATOMIC_INTEGER_KINDS,
+)
+_ATOMIC_FLOAT_KINDS = (
+    ("addf", "fadd"),
+    ("minimumf", "fminimum"),
+    ("maximumf", "fmaximum"),
+    ("minnumf", "fmin"),
+    ("maxnumf", "fmax"),
+)
+_ATOMIC_FLOAT_RMW_KINDS = (
+    ("xchgf", "xchg"),
+    *_ATOMIC_FLOAT_KINDS,
+)
 
 _CACHE_POLICY_BUILD_FLAG_SCOPE = 1 << 0
 _CACHE_POLICY_BUILD_FLAG_TEMPORAL = 1 << 1
@@ -195,6 +231,8 @@ _BITCAST_RESHAPE_SPECS = (
 
 _I8_MIN = -(2**7)
 _I8_MAX = (2**7) - 1
+_I1_MIN = 0
+_I1_MAX = 1
 _I16_MIN = -(2**15)
 _I16_MAX = (2**15) - 1
 _I32_MIN = -(2**31)
@@ -237,6 +275,10 @@ def _source_memory_byte_offset_materializer() -> SourceMemoryByteOffsetMateriali
 
 def _vector_type(element: str, lane_count: int) -> TypePattern:
     return Vector(element, lanes=lane_count)
+
+
+def _vector_shape_type(element: str, *dims: int) -> TypePattern:
+    return Vector(element, dims=dims)
 
 
 def _vector_suffix(element: str, lane_count: int) -> str:
@@ -321,6 +363,16 @@ def _const_i8_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
         "llvmir.const.i8",
         minimum=_I8_MIN,
         maximum=_I8_MAX,
+    )
+
+
+def _const_i1_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
+    return _const_integer_rule(
+        source_op,
+        result_type,
+        "llvmir.const.i1",
+        minimum=_I1_MIN,
+        maximum=_I1_MAX,
     )
 
 
@@ -679,6 +731,39 @@ def _cache_policy_guards(cache_policy: bool) -> tuple[Guard, ...]:
     )
 
 
+def _atomic_immediates(
+    *,
+    dynamic_term_count: int,
+    materialize_byte_offset: bool,
+    cache_policy: bool = False,
+) -> dict[str, SourceMemoryProject | AttrProject | int]:
+    immediates = _memory_immediates(
+        dynamic_term_count=dynamic_term_count,
+        materialize_byte_offset=materialize_byte_offset,
+        cache_policy=cache_policy,
+    )
+    immediates["ordering"] = AttrProject.enum_ordinal("ordering")
+    immediates["scope"] = AttrProject.enum_ordinal("scope")
+    return immediates
+
+
+def _atomic_cmpxchg_immediates(
+    *,
+    dynamic_term_count: int,
+    materialize_byte_offset: bool,
+    cache_policy: bool = False,
+) -> dict[str, SourceMemoryProject | AttrProject | int]:
+    immediates = _memory_immediates(
+        dynamic_term_count=dynamic_term_count,
+        materialize_byte_offset=materialize_byte_offset,
+        cache_policy=cache_policy,
+    )
+    immediates["success_ordering"] = AttrProject.enum_ordinal("success_ordering")
+    immediates["failure_ordering"] = AttrProject.enum_ordinal("failure_ordering")
+    immediates["scope"] = AttrProject.enum_ordinal("scope")
+    return immediates
+
+
 def _view_load_rule(
     source_op: Op,
     view_field: str,
@@ -689,6 +774,7 @@ def _view_load_rule(
     dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
+    low_result_type: TypePattern | None = None,
     materialize_byte_offset: bool | None = None,
     allow_dynamic_stride_values: bool = False,
     cache_policy: bool = False,
@@ -721,6 +807,9 @@ def _view_load_rule(
                 descriptor=descriptor,
                 operands=operands,
                 results={"dst": ValueRef.result("result")},
+                result_types=(
+                    {"dst": low_result_type} if low_result_type is not None else None
+                ),
                 immediates=_memory_immediates(
                     dynamic_term_count=dynamic_term_count,
                     materialize_byte_offset=materialize_byte_offset,
@@ -821,6 +910,7 @@ def _view_load_rule_variants(
     dynamic_term_count: int,
     element_byte_count: int,
     vector_lane_count: int = 1,
+    low_result_type: TypePattern | None = None,
 ) -> tuple[DescriptorRule, ...]:
     materializes_byte_offset = dynamic_term_count > 1 or (
         dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
@@ -835,6 +925,7 @@ def _view_load_rule_variants(
             dynamic_term_count=dynamic_term_count,
             element_byte_count=element_byte_count,
             vector_lane_count=vector_lane_count,
+            low_result_type=low_result_type,
             allow_dynamic_stride_values=materializes_byte_offset,
         )
     ]
@@ -848,6 +939,7 @@ def _view_load_rule_variants(
             dynamic_term_count=dynamic_term_count,
             element_byte_count=element_byte_count,
             vector_lane_count=vector_lane_count,
+            low_result_type=low_result_type,
             allow_dynamic_stride_values=materializes_byte_offset,
             cache_policy=True,
         )
@@ -863,6 +955,7 @@ def _view_load_rule_variants(
                 dynamic_term_count=dynamic_term_count,
                 element_byte_count=element_byte_count,
                 vector_lane_count=vector_lane_count,
+                low_result_type=low_result_type,
                 materialize_byte_offset=True,
                 allow_dynamic_stride_values=True,
             )
@@ -877,6 +970,7 @@ def _view_load_rule_variants(
                 dynamic_term_count=dynamic_term_count,
                 element_byte_count=element_byte_count,
                 vector_lane_count=vector_lane_count,
+                low_result_type=low_result_type,
                 materialize_byte_offset=True,
                 allow_dynamic_stride_values=True,
                 cache_policy=True,
@@ -959,11 +1053,307 @@ def _view_store_rule_variants(
     return tuple(rules)
 
 
+def _view_atomic_rule(
+    source_op: Op,
+    value_type: TypePattern,
+    descriptor_key: str,
+    *,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
+    element_byte_count: int,
+    operation: SourceMemoryOperation,
+    atomic_kind: str,
+    materialize_byte_offset: bool | None = None,
+    allow_dynamic_stride_values: bool = False,
+    cache_policy: bool = False,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    if materialize_byte_offset is None:
+        materialize_byte_offset = dynamic_term_count > 1 or (
+            dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+        )
+    if allow_dynamic_stride_values and not materialize_byte_offset:
+        raise ValueError("dynamic stride values require byte-offset materialization")
+    operands = {
+        "value": ValueRef.operand("value"),
+        "ptr": ValueRef.operand("view"),
+    }
+    if dynamic_term_count != 0:
+        if materialize_byte_offset:
+            operands["index"] = ValueRef.source_memory_dynamic_byte_offset()
+        elif source_dynamic_count:
+            operands["index"] = ValueRef.operand("indices")
+        else:
+            operands["index"] = ValueRef.source_memory_dynamic_term()
+    results = {}
+    if operation is SourceMemoryOperation.ATOMIC_RMW:
+        results["old"] = ValueRef.result("result")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("kind", atomic_kind),
+            Guard.operand_segment_count("indices", source_dynamic_count),
+            Guard.value_type("value", value_type),
+            Guard.attr_kind("ordering", "enum"),
+            Guard.attr_kind("scope", "enum"),
+            *_cache_policy_guards(cache_policy),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands=operands,
+                results=results,
+                immediates=_atomic_immediates(
+                    dynamic_term_count=dynamic_term_count,
+                    materialize_byte_offset=materialize_byte_offset,
+                    cache_policy=cache_policy,
+                ),
+                source_memory=_source_memory_constraint(
+                    operation,
+                    dynamic_term_count=dynamic_term_count,
+                    element_byte_count=element_byte_count,
+                    allow_dynamic_stride_values=allow_dynamic_stride_values,
+                    cache_policy=cache_policy,
+                ),
+                source_memory_byte_offset_materializer=(
+                    _source_memory_byte_offset_materializer()
+                    if materialize_byte_offset
+                    else None
+                ),
+            ),
+        ),
+    )
+
+
+def _view_atomic_rule_variants(
+    source_op: Op,
+    value_type: TypePattern,
+    descriptor_key: str,
+    *,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
+    element_byte_count: int,
+    operation: SourceMemoryOperation,
+    atomic_kind: str,
+) -> tuple[DescriptorRule, ...]:
+    materializes_byte_offset = dynamic_term_count > 1 or (
+        dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+    )
+    rules = [
+        _view_atomic_rule(
+            source_op,
+            value_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            operation=operation,
+            atomic_kind=atomic_kind,
+            allow_dynamic_stride_values=materializes_byte_offset,
+        )
+    ]
+    rules.append(
+        _view_atomic_rule(
+            source_op,
+            value_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            operation=operation,
+            atomic_kind=atomic_kind,
+            allow_dynamic_stride_values=materializes_byte_offset,
+            cache_policy=True,
+        )
+    )
+    if dynamic_term_count == 1 and not materializes_byte_offset:
+        rules.append(
+            _view_atomic_rule(
+                source_op,
+                value_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                operation=operation,
+                atomic_kind=atomic_kind,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+            )
+        )
+        rules.append(
+            _view_atomic_rule(
+                source_op,
+                value_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                operation=operation,
+                atomic_kind=atomic_kind,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+                cache_policy=True,
+            )
+        )
+    return tuple(rules)
+
+
+def _view_atomic_cmpxchg_rule(
+    value_type: TypePattern,
+    descriptor_key: str,
+    *,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
+    element_byte_count: int,
+    materialize_byte_offset: bool | None = None,
+    allow_dynamic_stride_values: bool = False,
+    cache_policy: bool = False,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    if materialize_byte_offset is None:
+        materialize_byte_offset = dynamic_term_count > 1 or (
+            dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+        )
+    if allow_dynamic_stride_values and not materialize_byte_offset:
+        raise ValueError("dynamic stride values require byte-offset materialization")
+    operands = {
+        "expected": ValueRef.operand("expected"),
+        "replacement": ValueRef.operand("replacement"),
+        "ptr": ValueRef.operand("view"),
+    }
+    if dynamic_term_count != 0:
+        if materialize_byte_offset:
+            operands["index"] = ValueRef.source_memory_dynamic_byte_offset()
+        elif source_dynamic_count:
+            operands["index"] = ValueRef.operand("indices")
+        else:
+            operands["index"] = ValueRef.source_memory_dynamic_term()
+    return DescriptorRule(
+        source_op=view.view_atomic_cmpxchg,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", source_dynamic_count),
+            Guard.value_type("expected", value_type),
+            Guard.value_type("replacement", value_type),
+            Guard.value_type("old", value_type),
+            Guard.attr_kind("success_ordering", "enum"),
+            Guard.attr_kind("failure_ordering", "enum"),
+            Guard.attr_kind("scope", "enum"),
+            *_cache_policy_guards(cache_policy),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands=operands,
+                results={"old": ValueRef.result("old")},
+                immediates=_atomic_cmpxchg_immediates(
+                    dynamic_term_count=dynamic_term_count,
+                    materialize_byte_offset=materialize_byte_offset,
+                    cache_policy=cache_policy,
+                ),
+                source_memory=_source_memory_constraint(
+                    SourceMemoryOperation.ATOMIC_CMPXCHG,
+                    dynamic_term_count=dynamic_term_count,
+                    element_byte_count=element_byte_count,
+                    allow_dynamic_stride_values=allow_dynamic_stride_values,
+                    cache_policy=cache_policy,
+                ),
+                source_memory_byte_offset_materializer=(
+                    _source_memory_byte_offset_materializer()
+                    if materialize_byte_offset
+                    else None
+                ),
+            ),
+        ),
+    )
+
+
+def _view_atomic_cmpxchg_rule_variants(
+    value_type: TypePattern,
+    descriptor_key: str,
+    *,
+    source_dynamic_count: int,
+    dynamic_term_count: int,
+    element_byte_count: int,
+) -> tuple[DescriptorRule, ...]:
+    materializes_byte_offset = dynamic_term_count > 1 or (
+        dynamic_term_count != 0 and source_dynamic_count != dynamic_term_count
+    )
+    rules = [
+        _view_atomic_cmpxchg_rule(
+            value_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            allow_dynamic_stride_values=materializes_byte_offset,
+        )
+    ]
+    rules.append(
+        _view_atomic_cmpxchg_rule(
+            value_type,
+            descriptor_key,
+            source_dynamic_count=source_dynamic_count,
+            dynamic_term_count=dynamic_term_count,
+            element_byte_count=element_byte_count,
+            allow_dynamic_stride_values=materializes_byte_offset,
+            cache_policy=True,
+        )
+    )
+    if dynamic_term_count == 1 and not materializes_byte_offset:
+        rules.append(
+            _view_atomic_cmpxchg_rule(
+                value_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+            )
+        )
+        rules.append(
+            _view_atomic_cmpxchg_rule(
+                value_type,
+                descriptor_key,
+                source_dynamic_count=source_dynamic_count,
+                dynamic_term_count=dynamic_term_count,
+                element_byte_count=element_byte_count,
+                materialize_byte_offset=True,
+                allow_dynamic_stride_values=True,
+                cache_policy=True,
+            )
+        )
+    return tuple(rules)
+
+
 def _memory_descriptor_key(operation: str, suffix: str, *, dynamic: bool) -> str:
     return (
         f"llvmir.{operation}.indexed.{suffix}"
         if dynamic
         else f"llvmir.{operation}.{suffix}"
+    )
+
+
+def _atomic_descriptor_key(
+    form: str,
+    operation: str,
+    suffix: str,
+    *,
+    dynamic: bool,
+) -> str:
+    if form == "cmpxchg":
+        return (
+            f"llvmir.atomic.cmpxchg.indexed.{suffix}"
+            if dynamic
+            else f"llvmir.atomic.cmpxchg.{suffix}"
+        )
+    return (
+        f"llvmir.atomic.{form}.indexed.{operation}.{suffix}"
+        if dynamic
+        else f"llvmir.atomic.{form}.{operation}.{suffix}"
     )
 
 
@@ -1514,6 +1904,21 @@ def _cast_rules() -> tuple[DescriptorRule, ...]:
     )
 
 
+def _bitcast_alias_rule(
+    source_type: TypePattern,
+    result_type: TypePattern,
+) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=vector.vector_bitcast,
+        source=ValueRef.operand("input"),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.value_type("input", source_type),
+            Guard.value_type("result", result_type),
+        ),
+    )
+
+
 def _index_cast_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
     return (
         _index_cast_rule(_I32, _INDEX, "llvmir.sext.i32.i64"),
@@ -1536,6 +1941,7 @@ def _select_rules() -> tuple[DescriptorRule, ...]:
             for type_pattern, suffix in (
                 (_INDEX, "i64"),
                 (_OFFSET, "i64"),
+                (_I1, "i1"),
                 (_I32, "i32"),
                 (_I64, "i64"),
                 (_F32, "f32"),
@@ -2019,6 +2425,76 @@ def _shuffle_rule(element: str, lane_count: int) -> DescriptorRule:
     )
 
 
+def _concat_rule(
+    element: str,
+    *,
+    input_lane_count: int,
+    input_count: int,
+) -> DescriptorRule:
+    input_type = _vector_type(element, input_lane_count)
+    result_type = _vector_type(element, input_lane_count * input_count)
+    descriptor = _descriptor(
+        "llvmir.concat."
+        f"{_vector_suffix(element, input_lane_count)}."
+        f"{_vector_suffix(element, input_lane_count * input_count)}"
+    )
+    return DescriptorRule(
+        source_op=vector.vector_concat,
+        descriptor=descriptor,
+        guards=(
+            Guard.i64_range("axis", 0, 0),
+            Guard.operand_segment_count("inputs", input_count),
+            Guard.value_type("inputs", input_type),
+            Guard.value_type("result", result_type),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={
+                    f"input{input_ordinal}": ValueRef.operand(
+                        "inputs", element=input_ordinal
+                    )
+                    for input_ordinal in range(input_count)
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _transpose_4x4_rule(element: str) -> DescriptorRule:
+    source_type = _vector_shape_type(element, 4, 4)
+    flat_type = _vector_type(element, 16)
+    descriptor = _descriptor(f"llvmir.shuffle.{_vector_suffix(element, 16)}")
+    lanes = (0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15)
+    return DescriptorRule(
+        source_op=vector.vector_transpose,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("source", source_type),
+            Guard.value_type("result", source_type),
+            Guard.i64_array_count("permutation", 2),
+            Guard.i64_array_element_range(
+                "permutation", element=0, minimum=1, maximum=1
+            ),
+            Guard.i64_array_element_range(
+                "permutation", element=1, minimum=0, maximum=0
+            ),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"source": ValueRef.operand("source")},
+                results={"dst": ValueRef.result("result")},
+                result_types={"dst": flat_type},
+                immediates={
+                    f"lane{lane_index}": lane for lane_index, lane in enumerate(lanes)
+                },
+            ),
+        ),
+    )
+
+
 def _slice_rule(
     element: str,
     *,
@@ -2070,7 +2546,20 @@ def _structural_vector_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
             rules.append(_insert_rule(element, lane_count))
             rules.append(_dynamic_insert_rule(element, lane_count))
             rules.append(_shuffle_rule(element, lane_count))
+        rules.append(_concat_rule(element, input_lane_count=4, input_count=4))
+        rules.append(_transpose_4x4_rule(element))
         rules.append(_slice_rule(element, source_lane_count=4, result_lane_count=2))
+        rules.append(_slice_rule(element, source_lane_count=16, result_lane_count=4))
+        rules.append(
+            _bitcast_alias_rule(
+                _vector_type(element, 16), _vector_shape_type(element, 4, 4)
+            )
+        )
+        rules.append(
+            _bitcast_alias_rule(
+                _vector_shape_type(element, 4, 4), _vector_type(element, 16)
+            )
+        )
         rules.append(_one_lane_splat_rule(element))
         rules.append(_one_lane_from_elements_rule(element))
         rules.append(_one_lane_extract_rule(element))
@@ -2147,6 +2636,37 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                         vector_lane_count=lane_count,
                     )
                 )
+            rank2_tile_type = _vector_shape_type(element, 4, 4)
+            rank2_tile_suffix = _vector_suffix(element, 16)
+            rules.extend(
+                _view_load_rule_variants(
+                    vector.vector_load,
+                    "view",
+                    rank2_tile_type,
+                    _memory_descriptor_key(
+                        "load", rank2_tile_suffix, dynamic=dynamic_term_count != 0
+                    ),
+                    source_dynamic_count=source_dynamic_count,
+                    dynamic_term_count=dynamic_term_count,
+                    element_byte_count=element_byte_count,
+                    vector_lane_count=16,
+                    low_result_type=_vector_type(element, 16),
+                )
+            )
+            rules.extend(
+                _view_store_rule_variants(
+                    vector.vector_store,
+                    "view",
+                    rank2_tile_type,
+                    _memory_descriptor_key(
+                        "store", rank2_tile_suffix, dynamic=dynamic_term_count != 0
+                    ),
+                    source_dynamic_count=source_dynamic_count,
+                    dynamic_term_count=dynamic_term_count,
+                    element_byte_count=element_byte_count,
+                    vector_lane_count=16,
+                )
+            )
             vector_type = _vector_type(element, 1)
             rules.extend(
                 _view_load_rule_variants(
@@ -2174,6 +2694,115 @@ def _memory_rules() -> tuple[DescriptorRule, ...]:
                     element_byte_count=element_byte_count,
                 )
             )
+    return tuple(rules)
+
+
+def _atomic_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    dynamic_cases = (
+        (0, 0),
+        (0, 1),
+        (1, 0),
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        (2, 2),
+    )
+    for element, element_byte_count in _ATOMIC_INTEGER_VALUE_TYPES:
+        value_type = Scalar(element)
+        for atomic_kind, llvmir_operation in _ATOMIC_INTEGER_KINDS:
+            for source_dynamic_count, dynamic_term_count in dynamic_cases:
+                rules.extend(
+                    _view_atomic_rule_variants(
+                        view.view_atomic_reduce,
+                        value_type,
+                        _atomic_descriptor_key(
+                            "reduce",
+                            llvmir_operation,
+                            element,
+                            dynamic=dynamic_term_count != 0,
+                        ),
+                        source_dynamic_count=source_dynamic_count,
+                        dynamic_term_count=dynamic_term_count,
+                        element_byte_count=element_byte_count,
+                        operation=SourceMemoryOperation.ATOMIC_REDUCE,
+                        atomic_kind=atomic_kind,
+                    )
+                )
+        for atomic_kind, llvmir_operation in _ATOMIC_INTEGER_RMW_KINDS:
+            for source_dynamic_count, dynamic_term_count in dynamic_cases:
+                rules.extend(
+                    _view_atomic_rule_variants(
+                        view.view_atomic_rmw,
+                        value_type,
+                        _atomic_descriptor_key(
+                            "rmw",
+                            llvmir_operation,
+                            element,
+                            dynamic=dynamic_term_count != 0,
+                        ),
+                        source_dynamic_count=source_dynamic_count,
+                        dynamic_term_count=dynamic_term_count,
+                        element_byte_count=element_byte_count,
+                        operation=SourceMemoryOperation.ATOMIC_RMW,
+                        atomic_kind=atomic_kind,
+                    )
+                )
+        for source_dynamic_count, dynamic_term_count in dynamic_cases:
+            rules.extend(
+                _view_atomic_cmpxchg_rule_variants(
+                    value_type,
+                    _atomic_descriptor_key(
+                        "cmpxchg",
+                        "cmpxchg",
+                        element,
+                        dynamic=dynamic_term_count != 0,
+                    ),
+                    source_dynamic_count=source_dynamic_count,
+                    dynamic_term_count=dynamic_term_count,
+                    element_byte_count=element_byte_count,
+                )
+            )
+    for element, element_byte_count in _ATOMIC_FLOAT_VALUE_TYPES:
+        value_type = Scalar(element)
+        for atomic_kind, llvmir_operation in _ATOMIC_FLOAT_KINDS:
+            for source_dynamic_count, dynamic_term_count in dynamic_cases:
+                rules.extend(
+                    _view_atomic_rule_variants(
+                        view.view_atomic_reduce,
+                        value_type,
+                        _atomic_descriptor_key(
+                            "reduce",
+                            llvmir_operation,
+                            element,
+                            dynamic=dynamic_term_count != 0,
+                        ),
+                        source_dynamic_count=source_dynamic_count,
+                        dynamic_term_count=dynamic_term_count,
+                        element_byte_count=element_byte_count,
+                        operation=SourceMemoryOperation.ATOMIC_REDUCE,
+                        atomic_kind=atomic_kind,
+                    )
+                )
+        for atomic_kind, llvmir_operation in _ATOMIC_FLOAT_RMW_KINDS:
+            for source_dynamic_count, dynamic_term_count in dynamic_cases:
+                rules.extend(
+                    _view_atomic_rule_variants(
+                        view.view_atomic_rmw,
+                        value_type,
+                        _atomic_descriptor_key(
+                            "rmw",
+                            llvmir_operation,
+                            element,
+                            dynamic=dynamic_term_count != 0,
+                        ),
+                        source_dynamic_count=source_dynamic_count,
+                        dynamic_term_count=dynamic_term_count,
+                        element_byte_count=element_byte_count,
+                        operation=SourceMemoryOperation.ATOMIC_RMW,
+                        atomic_kind=atomic_kind,
+                    )
+                )
     return tuple(rules)
 
 
@@ -2247,6 +2876,7 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
     descriptor_set=LLVMIR_GENERIC_CORE_DESCRIPTOR_SET,
     public_header="loom/target/arch/llvmir/contracts/generic_core.h",
     cases=(
+        _const_i1_rule(scalar_conversion.scalar_constant, _I1),
         _const_i8_rule(scalar_conversion.scalar_constant, _I8),
         _const_i16_rule(scalar_conversion.scalar_constant, _I16),
         _const_i32_rule(scalar_conversion.scalar_constant, _I32),
@@ -2305,5 +2935,6 @@ LLVMIR_GENERIC_CORE_CONTRACT_FRAGMENT = ContractFragment(
         *_vector_constant_rules(),
         *_structural_vector_rules(),
         *_memory_rules(),
+        *_atomic_rules(),
     ),
 )

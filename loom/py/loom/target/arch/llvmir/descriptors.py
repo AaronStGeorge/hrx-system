@@ -54,14 +54,18 @@ _REG_PTR = "llvmir.ptr"
 _RESOURCE_ALU = "llvmir.alu"
 _RESOURCE_LOAD = "llvmir.load"
 _RESOURCE_STORE = "llvmir.store"
+_RESOURCE_ATOMIC = "llvmir.atomic"
 
 _SCHEDULE_CONST = "llvmir.const"
 _SCHEDULE_ALU = "llvmir.alu"
 _SCHEDULE_LOAD = "llvmir.load"
 _SCHEDULE_STORE = "llvmir.store"
+_SCHEDULE_ATOMIC = "llvmir.atomic"
 
 _CACHE_SCOPE_ENUM = "llvmir.cache_scope"
 _CACHE_TEMPORAL_ENUM = "llvmir.cache_temporal"
+_ATOMIC_ORDERING_ENUM = "llvmir.atomic_ordering"
+_ATOMIC_SCOPE_ENUM = "llvmir.atomic_scope"
 
 _VECTOR_LANE_COUNTS = (2, 3, 4, 8, 16)
 _STRUCTURAL_VECTOR_LANE_COUNTS = (*_VECTOR_LANE_COUNTS, 32)
@@ -84,6 +88,17 @@ _MEMORY_VALUE_TYPES = (
     ("i64", 8),
     ("f16", 2),
     ("bf16", 2),
+    ("f32", 4),
+    ("f64", 8),
+)
+
+_ATOMIC_INTEGER_VALUE_TYPES = (
+    ("i8", 1),
+    ("i16", 2),
+    ("i32", 4),
+    ("i64", 8),
+)
+_ATOMIC_FLOAT_VALUE_TYPES = (
     ("f32", 4),
     ("f64", 8),
 )
@@ -338,6 +353,31 @@ _CACHE_TEMPORAL_IMMEDIATE = Immediate(
     enum_domain=_CACHE_TEMPORAL_ENUM,
     default_value=0,
 )
+
+_ATOMIC_ORDERING_IMMEDIATE = Immediate(
+    "ordering",
+    ImmediateKind.ENUM,
+    enum_domain=_ATOMIC_ORDERING_ENUM,
+)
+
+_ATOMIC_SUCCESS_ORDERING_IMMEDIATE = Immediate(
+    "success_ordering",
+    ImmediateKind.ENUM,
+    enum_domain=_ATOMIC_ORDERING_ENUM,
+)
+
+_ATOMIC_FAILURE_ORDERING_IMMEDIATE = Immediate(
+    "failure_ordering",
+    ImmediateKind.ENUM,
+    enum_domain=_ATOMIC_ORDERING_ENUM,
+)
+
+_ATOMIC_SCOPE_IMMEDIATE = Immediate(
+    "scope",
+    ImmediateKind.ENUM,
+    enum_domain=_ATOMIC_SCOPE_ENUM,
+)
+
 _FAST_MATH_FLAGS_IMMEDIATE = Immediate(
     "fast_math_flags",
     ImmediateKind.UNSIGNED,
@@ -393,6 +433,13 @@ def _write_effect(width_bits: int) -> Effect:
     )
 
 
+def _atomic_effects(width_bits: int) -> tuple[Effect, ...]:
+    return (
+        _read_effect(width_bits),
+        _write_effect(width_bits),
+    )
+
+
 def _const_i_descriptor(
     type_name: str,
     unit_count: int = 1,
@@ -442,6 +489,7 @@ def _const_f_descriptor(
 
 def _constant_descriptors() -> tuple[Descriptor, ...]:
     return (
+        _const_i_descriptor("i1"),
         _const_i_descriptor("i8"),
         _const_i_descriptor("i16"),
         _const_i_descriptor("i32"),
@@ -731,6 +779,89 @@ def _store_descriptor(
     )
 
 
+def _atomic_descriptor(
+    form: str,
+    operation: str,
+    type_name: str,
+    *,
+    indexed: bool = False,
+) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, 1)
+    operands = []
+    asm_results = ()
+    if form in ("rmw", "cmpxchg"):
+        operands.append(_result(type_name, "old"))
+        asm_results = ("old",)
+    if form == "cmpxchg":
+        operands.extend(
+            (
+                _operand(type_name, "expected"),
+                _operand(type_name, "replacement"),
+                _ptr_operand("ptr"),
+            )
+        )
+        immediates = [
+            _BYTE_OFFSET_IMMEDIATE,
+            _ATOMIC_SUCCESS_ORDERING_IMMEDIATE,
+            _ATOMIC_FAILURE_ORDERING_IMMEDIATE,
+            _ATOMIC_SCOPE_IMMEDIATE,
+            _CACHE_SCOPE_IMMEDIATE,
+            _CACHE_TEMPORAL_IMMEDIATE,
+        ]
+        asm_operands = ["expected", "replacement", "ptr"]
+        asm_immediates = [
+            "byte_offset",
+            "success_ordering",
+            "failure_ordering",
+            "scope",
+        ]
+        key_suffix = f"indexed.{suffix}" if indexed else suffix
+        mnemonic_suffix = f"indexed.{suffix}" if indexed else suffix
+    else:
+        operands.extend(
+            (
+                _operand(type_name, "value"),
+                _ptr_operand("ptr"),
+            )
+        )
+        immediates = [
+            _BYTE_OFFSET_IMMEDIATE,
+            _ATOMIC_ORDERING_IMMEDIATE,
+            _ATOMIC_SCOPE_IMMEDIATE,
+            _CACHE_SCOPE_IMMEDIATE,
+            _CACHE_TEMPORAL_IMMEDIATE,
+        ]
+        asm_operands = ["value", "ptr"]
+        asm_immediates = ["byte_offset", "ordering", "scope"]
+        key_suffix = (
+            f"indexed.{operation}.{suffix}" if indexed else f"{operation}.{suffix}"
+        )
+        mnemonic_suffix = (
+            f"indexed.{operation}.{suffix}" if indexed else f"{operation}.{suffix}"
+        )
+    if indexed:
+        operands.append(_operand("i64", "index"))
+        immediates.append(_BYTE_STRIDE_IMMEDIATE)
+        asm_operands.append("index")
+        asm_immediates.append("byte_stride")
+    return Descriptor(
+        key=f"llvmir.atomic.{form}.{key_suffix}",
+        mnemonic=f"atomic.{form}",
+        semantic_tag=f"llvmir.atomic.{form}.{key_suffix}",
+        operands=tuple(operands),
+        immediates=tuple(immediates),
+        asm_forms=_asm(
+            mnemonic=f"atomic.{form}.{mnemonic_suffix}",
+            results=asm_results,
+            operands=tuple(asm_operands),
+            immediates=tuple(asm_immediates),
+        ),
+        effects=_atomic_effects(_UNIT_BITS_BY_TYPE[type_name]),
+        schedule_class=_SCHEDULE_ATOMIC,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _alloca_descriptor(memory_space: str) -> Descriptor:
     return Descriptor(
         key=f"llvmir.alloca.{memory_space}.i8",
@@ -947,6 +1078,7 @@ def _select_descriptors() -> tuple[Descriptor, ...]:
     return tuple(
         _select_descriptor(type_name, unit_count=unit_count)
         for type_name, unit_count in (
+            ("i1", 1),
             ("i32", 1),
             ("i64", 1),
             ("f32", 1),
@@ -1145,6 +1277,38 @@ def _shuffle_descriptor(type_name: str, lane_count: int) -> Descriptor:
     )
 
 
+def _concat_descriptor(
+    type_name: str,
+    *,
+    input_lane_count: int,
+    input_count: int,
+) -> Descriptor:
+    input_suffix = _descriptor_suffix(type_name, input_lane_count, vector=True)
+    result_lane_count = input_lane_count * input_count
+    result_suffix = _descriptor_suffix(type_name, result_lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.concat.{input_suffix}.{result_suffix}",
+        mnemonic="concat",
+        semantic_tag=f"llvmir.concat.{input_suffix}.{result_suffix}",
+        operands=(
+            _result(type_name, unit_count=result_lane_count),
+            *(
+                _operand(type_name, f"input{input_ordinal}", input_lane_count)
+                for input_ordinal in range(input_count)
+            ),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"concat.{input_suffix}.{result_suffix}",
+            results=("dst",),
+            operands=tuple(
+                f"input{input_ordinal}" for input_ordinal in range(input_count)
+            ),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _slice_descriptor(
     type_name: str,
     *,
@@ -1186,6 +1350,12 @@ def _structural_vector_descriptors() -> tuple[Descriptor, ...]:
         descriptors.append(
             _slice_descriptor(type_name, source_lane_count=4, result_lane_count=2)
         )
+        descriptors.append(
+            _slice_descriptor(type_name, source_lane_count=16, result_lane_count=4)
+        )
+        descriptors.append(
+            _concat_descriptor(type_name, input_lane_count=4, input_count=4)
+        )
     return tuple(descriptors)
 
 
@@ -1221,6 +1391,77 @@ def _memory_descriptors() -> tuple[Descriptor, ...]:
                         indexed=indexed,
                     )
                 )
+    return tuple(descriptors)
+
+
+def _atomic_descriptors() -> tuple[Descriptor, ...]:
+    descriptors: list[Descriptor] = []
+    for type_name, _ in _ATOMIC_INTEGER_VALUE_TYPES:
+        integer_reduce_operations = (
+            "add",
+            "sub",
+            "and",
+            "or",
+            "xor",
+            "min",
+            "max",
+            "umin",
+            "umax",
+        )
+        descriptors.extend(
+            _atomic_descriptor(
+                "reduce",
+                operation,
+                type_name,
+                indexed=indexed,
+            )
+            for operation in integer_reduce_operations
+            for indexed in (False, True)
+        )
+        integer_rmw_operations = (
+            "xchg",
+            "add",
+            "sub",
+            "and",
+            "or",
+            "xor",
+            "min",
+            "max",
+            "umin",
+            "umax",
+        )
+        descriptors.extend(
+            _atomic_descriptor("rmw", operation, type_name, indexed=indexed)
+            for operation in integer_rmw_operations
+            for indexed in (False, True)
+        )
+        descriptors.extend(
+            _atomic_descriptor(
+                "cmpxchg",
+                "cmpxchg",
+                type_name,
+                indexed=indexed,
+            )
+            for indexed in (False, True)
+        )
+    for type_name, _ in _ATOMIC_FLOAT_VALUE_TYPES:
+        float_reduce_operations = ("fadd", "fminimum", "fmaximum", "fmin", "fmax")
+        descriptors.extend(
+            _atomic_descriptor(
+                "reduce",
+                operation,
+                type_name,
+                indexed=indexed,
+            )
+            for operation in float_reduce_operations
+            for indexed in (False, True)
+        )
+        float_rmw_operations = ("xchg", "fadd", "fminimum", "fmaximum", "fmin", "fmax")
+        descriptors.extend(
+            _atomic_descriptor("rmw", operation, type_name, indexed=indexed)
+            for operation in float_rmw_operations
+            for indexed in (False, True)
+        )
     return tuple(descriptors)
 
 
@@ -1279,6 +1520,7 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
         Resource(_RESOURCE_ALU, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),
         Resource(_RESOURCE_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
         Resource(_RESOURCE_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        Resource(_RESOURCE_ATOMIC, capacity_per_cycle=1, kind=ResourceKind.STORE),
     ),
     schedule_classes=(
         ScheduleClass(
@@ -1307,6 +1549,13 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
             flags=(ScheduleClassFlag.MAY_STORE,),
         ),
+        ScheduleClass(
+            _SCHEDULE_ATOMIC,
+            latency_kind=LatencyKind.VARIABLE,
+            issue_uses=(IssueUse(_RESOURCE_ATOMIC, cycles=1, units=1),),
+            model_quality=ModelQuality.FALLBACK,
+            flags=(ScheduleClassFlag.MAY_LOAD, ScheduleClassFlag.MAY_STORE),
+        ),
     ),
     enum_domains=(
         EnumDomain(
@@ -1333,6 +1582,26 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
                 EnumValue("bypass", 9),
             ),
         ),
+        EnumDomain(
+            _ATOMIC_ORDERING_ENUM,
+            (
+                EnumValue("relaxed", 0),
+                EnumValue("acquire", 1),
+                EnumValue("release", 2),
+                EnumValue("acq_rel", 3),
+                EnumValue("seq_cst", 4),
+            ),
+        ),
+        EnumDomain(
+            _ATOMIC_SCOPE_ENUM,
+            (
+                EnumValue("thread", 0),
+                EnumValue("subgroup", 1),
+                EnumValue("workgroup", 2),
+                EnumValue("device", 3),
+                EnumValue("system", 4),
+            ),
+        ),
     ),
     descriptors=(
         *_constant_descriptors(),
@@ -1344,6 +1613,7 @@ LLVMIR_GENERIC_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_kernel_query_descriptors(),
         *_structural_vector_descriptors(),
         *_memory_descriptors(),
+        *_atomic_descriptors(),
         *_allocation_descriptors(),
     ),
 )

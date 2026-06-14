@@ -52,6 +52,8 @@ typedef enum loom_llvmir_test_module_scenario_e {
   LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT = 12,
   // Host function using x86 target-specific intrinsics.
   LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS = 13,
+  // Host function using compare-exchange and aggregate value extraction.
+  LOOM_LLVMIR_TEST_MODULE_ATOMIC_CMPXCHG = 14,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);

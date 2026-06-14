@@ -571,6 +571,15 @@ static bool loom_low_lower_rule_type_matches(
       return false;
     }
   }
+  if (iree_any_bit_set(pattern->flags,
+                       LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1)) {
+    if (loom_type_rank(type) < 2 || loom_type_dim_is_dynamic_at(type, 1)) {
+      return false;
+    }
+    if (loom_type_dim_static_size_at(type, 1) != pattern->static_dim1) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -603,8 +612,17 @@ static loom_type_t loom_low_lower_rule_type_pattern_exact_type(
   IREE_ASSERT(iree_all_bits_set(
       pattern->flags, LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
                           LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0));
-  IREE_ASSERT_EQ(pattern->rank, 1);
   IREE_ASSERT_GE(pattern->static_dim0, 0);
+  if (pattern->rank == 2) {
+    IREE_ASSERT(iree_all_bits_set(
+        pattern->flags, LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1));
+    IREE_ASSERT_GE(pattern->static_dim1, 0);
+    return loom_type_shaped_2d(pattern->type_kind, element_type,
+                               loom_dim_pack_static(pattern->static_dim0),
+                               loom_dim_pack_static(pattern->static_dim1),
+                               /*encoding_id=*/0);
+  }
+  IREE_ASSERT_EQ(pattern->rank, 1);
   return loom_type_shaped_1d(pattern->type_kind, element_type,
                              loom_dim_pack_static(pattern->static_dim0), 0);
 }

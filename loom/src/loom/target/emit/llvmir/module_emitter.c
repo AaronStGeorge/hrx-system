@@ -17,6 +17,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ops/atomic.h"
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/llvmir/descriptors/descriptors.h"
@@ -48,6 +49,13 @@ typedef enum loom_llvmir_emit_memory_flag_bits_e {
   LOOM_LLVMIR_EMIT_MEMORY_FLAG_INDEXED = 1u << 1,
 } loom_llvmir_emit_memory_flag_bits_t;
 typedef uint8_t loom_llvmir_emit_memory_flags_t;
+
+typedef enum loom_llvmir_emit_atomic_flag_bits_e {
+  LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE = 1u << 0,
+  LOOM_LLVMIR_EMIT_ATOMIC_FLAG_INDEXED = 1u << 1,
+  LOOM_LLVMIR_EMIT_ATOMIC_FLAG_CMPXCHG = 1u << 2,
+} loom_llvmir_emit_atomic_flag_bits_t;
+typedef uint8_t loom_llvmir_emit_atomic_flags_t;
 
 typedef enum loom_llvmir_emit_const_kind_e {
   LOOM_LLVMIR_EMIT_CONST_KIND_INTEGER = 0,
@@ -120,6 +128,13 @@ typedef struct loom_llvmir_emit_const_info_t {
   loom_llvmir_emit_const_kind_t kind;
 } loom_llvmir_emit_const_info_t;
 
+typedef struct loom_llvmir_emit_concat_info_t {
+  // Generated descriptor reference ordinal.
+  uint32_t descriptor_ref;
+  // Number of vector operands concatenated into the result.
+  uint32_t input_count;
+} loom_llvmir_emit_concat_info_t;
+
 typedef struct loom_llvmir_emit_compare_info_t {
   // Generated descriptor reference ordinal.
   uint32_t descriptor_ref;
@@ -147,6 +162,17 @@ typedef struct loom_llvmir_emit_memory_info_t {
   // Memory operation flags selecting load/store and indexed addressing.
   loom_llvmir_emit_memory_flags_t flags;
 } loom_llvmir_emit_memory_info_t;
+
+typedef struct loom_llvmir_emit_atomic_info_t {
+  // Generated descriptor reference ordinal.
+  uint32_t descriptor_ref;
+  // Scalar value type used by the atomic operation.
+  loom_llvmir_emit_core_type_t value_type;
+  // LLVMIR builder atomic read-modify-write opcode for non-cmpxchg forms.
+  loom_llvmir_atomic_rmw_op_t op;
+  // Atomic operation flags selecting result and indexed addressing forms.
+  loom_llvmir_emit_atomic_flags_t flags;
+} loom_llvmir_emit_atomic_info_t;
 
 typedef struct loom_llvmir_emit_alloca_info_t {
   // Generated descriptor reference ordinal.
@@ -528,11 +554,11 @@ static const loom_llvmir_emit_cast_info_t kCastInfos[] = {
       LOOM_LLVMIR_SELECT_REF(V##lanes##F64)
 
 static const uint32_t kSelectDescriptorRefs[] = {
-    LOOM_LLVMIR_SELECT_REF(I32),        LOOM_LLVMIR_SELECT_REF(I64),
-    LOOM_LLVMIR_SELECT_REF(F32),        LOOM_LLVMIR_SELECT_REF(F64),
-    LOOM_LLVMIR_VECTOR_SELECT_REFS(2),  LOOM_LLVMIR_VECTOR_SELECT_REFS(3),
-    LOOM_LLVMIR_VECTOR_SELECT_REFS(4),  LOOM_LLVMIR_VECTOR_SELECT_REFS(8),
-    LOOM_LLVMIR_VECTOR_SELECT_REFS(16),
+    LOOM_LLVMIR_SELECT_REF(I1),        LOOM_LLVMIR_SELECT_REF(I32),
+    LOOM_LLVMIR_SELECT_REF(I64),       LOOM_LLVMIR_SELECT_REF(F32),
+    LOOM_LLVMIR_SELECT_REF(F64),       LOOM_LLVMIR_VECTOR_SELECT_REFS(2),
+    LOOM_LLVMIR_VECTOR_SELECT_REFS(3), LOOM_LLVMIR_VECTOR_SELECT_REFS(4),
+    LOOM_LLVMIR_VECTOR_SELECT_REFS(8), LOOM_LLVMIR_VECTOR_SELECT_REFS(16),
 };
 
 #undef LOOM_LLVMIR_VECTOR_SELECT_REFS
@@ -595,6 +621,8 @@ static const loom_llvmir_emit_kernel_query_info_t kKernelQueryInfos[] = {
                              lanes, LOOM_LLVMIR_EMIT_CONST_KIND_FLOAT_BITS)
 
 static const loom_llvmir_emit_const_info_t kConstInfos[] = {
+    LOOM_LLVMIR_CONST_INFO(I1, LOOM_LLVMIR_EMIT_CORE_TYPE_I1, 1,
+                           LOOM_LLVMIR_EMIT_CONST_KIND_INTEGER),
     LOOM_LLVMIR_CONST_INFO(I8, LOOM_LLVMIR_EMIT_CORE_TYPE_I8, 1,
                            LOOM_LLVMIR_EMIT_CONST_KIND_INTEGER),
     LOOM_LLVMIR_CONST_INFO(I16, LOOM_LLVMIR_EMIT_CORE_TYPE_I16, 1,
@@ -686,18 +714,34 @@ static const uint32_t kShuffleDescriptorRefs[] = {
     LOOM_LLVMIR_ALL_STRUCTURAL_VECTOR_REFS(SHUFFLE),
 };
 
-#define LOOM_LLVMIR_SLICE_REF(suffix) \
-  LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_SLICE_V4##suffix##_V2##suffix
+#define LOOM_LLVMIR_CONCAT_REF(suffix) \
+  {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_CONCAT_V4##suffix##_V16##suffix, 4}
+
+static const loom_llvmir_emit_concat_info_t kConcatInfos[] = {
+    LOOM_LLVMIR_CONCAT_REF(I1),   LOOM_LLVMIR_CONCAT_REF(I8),
+    LOOM_LLVMIR_CONCAT_REF(I16),  LOOM_LLVMIR_CONCAT_REF(I32),
+    LOOM_LLVMIR_CONCAT_REF(I64),  LOOM_LLVMIR_CONCAT_REF(F16),
+    LOOM_LLVMIR_CONCAT_REF(BF16), LOOM_LLVMIR_CONCAT_REF(F32),
+    LOOM_LLVMIR_CONCAT_REF(F64),
+};
+
+#define LOOM_LLVMIR_SLICE_REF(source_lanes, result_lanes, suffix) \
+  LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_SLICE_V##source_lanes##suffix##_V##result_lanes##suffix
 
 static const uint32_t kSliceDescriptorRefs[] = {
-    LOOM_LLVMIR_SLICE_REF(I1),   LOOM_LLVMIR_SLICE_REF(I8),
-    LOOM_LLVMIR_SLICE_REF(I16),  LOOM_LLVMIR_SLICE_REF(I32),
-    LOOM_LLVMIR_SLICE_REF(I64),  LOOM_LLVMIR_SLICE_REF(F16),
-    LOOM_LLVMIR_SLICE_REF(BF16), LOOM_LLVMIR_SLICE_REF(F32),
-    LOOM_LLVMIR_SLICE_REF(F64),
+    LOOM_LLVMIR_SLICE_REF(4, 2, I1),   LOOM_LLVMIR_SLICE_REF(4, 2, I8),
+    LOOM_LLVMIR_SLICE_REF(4, 2, I16),  LOOM_LLVMIR_SLICE_REF(4, 2, I32),
+    LOOM_LLVMIR_SLICE_REF(4, 2, I64),  LOOM_LLVMIR_SLICE_REF(4, 2, F16),
+    LOOM_LLVMIR_SLICE_REF(4, 2, BF16), LOOM_LLVMIR_SLICE_REF(4, 2, F32),
+    LOOM_LLVMIR_SLICE_REF(4, 2, F64),  LOOM_LLVMIR_SLICE_REF(16, 4, I1),
+    LOOM_LLVMIR_SLICE_REF(16, 4, I8),  LOOM_LLVMIR_SLICE_REF(16, 4, I16),
+    LOOM_LLVMIR_SLICE_REF(16, 4, I32), LOOM_LLVMIR_SLICE_REF(16, 4, I64),
+    LOOM_LLVMIR_SLICE_REF(16, 4, F16), LOOM_LLVMIR_SLICE_REF(16, 4, BF16),
+    LOOM_LLVMIR_SLICE_REF(16, 4, F32), LOOM_LLVMIR_SLICE_REF(16, 4, F64),
 };
 
 #undef LOOM_LLVMIR_SLICE_REF
+#undef LOOM_LLVMIR_CONCAT_REF
 #undef LOOM_LLVMIR_ALL_DYNAMIC_INSERT_VECTOR_REFS
 #undef LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS
 #undef LOOM_LLVMIR_ALL_STRUCTURAL_VECTOR_REFS
@@ -743,6 +787,138 @@ static const loom_llvmir_emit_memory_info_t kMemoryInfos[] = {
 #undef LOOM_LLVMIR_VECTOR_MEMORY_INFOS
 #undef LOOM_LLVMIR_MEMORY_INFOS
 #undef LOOM_LLVMIR_MEMORY_INFO
+
+#define LOOM_LLVMIR_ATOMIC_INFO(form, op_suffix, type_suffix, type, op, flags)              \
+  {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_ATOMIC_##form##_##op_suffix##_##type_suffix,          \
+   type, op, flags},                                                                        \
+  {                                                                                         \
+    LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_ATOMIC_##form##_INDEXED_##op_suffix##_##type_suffix, \
+        type, op, flags | LOOM_LLVMIR_EMIT_ATOMIC_FLAG_INDEXED                              \
+  }
+
+#define LOOM_LLVMIR_ATOMIC_CMPXCHG_INFO(type_suffix, type)                   \
+  {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_ATOMIC_CMPXCHG_##type_suffix, type,    \
+   LOOM_LLVMIR_ATOMIC_RMW_XCHG,                                              \
+   LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE |                               \
+       LOOM_LLVMIR_EMIT_ATOMIC_FLAG_CMPXCHG},                                \
+  {                                                                          \
+    LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_ATOMIC_CMPXCHG_INDEXED_##type_suffix, \
+        type, LOOM_LLVMIR_ATOMIC_RMW_XCHG,                                   \
+        LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE |                          \
+            LOOM_LLVMIR_EMIT_ATOMIC_FLAG_CMPXCHG |                           \
+            LOOM_LLVMIR_EMIT_ATOMIC_FLAG_INDEXED                             \
+  }
+
+#define LOOM_LLVMIR_INTEGER_ATOMIC_REDUCE_INFOS(type_suffix, type) \
+  LOOM_LLVMIR_ATOMIC_INFO(REDUCE, ADD, type_suffix, type,          \
+                          LOOM_LLVMIR_ATOMIC_RMW_ADD, 0),          \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, SUB, type_suffix, type,      \
+                              LOOM_LLVMIR_ATOMIC_RMW_SUB, 0),      \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, AND, type_suffix, type,      \
+                              LOOM_LLVMIR_ATOMIC_RMW_AND, 0),      \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, OR, type_suffix, type,       \
+                              LOOM_LLVMIR_ATOMIC_RMW_OR, 0),       \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, XOR, type_suffix, type,      \
+                              LOOM_LLVMIR_ATOMIC_RMW_XOR, 0),      \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, MIN, type_suffix, type,      \
+                              LOOM_LLVMIR_ATOMIC_RMW_MIN, 0),      \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, MAX, type_suffix, type,      \
+                              LOOM_LLVMIR_ATOMIC_RMW_MAX, 0),      \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, UMIN, type_suffix, type,     \
+                              LOOM_LLVMIR_ATOMIC_RMW_UMIN, 0),     \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, UMAX, type_suffix, type,     \
+                              LOOM_LLVMIR_ATOMIC_RMW_UMAX, 0)
+
+#define LOOM_LLVMIR_INTEGER_ATOMIC_RMW_INFOS(type_suffix, type)           \
+  LOOM_LLVMIR_ATOMIC_INFO(RMW, XCHG, type_suffix, type,                   \
+                          LOOM_LLVMIR_ATOMIC_RMW_XCHG,                    \
+                          LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE),     \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, ADD, type_suffix, type,                \
+                              LOOM_LLVMIR_ATOMIC_RMW_ADD,                 \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, SUB, type_suffix, type,                \
+                              LOOM_LLVMIR_ATOMIC_RMW_SUB,                 \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, AND, type_suffix, type,                \
+                              LOOM_LLVMIR_ATOMIC_RMW_AND,                 \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, OR, type_suffix, type,                 \
+                              LOOM_LLVMIR_ATOMIC_RMW_OR,                  \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, XOR, type_suffix, type,                \
+                              LOOM_LLVMIR_ATOMIC_RMW_XOR,                 \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, MIN, type_suffix, type,                \
+                              LOOM_LLVMIR_ATOMIC_RMW_MIN,                 \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, MAX, type_suffix, type,                \
+                              LOOM_LLVMIR_ATOMIC_RMW_MAX,                 \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, UMIN, type_suffix, type,               \
+                              LOOM_LLVMIR_ATOMIC_RMW_UMIN,                \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, UMAX, type_suffix, type,               \
+                              LOOM_LLVMIR_ATOMIC_RMW_UMAX,                \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE)
+
+#define LOOM_LLVMIR_FLOAT_ATOMIC_REDUCE_INFOS(type_suffix, type)   \
+  LOOM_LLVMIR_ATOMIC_INFO(REDUCE, FADD, type_suffix, type,         \
+                          LOOM_LLVMIR_ATOMIC_RMW_FADD, 0),         \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, FMINIMUM, type_suffix, type, \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMINIMUM, 0), \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, FMAXIMUM, type_suffix, type, \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMAXIMUM, 0), \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, FMIN, type_suffix, type,     \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMIN, 0),     \
+      LOOM_LLVMIR_ATOMIC_INFO(REDUCE, FMAX, type_suffix, type,     \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMAX, 0)
+
+#define LOOM_LLVMIR_FLOAT_ATOMIC_RMW_INFOS(type_suffix, type)             \
+  LOOM_LLVMIR_ATOMIC_INFO(RMW, XCHG, type_suffix, type,                   \
+                          LOOM_LLVMIR_ATOMIC_RMW_XCHG,                    \
+                          LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE),     \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, FADD, type_suffix, type,               \
+                              LOOM_LLVMIR_ATOMIC_RMW_FADD,                \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, FMINIMUM, type_suffix, type,           \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMINIMUM,            \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, FMAXIMUM, type_suffix, type,           \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMAXIMUM,            \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, FMIN, type_suffix, type,               \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMIN,                \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE), \
+      LOOM_LLVMIR_ATOMIC_INFO(RMW, FMAX, type_suffix, type,               \
+                              LOOM_LLVMIR_ATOMIC_RMW_FMAX,                \
+                              LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE)
+
+#define LOOM_LLVMIR_INTEGER_ATOMIC_INFOS(type_suffix, type)    \
+  LOOM_LLVMIR_INTEGER_ATOMIC_REDUCE_INFOS(type_suffix, type),  \
+      LOOM_LLVMIR_INTEGER_ATOMIC_RMW_INFOS(type_suffix, type), \
+      LOOM_LLVMIR_ATOMIC_CMPXCHG_INFO(type_suffix, type)
+
+#define LOOM_LLVMIR_FLOAT_ATOMIC_INFOS(type_suffix, type)   \
+  LOOM_LLVMIR_FLOAT_ATOMIC_REDUCE_INFOS(type_suffix, type), \
+      LOOM_LLVMIR_FLOAT_ATOMIC_RMW_INFOS(type_suffix, type)
+
+static const loom_llvmir_emit_atomic_info_t kAtomicInfos[] = {
+    LOOM_LLVMIR_INTEGER_ATOMIC_INFOS(I8, LOOM_LLVMIR_EMIT_CORE_TYPE_I8),
+    LOOM_LLVMIR_INTEGER_ATOMIC_INFOS(I16, LOOM_LLVMIR_EMIT_CORE_TYPE_I16),
+    LOOM_LLVMIR_INTEGER_ATOMIC_INFOS(I32, LOOM_LLVMIR_EMIT_CORE_TYPE_I32),
+    LOOM_LLVMIR_INTEGER_ATOMIC_INFOS(I64, LOOM_LLVMIR_EMIT_CORE_TYPE_I64),
+    LOOM_LLVMIR_FLOAT_ATOMIC_INFOS(F32, LOOM_LLVMIR_EMIT_CORE_TYPE_F32),
+    LOOM_LLVMIR_FLOAT_ATOMIC_INFOS(F64, LOOM_LLVMIR_EMIT_CORE_TYPE_F64),
+};
+
+#undef LOOM_LLVMIR_FLOAT_ATOMIC_INFOS
+#undef LOOM_LLVMIR_INTEGER_ATOMIC_INFOS
+#undef LOOM_LLVMIR_FLOAT_ATOMIC_RMW_INFOS
+#undef LOOM_LLVMIR_FLOAT_ATOMIC_REDUCE_INFOS
+#undef LOOM_LLVMIR_INTEGER_ATOMIC_RMW_INFOS
+#undef LOOM_LLVMIR_INTEGER_ATOMIC_REDUCE_INFOS
+#undef LOOM_LLVMIR_ATOMIC_CMPXCHG_INFO
+#undef LOOM_LLVMIR_ATOMIC_INFO
 
 static const loom_llvmir_emit_alloca_info_t kAllocaInfos[] = {
     {LLVMIR_GENERIC_CORE_DESCRIPTOR_REF_ALLOCA_PRIVATE_I8,
@@ -1029,6 +1205,34 @@ static iree_status_t loom_llvmir_emit_core_type(
   }
   return loom_llvmir_module_get_vector_type(module, unit_count, scalar_type,
                                             out_type_id);
+}
+
+static bool loom_llvmir_emit_core_type_byte_count(
+    loom_llvmir_emit_core_type_t type, uint32_t* out_byte_count) {
+  switch (type) {
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_I1:
+      *out_byte_count = 1;
+      return true;
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_I8:
+      *out_byte_count = 1;
+      return true;
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_I16:
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_F16:
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_BF16:
+      *out_byte_count = 2;
+      return true;
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_I32:
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_F32:
+      *out_byte_count = 4;
+      return true;
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_I64:
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_F64:
+      *out_byte_count = 8;
+      return true;
+    case LOOM_LLVMIR_EMIT_CORE_TYPE_PTR:
+      return false;
+  }
+  return false;
 }
 
 static const loom_llvmir_emit_alloca_info_t* loom_llvmir_emit_lookup_alloca(
@@ -1394,6 +1598,16 @@ static const loom_llvmir_emit_cast_info_t* loom_llvmir_emit_lookup_cast(
   return NULL;
 }
 
+static const loom_llvmir_emit_concat_info_t* loom_llvmir_emit_lookup_concat(
+    uint32_t descriptor_ref) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kConcatInfos); ++i) {
+    if (kConcatInfos[i].descriptor_ref == descriptor_ref) {
+      return &kConcatInfos[i];
+    }
+  }
+  return NULL;
+}
+
 static const loom_llvmir_emit_kernel_query_info_t*
 loom_llvmir_emit_lookup_kernel_query(uint32_t descriptor_ref) {
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kKernelQueryInfos); ++i) {
@@ -1424,6 +1638,16 @@ static const loom_llvmir_emit_memory_info_t* loom_llvmir_emit_lookup_memory(
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kMemoryInfos); ++i) {
     if (kMemoryInfos[i].descriptor_ref == descriptor_ref) {
       return &kMemoryInfos[i];
+    }
+  }
+  return NULL;
+}
+
+static const loom_llvmir_emit_atomic_info_t* loom_llvmir_emit_lookup_atomic(
+    uint32_t descriptor_ref) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAtomicInfos); ++i) {
+    if (kAtomicInfos[i].descriptor_ref == descriptor_ref) {
+      return &kAtomicInfos[i];
     }
   }
   return NULL;
@@ -2105,6 +2329,23 @@ static iree_status_t loom_llvmir_emit_insert_vector_lane(
                                           out_value);
 }
 
+static iree_status_t loom_llvmir_emit_extract_vector_lane(
+    loom_llvmir_emit_function_state_t* state, loom_llvmir_type_id_t result_type,
+    loom_llvmir_value_id_t vector, uint32_t lane,
+    iree_string_view_t result_name, loom_llvmir_value_id_t* out_value) {
+  loom_llvmir_value_id_t lane_index = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_i64_constant(state, lane, &lane_index));
+  return loom_llvmir_build_extract_element(
+      state->llvmir_block,
+      &(loom_llvmir_extract_element_desc_t){
+          .result_name = result_name,
+          .result_type = result_type,
+          .vector = vector,
+          .index = lane_index,
+      },
+      out_value);
+}
+
 static iree_status_t loom_llvmir_emit_const(
     loom_llvmir_emit_function_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet,
@@ -2277,6 +2518,85 @@ static iree_status_t loom_llvmir_emit_from_elements(
   return loom_llvmir_emit_define_value(state, result_value, current);
 }
 
+static iree_status_t loom_llvmir_emit_concat(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_llvmir_emit_concat_info_t* info) {
+  if (packet->op->operand_count != info->input_count) {
+    return loom_llvmir_emit_shape_diagnostic(
+        state, packet->op, IREE_SV("packet_operand"), packet->op->operand_count,
+        info->input_count);
+  }
+  loom_llvmir_type_id_t result_type_id = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_value_id_t result_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_prepare_packet_result(
+      state, packet, &result_type_id, &result_value));
+  if (result_type_id == LOOM_LLVMIR_TYPE_ID_INVALID) return iree_ok_status();
+
+  uint32_t result_lane_count = 0;
+  loom_llvmir_type_id_t result_element_type_id = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_vector_type_info(
+      state->llvmir_module, result_type_id, &result_lane_count,
+      &result_element_type_id));
+
+  loom_llvmir_value_id_t current = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_poison_constant(
+      state->llvmir_module, result_type_id, &current));
+
+  uint32_t result_lane = 0;
+  const loom_value_id_t* operands = loom_op_const_operands(packet->op);
+  for (uint32_t input_ordinal = 0; input_ordinal < info->input_count;
+       ++input_ordinal) {
+    const loom_value_id_t input_value = operands[input_ordinal];
+    loom_llvmir_type_id_t input_type_id = LOOM_LLVMIR_TYPE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_type_for_low_value(
+        state, packet->op, input_value, IREE_SV("input"),
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, input_ordinal),
+        &input_type_id));
+    if (input_type_id == LOOM_LLVMIR_TYPE_ID_INVALID) return iree_ok_status();
+    uint32_t input_lane_count = 0;
+    loom_llvmir_type_id_t input_element_type_id = LOOM_LLVMIR_TYPE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_module_get_vector_type_info(
+        state->llvmir_module, input_type_id, &input_lane_count,
+        &input_element_type_id));
+    if (input_element_type_id != result_element_type_id) {
+      return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                               IREE_SV("input_type"),
+                                               input_type_id, result_type_id);
+    }
+
+    loom_llvmir_value_id_t input = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_emit_lookup_value(state, input_value, &input));
+    for (uint32_t input_lane = 0; input_lane < input_lane_count;
+         ++input_lane, ++result_lane) {
+      if (result_lane >= result_lane_count) {
+        return loom_llvmir_emit_shape_diagnostic(
+            state, packet->op, IREE_SV("result_lane"), result_lane,
+            result_lane_count);
+      }
+      loom_llvmir_value_id_t element = LOOM_LLVMIR_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_llvmir_emit_extract_vector_lane(
+          state, result_element_type_id, input, input_lane,
+          iree_string_view_empty(), &element));
+      loom_llvmir_value_id_t next = LOOM_LLVMIR_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_llvmir_emit_insert_vector_lane(
+          state, result_type_id, current, element, result_lane,
+          result_lane + 1 == result_lane_count
+              ? loom_llvmir_emit_value_name(state->module, result_value)
+              : iree_string_view_empty(),
+          &next));
+      current = next;
+    }
+  }
+  if (result_lane != result_lane_count) {
+    return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                             IREE_SV("result_lane_count"),
+                                             result_lane, result_lane_count);
+  }
+  return loom_llvmir_emit_define_value(state, result_value, current);
+}
+
 static iree_status_t loom_llvmir_emit_extract(
     loom_llvmir_emit_function_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet) {
@@ -2301,18 +2621,10 @@ static iree_status_t loom_llvmir_emit_extract(
   loom_llvmir_value_id_t source = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_emit_lookup_value(state, operands[0], &source));
-  loom_llvmir_value_id_t lane_index = LOOM_LLVMIR_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_llvmir_emit_i64_constant(state, lane, &lane_index));
   loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_llvmir_build_extract_element(
-      state->llvmir_block,
-      &(loom_llvmir_extract_element_desc_t){
-          .result_name =
-              loom_llvmir_emit_value_name(state->module, result_value),
-          .result_type = result_type,
-          .vector = source,
-          .index = lane_index,
-      },
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_extract_vector_lane(
+      state, result_type, source, (uint32_t)lane,
+      loom_llvmir_emit_value_name(state->module, result_value),
       &llvmir_result));
   return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
 }
@@ -2670,6 +2982,52 @@ static iree_status_t loom_llvmir_emit_alloca(
   return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
 }
 
+static bool loom_llvmir_emit_atomic_ordering(
+    int64_t ordering, loom_llvmir_atomic_ordering_t* out_ordering) {
+  switch ((loom_atomic_ordering_t)ordering) {
+    case LOOM_ATOMIC_ORDERING_RELAXED:
+      *out_ordering = LOOM_LLVMIR_ATOMIC_ORDERING_MONOTONIC;
+      return true;
+    case LOOM_ATOMIC_ORDERING_ACQUIRE:
+      *out_ordering = LOOM_LLVMIR_ATOMIC_ORDERING_ACQUIRE;
+      return true;
+    case LOOM_ATOMIC_ORDERING_RELEASE:
+      *out_ordering = LOOM_LLVMIR_ATOMIC_ORDERING_RELEASE;
+      return true;
+    case LOOM_ATOMIC_ORDERING_ACQ_REL:
+      *out_ordering = LOOM_LLVMIR_ATOMIC_ORDERING_ACQ_REL;
+      return true;
+    case LOOM_ATOMIC_ORDERING_SEQ_CST:
+      *out_ordering = LOOM_LLVMIR_ATOMIC_ORDERING_SEQ_CST;
+      return true;
+    case LOOM_ATOMIC_ORDERING_COUNT_:
+      return false;
+  }
+  return false;
+}
+
+static bool loom_llvmir_emit_atomic_sync_scope(
+    int64_t scope, iree_string_view_t* out_sync_scope) {
+  switch ((loom_atomic_scope_t)scope) {
+    case LOOM_ATOMIC_SCOPE_THREAD:
+      *out_sync_scope = IREE_SV("singlethread");
+      return true;
+    case LOOM_ATOMIC_SCOPE_SUBGROUP:
+      *out_sync_scope = IREE_SV("subgroup");
+      return true;
+    case LOOM_ATOMIC_SCOPE_WORKGROUP:
+      *out_sync_scope = IREE_SV("workgroup");
+      return true;
+    case LOOM_ATOMIC_SCOPE_DEVICE:
+    case LOOM_ATOMIC_SCOPE_SYSTEM:
+      *out_sync_scope = iree_string_view_empty();
+      return true;
+    case LOOM_ATOMIC_SCOPE_COUNT_:
+      return false;
+  }
+  return false;
+}
+
 static iree_status_t loom_llvmir_emit_memory(
     loom_llvmir_emit_function_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet,
@@ -2735,6 +3093,181 @@ static iree_status_t loom_llvmir_emit_memory(
                                      .value = value,
                                      .pointer = pointer,
                                  });
+}
+
+static iree_status_t loom_llvmir_emit_atomic(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_llvmir_emit_atomic_info_t* info) {
+  const bool indexed =
+      iree_any_bit_set(info->flags, LOOM_LLVMIR_EMIT_ATOMIC_FLAG_INDEXED);
+  const bool is_cmpxchg =
+      iree_any_bit_set(info->flags, LOOM_LLVMIR_EMIT_ATOMIC_FLAG_CMPXCHG);
+  const bool returns_value =
+      iree_any_bit_set(info->flags, LOOM_LLVMIR_EMIT_ATOMIC_FLAG_RETURN_VALUE);
+  const uint32_t expected_operands =
+      (is_cmpxchg ? 3u : 2u) + (indexed ? 1u : 0u);
+  if (packet->op->operand_count != expected_operands) {
+    return loom_llvmir_emit_shape_diagnostic(
+        state, packet->op, IREE_SV("packet_operand"), packet->op->operand_count,
+        expected_operands);
+  }
+  if (packet->op->result_count != (returns_value ? 1u : 0u)) {
+    return loom_llvmir_emit_shape_diagnostic(
+        state, packet->op, IREE_SV("packet_result"), packet->op->result_count,
+        returns_value ? 1u : 0u);
+  }
+
+  loom_llvmir_atomic_ordering_t success_ordering =
+      LOOM_LLVMIR_ATOMIC_ORDERING_MONOTONIC;
+  loom_llvmir_atomic_ordering_t failure_ordering =
+      LOOM_LLVMIR_ATOMIC_ORDERING_MONOTONIC;
+  if (is_cmpxchg) {
+    int64_t success_ordering_attr = 0;
+    bool has_success_ordering = false;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_read_i64_immediate(
+        state, packet, IREE_SV("success_ordering"), &has_success_ordering,
+        &success_ordering_attr));
+    if (!has_success_ordering) return iree_ok_status();
+    if (!loom_llvmir_emit_atomic_ordering(success_ordering_attr,
+                                          &success_ordering)) {
+      return loom_llvmir_emit_shape_diagnostic(
+          state, packet->op, IREE_SV("atomic_success_ordering"),
+          (uint32_t)success_ordering_attr, LOOM_ATOMIC_ORDERING_COUNT_);
+    }
+    int64_t failure_ordering_attr = 0;
+    bool has_failure_ordering = false;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_read_i64_immediate(
+        state, packet, IREE_SV("failure_ordering"), &has_failure_ordering,
+        &failure_ordering_attr));
+    if (!has_failure_ordering) return iree_ok_status();
+    if (!loom_llvmir_emit_atomic_ordering(failure_ordering_attr,
+                                          &failure_ordering)) {
+      return loom_llvmir_emit_shape_diagnostic(
+          state, packet->op, IREE_SV("atomic_failure_ordering"),
+          (uint32_t)failure_ordering_attr, LOOM_ATOMIC_ORDERING_COUNT_);
+    }
+  } else {
+    int64_t ordering_attr = 0;
+    bool has_ordering = false;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_read_i64_immediate(
+        state, packet, IREE_SV("ordering"), &has_ordering, &ordering_attr));
+    if (!has_ordering) return iree_ok_status();
+    if (!loom_llvmir_emit_atomic_ordering(ordering_attr, &success_ordering)) {
+      return loom_llvmir_emit_shape_diagnostic(
+          state, packet->op, IREE_SV("atomic_ordering"),
+          (uint32_t)ordering_attr, LOOM_ATOMIC_ORDERING_COUNT_);
+    }
+  }
+
+  int64_t scope_attr = 0;
+  bool has_scope = false;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_read_i64_immediate(
+      state, packet, IREE_SV("scope"), &has_scope, &scope_attr));
+  if (!has_scope) return iree_ok_status();
+  iree_string_view_t sync_scope = iree_string_view_empty();
+  if (!loom_llvmir_emit_atomic_sync_scope(scope_attr, &sync_scope)) {
+    return loom_llvmir_emit_shape_diagnostic(
+        state, packet->op, IREE_SV("atomic_scope"), (uint32_t)scope_attr,
+        LOOM_ATOMIC_SCOPE_COUNT_);
+  }
+
+  loom_llvmir_value_id_t base = LOOM_LLVMIR_VALUE_ID_INVALID;
+  const uint32_t pointer_operand_index = is_cmpxchg ? 2u : 1u;
+  const loom_value_id_t base_value_id =
+      loom_op_const_operands(packet->op)[pointer_operand_index];
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_emit_lookup_value(state, base_value_id, &base));
+  const loom_llvmir_emit_memory_info_t memory_info = {
+      .value_type = info->value_type,
+      .unit_count = 1,
+      .flags = indexed ? LOOM_LLVMIR_EMIT_MEMORY_FLAG_INDEXED : 0,
+  };
+  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_byte_pointer(
+      state, packet, &memory_info, base_value_id, base, &pointer));
+  if (pointer == LOOM_LLVMIR_VALUE_ID_INVALID) return iree_ok_status();
+
+  loom_llvmir_type_id_t value_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_core_type(
+      state->llvmir_module, info->value_type, /*unit_count=*/1,
+      /*pointer_address_space=*/0, &value_type));
+
+  uint32_t alignment = 0;
+  if (!loom_llvmir_emit_core_type_byte_count(info->value_type, &alignment)) {
+    return loom_llvmir_emit_shape_diagnostic(
+        state, packet->op, IREE_SV("atomic_value_type"), 0, 1);
+  }
+
+  loom_value_id_t result_value = LOOM_VALUE_ID_INVALID;
+  iree_string_view_t result_name = iree_string_view_empty();
+  if (returns_value) {
+    result_value = loom_op_const_results(packet->op)[0];
+    result_name = loom_llvmir_emit_value_name(state->module, result_value);
+  }
+
+  if (is_cmpxchg) {
+    loom_llvmir_value_id_t expected = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
+        state, loom_op_const_operands(packet->op)[0], &expected));
+    loom_llvmir_value_id_t replacement = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
+        state, loom_op_const_operands(packet->op)[1], &replacement));
+    loom_llvmir_type_id_t i1_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_module_get_integer_type(state->llvmir_module, 1, &i1_type));
+    const loom_llvmir_type_id_t aggregate_elements[] = {value_type, i1_type};
+    loom_llvmir_type_id_t aggregate_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_module_get_struct_type(
+        state->llvmir_module, aggregate_elements,
+        IREE_ARRAYSIZE(aggregate_elements), &aggregate_type));
+    loom_llvmir_value_id_t aggregate = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_build_cmpxchg(state->llvmir_block,
+                                  &(loom_llvmir_cmpxchg_desc_t){
+                                      .result_type = aggregate_type,
+                                      .value_type = value_type,
+                                      .pointer = pointer,
+                                      .expected = expected,
+                                      .replacement = replacement,
+                                      .success_ordering = success_ordering,
+                                      .failure_ordering = failure_ordering,
+                                      .sync_scope = sync_scope,
+                                      .alignment = alignment,
+                                  },
+                                  &aggregate));
+    loom_llvmir_value_id_t old_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_build_extract_value(state->llvmir_block,
+                                        &(loom_llvmir_extract_value_desc_t){
+                                            .result_name = result_name,
+                                            .result_type = value_type,
+                                            .aggregate = aggregate,
+                                            .index = 0,
+                                        },
+                                        &old_value));
+    return loom_llvmir_emit_define_value(state, result_value, old_value);
+  }
+
+  loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_lookup_value(
+      state, loom_op_const_operands(packet->op)[0], &value));
+  loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_atomic_rmw(state->llvmir_block,
+                                   &(loom_llvmir_atomic_rmw_desc_t){
+                                       .result_name = result_name,
+                                       .result_type = value_type,
+                                       .op = info->op,
+                                       .pointer = pointer,
+                                       .value = value,
+                                       .ordering = success_ordering,
+                                       .sync_scope = sync_scope,
+                                       .alignment = alignment,
+                                   },
+                                   &llvmir_result));
+  if (!returns_value) return iree_ok_status();
+  return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
 }
 
 static iree_status_t loom_llvmir_emit_packet(
@@ -2849,6 +3382,12 @@ static iree_status_t loom_llvmir_emit_packet(
         state, packet, LOOM_LLVMIR_EMIT_SHUFFLE_KIND_EXPLICIT);
   }
 
+  const loom_llvmir_emit_concat_info_t* concat_info =
+      loom_llvmir_emit_lookup_concat(descriptor_ref);
+  if (concat_info) {
+    return loom_llvmir_emit_concat(state, packet, concat_info);
+  }
+
   if (loom_llvmir_emit_descriptor_ref_in(
           descriptor_ref, kSliceDescriptorRefs,
           IREE_ARRAYSIZE(kSliceDescriptorRefs))) {
@@ -2866,6 +3405,12 @@ static iree_status_t loom_llvmir_emit_packet(
       loom_llvmir_emit_lookup_memory(descriptor_ref);
   if (memory_info) {
     return loom_llvmir_emit_memory(state, packet, memory_info);
+  }
+
+  const loom_llvmir_emit_atomic_info_t* atomic_info =
+      loom_llvmir_emit_lookup_atomic(descriptor_ref);
+  if (atomic_info) {
+    return loom_llvmir_emit_atomic(state, packet, atomic_info);
   }
 
   return loom_llvmir_emit_unsupported_descriptor_diagnostic(state, packet);

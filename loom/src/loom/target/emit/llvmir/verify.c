@@ -6,6 +6,7 @@
 
 #include "loom/target/emit/llvmir/verify.h"
 
+#include "loom/ops/atomic.h"
 #include "loom/target/emit/llvmir/types.h"
 
 static bool loom_llvmir_is_terminator(const loom_llvmir_instruction_t* inst) {
@@ -187,6 +188,154 @@ static iree_status_t loom_llvmir_verify_memory_flags(uint32_t flags) {
                             "unknown LLVM memory flags");
   }
   return iree_ok_status();
+}
+
+static bool loom_llvmir_verify_atomic_rmw_op_accepts_type(
+    const loom_llvmir_module_t* module, loom_llvmir_atomic_rmw_op_t op,
+    loom_llvmir_type_id_t type_id) {
+  const loom_llvmir_type_t* type = loom_llvmir_verify_type(module, type_id);
+  if (!type || type->kind == LOOM_LLVMIR_TYPE_VECTOR) return false;
+  switch (op) {
+    case LOOM_LLVMIR_ATOMIC_RMW_XCHG:
+      return type->kind == LOOM_LLVMIR_TYPE_INTEGER ||
+             type->kind == LOOM_LLVMIR_TYPE_FLOAT;
+    case LOOM_LLVMIR_ATOMIC_RMW_ADD:
+    case LOOM_LLVMIR_ATOMIC_RMW_SUB:
+    case LOOM_LLVMIR_ATOMIC_RMW_AND:
+    case LOOM_LLVMIR_ATOMIC_RMW_OR:
+    case LOOM_LLVMIR_ATOMIC_RMW_XOR:
+    case LOOM_LLVMIR_ATOMIC_RMW_MAX:
+    case LOOM_LLVMIR_ATOMIC_RMW_MIN:
+    case LOOM_LLVMIR_ATOMIC_RMW_UMAX:
+    case LOOM_LLVMIR_ATOMIC_RMW_UMIN:
+      return type->kind == LOOM_LLVMIR_TYPE_INTEGER;
+    case LOOM_LLVMIR_ATOMIC_RMW_FADD:
+    case LOOM_LLVMIR_ATOMIC_RMW_FMAX:
+    case LOOM_LLVMIR_ATOMIC_RMW_FMIN:
+    case LOOM_LLVMIR_ATOMIC_RMW_FMAXIMUM:
+    case LOOM_LLVMIR_ATOMIC_RMW_FMINIMUM:
+      return type->kind == LOOM_LLVMIR_TYPE_FLOAT;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_verify_atomic_ordering(
+    loom_llvmir_atomic_ordering_t ordering) {
+  switch (ordering) {
+    case LOOM_LLVMIR_ATOMIC_ORDERING_MONOTONIC:
+    case LOOM_LLVMIR_ATOMIC_ORDERING_ACQUIRE:
+    case LOOM_LLVMIR_ATOMIC_ORDERING_RELEASE:
+    case LOOM_LLVMIR_ATOMIC_ORDERING_ACQ_REL:
+    case LOOM_LLVMIR_ATOMIC_ORDERING_SEQ_CST:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_llvmir_verify_atomic_rmw(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM atomicrmw has no result value");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->result_value_id,
+      instruction->atomic_rmw.result_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->atomic_rmw.value,
+      instruction->atomic_rmw.result_type));
+  if (!loom_llvmir_verify_value(module, instruction->atomic_rmw.pointer)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM atomicrmw references unknown pointer");
+  }
+  const loom_llvmir_type_t* pointer_type = loom_llvmir_verify_type(
+      module,
+      loom_llvmir_verify_value_type(module, instruction->atomic_rmw.pointer));
+  if (!loom_llvmir_verify_type_is_pointer_like(module, pointer_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM atomicrmw pointer must be a pointer");
+  }
+  if (!loom_llvmir_verify_atomic_rmw_op_accepts_type(
+          module, instruction->atomic_rmw.op,
+          instruction->atomic_rmw.result_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM atomicrmw opcode is invalid for result type");
+  }
+  if (!loom_llvmir_verify_atomic_ordering(instruction->atomic_rmw.ordering)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM atomic ordering");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_verify_memory_alignment(instruction->atomic_rmw.alignment));
+  return loom_llvmir_verify_memory_flags(instruction->atomic_rmw.flags);
+}
+
+static iree_status_t loom_llvmir_verify_cmpxchg(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM cmpxchg has no result value");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->result_value_id, instruction->cmpxchg.result_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->cmpxchg.expected, instruction->cmpxchg.value_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->cmpxchg.replacement,
+      instruction->cmpxchg.value_type));
+  if (!loom_llvmir_verify_value(module, instruction->cmpxchg.pointer)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM cmpxchg references unknown pointer");
+  }
+  const loom_llvmir_type_t* pointer_type = loom_llvmir_verify_type(
+      module,
+      loom_llvmir_verify_value_type(module, instruction->cmpxchg.pointer));
+  if (!loom_llvmir_verify_type_is_pointer_like(module, pointer_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM cmpxchg pointer must be a pointer");
+  }
+
+  const loom_llvmir_type_t* value_type =
+      loom_llvmir_verify_type(module, instruction->cmpxchg.value_type);
+  if (!value_type || (value_type->kind != LOOM_LLVMIR_TYPE_INTEGER &&
+                      value_type->kind != LOOM_LLVMIR_TYPE_POINTER)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM cmpxchg value type must be an integer or pointer");
+  }
+
+  const loom_llvmir_type_t* result_type =
+      loom_llvmir_verify_type(module, instruction->cmpxchg.result_type);
+  if (!result_type || result_type->kind != LOOM_LLVMIR_TYPE_STRUCT ||
+      result_type->element_count != 2 ||
+      result_type->element_types[0] != instruction->cmpxchg.value_type ||
+      !loom_llvmir_verify_type_is_i1(module, result_type->element_types[1])) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM cmpxchg result type must be { value_type, i1 }");
+  }
+  if (!loom_llvmir_verify_atomic_ordering(
+          instruction->cmpxchg.success_ordering) ||
+      !loom_llvmir_verify_atomic_ordering(
+          instruction->cmpxchg.failure_ordering)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM atomic ordering");
+  }
+  loom_atomic_cmpxchg_ordering_error_t ordering_error =
+      loom_atomic_cmpxchg_ordering_validate(
+          (uint8_t)instruction->cmpxchg.success_ordering,
+          (uint8_t)instruction->cmpxchg.failure_ordering);
+  if (ordering_error != LOOM_ATOMIC_CMPXCHG_ORDERING_ERROR_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid LLVM cmpxchg ordering pair");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_verify_memory_alignment(instruction->cmpxchg.alignment));
+  return loom_llvmir_verify_memory_flags(instruction->cmpxchg.flags);
 }
 
 static iree_status_t loom_llvmir_verify_metadata_attachments(
@@ -817,6 +966,43 @@ static iree_status_t loom_llvmir_verify_extract_element(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_verify_extract_value(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractvalue has no result value");
+  }
+  const loom_llvmir_type_id_t result_type_id =
+      loom_llvmir_verify_value_type(module, instruction->result_value_id);
+  if (result_type_id == LOOM_LLVMIR_TYPE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractvalue has unknown result value");
+  }
+  const loom_llvmir_value_t* aggregate =
+      loom_llvmir_verify_value(module, instruction->extract_value.aggregate);
+  if (!aggregate) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractvalue references unknown aggregate");
+  }
+  const loom_llvmir_type_t* aggregate_type =
+      loom_llvmir_verify_type(module, aggregate->type_id);
+  if (!aggregate_type || aggregate_type->kind != LOOM_LLVMIR_TYPE_STRUCT) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractvalue operand must be a struct");
+  }
+  if (instruction->extract_value.index >= aggregate_type->element_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractvalue index is out of bounds");
+  }
+  if (aggregate_type->element_types[instruction->extract_value.index] !=
+      result_type_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractvalue result type mismatch");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_verify_insert_element(
     const loom_llvmir_module_t* module,
     const loom_llvmir_instruction_t* instruction) {
@@ -1081,8 +1267,14 @@ static iree_status_t loom_llvmir_verify_instruction(
       return loom_llvmir_verify_metadata_attachments(
           module, instruction->store.metadata_attachments,
           instruction->store.metadata_attachment_count);
+    case LOOM_LLVMIR_INST_ATOMIC_RMW:
+      return loom_llvmir_verify_atomic_rmw(module, instruction);
+    case LOOM_LLVMIR_INST_CMPXCHG:
+      return loom_llvmir_verify_cmpxchg(module, instruction);
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
       return loom_llvmir_verify_extract_element(module, instruction);
+    case LOOM_LLVMIR_INST_EXTRACT_VALUE:
+      return loom_llvmir_verify_extract_value(module, instruction);
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:
       return loom_llvmir_verify_insert_element(module, instruction);
     case LOOM_LLVMIR_INST_SHUFFLE_VECTOR:

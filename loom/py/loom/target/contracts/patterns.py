@@ -24,6 +24,7 @@ class TypePattern:
     element: str | None = None
     elements: tuple[str, ...] = ()
     lanes: int | None = None
+    dims: tuple[int, ...] = ()
     minimum_lanes: CTypeExpression | None = None
     maximum_lanes: CTypeExpression | None = None
 
@@ -37,6 +38,7 @@ class TypePattern:
         element: ScalarElementPattern,
         *,
         lanes: int | None = None,
+        dims: Sequence[int] | None = None,
         minimum_lanes: CTypeExpression | None = None,
         maximum_lanes: CTypeExpression | None = None,
     ) -> Self:
@@ -44,6 +46,7 @@ class TypePattern:
             kind="vector",
             elements=_normalize_elements(element),
             lanes=lanes,
+            dims=() if dims is None else tuple(dims),
             minimum_lanes=minimum_lanes,
             maximum_lanes=maximum_lanes,
         )
@@ -59,6 +62,8 @@ class TypePattern:
                 raise ValueError("type pattern element and elements disagree")
             elements = (self.element,)
         object.__setattr__(self, "elements", elements)
+        dims = tuple(self.dims)
+        object.__setattr__(self, "dims", dims)
         if len(elements) == 1:
             object.__setattr__(self, "element", elements[0])
         if self.kind not in {"scalar", "vector", "view"}:
@@ -75,18 +80,35 @@ class TypePattern:
         if self.kind == "scalar":
             if (
                 self.lanes is not None
+                or dims
                 or self.minimum_lanes is not None
                 or self.maximum_lanes is not None
             ):
-                raise ValueError("scalar type patterns cannot constrain lanes")
+                raise ValueError("scalar type patterns cannot constrain shape")
             return
         if self.kind == "view":
+            if (
+                self.lanes is not None
+                or dims
+                or self.minimum_lanes is not None
+                or self.maximum_lanes is not None
+            ):
+                raise ValueError("view type patterns cannot constrain shape")
+            return
+        if dims:
             if (
                 self.lanes is not None
                 or self.minimum_lanes is not None
                 or self.maximum_lanes is not None
             ):
-                raise ValueError("view type patterns cannot constrain lanes")
+                raise ValueError("vector type pattern cannot mix exact dims with lanes")
+            if len(dims) > 2:
+                raise ValueError(
+                    "generated vector type patterns support at most two dims"
+                )
+            for dim in dims:
+                if dim < 0:
+                    raise ValueError("vector static dims must be non-negative")
             return
         if self.lanes is not None:
             if self.minimum_lanes is not None or self.maximum_lanes is not None:
@@ -112,6 +134,7 @@ def Vector(
     element: ScalarElementPattern,
     *,
     lanes: int | None = None,
+    dims: Sequence[int] | None = None,
     minimum_lanes: CTypeExpression | None = None,
     maximum_lanes: CTypeExpression | None = None,
 ) -> TypePattern:
@@ -120,6 +143,7 @@ def Vector(
     return TypePattern.vector(
         element,
         lanes=lanes,
+        dims=dims,
         minimum_lanes=minimum_lanes,
         maximum_lanes=maximum_lanes,
     )

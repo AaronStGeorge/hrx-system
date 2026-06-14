@@ -19,7 +19,7 @@
 #include "loom/target/emit/llvmir/x86/intrinsics.h"
 #endif
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 14
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 15
 #define TEST_X86_64_DATALAYOUT_TEXT                                   \
   "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:" \
   "64-i128:128-f80:128-n8:16:32:64-S128\"\n"
@@ -679,6 +679,97 @@ static iree_status_t loom_llvmir_test_populate_global_constant(
       },
       &value));
   IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, value));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_test_populate_atomic_cmpxchg(
+    loom_llvmir_module_t* module) {
+  const loom_llvmir_target_env_t* target_env =
+      &kTestX86_64UnknownLinuxGnuTargetEnv;
+
+  loom_llvmir_type_id_t i1_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 1, &i1_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      module, target_env->address_spaces.generic, &ptr_type));
+
+  loom_llvmir_type_id_t cmpxchg_result_elements[] = {i32_type, i1_type};
+  loom_llvmir_type_id_t cmpxchg_result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_struct_type(
+      module, cmpxchg_result_elements, IREE_ARRAYSIZE(cmpxchg_result_elements),
+      &cmpxchg_result_type));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("cmpxchg_i32"),
+          .return_type = i32_type,
+          .linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t expected = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t replacement = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = ptr_type,
+                                             .name = IREE_SV("ptr"),
+                                         },
+                                         &pointer));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i32_type,
+                                             .name = IREE_SV("expected"),
+                                         },
+                                         &expected));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i32_type,
+                                             .name = IREE_SV("replacement"),
+                                         },
+                                         &replacement));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  loom_llvmir_value_id_t pair = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_cmpxchg(
+      entry,
+      &(loom_llvmir_cmpxchg_desc_t){
+          .result_name = IREE_SV("pair"),
+          .result_type = cmpxchg_result_type,
+          .value_type = i32_type,
+          .pointer = pointer,
+          .expected = expected,
+          .replacement = replacement,
+          .success_ordering = LOOM_LLVMIR_ATOMIC_ORDERING_ACQ_REL,
+          .failure_ordering = LOOM_LLVMIR_ATOMIC_ORDERING_ACQUIRE,
+          .sync_scope = IREE_SV("workgroup"),
+          .alignment = 4,
+          .is_weak = true,
+      },
+      &pair));
+  loom_llvmir_value_id_t old_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_extract_value(entry,
+                                      &(loom_llvmir_extract_value_desc_t){
+                                          .result_name = IREE_SV("old"),
+                                          .result_type = i32_type,
+                                          .aggregate = pair,
+                                          .index = 0,
+                                      },
+                                      &old_value));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, old_value));
   return iree_ok_status();
 }
 
@@ -1953,6 +2044,19 @@ static const char kGlobalConstantText[] =
     "  ret i32 %value\n"
     "}\n";
 
+static const char kAtomicCmpxchgText[] =
+    "source_filename = \"loom-cmpxchg\"\n" TEST_X86_64_DATALAYOUT_TEXT
+    "target triple = \"x86_64-unknown-linux-gnu\"\n"
+    "\n"
+    "define dso_local i32 @cmpxchg_i32(ptr %ptr, i32 %expected, i32 "
+    "%replacement) {\n"
+    "entry:\n"
+    "  %pair = cmpxchg weak ptr %ptr, i32 %expected, i32 %replacement "
+    "syncscope(\"workgroup\") acq_rel acquire, align 4\n"
+    "  %old = extractvalue { i32, i1 } %pair, 0\n"
+    "  ret i32 %old\n"
+    "}\n";
+
 static const char kCfgPhiText[] =
     "define i32 @select_i32(i1 %c, i32 %a, i32 %b) {\n"
     "entry:\n"
@@ -2125,6 +2229,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
       return IREE_SV("builtin_intrinsics");
     case LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS:
       return IREE_SV("x86_intrinsics");
+    case LOOM_LLVMIR_TEST_MODULE_ATOMIC_CMPXCHG:
+      return IREE_SV("atomic_cmpxchg");
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return IREE_SV("compare_select");
     case LOOM_LLVMIR_TEST_MODULE_CASTS:
@@ -2192,6 +2298,14 @@ static iree_status_t loom_llvmir_test_module_target_config(
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
+    case LOOM_LLVMIR_TEST_MODULE_ATOMIC_CMPXCHG: {
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_test_target_profile_x86_64_object();
+      loom_llvmir_target_profile_module_config(profile, IREE_SV("loom-cmpxchg"),
+                                               out_target_config);
+      *out_target_config_ptr = out_target_config;
+      return iree_ok_status();
+    }
 #if LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_SCENARIOS
     case LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS: {
       const loom_llvmir_target_profile_t* profile =
@@ -2233,6 +2347,8 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_stack_alloca(module);
     case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT:
       return loom_llvmir_test_populate_global_constant(module);
+    case LOOM_LLVMIR_TEST_MODULE_ATOMIC_CMPXCHG:
+      return loom_llvmir_test_populate_atomic_cmpxchg(module);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return loom_llvmir_test_populate_cfg_phi(module);
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
@@ -2302,6 +2418,9 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT:
       return iree_make_string_view(kGlobalConstantText,
                                    IREE_ARRAYSIZE(kGlobalConstantText) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_ATOMIC_CMPXCHG:
+      return iree_make_string_view(kAtomicCmpxchgText,
+                                   IREE_ARRAYSIZE(kAtomicCmpxchgText) - 1);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return iree_make_string_view(kCfgPhiText,
                                    IREE_ARRAYSIZE(kCfgPhiText) - 1);

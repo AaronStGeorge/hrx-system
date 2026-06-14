@@ -48,6 +48,8 @@ typedef uint16_t loom_low_lower_type_pattern_flags_t;
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0 ((uint16_t)1u << 3)
 // First shaped dimension must be inside [static_dim0_min, static_dim0_max].
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE ((uint16_t)1u << 4)
+// Second shaped dimension must be statically equal to static_dim1.
+#define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1 ((uint16_t)1u << 5)
 
 typedef struct loom_low_lower_type_pattern_t {
   // Type fields this pattern checks.
@@ -64,6 +66,8 @@ typedef struct loom_low_lower_type_pattern_t {
   int64_t static_dim0_min;
   // Inclusive maximum static dimension 0 when STATIC_DIM0_RANGE is set.
   int64_t static_dim0_max;
+  // Required static dimension 1 when the STATIC_DIM1 flag is set.
+  int64_t static_dim1;
 } loom_low_lower_type_pattern_t;
 
 typedef enum loom_low_lower_value_ref_kind_e {

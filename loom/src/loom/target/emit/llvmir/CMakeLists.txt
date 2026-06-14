@@ -38,6 +38,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::io::stream
+    loom::ops::atomic
     loom::util::stream
   PUBLIC
 )
@@ -98,6 +99,7 @@ loom_cc_library(
     loom::error::error_defs
     loom::ir
     loom::ir::facts
+    loom::ops::atomic
     loom::ops::llvmir
     loom::ops::low
     loom::target::arch::llvmir::descriptors::descriptors_ids

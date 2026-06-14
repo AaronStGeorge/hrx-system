@@ -124,6 +124,17 @@ static iree_status_t loom_llvmir_write_type(const loom_llvmir_module_t* module,
           loom_llvmir_write_type(module, type->element_type, stream));
       return loom_output_stream_write_char(stream, '>');
     }
+    case LOOM_LLVMIR_TYPE_STRUCT: {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{ "));
+      for (uint32_t i = 0; i < type->element_count; ++i) {
+        if (i > 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_llvmir_write_type(module, type->element_types[i], stream));
+      }
+      return loom_output_stream_write_cstring(stream, " }");
+    }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown LLVM type kind");
@@ -380,6 +391,62 @@ static const char* loom_llvmir_binop_spelling(loom_llvmir_binop_t op) {
       return "fdiv";
     case LOOM_LLVMIR_BINOP_FREM:
       return "frem";
+    default:
+      return NULL;
+  }
+}
+
+static const char* loom_llvmir_atomic_rmw_op_spelling(
+    loom_llvmir_atomic_rmw_op_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_ATOMIC_RMW_XCHG:
+      return "xchg";
+    case LOOM_LLVMIR_ATOMIC_RMW_ADD:
+      return "add";
+    case LOOM_LLVMIR_ATOMIC_RMW_SUB:
+      return "sub";
+    case LOOM_LLVMIR_ATOMIC_RMW_AND:
+      return "and";
+    case LOOM_LLVMIR_ATOMIC_RMW_OR:
+      return "or";
+    case LOOM_LLVMIR_ATOMIC_RMW_XOR:
+      return "xor";
+    case LOOM_LLVMIR_ATOMIC_RMW_MAX:
+      return "max";
+    case LOOM_LLVMIR_ATOMIC_RMW_MIN:
+      return "min";
+    case LOOM_LLVMIR_ATOMIC_RMW_UMAX:
+      return "umax";
+    case LOOM_LLVMIR_ATOMIC_RMW_UMIN:
+      return "umin";
+    case LOOM_LLVMIR_ATOMIC_RMW_FADD:
+      return "fadd";
+    case LOOM_LLVMIR_ATOMIC_RMW_FMAX:
+      return "fmax";
+    case LOOM_LLVMIR_ATOMIC_RMW_FMIN:
+      return "fmin";
+    case LOOM_LLVMIR_ATOMIC_RMW_FMAXIMUM:
+      return "fmaximum";
+    case LOOM_LLVMIR_ATOMIC_RMW_FMINIMUM:
+      return "fminimum";
+    default:
+      return NULL;
+  }
+}
+
+static const char* loom_llvmir_atomic_ordering_spelling(
+    loom_llvmir_atomic_ordering_t ordering) {
+  switch (ordering) {
+    case LOOM_LLVMIR_ATOMIC_ORDERING_MONOTONIC:
+      return "monotonic";
+    case LOOM_LLVMIR_ATOMIC_ORDERING_ACQUIRE:
+      return "acquire";
+    case LOOM_LLVMIR_ATOMIC_ORDERING_RELEASE:
+      return "release";
+    case LOOM_LLVMIR_ATOMIC_ORDERING_ACQ_REL:
+      return "acq_rel";
+    case LOOM_LLVMIR_ATOMIC_ORDERING_SEQ_CST:
+      return "seq_cst";
     default:
       return NULL;
   }
@@ -877,6 +944,100 @@ static iree_status_t loom_llvmir_write_instruction(
           instruction->store.metadata_attachments,
           instruction->store.metadata_attachment_count, ", ", stream);
     }
+    case LOOM_LLVMIR_INST_ATOMIC_RMW: {
+      const char* op_spelling =
+          loom_llvmir_atomic_rmw_op_spelling(instruction->atomic_rmw.op);
+      if (!op_spelling) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM atomicrmw op");
+      }
+      const char* ordering_spelling = loom_llvmir_atomic_ordering_spelling(
+          instruction->atomic_rmw.ordering);
+      if (!ordering_spelling) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM atomic ordering");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "atomicrmw "));
+      if (instruction->atomic_rmw.flags & LOOM_LLVMIR_MEMORY_VOLATILE) {
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(stream, "volatile "));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, op_spelling));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->atomic_rmw.pointer, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->atomic_rmw.value, stream));
+      if (!iree_string_view_is_empty(instruction->atomic_rmw.sync_scope)) {
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(stream, " syncscope("));
+        IREE_RETURN_IF_ERROR(loom_llvmir_write_escaped_string(
+            stream, instruction->atomic_rmw.sync_scope));
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ')'));
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, ordering_spelling));
+      if (instruction->atomic_rmw.alignment != 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            stream, ", align %u", instruction->atomic_rmw.alignment));
+      }
+      return iree_ok_status();
+    }
+    case LOOM_LLVMIR_INST_CMPXCHG: {
+      const char* success_ordering_spelling =
+          loom_llvmir_atomic_ordering_spelling(
+              instruction->cmpxchg.success_ordering);
+      const char* failure_ordering_spelling =
+          loom_llvmir_atomic_ordering_spelling(
+              instruction->cmpxchg.failure_ordering);
+      if (!success_ordering_spelling || !failure_ordering_spelling) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM atomic ordering");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "cmpxchg "));
+      if (instruction->cmpxchg.is_weak) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "weak "));
+      }
+      if (instruction->cmpxchg.flags & LOOM_LLVMIR_MEMORY_VOLATILE) {
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(stream, "volatile "));
+      }
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->cmpxchg.pointer, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->cmpxchg.expected, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->cmpxchg.replacement, stream));
+      if (!iree_string_view_is_empty(instruction->cmpxchg.sync_scope)) {
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(stream, " syncscope("));
+        IREE_RETURN_IF_ERROR(loom_llvmir_write_escaped_string(
+            stream, instruction->cmpxchg.sync_scope));
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ')'));
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, success_ordering_spelling));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, failure_ordering_spelling));
+      if (instruction->cmpxchg.alignment != 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            stream, ", align %u", instruction->cmpxchg.alignment));
+      }
+      return iree_ok_status();
+    }
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT: {
       IREE_RETURN_IF_ERROR(
           loom_llvmir_write_result_prefix(module, instruction, stream));
@@ -887,6 +1048,16 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
       return loom_llvmir_write_typed_value_ref(
           module, instruction->extract_element.index, stream);
+    }
+    case LOOM_LLVMIR_INST_EXTRACT_VALUE: {
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "extractvalue "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->extract_value.aggregate, stream));
+      return loom_output_stream_write_format(stream, ", %u",
+                                             instruction->extract_value.index);
     }
     case LOOM_LLVMIR_INST_INSERT_ELEMENT: {
       IREE_RETURN_IF_ERROR(

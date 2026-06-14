@@ -67,7 +67,12 @@ def _append_field(
 
 def value_ref_row(row: LowerValueRef) -> list[str]:
     fields: list[str] = []
-    _append_field(fields, "kind", lower_rule_spelling.VALUE_REF_KIND_C_NAMES[row.kind], always=True)
+    _append_field(
+        fields,
+        "kind",
+        lower_rule_spelling.VALUE_REF_KIND_C_NAMES[row.kind],
+        always=True,
+    )
     _append_field(fields, "index", row.index, always=True)
     _append_field(fields, "materializer_index", row.materializer_index)
     return fields
@@ -623,15 +628,23 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
     ]
     if type_pattern.kind == "vector":
         row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
-        row.extend(
-            [
-                ".rank = 1",
-            ]
-        )
-        if type_pattern.lanes is not None:
+        if type_pattern.dims:
+            row.extend(
+                [
+                    f".rank = {len(type_pattern.dims)}",
+                    f".static_dim0 = {lower_rule_spelling.c_expression(type_pattern.dims[0])}",
+                ]
+            )
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
+            if len(type_pattern.dims) >= 2:
+                row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1"
+                row.append(f".static_dim1 = {lower_rule_spelling.c_expression(type_pattern.dims[1])}")
+        elif type_pattern.lanes is not None:
+            row.append(".rank = 1")
             row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
             row.append(f".static_dim0 = {lower_rule_spelling.c_expression(type_pattern.lanes)}")
         elif type_pattern.minimum_lanes is not None and type_pattern.maximum_lanes is not None:
+            row.append(".rank = 1")
             row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE"
             row.extend(
                 [
@@ -640,5 +653,5 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
                 ]
             )
         else:
-            raise ValueError("generated vector type patterns require static lanes")
+            raise ValueError("generated vector type patterns require static shape")
     return row
