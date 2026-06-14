@@ -148,7 +148,7 @@ class AsanCachedBackendDevice {
   // Gets or creates a cached ASAN backend device using |backend|.
   iree_status_t Initialize(const BackendInfo& backend) {
     auto [cached_it, inserted] =
-        GetAsanBackendCache().try_emplace(backend.name);
+        GetAsanBackendCache().try_emplace(GetBackendDeviceCacheKey(backend));
     (void)inserted;
     AsanCachedBackendResources& cached = cached_it->second;
     if (!cached.device && !cached.unavailable) {

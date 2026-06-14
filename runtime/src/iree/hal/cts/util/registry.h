@@ -141,14 +141,30 @@ struct TestExpectedFailure {
 // Tests receive this via GetParam() and use it to create devices and load
 // executables.
 struct BackendInfo {
-  std::string name;                            // Human-readable backend name.
-  DeviceFactory factory;                       // Creates driver + device.
-  const char* executable_format = nullptr;     // E.g., "vmvx-bytecode-fb".
-  ExecutableDataFn executable_data = nullptr;  // Compiled executable lookup.
+  // Human-readable backend name used as the gtest parameter suffix.
+  std::string name;
+  // Creates driver + device.
+  DeviceFactory factory;
+  // E.g., "vmvx-bytecode-fb".
+  const char* executable_format = nullptr;
+  // Compiled executable lookup.
+  ExecutableDataFn executable_data = nullptr;
   RecordingMode recording_mode = RecordingMode::kDirect;
   std::vector<TestUnsupported> unsupported_tests;
   std::vector<TestExpectedFailure> expected_failures;
+  // Stable key for caches that own driver/device resources.
+  //
+  // Executable tests use |name| to distinguish one executable format from
+  // another while still running on the same physical backend. Device caches
+  // should use this key so format parameterization does not multiply expensive
+  // device state.
+  std::string device_cache_key;
 };
+
+// Returns the stable cache key for driver/device resources owned by |info|.
+inline const std::string& GetBackendDeviceCacheKey(const BackendInfo& info) {
+  return info.device_cache_key.empty() ? info.name : info.device_cache_key;
+}
 
 // Returns human-readable test suffix from BackendInfo.
 // Used as the generator for INSTANTIATE_TEST_SUITE_P.
@@ -440,6 +456,7 @@ inline std::string GetBackendName(
             [](const ::iree::hal::cts::BackendConfig& cfg) {                  \
               for (const auto& fmt : cfg.executable_formats) {                \
                 auto info = cfg.info;                                         \
+                info.device_cache_key = cfg.name;                             \
                 info.name = std::string(cfg.name) + "_" + fmt.name;           \
                 info.executable_format = fmt.format;                          \
                 info.executable_data = fmt.data_fn;                           \
@@ -502,6 +519,7 @@ inline std::string GetBackendName(
             [](const ::iree::hal::cts::BackendConfig& cfg) {                  \
               for (const auto& fmt : cfg.executable_formats) {                \
                 auto info = cfg.info;                                         \
+                info.device_cache_key = cfg.name;                             \
                 info.name = std::string(cfg.name) + "_" + fmt.name;           \
                 info.executable_format = fmt.format;                          \
                 info.executable_data = fmt.data_fn;                           \
@@ -531,6 +549,7 @@ inline std::string GetBackendName(
             [](const ::iree::hal::cts::BackendConfig& cfg) {                  \
               for (const auto& fmt : cfg.executable_formats) {                \
                 auto info = cfg.info;                                         \
+                info.device_cache_key = cfg.name;                             \
                 info.name = std::string(cfg.name) + "_" + fmt.name;           \
                 info.executable_format = fmt.format;                          \
                 info.executable_data = fmt.data_fn;                           \

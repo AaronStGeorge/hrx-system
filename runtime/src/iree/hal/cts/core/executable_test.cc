@@ -102,12 +102,10 @@ TEST_P(ExecutableTest, ExportParametersNoCapacity) {
     GTEST_SKIP() << "parameter reflection not available";
   }
 
-  iree_hal_executable_function_parameter_t parameters[1];
+  iree_hal_executable_function_parameter_t parameter;
   IREE_EXPECT_OK(iree_hal_executable_function_parameters(
-      executable_, iree_hal_executable_function_from_index(0), /*capacity=*/1,
-      parameters));
-  EXPECT_EQ(parameters[0].type,
-            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING);
+      executable_, iree_hal_executable_function_from_index(0), /*capacity=*/0,
+      &parameter));
 }
 
 TEST_P(ExecutableTest, ExportParameters) {

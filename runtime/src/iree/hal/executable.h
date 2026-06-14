@@ -233,8 +233,8 @@ IREE_API_EXPORT iree_status_t iree_hal_executable_function_info(
     iree_hal_executable_function_info_t* out_info);
 
 // Populates the |out_parameters| array with up to |capacity| parameters.
-// Returns the total number populated up to |capacity|. Callers should allocate
-// the parameter array based on the parameter_count in the function info.
+// Callers should allocate the parameter array based on the parameter_count in
+// the function info.
 IREE_API_EXPORT iree_status_t iree_hal_executable_function_parameters(
     iree_hal_executable_t* executable, iree_hal_executable_function_t function,
     iree_host_size_t capacity,

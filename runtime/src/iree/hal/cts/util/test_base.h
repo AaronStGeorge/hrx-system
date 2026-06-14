@@ -346,7 +346,7 @@ class CtsTestBase : public BaseType {
     // create/destroy devices per test (cloud runners have reliability issues
     // with device churn). CPU backends also benefit from avoiding redundant
     // creation overhead.
-    auto& cached = GetBackendCache()[backend.name];
+    auto& cached = GetBackendCache()[GetBackendDeviceCacheKey(backend)];
     if (!cached.device && !cached.unavailable) {
       iree_hal_driver_t* driver = nullptr;
       iree_hal_device_t* device = nullptr;
