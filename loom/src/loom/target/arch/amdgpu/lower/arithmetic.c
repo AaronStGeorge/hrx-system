@@ -546,11 +546,37 @@ static bool loom_amdgpu_source_value_has_exact_f32_immediate(
 }
 
 typedef struct loom_amdgpu_fmaf_literal_operand_form_t {
+  // Selected f32 FMA literal operand form.
   iree_string_view_t operand_form;
+  // Source operand index carrying the exact f32 literal.
   uint32_t source_operand_index;
+  // Diagnostic role for the literal operand.
   iree_string_view_t literal_role;
+  // Descriptor key implementing the literal operand form.
   iree_string_view_t descriptor_key;
 } loom_amdgpu_fmaf_literal_operand_form_t;
+
+static const loom_amdgpu_fmaf_literal_operand_form_t
+    kAmdgpuFmafLiteralOperandForms[] = {
+        {
+            .operand_form = IREE_SVL("fmaak"),
+            .source_operand_index = 2,
+            .literal_role = IREE_SVL("addend"),
+            .descriptor_key = IREE_SVL("amdgpu.v_fmaak_f32"),
+        },
+        {
+            .operand_form = IREE_SVL("fmamk"),
+            .source_operand_index = 0,
+            .literal_role = IREE_SVL("multiply_lhs"),
+            .descriptor_key = IREE_SVL("amdgpu.v_fmamk_f32"),
+        },
+        {
+            .operand_form = IREE_SVL("fmamk"),
+            .source_operand_index = 1,
+            .literal_role = IREE_SVL("multiply_rhs"),
+            .descriptor_key = IREE_SVL("amdgpu.v_fmamk_f32"),
+        },
+};
 
 static bool loom_amdgpu_fmaf_literal_operand_form(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -577,35 +603,16 @@ static bool loom_amdgpu_fmaf_literal_operand_form(
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_fact_table_t* fact_table =
       loom_low_lower_context_fact_table(context);
-  if (loom_amdgpu_source_value_has_exact_f32_immediate(module, fact_table,
-                                                       sources[2])) {
-    *out_form = (loom_amdgpu_fmaf_literal_operand_form_t){
-        .operand_form = IREE_SV("fmaak"),
-        .source_operand_index = 2,
-        .literal_role = IREE_SV("addend"),
-        .descriptor_key = IREE_SV("amdgpu.v_fmaak_f32"),
-    };
-    return true;
-  }
-  if (loom_amdgpu_source_value_has_exact_f32_immediate(module, fact_table,
-                                                       sources[0])) {
-    *out_form = (loom_amdgpu_fmaf_literal_operand_form_t){
-        .operand_form = IREE_SV("fmamk"),
-        .source_operand_index = 0,
-        .literal_role = IREE_SV("multiply_lhs"),
-        .descriptor_key = IREE_SV("amdgpu.v_fmamk_f32"),
-    };
-    return true;
-  }
-  if (loom_amdgpu_source_value_has_exact_f32_immediate(module, fact_table,
-                                                       sources[1])) {
-    *out_form = (loom_amdgpu_fmaf_literal_operand_form_t){
-        .operand_form = IREE_SV("fmamk"),
-        .source_operand_index = 1,
-        .literal_role = IREE_SV("multiply_rhs"),
-        .descriptor_key = IREE_SV("amdgpu.v_fmamk_f32"),
-    };
-    return true;
+  for (uint32_t i = 0; i < IREE_ARRAYSIZE(kAmdgpuFmafLiteralOperandForms);
+       ++i) {
+    const loom_amdgpu_fmaf_literal_operand_form_t* form =
+        &kAmdgpuFmafLiteralOperandForms[i];
+    IREE_ASSERT_LT(form->source_operand_index, IREE_ARRAYSIZE(sources));
+    if (loom_amdgpu_source_value_has_exact_f32_immediate(
+            module, fact_table, sources[form->source_operand_index])) {
+      *out_form = *form;
+      return true;
+    }
   }
   return false;
 }
