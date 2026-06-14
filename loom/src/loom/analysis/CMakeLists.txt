@@ -239,6 +239,7 @@ loom_cc_library(
     loom::error::emitter
     loom::error::error_defs
     loom::ir
+    loom::ops::config
     loom::ops::type_registry
     loom::ops::vector
     loom::util::fact_table

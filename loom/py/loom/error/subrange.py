@@ -239,6 +239,32 @@ ERR_SUBRANGE_017 = ErrorDef(
     fix_hint="Use rank-1 vector offsets for gather, scatter, and vector atomics",
 )
 
+# ERR_SUBRANGE_018: Vector memory config-declared upper bound is not proven.
+ERR_SUBRANGE_018 = ErrorDef(
+    domain=ErrorDomain.SUBRANGE,
+    code=18,
+    severity=Severity.ERROR,
+    summary="Vector memory config-declared upper bound is not proven.",
+    message=(
+        "{op_name} footprint upper bound is not proven on view axis "
+        "{view_axis} (vector axis {vector_axis}); view_bound comes from "
+        "config.decl @{config_key}, whose where predicates do not prove "
+        "origin {origin} remains in bounds"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("view_axis", ParamKind.I64),
+        ErrorParam("vector_axis", ParamKind.I64),
+        ErrorParam("origin", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Strengthen config.decl @{config_key} where predicates or add a "
+        "launch/view relation proving {constraint_key}"
+    ),
+)
+
 ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_001,
     ERR_SUBRANGE_002,
@@ -255,4 +281,5 @@ ALL_SUBRANGE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SUBRANGE_015,
     ERR_SUBRANGE_016,
     ERR_SUBRANGE_017,
+    ERR_SUBRANGE_018,
 )

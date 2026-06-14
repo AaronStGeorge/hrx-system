@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/ops/config/ops.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
@@ -147,6 +148,54 @@ static bool loom_vector_memory_footprint_origin_value(
   return false;
 }
 
+static bool loom_vector_memory_footprint_lookup_config_decl_bound(
+    const loom_vector_memory_footprint_state_t* state,
+    const loom_vector_memory_footprint_access_t* access, uint8_t view_axis,
+    iree_string_view_t* out_config_key) {
+  *out_config_key = iree_string_view_empty();
+  if (access->view == LOOM_VALUE_ID_INVALID ||
+      access->view >= state->module->values.count) {
+    return false;
+  }
+
+  loom_type_t view_type = loom_module_value_type(state->module, access->view);
+  if (view_axis >= loom_type_rank(view_type) ||
+      !loom_type_dim_is_dynamic_at(view_type, view_axis)) {
+    return false;
+  }
+  loom_value_id_t bound_id = loom_type_dim_value_id_at(view_type, view_axis);
+  if (bound_id == LOOM_VALUE_ID_INVALID ||
+      bound_id >= state->module->values.count) {
+    return false;
+  }
+
+  const loom_value_t* bound_value = loom_module_value(state->module, bound_id);
+  if (loom_value_is_block_arg(bound_value)) {
+    return false;
+  }
+  const loom_op_t* bound_op = loom_value_def_op(bound_value);
+  if (!bound_op || !loom_config_get_isa(bound_op)) {
+    return false;
+  }
+
+  loom_symbol_ref_t config_ref = loom_config_get_config(bound_op);
+  if (!loom_symbol_ref_is_valid(config_ref) || config_ref.module_id != 0 ||
+      config_ref.symbol_id >= state->module->symbols.count) {
+    return false;
+  }
+  const loom_symbol_t* config_symbol =
+      &state->module->symbols.entries[config_ref.symbol_id];
+  if (!loom_symbol_implements(config_symbol, LOOM_SYMBOL_INTERFACE_CONFIG) ||
+      !config_symbol->defining_op ||
+      !loom_config_decl_isa(config_symbol->defining_op) ||
+      config_symbol->name_id >= state->module->strings.count) {
+    return false;
+  }
+
+  *out_config_key = state->module->strings.entries[config_symbol->name_id];
+  return true;
+}
+
 static iree_status_t loom_vector_memory_footprint_fail_axis(
     loom_vector_memory_footprint_state_t* state,
     const loom_vector_memory_footprint_access_t* access, uint8_t view_axis,
@@ -162,6 +211,29 @@ static iree_status_t loom_vector_memory_footprint_fail_axis(
   ++state->result->error_count;
   iree_string_view_t op_name =
       loom_vector_memory_footprint_op_name(state->module, access->op);
+  if (error == LOOM_ERR_SUBRANGE_010 || error == LOOM_ERR_SUBRANGE_011) {
+    iree_string_view_t config_key = iree_string_view_empty();
+    if (loom_vector_memory_footprint_lookup_config_decl_bound(
+            state, access, view_axis, &config_key)) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(op_name),
+          loom_param_i64(view_axis),
+          loom_param_i64(vector_axis),
+          loom_param_string(origin),
+          loom_param_string(config_key),
+          loom_param_string(
+              IREE_SV("config_decl.where.vector_footprint_upper_bound")),
+      };
+      loom_diagnostic_emission_t emission = {
+          .op = access->op,
+          .error = LOOM_ERR_SUBRANGE_018,
+          .params = params,
+          .param_count = IREE_ARRAYSIZE(params),
+      };
+      return iree_diagnostic_emit(state->options->emitter, &emission);
+    }
+  }
+
   loom_diagnostic_param_t params[] = {
       loom_param_string(op_name),
       loom_param_i64(view_axis),
