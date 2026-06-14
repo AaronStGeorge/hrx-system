@@ -347,6 +347,7 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.ENUM_ORDINAL,
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
     ):
         _append_field(fields, "source_attr_index", row.source_attr_index, always=True)
@@ -363,6 +364,7 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
         )
     if row.kind in (
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
     ):
         _append_field(
@@ -371,7 +373,10 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
             row.source_element_count,
             always=True,
         )
-    if row.kind == LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS:
+    if row.kind in (
+        LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
+        LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
+    ):
         _append_field(
             fields,
             "source_element_bit_width",

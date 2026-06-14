@@ -434,6 +434,71 @@ iree_status_t loom_scalar_shli_facts(loom_fact_context_t* context,
 BINARY_FACTS(loom_scalar_shrsi_facts, loom_value_facts_shrsi)
 BINARY_FACTS(loom_scalar_shrui_facts, loom_value_facts_shrui)
 
+static bool loom_scalar_integer_bitwidth(loom_type_t type,
+                                         int32_t* out_bitwidth) {
+  if (!loom_type_is_scalar(type)) return false;
+  loom_scalar_type_t element_type = loom_type_element_type(type);
+  if (!loom_scalar_type_is_integer(element_type)) return false;
+  int32_t bitwidth = loom_scalar_type_bitwidth(element_type);
+  if (bitwidth <= 0 || bitwidth > 64) return false;
+  *out_bitwidth = bitwidth;
+  return true;
+}
+
+static iree_status_t loom_scalar_bitfield_extract_facts(
+    const loom_module_t* module, const loom_value_facts_t* operand_facts,
+    loom_value_id_t source_id, loom_value_id_t result_id, int64_t offset,
+    int64_t width, bool signed_extract, loom_value_facts_t* result_facts) {
+  int32_t source_width = 0;
+  int32_t result_width = 0;
+  if (!loom_scalar_integer_bitwidth(loom_module_value_type(module, source_id),
+                                    &source_width) ||
+      !loom_scalar_integer_bitwidth(loom_module_value_type(module, result_id),
+                                    &result_width) ||
+      result_width < width) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  bool valid =
+      signed_extract
+          ? loom_value_facts_extract_signed_bitfield(
+                operand_facts[0], source_width, offset, width, &result_facts[0])
+          : loom_value_facts_extract_unsigned_bitfield(operand_facts[0],
+                                                       source_width, offset,
+                                                       width, &result_facts[0]);
+  if (!valid) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  loom_value_facts_propagate_unary_distribution(operand_facts[0],
+                                                &result_facts[0]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_scalar_bitfield_extractu_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  return loom_scalar_bitfield_extract_facts(
+      module, operand_facts, loom_scalar_bitfield_extractu_source(op),
+      loom_scalar_bitfield_extractu_result(op),
+      loom_scalar_bitfield_extractu_offset(op),
+      loom_scalar_bitfield_extractu_width(op), /*signed_extract=*/false,
+      result_facts);
+}
+
+iree_status_t loom_scalar_bitfield_extracts_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  return loom_scalar_bitfield_extract_facts(
+      module, operand_facts, loom_scalar_bitfield_extracts_source(op),
+      loom_scalar_bitfield_extracts_result(op),
+      loom_scalar_bitfield_extracts_offset(op),
+      loom_scalar_bitfield_extracts_width(op), /*signed_extract=*/true,
+      result_facts);
+}
+
 // Rotates: no transfer function yet — exact-only fact inference.
 iree_status_t loom_scalar_rotli_facts(loom_fact_context_t* context,
                                       const loom_module_t* module,

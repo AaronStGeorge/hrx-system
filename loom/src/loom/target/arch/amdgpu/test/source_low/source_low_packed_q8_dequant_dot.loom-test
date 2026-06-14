@@ -165,16 +165,10 @@ low.func.def target(@target) abi(hal_kernel) @q8_packed_word_two_rhs_dequant_dot
 
 amdgpu.target<gfx1100> @target
 func.def target(@target) @q8_packed_word_scalar_extract_dequant_dot4(%packed: i32, %scale: f16, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
-  %shift8 = scalar.constant 8 : i32
-  %shift16 = scalar.constant 16 : i32
-  %shift24 = scalar.constant 24 : i32
-  %q0_shifted = scalar.shli %packed, %shift24 : i32
-  %q1_shifted = scalar.shli %packed, %shift16 : i32
-  %q2_shifted = scalar.shli %packed, %shift8 : i32
-  %q0_i32 = scalar.shrsi %q0_shifted, %shift24 : i32
-  %q1_i32 = scalar.shrsi %q1_shifted, %shift24 : i32
-  %q2_i32 = scalar.shrsi %q2_shifted, %shift24 : i32
-  %q3_i32 = scalar.shrsi %packed, %shift24 : i32
+  %q0_i32 = scalar.bitfield.extracts %packed {offset = 0, width = 8} : i32 -> i32
+  %q1_i32 = scalar.bitfield.extracts %packed {offset = 8, width = 8} : i32 -> i32
+  %q2_i32 = scalar.bitfield.extracts %packed {offset = 16, width = 8} : i32 -> i32
+  %q3_i32 = scalar.bitfield.extracts %packed {offset = 24, width = 8} : i32 -> i32
   %q0_f32 = scalar.sitofp %q0_i32 : i32 to f32
   %q1_f32 = scalar.sitofp %q1_i32 : i32 to f32
   %q2_f32 = scalar.sitofp %q2_i32 : i32 to f32
@@ -191,16 +185,10 @@ func.def target(@target) @q8_packed_word_scalar_extract_dequant_dot4(%packed: i3
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @q8_packed_word_scalar_extract_dequant_dot4(%packed: reg<amdgpu.sgpr>, %scale: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
-  %shift8 = s_mov_b32 8
-  %shift16 = s_mov_b32 16
-  %shift24 = s_mov_b32 24
-  %q0_shifted = s_lshl_b32 %packed, %shift24
-  %q1_shifted = s_lshl_b32 %packed, %shift16
-  %q2_shifted = s_lshl_b32 %packed, %shift8
-  %q0_i32 = s_ashr_i32 %q0_shifted, %shift24
-  %q1_i32 = s_ashr_i32 %q1_shifted, %shift24
-  %q2_i32 = s_ashr_i32 %q2_shifted, %shift24
-  %q3_i32 = s_ashr_i32 %packed, %shift24
+  %q0_i32 = s_bfe_i32_lit %packed, 2048
+  %q1_i32 = s_bfe_i32_lit %packed, 2056
+  %q2_i32 = s_bfe_i32_lit %packed, 2064
+  %q3_i32 = s_bfe_i32_lit %packed, 2072
   %q0_f32 = v_cvt_f32_i32 %q0_i32
   %q1_f32 = v_cvt_f32_i32 %q1_i32
   %q2_f32 = v_cvt_f32_i32 %q2_i32
@@ -209,13 +197,13 @@ low.func.def target(@target) abi(hal_kernel) @q8_packed_word_scalar_extract_dequ
   %s1 = v_fma_mix_f32_f16lo_f32_f32_src2_lit %scale, %q1_f32, 0
   %s2 = v_fma_mix_f32_f16lo_f32_f32_src2_lit %scale, %q2_f32, 0
   %s3 = v_fma_mix_f32_f16lo_f32_f32_src2_lit %scale, %q3_f32, 0
-  %51 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %52 = v_fma_f32 %s0, %51, %acc
-  %54 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %55 = v_fmac_f32 %52, %s1, %54
-  %57 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %58 = v_fmac_f32 %55, %s2, %57
-  %60 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %dot = v_fmac_f32 %58, %s3, %60
+  %39 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %40 = v_fma_f32 %s0, %39, %acc
+  %42 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %43 = v_fmac_f32 %40, %s1, %42
+  %45 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = v_fmac_f32 %43, %s2, %45
+  %48 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %dot = v_fmac_f32 %46, %s3, %48
   return %dot
 }

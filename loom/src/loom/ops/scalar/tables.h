@@ -118,6 +118,8 @@ extern const loom_op_vtable_t loom_scalar_rotri_vtable;
 extern const loom_op_vtable_t loom_scalar_ctlzi_vtable;
 extern const loom_op_vtable_t loom_scalar_cttzi_vtable;
 extern const loom_op_vtable_t loom_scalar_ctpopi_vtable;
+extern const loom_op_vtable_t loom_scalar_bitfield_extractu_vtable;
+extern const loom_op_vtable_t loom_scalar_bitfield_extracts_vtable;
 extern const loom_op_vtable_t loom_scalar_assume_vtable;
 
 #ifdef __cplusplus

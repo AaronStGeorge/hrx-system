@@ -234,6 +234,9 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   LOOM_LOW_LOWER_ATTR_COPY_ENUM_ORDINAL = 18,
   // Emits the source op instance flag bitmask as an i64 packet attribute.
   LOOM_LOW_LOWER_ATTR_COPY_SOURCE_OP_INSTANCE_FLAGS = 19,
+  // Packs contiguous i64 source op attributes into an i64 attribute, with the
+  // first source attribute occupying the least-significant bitfield.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ATTRS_PACK_CONSECUTIVE = 20,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -245,8 +248,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint16_t source_attr_index;
   // First source i64_array element ordinal consumed by array projection rows.
   uint16_t source_element_index;
-  // Number of source i64_array elements consumed by PACK_ELEMENTS rows or byte
-  // stride used by I64_ARRAY_LANE_BYTE rows.
+  // Number of source elements consumed by PACK_ELEMENTS rows or byte stride
+  // used by I64_ARRAY_LANE_BYTE rows.
   uint16_t source_element_count;
   // Bit width of each packed source element for PACK_ELEMENTS rows.
   uint8_t source_element_bit_width;

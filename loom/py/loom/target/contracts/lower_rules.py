@@ -82,6 +82,7 @@ class LowerAttrCopyKind(Enum):
     ENUM_ORDINAL = "enum_ordinal"
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
+    I64_ATTRS_PACK_CONSECUTIVE = "i64_attrs_pack_consecutive"
     I64_LITERAL = "i64_literal"
     VALUE_EXACT_I64 = "value_exact_i64"
     VALUE_EXACT_I64_NEGATE = "value_exact_i64_negate"
@@ -1381,6 +1382,19 @@ class _LowerRuleSetCompiler:
                 target_name=target_name,
                 source_attr_index=source_attr_index,
                 source_element_index=project.element,
+                source_element_count=project.count,
+                source_element_bit_width=project.bit_width,
+                target_bit_offset=project.target_bit_offset,
+            )
+        if project.kind == AttrProjectKind.I64_ATTRS_PACK_CONSECUTIVE:
+            if project.count is None or project.bit_width is None:
+                raise ValueError(
+                    f"{source_op.name}: i64-attrs pack projection needs payload"
+                )
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
                 source_element_count=project.count,
                 source_element_bit_width=project.bit_width,
                 target_bit_offset=project.target_bit_offset,

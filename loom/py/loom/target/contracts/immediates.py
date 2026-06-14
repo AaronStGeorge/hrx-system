@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Self
 
-from loom.dsl import ATTR_TYPE_ENUM, ATTR_TYPE_I64_ARRAY, Op
+from loom.dsl import ATTR_TYPE_ENUM, ATTR_TYPE_I64, ATTR_TYPE_I64_ARRAY, Op
 from loom.target.contracts.descriptors import _require_immediate
 from loom.target.contracts.source import _require_attr, _require_value
 from loom.target.low_descriptors import Descriptor, ImmediateKind
@@ -27,6 +27,7 @@ class AttrProjectKind(Enum):
     ENUM_ORDINAL = "enum_ordinal"
     I64_ARRAY_ELEMENT = "i64_array_element"
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
+    I64_ATTRS_PACK_CONSECUTIVE = "i64_attrs_pack_consecutive"
     EXPAND_LANE_I64_ARRAY_TO_BYTE_LANES = "expand_lane_i64_array_to_byte_lanes"
 
 
@@ -119,6 +120,23 @@ class AttrProject:
         )
 
     @classmethod
+    def i64_attrs_pack_consecutive(
+        cls,
+        source_attr: str,
+        *,
+        count: int,
+        bit_width: int,
+        target_bit_offset: int = 0,
+    ) -> Self:
+        return cls(
+            kind=AttrProjectKind.I64_ATTRS_PACK_CONSECUTIVE,
+            source_attr=source_attr,
+            count=count,
+            bit_width=bit_width,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
     def expand_lane_i64_array_to_byte_lanes(
         cls,
         *,
@@ -148,6 +166,12 @@ class AttrProject:
             raise ValueError(
                 f"{self.kind.value} target bit offset must be non-negative"
             )
+        if self.count is not None and self.bit_width is not None:
+            packed_bit_count = self.count * self.bit_width
+            if packed_bit_count + self.target_bit_offset > 63:
+                raise ValueError(
+                    f"{self.kind.value} packed bit count must fit in signed i64"
+                )
         if self.source_lane_count is not None and self.source_lane_count < 0:
             raise ValueError(
                 f"{self.kind.value} source lane count must be non-negative"
@@ -186,6 +210,32 @@ class AttrProject:
                     f"{source_op.name}: {subject} descriptor immediate "
                     f"'{bound_immediate_name}' must be an enum immediate"
                 )
+            return
+        if self.kind == AttrProjectKind.I64_ATTRS_PACK_CONSECUTIVE:
+            if bound_immediate_name is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} must bind one descriptor immediate"
+                )
+            _require_immediate(descriptor, bound_immediate_name, subject)
+            if self.count is None or self.bit_width is None:
+                raise ValueError(f"{source_op.name}: {subject} needs count/bit_width")
+            if attr.attr_type != ATTR_TYPE_I64:
+                raise ValueError(
+                    f"{source_op.name}: {subject} source attr '{self.source_attr}' "
+                    "must be an i64 attr"
+                )
+            attr_index = source_op.attrs.index(attr)
+            if attr_index + self.count > len(source_op.attrs):
+                raise ValueError(
+                    f"{source_op.name}: {subject} source attr '{self.source_attr}' "
+                    "does not have enough following attrs"
+                )
+            for element_attr in source_op.attrs[attr_index : attr_index + self.count]:
+                if element_attr.attr_type != ATTR_TYPE_I64:
+                    raise ValueError(
+                        f"{source_op.name}: {subject} source attr "
+                        f"'{element_attr.name}' must be an i64 attr"
+                    )
             return
         if attr.attr_type != ATTR_TYPE_I64_ARRAY:
             raise ValueError(

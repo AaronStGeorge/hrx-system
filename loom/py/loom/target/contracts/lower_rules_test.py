@@ -11,11 +11,13 @@ from dataclasses import replace
 
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
+from loom.dialect.scalar import bitwise as scalar_bitwise
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
 from loom.target.contracts import (
+    AttrProject,
     ContractFragment,
     DescriptorRule,
     DirectDescriptorCase,
@@ -363,6 +365,70 @@ def test_compile_lower_rule_set_compiles_const_immediate_emit() -> None:
     assert len(compiled.attr_copies) == 1
     assert compiled.attr_copies[0].kind == LowerAttrCopyKind.I64_LITERAL
     assert compiled.attr_copies[0].literal_i64 == 0
+
+
+def test_compile_lower_rule_set_compiles_consecutive_i64_attr_pack() -> None:
+    table = ContractFragment(
+        name="test.attr-pack",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_bitwise.scalar_bitfield_extractu,
+                descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                guards=(Guard.value_type("result", Scalar("i32")),),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                        results={"dst": ValueRef.result("result")},
+                        immediates={
+                            "i32_value": AttrProject.i64_attrs_pack_consecutive(
+                                "offset",
+                                count=2,
+                                bit_width=8,
+                            )
+                        },
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert len(compiled.attr_copies) == 1
+    attr_copy = compiled.attr_copies[0]
+    assert attr_copy.kind == LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE
+    assert attr_copy.source_attr_index == 0
+    assert attr_copy.source_element_count == 2
+    assert attr_copy.source_element_bit_width == 8
+
+    _expect_value_error(
+        lambda: ContractFragment(
+            name="test.bad-attr-pack",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=scalar_bitwise.scalar_shli,
+                    descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                    guards=(Guard.value_type("result", Scalar("i32")),),
+                    emit=(
+                        EmitDescriptorOp(
+                            descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                            results={"dst": ValueRef.result("result")},
+                            immediates={
+                                "i32_value": AttrProject.i64_attrs_pack_consecutive(
+                                    "overflow",
+                                    count=1,
+                                    bit_width=8,
+                                )
+                            },
+                        ),
+                    ),
+                )
+            ],
+        ),
+        "source attr 'overflow' must be an i64 attr",
+    )
 
 
 def test_compile_lower_rule_set_validates_enum_immediate_literal() -> None:

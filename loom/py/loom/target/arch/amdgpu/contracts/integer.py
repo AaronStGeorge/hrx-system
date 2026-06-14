@@ -21,6 +21,7 @@ from loom.target.arch.amdgpu.contracts.materializers import (
 )
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
+    AttrProject,
     ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
@@ -57,6 +58,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.s_lshl_b32",
     "amdgpu.s_lshr_b32",
     "amdgpu.s_ashr_i32",
+    "amdgpu.s_bfe_i32.lit",
+    "amdgpu.s_bfe_u32.lit",
     "amdgpu.v_mov_b32",
     "amdgpu.v_add_u32",
     "amdgpu.v_sub_u32",
@@ -79,6 +82,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_lshrrev_b32.lit",
     "amdgpu.v_ashrrev_i32",
     "amdgpu.v_ashrrev_i32.lit",
+    "amdgpu.v_bfe_i32.offset_width_inline",
+    "amdgpu.v_bfe_u32.offset_width_inline",
 )
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
@@ -579,6 +584,72 @@ def _i32_shift_rules(
             descriptor_rhs="value",
             source_lhs="rhs",
             source_rhs="lhs",
+        ),
+    )
+
+
+def _i32_bitfield_extract_rules(
+    source_op: Op,
+    *,
+    sgpr_descriptor_key: str,
+    vgpr_descriptor_key: str,
+) -> tuple[DescriptorRule, ...]:
+    sgpr_descriptor = _descriptor(sgpr_descriptor_key)
+    vgpr_descriptor = _descriptor(vgpr_descriptor_key)
+    return (
+        DescriptorRule(
+            source_op=source_op,
+            descriptor=sgpr_descriptor,
+            guards=(
+                Guard.value_type("source", _I32),
+                Guard.value_type("result", _I32),
+                Guard.low_value_register_class("source", "amdgpu.sgpr"),
+                Guard.low_value_register_class("result", "amdgpu.sgpr"),
+                Guard.descriptor_available(sgpr_descriptor),
+            ),
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=sgpr_descriptor,
+                    operands={"value": ValueRef.operand("source")},
+                    results={"dst": _RESULT},
+                    immediates={
+                        "imm32": AttrProject.i64_attrs_pack_consecutive(
+                            "offset",
+                            count=2,
+                            bit_width=8,
+                        )
+                    },
+                    form=DescriptorEmitForm.OP,
+                ),
+            ),
+        ),
+        DescriptorRule(
+            source_op=source_op,
+            descriptor=vgpr_descriptor,
+            guards=(
+                Guard.value_type("source", _I32),
+                Guard.value_type("result", _I32),
+                Guard.low_value_register_class("result", "amdgpu.vgpr"),
+                Guard.value_materializable("source", I32_VGPR_MATERIALIZER.name),
+                Guard.descriptor_available(vgpr_descriptor),
+            ),
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=vgpr_descriptor,
+                    operands={
+                        "value": _materialized_operand(
+                            "source",
+                            I32_VGPR_MATERIALIZER,
+                        )
+                    },
+                    results={"dst": _RESULT},
+                    immediates={
+                        "offset": AttrProject.direct("offset"),
+                        "width": AttrProject.direct("width"),
+                    },
+                    form=DescriptorEmitForm.OP,
+                ),
+            ),
         ),
     )
 
@@ -1441,6 +1512,20 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.s_lshr_b32",
             "amdgpu.v_lshrrev_b32",
             "amdgpu.v_lshrrev_b32.lit",
+        )
+    )
+    rules.extend(
+        _i32_bitfield_extract_rules(
+            scalar_bitwise.scalar_bitfield_extracts,
+            sgpr_descriptor_key="amdgpu.s_bfe_i32.lit",
+            vgpr_descriptor_key="amdgpu.v_bfe_i32.offset_width_inline",
+        )
+    )
+    rules.extend(
+        _i32_bitfield_extract_rules(
+            scalar_bitwise.scalar_bitfield_extractu,
+            sgpr_descriptor_key="amdgpu.s_bfe_u32.lit",
+            vgpr_descriptor_key="amdgpu.v_bfe_u32.offset_width_inline",
         )
     )
     rules.extend(

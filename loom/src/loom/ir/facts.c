@@ -143,6 +143,122 @@ loom_value_facts_t loom_value_facts_clamp_domain(loom_value_facts_t facts,
 }
 
 //===----------------------------------------------------------------------===//
+// Raw integer bit helpers
+//===----------------------------------------------------------------------===//
+
+bool loom_value_facts_as_exact_raw_bits(loom_value_facts_t facts,
+                                        int32_t bit_count, uint64_t* out_bits) {
+  int64_t value = 0;
+  if (bit_count <= 0 || bit_count > 64 ||
+      !loom_value_facts_as_exact_i64(facts, &value)) {
+    return false;
+  }
+  *out_bits = loom_mask_to_bitwidth_u64((uint64_t)value, bit_count);
+  return true;
+}
+
+bool loom_value_facts_make_unsigned_raw_bits(uint64_t raw_bits,
+                                             int32_t bit_count,
+                                             loom_value_facts_t* out_facts) {
+  if (bit_count <= 0 || bit_count > 64) {
+    return false;
+  }
+  uint64_t masked = loom_mask_to_bitwidth_u64(raw_bits, bit_count);
+  if (masked > (uint64_t)INT64_MAX) {
+    return false;
+  }
+  *out_facts = loom_value_facts_exact_i64((int64_t)masked);
+  return true;
+}
+
+static int64_t loom_value_facts_sign_extend_raw_bits(uint64_t raw_bits,
+                                                     int32_t bit_count) {
+  if (bit_count <= 0) return 0;
+  if (bit_count >= 64) return (int64_t)raw_bits;
+  uint64_t sign_bit = UINT64_C(1) << (bit_count - 1);
+  uint64_t mask = (UINT64_C(1) << bit_count) - 1;
+  uint64_t masked = raw_bits & mask;
+  return (int64_t)((masked ^ sign_bit) - sign_bit);
+}
+
+loom_value_facts_t loom_value_facts_make_signed_raw_bits(uint64_t raw_bits,
+                                                         int32_t bit_count) {
+  if (bit_count <= 0 || bit_count > 64) {
+    return loom_value_facts_unknown();
+  }
+  return loom_value_facts_exact_i64(
+      loom_value_facts_sign_extend_raw_bits(raw_bits, bit_count));
+}
+
+loom_value_facts_t loom_value_facts_make_unsigned_bit_count_range(
+    int64_t bit_count) {
+  if (bit_count <= 0 || bit_count > 63) {
+    return loom_value_facts_unknown();
+  }
+  const int64_t maximum_value =
+      bit_count == 63 ? INT64_MAX : (int64_t)((UINT64_C(1) << bit_count) - 1);
+  return loom_value_facts_make(0, maximum_value, 1);
+}
+
+loom_value_facts_t loom_value_facts_make_signed_bit_count_range(
+    int64_t bit_count) {
+  if (bit_count <= 0 || bit_count > 64) {
+    return loom_value_facts_unknown();
+  }
+  if (bit_count == 64) {
+    return loom_value_facts_make(INT64_MIN, INT64_MAX, 1);
+  }
+  const int64_t minimum_value = -(INT64_C(1) << (bit_count - 1));
+  const int64_t maximum_value = (INT64_C(1) << (bit_count - 1)) - 1;
+  return loom_value_facts_make(minimum_value, maximum_value, 1);
+}
+
+static bool loom_value_facts_extract_bitfield(loom_value_facts_t source,
+                                              int32_t source_bit_count,
+                                              int64_t offset, int64_t width,
+                                              bool signed_extract,
+                                              loom_value_facts_t* out_facts) {
+  if (offset < 0 || width <= 0 || source_bit_count <= 0 ||
+      source_bit_count > 64 || offset > source_bit_count ||
+      width > source_bit_count - offset || width > 64) {
+    return false;
+  }
+  uint64_t source_bits = 0;
+  if (!loom_value_facts_as_exact_raw_bits(source, source_bit_count,
+                                          &source_bits)) {
+    *out_facts = signed_extract
+                     ? loom_value_facts_make_signed_bit_count_range(width)
+                     : loom_value_facts_make_unsigned_bit_count_range(width);
+    return true;
+  }
+  uint64_t field_bits =
+      loom_mask_to_bitwidth_u64(source_bits >> offset, (int32_t)width);
+  if (signed_extract) {
+    *out_facts =
+        loom_value_facts_make_signed_raw_bits(field_bits, (int32_t)width);
+    return true;
+  }
+  return loom_value_facts_make_unsigned_raw_bits(field_bits, (int32_t)width,
+                                                 out_facts);
+}
+
+bool loom_value_facts_extract_unsigned_bitfield(loom_value_facts_t source,
+                                                int32_t source_bit_count,
+                                                int64_t offset, int64_t width,
+                                                loom_value_facts_t* out_facts) {
+  return loom_value_facts_extract_bitfield(source, source_bit_count, offset,
+                                           width, false, out_facts);
+}
+
+bool loom_value_facts_extract_signed_bitfield(loom_value_facts_t source,
+                                              int32_t source_bit_count,
+                                              int64_t offset, int64_t width,
+                                              loom_value_facts_t* out_facts) {
+  return loom_value_facts_extract_bitfield(source, source_bit_count, offset,
+                                           width, true, out_facts);
+}
+
+//===----------------------------------------------------------------------===//
 // Flag recomputation
 //===----------------------------------------------------------------------===//
 

@@ -64,16 +64,10 @@ func.def @q8_packed_word_two_rhs_dequant_dot4(%packed: vector<1xi32>, %scale: f1
 // ====
 
 func.def @q8_packed_word_scalar_extract_dequant_dot4(%packed: i32, %scale: f16, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
-  %shift8 = scalar.constant 8 : i32
-  %shift16 = scalar.constant 16 : i32
-  %shift24 = scalar.constant 24 : i32
-  %q0_shifted = scalar.shli %packed, %shift24 : i32
-  %q1_shifted = scalar.shli %packed, %shift16 : i32
-  %q2_shifted = scalar.shli %packed, %shift8 : i32
-  %q0_i32 = scalar.shrsi %q0_shifted, %shift24 : i32
-  %q1_i32 = scalar.shrsi %q1_shifted, %shift24 : i32
-  %q2_i32 = scalar.shrsi %q2_shifted, %shift24 : i32
-  %q3_i32 = scalar.shrsi %packed, %shift24 : i32
+  %q0_i32 = scalar.bitfield.extracts %packed {offset = 0, width = 8} : i32 -> i32
+  %q1_i32 = scalar.bitfield.extracts %packed {offset = 8, width = 8} : i32 -> i32
+  %q2_i32 = scalar.bitfield.extracts %packed {offset = 16, width = 8} : i32 -> i32
+  %q3_i32 = scalar.bitfield.extracts %packed {offset = 24, width = 8} : i32 -> i32
   %q0_f32 = scalar.sitofp %q0_i32 : i32 to f32
   %q1_f32 = scalar.sitofp %q1_i32 : i32 to f32
   %q2_f32 = scalar.sitofp %q2_i32 : i32 to f32

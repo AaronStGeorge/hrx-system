@@ -91,6 +91,42 @@ func.def @assume_rejects_count_mismatch(%x: i64, %y: i64) -> (i64) {
 
 // ====
 
+// Bitfield extraction requires positive field widths.
+func.def @bitfield_extract_zero_width(%x: i8) {
+  // ERROR@+1: STRUCTURE/014 "width" "0" "positive bitfield width"
+  %r = scalar.bitfield.extractu %x {offset = 0, width = 0} : i8 -> i32
+  func.return
+}
+
+// ====
+
+// Bitfield offsets are least-significant bit positions and cannot be negative.
+func.def @bitfield_extract_negative_offset(%x: i8) {
+  // ERROR@+1: STRUCTURE/014 "offset" "-1" "non-negative bit offset"
+  %r = scalar.bitfield.extractu %x {offset = -1, width = 4} : i8 -> i32
+  func.return
+}
+
+// ====
+
+// Bitfield ranges must fit inside the source scalar.
+func.def @bitfield_extract_range_overflow(%x: i8) {
+  // ERROR@+1: STRUCTURE/014 "width" "4" "bitfield range within storage element width"
+  %r = scalar.bitfield.extracts %x {offset = 6, width = 4} : i8 -> i32
+  func.return
+}
+
+// ====
+
+// Extract results must be wide enough to hold the selected field.
+func.def @bitfield_extract_result_too_narrow(%x: i8) {
+  // ERROR@+1: TYPE/004 "result" "element bit width at least width"
+  %r = scalar.bitfield.extractu %x {offset = 0, width = 4} : i8 -> i1
+  func.return
+}
+
+// ====
+
 func.def @geluf_logistic_requires_scale(%x: f32) -> (f32) {
   // ERROR@+1: TYPE/005 {attr_name="scale", actual_kind="0", expected_kind="2"}
   %r = scalar.geluf<logistic> %x : f32
