@@ -183,12 +183,12 @@ iree_status_t loom_low_allocate_function(
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     const loom_low_allocation_edge_copy_context_t edge_copy_context = {
-        .module = state.module,
         .body = state.body,
         .descriptor_set = state.target.descriptor_set,
         .liveness_order = options->liveness_order,
         .target_constraints = &state.target_constraints,
         .unit_liveness = &state.unit_liveness,
+        .placement = &state.placement,
         .assignment_map = state.interval_assignment.assignment_map,
     };
     status = loom_low_allocation_edge_copy_plan_build(&edge_copy_context, arena,

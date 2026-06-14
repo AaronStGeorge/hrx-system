@@ -21,18 +21,6 @@ extern "C" {
 iree_host_size_t loom_low_allocation_move_topology_count_copy_ops(
     const loom_region_t* body);
 
-// Returns the low.concat operation defining |value_id|, or NULL when |value_id|
-// is a block argument or is defined by another operation.
-const loom_op_t* loom_low_allocation_move_topology_value_defining_concat(
-    const loom_module_t* module, loom_value_id_t value_id);
-
-// Counts branch-edge copy groups and scalar copy records implied by low.br
-// payloads in |body|. A branch payload defined by low.concat decomposes into
-// one edge-copy segment per concat source.
-iree_status_t loom_low_allocation_move_topology_count_edge_copy_groups(
-    const loom_module_t* module, const loom_region_t* body,
-    iree_host_size_t* out_group_count, iree_host_size_t* out_copy_count);
-
 // Returns true when a low.concat must materialize its result as packet-local
 // storage in |module|. Branch-edge copies can decompose low.concat payloads
 // directly into block arguments, so branch-only concats do not require

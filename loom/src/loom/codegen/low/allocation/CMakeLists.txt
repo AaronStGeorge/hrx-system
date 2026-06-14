@@ -101,7 +101,6 @@ loom_cc_library(
     ::assignment
     ::assignment_map
     ::live_range
-    ::move_topology
     ::table
     ::target_constraints
     ::unit_liveness
