@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "loom/ops/cache.h"
@@ -1145,6 +1146,45 @@ iree_status_t loom_amdgpu_emit_memory_flat_vaddr(
   return iree_ok_status();
 }
 
+typedef struct loom_amdgpu_memory_cache_attr_field_t {
+  // Presence bit required for this descriptor attribute.
+  loom_amdgpu_memory_cache_policy_attr_flags_t flag;
+  // Descriptor attribute name.
+  iree_string_view_t name;
+  // Byte offset to the encoded attribute value field.
+  iree_host_size_t value_offset;
+} loom_amdgpu_memory_cache_attr_field_t;
+
+static const loom_amdgpu_memory_cache_attr_field_t
+    kLoomAmdgpuMemoryCacheAttrFields[] = {
+        {
+            .flag = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE,
+            .name = {.data = "scope", .size = 5},
+            .value_offset =
+                offsetof(loom_amdgpu_memory_cache_policy_attrs_t, scope),
+        },
+        {
+            .flag = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH,
+            .name = {.data = "th", .size = 2},
+            .value_offset =
+                offsetof(loom_amdgpu_memory_cache_policy_attrs_t, th),
+        },
+        {
+            .flag = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT,
+            .name = {.data = "nt", .size = 2},
+            .value_offset =
+                offsetof(loom_amdgpu_memory_cache_policy_attrs_t, nt),
+        },
+};
+
+static int64_t loom_amdgpu_memory_cache_attr_field_value(
+    const loom_amdgpu_memory_cache_policy_attrs_t* cache_attrs,
+    const loom_amdgpu_memory_cache_attr_field_t* field) {
+  const uint8_t* attrs_bytes = (const uint8_t*)cache_attrs;
+  const void* value_bytes = attrs_bytes + field->value_offset;
+  return *(const int64_t*)value_bytes;
+}
+
 static iree_status_t loom_amdgpu_append_memory_cache_attrs(
     loom_low_lower_context_t* context,
     const loom_amdgpu_memory_access_t* access, loom_named_attr_t* attrs,
@@ -1161,23 +1201,17 @@ static iree_status_t loom_amdgpu_append_memory_cache_attrs(
       descriptor_set, access, &cache_attrs);
   IREE_ASSERT(encoded);
 
-  if (iree_any_bit_set(cache_attrs.flags,
-                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE)) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomAmdgpuMemoryCacheAttrFields); ++i) {
+    const loom_amdgpu_memory_cache_attr_field_t* field =
+        &kLoomAmdgpuMemoryCacheAttrFields[i];
+    if (!iree_any_bit_set(cache_attrs.flags, field->flag)) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(
-        context, IREE_SV("scope"), cache_attrs.scope, attrs, attr_capacity,
-        inout_attr_count));
-  }
-  if (iree_any_bit_set(cache_attrs.flags,
-                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH)) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_append_i64_attr(context, IREE_SV("th"), cache_attrs.th,
-                                    attrs, attr_capacity, inout_attr_count));
-  }
-  if (iree_any_bit_set(cache_attrs.flags,
-                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT)) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_append_i64_attr(context, IREE_SV("nt"), cache_attrs.nt,
-                                    attrs, attr_capacity, inout_attr_count));
+        context, field->name,
+        loom_amdgpu_memory_cache_attr_field_value(&cache_attrs, field), attrs,
+        attr_capacity, inout_attr_count));
   }
   return iree_ok_status();
 }
