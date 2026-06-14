@@ -180,8 +180,9 @@ iree_status_t iree_hal_slab_provider_validate_asan_options(
 // |backing_offset| identifies the beginning of |layout|'s backing range within
 // |slab|. The provider uses |layout| to locate the user-visible range and
 // poison/unpoison bytes in its target-specific shadow state according to
-// |advice_flags|.
-iree_status_t iree_hal_slab_provider_advise_asan_range(
+// |advice_flags|. This hook must be infallible after enabled ASAN options have
+// been accepted by iree_hal_slab_provider_validate_asan_options().
+void iree_hal_slab_provider_advise_asan_range(
     iree_hal_slab_provider_t* provider, const iree_hal_slab_t* slab,
     iree_device_size_t backing_offset,
     iree_hal_asan_range_advice_flags_t advice_flags,
@@ -263,11 +264,11 @@ struct iree_hal_slab_provider_vtable_t {
       const iree_hal_asan_pool_options_t* options);
 
   // Advises the provider of an ASAN backing range lifecycle transition.
-  iree_status_t (*advise_asan_range)(
-      iree_hal_slab_provider_t* provider, const iree_hal_slab_t* slab,
-      iree_device_size_t backing_offset,
-      iree_hal_asan_range_advice_flags_t advice_flags,
-      const iree_hal_asan_allocation_layout_t* layout);
+  void (*advise_asan_range)(iree_hal_slab_provider_t* provider,
+                            const iree_hal_slab_t* slab,
+                            iree_device_size_t backing_offset,
+                            iree_hal_asan_range_advice_flags_t advice_flags,
+                            const iree_hal_asan_allocation_layout_t* layout);
 
   // Prepares a slab for use after acquisition. Called by the slab cache's
   // background thread after acquire_slab() succeeds and before the slab is

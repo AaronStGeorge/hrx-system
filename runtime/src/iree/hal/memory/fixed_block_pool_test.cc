@@ -142,7 +142,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_validate_asan_options(
       "test opaque slab provider does not support HAL ASAN range advice");
 }
 
-static iree_status_t iree_hal_test_opaque_slab_provider_advise_asan_range(
+static void iree_hal_test_opaque_slab_provider_advise_asan_range(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab,
     iree_device_size_t backing_offset,
     iree_hal_asan_range_advice_flags_t advice_flags,
@@ -152,9 +152,7 @@ static iree_status_t iree_hal_test_opaque_slab_provider_advise_asan_range(
   (void)backing_offset;
   (void)advice_flags;
   (void)layout;
-  return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
-      "test opaque slab provider cannot advise ASAN ranges");
+  IREE_ASSERT(false, "test opaque slab provider cannot advise ASAN ranges");
 }
 
 static void iree_hal_test_opaque_slab_provider_prefault(

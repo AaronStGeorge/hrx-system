@@ -482,13 +482,13 @@ static iree_status_t iree_hal_slab_cache_validate_asan_options(
                                                       options);
 }
 
-static iree_status_t iree_hal_slab_cache_advise_asan_range(
+static void iree_hal_slab_cache_advise_asan_range(
     iree_hal_slab_provider_t* base_provider, const iree_hal_slab_t* slab,
     iree_device_size_t backing_offset,
     iree_hal_asan_range_advice_flags_t advice_flags,
     const iree_hal_asan_allocation_layout_t* layout) {
   iree_hal_slab_cache_t* cache = (iree_hal_slab_cache_t*)base_provider;
-  return iree_hal_slab_provider_advise_asan_range(
+  iree_hal_slab_provider_advise_asan_range(
       cache->inner_provider, slab, backing_offset, advice_flags, layout);
 }
 
