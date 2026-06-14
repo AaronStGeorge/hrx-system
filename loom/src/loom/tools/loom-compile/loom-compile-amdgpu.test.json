@@ -171,6 +171,53 @@
           ]
         }
       ]
+    },
+    {
+      "name": "preserves configured dynamic-width vector reduction loads",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/configured_vector_reduce_amdgpu.loom",
+            "text": "config.decl @runtime.vector_width : %value: index where [range(%value, 2, 4)]\n\nkernel.def export(\"configured_vector_reduce\") @configured_vector_reduce() {\n  %one = index.constant 1 : index\n  %workgroup_size = index.constant 64 : index\n  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%workgroup_size, %one, %one) : index\n} launch(%input: buffer, %output: buffer) {\n  %zero_offset = index.constant 0 : offset\n  %lane0 = kernel.workitem.id<x> : index\n  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index\n  %vector_width = config.get @runtime.vector_width : index\n  %vector_width_bounded = index.assume %vector_width [range(%vector_width, 2, 4)] : index\n  %element_count = index.constant 256 : index\n  %input_view = buffer.view %input[%zero_offset] : buffer -> view<[%element_count]xf32, #dense>\n  %output_view = buffer.view %output[%zero_offset] : buffer -> view<1xf32, #dense>\n  %linear0 = index.mul %lane, %vector_width_bounded : index\n  %linear = index.assume %linear0 [range(%linear0, 0, 252)] : index\n  %loaded = vector.load %input_view[%linear] : view<[%element_count]xf32, #dense> -> vector<[%vector_width_bounded]xf32>\n  %squared = vector.mulf<reassoc|nnan|ninf|nsz|contract> %loaded, %loaded : vector<[%vector_width_bounded]xf32>\n  %zero_f32 = scalar.constant 0.0 : f32\n  %sum = vector.reduce<addf, reassoc|nnan|ninf|nsz|contract> %squared, %zero_f32 : vector<[%vector_width_bounded]xf32>, f32\n  %stored = vector.from_elements %sum : vector<1xf32>\n  vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>\n  kernel.return\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/configured_vector_reduce_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--config=runtime.vector_width=4",
+              "--output={tmp}/configured_vector_reduce_amdgpu.hsaco",
+              "--compile-report=summary",
+              "--dump-ir-after=low-dce",
+              "--dump-ir-format=text",
+              "--dump-ir-output=stderr"
+            ]
+          },
+          "stderr": {
+            "contains": {
+              "unordered": [
+                "\"target_key\":\"gfx11-generic\"",
+                "\"status\":\"OK\"",
+                "global_load_b128_saddr"
+              ]
+            },
+            "not_contains": [
+              "global_load_b32_saddr"
+            ]
+          },
+          "files": [
+            {
+              "path": "{tmp}/configured_vector_reduce_amdgpu.hsaco",
+              "non_empty": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }

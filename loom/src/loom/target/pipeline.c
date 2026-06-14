@@ -197,7 +197,7 @@ loom_target_pipeline_build_source_normalization_before_legalize(
       builder, IREE_SV("normalize-kernel-resources")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("promote-private-fragments")));
-  return iree_ok_status();
+  return loom_target_pipeline_build_cleanup(builder);
 }
 
 static iree_status_t

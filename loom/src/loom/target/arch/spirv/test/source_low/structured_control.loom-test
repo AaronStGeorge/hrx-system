@@ -13,6 +13,8 @@ pass.pipeline<module> @__loom_check_source_low pipeline {
       legalize-math
       normalize-kernel-resources
       promote-private-fragments
+      canonicalize
+      cse
     }
   }
   select-templates(mode = "final")

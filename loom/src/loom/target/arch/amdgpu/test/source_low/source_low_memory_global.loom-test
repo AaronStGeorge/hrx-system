@@ -1761,20 +1761,20 @@ func.def target(@target) @bf16_strided_gather_dot2(%latent: vector<2xbf16>, %wei
 // ----
 low.func.def target(@target) abi(hal_kernel) @bf16_strided_gather_dot2(%latent: reg<amdgpu.vgpr>, %origin_bounded: reg<amdgpu.sgpr>, %accumulator: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %weights_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 8192} : reg<amdgpu.sgpr x2>
-  %29 = v_mov_b32 0
-  %30 = s_lshl_b32_rhs_inline %origin_bounded, 1
-  %31 = slice %weights_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %32 = slice %weights_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
-  %33 = s_mov_b32 0
-  %34 = s_add_u32 %31, %30
-  %35 = s_addc_u32 %32, %33
-  %36 = concat(%34, %35) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %37 = global_load_d16_b16_saddr %29, %36
-  %47 = concat(%34, %35) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %48 = global_load_d16_b16_saddr %29, %47 {offset = 14}
-  %49 = v_bfe_u32_offset_0_width_16_low16 %37
-  %50 = v_lshlrev_b32_src0_16_low16 %48
-  %weight = v_or_b32 %49, %50
+  %26 = v_mov_b32 0
+  %27 = s_lshl_b32_rhs_inline %origin_bounded, 1
+  %28 = slice %weights_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %29 = slice %weights_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %30 = s_mov_b32 0
+  %31 = s_add_u32 %28, %27
+  %32 = s_addc_u32 %29, %30
+  %33 = concat(%31, %32) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %34 = global_load_d16_b16_saddr %26, %33
+  %44 = concat(%31, %32) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %45 = global_load_d16_b16_saddr %26, %44 {offset = 14}
+  %46 = v_bfe_u32_offset_0_width_16_low16 %34
+  %47 = v_lshlrev_b32_src0_16_low16 %45
+  %weight = v_or_b32 %46, %47
   %dot = v_dot2_f32_bf16 %latent, %weight, %accumulator
   return %dot
 }

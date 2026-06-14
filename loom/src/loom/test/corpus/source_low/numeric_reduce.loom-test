@@ -42,6 +42,34 @@ func.def @f32_reduce_add_fastmath(%input: buffer, %output: buffer) {
 
 // ====
 
+config.def @runtime.vector_width = 4 : index
+
+kernel.def @f32_configured_width_square_reduce() {
+  %one = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%workgroup_size, %one, %one) : index
+} launch(%input: buffer, %output: buffer) {
+  %zero_offset = index.constant 0 : offset
+  %lane0 = kernel.workitem.id<x> : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %vector_width = config.get @runtime.vector_width : index
+  %vector_width_bounded = index.assume %vector_width [range(%vector_width, 2, 4)] : index
+  %element_count = index.constant 256 : index
+  %input_view = buffer.view %input[%zero_offset] : buffer -> view<[%element_count]xf32, #dense>
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<1xf32, #dense>
+  %linear0 = index.mul %lane, %vector_width_bounded : index
+  %linear = index.assume %linear0 [range(%linear0, 0, 252)] : index
+  %loaded = vector.load %input_view[%linear] : view<[%element_count]xf32, #dense> -> vector<[%vector_width_bounded]xf32>
+  %squared = vector.mulf<reassoc|nnan|ninf|nsz|contract> %loaded, %loaded : vector<[%vector_width_bounded]xf32>
+  %zero_f32 = scalar.constant 0.0 : f32
+  %sum = vector.reduce<addf, reassoc|nnan|ninf|nsz|contract> %squared, %zero_f32 : vector<[%vector_width_bounded]xf32>, f32
+  %stored = vector.from_elements %sum : vector<1xf32>
+  vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>
+  kernel.return
+}
+
+// ====
+
 func.def @i32_reduce_minui_select_sentinel(%values: vector<4xi32>) -> (i32) {
   %zero = scalar.constant 0 : i32
   %zeros = vector.splat %zero : vector<4xi32>
