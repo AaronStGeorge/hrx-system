@@ -460,6 +460,21 @@ def _buffer_view_rule() -> ValueAliasRule:
     )
 
 
+def _index_cast_alias_rule(
+    input_type: TypePattern,
+    result_type: TypePattern,
+) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=index.index_cast,
+        source=ValueRef.operand("input"),
+        result=ValueRef.result("result"),
+        guards=(
+            Guard.value_type("input", input_type),
+            Guard.value_type("result", result_type),
+        ),
+    )
+
+
 def _add_disp_rule(
     type_pattern: TypePattern,
     *,
@@ -910,6 +925,7 @@ def x86_scalar_core_cases(
         _const_scalar_i64_rule(descriptor_lookup),
         _index_const_i64_rule(_INDEX, descriptor_lookup),
         _index_const_i64_rule(_OFFSET, descriptor_lookup),
+        _index_cast_alias_rule(_I64, _INDEX),
         _add_disp_rule(
             _INDEX,
             base_field="lhs",

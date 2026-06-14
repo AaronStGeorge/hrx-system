@@ -2,6 +2,20 @@
 
 x86.target<scalar> @target
 
+func.def target(@target) @i64_to_index_identity(%value: i64) -> (index) {
+  %index = index.cast %value : i64 to index
+  func.return %index : index
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i64_to_index_identity(%index: reg<x86.gpr64>) -> (reg<x86.gpr64>) asm<x86.scalar.core> {
+  return %index
+}
+
+// ====
+
+x86.target<scalar> @target
+
 func.def target(@target) @index_add_sub_disp(%base: index) -> (index) {
   %c24 = index.constant 24 : index
   %c8 = index.constant 8 : index
