@@ -616,7 +616,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   s_mov_b64_exec %38
   s_barrier
   %41 = v_mov_b32 2
-  %42 = v_cmp_lt_u32 %tid, %41
+  %42 = v_cmp_lt_u32 %19, %41
   %43, %44 = s_and_saveexec_b64 %42
   %45 = v_lshlrev_b32_src0_inline %19, 2
   %46 = v_add_u32 %21, %45
@@ -625,15 +625,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %49 = v_lshlrev_b32_src0_inline %48, 2
   %50 = ds_bpermute_b32 %49, %47
   %51 = v_add_f32 %47, %50
-  %52, %53 = s_and_saveexec_b64 %37
-  %54 = v_add_u32 %21, %45
-  ds_write_b32 %54, %51
-  s_mov_b64_exec %52
   s_mov_b64_exec %43
-  s_barrier
-  %result = ds_read_b32 %21
-  %56 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %56, %result, %output_view
+  %52 = v_mov_b32 0
+  %result = ds_bpermute_b32 %52, %51
+  %54 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %54, %result, %output_view
   return
 }
 
@@ -690,7 +686,7 @@ low.kernel.def target(@target) workgroup_size(448, 1, 1) @workgroup_reduce_addf_
   s_mov_b64_exec %38
   s_barrier
   %41 = v_mov_b32 14
-  %42 = v_cmp_lt_u32 %tid, %41
+  %42 = v_cmp_lt_u32 %19, %41
   %43, %44 = s_and_saveexec_b64 %42
   %45 = v_lshlrev_b32_src0_inline %19, 2
   %46 = v_add_u32 %21, %45
@@ -722,15 +718,11 @@ low.kernel.def target(@target) workgroup_size(448, 1, 1) @workgroup_reduce_addf_
   %73 = v_cndmask_b32 %49, %72, %71
   %74 = v_add_f32 %68, %73
   %75 = ds_bpermute_b32 %49, %74
-  %76, %77 = s_and_saveexec_b64 %37
-  %78 = v_add_u32 %21, %45
-  ds_write_b32 %78, %75
-  s_mov_b64_exec %76
   s_mov_b64_exec %43
-  s_barrier
-  %result = ds_read_b32 %21
-  %80 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %80, %result, %output_view
+  %76 = v_mov_b32 0
+  %result = ds_bpermute_b32 %76, %75
+  %78 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %78, %result, %output_view
   return
 }
 
@@ -811,7 +803,7 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_addf_f
   s_mov_b64_exec %64
   s_barrier
   %67 = v_mov_b32 2
-  %68 = v_cmp_lt_u32 %tid, %67
+  %68 = v_cmp_lt_u32 %19, %67
   %69, %70 = s_and_saveexec_b64 %68
   %71 = v_lshlrev_b32_src0_inline %19, 2
   %72 = v_add_u32 %21, %71
@@ -820,15 +812,11 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_addf_f
   %75 = v_lshlrev_b32_src0_inline %74, 2
   %76 = ds_bpermute_b32 %75, %73
   %77 = v_add_f32 %73, %76
-  %78, %79 = s_and_saveexec_b64 %63
-  %80 = v_add_u32 %21, %71
-  ds_write_b32 %80, %77
-  s_mov_b64_exec %78
   s_mov_b64_exec %69
-  s_barrier
-  %result = ds_read_b32 %21
-  %82 = v_lshlrev_b32_src0_inline %tid, 2
-  global_store_b32_saddr %82, %result, %output_view
+  %78 = v_mov_b32 0
+  %result = ds_bpermute_b32 %78, %77
+  %80 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %80, %result, %output_view
   return
 }
 

@@ -529,6 +529,15 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   loom_amdgpu_subgroup_reduce_crosslane_kind_t crosslane_kind;
 } loom_amdgpu_subgroup_reduce_plan_t;
 
+typedef enum loom_amdgpu_workgroup_reduce_publication_kind_e {
+  // One wave reduces LDS-published per-wave partials and publishes the final
+  // value back through LDS for all workitems to reload.
+  LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_LDS = 0,
+  // Every wave reloads the per-wave partials, redundantly reduces them within
+  // the wave, and broadcasts the wave-local lane-zero result to its lanes.
+  LOOM_AMDGPU_WORKGROUP_REDUCE_PUBLICATION_REDUNDANT_SUBGROUP = 1,
+} loom_amdgpu_workgroup_reduce_publication_kind_t;
+
 typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   // Descriptor row selected for each native cross-lane read.
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
@@ -568,6 +577,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   uint32_t identity_bits;
   // Cross-lane exchange strategy selected for full-wave subgroup trees.
   loom_amdgpu_subgroup_reduce_crosslane_kind_t crosslane_kind;
+  // Strategy used to publish the final reduced value to all workitems.
+  loom_amdgpu_workgroup_reduce_publication_kind_t publication_kind;
 } loom_amdgpu_workgroup_reduce_plan_t;
 
 typedef struct loom_amdgpu_subgroup_scan_plan_t {
