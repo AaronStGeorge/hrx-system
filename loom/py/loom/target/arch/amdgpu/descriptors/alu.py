@@ -1142,6 +1142,59 @@ def _s_ashr_i32_rhs_inline_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_bfe_b32_overlay(*, is_signed: bool) -> AmdgpuDescriptorOverlay:
+    type_suffix = "i32" if is_signed else "u32"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.s_bfe_{type_suffix}",
+        instruction_name=f"S_BFE_{type_suffix.upper()}",
+        mnemonic=f"s_bfe_{type_suffix}",
+        encoding_name="ENC_SOP2",
+        semantic_tag=f"integer.bitfield.extract.{type_suffix}",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("value")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("control")),
+        ),
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        operand_forms=(
+            _literal_operand_form(
+                replacement_descriptor=f"amdgpu.s_bfe_{type_suffix}.lit",
+                source_operand="control",
+            ),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_bfe_b32_literal_overlay(*, is_signed: bool) -> AmdgpuDescriptorOverlay:
+    type_suffix = "i32" if is_signed else "u32"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.s_bfe_{type_suffix}.lit",
+        instruction_name=f"S_BFE_{type_suffix.upper()}",
+        mnemonic=f"s_bfe_{type_suffix}",
+        encoding_name="ENC_SOP2",
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP2_LITERAL,
+        semantic_tag=f"integer.bitfield.extract.{type_suffix}",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("value")),
+        ),
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        asm_forms=_asm(
+            mnemonic=f"s_bfe_{type_suffix}_lit",
+            results=("dst",),
+            operands=("value",),
+            immediates=("imm32",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_LITERAL_U32_IMMEDIATE,),
+        fixed_encoding_fields=(("SSRC1", _predefined("SRC_LITERAL", "OPR_SSRC")),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_and_b32_overlay() -> AmdgpuDescriptorOverlay:
     return _v_binary_u32_overlay(
         descriptor_key="amdgpu.v_and_b32",
@@ -1552,6 +1605,10 @@ def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_lshr_b64_overlay(),
         _s_ashr_i32_overlay(),
         _s_ashr_i32_rhs_inline_overlay(),
+        _s_bfe_b32_overlay(is_signed=False),
+        _s_bfe_b32_literal_overlay(is_signed=False),
+        _s_bfe_b32_overlay(is_signed=True),
+        _s_bfe_b32_literal_overlay(is_signed=True),
         _v_and_b32_overlay(),
         _v_and_b32_src0_inline_overlay(),
         _v_and_b32_literal_overlay(),
@@ -3729,6 +3786,8 @@ __all__ = (
     "_s_and_saveexec_b64_overlay",
     "_s_ashr_i32_overlay",
     "_s_ashr_i32_rhs_inline_overlay",
+    "_s_bfe_b32_literal_overlay",
+    "_s_bfe_b32_overlay",
     "_s_binary_u32_overlay",
     "_s_binary_u32_rhs_inline_overlay",
     "_s_binary_u64_overlay",

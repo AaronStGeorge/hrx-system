@@ -21,6 +21,7 @@ from loom.target.arch.amdgpu.descriptor_overlay import (
 )
 from loom.target.arch.amdgpu.encoding import (
     AMDGPU_ENCODING_FORMAT_SOP2,
+    AMDGPU_ENCODING_FORMAT_SOP2_LITERAL,
     AMDGPU_ENCODING_FORMAT_SOPP,
     AMDGPU_ENCODING_FORMAT_VBUFFER,
     AMDGPU_ENCODING_FORMAT_VOP2_LITERAL,
@@ -716,6 +717,71 @@ def test_materialize_rejects_repeated_overlay_xml_field() -> None:
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
         match="repeats XML field 'LITERAL' across operands and immediates",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_accepts_synthetic_literal_on_literal_encoding_format() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.s_add_u32.rhs_lit",
+            instruction_name="S_ADD_U32",
+            mnemonic="s_add_u32",
+            encoding_name="ENC_SOP2",
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP2_LITERAL,
+            semantic_tag="integer.add.u32",
+            schedule_class="amdgpu.salu",
+            operands=(
+                AmdgpuOperandOverlay("SDST", _result("dst", _SGPR_ALT)),
+                AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
+            ),
+            immediate_fields=("LITERAL",),
+            immediates=(_U32_IMMEDIATE,),
+            fixed_encoding_fields=(
+                (
+                    "SSRC1",
+                    AmdgpuOperandPredefinedValueRef("SRC_LITERAL", "OPR_SSRC"),
+                ),
+            ),
+            implicit_operands=(_IGNORE_SCC_OUTPUT,),
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+    )
+
+    assert descriptor.encoding_format_id == AMDGPU_ENCODING_FORMAT_SOP2_LITERAL
+    assert [operand.field_name for operand in descriptor.operands] == ["dst", "lhs"]
+    assert [immediate.field_name for immediate in descriptor.immediates] == ["literal"]
+
+
+def test_materialize_rejects_synthetic_literal_on_plain_encoding_format() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_add_u32.rhs_lit",
+        instruction_name="S_ADD_U32",
+        mnemonic="s_add_u32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="integer.add.u32",
+        schedule_class="amdgpu.salu",
+        operands=(
+            AmdgpuOperandOverlay("SDST", _result("dst", _SGPR_ALT)),
+            AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_U32_IMMEDIATE,),
+        fixed_encoding_fields=(
+            (
+                "SSRC1",
+                AmdgpuOperandPredefinedValueRef("SRC_LITERAL", "OPR_SSRC"),
+            ),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="references missing immediate encoding field 'LITERAL'",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 

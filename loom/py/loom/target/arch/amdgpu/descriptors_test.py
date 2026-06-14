@@ -37,6 +37,7 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
     AMDGPU_CONTROL_DESCRIPTOR_CATEGORY,
     AMDGPU_DESCRIPTOR_CATEGORIES,
+    AMDGPU_ENCODING_FORMAT_SOP2_LITERAL,
     AMDGPU_ENCODING_FORMAT_VOP1,
     AMDGPU_ENCODING_FORMAT_VOP2,
     AMDGPU_ENCODING_FORMAT_VOP3P_LITERAL,
@@ -620,6 +621,45 @@ def test_vop2_f32_uses_inline_then_literal_operand_forms() -> None:
             f"{descriptor_key}.src0_inline",
             f"{descriptor_key}.lit",
         )
+
+
+def test_sop2_bfe_literal_forms_fix_control_to_literal_source() -> None:
+    for descriptor_set in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key in ("amdgpu.s_bfe_i32", "amdgpu.s_bfe_u32"):
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.schedule_class == _SCHEDULE_SALU
+            assert tuple(
+                form.replacement_descriptor for form in descriptor.operand_forms
+            ) == (f"{descriptor_key}.lit",)
+
+            literal_descriptor = descriptors[f"{descriptor_key}.lit"]
+            assert literal_descriptor.encoding_name == "ENC_SOP2"
+            assert (
+                literal_descriptor.encoding_format_id
+                == AMDGPU_ENCODING_FORMAT_SOP2_LITERAL
+            )
+            assert tuple(
+                operand.xml_field_name for operand in literal_descriptor.operands
+            ) == ("SDST", "SSRC0")
+            assert literal_descriptor.immediate_fields == ("LITERAL",)
+            assert tuple(
+                immediate.field_name for immediate in literal_descriptor.immediates
+            ) == ("imm32",)
+            fixed_field, fixed_value = literal_descriptor.fixed_encoding_fields[0]
+            assert fixed_field == "SSRC1"
+            assert isinstance(fixed_value, AmdgpuOperandPredefinedValueRef)
+            assert fixed_value.operand_type == "OPR_SSRC"
+            assert fixed_value.value_name == "SRC_LITERAL"
 
 
 def test_fmamk_f32_descriptor_pins_literal_multiply_slot() -> None:

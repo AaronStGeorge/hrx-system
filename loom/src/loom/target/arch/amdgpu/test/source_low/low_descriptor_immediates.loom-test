@@ -18,6 +18,15 @@ low.func.def target(@gfx11_target) @vop3_bfe_offset_width_inline(%value: reg<amd
 // ====
 
 amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @sop2_bfe_literal_control(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %signed = s_bfe_i32_lit %value, 2056
+  %unsigned = s_bfe_u32_lit %value, 1028
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @vop3p_fma_mix_f16_lanes(%addr: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
   %low = ds_load_u16_d16 %addr
   %low_result = v_fma_mix_f32_f16lo_f32_f32 %low, %b, %c
