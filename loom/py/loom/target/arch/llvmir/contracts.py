@@ -64,6 +64,8 @@ _F64 = Scalar("f64")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
 
+_DYNAMIC_INDEX = -(2**63)
+
 _VECTOR_LANE_COUNTS = (2, 3, 4, 8, 16)
 _VECTOR_SELECT_TYPES = ("i8", "i16", "i32", "i64", "f16", "bf16", "f32", "f64")
 _STRUCTURAL_VECTOR_TYPES = (
@@ -1837,6 +1839,43 @@ def _insert_rule(element: str, lane_count: int) -> DescriptorRule:
     )
 
 
+def _dynamic_insert_rule(element: str, lane_count: int) -> DescriptorRule:
+    value_type = Scalar(element)
+    dest_type = _vector_type(element, lane_count)
+    descriptor = _descriptor(
+        f"llvmir.insert.dynamic.{_vector_suffix(element, lane_count)}"
+    )
+    return DescriptorRule(
+        source_op=vector.vector_insert,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("value", value_type),
+            Guard.value_type("dest", dest_type),
+            Guard.value_type("indices", _INDEX),
+            Guard.value_type("result", dest_type),
+            Guard.operand_segment_count("indices", 1),
+            Guard.i64_array_count("static_indices", 1),
+            Guard.i64_array_element_range(
+                "static_indices",
+                element=0,
+                minimum=_DYNAMIC_INDEX,
+                maximum=_DYNAMIC_INDEX,
+            ),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={
+                    "dest": ValueRef.operand("dest"),
+                    "value": ValueRef.operand("value"),
+                    "index": ValueRef.operand("indices"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _shuffle_rule(element: str, lane_count: int) -> DescriptorRule:
     type_pattern = _vector_type(element, lane_count)
     descriptor = _descriptor(f"llvmir.shuffle.{_vector_suffix(element, lane_count)}")
@@ -1916,6 +1955,7 @@ def _structural_vector_rules() -> tuple[DescriptorRule | ValueAliasRule, ...]:
             rules.append(_from_elements_rule(element, lane_count))
             rules.append(_extract_rule(element, lane_count))
             rules.append(_insert_rule(element, lane_count))
+            rules.append(_dynamic_insert_rule(element, lane_count))
             rules.append(_shuffle_rule(element, lane_count))
         rules.append(_slice_rule(element, source_lane_count=4, result_lane_count=2))
         rules.append(_one_lane_splat_rule(element))

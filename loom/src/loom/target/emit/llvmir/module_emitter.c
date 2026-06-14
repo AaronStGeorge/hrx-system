@@ -612,6 +612,24 @@ static const loom_llvmir_emit_const_info_t kConstInfos[] = {
       LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 8),   \
       LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS(prefix, 16)
 
+#define LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(lanes)         \
+  LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##I1),       \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##I8),   \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##I16),  \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##I32),  \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##I64),  \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##F16),  \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##BF16), \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##F32),  \
+      LOOM_LLVMIR_VECTOR_REF(INSERT_DYNAMIC, V##lanes##F64)
+
+#define LOOM_LLVMIR_ALL_DYNAMIC_INSERT_VECTOR_REFS() \
+  LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(2),         \
+      LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(3),     \
+      LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(4),     \
+      LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(8),     \
+      LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS(16)
+
 static const uint32_t kSplatDescriptorRefs[] = {
     LOOM_LLVMIR_ALL_STRUCTURAL_VECTOR_REFS(SPLAT),
 };
@@ -626,6 +644,10 @@ static const uint32_t kExtractDescriptorRefs[] = {
 
 static const uint32_t kInsertDescriptorRefs[] = {
     LOOM_LLVMIR_ALL_STRUCTURAL_VECTOR_REFS(INSERT),
+};
+
+static const uint32_t kDynamicInsertDescriptorRefs[] = {
+    LOOM_LLVMIR_ALL_DYNAMIC_INSERT_VECTOR_REFS(),
 };
 
 static const uint32_t kShuffleDescriptorRefs[] = {
@@ -644,6 +666,8 @@ static const uint32_t kSliceDescriptorRefs[] = {
 };
 
 #undef LOOM_LLVMIR_SLICE_REF
+#undef LOOM_LLVMIR_ALL_DYNAMIC_INSERT_VECTOR_REFS
+#undef LOOM_LLVMIR_DYNAMIC_INSERT_VECTOR_REFS
 #undef LOOM_LLVMIR_ALL_STRUCTURAL_VECTOR_REFS
 #undef LOOM_LLVMIR_STRUCTURAL_VECTOR_REFS
 #undef LOOM_LLVMIR_VECTOR_REF
@@ -2242,6 +2266,45 @@ static iree_status_t loom_llvmir_emit_insert(
   return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
 }
 
+static iree_status_t loom_llvmir_emit_dynamic_insert(
+    loom_llvmir_emit_function_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet) {
+  if (packet->op->operand_count != 3) {
+    return loom_llvmir_emit_shape_diagnostic(state, packet->op,
+                                             IREE_SV("packet_operand"),
+                                             packet->op->operand_count, 3);
+  }
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_value_id_t result_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_emit_prepare_packet_result(
+      state, packet, &result_type, &result_value));
+  if (result_type == LOOM_LLVMIR_TYPE_ID_INVALID) return iree_ok_status();
+
+  const loom_value_id_t* operands = loom_op_const_operands(packet->op);
+  loom_llvmir_value_id_t dest = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t index = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_emit_lookup_value(state, operands[0], &dest));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_emit_lookup_value(state, operands[1], &value));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_emit_lookup_value(state, operands[2], &index));
+  loom_llvmir_value_id_t llvmir_result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_insert_element(
+      state->llvmir_block,
+      &(loom_llvmir_insert_element_desc_t){
+          .result_name =
+              loom_llvmir_emit_value_name(state->module, result_value),
+          .result_type = result_type,
+          .vector = dest,
+          .element = value,
+          .index = index,
+      },
+      &llvmir_result));
+  return loom_llvmir_emit_define_value(state, result_value, llvmir_result);
+}
+
 static iree_status_t loom_llvmir_emit_read_shuffle_mask(
     loom_llvmir_emit_function_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet, uint32_t lane_count,
@@ -2685,6 +2748,12 @@ static iree_status_t loom_llvmir_emit_packet(
           descriptor_ref, kInsertDescriptorRefs,
           IREE_ARRAYSIZE(kInsertDescriptorRefs))) {
     return loom_llvmir_emit_insert(state, packet);
+  }
+
+  if (loom_llvmir_emit_descriptor_ref_in(
+          descriptor_ref, kDynamicInsertDescriptorRefs,
+          IREE_ARRAYSIZE(kDynamicInsertDescriptorRefs))) {
+    return loom_llvmir_emit_dynamic_insert(state, packet);
   }
 
   if (loom_llvmir_emit_descriptor_ref_in(

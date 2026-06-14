@@ -1070,6 +1070,28 @@ def _insert_descriptor(type_name: str, lane_count: int) -> Descriptor:
     )
 
 
+def _dynamic_insert_descriptor(type_name: str, lane_count: int) -> Descriptor:
+    suffix = _descriptor_suffix(type_name, lane_count, vector=True)
+    return Descriptor(
+        key=f"llvmir.insert.dynamic.{suffix}",
+        mnemonic="insert.dynamic",
+        semantic_tag=f"llvmir.insert.dynamic.{suffix}",
+        operands=(
+            _result(type_name, unit_count=lane_count),
+            _operand(type_name, "dest", unit_count=lane_count),
+            _operand(type_name, "value"),
+            _operand("i64", "index"),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"insert.dynamic.{suffix}",
+            results=("dst",),
+            operands=("dest", "value", "index"),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _shuffle_descriptor(type_name: str, lane_count: int) -> Descriptor:
     suffix = _descriptor_suffix(type_name, lane_count, vector=True)
     return Descriptor(
@@ -1131,6 +1153,7 @@ def _structural_vector_descriptors() -> tuple[Descriptor, ...]:
             descriptors.append(_from_elements_descriptor(type_name, lane_count))
             descriptors.append(_extract_descriptor(type_name, lane_count))
             descriptors.append(_insert_descriptor(type_name, lane_count))
+            descriptors.append(_dynamic_insert_descriptor(type_name, lane_count))
             descriptors.append(_shuffle_descriptor(type_name, lane_count))
         descriptors.append(
             _slice_descriptor(type_name, source_lane_count=4, result_lane_count=2)

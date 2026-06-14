@@ -137,7 +137,6 @@ low.func.def target(@target) abi(object_function) @f16x4_insert_static(%values: 
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -148,21 +147,27 @@ func.def target(@target) @bf16x8_insert_static_constant(%values: vector<8xbf16>)
   func.return %updated : vector<8xbf16>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @bf16x8_insert_static_constant(%values: reg<llvmir.bf16 x8>) -> (reg<llvmir.bf16 x8>) asm<llvmir.generic.core> {
+  %zero = const.bf16 0
+  %updated = insert.v8bf16 %values, %zero, 5
+  return %updated
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
 }
 func.def target(@target) @f32x1_insert_dynamic(%values: vector<1xf32>, %value: f32, %lane: index) -> (vector<1xf32>) {
+  // ERROR@+1: TARGET/004 {op_name="vector.insert", subject_role="operand_segment", subject_name="indices", constraint_key="operand_segment_count", expected_count="0"}
   %updated = vector.insert %value into %values[%lane] : f32, vector<1xf32>
   func.return %updated : vector<1xf32>
 }
 
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -172,9 +177,14 @@ func.def target(@target) @f32x4_insert_dynamic(%values: vector<4xf32>, %value: f
   func.return %updated : vector<4xf32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_insert_dynamic(%values: reg<llvmir.f32 x4>, %value: reg<llvmir.f32>, %lane: reg<llvmir.i64>) -> (reg<llvmir.f32 x4>) asm<llvmir.generic.core> {
+  %updated = insert.dynamic.v4f32 %values, %value, %lane
+  return %updated
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -184,9 +194,14 @@ func.def target(@target) @i32x4_insert_dynamic(%values: vector<4xi32>, %value: i
   func.return %updated : vector<4xi32>
 }
 
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_insert_dynamic(%values: reg<llvmir.i32 x4>, %value: reg<llvmir.i32>, %lane: reg<llvmir.i64>) -> (reg<llvmir.i32 x4>) asm<llvmir.generic.core> {
+  %updated = insert.dynamic.v4i32 %values, %value, %lane
+  return %updated
+}
+
 // ====
 
-// XFAIL: llvmir source-low coverage gap
 llvmir.target<object> @target {
   triple = "loom-direct64-unknown-none",
   data_layout = "e-p:64:64-i64:64-n8:16:32:64-S128"
@@ -194,4 +209,10 @@ llvmir.target<object> @target {
 func.def target(@target) @bf16x4_insert_dynamic(%values: vector<4xbf16>, %value: bf16, %lane: index) -> (vector<4xbf16>) {
   %updated = vector.insert %value into %values[%lane] : bf16, vector<4xbf16>
   func.return %updated : vector<4xbf16>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @bf16x4_insert_dynamic(%values: reg<llvmir.bf16 x4>, %value: reg<llvmir.bf16>, %lane: reg<llvmir.i64>) -> (reg<llvmir.bf16 x4>) asm<llvmir.generic.core> {
+  %updated = insert.dynamic.v4bf16 %values, %value, %lane
+  return %updated
 }
