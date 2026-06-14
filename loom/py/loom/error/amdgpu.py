@@ -707,9 +707,9 @@ ERR_AMDGPU_033 = ErrorDef(
         ErrorParam("accepted_proof_sources", ParamKind.STRING_LIST),
     ),
     fix_hint=(
-        "Guard or assume the integer source before the index cast so value "
-        "facts prove it fits the target index width; use an offset path when "
-        "the value is a byte address"
+        "Assume the integer source before the index cast, after any required "
+        "runtime guard, so value facts prove it fits the target index width; "
+        "use an offset path when the value is a byte address"
     ),
 )
 

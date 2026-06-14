@@ -1118,7 +1118,6 @@ kernel.def target(@target) @i64_readonly_uniform_smem_guarded_index_address() {
   %control_view = buffer.view %control[%base] : buffer -> view<1xi64, #dense>
   %output_view = buffer.view %output[%base] : buffer -> view<64xi32, #dense>
   %column_i64 = view.load %control_view[0] : view<1xi64, #dense> -> i64
-  %column = index.cast %column_i64 : i64 to index
   %zero_i64 = scalar.constant 0 : i64
   %limit_i64 = scalar.constant 64 : i64
   %nonnegative = scalar.cmpi sge, %column_i64, %zero_i64 : i64
@@ -1126,6 +1125,8 @@ kernel.def target(@target) @i64_readonly_uniform_smem_guarded_index_address() {
   %guard = scalar.andi %nonnegative, %below : i1
   %zero_i32 = scalar.constant 0 : i32
   scf.if %guard {
+    %bounded_column_i64 = scalar.assume %column_i64 [range(%column_i64, 0, 63)] : i64
+    %column = index.cast %bounded_column_i64 : i64 to index
     view.store %zero_i32, %output_view[%column] : i32, view<64xi32, #dense>
   }
   kernel.return
@@ -1136,32 +1137,33 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i64_readonly_uniform_sme
   %control_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 8} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %17 = v_mov_b32 0
-  %column_i64 = global_load_b64_saddr %17, %control_view
-  %column = slice %column_i64[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %20 = s_mov_b32 0
-  %23 = s_mov_b32 64
-  %27 = slice %column_i64[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %29 = v_mov_b32_copy %20
-  %32 = v_cmp_gt_i32 %27, %29
-  %33 = v_cmp_ge_u32 %column, %29
-  %34 = v_cmp_eq_i32 %27, %29
-  %35 = s_and_b64 %34, %33
-  %nonnegative = s_or_b64 %32, %35
-  %40 = v_mov_b32_copy %23
-  %43 = v_cmp_lt_i32 %27, %29
-  %44 = v_cmp_lt_u32 %column, %40
-  %46 = s_and_b64 %34, %44
-  %below = s_or_b64 %43, %46
+  %bounded_column_i64 = global_load_b64_saddr %17, %control_view
+  %19 = s_mov_b32 0
+  %22 = s_mov_b32 64
+  %25 = slice %bounded_column_i64[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %26 = slice %bounded_column_i64[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %28 = v_mov_b32_copy %19
+  %31 = v_cmp_gt_i32 %26, %28
+  %32 = v_cmp_ge_u32 %25, %28
+  %33 = v_cmp_eq_i32 %26, %28
+  %34 = s_and_b64 %33, %32
+  %nonnegative = s_or_b64 %31, %34
+  %39 = v_mov_b32_copy %22
+  %42 = v_cmp_lt_i32 %26, %28
+  %43 = v_cmp_lt_u32 %25, %39
+  %45 = s_and_b64 %33, %43
+  %below = s_or_b64 %42, %45
   %guard = s_and_b64 %nonnegative, %below
-  %50, %51 = s_and_saveexec_b64 %guard
-  low.cond_br %51, ^_bb1, ^_bb2 : reg<amdgpu.scc>
+  %49, %50 = s_and_saveexec_b64 %guard
+  low.cond_br %50, ^_bb1, ^_bb2 : reg<amdgpu.scc>
 ^_bb1:
+  %column = slice %bounded_column_i64[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %52 = v_mov_b32 0
   %53 = v_lshlrev_b32_src0_inline %column, 2
   global_store_b32_saddr %53, %52, %output_view
   low.br ^_bb2
 ^_bb2:
-  s_mov_b64_exec %50
+  s_mov_b64_exec %49
   return
 }
 

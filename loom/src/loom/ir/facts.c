@@ -425,7 +425,7 @@ void loom_value_facts_remui(const loom_value_facts_t* lhs,
                             loom_value_facts_t* out) {
   const loom_value_facts_t lhs_facts = *lhs;
   const loom_value_facts_t rhs_facts = *rhs;
-  int64_t lhs_lo = lhs_facts.range_lo;
+  int64_t lhs_lo = lhs_facts.range_lo, lhs_hi = lhs_facts.range_hi;
   int64_t rhs_lo = rhs_facts.range_lo, rhs_hi = rhs_facts.range_hi;
   int64_t lhs_divisor = lhs_facts.known_divisor;
 
@@ -448,8 +448,10 @@ void loom_value_facts_remui(const loom_value_facts_t* lhs,
     loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
     return;
   }
-  // Result is in [0, max_divisor - 1].
-  *out = loom_value_facts_make(0, rhs_hi - 1, 1);
+  // Result is in [0, min(dividend, divisor - 1)]. This is important for
+  // dynamic divisor shapes where the divisor upper bound may be much wider than
+  // the lane or flat-index dividend being decomposed.
+  *out = loom_value_facts_make(0, loom_min_i64(lhs_hi, rhs_hi - 1), 1);
   loom_value_facts_propagate_binary_distribution(lhs_facts, rhs_facts, out);
 }
 

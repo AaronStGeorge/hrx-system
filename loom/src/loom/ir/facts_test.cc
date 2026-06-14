@@ -674,6 +674,15 @@ TEST(RemuiTransfer, NotDivisible) {
   EXPECT_EQ(out.range_hi, 15);
 }
 
+TEST(RemuiTransfer, DynamicDivisorClampedByDividend) {
+  loom_value_facts_t a = loom_value_facts_make(0, 63, 1);
+  loom_value_facts_t b = loom_value_facts_make(1, 1024, 1);
+  loom_value_facts_t out;
+  loom_value_facts_remui(&a, &b, &out);
+  EXPECT_EQ(out.range_lo, 0);
+  EXPECT_EQ(out.range_hi, 63);
+}
+
 //===----------------------------------------------------------------------===//
 // Transfer functions: shifts
 //===----------------------------------------------------------------------===//

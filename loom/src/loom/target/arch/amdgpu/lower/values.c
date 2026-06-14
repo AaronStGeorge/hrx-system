@@ -1957,7 +1957,6 @@ static iree_status_t loom_amdgpu_emit_index_cast_range_diagnostic(
     loom_value_facts_t source_facts, uint32_t index_bitwidth) {
   loom_module_t* module = loom_low_lower_context_module(context);
   static const iree_string_view_t accepted_proof_sources[] = {
-      IREE_SVL("scalar.cmpi/scf.if guard on the integer source"),
       IREE_SVL("scalar.assume on the integer source before index.cast"),
       IREE_SVL("config or kernel boundary facts on the integer source"),
   };
@@ -1981,38 +1980,6 @@ static iree_status_t loom_amdgpu_emit_index_cast_range_diagnostic(
   return loom_low_lower_emit_error_ref(context, source_op,
                                        LOOM_ERR_AMDGPU_033_REF, params,
                                        IREE_ARRAYSIZE(params));
-}
-
-static bool loom_amdgpu_index_cast_single_assume_result_facts(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t result, loom_value_facts_t* out_facts) {
-  *out_facts = loom_value_facts_unknown();
-  if (fact_table == NULL || result >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* result_value = loom_module_value(module, result);
-  if (!loom_value_has_single_use(result_value)) {
-    return false;
-  }
-
-  const loom_use_t use = loom_value_uses(result_value)[0];
-  const loom_op_t* user_op = loom_use_user_op(use);
-  if (user_op == NULL || !loom_index_assume_isa(user_op)) {
-    return false;
-  }
-
-  const uint16_t operand_index = loom_use_operand_index(use);
-  loom_value_slice_t assumed_values = loom_index_assume_values(user_op);
-  loom_value_slice_t assumed_results = loom_index_assume_results(user_op);
-  if (operand_index >= assumed_values.count ||
-      operand_index >= assumed_results.count ||
-      assumed_values.values[operand_index] != result) {
-    return false;
-  }
-
-  *out_facts = loom_value_fact_table_lookup(
-      fact_table, assumed_results.values[operand_index]);
-  return true;
 }
 
 static iree_status_t loom_amdgpu_select_index_cast_plan(
@@ -2051,20 +2018,6 @@ static iree_status_t loom_amdgpu_select_index_cast_plan(
     }
     if (!loom_value_facts_fit_signed_bit_count(source_facts,
                                                (uint8_t)index_bitwidth)) {
-      loom_value_facts_t assumed_result_facts = loom_value_facts_unknown();
-      if (loom_amdgpu_index_cast_single_assume_result_facts(
-              module, fact_table, result, &assumed_result_facts) &&
-          loom_value_facts_fit_signed_bit_count(assumed_result_facts,
-                                                (uint8_t)index_bitwidth)) {
-        *out_plan = (loom_amdgpu_index_cast_plan_t){
-            .kind = LOOM_AMDGPU_INDEX_CAST_KIND_PRESERVING_LOW_32,
-            .source = source,
-            .result = result,
-            .index_bitwidth = index_bitwidth,
-        };
-        *out_selected = true;
-        return iree_ok_status();
-      }
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_index_cast_range_diagnostic(
           context, source_op, source_type, result_type, source_facts,
           index_bitwidth));

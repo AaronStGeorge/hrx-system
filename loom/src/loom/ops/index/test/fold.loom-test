@@ -136,6 +136,46 @@ func.def @madd_divisibility(%x: index, %y: index) -> (i64) {
 
 // ====
 
+// index.madd composes finite non-negative coordinate ranges without local
+// per-result assumptions.
+func.def @madd_linear_lane_range(%workgroup0: index, %lane0: index) -> (i64, i64) {
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 7)] : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 255)] : index
+  %workgroup_size = index.constant 256 : index
+  %linear = index.madd %workgroup, %workgroup_size, %lane : index
+  %lo = test.fact_range_lo %linear : index -> i64
+  %hi = test.fact_range_hi %linear : index -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @madd_linear_lane_range(%workgroup0: index, %lane0: index) -> (i64, i64) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 2047 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
+// Strided multidimensional offsets keep bounded flat-index facts when each
+// coordinate carries finite non-negative facts.
+func.def @madd_strided_offset_range(%row0: index, %column0: index, %stride0: index) -> (i64, i64) {
+  %row = index.assume %row0 [range(%row0, 0, 127)] : index
+  %column = index.assume %column0 [range(%column0, 0, 15)] : index
+  %stride = index.assume %stride0 [range(%stride0, 1, 4096)] : index
+  %linear = index.madd %row, %stride, %column : index
+  %lo = test.fact_range_lo %linear : index -> i64
+  %hi = test.fact_range_hi %linear : index -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @madd_strided_offset_range(%row0: index, %column0: index, %stride0: index) -> (i64, i64) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 520207 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
 // index.div by an exact positive constant scales known divisibility down.
 func.def @div_divisibility(%x: index) -> (i64) {
   %c64 = index.constant 64 : index
@@ -169,6 +209,25 @@ func.def @rem_exact_zero(%x: index) -> (i64, i64) {
 func.def @rem_exact_zero(%x: index) -> (i64, i64) {
   %lo = scalar.constant 0 : i64
   %hi = scalar.constant 0 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
+// index.rem is also bounded by the non-negative dividend, not only by a wide
+// dynamic divisor range.
+func.def @rem_dynamic_divisor_uses_dividend_bound(%x0: index, %d0: index) -> (i64, i64) {
+  %x = index.assume %x0 [range(%x0, 0, 63)] : index
+  %d = index.assume %d0 [range(%d0, 1, 1024)] : index
+  %r = index.rem %x, %d : index
+  %lo = test.fact_range_lo %r : index -> i64
+  %hi = test.fact_range_hi %r : index -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @rem_dynamic_divisor_uses_dividend_bound(%x0: index, %d0: index) -> (i64, i64) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 63 : i64
   func.return %lo, %hi : i64, i64
 }
 
