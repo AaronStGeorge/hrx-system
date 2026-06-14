@@ -77,8 +77,8 @@ low.func.def target(@gfx11_target) @rdna_scalar_f16_fma_forms(%acc: reg<amdgpu.v
 
 // ====
 
-amdgpu.target<gfx1170> @gfx1170_target
-low.func.def target(@gfx1170_target) @rdna35_scalar_domain_fma_forms(%acc32: reg<amdgpu.sgpr>, %a32: reg<amdgpu.sgpr>, %b32: reg<amdgpu.sgpr>, %acc16: reg<amdgpu.sgpr>, %a16: reg<amdgpu.sgpr>, %b16: reg<amdgpu.sgpr>) asm<amdgpu.rdna3_5.core> {
+amdgpu.target<gfx1150> @gfx1150_target
+low.func.def target(@gfx1150_target) @rdna35_scalar_domain_fma_forms(%acc32: reg<amdgpu.sgpr>, %a32: reg<amdgpu.sgpr>, %b32: reg<amdgpu.sgpr>, %acc16: reg<amdgpu.sgpr>, %a16: reg<amdgpu.sgpr>, %b16: reg<amdgpu.sgpr>) asm<amdgpu.rdna3_5.core> {
   %fmaak = s_fmaak_f32 %a32, %b32, 1065353216
   %fmamk = s_fmamk_f32 %a32, %b32, 1065353216
   %fmac32 = s_fmac_f32 %acc32, %a32, %b32

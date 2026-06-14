@@ -187,7 +187,7 @@ TEST_F(AmdgpuProviderTest, MaterializesSelectedProcessors) {
   };
   static const Case cases[] = {
       {IREE_SV("gfx942"), LOOM_AMDGPU_TARGET_KIND_GFX942},
-      {IREE_SV("gfx1150"), LOOM_AMDGPU_TARGET_KIND_GFX1100},
+      {IREE_SV("gfx1150"), LOOM_AMDGPU_TARGET_KIND_GFX1150},
       {IREE_SV("gfx1201"), LOOM_AMDGPU_TARGET_KIND_GFX1200},
       {IREE_SV("gfx1250"), LOOM_AMDGPU_TARGET_KIND_GFX1250},
   };
