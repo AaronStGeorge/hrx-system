@@ -1210,9 +1210,8 @@ static iree_status_t loom_amdgpu_lookup_atomic_value_as_vgpr(
     *out_low_value = low_value;
     return iree_ok_status();
   }
-  return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
-      "AMDGPU atomic selected a non-VGPR dynamic update value");
+  IREE_ASSERT_UNREACHABLE("selected AMDGPU atomic VGPR update value");
+  IREE_BUILTIN_UNREACHABLE();
 }
 
 static iree_status_t loom_amdgpu_materialize_atomic_value_as_fresh_vgpr(
