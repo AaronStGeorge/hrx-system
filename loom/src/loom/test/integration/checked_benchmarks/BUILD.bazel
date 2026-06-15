@@ -36,6 +36,19 @@ _CHECKED_BENCHMARK_CASES = [
         ],
     },
     {
+        "name": "paged_decode_attention_tile_f32",
+        "rows": [
+            {
+                "benchmark": "@paged_decode_attention_tile_tail",
+                "target_name": "paged_decode_attention_tile_tail",
+            },
+        ],
+        "source": "paged_decode_attention_tile_f32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
         "name": "rope_pair_rotate_tile_f32",
         "rows": [
             {
@@ -48,6 +61,19 @@ _CHECKED_BENCHMARK_CASES = [
             },
         ],
         "source": "rope_pair_rotate_tile_f32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
+        "name": "split_kv_online_softmax_combine_f32",
+        "rows": [
+            {
+                "benchmark": "@split_kv_online_softmax_combine_f32_smoke",
+                "target_name": "split_kv_online_softmax_combine_f32",
+            },
+        ],
+        "source": "split_kv_online_softmax_combine_f32.loom",
         "targets": [
             "amdgpu",
         ],
@@ -78,6 +104,23 @@ _CHECKED_BENCHMARK_CASES = [
             },
         ],
         "source": "top2_routing_expert_gather_f32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
+        "name": "weighted_expert_route_gather_f32",
+        "rows": [
+            {
+                "benchmark": "@weighted_expert_route_gather_distinct",
+                "target_name": "weighted_expert_route_gather_distinct",
+            },
+            {
+                "benchmark": "@weighted_expert_route_gather_duplicate",
+                "target_name": "weighted_expert_route_gather_duplicate",
+            },
+        ],
+        "source": "weighted_expert_route_gather_f32.loom",
         "targets": [
             "amdgpu",
         ],
