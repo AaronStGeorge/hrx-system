@@ -37,23 +37,6 @@ loom_amdgpu_find_compare_descriptor_candidate(loom_op_kind_t op_kind,
   return NULL;
 }
 
-typedef struct loom_amdgpu_select_descriptors_t {
-  // Descriptor row selected for register-register lane selects.
-  loom_low_lower_resolved_descriptor_t register_descriptor;
-  // Optional descriptor row selected when the false lane is an inline source.
-  loom_low_lower_resolved_descriptor_t src0_inline_descriptor;
-  // Optional descriptor row selected when the true lane is an inline source.
-  loom_low_lower_resolved_descriptor_t src1_inline_descriptor;
-  // Optional descriptor row selected when the false lane is a literal source.
-  loom_low_lower_resolved_descriptor_t src0_literal_descriptor;
-  // Optional descriptor row selected when the true lane is a literal source.
-  loom_low_lower_resolved_descriptor_t src1_literal_descriptor;
-  // Optional descriptor row selected when false is literal and true is inline.
-  loom_low_lower_resolved_descriptor_t src0_literal_src1_inline_descriptor;
-  // Optional descriptor row selected when true is literal and false is inline.
-  loom_low_lower_resolved_descriptor_t src1_literal_src0_inline_descriptor;
-} loom_amdgpu_select_descriptors_t;
-
 static iree_status_t loom_amdgpu_resolve_optional_descriptor_ref(
     loom_low_lower_context_t* context,
     loom_amdgpu_descriptor_ref_t descriptor_ref,
@@ -180,43 +163,6 @@ iree_status_t loom_amdgpu_select_scalar_cmpf_plan(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_resolve_select_vgpr_descriptors(
-    loom_low_lower_context_t* context,
-    loom_amdgpu_select_descriptors_t* out_descriptors, bool* out_present) {
-  *out_descriptors = (loom_amdgpu_select_descriptors_t){0};
-  *out_present = false;
-
-  bool register_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
-      &out_descriptors->register_descriptor, &register_descriptor_present));
-  if (!register_descriptor_present) {
-    return iree_ok_status();
-  }
-
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC0_INLINE,
-      &out_descriptors->src0_inline_descriptor));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_INLINE,
-      &out_descriptors->src1_inline_descriptor));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC0_LIT,
-      &out_descriptors->src0_literal_descriptor));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_LIT,
-      &out_descriptors->src1_literal_descriptor));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC0_LIT_SRC1_INLINE,
-      &out_descriptors->src0_literal_src1_inline_descriptor));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_LIT_SRC0_INLINE,
-      &out_descriptors->src1_literal_src0_inline_descriptor));
-
-  *out_present = true;
-  return iree_ok_status();
-}
-
 static bool loom_amdgpu_select_vector_storage(
     loom_type_t result_type, loom_amdgpu_vector_storage_t* out_storage,
     bool* out_allows_vector_mask, bool* out_allows_lane_immediates) {
@@ -315,10 +261,12 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
     return iree_ok_status();
   }
 
-  loom_amdgpu_select_descriptors_t select_descriptors = {0};
+  loom_amdgpu_cndmask_b32_descriptors_t cndmask_descriptors = {0};
   bool descriptors_present = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_select_vgpr_descriptors(
-      context, &select_descriptors, &descriptors_present));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_cndmask_b32_descriptors(
+      context, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_REGISTER,
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_ALL, &cndmask_descriptors,
+      &descriptors_present));
   if (!descriptors_present) {
     return iree_ok_status();
   }
@@ -326,15 +274,7 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
   *out_plan = (loom_amdgpu_vector_select_plan_t){
       .payload_kind = LOOM_AMDGPU_SELECT_PAYLOAD_KIND_DATA,
       .condition_kind = condition_kind,
-      .register_descriptor = select_descriptors.register_descriptor,
-      .src0_inline_descriptor = select_descriptors.src0_inline_descriptor,
-      .src1_inline_descriptor = select_descriptors.src1_inline_descriptor,
-      .src0_literal_descriptor = select_descriptors.src0_literal_descriptor,
-      .src1_literal_descriptor = select_descriptors.src1_literal_descriptor,
-      .src0_literal_src1_inline_descriptor =
-          select_descriptors.src0_literal_src1_inline_descriptor,
-      .src1_literal_src0_inline_descriptor =
-          select_descriptors.src1_literal_src0_inline_descriptor,
+      .cndmask_descriptors = cndmask_descriptors,
       .condition = selected_condition,
       .true_value = true_value,
       .false_value = false_value,
@@ -707,10 +647,12 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
     return iree_ok_status();
   }
 
-  loom_amdgpu_select_descriptors_t select_descriptors = {0};
+  loom_amdgpu_cndmask_b32_descriptors_t cndmask_descriptors = {0};
   bool descriptors_present = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_select_vgpr_descriptors(
-      context, &select_descriptors, &descriptors_present));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_cndmask_b32_descriptors(
+      context, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_REGISTER,
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_ALL, &cndmask_descriptors,
+      &descriptors_present));
   if (!descriptors_present) {
     return iree_ok_status();
   }
@@ -718,15 +660,7 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
   *out_plan = (loom_amdgpu_vector_select_plan_t){
       .payload_kind = LOOM_AMDGPU_SELECT_PAYLOAD_KIND_DATA,
       .condition_kind = LOOM_AMDGPU_SELECT_CONDITION_KIND_SCALAR_MASK,
-      .register_descriptor = select_descriptors.register_descriptor,
-      .src0_inline_descriptor = select_descriptors.src0_inline_descriptor,
-      .src1_inline_descriptor = select_descriptors.src1_inline_descriptor,
-      .src0_literal_descriptor = select_descriptors.src0_literal_descriptor,
-      .src1_literal_descriptor = select_descriptors.src1_literal_descriptor,
-      .src0_literal_src1_inline_descriptor =
-          select_descriptors.src0_literal_src1_inline_descriptor,
-      .src1_literal_src0_inline_descriptor =
-          select_descriptors.src1_literal_src0_inline_descriptor,
+      .cndmask_descriptors = cndmask_descriptors,
       .condition = condition,
       .true_value = true_value,
       .false_value = false_value,
@@ -757,25 +691,10 @@ static iree_status_t loom_amdgpu_select_clampf_ordered_descriptors(
   if (!upper_compare_present) {
     return iree_ok_status();
   }
-  bool select_present = false;
-  loom_amdgpu_select_descriptors_t select_descriptors = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_select_vgpr_descriptors(
-      context, &select_descriptors, &select_present));
-  out_plan->select_register_descriptor = select_descriptors.register_descriptor;
-  out_plan->select_src0_inline_descriptor =
-      select_descriptors.src0_inline_descriptor;
-  out_plan->select_src1_inline_descriptor =
-      select_descriptors.src1_inline_descriptor;
-  out_plan->select_src0_literal_descriptor =
-      select_descriptors.src0_literal_descriptor;
-  out_plan->select_src1_literal_descriptor =
-      select_descriptors.src1_literal_descriptor;
-  out_plan->select_src0_literal_src1_inline_descriptor =
-      select_descriptors.src0_literal_src1_inline_descriptor;
-  out_plan->select_src1_literal_src0_inline_descriptor =
-      select_descriptors.src1_literal_src0_inline_descriptor;
-  *out_present = select_present;
-  return iree_ok_status();
+  return loom_amdgpu_resolve_cndmask_b32_descriptors(
+      context, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_REGISTER,
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_ALL, &out_plan->select_descriptors,
+      out_present);
 }
 
 static iree_status_t loom_amdgpu_select_clampf_number_descriptors(
@@ -1017,8 +936,9 @@ typedef struct loom_amdgpu_select_immediate_candidate_t {
 static const loom_amdgpu_select_immediate_candidate_t
     kLoomAmdgpuSelectImmediateCandidates[] = {
         {
-            .descriptor_offset = offsetof(loom_amdgpu_vector_select_plan_t,
-                                          src0_literal_src1_inline_descriptor),
+            .descriptor_offset = offsetof(
+                loom_amdgpu_vector_select_plan_t,
+                cndmask_descriptors.src0_literal_src1_inline_descriptor),
             .operands = {LOOM_AMDGPU_SELECT_IMMEDIATE_OPERAND_CONDITION},
             .operand_count = 1,
             .attrs =
@@ -1036,8 +956,9 @@ static const loom_amdgpu_select_immediate_candidate_t
             .attr_count = 2,
         },
         {
-            .descriptor_offset = offsetof(loom_amdgpu_vector_select_plan_t,
-                                          src1_literal_src0_inline_descriptor),
+            .descriptor_offset = offsetof(
+                loom_amdgpu_vector_select_plan_t,
+                cndmask_descriptors.src1_literal_src0_inline_descriptor),
             .operands = {LOOM_AMDGPU_SELECT_IMMEDIATE_OPERAND_CONDITION},
             .operand_count = 1,
             .attrs =
@@ -1055,8 +976,9 @@ static const loom_amdgpu_select_immediate_candidate_t
             .attr_count = 2,
         },
         {
-            .descriptor_offset = offsetof(loom_amdgpu_vector_select_plan_t,
-                                          src1_inline_descriptor),
+            .descriptor_offset =
+                offsetof(loom_amdgpu_vector_select_plan_t,
+                         cndmask_descriptors.src1_inline_descriptor),
             .operands =
                 {
                     LOOM_AMDGPU_SELECT_IMMEDIATE_OPERAND_FALSE_LANE,
@@ -1074,8 +996,9 @@ static const loom_amdgpu_select_immediate_candidate_t
             .attr_count = 1,
         },
         {
-            .descriptor_offset = offsetof(loom_amdgpu_vector_select_plan_t,
-                                          src0_inline_descriptor),
+            .descriptor_offset =
+                offsetof(loom_amdgpu_vector_select_plan_t,
+                         cndmask_descriptors.src0_inline_descriptor),
             .operands =
                 {
                     LOOM_AMDGPU_SELECT_IMMEDIATE_OPERAND_TRUE_LANE,
@@ -1093,8 +1016,9 @@ static const loom_amdgpu_select_immediate_candidate_t
             .attr_count = 1,
         },
         {
-            .descriptor_offset = offsetof(loom_amdgpu_vector_select_plan_t,
-                                          src0_literal_descriptor),
+            .descriptor_offset =
+                offsetof(loom_amdgpu_vector_select_plan_t,
+                         cndmask_descriptors.src0_literal_descriptor),
             .operands =
                 {
                     LOOM_AMDGPU_SELECT_IMMEDIATE_OPERAND_TRUE_LANE,
@@ -1111,8 +1035,9 @@ static const loom_amdgpu_select_immediate_candidate_t
             .attr_count = 1,
         },
         {
-            .descriptor_offset = offsetof(loom_amdgpu_vector_select_plan_t,
-                                          src1_literal_descriptor),
+            .descriptor_offset =
+                offsetof(loom_amdgpu_vector_select_plan_t,
+                         cndmask_descriptors.src1_literal_descriptor),
             .operands =
                 {
                     LOOM_AMDGPU_SELECT_IMMEDIATE_OPERAND_FALSE_LANE,
@@ -1625,7 +1550,7 @@ static iree_status_t loom_amdgpu_emit_clampf_select_lane(
       loom_low_lower_context_fact_table(context);
   const loom_module_t* module = loom_low_lower_context_module(context);
   uint32_t true_bits = 0;
-  if (plan->select_src1_inline_descriptor.descriptor != NULL &&
+  if (plan->select_descriptors.src1_inline_descriptor.descriptor != NULL &&
       loom_amdgpu_source_lane_as_u32_bits(fact_table, module, true_source, lane,
                                           &true_bits) &&
       true_bits <= 64) {
@@ -1636,8 +1561,9 @@ static iree_status_t loom_amdgpu_emit_clampf_select_lane(
                                     attrs, IREE_ARRAYSIZE(attrs), &attr_count));
     const loom_value_id_t operands[] = {false_value, condition};
     return loom_amdgpu_emit_select_lane_op(
-        context, source_op, &plan->select_src1_inline_descriptor, operands,
-        IREE_ARRAYSIZE(operands), attrs, attr_count, lane_type, out_value);
+        context, source_op, &plan->select_descriptors.src1_inline_descriptor,
+        operands, IREE_ARRAYSIZE(operands), attrs, attr_count, lane_type,
+        out_value);
   }
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
@@ -1649,7 +1575,7 @@ static iree_status_t loom_amdgpu_emit_clampf_select_lane(
   };
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-      context, &plan->select_register_descriptor, operands,
+      context, &plan->select_descriptors.register_descriptor, operands,
       IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0), &lane_type,
       1, /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
       &low_op));
@@ -2165,10 +2091,10 @@ iree_status_t loom_amdgpu_lower_select(
     };
     loom_op_t* lane_op = NULL;
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
-        context, &plan->register_descriptor, operands, IREE_ARRAYSIZE(operands),
-        loom_make_named_attr_slice(NULL, 0), &lane_type, 1,
-        /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-        &lane_op));
+        context, &plan->cndmask_descriptors.register_descriptor, operands,
+        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0),
+        &lane_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
+        source_op->location, &lane_op));
     lane_results[i] = loom_value_slice_get(loom_low_op_results(lane_op), 0);
   }
 

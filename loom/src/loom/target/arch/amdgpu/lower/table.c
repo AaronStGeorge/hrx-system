@@ -240,21 +240,23 @@ iree_status_t loom_amdgpu_select_vector_table_lookup_plan(
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
       context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32,
       &out_plan->compare_register_descriptor, &compare_descriptor_present));
+  loom_amdgpu_cndmask_b32_descriptors_t select_descriptors = {0};
   bool select_descriptor_present = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
-      &out_plan->select_register_descriptor, &select_descriptor_present));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_cndmask_b32_descriptors(
+      context, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_REGISTER,
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_LITERAL, &select_descriptors,
+      &select_descriptor_present));
   if (!compare_descriptor_present || !select_descriptor_present) {
     return iree_ok_status();
   }
+  out_plan->select_register_descriptor = select_descriptors.register_descriptor;
+  out_plan->select_src1_literal_descriptor =
+      select_descriptors.src1_literal_descriptor;
 
   bool optional_descriptor_present = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
       context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CMP_EQ_I32_SRC1_INLINE,
       &out_plan->compare_src1_inline_descriptor, &optional_descriptor_present));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
-      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_LIT,
-      &out_plan->select_src1_literal_descriptor, &optional_descriptor_present));
 
   *out_selected = true;
   return iree_ok_status();

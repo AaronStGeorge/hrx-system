@@ -96,6 +96,15 @@ iree_status_t loom_amdgpu_resolve_descriptor_refs_if_present(
     const loom_amdgpu_descriptor_resolution_t* resolutions,
     iree_host_size_t resolution_count, bool* out_present);
 
+// Resolves selected v_cndmask_b32 descriptor forms against the active
+// descriptor set. Required flags must be present for |out_present| to become
+// true; optional flags are resolved when available and otherwise left empty.
+iree_status_t loom_amdgpu_resolve_cndmask_b32_descriptors(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t required_flags,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t optional_flags,
+    loom_amdgpu_cndmask_b32_descriptors_t* out_descriptors, bool* out_present);
+
 // Resolves a required AMDGPU descriptor ref against the active descriptor set.
 iree_status_t loom_amdgpu_resolve_descriptor_ref(
     loom_low_lower_context_t* context,

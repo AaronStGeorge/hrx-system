@@ -581,6 +581,93 @@ iree_status_t loom_amdgpu_resolve_descriptor_refs_if_present(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t requested_flags,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t flag,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    loom_low_lower_resolved_descriptor_t* out_descriptor, bool* out_present) {
+  if (!iree_any_bit_set(requested_flags, flag)) {
+    *out_present = true;
+    return iree_ok_status();
+  }
+  return loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, descriptor_ref, out_descriptor, out_present);
+}
+
+static iree_status_t loom_amdgpu_resolve_cndmask_b32_descriptor_set(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t requested_flags,
+    loom_amdgpu_cndmask_b32_descriptors_t* out_descriptors,
+    bool* out_all_present) {
+  *out_all_present = true;
+  bool present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+      context, requested_flags, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_REGISTER,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32,
+      &out_descriptors->register_descriptor, &present));
+  *out_all_present = *out_all_present && present;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+      context, requested_flags, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_INLINE,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC0_INLINE,
+      &out_descriptors->src0_inline_descriptor, &present));
+  *out_all_present = *out_all_present && present;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+      context, requested_flags, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_INLINE,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_INLINE,
+      &out_descriptors->src1_inline_descriptor, &present));
+  *out_all_present = *out_all_present && present;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+      context, requested_flags, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_LITERAL,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC0_LIT,
+      &out_descriptors->src0_literal_descriptor, &present));
+  *out_all_present = *out_all_present && present;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+      context, requested_flags, LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_LITERAL,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_LIT,
+      &out_descriptors->src1_literal_descriptor, &present));
+  *out_all_present = *out_all_present && present;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+      context, requested_flags,
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_LITERAL_SRC1_INLINE,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC0_LIT_SRC1_INLINE,
+      &out_descriptors->src0_literal_src1_inline_descriptor, &present));
+  *out_all_present = *out_all_present && present;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_requested_cndmask_b32_descriptor(
+      context, requested_flags,
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_LITERAL_SRC0_INLINE,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_CNDMASK_B32_SRC1_LIT_SRC0_INLINE,
+      &out_descriptors->src1_literal_src0_inline_descriptor, &present));
+  *out_all_present = *out_all_present && present;
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_resolve_cndmask_b32_descriptors(
+    loom_low_lower_context_t* context,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t required_flags,
+    loom_amdgpu_cndmask_b32_descriptor_flags_t optional_flags,
+    loom_amdgpu_cndmask_b32_descriptors_t* out_descriptors, bool* out_present) {
+  IREE_ASSERT_EQ(required_flags & ~LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_ALL, 0u);
+  IREE_ASSERT_EQ(optional_flags & ~LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_ALL, 0u);
+  *out_descriptors = (loom_amdgpu_cndmask_b32_descriptors_t){0};
+  *out_present = false;
+
+  bool required_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_cndmask_b32_descriptor_set(
+      context, required_flags, out_descriptors, &required_present));
+  if (!required_present) {
+    return iree_ok_status();
+  }
+
+  bool optional_present = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_cndmask_b32_descriptor_set(
+      context, optional_flags & ~required_flags, out_descriptors,
+      &optional_present));
+  (void)optional_present;
+  *out_present = true;
+  return iree_ok_status();
+}
+
 iree_status_t loom_amdgpu_resolve_descriptor_ref(
     loom_low_lower_context_t* context,
     loom_amdgpu_descriptor_ref_t descriptor_ref,

@@ -290,6 +290,43 @@ typedef struct loom_amdgpu_vector_compare_plan_t {
   uint32_t lane_count;
 } loom_amdgpu_vector_compare_plan_t;
 
+typedef uint32_t loom_amdgpu_cndmask_b32_descriptor_flags_t;
+
+enum {
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_REGISTER = 1u << 0,
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_INLINE = 1u << 1,
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_INLINE = 1u << 2,
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_LITERAL = 1u << 3,
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_LITERAL = 1u << 4,
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_LITERAL_SRC1_INLINE = 1u << 5,
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_LITERAL_SRC0_INLINE = 1u << 6,
+  LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_ALL =
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_REGISTER |
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_INLINE |
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_INLINE |
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_LITERAL |
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_LITERAL |
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC0_LITERAL_SRC1_INLINE |
+      LOOM_AMDGPU_CNDMASK_B32_DESCRIPTOR_SRC1_LITERAL_SRC0_INLINE,
+};
+
+typedef struct loom_amdgpu_cndmask_b32_descriptors_t {
+  // Descriptor row selected for register-register lane selects.
+  loom_low_lower_resolved_descriptor_t register_descriptor;
+  // Optional descriptor row selected when the false lane is an inline source.
+  loom_low_lower_resolved_descriptor_t src0_inline_descriptor;
+  // Optional descriptor row selected when the true lane is an inline source.
+  loom_low_lower_resolved_descriptor_t src1_inline_descriptor;
+  // Optional descriptor row selected when the false lane is a literal source.
+  loom_low_lower_resolved_descriptor_t src0_literal_descriptor;
+  // Optional descriptor row selected when the true lane is a literal source.
+  loom_low_lower_resolved_descriptor_t src1_literal_descriptor;
+  // Optional descriptor row selected when false is literal and true is inline.
+  loom_low_lower_resolved_descriptor_t src0_literal_src1_inline_descriptor;
+  // Optional descriptor row selected when true is literal and false is inline.
+  loom_low_lower_resolved_descriptor_t src1_literal_src0_inline_descriptor;
+} loom_amdgpu_cndmask_b32_descriptors_t;
+
 typedef enum loom_amdgpu_select_condition_kind_e {
   LOOM_AMDGPU_SELECT_CONDITION_KIND_NONE = 0,
   LOOM_AMDGPU_SELECT_CONDITION_KIND_SCC = 1,
@@ -310,20 +347,8 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   loom_amdgpu_select_condition_kind_t condition_kind;
   // Descriptor row selected for SCC-controlled scalar selects.
   loom_low_lower_resolved_descriptor_t scc_descriptor;
-  // Descriptor row selected for register-register lane selects.
-  loom_low_lower_resolved_descriptor_t register_descriptor;
-  // Optional descriptor row selected when the false lane is an inline source.
-  loom_low_lower_resolved_descriptor_t src0_inline_descriptor;
-  // Optional descriptor row selected when the true lane is an inline source.
-  loom_low_lower_resolved_descriptor_t src1_inline_descriptor;
-  // Optional descriptor row selected when the false lane is a literal source.
-  loom_low_lower_resolved_descriptor_t src0_literal_descriptor;
-  // Optional descriptor row selected when the true lane is a literal source.
-  loom_low_lower_resolved_descriptor_t src1_literal_descriptor;
-  // Optional descriptor row selected when false is literal and true is inline.
-  loom_low_lower_resolved_descriptor_t src0_literal_src1_inline_descriptor;
-  // Optional descriptor row selected when true is literal and false is inline.
-  loom_low_lower_resolved_descriptor_t src1_literal_src0_inline_descriptor;
+  // Descriptor rows selected for scalar-mask v_cndmask_b32 lane selects.
+  loom_amdgpu_cndmask_b32_descriptors_t cndmask_descriptors;
   // Descriptor row selected to read EXEC for i1 mask selection.
   loom_low_lower_resolved_descriptor_t mask_exec_read_descriptor;
   // Descriptor row selected to AND i1 mask payloads.
@@ -361,22 +386,8 @@ typedef struct loom_amdgpu_clampf_plan_t {
   loom_low_lower_resolved_descriptor_t lower_compare_descriptor;
   // Descriptor row selected for the ordered upper-bound comparison.
   loom_low_lower_resolved_descriptor_t upper_compare_descriptor;
-  // Descriptor row selected for register-register lane selects.
-  loom_low_lower_resolved_descriptor_t select_register_descriptor;
-  // Optional descriptor row selected when a select false lane is inline.
-  loom_low_lower_resolved_descriptor_t select_src0_inline_descriptor;
-  // Optional descriptor row selected when a select true lane is inline.
-  loom_low_lower_resolved_descriptor_t select_src1_inline_descriptor;
-  // Optional descriptor row selected when a select false lane is literal.
-  loom_low_lower_resolved_descriptor_t select_src0_literal_descriptor;
-  // Optional descriptor row selected when a select true lane is literal.
-  loom_low_lower_resolved_descriptor_t select_src1_literal_descriptor;
-  // Optional descriptor row selected when false is literal and true is inline.
-  loom_low_lower_resolved_descriptor_t
-      select_src0_literal_src1_inline_descriptor;
-  // Optional descriptor row selected when true is literal and false is inline.
-  loom_low_lower_resolved_descriptor_t
-      select_src1_literal_src0_inline_descriptor;
+  // Descriptor rows selected for ordered-mode v_cndmask_b32 lane selects.
+  loom_amdgpu_cndmask_b32_descriptors_t select_descriptors;
   // Descriptor row selected for register-register lower-bound maxnum.
   loom_low_lower_resolved_descriptor_t lower_bound_register_descriptor;
   // Optional descriptor row selected for literal lower-bound maxnum.
