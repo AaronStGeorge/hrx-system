@@ -282,6 +282,10 @@ def _cdna_core_overlays(
         _v_add_co_ci_u32_overlay(
             instruction_name="V_ADDC_CO_U32", mnemonic="v_addc_co_u32"
         ),
+        _v_sub_co_u32_overlay(),
+        _v_sub_co_ci_u32_overlay(
+            instruction_name="V_SUBB_CO_U32", mnemonic="v_subb_co_u32"
+        ),
         _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -819,6 +823,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
         _v_add_co_u32_overlay(),
         _v_add_co_ci_u32_overlay(),
+        _v_sub_co_u32_overlay(),
+        _v_sub_co_ci_u32_overlay(),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
@@ -1228,6 +1234,8 @@ def _rdna4_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_add_u32_literal_overlay("V_ADD_NC_U32"),
         _v_add_co_u32_overlay(),
         _v_add_co_ci_u32_overlay(),
+        _v_sub_co_u32_overlay(),
+        _v_sub_co_ci_u32_overlay(),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),

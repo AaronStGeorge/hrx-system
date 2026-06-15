@@ -18,6 +18,15 @@ func.def @scalar_i64_addi_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2
 
 // ====
 
+func.def @scalar_i64_subi_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2xi64>) -> (i64) {
+  %lhs = vector.extract %lhs_values[0] : vector<2xi64> -> i64
+  %rhs = vector.extract %rhs_values[0] : vector<2xi64> -> i64
+  %difference = scalar.subi %lhs, %rhs : i64
+  func.return %difference : i64
+}
+
+// ====
+
 func.def @scalar_i64_muli_bitwise_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2xi64>, %mask_values: vector<2xi64>) -> (i64) {
   %lhs = vector.extract %lhs_values[0] : vector<2xi64> -> i64
   %rhs = vector.extract %rhs_values[0] : vector<2xi64> -> i64
