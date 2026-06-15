@@ -18,10 +18,6 @@
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
-static bool loom_amdgpu_subgroup_wavefront_size_is_supported(
-    uint32_t wavefront_size) {
-  return wavefront_size == 32 || wavefront_size == 64;
-}
 static bool loom_amdgpu_subgroup_exact_i32_value(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, int64_t* out_value) {
@@ -74,7 +70,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_plan(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return iree_ok_status();
   }
 
@@ -133,7 +129,7 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_broadcast_first_plan(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return iree_ok_status();
   }
 
@@ -279,7 +275,7 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
   const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, out_wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(*out_wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(*out_wavefront_size)) {
     return loom_amdgpu_low_legality_reject(context, op, constraint_key);
   }
   return iree_ok_status();
@@ -309,7 +305,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast(
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_wavefront_size(bundle, &wavefront_size));
-  if (!loom_amdgpu_subgroup_wavefront_size_is_supported(wavefront_size)) {
+  if (!loom_amdgpu_wavefront_size_is_valid(wavefront_size)) {
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("subgroup_broadcast.wavefront_size"));
   }

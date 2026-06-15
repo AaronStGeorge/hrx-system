@@ -270,24 +270,32 @@ typedef struct loom_amdgpu_amdhsa_target_id_t {
   iree_string_view_t feature_suffix;
 } loom_amdgpu_amdhsa_target_id_t;
 
+// Returns the support flag for |wavefront_size|, or zero when unsupported.
+static inline loom_amdgpu_wavefront_size_flags_t
+loom_amdgpu_wavefront_size_flag(uint32_t wavefront_size) {
+  switch (wavefront_size) {
+    case 32:
+      return LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32;
+    case 64:
+      return LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64;
+    default:
+      return 0;
+  }
+}
+
+// Returns true for wavefront sizes represented by AMDGPU target lowering.
+static inline bool loom_amdgpu_wavefront_size_is_valid(
+    uint32_t wavefront_size) {
+  return loom_amdgpu_wavefront_size_flag(wavefront_size) != 0;
+}
+
 // Returns true when |processor| can execute kernels with |wavefront_size|.
 static inline bool loom_amdgpu_processor_supports_wavefront_size(
     const loom_amdgpu_processor_info_t* processor, uint32_t wavefront_size) {
-  if (processor == NULL) {
-    return false;
-  }
-  loom_amdgpu_wavefront_size_flags_t requested_size = 0;
-  switch (wavefront_size) {
-    case 32:
-      requested_size = LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32;
-      break;
-    case 64:
-      requested_size = LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64;
-      break;
-    default:
-      return false;
-  }
-  return iree_all_bits_set(processor->wavefront.supported_sizes,
+  const loom_amdgpu_wavefront_size_flags_t requested_size =
+      loom_amdgpu_wavefront_size_flag(wavefront_size);
+  return processor != NULL && requested_size != 0 &&
+         iree_all_bits_set(processor->wavefront.supported_sizes,
                            requested_size);
 }
 
