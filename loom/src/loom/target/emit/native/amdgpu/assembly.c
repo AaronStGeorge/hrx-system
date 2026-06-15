@@ -1585,18 +1585,30 @@ typedef enum loom_amdgpu_descriptor_packet_route_flag_bits_e {
   // Descriptor has exactly the two immediates used by s_waitcnt.
   LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_TWO_IMMEDIATES = 1u << 8,
 } loom_amdgpu_descriptor_packet_route_flag_bits_t;
-typedef uint32_t loom_amdgpu_descriptor_packet_route_flags_t;
+typedef uint16_t loom_amdgpu_descriptor_packet_route_flags_t;
 
-typedef iree_status_t (*loom_amdgpu_append_descriptor_packet_fn_t)(
-    const loom_native_assembly_packet_context_t* context);
+typedef enum loom_amdgpu_descriptor_packet_route_kind_e {
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD_LDS = 0,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_LOAD_LDS,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_BUFFER_ATOMIC,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MEMORY,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_UNSUPPORTED_READ_WRITE,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_LOAD,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_STORE,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_LOAD,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_STORE,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_STORE,
+  LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_WAITCNT,
+} loom_amdgpu_descriptor_packet_route_kind_t;
 
 typedef struct loom_amdgpu_descriptor_packet_route_t {
   // Fact bits required for this route to match.
   loom_amdgpu_descriptor_packet_route_flags_t required_flags;
   // Fact bits that prevent this route from matching.
   loom_amdgpu_descriptor_packet_route_flags_t forbidden_flags;
-  // Assembly appender used when the route matches.
-  loom_amdgpu_append_descriptor_packet_fn_t append;
+  // Assembly route to append when the row matches.
+  loom_amdgpu_descriptor_packet_route_kind_t route_kind;
 } loom_amdgpu_descriptor_packet_route_t;
 
 static bool loom_amdgpu_descriptor_packet_route_matches(
@@ -1671,6 +1683,41 @@ static iree_status_t loom_amdgpu_append_unsupported_read_write_packet(
       (int)key.size, key.data);
 }
 
+static iree_status_t loom_amdgpu_append_descriptor_packet_route(
+    const loom_native_assembly_packet_context_t* context,
+    loom_amdgpu_descriptor_packet_route_kind_t route_kind) {
+  switch (route_kind) {
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD_LDS:
+      return loom_amdgpu_append_global_load_lds_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_LOAD_LDS:
+      return loom_amdgpu_append_mubuf_load_lds_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_BUFFER_ATOMIC:
+      return loom_amdgpu_append_buffer_atomic_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MEMORY:
+      return loom_amdgpu_append_memory_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_UNSUPPORTED_READ_WRITE:
+      return loom_amdgpu_append_unsupported_read_write_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_LOAD:
+      return loom_amdgpu_append_mubuf_load_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_STORE:
+      return loom_amdgpu_append_mubuf_store_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_LOAD:
+      return loom_amdgpu_append_scratch_load_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_STORE:
+      return loom_amdgpu_append_scratch_store_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD:
+      return loom_amdgpu_append_global_load_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_STORE:
+      return loom_amdgpu_append_global_store_packet(context);
+    case LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_WAITCNT:
+      return loom_amdgpu_append_waitcnt_packet(context);
+    default:
+      IREE_ASSERT_UNREACHABLE(
+          "AMDGPU assembly descriptor route table must use a known route kind");
+      IREE_BUILTIN_UNREACHABLE();
+  }
+}
+
 static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
     const loom_native_assembly_packet_context_t* context,
     loom_amdgpu_descriptor_packet_route_flags_t flags, bool* out_matched) {
@@ -1681,7 +1728,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_TO_LDS |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
-          .append = loom_amdgpu_append_global_load_lds_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD_LDS,
       },
       {
           .required_flags =
@@ -1689,34 +1736,35 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_TO_LDS |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
-          .append = loom_amdgpu_append_mubuf_load_lds_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_LOAD_LDS,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
-          .append = loom_amdgpu_append_buffer_atomic_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_BUFFER_ATOMIC,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
-          .append = loom_amdgpu_append_memory_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MEMORY,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_DATA_SHARE_FORMAT,
-          .append = loom_amdgpu_append_memory_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MEMORY,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
-          .append = loom_amdgpu_append_unsupported_read_write_packet,
+          .route_kind =
+              LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_UNSUPPORTED_READ_WRITE,
       },
       {
           .required_flags =
@@ -1724,7 +1772,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
-          .append = loom_amdgpu_append_mubuf_load_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_LOAD,
       },
       {
           .required_flags =
@@ -1732,7 +1780,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_BUFFER_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
-          .append = loom_amdgpu_append_mubuf_store_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MUBUF_STORE,
       },
       {
           .required_flags =
@@ -1740,7 +1788,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
-          .append = loom_amdgpu_append_scratch_load_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_LOAD,
       },
       {
           .required_flags =
@@ -1748,7 +1796,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_SCRATCH_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
-          .append = loom_amdgpu_append_scratch_store_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_SCRATCH_STORE,
       },
       {
           .required_flags =
@@ -1756,7 +1804,7 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
-          .append = loom_amdgpu_append_global_load_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_LOAD,
       },
       {
           .required_flags =
@@ -1764,32 +1812,32 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_GLOBAL_POINTER_FORMAT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
-          .append = loom_amdgpu_append_global_store_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_GLOBAL_STORE,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_DATA_SHARE_FORMAT,
-          .append = loom_amdgpu_append_memory_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MEMORY,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
-          .append = loom_amdgpu_append_memory_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MEMORY,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_WRITE_EFFECT,
           .forbidden_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_READ_EFFECT,
-          .append = loom_amdgpu_append_memory_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_MEMORY,
       },
       {
           .required_flags =
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_COUNTER_EFFECT |
               LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_FLAG_TWO_IMMEDIATES,
-          .append = loom_amdgpu_append_waitcnt_packet,
+          .route_kind = LOOM_AMDGPU_DESCRIPTOR_PACKET_ROUTE_WAITCNT,
       },
   };
   *out_matched = false;
@@ -1799,7 +1847,8 @@ static iree_status_t loom_amdgpu_try_append_descriptor_packet_route(
       continue;
     }
     *out_matched = true;
-    return route->append(context);
+    return loom_amdgpu_append_descriptor_packet_route(context,
+                                                      route->route_kind);
   }
   return iree_ok_status();
 }
