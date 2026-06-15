@@ -582,6 +582,20 @@ static iree_status_t loom_compile_write_report(
   return status;
 }
 
+static void loom_compile_record_terminal_report_status(
+    loom_target_compile_report_t* report, iree_status_code_t status_code,
+    int exit_code) {
+  if (report == NULL) {
+    return;
+  }
+  if (status_code != IREE_STATUS_OK) {
+    loom_target_compile_report_record_status(report, status_code);
+  } else if (exit_code != 0) {
+    loom_target_compile_report_record_status(report,
+                                             IREE_STATUS_FAILED_PRECONDITION);
+  }
+}
+
 static iree_status_t loom_compile_emit_hal(
     const loom_run_hal_artifact_provider_t* artifact_provider,
     const loom_run_hal_device_target_t* hal_target,
@@ -642,12 +656,15 @@ static iree_status_t loom_compile_emit_hal(
   if (iree_status_is_ok(status)) {
     *out_emitted = candidate.compiled;
   }
-  if (iree_status_is_ok(status)) {
-    status = loom_compile_write_report(
-        compile_report_capture, artifact_manifest_output_path, allocator);
-    if (iree_status_is_ok(status)) {
-      *out_report_written = true;
-    }
+  if (loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
+    loom_compile_record_terminal_report_status(compile_options->report,
+                                               iree_status_code(status),
+                                               candidate.compiled ? 0 : 1);
+    status = iree_status_join(
+        status,
+        loom_compile_write_report(compile_report_capture,
+                                  artifact_manifest_output_path, allocator));
+    *out_report_written = true;
   }
   loom_run_hal_candidate_deinitialize(&candidate);
   return status;
@@ -1260,12 +1277,15 @@ int main(int argc, char** argv) {
     }
     exit_code = 1;
   }
-  if (iree_status_is_ok(status) && !report_written) {
-    status = loom_compile_write_report(
-        &compile_report_capture, artifact_manifest_output_path, allocator);
-  }
-
   status = iree_status_join(status, loom_tooling_pass_trace_close(&pass_trace));
+  if (!report_written) {
+    loom_compile_record_terminal_report_status(
+        compile_options.report, iree_status_code(status), exit_code);
+    status = iree_status_join(
+        status,
+        loom_compile_write_report(&compile_report_capture,
+                                  artifact_manifest_output_path, allocator));
+  }
   if (!iree_status_is_ok(status)) {
     iree_status_fprint(stderr, status);
     iree_status_free(status);

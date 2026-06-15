@@ -133,6 +133,49 @@
       ]
     },
     {
+      "name": "reports terminal no-artifact AMDGPU failure status",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/bad_terminal_status_amdgpu.loom",
+            "text": "kernel.def export(\"bad_terminal_status_kernel\") @bad_terminal_status_kernel(%n: i32) {\n  %n_idx = index.cast %n : i32 to index\n  %c1 = index.constant 1 : index\n  kernel.launch.config workgroups(%n_idx, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index\n} launch(%input_handle: buffer, %output_handle: buffer, %n: i32) {\n  %c0_bytes = index.constant 0 : offset\n  %layout = encoding.layout.dense : encoding<layout>\n  %n_idx = index.cast %n : i32 to index\n  %input = buffer.view %input_handle[%c0_bytes] : buffer -> view<[%n_idx]x2xf32, %layout>\n  %output = buffer.view %output_handle[%c0_bytes] : buffer -> view<[%n_idx]x2xf32, %layout>\n  %bx = kernel.workgroup.id<x> : index\n  %c0 = index.constant 0 : index\n  %c1 = index.constant 1 : index\n  %c2 = index.constant 2 : index\n  scf.for %i = [%c0 to %c2 step %c1] {\n    %madd = index.madd %bx, %c2, %i : index\n    %cmp = index.cmp slt, %madd, %n_idx : index\n    scf.if %cmp {\n      %load = view.load %input[%madd, %c0] : view<[%n_idx]x2xf32, %layout> -> f32\n      view.store %load, %output[%madd, %c0] : f32, view<[%n_idx]x2xf32, %layout>\n    }\n  }\n  kernel.return\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/bad_terminal_status_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--output={tmp}/unused.hsaco",
+              "--compile-report=summary",
+              "--compile-report-output=-"
+            ]
+          },
+          "exit": {
+            "nonzero": true
+          },
+          "stdout": {
+            "contains": [
+              "\"status\":\"FAILED_PRECONDITION\""
+            ],
+            "not_contains": [
+              "\"status\":\"OK\""
+            ]
+          },
+          "stderr": {
+            "contains": [
+              "DOMINANCE/002",
+              "use of consumed value"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "compiles 64-bit direct arg narrowing for AMDGPU HAL kernel",
       "steps": [
         {
