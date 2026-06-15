@@ -141,8 +141,8 @@ loom_amdgpu_hal_kernel_library_emit_descriptor_set_mismatch(
     const loom_amdgpu_processor_info_t* processor,
     iree_string_view_t target_name) {
   const loom_diagnostic_param_t params[] = {
-      loom_param_string(processor->processor),
-      loom_param_string(processor->descriptor_set_key),
+      loom_param_string(processor->name),
+      loom_param_string(processor->descriptor_set.key),
       loom_param_string(target_name),
       loom_param_string(entry->bundle_storage.config.contract_set_key),
   };
@@ -165,13 +165,13 @@ static iree_status_t loom_amdgpu_hal_kernel_library_apply_processor(
     return loom_amdgpu_hal_kernel_library_emit_unknown_processor(
         entry, diagnostic_emitter, processor_name);
   }
-  if (processor->descriptor_set_ordinal ==
+  if (processor->descriptor_set.ordinal ==
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
-      iree_string_view_is_empty(processor->descriptor_set_key)) {
+      iree_string_view_is_empty(processor->descriptor_set.key)) {
     return loom_amdgpu_hal_kernel_library_emit_no_descriptor_set(
-        entry, diagnostic_emitter, processor->processor);
+        entry, diagnostic_emitter, processor->name);
   }
-  if (!iree_string_view_equal(processor->descriptor_set_key,
+  if (!iree_string_view_equal(processor->descriptor_set.key,
                               entry->bundle_storage.config.contract_set_key)) {
     return loom_amdgpu_hal_kernel_library_emit_descriptor_set_mismatch(
         entry, diagnostic_emitter, processor,
@@ -500,8 +500,14 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
   if (diagnostic_emitter->error_count != 0) {
     return iree_ok_status();
   }
+  const loom_amdgpu_native_preflight_options_t preflight_options = {
+      .emitter = frame_options.emitter,
+  };
   IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
-      &frame.schedule, &frame.allocation, &preflight));
+      &frame.schedule, &frame.allocation, &preflight_options, &preflight));
+  if (preflight.error_count != 0) {
+    return iree_ok_status();
+  }
   if (report != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_record_low_emission_frame(report, &frame));

@@ -292,10 +292,10 @@ def _amdgpu_target_selection(target_preset: str) -> _AmdgpuTargetSelection | Non
         return _AmdgpuTargetSelection(kind=target_record.processor)
 
     processor_info = amdgpu_processor_info_by_name(target_cpu)
-    if processor_info is None or not processor_info.descriptor_set_key:
+    if processor_info is None or not processor_info.descriptor_set.key:
         return None
     target_record = amdgpu_default_target_record_info_for_descriptor_set(
-        processor_info.descriptor_set_key
+        processor_info.descriptor_set.key
     )
     if target_record is None or target_record.processor not in available_kinds:
         return None

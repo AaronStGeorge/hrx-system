@@ -235,6 +235,42 @@ low.func.def target(@target) @vop3_compare_inline(%value: reg<amdgpu.vgpr>) -> (
 
 amdgpu.target<gfx1100> @target
 
+low.func.def target(@target) @vop3_compare_f32_rhs_inline(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) {
+  %limit = low.const<amdgpu.v_mov_b32> {imm32 = 1065353216} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_cmp_olt_f32>(%value, %limit) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  low.return %result : reg<amdgpu.sgpr x2>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3_compare_f32_rhs_inline(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) {
+  %result = low.op<amdgpu.v_cmp_olt_f32.src1_inline>(%value) {rhs = 1065353216} : (reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  low.return %result : reg<amdgpu.sgpr x2>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3_compare_f32_lhs_inline(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) {
+  %baseline = low.const<amdgpu.v_mov_b32> {imm32 = 3212836864} : reg<amdgpu.vgpr>
+  %result = low.op<amdgpu.v_cmp_ogt_f32>(%baseline, %value) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  low.return %result : reg<amdgpu.sgpr x2>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @vop3_compare_f32_lhs_inline(%value: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) {
+  %result = low.op<amdgpu.v_cmp_ogt_f32.src0_inline>(%value) {lhs = 3212836864} : (reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  low.return %result : reg<amdgpu.sgpr x2>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 low.func.def target(@target) @vop3_cndmask_false_inline(%true_value: reg<amdgpu.vgpr>, %mask: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.vgpr>) {
   %false_value = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %result = low.op<amdgpu.v_cndmask_b32>(%false_value, %true_value, %mask) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
@@ -437,6 +473,42 @@ low.func.def target(@target) @buffer_store_dword_off_zero(%value: reg<amdgpu.vgp
 
 amdgpu.target<gfx1100> @target
 
+low.func.def target(@target) @buffer_load_dword_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 48} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 16} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_load_dword_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.buffer_load_dword_vaddr_offset>(%resource, %vaddr) {offset = 64} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_store_dword_vaddr_offset(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 12} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 20} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_store_dword_vaddr_offset(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  low.op<amdgpu.buffer_store_dword_vaddr_offset>(%value, %resource, %vaddr) {offset = 32} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>)
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 low.func.def target(@target) @buffer_load_b128_off_zero(%resource: reg<amdgpu.sgpr x4>) -> (reg<amdgpu.vgpr x4>) {
   %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -449,6 +521,24 @@ amdgpu.target<gfx1100> @target
 
 low.func.def target(@target) @buffer_load_b128_off_zero(%resource: reg<amdgpu.sgpr x4>) -> (reg<amdgpu.vgpr x4>) {
   %result = low.op<amdgpu.buffer_load_b128_off_zero>(%resource) {offset = 32} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr x4>
+  low.return %result : reg<amdgpu.vgpr x4>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_load_b128_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 64} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.buffer_load_b128>(%resource, %vaddr, %soffset) {offset = 128} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
+  low.return %result : reg<amdgpu.vgpr x4>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_load_b128_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) {
+  %result = low.op<amdgpu.buffer_load_b128_vaddr_offset>(%resource, %vaddr) {offset = 192} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   low.return %result : reg<amdgpu.vgpr x4>
 }
 
@@ -473,6 +563,62 @@ low.func.def target(@target) @buffer_store_b64_off_zero(%value: reg<amdgpu.vgpr 
 
 // ====
 
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_store_b64_vaddr_offset(%value: reg<amdgpu.vgpr x2>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 128} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_b64>(%value, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_store_b64_vaddr_offset(%value: reg<amdgpu.vgpr x2>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  low.op<amdgpu.buffer_store_b64_vaddr_offset>(%value, %resource, %vaddr) {offset = 132} : (reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>)
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_store_b8_vaddr_offset(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_b8>(%value, %resource, %vaddr, %soffset) {offset = 5} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_store_b8_vaddr_offset(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  low.op<amdgpu.buffer_store_b8_vaddr_offset>(%value, %resource, %vaddr) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>)
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_load_b16_d16_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 10} : reg<amdgpu.sgpr>
+  %loaded = low.op<amdgpu.buffer_load_b16_d16>(%resource, %vaddr, %soffset) {offset = 6} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %extended = low.op<amdgpu.v_lshlrev_b32.src0_16_low16>(%loaded) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %extended : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @buffer_load_b16_d16_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %loaded = low.op<amdgpu.buffer_load_b16_d16_vaddr_offset>(%resource, %vaddr) {offset = 16} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %extended = low.op<amdgpu.v_lshlrev_b32.src0_16_low16>(%loaded) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %extended : reg<amdgpu.vgpr>
+}
+
+// ====
+
 amdgpu.target<gfx950> @target
 
 low.func.def target(@target) @buffer_load_dwordx2_off_zero(%resource: reg<amdgpu.sgpr x4>) -> (reg<amdgpu.vgpr x2>) {
@@ -488,4 +634,76 @@ amdgpu.target<gfx950> @target
 low.func.def target(@target) @buffer_load_dwordx2_off_zero(%resource: reg<amdgpu.sgpr x4>) -> (reg<amdgpu.vgpr x2>) {
   %result = low.op<amdgpu.buffer_load_dwordx2_off_zero>(%resource) {offset = 32} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr x2>
   low.return %result : reg<amdgpu.vgpr x2>
+}
+
+// ====
+
+amdgpu.target<gfx950> @target
+
+low.func.def target(@target) @buffer_load_dwordx2_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.buffer_load_dwordx2>(%resource, %vaddr, %soffset) {offset = 24} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x2>
+  low.return %result : reg<amdgpu.vgpr x2>
+}
+
+// ----
+amdgpu.target<gfx950> @target
+
+low.func.def target(@target) @buffer_load_dwordx2_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x2>) {
+  %result = low.op<amdgpu.buffer_load_dwordx2_vaddr_offset>(%resource, %vaddr) {offset = 280} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.return %result : reg<amdgpu.vgpr x2>
+}
+
+// ====
+
+amdgpu.target<gfx1200> @target
+
+low.func.def target(@target) @vbuffer_load_dword_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 512} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 4096} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ----
+amdgpu.target<gfx1200> @target
+
+low.func.def target(@target) @vbuffer_load_dword_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %result = low.op<amdgpu.buffer_load_dword_vaddr_offset>(%resource, %vaddr) {offset = 4608} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %result : reg<amdgpu.vgpr>
+}
+
+// ====
+
+amdgpu.target<gfx1200> @target
+
+low.func.def target(@target) @vbuffer_store_b16_vaddr_offset(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_b16>(%value, %resource, %vaddr, %soffset) {offset = 7} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+amdgpu.target<gfx1200> @target
+
+low.func.def target(@target) @vbuffer_store_b16_vaddr_offset(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) {
+  low.op<amdgpu.buffer_store_b16_vaddr_offset>(%value, %resource, %vaddr) {offset = 1031} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>)
+  low.return
+}
+
+// ====
+
+amdgpu.target<gfx1250> @target
+
+low.func.def target(@target) @gfx1250_vbuffer_load_b96_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x3>) {
+  %soffset = low.const<amdgpu.s_mov_b32> {imm32 = 2048} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.buffer_load_b96>(%resource, %vaddr, %soffset) {offset = 1} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x3>
+  low.return %result : reg<amdgpu.vgpr x3>
+}
+
+// ----
+amdgpu.target<gfx1250> @target
+
+low.func.def target(@target) @gfx1250_vbuffer_load_b96_vaddr_offset(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x3>) {
+  %result = low.op<amdgpu.buffer_load_b96_vaddr_offset>(%resource, %vaddr) {offset = 2049} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  low.return %result : reg<amdgpu.vgpr x3>
 }

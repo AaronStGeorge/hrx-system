@@ -33,8 +33,6 @@ typedef iree_status_t (*loom_low_allocation_coalescing_consumption_query_fn_t)(
     void* user_data, loom_consumption_region_query_t** out_query);
 
 typedef struct loom_low_allocation_coalescing_context_t {
-  // Module containing the allocated low function.
-  const loom_module_t* module;
   // Arena used for temporary coalescing scratch.
   iree_arena_allocator_t* arena;
   // Liveness facts for the allocated low function body.

@@ -60,6 +60,7 @@ loom_cc_library(
     hdrs = ["operand_forms.h"],
     deps = [
         "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:descriptor_traits",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:function",
@@ -73,6 +74,8 @@ loom_cc_library(
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
         "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
         "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",

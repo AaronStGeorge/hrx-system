@@ -599,7 +599,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
     }
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
-        schedule, allocation, &derived_preflight));
+        schedule, allocation, /*options=*/NULL, &derived_preflight));
     preflight = &derived_preflight;
   }
   IREE_RETURN_IF_ERROR(
@@ -656,7 +656,8 @@ iree_status_t loom_amdgpu_kernel_record_build(
   loom_amdgpu_kernel_descriptor_flags_t topology_descriptor_flags = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_descriptor_flags(
       allocation, user_sgpr_count,
-      processor->kernel_descriptor_has_packed_workitem_id,
+      loom_amdgpu_processor_kernel_descriptor_has_flags(
+          processor, LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID),
       &topology_descriptor_flags));
   descriptor_flags |= topology_descriptor_flags;
   uint32_t system_vgpr_workitem_id = 0;

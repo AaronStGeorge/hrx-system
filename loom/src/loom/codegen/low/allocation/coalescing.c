@@ -7,7 +7,6 @@
 #include "loom/codegen/low/allocation/coalescing.h"
 
 #include "loom/codegen/low/allocation/live_range.h"
-#include "loom/ops/low/ops.h"
 
 static bool loom_low_allocation_coalescing_value_ordinal_for_value(
     const loom_low_allocation_coalescing_context_t* context,
@@ -82,37 +81,36 @@ loom_low_allocation_coalescing_can_ignore_branch_counterpart_conflict(
       counterpart->end_point);
 }
 
-static bool loom_low_allocation_coalescing_copy_source_for_value(
-    const loom_module_t* module, loom_value_id_t value_id,
-    loom_value_id_t* out_source_id) {
-  *out_source_id = LOOM_VALUE_ID_INVALID;
-  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
-    return false;
+static const loom_low_placement_relation_t*
+loom_low_allocation_coalescing_copy_relation_for_result_ordinal(
+    const loom_low_allocation_coalescing_context_t* context,
+    loom_value_ordinal_t result_ordinal) {
+  const loom_low_placement_relation_range_t range =
+      loom_low_placement_relation_range_for_value_ordinal(context->placement,
+                                                          result_ordinal);
+  for (uint32_t i = 0; i < range.count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &context->placement->relations[range.start + i];
+    if (relation->cause == LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY) {
+      return relation;
+    }
   }
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(value);
-  if (!loom_low_copy_isa(defining_op)) {
-    return false;
-  }
-  *out_source_id = loom_low_copy_source(defining_op);
-  return true;
+  return NULL;
 }
 
 static iree_status_t
 loom_low_allocation_coalescing_copy_source_used_after_tied_consume(
     loom_low_allocation_coalescing_context_t* context,
     const loom_low_placement_relation_t* tied_relation,
-    loom_value_id_t tied_operand_id, loom_value_id_t* out_copy_source_id,
-    bool* out_used_after) {
+    const loom_low_placement_relation_t* copy_relation,
+    loom_value_id_t* out_copy_source_id, bool* out_used_after) {
   *out_copy_source_id = LOOM_VALUE_ID_INVALID;
   *out_used_after = false;
-  if (!loom_low_allocation_coalescing_copy_source_for_value(
-          context->module, tied_operand_id, out_copy_source_id)) {
+  if (!copy_relation) {
     return iree_ok_status();
   }
+  *out_copy_source_id = loom_low_placement_value_id(
+      context->placement, copy_relation->source_ordinal);
 
   loom_consumption_region_query_t* query = NULL;
   IREE_RETURN_IF_ERROR(context->consumption_query(context->user_data, &query));
@@ -202,8 +200,6 @@ loom_low_allocation_coalescing_copy_relation_requires_materialized_storage(
     const loom_low_placement_relation_t* copy_relation,
     bool* out_requires_materialized_storage) {
   *out_requires_materialized_storage = false;
-  const loom_value_id_t copy_result_id = loom_low_placement_value_id(
-      context->placement, copy_relation->result_ordinal);
   const loom_low_placement_relation_range_t tied_range =
       loom_low_placement_relation_range_for_source_value_ordinal(
           context->placement, copy_relation->result_ordinal);
@@ -216,11 +212,17 @@ loom_low_allocation_coalescing_copy_relation_requires_materialized_storage(
     if (tied_relation->cause != LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT) {
       continue;
     }
+    const loom_low_placement_relation_t* tied_operand_copy_relation =
+        loom_low_allocation_coalescing_copy_relation_for_result_ordinal(
+            context, tied_relation->source_ordinal);
+    if (tied_operand_copy_relation != copy_relation) {
+      continue;
+    }
     loom_value_id_t copy_source_id = LOOM_VALUE_ID_INVALID;
     bool used_after = false;
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_coalescing_copy_source_used_after_tied_consume(
-            context, tied_relation, copy_result_id, &copy_source_id,
+            context, tied_relation, copy_relation, &copy_source_id,
             &used_after));
     if (used_after) {
       *out_requires_materialized_storage = true;
@@ -963,11 +965,14 @@ iree_status_t loom_low_allocation_coalescing_assign_tied_interval(
   loom_value_id_t ignored_value_ids[2] = {tied_operand_id,
                                           LOOM_VALUE_ID_INVALID};
   uint16_t ignored_value_count = 1;
+  const loom_low_placement_relation_t* tied_operand_copy_relation =
+      loom_low_allocation_coalescing_copy_relation_for_result_ordinal(
+          context, relation->source_ordinal);
   loom_value_id_t copy_source_id = LOOM_VALUE_ID_INVALID;
   bool copy_source_used_after = false;
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_coalescing_copy_source_used_after_tied_consume(
-          context, relation, tied_operand_id, &copy_source_id,
+          context, relation, tied_operand_copy_relation, &copy_source_id,
           &copy_source_used_after));
   if (copy_source_id != LOOM_VALUE_ID_INVALID && !copy_source_used_after) {
     ignored_value_ids[ignored_value_count++] = copy_source_id;

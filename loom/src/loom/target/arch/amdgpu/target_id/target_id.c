@@ -45,7 +45,7 @@ iree_status_t loom_amdgpu_amdhsa_target_id_append(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
       builder, loom_amdgpu_amdhsa_target_id_prefix));
   IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_string(builder, processor->processor));
+      iree_string_builder_append_string(builder, processor->name));
   if (!iree_string_view_is_empty(feature_suffix)) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_string(builder, IREE_SV(":")));
@@ -67,7 +67,7 @@ iree_status_t loom_amdgpu_amdhsa_target_id_format(
   iree_host_size_t prefix_processor_separator_length = 0;
   iree_host_size_t target_id_length = 0;
   if (!iree_host_size_checked_add(loom_amdgpu_amdhsa_target_id_prefix.size,
-                                  processor->processor.size,
+                                  processor->name.size,
                                   &prefix_processor_length) ||
       !iree_host_size_checked_add(prefix_processor_length, separator_length,
                                   &prefix_processor_separator_length) ||
@@ -84,8 +84,8 @@ iree_status_t loom_amdgpu_amdhsa_target_id_format(
   memcpy(cursor, loom_amdgpu_amdhsa_target_id_prefix.data,
          loom_amdgpu_amdhsa_target_id_prefix.size);
   cursor += loom_amdgpu_amdhsa_target_id_prefix.size;
-  memcpy(cursor, processor->processor.data, processor->processor.size);
-  cursor += processor->processor.size;
+  memcpy(cursor, processor->name.data, processor->name.size);
+  cursor += processor->name.size;
   if (!iree_string_view_is_empty(feature_suffix)) {
     *cursor++ = ':';
     memcpy(cursor, feature_suffix.data, feature_suffix.size);

@@ -93,6 +93,43 @@ typedef enum loom_amdgpu_processor_scheduling_bit_e {
 // Bitset of loom_amdgpu_processor_scheduling_bit_t values.
 typedef uint32_t loom_amdgpu_processor_scheduling_bits_t;
 
+typedef enum loom_amdgpu_descriptor_set_info_flag_bits_e {
+  // Descriptor packets have implemented native binary encoding.
+  LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING = UINT64_C(1)
+                                                                    << 0,
+  // Descriptor-set info flags known by the AMDGPU target package.
+  LOOM_AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS =
+      LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+} loom_amdgpu_descriptor_set_info_flag_bits_t;
+
+// Bitset of loom_amdgpu_descriptor_set_info_flag_bits_t values.
+typedef uint64_t loom_amdgpu_descriptor_set_info_flags_t;
+
+typedef enum loom_amdgpu_kernel_descriptor_abi_flag_bits_e {
+  // Flat scratch is architected and legacy user SGPRs are invalid.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH = UINT64_C(1)
+                                                                    << 0,
+  // SGPR resource counts use the GFX10+ encoding rule.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING = UINT64_C(1) << 1,
+  // COMPUTE_PGM_RSRC3.ACCUM_OFFSET must be encoded.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET = UINT64_C(1) << 2,
+  // COMPUTE_PGM_RSRC1 DX10 clamp and IEEE mode bits are supported.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE = UINT64_C(1)
+                                                                    << 3,
+  // Workitem IDs are packed into v0 instead of separate VGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID = UINT64_C(1) << 4,
+  // Kernel descriptor ABI flags known by the AMDGPU target package.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_KNOWN_FLAGS =
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID,
+} loom_amdgpu_kernel_descriptor_abi_flag_bits_t;
+
+// Bitset of loom_amdgpu_kernel_descriptor_abi_flag_bits_t values.
+typedef uint64_t loom_amdgpu_kernel_descriptor_abi_flags_t;
+
 typedef enum loom_amdgpu_buffer_resource_cache_swizzle_e {
   // Buffer resource descriptors do not support cache swizzle.
   LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE = 0,
@@ -111,63 +148,99 @@ typedef enum loom_amdgpu_vector_memory_cache_policy_encoding_e {
   LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = 3,
 } loom_amdgpu_vector_memory_cache_policy_encoding_t;
 
+typedef struct loom_amdgpu_descriptor_set_sopp_opcodes_t {
+  // Opcode for S_NOP.
+  uint16_t nop;
+  // Opcode for S_ENDPGM.
+  uint16_t endpgm;
+  // Opcode for S_BRANCH.
+  uint16_t branch;
+  // Opcode for S_CBRANCH_SCC0.
+  uint16_t conditional_branch_scc0;
+  // Opcode for S_CBRANCH_SCC1.
+  uint16_t conditional_branch_scc1;
+} loom_amdgpu_descriptor_set_sopp_opcodes_t;
+
+typedef struct loom_amdgpu_descriptor_set_buffer_resource_info_t {
+  // Buffer resource descriptor cache-swizzle encoding shape.
+  loom_amdgpu_buffer_resource_cache_swizzle_t cache_swizzle;
+} loom_amdgpu_descriptor_set_buffer_resource_info_t;
+
+typedef struct loom_amdgpu_descriptor_set_vector_memory_info_t {
+  // Vector memory packet cache-policy immediate encoding shape.
+  loom_amdgpu_vector_memory_cache_policy_encoding_t cache_policy_encoding;
+} loom_amdgpu_descriptor_set_vector_memory_info_t;
+
 typedef struct loom_amdgpu_descriptor_set_info_t {
   // Target-low descriptor set key such as `amdgpu.rdna3.core`.
-  iree_string_view_t descriptor_set_key;
+  iree_string_view_t key;
   // Dense generated descriptor-set ordinal within the AMDGPU target package.
-  uint16_t descriptor_set_ordinal;
-  // SOPP opcode used when materializing target wait-state noops.
-  uint16_t s_nop_opcode;
-  // SOPP opcode used when lowering structural `low.return` to `s_endpgm`.
-  uint16_t s_endpgm_opcode;
-  // SOPP opcode used when lowering structural `low.br` to `s_branch`.
-  uint16_t s_branch_opcode;
-  // SOPP opcode used when lowering structural `low.cond_br` on SCC=false.
-  uint16_t s_cbranch_scc0_opcode;
-  // SOPP opcode used when lowering structural `low.cond_br` on SCC=true.
-  uint16_t s_cbranch_scc1_opcode;
-  // True when descriptor packets have implemented native binary encoding.
-  bool supports_descriptor_packet_encoding;
-  // Buffer resource descriptor cache-swizzle encoding shape.
-  loom_amdgpu_buffer_resource_cache_swizzle_t buffer_resource_cache_swizzle;
-  // Vector memory packet cache-policy immediate encoding shape.
-  loom_amdgpu_vector_memory_cache_policy_encoding_t
-      vector_memory_cache_policy_encoding;
+  uint16_t ordinal;
+  // SOPP opcodes required by structural control-flow materialization.
+  loom_amdgpu_descriptor_set_sopp_opcodes_t sopp;
+  // Descriptor-set capability and encoding flags.
+  loom_amdgpu_descriptor_set_info_flags_t flags;
+  // Buffer resource descriptor encoding facts.
+  loom_amdgpu_descriptor_set_buffer_resource_info_t buffer_resource;
+  // Vector memory descriptor encoding facts.
+  loom_amdgpu_descriptor_set_vector_memory_info_t vector_memory;
 } loom_amdgpu_descriptor_set_info_t;
+
+typedef struct loom_amdgpu_processor_descriptor_set_info_t {
+  // Target-low descriptor set key selected for this processor.
+  iree_string_view_t key;
+  // Dense generated descriptor-set ordinal selected for this processor.
+  uint16_t ordinal;
+} loom_amdgpu_processor_descriptor_set_info_t;
+
+typedef struct loom_amdgpu_processor_elf_info_t {
+  // ELF EF_AMDGPU_MACH bits for this processor, or 0 when unknown.
+  uint32_t machine_flags;
+  // ELF EF_AMDGPU_FEATURE_* bits implied by the selected target-id policy.
+  uint32_t feature_flags;
+} loom_amdgpu_processor_elf_info_t;
+
+typedef struct loom_amdgpu_processor_wavefront_info_t {
+  // Default metadata wavefront size in lanes.
+  uint32_t default_size;
+} loom_amdgpu_processor_wavefront_info_t;
+
+typedef struct loom_amdgpu_kernel_descriptor_vgpr_granules_t {
+  // VGPR encoding granule when wavefront-size-32 mode is enabled.
+  uint32_t wave32;
+  // VGPR encoding granule when wavefront-size-64 mode is enabled.
+  uint32_t wave64;
+} loom_amdgpu_kernel_descriptor_vgpr_granules_t;
+
+typedef struct loom_amdgpu_processor_kernel_descriptor_info_t {
+  // Kernel descriptor packing profile implemented for this processor.
+  loom_amdgpu_kernel_descriptor_profile_t profile;
+  // Kernel descriptor ABI flags implemented for this processor.
+  loom_amdgpu_kernel_descriptor_abi_flags_t flags;
+  // VGPR encoding granules for wave32 and wave64 modes.
+  loom_amdgpu_kernel_descriptor_vgpr_granules_t vgpr_granules;
+} loom_amdgpu_processor_kernel_descriptor_info_t;
+
+typedef struct loom_amdgpu_processor_feature_info_t {
+  // Matrix instruction feature profile implemented for this processor.
+  loom_amdgpu_matrix_feature_profile_t matrix;
+  // Target-local scheduling and hazard facts for this processor.
+  loom_amdgpu_processor_scheduling_bits_t scheduling;
+} loom_amdgpu_processor_feature_info_t;
 
 typedef struct loom_amdgpu_processor_info_t {
   // Processor name used in AMDHSA target IDs, such as `gfx1100`.
-  iree_string_view_t processor;
-  // Target-low descriptor set key selected for this processor.
-  iree_string_view_t descriptor_set_key;
-  // Dense generated descriptor-set ordinal selected for this processor.
-  uint16_t descriptor_set_ordinal;
-  // ELF EF_AMDGPU_MACH bits for this processor, or 0 when unknown.
-  uint32_t elf_machine_flags;
-  // ELF EF_AMDGPU_FEATURE_* bits implied by the selected target-id policy.
-  uint32_t elf_feature_flags;
-  // Default metadata wavefront size in lanes.
-  uint32_t default_wavefront_size;
-  // Kernel descriptor packing profile implemented for this processor.
-  loom_amdgpu_kernel_descriptor_profile_t kernel_descriptor_profile;
-  // Matrix instruction feature profile implemented for this processor.
-  loom_amdgpu_matrix_feature_profile_t matrix_feature_profile;
-  // Target-local scheduling and hazard facts for this processor.
-  loom_amdgpu_processor_scheduling_bits_t scheduling_bits;
-  // VGPR encoding granule when wavefront-size-32 mode is enabled.
-  uint32_t kernel_descriptor_vgpr_encoding_granule_wave32;
-  // VGPR encoding granule when wavefront-size-64 mode is enabled.
-  uint32_t kernel_descriptor_vgpr_encoding_granule_wave64;
-  // True when flat scratch is architected and legacy user SGPRs are invalid.
-  bool kernel_descriptor_has_architected_flat_scratch;
-  // True when the target uses the GFX10+ SGPR resource encoding rule.
-  bool kernel_descriptor_uses_gfx10_sgpr_encoding;
-  // True when COMPUTE_PGM_RSRC3.ACCUM_OFFSET is required.
-  bool kernel_descriptor_has_accum_offset;
-  // True when DX10 clamp and IEEE mode defaults are supported.
-  bool kernel_descriptor_has_dx10_clamp_and_ieee_mode;
-  // True when workitem IDs are packed into v0 instead of separate VGPRs.
-  bool kernel_descriptor_has_packed_workitem_id;
+  iree_string_view_t name;
+  // Target-low descriptor-set identity selected for this processor.
+  loom_amdgpu_processor_descriptor_set_info_t descriptor_set;
+  // AMDHSA ELF code-object identity for this processor.
+  loom_amdgpu_processor_elf_info_t elf;
+  // Wavefront facts selected for this processor.
+  loom_amdgpu_processor_wavefront_info_t wavefront;
+  // Kernel descriptor ABI facts selected for this processor.
+  loom_amdgpu_processor_kernel_descriptor_info_t kernel_descriptor;
+  // Instruction and scheduling feature profiles for this processor.
+  loom_amdgpu_processor_feature_info_t features;
 } loom_amdgpu_processor_info_t;
 
 typedef struct loom_amdgpu_amdhsa_target_id_t {
@@ -185,18 +258,36 @@ static inline bool loom_amdgpu_processor_supports_wavefront_size(
   }
   switch (wavefront_size) {
     case 32:
-      return processor->kernel_descriptor_profile !=
+      return processor->kernel_descriptor.profile !=
                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
-             processor->kernel_descriptor_profile !=
+             processor->kernel_descriptor.profile !=
                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9;
     case 64:
-      return processor->kernel_descriptor_profile !=
+      return processor->kernel_descriptor.profile !=
                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
-             processor->kernel_descriptor_profile !=
+             processor->kernel_descriptor.profile !=
                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125;
     default:
       return false;
   }
+}
+
+// Returns true when |processor| advertises every requested kernel descriptor
+// ABI flag.
+static inline bool loom_amdgpu_processor_kernel_descriptor_has_flags(
+    const loom_amdgpu_processor_info_t* processor,
+    loom_amdgpu_kernel_descriptor_abi_flags_t flags) {
+  return processor != NULL &&
+         iree_all_bits_set(processor->kernel_descriptor.flags, flags);
+}
+
+// Returns true when |descriptor_set| advertises every requested descriptor-set
+// info flag.
+static inline bool loom_amdgpu_descriptor_set_info_has_flags(
+    const loom_amdgpu_descriptor_set_info_t* descriptor_set,
+    loom_amdgpu_descriptor_set_info_flags_t flags) {
+  return descriptor_set != NULL &&
+         iree_all_bits_set(descriptor_set->flags, flags);
 }
 
 // Returns whether |processor| has enough native target information to emit an

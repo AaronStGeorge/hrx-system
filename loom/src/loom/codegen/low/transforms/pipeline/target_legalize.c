@@ -368,6 +368,37 @@ loom_low_target_legalize_report_legalizer_strategy(
   }
 }
 
+static loom_target_compile_report_legalization_outcome_t
+loom_low_target_legalize_report_legalization_outcome(
+    loom_target_compile_report_legalization_action_t action,
+    loom_target_compile_report_legalizer_strategy_t legalizer_strategy) {
+  switch (action) {
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_LEGAL:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_ALREADY_LEGAL;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN:
+      switch (legalizer_strategy) {
+        case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_TARGET:
+          return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_TARGET_REWRITE;
+        case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE:
+          return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_REFERENCE_FALLBACK;
+        case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_NONE:
+        default:
+          return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_NONE;
+      }
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_DEFERRED:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_DEFERRED;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_INVALID_IR:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_REJECT_INVALID_IR;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_UNSUPPORTED_FINAL:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_REJECT_UNSUPPORTED;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_UNHANDLED:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_UNHANDLED;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_NONE:
+    default:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_NONE;
+  }
+}
+
 static iree_string_view_t loom_low_target_legalize_function_name(
     const loom_low_target_legalize_function_state_t* state) {
   const loom_symbol_ref_t callee =
@@ -505,6 +536,9 @@ static iree_status_t loom_low_target_legalize_record_report_row(
       .policy = loom_low_target_legalize_report_policy(
           state->legalization_context.policy),
       .action = action,
+      .legalization_outcome =
+          loom_low_target_legalize_report_legalization_outcome(
+              action, legalizer_strategy),
       .contract_outcome = loom_low_target_legalize_report_contract_outcome(
           query_result->outcome),
       .binding_index = query_result->binding_index,

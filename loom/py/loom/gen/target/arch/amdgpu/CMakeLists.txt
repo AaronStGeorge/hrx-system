@@ -52,4 +52,19 @@ iree_py_library(
     loom::py::loom::target::arch::amdgpu::target_info
 )
 
+iree_py_test(
+  NAME
+    target_info_test
+  SRCS
+    "../../../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.target.arch.amdgpu.amdgpu_target_info_test"
+  DEPS
+    loom::py::loom::gen::target::arch::amdgpu::target_info
+    loom::py::loom::target::arch::amdgpu::target_info
+  PACKAGE_DIRS
+    "${PROJECT_SOURCE_DIR}/loom/py"
+    "${PROJECT_BINARY_DIR}/loom/py"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -70,6 +70,10 @@ static bool loom_amdgpu_memory_cache_policy_is_complete(
 typedef struct loom_amdgpu_memory_cache_policy_encoding_row_t {
   // Descriptor-set cache-policy encoding selected by target info.
   loom_amdgpu_vector_memory_cache_policy_encoding_t encoding;
+  // Stable key naming the encoding.
+  iree_string_view_t encoding_key;
+  // Stable key naming the selected encoding decision.
+  iree_string_view_t selected_key;
   // Accepted cache-scope bits indexed by loom_cache_scope_t.
   uint32_t scope_bits;
   // Accepted cache-temporal bits indexed by loom_cache_temporal_t.
@@ -117,6 +121,11 @@ static const loom_amdgpu_memory_cache_policy_encoding_row_t
         {
             .encoding =
                 LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+            .encoding_key = {.data = "gfx12_nv_scope_th",
+                             .size = sizeof("gfx12_nv_scope_th") - 1},
+            .selected_key =
+                {.data = "memory_cache_policy.gfx12_nv_scope_th",
+                 .size = sizeof("memory_cache_policy.gfx12_nv_scope_th") - 1},
             .scope_bits = LOOM_AMDGPU_ALL_CACHE_SCOPE_BITS,
             .temporal_bits = LOOM_AMDGPU_ALL_CACHE_TEMPORAL_BITS,
             .attr_flags = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE |
@@ -125,6 +134,11 @@ static const loom_amdgpu_memory_cache_policy_encoding_row_t
         {
             .encoding =
                 LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+            .encoding_key = {.data = "gfx950_nt_sc0_sc1",
+                             .size = sizeof("gfx950_nt_sc0_sc1") - 1},
+            .selected_key =
+                {.data = "memory_cache_policy.gfx950_nt_sc0_sc1",
+                 .size = sizeof("memory_cache_policy.gfx950_nt_sc0_sc1") - 1},
             .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
             .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR) |
                              LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL),
@@ -133,6 +147,11 @@ static const loom_amdgpu_memory_cache_policy_encoding_row_t
         {
             .encoding =
                 LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+            .encoding_key = {.data = "gfx9_11_glc_slc_dlc",
+                             .size = sizeof("gfx9_11_glc_slc_dlc") - 1},
+            .selected_key =
+                {.data = "memory_cache_policy.gfx9_11_glc_slc_dlc",
+                 .size = sizeof("memory_cache_policy.gfx9_11_glc_slc_dlc") - 1},
             .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
             .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR),
             .attr_flags = 0,
@@ -155,30 +174,26 @@ loom_amdgpu_memory_cache_policy_encoding_row(
 
 static iree_string_view_t loom_amdgpu_memory_cache_policy_encoding_name(
     loom_amdgpu_vector_memory_cache_policy_encoding_t encoding) {
-  switch (encoding) {
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE:
-      return IREE_SV("none");
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
-      return IREE_SV("gfx9_11_glc_slc_dlc");
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH:
-      return IREE_SV("gfx12_nv_scope_th");
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
-      return IREE_SV("gfx950_nt_sc0_sc1");
+  const loom_amdgpu_memory_cache_policy_encoding_row_t* row =
+      loom_amdgpu_memory_cache_policy_encoding_row(encoding);
+  if (row != NULL) {
+    return row->encoding_key;
+  }
+  if (encoding == LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE) {
+    return IREE_SV("none");
   }
   return IREE_SV("invalid");
 }
 
 static iree_string_view_t loom_amdgpu_memory_cache_policy_selected_name(
     loom_amdgpu_vector_memory_cache_policy_encoding_t encoding) {
-  switch (encoding) {
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE:
-      return IREE_SV("memory_cache_policy.none");
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
-      return IREE_SV("memory_cache_policy.gfx9_11_glc_slc_dlc");
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH:
-      return IREE_SV("memory_cache_policy.gfx12_nv_scope_th");
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
-      return IREE_SV("memory_cache_policy.gfx950_nt_sc0_sc1");
+  const loom_amdgpu_memory_cache_policy_encoding_row_t* row =
+      loom_amdgpu_memory_cache_policy_encoding_row(encoding);
+  if (row != NULL) {
+    return row->selected_key;
+  }
+  if (encoding == LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE) {
+    return IREE_SV("memory_cache_policy.none");
   }
   return IREE_SV("memory_cache_policy.invalid");
 }
@@ -190,7 +205,7 @@ loom_amdgpu_memory_cache_policy_descriptor_encoding(
       loom_amdgpu_target_info_descriptor_set_at(
           descriptor_set->descriptor_set_ordinal);
   return descriptor_set_info
-             ? descriptor_set_info->vector_memory_cache_policy_encoding
+             ? descriptor_set_info->vector_memory.cache_policy_encoding
              : LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE;
 }
 
@@ -235,7 +250,7 @@ bool loom_amdgpu_memory_cache_policy_encode(
   }
   const loom_amdgpu_memory_cache_policy_encoding_row_t* row =
       loom_amdgpu_memory_cache_policy_encoding_row(
-          descriptor_set_info->vector_memory_cache_policy_encoding);
+          descriptor_set_info->vector_memory.cache_policy_encoding);
   if (row == NULL ||
       !loom_amdgpu_memory_cache_policy_bits_contain(row->scope_bits,
                                                     policy->cache_scope) ||

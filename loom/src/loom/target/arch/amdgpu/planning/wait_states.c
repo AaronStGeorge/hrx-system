@@ -152,61 +152,68 @@ typedef struct loom_amdgpu_wait_state_builder_t {
   uint64_t current_position;
 } loom_amdgpu_wait_state_builder_t;
 
+static const iree_string_view_t kAmdgpuWaitStateReasonNames[] = {
+    [LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN] = IREE_SVL("unknown"),
+    [LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE] =
+        IREE_SVL("matrix_result_use"),
+    [LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE] =
+        IREE_SVL("valu_to_matrix_use"),
+    [LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE] =
+        IREE_SVL("trans_result_use"),
+    [LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ] = IREE_SVL("valu_sgpr_read"),
+    [LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ] = IREE_SVL("dpp_vgpr_read"),
+    [LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ] =
+        IREE_SVL("readfirstlane_vgpr_read"),
+    [LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE] =
+        IREE_SVL("dst_sel_forwarding_use"),
+};
+
+static const iree_string_view_t kAmdgpuWaitStateActionNames[] = {
+    [LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN] = IREE_SVL("unknown"),
+    [LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP] = IREE_SVL("amdgpu.s_nop"),
+};
+
+static const loom_amdgpu_wait_state_reason_flags_t
+    kAmdgpuWaitStateReasonFlags[] = {
+        [LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN] = 0,
+        [LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE] =
+            LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_MATRIX_RESULT_USE,
+        [LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE] =
+            LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_TO_MATRIX_USE,
+        [LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE] =
+            LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_TRANS_RESULT_USE,
+        [LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ] =
+            LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ,
+        [LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ] =
+            LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DPP_VGPR_READ,
+        [LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ] =
+            LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_READFIRSTLANE_VGPR_READ,
+        [LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE] =
+            LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DST_SEL_FORWARDING_USE,
+};
+
 iree_string_view_t loom_amdgpu_wait_state_reason_name(
     loom_amdgpu_wait_state_reason_t reason) {
-  switch (reason) {
-    case LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE:
-      return IREE_SV("matrix_result_use");
-    case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE:
-      return IREE_SV("valu_to_matrix_use");
-    case LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE:
-      return IREE_SV("trans_result_use");
-    case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ:
-      return IREE_SV("valu_sgpr_read");
-    case LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ:
-      return IREE_SV("dpp_vgpr_read");
-    case LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ:
-      return IREE_SV("readfirstlane_vgpr_read");
-    case LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE:
-      return IREE_SV("dst_sel_forwarding_use");
-    case LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN:
-    default:
-      return IREE_SV("unknown");
+  if ((iree_host_size_t)reason >= IREE_ARRAYSIZE(kAmdgpuWaitStateReasonNames)) {
+    return kAmdgpuWaitStateReasonNames[LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN];
   }
+  return kAmdgpuWaitStateReasonNames[reason];
 }
 
 iree_string_view_t loom_amdgpu_wait_state_action_name(
     loom_amdgpu_wait_state_action_t action) {
-  switch (action) {
-    case LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP:
-      return IREE_SV("amdgpu.s_nop");
-    case LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN:
-    default:
-      return IREE_SV("unknown");
+  if ((iree_host_size_t)action >= IREE_ARRAYSIZE(kAmdgpuWaitStateActionNames)) {
+    return kAmdgpuWaitStateActionNames[LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN];
   }
+  return kAmdgpuWaitStateActionNames[action];
 }
 
 static loom_amdgpu_wait_state_reason_flags_t loom_amdgpu_wait_state_reason_flag(
     loom_amdgpu_wait_state_reason_t reason) {
-  switch (reason) {
-    case LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE:
-      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_MATRIX_RESULT_USE;
-    case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE:
-      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_TO_MATRIX_USE;
-    case LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE:
-      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_TRANS_RESULT_USE;
-    case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ:
-      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ;
-    case LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ:
-      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DPP_VGPR_READ;
-    case LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ:
-      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_READFIRSTLANE_VGPR_READ;
-    case LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE:
-      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DST_SEL_FORWARDING_USE;
-    case LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN:
-    default:
-      return 0;
+  if ((iree_host_size_t)reason >= IREE_ARRAYSIZE(kAmdgpuWaitStateReasonFlags)) {
+    return 0;
   }
+  return kAmdgpuWaitStateReasonFlags[reason];
 }
 
 static bool loom_amdgpu_wait_state_reason_is_valid(
@@ -393,7 +400,7 @@ loom_amdgpu_wait_state_matrix_wait_profile(
       LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950;
   if (builder->processor != NULL &&
       !loom_amdgpu_matrix_wait_profile_from_feature_profile(
-          builder->processor->matrix_feature_profile, &wait_profile)) {
+          builder->processor->features.matrix, &wait_profile)) {
     return LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
   }
   return wait_profile;
@@ -474,7 +481,7 @@ static bool loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES);
 }
 
@@ -482,7 +489,7 @@ static bool loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES);
 }
 
@@ -490,7 +497,7 @@ static bool loom_amdgpu_wait_state_processor_has_dst_sel_forwarding_hazard(
     const loom_amdgpu_processor_info_t* processor) {
   return processor != NULL &&
          iree_any_bit_set(
-             processor->scheduling_bits,
+             processor->features.scheduling,
              LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES);
 }
 

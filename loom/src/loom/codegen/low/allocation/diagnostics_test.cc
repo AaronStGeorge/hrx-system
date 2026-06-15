@@ -30,7 +30,8 @@ TEST(LowAllocationDiagnosticsTest, EmptyTableEmitsNoDiagnostics) {
   IREE_EXPECT_OK(loom_low_allocation_diagnostics_emit(
       &table,
       LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS |
-          LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS,
+          LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS |
+          LOOM_LOW_ALLOCATION_DIAGNOSTIC_PLACEMENT_DECISIONS,
       emitter));
 }
 

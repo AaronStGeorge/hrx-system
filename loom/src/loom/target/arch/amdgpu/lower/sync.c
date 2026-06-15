@@ -151,15 +151,9 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
                                            IREE_SV("barrier.workgroup_scope"));
   }
 
-  const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
-      loom_target_low_legality_descriptor_set(context),
-      LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return loom_amdgpu_low_legality_reject(context, op,
-                                           IREE_SV("descriptor.s_barrier"));
-  }
-
-  return iree_ok_status();
+  return loom_amdgpu_low_legality_verify_descriptor_requirement(
+      context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_BARRIER,
+      IREE_SV("descriptor.s_barrier"));
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_collective(

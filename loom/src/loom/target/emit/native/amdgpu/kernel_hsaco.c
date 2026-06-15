@@ -59,7 +59,7 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
       loom_amdgpu_packet_plan_instruction_count(schedule, packet_plan);
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){
       .target = record.target_id,
-      .processor = record.processor->processor,
+      .processor = record.processor->name,
       .kernel = kernel,
       .summary =
           {

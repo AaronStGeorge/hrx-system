@@ -752,6 +752,35 @@ ERR_AMDGPU_034 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_035: AMDGPU native emission metadata does not support register class.
+ERR_AMDGPU_035 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=35,
+    severity=Severity.ERROR,
+    summary="AMDGPU native emission register metadata is unsupported.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' cannot emit native metadata for '@{function_name}': "
+        "{value_class} value '{value_name}' is assigned to register class "
+        "'{register_class}', but {metadata_contract} metadata is not "
+        "implemented for that class"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("value_class", ParamKind.STRING),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("metadata_contract", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use register classes with complete AMDGPU native metadata support, "
+        "or implement kernel descriptor metadata for the selected class"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -786,4 +815,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_032,
     ERR_AMDGPU_033,
     ERR_AMDGPU_034,
+    ERR_AMDGPU_035,
 )

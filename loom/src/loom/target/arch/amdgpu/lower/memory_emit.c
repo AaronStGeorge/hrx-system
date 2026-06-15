@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "loom/ops/cache.h"
@@ -514,23 +515,6 @@ iree_status_t loom_amdgpu_emit_memory_saddr(
                                      low_offset, out_low_saddr);
 }
 
-static iree_status_t loom_amdgpu_low_value_is_register_class(
-    loom_low_lower_context_t* context, loom_value_id_t low_value,
-    uint16_t reg_class_id, uint32_t unit_count, bool* out_match) {
-  *out_match = false;
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_type_t low_type = loom_module_value_type(module, low_value);
-  if (!loom_low_type_is_register(low_type)) {
-    return iree_ok_status();
-  }
-  bool is_class = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
-      context, low_type, reg_class_id, &is_class));
-  *out_match =
-      is_class && loom_low_register_type_unit_count(low_type) == unit_count;
-  return iree_ok_status();
-}
-
 typedef struct loom_amdgpu_hal_buffer_descriptor_extent_t {
   // Static descriptor range word used when dynamic_extent is absent.
   int64_t static_extent;
@@ -630,7 +614,7 @@ loom_amdgpu_source_access_dynamic_view_base_term_can_emit_u32(
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, term->index, &low_index));
   bool is_sgpr_b32 = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class_count(
       context, low_index, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, &is_sgpr_b32));
   if (!is_sgpr_b32) {
     return iree_ok_status();
@@ -641,7 +625,7 @@ loom_amdgpu_source_access_dynamic_view_base_term_can_emit_u32(
     IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
         context, term->stride_values[i], &low_stride));
     bool stride_is_sgpr_b32 = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class_count(
         context, low_stride, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1,
         &stride_is_sgpr_b32));
     if (!stride_is_sgpr_b32) {
@@ -765,7 +749,7 @@ static iree_status_t loom_amdgpu_emit_source_access_dense_dynamic_range(
     IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
         context, loom_type_dim_value_id_at(view_type, axis), &low_dim));
     bool is_sgpr_b32 = false;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class_count(
         context, low_dim, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, &is_sgpr_b32));
     if (!is_sgpr_b32) {
       return iree_ok_status();
@@ -1037,13 +1021,6 @@ static iree_status_t loom_amdgpu_emit_memory_flat_add_term(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_low_value_is_sgpr_b32(
-    loom_low_lower_context_t* context, loom_value_id_t low_value,
-    bool* out_is_sgpr_b32) {
-  return loom_amdgpu_low_value_is_register_class(
-      context, low_value, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, out_is_sgpr_b32);
-}
-
 static iree_status_t loom_amdgpu_emit_memory_flat_scalar_dynamic_term(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_low_source_memory_dynamic_term_t* term,
@@ -1055,7 +1032,7 @@ static iree_status_t loom_amdgpu_emit_memory_flat_scalar_dynamic_term(
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, term->index, &low_index));
   bool index_is_sgpr_b64 = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class_count(
       context, low_index, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
       &index_is_sgpr_b64));
   if (index_is_sgpr_b64 && term->byte_stride == 1 &&
@@ -1066,8 +1043,9 @@ static iree_status_t loom_amdgpu_emit_memory_flat_scalar_dynamic_term(
   }
 
   bool index_is_sgpr_b32 = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_sgpr_b32(context, low_index,
-                                                         &index_is_sgpr_b32));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_value_is_register_class_count(
+      context, low_index, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1,
+      &index_is_sgpr_b32));
   if (!index_is_sgpr_b32) {
     return iree_ok_status();
   }
@@ -1168,6 +1146,45 @@ iree_status_t loom_amdgpu_emit_memory_flat_vaddr(
   return iree_ok_status();
 }
 
+typedef struct loom_amdgpu_memory_cache_attr_field_t {
+  // Presence bit required for this descriptor attribute.
+  loom_amdgpu_memory_cache_policy_attr_flags_t flag;
+  // Descriptor attribute name.
+  iree_string_view_t name;
+  // Byte offset to the encoded attribute value field.
+  iree_host_size_t value_offset;
+} loom_amdgpu_memory_cache_attr_field_t;
+
+static const loom_amdgpu_memory_cache_attr_field_t
+    kLoomAmdgpuMemoryCacheAttrFields[] = {
+        {
+            .flag = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE,
+            .name = {.data = "scope", .size = 5},
+            .value_offset =
+                offsetof(loom_amdgpu_memory_cache_policy_attrs_t, scope),
+        },
+        {
+            .flag = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH,
+            .name = {.data = "th", .size = 2},
+            .value_offset =
+                offsetof(loom_amdgpu_memory_cache_policy_attrs_t, th),
+        },
+        {
+            .flag = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT,
+            .name = {.data = "nt", .size = 2},
+            .value_offset =
+                offsetof(loom_amdgpu_memory_cache_policy_attrs_t, nt),
+        },
+};
+
+static int64_t loom_amdgpu_memory_cache_attr_field_value(
+    const loom_amdgpu_memory_cache_policy_attrs_t* cache_attrs,
+    const loom_amdgpu_memory_cache_attr_field_t* field) {
+  const uint8_t* attrs_bytes = (const uint8_t*)cache_attrs;
+  const void* value_bytes = attrs_bytes + field->value_offset;
+  return *(const int64_t*)value_bytes;
+}
+
 static iree_status_t loom_amdgpu_append_memory_cache_attrs(
     loom_low_lower_context_t* context,
     const loom_amdgpu_memory_access_t* access, loom_named_attr_t* attrs,
@@ -1184,23 +1201,17 @@ static iree_status_t loom_amdgpu_append_memory_cache_attrs(
       descriptor_set, access, &cache_attrs);
   IREE_ASSERT(encoded);
 
-  if (iree_any_bit_set(cache_attrs.flags,
-                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE)) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomAmdgpuMemoryCacheAttrFields); ++i) {
+    const loom_amdgpu_memory_cache_attr_field_t* field =
+        &kLoomAmdgpuMemoryCacheAttrFields[i];
+    if (!iree_any_bit_set(cache_attrs.flags, field->flag)) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(
-        context, IREE_SV("scope"), cache_attrs.scope, attrs, attr_capacity,
-        inout_attr_count));
-  }
-  if (iree_any_bit_set(cache_attrs.flags,
-                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH)) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_append_i64_attr(context, IREE_SV("th"), cache_attrs.th,
-                                    attrs, attr_capacity, inout_attr_count));
-  }
-  if (iree_any_bit_set(cache_attrs.flags,
-                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT)) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_append_i64_attr(context, IREE_SV("nt"), cache_attrs.nt,
-                                    attrs, attr_capacity, inout_attr_count));
+        context, field->name,
+        loom_amdgpu_memory_cache_attr_field_value(&cache_attrs, field), attrs,
+        attr_capacity, inout_attr_count));
   }
   return iree_ok_status();
 }

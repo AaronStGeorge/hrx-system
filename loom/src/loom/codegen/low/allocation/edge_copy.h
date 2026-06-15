@@ -25,8 +25,6 @@ extern "C" {
 
 // Immutable allocation facts needed to plan branch edge copies.
 typedef struct loom_low_allocation_edge_copy_context_t {
-  // Module containing the allocated low function.
-  const loom_module_t* module;
   // Body region of the low function.
   loom_region_t* body;
   // Descriptor set selected by the low function target.
@@ -37,6 +35,8 @@ typedef struct loom_low_allocation_edge_copy_context_t {
   loom_low_allocation_target_constraints_t* target_constraints;
   // Per-allocation-unit live end points.
   const loom_low_allocation_unit_liveness_t* unit_liveness;
+  // Function-local placement relations over |assignment_map.liveness|.
+  const loom_low_placement_table_t* placement;
   // Completed assignment lookup map.
   loom_low_allocation_assignment_map_t assignment_map;
 } loom_low_allocation_edge_copy_context_t;

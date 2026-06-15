@@ -209,6 +209,44 @@ TEST_F(ConditionFactsTest, AppliesSwappedConstantRelationToValueFacts) {
   EXPECT_EQ(induction_facts.range_hi, 100);
 }
 
+TEST_F(ConditionFactsTest, EdgeFactsProveWiderScalarCompareTrue) {
+  loom_value_id_t lane = DefineI32Value();
+  loom_value_id_t outer_bound = DefineI32Value();
+  loom_value_id_t inner_bound = DefineI32Value();
+  DefineFacts(outer_bound, loom_value_facts_exact_i64(8));
+  DefineFacts(inner_bound, loom_value_facts_exact_i64(16));
+  loom_op_t* outer =
+      BuildScalarI32Compare(LOOM_SCALAR_CMPI_PREDICATE_SLT, lane, outer_bound);
+  ASSERT_TRUE(Query(loom_scalar_cmpi_result(outer)));
+
+  loom_op_t* inner =
+      BuildScalarI32Compare(LOOM_SCALAR_CMPI_PREDICATE_SLT, lane, inner_bound);
+  bool condition = false;
+  EXPECT_TRUE(loom_condition_fact_set_proves_condition(
+      module_, &fact_table_, &condition_facts_, loom_scalar_cmpi_result(inner),
+      &condition));
+  EXPECT_TRUE(condition);
+}
+
+TEST_F(ConditionFactsTest, EdgeFactsProveDisjointIndexCompareFalse) {
+  loom_value_id_t lane = DefineIndexValue();
+  loom_value_id_t outer_bound = DefineIndexValue();
+  loom_value_id_t inner_bound = DefineIndexValue();
+  DefineFacts(outer_bound, loom_value_facts_exact_i64(8));
+  DefineFacts(inner_bound, loom_value_facts_exact_i64(16));
+  loom_op_t* outer =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_SLT, lane, outer_bound);
+  ASSERT_TRUE(Query(loom_index_cmp_result(outer)));
+
+  loom_op_t* inner =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_SGE, lane, inner_bound);
+  bool condition = true;
+  EXPECT_TRUE(loom_condition_fact_set_proves_condition(
+      module_, &fact_table_, &condition_facts_, loom_index_cmp_result(inner),
+      &condition));
+  EXPECT_FALSE(condition);
+}
+
 TEST_F(ConditionFactsTest, UnsignedCompareRequiresNonNegativeOperandFacts) {
   loom_value_id_t induction = DefineIndexValue();
   loom_value_id_t upper_bound = DefineIndexValue();

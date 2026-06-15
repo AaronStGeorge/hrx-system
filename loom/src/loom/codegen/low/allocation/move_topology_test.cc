@@ -124,23 +124,6 @@ low.func.def target(@test_target) @materialized_concat(%lhs: reg<test.i32>, %rhs
 }
 )";
 
-TEST_F(LowAllocationMoveTopologyTest, CountsBranchEdgeCopyTopology) {
-  ModulePtr module = ParseModule(kBranchOnlyConcatFunction);
-  ASSERT_NE(module.get(), nullptr);
-  loom_op_t* function_op =
-      FindLowFunction(module.get(), IREE_SV("branch_only_concat"));
-  loom_region_t* body = loom_low_func_def_body(function_op);
-
-  EXPECT_EQ(loom_low_allocation_move_topology_count_copy_ops(body), 1u);
-
-  iree_host_size_t group_count = 0;
-  iree_host_size_t copy_count = 0;
-  IREE_EXPECT_OK(loom_low_allocation_move_topology_count_edge_copy_groups(
-      module.get(), body, &group_count, &copy_count));
-  EXPECT_EQ(group_count, 2u);
-  EXPECT_EQ(copy_count, 4u);
-}
-
 TEST_F(LowAllocationMoveTopologyTest, ClassifiesPacketMoveOps) {
   ModulePtr module = ParseModule(kBranchOnlyConcatFunction);
   ASSERT_NE(module.get(), nullptr);

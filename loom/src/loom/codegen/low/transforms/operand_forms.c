@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/builder.h"
+#include "loom/codegen/low/descriptor_traits.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/pipeline/pass_environment.h"
@@ -22,15 +23,19 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/rewrite/materialize.h"
+#include "loom/rewrite/remap.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/math.h"
 
-#define LOOM_LOW_SELECT_OPERAND_FORMS_STATISTICS(V, statistics_type) \
-  V(statistics_type, forms_selected, "forms-selected",               \
-    "Number of low packets rewritten to descriptor operand forms.")  \
-  V(statistics_type, forms_rejected, "forms-rejected",               \
-    "Number of matched descriptor operand forms rejected.")          \
-  V(statistics_type, packets_folded, "packets-folded",               \
+#define LOOM_LOW_SELECT_OPERAND_FORMS_STATISTICS(V, statistics_type)      \
+  V(statistics_type, forms_selected, "forms-selected",                    \
+    "Number of low packets rewritten to descriptor operand forms.")       \
+  V(statistics_type, forms_rejected, "forms-rejected",                    \
+    "Number of matched descriptor operand forms rejected.")               \
+  V(statistics_type, operands_rematerialized, "operands-rematerialized",  \
+    "Number of replacement operands rematerialized near selected forms.") \
+  V(statistics_type, packets_folded, "packets-folded",                    \
     "Number of descriptor-backed low packets folded away.")
 
 LOOM_PASS_STATISTICS_DEFINE(loom_low_select_operand_forms_statistics,
@@ -634,6 +639,157 @@ static bool loom_low_select_operand_form_can_rewrite_destructive(
   return true;
 }
 
+static bool loom_low_descriptor_result_has_unary_constraint(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t result_index,
+    loom_low_constraint_kind_t kind) {
+  if (result_index >= descriptor->result_count) return false;
+  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
+    const loom_low_constraint_t* constraint =
+        &descriptor_set->constraints[descriptor->constraint_start + i];
+    if (constraint->kind == kind &&
+        constraint->lhs_operand_index == result_index &&
+        constraint->rhs_operand_index == LOOM_LOW_ID_NONE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_low_descriptor_result_can_rematerialize(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t result_index) {
+  if (descriptor == NULL) return false;
+  if (!iree_all_bits_set(descriptor->flags,
+                         LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE)) {
+    return false;
+  }
+  if (!loom_low_descriptor_result_has_unary_constraint(
+          descriptor_set, descriptor, result_index,
+          LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE)) {
+    return false;
+  }
+
+  const loom_trait_flags_t traits =
+      loom_low_descriptor_effective_traits(descriptor_set, descriptor);
+  return iree_all_bits_set(traits, LOOM_TRAIT_PURE) &&
+         !loom_traits_may_read(traits) && !loom_traits_has_side_effects(traits);
+}
+
+static bool loom_low_packet_kind_may_rematerialize(
+    loom_low_descriptor_packet_kind_t kind) {
+  return kind == LOOM_LOW_DESCRIPTOR_PACKET_OP ||
+         kind == LOOM_LOW_DESCRIPTOR_PACKET_CONST;
+}
+
+// Rematerialization should shorten a local live range, not duplicate a value
+// whose original producer must remain live for a later or cross-block use.
+static bool loom_low_select_operand_form_rematerialization_shortens_live_range(
+    const loom_value_t* value, const loom_op_t* before_op) {
+  if (before_op->parent_block == NULL) return false;
+  const loom_use_t* uses = loom_value_uses(value);
+  for (uint32_t i = 0; i < value->use_count; ++i) {
+    const loom_op_t* user_op = loom_use_user_op(uses[i]);
+    if (user_op == before_op) continue;
+    if (user_op == NULL || user_op->parent_block != before_op->parent_block ||
+        user_op->block_ordinal >= before_op->block_ordinal) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_low_select_operand_form_rematerialize_operand(
+    loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
+    loom_op_t* before_op, loom_value_id_t* inout_value_id) {
+  IREE_ASSERT(inout_value_id);
+  IREE_ASSERT(*inout_value_id < state->module->values.count);
+
+  const loom_value_t* value = loom_module_value(state->module, *inout_value_id);
+  if (loom_value_is_block_arg(value) || loom_value_is_consumed(value)) {
+    return iree_ok_status();
+  }
+  if (!loom_low_select_operand_form_rematerialization_shortens_live_range(
+          value, before_op)) {
+    return iree_ok_status();
+  }
+  const uint16_t result_index = loom_value_def_index(value);
+  loom_op_t* defining_op = loom_value_def_op(value);
+  if (defining_op == NULL || defining_op == before_op ||
+      defining_op == before_op->prev_op) {
+    return iree_ok_status();
+  }
+  if (defining_op->operand_count != 0 || defining_op->result_count != 1 ||
+      defining_op->region_count != 0 || defining_op->successor_count != 0 ||
+      defining_op->tied_result_count != 0) {
+    return iree_ok_status();
+  }
+
+  loom_low_resolved_descriptor_packet_t producer_packet = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
+      state->module, state->target, defining_op, &producer_packet));
+  if (!loom_low_packet_kind_may_rematerialize(producer_packet.kind) ||
+      !loom_low_descriptor_result_can_rematerialize(
+          state->target->descriptor_set, producer_packet.descriptor,
+          result_index)) {
+    return iree_ok_status();
+  }
+
+  loom_ir_remap_t remap;
+  IREE_RETURN_IF_ERROR(
+      loom_ir_remap_initialize(state->module, state->module, state->pass->arena,
+                               &(loom_ir_remap_options_t){
+                                   .allow_unmapped_values = true,
+                               },
+                               &remap));
+
+  loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
+  loom_builder_set_before(&rewriter->builder, before_op);
+  loom_op_t* cloned_op = NULL;
+  iree_status_t status =
+      loom_ir_clone_op(&rewriter->builder, defining_op, &remap, &cloned_op);
+  loom_builder_restore(&rewriter->builder, saved_ip);
+  IREE_RETURN_IF_ERROR(status);
+  IREE_ASSERT(result_index < cloned_op->result_count);
+  const loom_value_id_t cloned_value_id =
+      loom_op_results(cloned_op)[result_index];
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_clear_value_name(rewriter, cloned_value_id));
+  IREE_RETURN_IF_ERROR(loom_rewriter_try_set_derived_value_name(
+      rewriter, *inout_value_id, cloned_value_id, IREE_SV("remat")));
+  *inout_value_id = cloned_value_id;
+  ++state->statistics->operands_rematerialized;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_select_operand_form_rematerialize_operands(
+    loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
+    loom_op_t* before_op, loom_value_id_t* operands,
+    iree_host_size_t operand_count) {
+  loom_value_id_t* original_operands = NULL;
+  if (operand_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->pass->arena, operand_count, sizeof(*original_operands),
+        (void**)&original_operands));
+  }
+  for (iree_host_size_t i = 0; i < operand_count; ++i) {
+    const loom_value_id_t original_operand = operands[i];
+    original_operands[i] = original_operand;
+    bool reused_operand = false;
+    for (iree_host_size_t j = 0; j < i; ++j) {
+      if (original_operands[j] == original_operand) {
+        operands[i] = operands[j];
+        reused_operand = true;
+        break;
+      }
+    }
+    if (reused_operand) continue;
+    IREE_RETURN_IF_ERROR(loom_low_select_operand_form_rematerialize_operand(
+        state, rewriter, before_op, &operands[i]));
+  }
+  return iree_ok_status();
+}
+
 static bool loom_low_enum_domain_contains_i64(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_enum_domain_t* domain, int64_t value) {
@@ -896,6 +1052,11 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
       state->pass->arena, descriptor_set, replacement_descriptor, &tied_results,
       &tied_result_count));
 
+  const loom_value_id_t value_checkpoint =
+      loom_rewriter_value_checkpoint(rewriter);
+  IREE_RETURN_IF_ERROR(loom_low_select_operand_form_rematerialize_operands(
+      state, rewriter, op, operands, form->operand_map_count));
+
   loom_named_attr_slice_t replacement_attrs = {0};
   IREE_RETURN_IF_ERROR(loom_low_select_operand_form_build_attrs(
       state->module, descriptor_set, replacement_descriptor, form,
@@ -905,8 +1066,6 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
       IREE_SV("selected"), IREE_SV("selected"), immediate_value,
       &destructive_info));
 
-  const loom_value_id_t value_checkpoint =
-      loom_rewriter_value_checkpoint(rewriter);
   loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
   loom_builder_set_before(&rewriter->builder, op);
   loom_op_t* replacement_op = NULL;

@@ -5,6 +5,8 @@
 // f16-to-f32 scale application, f32 RHS vector load, f32 dot accumulation, and
 // per-lane output store. The generated RHS iota makes the expected result
 // lane-dependent: dot([-3, -1, 2, 7] * 0.5, [4L+1..4L+4]) = 14.5 + 10L.
+// Numeric policy is ML-fast dot math: the explicit dot operation is the
+// accumulation contract, so comparisons should look for dot/FMA selection.
 kernel.def @packed_s8_fields_f16scale_f32dot() {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 4 : index

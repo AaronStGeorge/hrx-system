@@ -290,13 +290,13 @@ static iree_status_t loom_amdgpu_hsaco_validate_target_id(
         "AMDGPU HSACO target-feature suffixes are not supported yet: '%.*s'",
         (int)target_id.feature_suffix.size, target_id.feature_suffix.data);
   }
-  if (!iree_string_view_equal(target_id.processor->processor, processor_name)) {
+  if (!iree_string_view_equal(target_id.processor->name, processor_name)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HSACO target id '%.*s' selects processor '%.*s' but file "
         "processor is '%.*s'",
-        (int)target.size, target.data, (int)target_id.processor->processor.size,
-        target_id.processor->processor.data, (int)processor_name.size,
+        (int)target.size, target.data, (int)target_id.processor->name.size,
+        target_id.processor->name.data, (int)processor_name.size,
         processor_name.data);
   }
   return iree_ok_status();
@@ -1018,14 +1018,14 @@ iree_status_t loom_amdgpu_hsaco_write_file(
   const loom_amdgpu_processor_info_t* processor = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_info_lookup_processor(file->processor, &processor));
-  if (processor->elf_machine_flags == 0) {
+  if (processor->elf.machine_flags == 0) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU HSACO processor '%.*s' has no ELF e_flags mapping",
         (int)file->processor.size, file->processor.data);
   }
   const uint32_t elf_flags =
-      processor->elf_machine_flags | processor->elf_feature_flags;
+      processor->elf.machine_flags | processor->elf.feature_flags;
 
   loom_amdgpu_hsaco_payloads_t payloads = {0};
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(

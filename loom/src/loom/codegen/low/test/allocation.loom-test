@@ -61,6 +61,20 @@ low.func.def target(@test_target) @structural_physical_span_rebased_at_capacity(
 
 // ====
 
+// RUN: emit low-allocation-json @slice_uses_source_subrange fixed=%wide:target_id:4:4
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @slice_uses_source_subrange(%wide: reg<test.i32 x4>) -> (reg<test.i32>) asm<test.low.core> {
+  %middle = slice %wide[2] : reg<test.i32 x4> -> reg<test.i32>
+  return %middle
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"slice_uses_source_subrange","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":2,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"wide","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":0,"end_point":1,"unit_count":4,"location":{"kind":"target_id","base":4,"count":4}},{"index":1,"value":{"id":2,"name":"middle","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":6,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+
+// ====
+
 // RUN: emit low-allocation-json @fixed_physical_span_exceeds_capacity fixed=%value:physical_register:32:1 output=none
 
 test.target<low_core> @test_target
@@ -138,6 +152,30 @@ low.func.def target(@test_target) @dead_result_clobber_window(%leader: reg<test.
 
 // ----
 {"format":"loom.low.allocation.v0","function":"dead_result_clobber_window","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":4,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":1,"name":"lhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.phys"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}},{"index":1,"value":{"id":2,"name":"rhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.phys"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":1,"count":1}},{"index":2,"value":{"id":0,"name":"leader","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.phys"},"start_point":0,"end_point":2,"unit_count":1,"location":{"kind":"physical_register","base":2,"count":1}},{"index":3,"value":{"id":4,"name":"dead","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.phys"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+
+// ====
+
+// RUN: emit low-allocation-json @placement_affinity_accepted diagnostics=placement-decisions output=none
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @placement_affinity_accepted(%state: reg<test.i32>) -> (reg<test.i32>) {
+  // REMARK@+1: BACKEND/043 {function_name="placement_affinity_accepted", op_name="low.copy", source_value_name="state", result_value_name="copy", value_class="test.i32", placement_cause="low.copy", decision="accepted", reason="assigned-locations-match"}
+  %copy = low.copy %state : reg<test.i32> -> reg<test.i32>
+  low.return %copy : reg<test.i32>
+}
+
+// ====
+
+// RUN: emit low-allocation-json @placement_affinity_rejected diagnostics=placement-decisions fixed=%state:target_id:0:1 fixed=%copy:target_id:1:1 output=none
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @placement_affinity_rejected(%state: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  // REMARK@+1: BACKEND/043 {function_name="placement_affinity_rejected", op_name="low.copy", source_value_name="state", result_value_name="copy", value_class="test.i32", placement_cause="low.copy", decision="rejected", reason="assigned-locations-differ"}
+  %copy = low.copy %state : reg<test.i32> -> reg<test.i32>
+  low.return %copy, %state : reg<test.i32>, reg<test.i32>
+}
 
 // ====
 

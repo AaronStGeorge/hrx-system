@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/analysis/condition_facts.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
@@ -123,6 +124,93 @@ static iree_status_t loom_amdgpu_low_type_is_native_i1_mask(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
   *out_match = is_sgpr && loom_low_register_type_unit_count(low_type) == 2;
   return iree_ok_status();
+}
+
+static bool loom_amdgpu_single_predecessor_cfg_condition(
+    const loom_op_t* source_op, loom_value_id_t* out_condition,
+    bool* out_assumed_truth) {
+  *out_condition = LOOM_VALUE_ID_INVALID;
+  *out_assumed_truth = false;
+  const loom_block_t* block =
+      source_op != NULL ? source_op->parent_block : NULL;
+  const loom_region_t* region = block != NULL ? block->parent_region : NULL;
+  if (region == NULL || block == loom_region_const_entry_block(region)) {
+    return false;
+  }
+
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* predecessor =
+        loom_region_const_block(region, block_index);
+    if (predecessor == NULL || predecessor == block ||
+        predecessor->op_count == 0) {
+      continue;
+    }
+
+    const loom_op_t* terminator = loom_block_const_last_op(predecessor);
+    if (loom_cfg_br_isa(terminator)) {
+      if (loom_cfg_br_dest(terminator) == block) {
+        return false;
+      }
+      continue;
+    }
+    if (!loom_cfg_cond_br_isa(terminator)) {
+      continue;
+    }
+
+    const bool true_edge_reaches_block =
+        loom_cfg_cond_br_true_dest(terminator) == block;
+    const bool false_edge_reaches_block =
+        loom_cfg_cond_br_false_dest(terminator) == block;
+    if (!true_edge_reaches_block && !false_edge_reaches_block) {
+      continue;
+    }
+    if ((true_edge_reaches_block && false_edge_reaches_block) ||
+        *out_condition != LOOM_VALUE_ID_INVALID) {
+      return false;
+    }
+    *out_condition = loom_cfg_cond_br_condition(terminator);
+    *out_assumed_truth = true_edge_reaches_block;
+  }
+  return *out_condition != LOOM_VALUE_ID_INVALID;
+}
+
+static bool loom_amdgpu_cfg_cond_br_edge_implied_bool(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    bool* out_condition) {
+  *out_condition = false;
+  if (!loom_cfg_cond_br_isa(source_op)) {
+    return false;
+  }
+
+  loom_value_id_t edge_condition = LOOM_VALUE_ID_INVALID;
+  bool edge_assumed_truth = false;
+  if (!loom_amdgpu_single_predecessor_cfg_condition(source_op, &edge_condition,
+                                                    &edge_assumed_truth)) {
+    return false;
+  }
+
+  const loom_value_id_t condition = loom_cfg_cond_br_condition(source_op);
+  if (condition == edge_condition) {
+    *out_condition = edge_assumed_truth;
+    return true;
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  loom_condition_integer_relation_t relation_storage[16];
+  loom_condition_fact_set_t edge_facts = {0};
+  loom_condition_fact_set_initialize(
+      relation_storage, IREE_ARRAYSIZE(relation_storage), &edge_facts);
+  (void)loom_condition_facts_query(module, fact_table, edge_condition,
+                                   edge_assumed_truth, &edge_facts);
+  if (edge_facts.integer_relation_count == 0) {
+    return false;
+  }
+
+  return loom_condition_fact_set_proves_condition(
+      module, fact_table, &edge_facts, condition, out_condition);
 }
 
 static iree_status_t loom_amdgpu_materialize_branch_address(
@@ -1254,6 +1342,11 @@ iree_status_t loom_amdgpu_prepare_branch(void* user_data,
   if (!loom_cfg_cond_br_isa(source_terminator)) {
     return iree_ok_status();
   }
+  bool edge_implied_condition = false;
+  if (loom_amdgpu_cfg_cond_br_edge_implied_bool(context, source_terminator,
+                                                &edge_implied_condition)) {
+    return iree_ok_status();
+  }
 
   loom_type_t condition_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
@@ -2015,6 +2108,16 @@ iree_status_t loom_amdgpu_emit_cond_branch(void* user_data,
       context, condition_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 2,
       &is_sgpr_mask));
   if (is_sgpr_mask) {
+    bool edge_implied_condition = false;
+    if (loom_amdgpu_cfg_cond_br_edge_implied_bool(context, source_op,
+                                                  &edge_implied_condition)) {
+      loom_block_t* low_dest =
+          edge_implied_condition ? low_true_dest : low_false_dest;
+      loom_op_t* low_br_op = NULL;
+      return loom_low_br_build(loom_low_lower_context_builder(context),
+                               low_dest, NULL, 0, source_op->location,
+                               &low_br_op);
+    }
     return loom_amdgpu_emit_exec_mask_cond_branch(
         context, source_op, low_condition, low_true_dest, low_false_dest,
         condition_type);

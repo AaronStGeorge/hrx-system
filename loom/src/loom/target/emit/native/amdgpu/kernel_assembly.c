@@ -59,7 +59,9 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
           LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR)
           ? 1u
           : 0u));
-  if (record->processor->kernel_descriptor_uses_gfx10_sgpr_encoding) {
+  if (loom_amdgpu_processor_kernel_descriptor_has_flags(
+          record->processor,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder, "  .amdhsa_wavefront_size32 %u\n",
         kernel->wavefront_size == 32 ? 1u : 0u));
@@ -86,7 +88,9 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
       record->system_vgpr_workitem_id));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "  .amdhsa_next_free_vgpr %" PRIu32 "\n", kernel->vgpr_count));
-  if (record->processor->kernel_descriptor_has_accum_offset) {
+  if (loom_amdgpu_processor_kernel_descriptor_has_flags(
+          record->processor,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET)) {
     uint32_t accum_offset = 0;
     IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_accum_offset(
         kernel->vgpr_count, &accum_offset));

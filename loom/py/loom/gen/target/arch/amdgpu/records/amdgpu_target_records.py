@@ -73,7 +73,7 @@ def _lookup_processor(
     processor = processors.get(processor_name)
     if processor is None:
         raise ValueError(f"AMDGPU target record '{processor_name}' does not name a known processor")
-    if not processor.descriptor_set_key:
+    if not processor.descriptor_set.key:
         raise ValueError(f"AMDGPU target record '{processor_name}' has no supported descriptor set")
     return processor
 
@@ -82,9 +82,9 @@ def _lookup_descriptor_set(
     descriptor_sets: dict[str, AmdgpuDescriptorSetInfo],
     processor: AmdgpuProcessorInfo,
 ) -> AmdgpuDescriptorSetInfo:
-    descriptor_set = descriptor_sets.get(processor.descriptor_set_key)
+    descriptor_set = descriptor_sets.get(processor.descriptor_set.key)
     if descriptor_set is None:
-        raise ValueError(f"AMDGPU target record '{processor.processor}' references unknown descriptor set '{processor.descriptor_set_key}'")
+        raise ValueError(f"AMDGPU target record '{processor.processor}' references unknown descriptor set '{processor.descriptor_set.key}'")
     return descriptor_set
 
 
@@ -184,7 +184,7 @@ def _emit_tables(rows: Sequence[_AmdgpuTargetRecordRow]) -> str:
             f"{_c_string_arg(bundle_name)}, "
             f"{_c_string_arg(bundle_name + '-low')}, "
             f"{_c_string_arg(descriptor_set.key)}, "
-            f"{default_row.processor.default_wavefront_size})"
+            f"{default_row.processor.wavefront.default_size})"
         )
     lines.extend(["#endif  // LOOM_AMDGPU_TARGET_DESCRIPTOR_SET", ""])
 

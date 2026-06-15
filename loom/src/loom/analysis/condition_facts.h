@@ -109,6 +109,14 @@ bool loom_condition_fact_set_apply_to_value_facts(
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
     loom_value_facts_t* inout_facts);
 
+// Attempts to prove that |condition_value| is exact after applying edge-local
+// |facts| to the values it depends on. Unsupported condition forms are valid
+// and return false. |fact_table| may be NULL to prove only from edge relations.
+bool loom_condition_fact_set_proves_condition(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_condition_fact_set_t* facts, loom_value_id_t condition_value,
+    bool* out_condition);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

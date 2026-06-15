@@ -381,7 +381,8 @@ static iree_status_t loom_amdgpu_uses_packed_workitem_id(
                             "processor target record");
   }
   *out_uses_packed_workitem_id =
-      processor->kernel_descriptor_has_packed_workitem_id;
+      loom_amdgpu_processor_kernel_descriptor_has_flags(
+          processor, LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID);
   return iree_ok_status();
 }
 

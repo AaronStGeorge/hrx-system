@@ -1817,10 +1817,8 @@ static bool loom_amdgpu_memory_access_signed_i16_repair_is_available(
   if (!loom_amdgpu_memory_access_needs_signed_i16_repair(access)) {
     return true;
   }
-  return loom_amdgpu_descriptor_ref_ordinal(
-             descriptor_set,
-             LOOM_AMDGPU_DESCRIPTOR_REF_V_BFE_I32_OFFSET_WIDTH_INLINE) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  return loom_amdgpu_descriptor_set_has_ref(
+      descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_V_BFE_I32_OFFSET_WIDTH_INLINE);
 }
 
 static bool loom_amdgpu_memory_access_try_select_buffer(

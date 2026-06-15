@@ -94,7 +94,6 @@ loom_cc_library(
         ":assignment",
         ":assignment_map",
         ":live_range",
-        ":move_topology",
         ":table",
         ":target_constraints",
         ":unit_liveness",
@@ -156,7 +155,6 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:placement",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -599,6 +597,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
         "//runtime/src/iree/base",
     ],
 )

@@ -134,6 +134,25 @@ typedef enum loom_target_compile_report_legalization_action_e {
   LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_UNHANDLED = 6,
 } loom_target_compile_report_legalization_action_t;
 
+typedef enum loom_target_compile_report_legalization_outcome_e {
+  // No terminal target-legalization outcome was recorded.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_NONE = 0,
+  // The selected target contract already accepts the source op.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_ALREADY_LEGAL = 1,
+  // A target-specific legalizer rewrote or erased the source op.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_TARGET_REWRITE = 2,
+  // A target-independent reference legalizer rewrote or erased the source op.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_REFERENCE_FALLBACK = 3,
+  // A legalizer intentionally left the source op for a later phase.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_DEFERRED = 4,
+  // The source op violates the source contract required before legalization.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_REJECT_INVALID_IR = 5,
+  // The source op is recognized but unsupported by the final target contract.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_REJECT_UNSUPPORTED = 6,
+  // No composed legalizer had an opinion about the unsupported source op.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_OUTCOME_UNHANDLED = 7,
+} loom_target_compile_report_legalization_outcome_t;
+
 typedef enum loom_target_compile_report_contract_outcome_e {
   // No target-contract query outcome was recorded.
   LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_NONE = 0,
@@ -374,6 +393,8 @@ typedef struct loom_target_compile_report_legalization_row_t {
   loom_target_compile_report_legalization_policy_t policy;
   // Legalization decision recorded for this source operation.
   loom_target_compile_report_legalization_action_t action;
+  // Terminal outcome after applying the selected legalization action.
+  loom_target_compile_report_legalization_outcome_t legalization_outcome;
   // Read-only target-contract query outcome observed before rewriting.
   loom_target_compile_report_contract_outcome_t contract_outcome;
   // Active target-contract fragment binding ordinal, or UINT16_MAX.

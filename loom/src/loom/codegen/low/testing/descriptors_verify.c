@@ -181,6 +181,9 @@ static iree_status_t loom_low_verify_tables_present(
       descriptor_set->asm_immediates, descriptor_set->asm_immediate_count,
       "asm_immediates"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->native_asm_values, descriptor_set->native_asm_value_count,
+      "native_asm_values"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->operands, descriptor_set->operand_count, "operands"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->immediates, descriptor_set->immediate_count,
@@ -414,6 +417,150 @@ static iree_status_t loom_low_verify_asm_immediates(
   return iree_ok_status();
 }
 
+static bool loom_low_native_asm_value_kind_is_valid(
+    loom_low_native_asm_value_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_LITERAL:
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_RESULT:
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND:
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64:
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_low_verify_native_asm_values(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_asm_form_t* asm_form,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  for (uint16_t i = 0; i < asm_form->native_assembly_value_count; ++i) {
+    const uint32_t row_index = asm_form->native_assembly_value_start + i;
+    const loom_low_native_asm_value_t* value =
+        &descriptor_set->native_asm_values[row_index];
+    if (!loom_low_native_asm_value_kind_is_valid(value->kind)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm form for descriptor %" PRIu32
+                              " has invalid native value kind %u",
+                              descriptor_index, (unsigned)value->kind);
+    }
+    if (value->kind == LOOM_LOW_NATIVE_ASM_VALUE_KIND_LITERAL) {
+      iree_string_view_t literal = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+          descriptor_set, value->literal_string_offset,
+          "native_asm_value.literal", &literal));
+      (void)literal;
+      if (value->index != 0 || value->bit_width != 0) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low asm form for descriptor %" PRIu32
+            " literal native value must not set index or bit width",
+            descriptor_index);
+      }
+      continue;
+    }
+    if (value->literal_string_offset != LOOM_LOW_STRING_OFFSET_NONE) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm form for descriptor %" PRIu32
+                              " non-literal native value has a literal string",
+                              descriptor_index);
+    }
+    switch (value->kind) {
+      case LOOM_LOW_NATIVE_ASM_VALUE_KIND_RESULT: {
+        if (value->index >= descriptor->operand_count) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low asm form for descriptor %" PRIu32
+              " native result references operand %" PRIu16
+              " but descriptor has only %" PRIu16 " operands",
+              descriptor_index, value->index, descriptor->operand_count);
+        }
+        const loom_low_operand_t* operand =
+            &descriptor_set->operands[descriptor->operand_start + value->index];
+        if (value->index >= descriptor->result_count ||
+            operand->role != LOOM_LOW_OPERAND_ROLE_RESULT) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " native result operand %" PRIu16
+                                  " does not name a descriptor result",
+                                  descriptor_index, value->index);
+        }
+        if (value->bit_width != 0) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " native result must not set bit width",
+                                  descriptor_index);
+        }
+        break;
+      }
+      case LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND: {
+        if (value->index >= descriptor->operand_count) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low asm form for descriptor %" PRIu32
+              " native operand references operand %" PRIu16
+              " but descriptor has only %" PRIu16 " operands",
+              descriptor_index, value->index, descriptor->operand_count);
+        }
+        const loom_low_operand_t* operand =
+            &descriptor_set->operands[descriptor->operand_start + value->index];
+        if (!loom_low_operand_role_is_packet_operand(operand->role)) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " native operand %" PRIu16
+                                  " does not name an explicit packet operand",
+                                  descriptor_index, value->index);
+        }
+        if (value->bit_width != 0) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " native operand must not set bit width",
+                                  descriptor_index);
+        }
+        break;
+      }
+      case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64:
+        if (value->index >= descriptor->immediate_count) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low asm form for descriptor %" PRIu32
+              " native immediate references immediate %" PRIu16
+              " but descriptor has only %" PRIu16 " immediates",
+              descriptor_index, value->index, descriptor->immediate_count);
+        }
+        if (value->bit_width != 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low asm form for descriptor %" PRIu32
+              " native i64 immediate must not set bit width",
+              descriptor_index);
+        }
+        break;
+      case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
+        if (value->index >= descriptor->immediate_count) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low asm form for descriptor %" PRIu32
+              " native immediate references immediate %" PRIu16
+              " but descriptor has only %" PRIu16 " immediates",
+              descriptor_index, value->index, descriptor->immediate_count);
+        }
+        if (value->bit_width == 0 || value->bit_width > 32) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " native unsigned-hex bit width is invalid",
+                                  descriptor_index);
+        }
+        break;
+      default:
+        IREE_ASSERT_UNREACHABLE("validated above");
+        break;
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_asm_form(
     const loom_low_descriptor_set_t* descriptor_set, uint32_t asm_form_index,
     iree_string_view_t* out_mnemonic) {
@@ -449,6 +596,10 @@ static iree_status_t loom_low_verify_asm_form(
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
       asm_form->immediate_start, asm_form->immediate_count,
       descriptor_set->asm_immediate_count, "asm_immediates"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      asm_form->native_assembly_value_start,
+      asm_form->native_assembly_value_count,
+      descriptor_set->native_asm_value_count, "native_asm_values"));
   IREE_RETURN_IF_ERROR(loom_low_verify_asm_operand_indices(
       descriptor_set, descriptor, asm_form->descriptor_ordinal,
       asm_form->result_operand_index_start,
@@ -458,6 +609,8 @@ static iree_status_t loom_low_verify_asm_form(
       asm_form->operand_index_start, asm_form->operand_index_count,
       /*expect_result=*/false));
   IREE_RETURN_IF_ERROR(loom_low_verify_asm_immediates(
+      descriptor_set, asm_form, descriptor, asm_form->descriptor_ordinal));
+  IREE_RETURN_IF_ERROR(loom_low_verify_native_asm_values(
       descriptor_set, asm_form, descriptor, asm_form->descriptor_ordinal));
   if (out_mnemonic != NULL) {
     *out_mnemonic = mnemonic;
@@ -469,11 +622,12 @@ static iree_status_t loom_low_verify_asm_forms(
     const loom_low_descriptor_set_t* descriptor_set) {
   if (descriptor_set->asm_form_count == 0) {
     if (descriptor_set->asm_operand_index_count != 0 ||
-        descriptor_set->asm_immediate_count != 0) {
+        descriptor_set->asm_immediate_count != 0 ||
+        descriptor_set->native_asm_value_count != 0) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "low descriptor set has asm operand or immediate rows but no asm "
-          "forms");
+          "low descriptor set has asm operand, immediate, or native value rows "
+          "but no asm forms");
     }
     return iree_ok_status();
   }

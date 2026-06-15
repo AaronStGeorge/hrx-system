@@ -18,6 +18,15 @@ low.func.def target(@gfx11_target) @vop3_bfe_offset_width_inline(%value: reg<amd
 // ====
 
 amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @vop3_cmp_f32_inline_sources(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %below = v_cmp_lt_f32_src1_inline %lhs {rhs = 1065353216}
+  %above = v_cmp_gt_f32_src0_inline %rhs {lhs = 3212836864}
+  return %below, %above
+}
+
+// ====
+
+amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @sop2_bfe_literal_control(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   %signed = s_bfe_i32_lit %value, 2056
   %unsigned = s_bfe_u32_lit %value, 1028
@@ -68,8 +77,8 @@ low.func.def target(@gfx11_target) @rdna_scalar_f16_fma_forms(%acc: reg<amdgpu.v
 
 // ====
 
-amdgpu.target<gfx1170> @gfx1170_target
-low.func.def target(@gfx1170_target) @rdna35_scalar_domain_fma_forms(%acc32: reg<amdgpu.sgpr>, %a32: reg<amdgpu.sgpr>, %b32: reg<amdgpu.sgpr>, %acc16: reg<amdgpu.sgpr>, %a16: reg<amdgpu.sgpr>, %b16: reg<amdgpu.sgpr>) asm<amdgpu.rdna3_5.core> {
+amdgpu.target<gfx1150> @gfx1150_target
+low.func.def target(@gfx1150_target) @rdna35_scalar_domain_fma_forms(%acc32: reg<amdgpu.sgpr>, %a32: reg<amdgpu.sgpr>, %b32: reg<amdgpu.sgpr>, %acc16: reg<amdgpu.sgpr>, %a16: reg<amdgpu.sgpr>, %b16: reg<amdgpu.sgpr>) asm<amdgpu.rdna3_5.core> {
   %fmaak = s_fmaak_f32 %a32, %b32, 1065353216
   %fmamk = s_fmamk_f32 %a32, %b32, 1065353216
   %fmac32 = s_fmac_f32 %acc32, %a32, %b32

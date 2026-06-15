@@ -16,6 +16,12 @@ Each checked benchmark source is expected to contain:
 - Comments that identify the represented behavior class and any non-obvious
   numeric, layout, target, or launch contract.
 
+Fast-math flags are part of the benchmark contract. Cases that model ML-fast
+math should spell that policy in source and mark the contractable add/sub/reduce
+operations that backend and oracle comparisons are allowed to fuse. Cases that
+intentionally have no contraction opportunity should say that too, so missing
+FMA-style instructions are not misclassified as backend losses.
+
 The source stays more test-focused than the authoring corpus. Authoring
 examples are comment-rich recipes for people and agents learning how to write
 Loom. Checked benchmark integration cases are regression and benchmark assets:

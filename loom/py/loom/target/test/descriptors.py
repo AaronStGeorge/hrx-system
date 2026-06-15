@@ -131,6 +131,12 @@ def _i32_high16_result(field_name: str = "dst") -> Operand:
     )
 
 
+def _i32_high16_operand(field_name: str) -> Operand:
+    return Operand(
+        field_name, OperandRole.OPERAND, _I32_ALT, register_part=_REG_PART_I32_HIGH16
+    )
+
+
 def _i32_i64_result(field_name: str = "dst") -> Operand:
     return Operand(field_name, OperandRole.RESULT, _I32_I64_ALT)
 
@@ -542,12 +548,48 @@ TEST_LOW_AMBIGUOUS_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
+TEST_LOW_READ_LOW16_I32_DESCRIPTOR = Descriptor(
+    key="test.read.low16.i32",
+    mnemonic="test.read.low16.i32",
+    semantic_tag="test.read.low16.i32",
+    operands=(_i32_result(), _i32_low16_operand("src")),
+    asm_forms=_asm(results=("dst",), operands=("src",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
+TEST_LOW_READ_HIGH16_I32_DESCRIPTOR = Descriptor(
+    key="test.read.high16.i32",
+    mnemonic="test.read.high16.i32",
+    semantic_tag="test.read.high16.i32",
+    operands=(_i32_result(), _i32_high16_operand("src")),
+    asm_forms=_asm(results=("dst",), operands=("src",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
 TEST_LOW_WRITE_LOW16_I32_DESCRIPTOR = Descriptor(
     key="test.write.low16.i32",
     mnemonic="test.write.low16.i32",
     semantic_tag="test.write.low16.i32",
     operands=(_i32_low16_result(), _ptr_resource("address")),
     asm_forms=_asm(results=("dst",), operands=("address",)),
+    effects=(_LOAD_EFFECT,),
+    schedule_class=_SCHEDULE_LOAD,
+    flags=(DescriptorFlag.SIDE_EFFECTING,),
+)
+
+TEST_LOW_TIED_WRITE_LOW16_I32_DESCRIPTOR = Descriptor(
+    key="test.write.low16.tied.i32",
+    mnemonic="test.write.low16.tied.i32",
+    semantic_tag="test.write.low16.tied.i32",
+    operands=(
+        _i32_low16_result(),
+        _i32_high16_operand("src"),
+        _ptr_resource("address"),
+    ),
+    constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
+    asm_forms=_asm(results=("dst",), operands=("src", "address")),
     effects=(_LOAD_EFFECT,),
     schedule_class=_SCHEDULE_LOAD,
     flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -999,7 +1041,10 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_MUL_F32_DESCRIPTOR,
         TEST_LOW_AMBIGUOUS_DESCRIPTOR,
         TEST_LOW_TIED_ANY_DESCRIPTOR,
+        TEST_LOW_READ_LOW16_I32_DESCRIPTOR,
+        TEST_LOW_READ_HIGH16_I32_DESCRIPTOR,
         TEST_LOW_WRITE_LOW16_I32_DESCRIPTOR,
+        TEST_LOW_TIED_WRITE_LOW16_I32_DESCRIPTOR,
         TEST_LOW_WRITE_HIGH16_I32_DESCRIPTOR,
         TEST_LOW_SPV_OP_IADD_I32_DESCRIPTOR,
         TEST_LOW_CMP_EQ_I32_DESCRIPTOR,

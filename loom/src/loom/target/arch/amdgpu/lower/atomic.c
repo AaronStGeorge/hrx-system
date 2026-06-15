@@ -268,13 +268,6 @@ static uint8_t loom_amdgpu_atomic_scope(const loom_op_t* op) {
   return loom_view_atomic_rmw_scope(op);
 }
 
-static bool loom_amdgpu_atomic_descriptor_available(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
 static loom_amdgpu_vector_memory_cache_policy_encoding_t
 loom_amdgpu_atomic_vector_cache_encoding(
     const loom_low_descriptor_set_t* descriptor_set) {
@@ -283,7 +276,7 @@ loom_amdgpu_atomic_vector_cache_encoding(
           descriptor_set->descriptor_set_ordinal);
   return descriptor_set_info == NULL
              ? LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
-             : descriptor_set_info->vector_memory_cache_policy_encoding;
+             : descriptor_set_info->vector_memory.cache_policy_encoding;
 }
 
 static bool loom_amdgpu_atomic_prefers_global_saddr(
@@ -686,8 +679,7 @@ static bool loom_amdgpu_atomic_append_explicit_packet(
     iree_host_size_t immediate_count,
     loom_amdgpu_atomic_explicit_packet_selection_t* packets,
     iree_host_size_t packet_capacity, iree_host_size_t* inout_packet_count) {
-  if (!loom_amdgpu_atomic_descriptor_available(descriptor_set,
-                                               descriptor_ref)) {
+  if (!loom_amdgpu_descriptor_set_has_ref(descriptor_set, descriptor_ref)) {
     return false;
   }
   IREE_ASSERT(*inout_packet_count < packet_capacity);

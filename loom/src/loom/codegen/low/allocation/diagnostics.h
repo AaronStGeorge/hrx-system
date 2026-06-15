@@ -22,6 +22,8 @@ typedef enum loom_low_allocation_diagnostic_bits_e {
   LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS = 1u << 0,
   // Emits BACKEND/006 remarks for low.copy coalescing decisions.
   LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS = 1u << 1,
+  // Emits BACKEND/043 remarks for placement-affinity decisions.
+  LOOM_LOW_ALLOCATION_DIAGNOSTIC_PLACEMENT_DECISIONS = 1u << 2,
 } loom_low_allocation_diagnostic_bits_t;
 
 // Bitset of loom_low_allocation_diagnostic_bits_t values.

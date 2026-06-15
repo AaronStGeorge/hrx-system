@@ -65,6 +65,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::codegen::low::builder
+    loom::codegen::low::descriptor_traits
     loom::codegen::low::descriptors
     loom::codegen::low::diagnostics
     loom::codegen::low::function
@@ -78,6 +79,8 @@ loom_cc_library(
     loom::pass::registry
     loom::pass::types
     loom::pass::value_facts
+    loom::rewrite::materialize
+    loom::rewrite::remap
     loom::rewrite::rewriter
     loom::util::math
   PUBLIC

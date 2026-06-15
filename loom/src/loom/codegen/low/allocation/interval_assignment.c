@@ -621,7 +621,6 @@ iree_status_t loom_low_allocation_interval_assignment_build(
     loom_low_allocation_search_context_t search_context =
         loom_low_allocation_interval_assignment_search_context(&state);
     loom_low_allocation_coalescing_context_t coalescing_context = {
-        .module = context->module,
         .arena = context->arena,
         .liveness = context->liveness,
         .placement = context->placement,

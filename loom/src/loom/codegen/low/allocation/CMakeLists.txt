@@ -101,7 +101,6 @@ loom_cc_library(
     ::assignment
     ::assignment_map
     ::live_range
-    ::move_topology
     ::table
     ::target_constraints
     ::unit_liveness
@@ -172,7 +171,6 @@ loom_cc_library(
     loom::codegen::low::descriptors
     loom::codegen::low::placement
     loom::ir
-    loom::ops::low
   PUBLIC
 )
 
@@ -677,6 +675,7 @@ loom_cc_library(
     loom::codegen::low::diagnostics
     loom::error::emitter
     loom::error::error_defs
+    loom::ir
   PUBLIC
 )
 

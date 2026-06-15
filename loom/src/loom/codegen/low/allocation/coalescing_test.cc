@@ -271,7 +271,6 @@ TEST_F(LowAllocationCoalescingTest, AssignsTiedIntervalToSourceLocation) {
   search_context.storage_leases = &storage_leases;
 
   loom_low_allocation_coalescing_context_t context = {};
-  context.module = module;
   context.arena = &arena_;
   context.liveness = &liveness;
   context.placement = &placement;

@@ -56,8 +56,8 @@ static iree_status_t loom_amdgpu_target_record_emit_descriptor_set_mismatch(
     const loom_op_t* op, const loom_amdgpu_processor_info_t* processor,
     iree_string_view_t record_descriptor_set) {
   const loom_diagnostic_param_t params[] = {
-      loom_param_string(processor->processor),
-      loom_param_string(processor->descriptor_set_key),
+      loom_param_string(processor->name),
+      loom_param_string(processor->descriptor_set.key),
       loom_param_string(loom_amdgpu_target_record_symbol_name(module, op)),
       loom_param_string(record_descriptor_set),
   };
@@ -69,7 +69,7 @@ static iree_status_t loom_amdgpu_target_record_emit_no_descriptor_set(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     const loom_amdgpu_processor_info_t* processor) {
   const loom_diagnostic_param_t params[] = {
-      loom_param_string(processor->processor),
+      loom_param_string(processor->name),
   };
   return loom_amdgpu_target_record_emit(emitter, op, LOOM_ERR_AMDGPU_004,
                                         params, IREE_ARRAYSIZE(params));
@@ -82,7 +82,7 @@ static iree_status_t loom_amdgpu_target_record_emit_wavefront_size_unsupported(
   const loom_diagnostic_param_t params[] = {
       loom_param_string(loom_amdgpu_target_record_symbol_name(module, op)),
       loom_param_u64(wavefront_size),
-      loom_param_string(processor->processor),
+      loom_param_string(processor->name),
   };
   return loom_amdgpu_target_record_emit(emitter, op, LOOM_ERR_AMDGPU_026,
                                         params, IREE_ARRAYSIZE(params));
@@ -139,25 +139,25 @@ iree_status_t loom_amdgpu_target_record_build_for_processor(
   }
 
   const loom_amdgpu_target_record_info_t* target_record =
-      loom_amdgpu_target_record_info_for_processor(processor->processor);
+      loom_amdgpu_target_record_info_for_processor(processor->name);
   if (target_record == NULL) {
     target_record = loom_amdgpu_target_record_default_info_for_descriptor_set(
-        processor->descriptor_set_ordinal);
+        processor->descriptor_set.ordinal);
   }
   if (target_record == NULL) {
     return iree_make_status(
         IREE_STATUS_UNAVAILABLE,
         "AMDGPU processor '%.*s' has unsupported descriptor set ordinal %u",
-        (int)processor->processor.size, processor->processor.data,
-        (unsigned)processor->descriptor_set_ordinal);
+        (int)processor->name.size, processor->name.data,
+        (unsigned)processor->descriptor_set.ordinal);
   }
 
   loom_amdgpu_target_build_flags_t build_flags = 0;
   loom_string_id_t processor_id = LOOM_STRING_ID_INVALID;
-  if (!iree_string_view_equal(processor->processor,
+  if (!iree_string_view_equal(processor->name,
                               target_record->default_processor_name)) {
     IREE_RETURN_IF_ERROR(loom_module_intern_string(
-        builder->module, processor->processor, &processor_id));
+        builder->module, processor->name, &processor_id));
     build_flags |= LOOM_AMDGPU_TARGET_BUILD_FLAG_HAS_PROCESSOR;
   }
 
@@ -173,11 +173,11 @@ static uint32_t loom_amdgpu_target_record_default_wavefront_size(
     const loom_amdgpu_processor_info_t* default_processor) {
   const loom_target_bundle_t* bundle =
       loom_amdgpu_target_bundle_for_descriptor_set(
-          default_processor->descriptor_set_ordinal);
+          default_processor->descriptor_set.ordinal);
   if (bundle != NULL && bundle->snapshot != NULL) {
     return bundle->snapshot->subgroup_size;
   }
-  return default_processor->default_wavefront_size;
+  return default_processor->wavefront.default_size;
 }
 
 static bool loom_amdgpu_target_record_effective_wavefront_size(
@@ -205,7 +205,7 @@ iree_status_t loom_amdgpu_target_record_set_processor(
     const loom_amdgpu_processor_info_t* processor) {
   loom_string_id_t processor_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(module, processor->processor, &processor_id));
+      loom_module_intern_string(module, processor->name, &processor_id));
   loom_op_attrs(target_op)[loom_amdgpu_target_processor_ATTR_INDEX] =
       loom_attr_string(processor_id);
   return iree_ok_status();
@@ -224,9 +224,9 @@ iree_status_t loom_amdgpu_target_record_verify(
     return loom_amdgpu_target_record_emit_unknown_processor(emitter, op,
                                                             processor_name);
   }
-  if (processor->descriptor_set_ordinal ==
+  if (processor->descriptor_set.ordinal ==
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
-      iree_string_view_is_empty(processor->descriptor_set_key)) {
+      iree_string_view_is_empty(processor->descriptor_set.key)) {
     return loom_amdgpu_target_record_emit_no_descriptor_set(emitter, op,
                                                             processor);
   }
@@ -243,10 +243,10 @@ iree_status_t loom_amdgpu_target_record_verify(
     return loom_amdgpu_target_record_emit_unknown_processor(
         emitter, op, default_processor_name);
   }
-  if (!iree_string_view_equal(processor->descriptor_set_key,
-                              default_processor->descriptor_set_key)) {
+  if (!iree_string_view_equal(processor->descriptor_set.key,
+                              default_processor->descriptor_set.key)) {
     return loom_amdgpu_target_record_emit_descriptor_set_mismatch(
-        module, emitter, op, processor, default_processor->descriptor_set_key);
+        module, emitter, op, processor, default_processor->descriptor_set.key);
   }
 
   uint32_t wavefront_size = 0;

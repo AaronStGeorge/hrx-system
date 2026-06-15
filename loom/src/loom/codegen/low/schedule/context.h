@@ -72,9 +72,20 @@ typedef struct loom_low_schedule_state_chain_read_record_t {
   uint32_t next_record;
 } loom_low_schedule_state_chain_read_record_t;
 
+typedef struct loom_low_schedule_storage_read_record_t {
+  // Node that reads a value whose storage may later be consumed by a tied op.
+  uint32_t reader_node;
+  // Register part mask read by reader_node.
+  loom_low_register_part_mask_t read_mask;
+  // Next outstanding storage-read record for the same value ordinal.
+  uint32_t next_record;
+} loom_low_schedule_storage_read_record_t;
+
 enum loom_low_schedule_value_flag_bits_e {
   // Value is live in the current simulated block schedule.
   LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE = 1u << 0,
+  // Value ordinal is present in storage_read_touched_ordinals.
+  LOOM_LOW_SCHEDULE_VALUE_FLAG_STORAGE_READ_TOUCHED = 1u << 1,
 };
 typedef uint16_t loom_low_schedule_value_flags_t;
 
@@ -160,6 +171,21 @@ typedef struct loom_low_schedule_build_state_t {
   uint32_t* state_chain_read_heads;
   // State-chain read records used by state_chain_read_heads.
   loom_low_schedule_state_chain_read_record_t* state_chain_read_records;
+  // Per-block readers of values whose storage may be consumed by tied ops.
+  struct {
+    // Outstanding read lists, dense by local value ordinal.
+    uint32_t* heads;
+    // Read records used by heads.
+    loom_low_schedule_storage_read_record_t* records;
+    // Value ordinals whose heads were touched in the current block.
+    loom_value_ordinal_t* touched_ordinals;
+    // Number of populated read records.
+    iree_host_size_t record_count;
+    // Allocated read record capacity.
+    iree_host_size_t record_capacity;
+    // Number of touched value ordinals in the current block.
+    iree_host_size_t touched_count;
+  } storage_reads;
   // Scratch effect-frontier read node indices, reused for each block.
   uint32_t* effect_read_nodes;
   // Scratch effect-frontier read summaries, parallel to effect_read_nodes.

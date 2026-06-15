@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 24
+LOW_DESCRIPTOR_SET_ABI_VERSION = 26
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 LOW_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
@@ -228,6 +228,14 @@ class OperandFormImmediateAction(CEnum):
     ADD_MATCHED_I64 = "LOOM_LOW_OPERAND_FORM_IMMEDIATE_ADD_MATCHED_I64"
 
 
+class NativeAsmValueKind(CEnum):
+    LITERAL = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_LITERAL"
+    RESULT = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_RESULT"
+    OPERAND = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND"
+    IMMEDIATE_I64 = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64"
+    IMMEDIATE_UNSIGNED_HEX = "LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX"
+
+
 @dataclass(frozen=True, slots=True)
 class DescriptorCategory:
     """Stable category for grouping related descriptors inside a set.
@@ -321,12 +329,21 @@ class AsmImmediate:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeAsmValue:
+    kind: NativeAsmValueKind
+    field_name: str | None = None
+    literal: str | None = None
+    bit_width: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class AsmForm:
     mnemonic: str | None = None
     native_assembly_mnemonic: str | None = None
     results: tuple[str, ...] = ()
     operands: tuple[str, ...] = ()
     immediates: tuple[AsmImmediate, ...] = ()
+    native_assembly_values: tuple[NativeAsmValue, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

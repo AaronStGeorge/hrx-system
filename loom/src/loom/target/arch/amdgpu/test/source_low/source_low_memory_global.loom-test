@@ -1777,7 +1777,8 @@ low.func.def target(@target) abi(hal_kernel) @bf16_strided_gather_dot2(%latent: 
   %46 = v_bfe_u32_offset_0_width_16_low16 %34
   %47 = v_lshlrev_b32_src0_16_low16 %45
   %weight = v_or_b32 %46, %47
-  %dot = v_dot2_f32_bf16 %latent, %weight, %accumulator
+  %49 = copy %accumulator : reg<amdgpu.vgpr> -> reg<amdgpu.vgpr>
+  %dot = v_dot2_f32_bf16 %latent, %weight, %49
   return %dot
 }
 

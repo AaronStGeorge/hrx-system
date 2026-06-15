@@ -89,6 +89,8 @@ from loom.target.low_descriptors import (
     LatencyKind,
     MemorySpace,
     ModelQuality,
+    NativeAsmValue,
+    NativeAsmValueKind,
     Operand,
     OperandAddressMapKind,
     OperandFlag,
@@ -402,6 +404,7 @@ def _instruction_encoding_opcode(
 
 
 _MUBUF_SOFFSET_INLINE_ZERO = _predefined("0")
+_VBUFFER_SOFFSET_NULL = _predefined("NULL", "OPR_SREG_M0")
 
 _VMEM_LOAD_COUNTER_HAZARD = Hazard(
     HazardKind.WAIT_COUNTER, counter_id=_COUNTER_VMEM_LOAD
@@ -777,6 +780,7 @@ def _asm(
     operands: tuple[str, ...] = (),
     immediates: tuple[str, ...] = (),
     named_immediates: bool = False,
+    native_assembly_values: tuple[NativeAsmValue, ...] = (),
 ) -> tuple[AsmForm, ...]:
     return (
         AsmForm(
@@ -788,7 +792,32 @@ def _asm(
                 AsmImmediate(field_name, name=field_name if named_immediates else None)
                 for field_name in immediates
             ),
+            native_assembly_values=native_assembly_values,
         ),
+    )
+
+
+def _native_result(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.RESULT, field_name=field_name)
+
+
+def _native_operand(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.OPERAND, field_name=field_name)
+
+
+def _native_literal(spelling: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.LITERAL, literal=spelling)
+
+
+def _native_i64_immediate(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(NativeAsmValueKind.IMMEDIATE_I64, field_name=field_name)
+
+
+def _native_unsigned_hex_immediate(field_name: str, bit_width: int) -> NativeAsmValue:
+    return NativeAsmValue(
+        NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX,
+        field_name=field_name,
+        bit_width=bit_width,
     )
 
 
@@ -890,6 +919,21 @@ def _buffer_off_zero_operand_form(*, replacement_descriptor: str) -> OperandForm
                 match_i64=0,
             ),
         ),
+    )
+
+
+def _buffer_soffset_offset_operand_form(*, replacement_descriptor: str) -> OperandForm:
+    return OperandForm(
+        replacement_descriptor=replacement_descriptor,
+        matches=(
+            OperandFormMatch(
+                source_operand="soffset",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+            ),
+        ),
+        immediate_action=OperandFormImmediateAction.ADD_MATCHED_I64,
+        immediate_field="offset",
+        immediate_source_operand="soffset",
     )
 
 
@@ -1231,6 +1275,7 @@ def _s_mov_b32_contract_overlay() -> AmdgpuDescriptorOverlay:
         operands=(AmdgpuOperandOverlay("SDST", _sgpr_result()),),
         asm_forms=_asm(results=("dst",), immediates=("imm32",)),
         immediates=(_U32_IMMEDIATE,),
+        constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1252,6 +1297,7 @@ def _manual_scalar_descriptors(
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             encoding_id=s_mov_b32_opcode,
+            constraints=(Constraint(ConstraintKind.REMATERIALIZABLE, 0),),
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -1321,7 +1367,15 @@ def _manual_scalar_descriptors(
                     spec.operand_predefined_value("OPR_SDST_EXEC", "EXEC_LO"),
                 ),
             ),
-            asm_forms=_asm(mnemonic="s_mov_b64_exec", operands=("src",)),
+            asm_forms=_asm(
+                mnemonic="s_mov_b64_exec",
+                native_assembly_mnemonic="s_mov_b64",
+                operands=("src",),
+                native_assembly_values=(
+                    _native_literal("exec"),
+                    _native_operand("src"),
+                ),
+            ),
             effects=(_CONVERGENT_EFFECT,),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
@@ -1343,7 +1397,14 @@ def _manual_scalar_descriptors(
                     spec.operand_predefined_value("OPR_SSRC", "-1"),
                 ),
             ),
-            asm_forms=_asm(mnemonic="s_mov_b64_exec_full"),
+            asm_forms=_asm(
+                mnemonic="s_mov_b64_exec_full",
+                native_assembly_mnemonic="s_mov_b64",
+                native_assembly_values=(
+                    _native_literal("exec"),
+                    _native_literal("-1"),
+                ),
+            ),
             effects=(_CONVERGENT_EFFECT,),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
@@ -2437,6 +2498,8 @@ __all__ = (
     "LatencyKind",
     "MemorySpace",
     "ModelQuality",
+    "NativeAsmValue",
+    "NativeAsmValueKind",
     "Operand",
     "OperandAddressMapKind",
     "OperandFlag",
@@ -2568,6 +2631,7 @@ __all__ = (
     "_MATRIX_B_SCALE_IMMEDIATE",
     "_MUBUF_SOFFSET_INLINE_ZERO",
     "_MUBUF_VADDR_OFFSET_ONLY_SIZE_REASON",
+    "_VBUFFER_SOFFSET_NULL",
     "_PREFETCH_COUNT_IMMEDIATE",
     "_PREFETCH_DISTANCE_IMMEDIATE",
     "_PSEUDO_DEAD_REMOVABLE_FLAGS",
@@ -2673,6 +2737,7 @@ __all__ = (
     "_asm",
     "_atomic_effects",
     "_buffer_off_zero_operand_form",
+    "_buffer_soffset_offset_operand_form",
     "_cache_field_names",
     "_cache_immediate",
     "_cache_immediates",
@@ -2717,6 +2782,11 @@ __all__ = (
     "_matrix_hazards",
     "_memory_asm_immediate_names",
     "_mubuf_vaddr_operand",
+    "_native_i64_immediate",
+    "_native_literal",
+    "_native_operand",
+    "_native_result",
+    "_native_unsigned_hex_immediate",
     "_named_offset_immediate",
     "_offset_immediate",
     "_predefined",

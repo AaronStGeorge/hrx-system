@@ -35,7 +35,7 @@ const loom_amdgpu_processor_info_t* loom_amdgpu_target_info_find_processor(
     const loom_amdgpu_processor_info_t* processor =
         &loom_amdgpu_target_info_processor_infos[mid];
     const int comparison =
-        iree_string_view_compare(processor->processor, processor_name);
+        iree_string_view_compare(processor->name, processor_name);
     if (comparison == 0) {
       return processor;
     }
@@ -52,20 +52,22 @@ iree_status_t loom_amdgpu_target_info_processor_supports_hsaco(
     const loom_amdgpu_processor_info_t* processor, bool* out_supported) {
   IREE_ASSERT_ARGUMENT(out_supported);
   *out_supported = false;
-  if (processor == NULL || iree_string_view_is_empty(processor->processor) ||
-      iree_string_view_is_empty(processor->descriptor_set_key) ||
-      processor->descriptor_set_ordinal ==
+  if (processor == NULL || iree_string_view_is_empty(processor->name) ||
+      iree_string_view_is_empty(processor->descriptor_set.key) ||
+      processor->descriptor_set.ordinal ==
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE ||
-      processor->elf_machine_flags == 0 ||
-      processor->kernel_descriptor_profile ==
+      processor->elf.machine_flags == 0 ||
+      processor->kernel_descriptor.profile ==
           LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE) {
     return iree_ok_status();
   }
 
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
-      processor->descriptor_set_ordinal, &descriptor_set));
-  *out_supported = descriptor_set->supports_descriptor_packet_encoding;
+      processor->descriptor_set.ordinal, &descriptor_set));
+  *out_supported = loom_amdgpu_descriptor_set_info_has_flags(
+      descriptor_set,
+      LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING);
   return iree_ok_status();
 }
 
@@ -117,8 +119,8 @@ iree_status_t loom_amdgpu_target_info_lookup_descriptor_set(
     const iree_host_size_t mid = low + (high - low) / 2;
     const loom_amdgpu_descriptor_set_info_t* descriptor_set =
         &loom_amdgpu_target_info_descriptor_set_infos[mid];
-    const int comparison = iree_string_view_compare(
-        descriptor_set->descriptor_set_key, descriptor_set_key);
+    const int comparison =
+        iree_string_view_compare(descriptor_set->key, descriptor_set_key);
     if (comparison == 0) {
       *out_descriptor_set = descriptor_set;
       return iree_ok_status();

@@ -17,6 +17,7 @@ from loom.gen.target.low import c_spelling, validation
 from loom.gen.target.low.compiled import (
     CompiledAsmForm,
     CompiledDescriptorSet,
+    CompiledNativeAsmValue,
     CompiledOperandForm,
     DescriptorSetView,
 )
@@ -307,8 +308,26 @@ def _asm_form_row_lines(
             f".operand_index_count = {len(asm_form.operand_indices)},",
             f".immediate_start = {asm_form.immediate_start},",
             f".immediate_count = {len(asm_form.immediates)},",
+            f".native_assembly_value_start = {asm_form.native_assembly_value_start},",
+            f".native_assembly_value_count = {len(asm_form.native_assembly_values)},",
         ]
         for asm_form in asm_forms
+    ]
+
+
+def _native_asm_value_row_lines(
+    compiled: CompiledDescriptorSet,
+    values: Sequence[CompiledNativeAsmValue],
+) -> list[list[str]]:
+    pool = compiled.string_pool
+    return [
+        [
+            f".kind = {value.kind.c_name},",
+            f".index = {value.index},",
+            f".bit_width = {value.bit_width},",
+            f".literal_string_offset = {c_spelling.optional_string_expr(pool, value.literal_label)},",
+        ]
+        for value in values
     ]
 
 
@@ -729,6 +748,13 @@ def emit_source_for_views(
         "AsmForms",
         _asm_form_row_lines(compiled, compiled.asm_forms),
     )
+    _emit_array(
+        lines,
+        "loom_low_native_asm_value_t",
+        spec.c_table_prefix,
+        "NativeAsmValues",
+        _native_asm_value_row_lines(compiled, compiled.native_asm_values),
+    )
     for view in views:
         if view.uses_storage_asm_form_tables:
             continue
@@ -760,6 +786,7 @@ def emit_source_for_views(
         "asm_forms": "asm_form_count",
         "asm_operand_indices": "asm_operand_index_count",
         "asm_immediates": "asm_immediate_count",
+        "native_asm_values": "native_asm_value_count",
         "encoding_field_values": "encoding_field_value_count",
         "operand_forms": "operand_form_count",
         "operand_form_matches": "operand_form_match_count",
@@ -819,6 +846,7 @@ def emit_source_for_views(
             view_lines.append(f"    .asm_form_count = IREE_ARRAYSIZE(k{asm_form_table_prefix}AsmForms),")
             append_optional_table("asm_operand_indices", "AsmOperandIndices", view_lines)
             append_optional_table("asm_immediates", "AsmImmediates", view_lines)
+            append_optional_table("native_asm_values", "NativeAsmValues", view_lines)
         append_optional_table("encoding_field_values", "EncodingFieldValues", view_lines)
         if view.operand_forms:
             view_lines.append(f"    .operand_forms = k{operand_form_table_prefix}OperandForms,")

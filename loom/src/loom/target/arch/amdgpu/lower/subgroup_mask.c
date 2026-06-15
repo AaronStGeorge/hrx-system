@@ -19,12 +19,6 @@ static bool loom_amdgpu_subgroup_wavefront_size_is_supported(
     uint32_t wavefront_size) {
   return wavefront_size == 32 || wavefront_size == 64;
 }
-static bool loom_amdgpu_descriptor_set_has_ref(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_amdgpu_descriptor_ref_t descriptor_ref) {
-  return loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref) !=
-         LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
 
 static bool loom_amdgpu_subgroup_mask_bit_count(const loom_module_t* module,
                                                 loom_value_id_t value_id,
@@ -461,17 +455,6 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_mask_result(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_low_legality_verify_subgroup_descriptor(
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    loom_amdgpu_descriptor_ref_t descriptor_ref,
-    iree_string_view_t constraint_key) {
-  if (!loom_amdgpu_descriptor_set_has_ref(
-          loom_target_low_legality_descriptor_set(context), descriptor_ref)) {
-    return loom_amdgpu_low_legality_reject(context, op, constraint_key);
-  }
-  return iree_ok_status();
-}
-
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
@@ -492,11 +475,11 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_active_mask(
       &unused_mask_bit_count));
   if (loom_amdgpu_subgroup_mask_requires_wave32_zero_extend(
           unused_mask_bit_count, wavefront_size)) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
         context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
         IREE_SV("descriptor.s_mov_b32")));
   }
-  return loom_amdgpu_low_legality_verify_subgroup_descriptor(
+  return loom_amdgpu_low_legality_verify_descriptor_requirement(
       context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
       IREE_SV("descriptor.s_mov_b64_exec_read"));
 }
@@ -524,7 +507,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_ballot(
       &unused_mask_bit_count));
   if (loom_amdgpu_subgroup_mask_requires_wave32_zero_extend(
           unused_mask_bit_count, wavefront_size)) {
-    return loom_amdgpu_low_legality_verify_subgroup_descriptor(
+    return loom_amdgpu_low_legality_verify_descriptor_requirement(
         context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
         IREE_SV("descriptor.s_mov_b32"));
   }
@@ -549,10 +532,10 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_any(
       loom_amdgpu_low_legality_verify_subgroup_native_predicate(
           context, op, loom_kernel_subgroup_vote_any_predicate(op),
           IREE_SV("subgroup_vote_any.native_predicate")));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
       context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_U64,
       IREE_SV("descriptor.s_cmp_lg_u64")));
-  return loom_amdgpu_low_legality_verify_subgroup_descriptor(
+  return loom_amdgpu_low_legality_verify_descriptor_requirement(
       context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32,
       IREE_SV("descriptor.s_mov_b32"));
 }
@@ -575,10 +558,10 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_vote_all(
       loom_amdgpu_low_legality_verify_subgroup_native_predicate(
           context, op, loom_kernel_subgroup_vote_all_predicate(op),
           IREE_SV("subgroup_vote_all.native_predicate")));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_subgroup_descriptor(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_legality_verify_descriptor_requirement(
       context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_EQ_U64,
       IREE_SV("descriptor.s_cmp_eq_u64")));
-  return loom_amdgpu_low_legality_verify_subgroup_descriptor(
+  return loom_amdgpu_low_legality_verify_descriptor_requirement(
       context, op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ,
       IREE_SV("descriptor.s_mov_b64_exec_read"));
 }

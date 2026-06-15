@@ -151,6 +151,7 @@ def _compile_view_asm_forms(
         asm_forms,
         compiled.asm_operand_indices,
         compiled.asm_immediates,
+        compiled.native_asm_values,
     )
     return asm_forms
 

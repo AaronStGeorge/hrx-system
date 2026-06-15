@@ -187,7 +187,7 @@ TEST_F(AmdgpuProviderTest, MaterializesSelectedProcessors) {
   };
   static const Case cases[] = {
       {IREE_SV("gfx942"), LOOM_AMDGPU_TARGET_KIND_GFX942},
-      {IREE_SV("gfx1150"), LOOM_AMDGPU_TARGET_KIND_GFX1100},
+      {IREE_SV("gfx1150"), LOOM_AMDGPU_TARGET_KIND_GFX1150},
       {IREE_SV("gfx1201"), LOOM_AMDGPU_TARGET_KIND_GFX1200},
       {IREE_SV("gfx1250"), LOOM_AMDGPU_TARGET_KIND_GFX1250},
   };
@@ -198,7 +198,7 @@ TEST_F(AmdgpuProviderTest, MaterializesSelectedProcessors) {
     ASSERT_NE(processor, nullptr);
     const loom_target_selection_t selection = {
         /*.bundle=*/loom_amdgpu_target_bundle_for_descriptor_set(
-            processor->descriptor_set_ordinal),
+            processor->descriptor_set.ordinal),
         /*.data=*/const_cast<loom_amdgpu_processor_info_t*>(processor),
     };
 
@@ -210,7 +210,7 @@ TEST_F(AmdgpuProviderTest, MaterializesSelectedProcessors) {
     EXPECT_EQ(loom_amdgpu_target_kind(target_op), c.expected_kind);
     EXPECT_TRUE(iree_string_view_equal(
         loom_amdgpu_target_record_processor_name(module.get(), target_op),
-        processor->processor));
+        processor->name));
 
     loom_symbol_ref_t reused_ref = loom_symbol_ref_null();
     IREE_ASSERT_OK(loom_target_environment_materialize_selection(
