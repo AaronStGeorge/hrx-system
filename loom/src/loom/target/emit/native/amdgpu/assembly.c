@@ -2711,17 +2711,21 @@ static iree_string_view_t loom_amdgpu_vopd_component_assembly_mnemonic(
   return info->assembly_mnemonic;
 }
 
-static iree_status_t loom_amdgpu_append_vopd_fmac_component(
+static iree_status_t loom_amdgpu_append_vopd_tied_accumulate_component(
     const loom_native_assembly_packet_context_t* context,
-    const loom_low_packet_view_t* packet, iree_string_view_t mnemonic) {
+    const loom_low_packet_view_t* packet,
+    const loom_amdgpu_vopd_component_info_t* info,
+    iree_string_view_t mnemonic) {
   loom_native_assembly_packet_context_t component_context = *context;
   component_context.packet = packet;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_vopd_mnemonic(context, mnemonic));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(&component_context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(&component_context, 1));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(&component_context,
+                                                  info->operands.src0_index));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  return loom_amdgpu_append_operand(&component_context, 2);
+  return loom_amdgpu_append_operand(&component_context,
+                                    info->operands.vsrc1_index);
 }
 
 static iree_status_t loom_amdgpu_append_vopd_fmaak_component(
@@ -2797,8 +2801,9 @@ static iree_status_t loom_amdgpu_append_vopd_component(
   const iree_string_view_t mnemonic =
       loom_amdgpu_vopd_component_assembly_mnemonic(context, info);
   switch (info->form) {
-    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_FMAC:
-      return loom_amdgpu_append_vopd_fmac_component(context, packet, mnemonic);
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_ACCUMULATE:
+      return loom_amdgpu_append_vopd_tied_accumulate_component(context, packet,
+                                                               info, mnemonic);
     case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAAK_LITERAL:
       return loom_amdgpu_append_vopd_fmaak_component(context, packet, mnemonic,
                                                      literal_u32);

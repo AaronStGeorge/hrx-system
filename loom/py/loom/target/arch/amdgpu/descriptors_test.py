@@ -1128,6 +1128,45 @@ def test_packed_fmac_f16_descriptor_pins_destructive_accumulator() -> None:
         ) == ((0, 1), (0, 1))
 
 
+def test_packed_dot2_descriptors_pin_destructive_accumulator() -> None:
+    descriptor_sets = (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    )
+    for descriptor_set in descriptor_sets:
+        descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in descriptor_set
+        }
+        for descriptor_key in (
+            "amdgpu.v_dot2_f32_f16",
+            "amdgpu.v_dot2_f32_bf16",
+        ):
+            if descriptor_key not in descriptors:
+                continue
+            descriptor = descriptors[descriptor_key]
+            assert descriptor.encoding_name == "ENC_VOP3P"
+            assert tuple(operand.xml_field_name for operand in descriptor.operands) == (
+                "VDST",
+                "SRC0",
+                "SRC1",
+                "SRC2",
+            )
+            assert tuple(
+                operand.descriptor_operand.field_name for operand in descriptor.operands
+            ) == ("dst", "lhs", "rhs", "acc")
+            assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+                ConstraintKind.TIED,
+                ConstraintKind.DESTRUCTIVE,
+            )
+            assert tuple(
+                (constraint.lhs_operand_index, constraint.rhs_operand_index)
+                for constraint in descriptor.constraints
+            ) == ((0, 3), (0, 3))
+
+
 def _expected_mix_descriptor_keys(
     descriptor_key_prefix: str, *, include_all_f32: bool
 ) -> set[str]:

@@ -412,6 +412,37 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair(%acc0: reg<amdgpu.vgpr>
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_vopd_dot2_pairs strategy=source fixed=%lhs0:physical_register:0:1 fixed=%rhs0:physical_register:1:1 fixed=%lhs1:physical_register:2:1 fixed=%rhs1:physical_register:3:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_dot2_pairs(%lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>, %acc_f16_0: reg<amdgpu.vgpr>, %acc_f16_1: reg<amdgpu.vgpr>, %acc_bf16_0: reg<amdgpu.vgpr>, %acc_bf16_1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %dot_f16_0 = v_dot2_f32_f16 %lhs0, %rhs0, %acc_f16_0
+  %dot_f16_1 = v_dot2_f32_f16 %lhs1, %rhs1, %acc_f16_1
+  %dot_bf16_0 = v_dot2_f32_bf16 %lhs0, %rhs0, %acc_bf16_0
+  %dot_bf16_1 = v_dot2_f32_bf16 %lhs1, %rhs1, %acc_bf16_1
+  return
+}
+
+// ----
+  v_dual_dot2acc_f32_f16 v4, v0, v1 :: v_dual_dot2acc_f32_f16 v5, v2, v3
+  v_dual_dot2acc_f32_bf16 v6, v0, v1 :: v_dual_dot2acc_f32_bf16 v7, v2, v3
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_vopd_mixed_dot2_pair strategy=source fixed=%lhs0:physical_register:0:1 fixed=%rhs0:physical_register:1:1 fixed=%lhs1:physical_register:2:1 fixed=%rhs1:physical_register:3:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_mixed_dot2_pair(%lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>, %acc_f16: reg<amdgpu.vgpr>, %acc_bf16: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %dot_f16 = v_dot2_f32_f16 %lhs0, %rhs0, %acc_f16
+  %dot_bf16 = v_dot2_f32_bf16 %lhs1, %rhs1, %acc_bf16
+  return
+}
+
+// ----
+  v_dual_dot2acc_f32_f16 v4, v0, v1 :: v_dual_dot2acc_f32_bf16 v5, v2, v3
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_vopd_binary_f32_pairs strategy=source fixed=%a0:physical_register:0:1 fixed=%b0:physical_register:1:1 fixed=%a1:physical_register:2:1 fixed=%b1:physical_register:3:1 fixed=%mul0:physical_register:4:1 fixed=%mul1:physical_register:5:1 fixed=%add0:physical_register:6:1 fixed=%add1:physical_register:7:1 fixed=%sub0:physical_register:8:1 fixed=%sub1:physical_register:9:1
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_binary_f32_pairs(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
@@ -616,6 +647,32 @@ low.func.def target(@gfx11_target) @gfx11_vopd_epilogue_weighted_adds(%acc0: reg
   v_dual_add_f32 v8, v0, v1 :: v_dual_add_f32 v9, v2, v3
   v_dual_add_f32 v10, v4, v5 :: v_dual_add_f32 v11, v6, v7
   s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_vopd_dot2_pairs_native strategy=source fixed=%lhs0:physical_register:0:1 fixed=%rhs0:physical_register:1:1 fixed=%lhs1:physical_register:2:1 fixed=%rhs1:physical_register:3:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_dot2_pairs_native(%lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>, %acc_f16_0: reg<amdgpu.vgpr>, %acc_f16_1: reg<amdgpu.vgpr>, %acc_bf16_0: reg<amdgpu.vgpr>, %acc_bf16_1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %dot_f16_0 = v_dot2_f32_f16 %lhs0, %rhs0, %acc_f16_0
+  %dot_f16_1 = v_dot2_f32_f16 %lhs1, %rhs1, %acc_f16_1
+  %dot_bf16_0 = v_dot2_f32_bf16 %lhs0, %rhs0, %acc_bf16_0
+  %dot_bf16_1 = v_dot2_f32_bf16 %lhs1, %rhs1, %acc_bf16_1
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_vopd_mixed_dot2_pair_native strategy=source fixed=%lhs0:physical_register:0:1 fixed=%rhs0:physical_register:1:1 fixed=%lhs1:physical_register:2:1 fixed=%rhs1:physical_register:3:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_mixed_dot2_pair_native(%lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>, %acc_f16: reg<amdgpu.vgpr>, %acc_bf16: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %dot_f16 = v_dot2_f32_f16 %lhs0, %rhs0, %acc_f16
+  %dot_bf16 = v_dot2_f32_bf16 %lhs1, %rhs1, %acc_bf16
+  return
+}
+
+// ----
 
 // ====
 

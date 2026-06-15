@@ -1516,11 +1516,12 @@ static iree_status_t loom_amdgpu_encode_vopd_vgpr_src0(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
+static iree_status_t loom_amdgpu_encode_vopd_tied_accumulate_component(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet,
     loom_amdgpu_encoding_vopdxy_fields_t* fields,
     loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
-    loom_amdgpu_vopd_component_slot_t slot) {
+    loom_amdgpu_vopd_component_slot_t slot,
+    const loom_amdgpu_vopd_component_info_t* info) {
   loom_amdgpu_vopd_component_fields_t slot_fields =
       loom_amdgpu_vopd_component_fields_for_slot(fields, slot);
   *slot_fields.vdst = 0;
@@ -1530,10 +1531,14 @@ static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
   *out_literal_u32 = 0;
 
   const loom_op_t* op = packet->node->op;
-  if (op->result_count != 1 || op->operand_count != 3) {
+  if (op->result_count != 1 || packet->descriptor->immediate_count != 0 ||
+      info->operands.accumulator_index >= op->operand_count ||
+      info->operands.src0_index >= op->operand_count ||
+      info->operands.vsrc1_index >= op->operand_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU VOPD fmac component has unexpected "
-                            "operand shape");
+                            "AMDGPU VOPD %.*s component has unexpected operand "
+                            "shape",
+                            (int)info->op_name.size, info->op_name.data);
   }
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_packet_result_vgpr(state, packet, 0, slot_fields.vdst));
@@ -1542,16 +1547,19 @@ static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
   const loom_low_allocation_assignment_t* result_assignment =
       loom_amdgpu_map_assignment(state->allocation, results[0]);
   const loom_low_allocation_assignment_t* accumulator_assignment =
-      loom_amdgpu_map_assignment(state->allocation, operands[0]);
+      loom_amdgpu_map_assignment(state->allocation,
+                                 operands[info->operands.accumulator_index]);
   if (!loom_amdgpu_assignments_match(result_assignment,
                                      accumulator_assignment)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU VOPD fmac component result must share the "
-                            "accumulator physical register");
+                            "AMDGPU VOPD %.*s component result must share the "
+                            "accumulator physical register",
+                            (int)info->op_name.size, info->op_name.data);
   }
 
   const loom_low_allocation_assignment_t* src0_assignment =
-      loom_amdgpu_map_assignment(state->allocation, operands[1]);
+      loom_amdgpu_map_assignment(state->allocation,
+                                 operands[info->operands.src0_index]);
   uint16_t src0_vgpr = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_vgpr(
       state->allocation, src0_assignment, &src0_vgpr));
@@ -1559,7 +1567,8 @@ static iree_status_t loom_amdgpu_encode_vopd_fmac_component(
       loom_amdgpu_encode_vopd_vgpr_src0(state, src0_vgpr, slot_fields.src0));
 
   const loom_low_allocation_assignment_t* vsrc1_assignment =
-      loom_amdgpu_map_assignment(state->allocation, operands[2]);
+      loom_amdgpu_map_assignment(state->allocation,
+                                 operands[info->operands.vsrc1_index]);
   return loom_amdgpu_assignment_vgpr(state->allocation, vsrc1_assignment,
                                      slot_fields.vsrc1);
 }
@@ -1690,9 +1699,9 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
                             vopd_op);
   }
   switch (info->form) {
-    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_FMAC:
-      return loom_amdgpu_encode_vopd_fmac_component(
-          state, packet, fields, out_flags, out_literal_u32, slot);
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_ACCUMULATE:
+      return loom_amdgpu_encode_vopd_tied_accumulate_component(
+          state, packet, fields, out_flags, out_literal_u32, slot, info);
     case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAAK_LITERAL:
     case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAMK_LITERAL:
       return loom_amdgpu_encode_vopd_literal_fma_component(

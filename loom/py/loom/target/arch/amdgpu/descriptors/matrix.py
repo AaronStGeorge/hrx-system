@@ -1056,6 +1056,10 @@ def _v_dot2_f32_packed_float_overlay(
         fixed_encoding_fields=_vop3p_packed_dot_fixed_fields(
             op_sel_hi_field=op_sel_hi_field
         ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 3),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 3),
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 

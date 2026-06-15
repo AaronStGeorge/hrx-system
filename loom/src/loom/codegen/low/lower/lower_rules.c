@@ -2597,6 +2597,14 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op(
                                           emit, low_results.values);
 }
 
+static const loom_tied_result_t* loom_low_lower_rule_emit_tied_results(
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_emit_t* emit) {
+  return emit->tied_result_count == 0
+             ? NULL
+             : &rule_set->tied_results[emit->tied_result_start];
+}
+
 static iree_status_t loom_low_lower_rule_slice_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_value_id, uint32_t lane_index, loom_type_t lane_type,
@@ -2638,7 +2646,6 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_first_lane(
   const loom_low_lower_emit_t* emit = resolved_emit->emit;
   IREE_ASSERT_GT(emit->operand_ref_count, 0);
   IREE_ASSERT_EQ(emit->result_ref_count, 1);
-  IREE_ASSERT_EQ(emit->tied_result_count, 0);
   IREE_ASSERT_EQ(emit->source_memory_ordinal, 0);
 
   loom_value_id_t* low_operands = NULL;
@@ -2674,10 +2681,12 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_first_lane(
       context, rule_set, source_op, emit, NULL, &attrs));
 
   loom_op_t* low_op = NULL;
+  const loom_tied_result_t* tied_results =
+      loom_low_lower_rule_emit_tied_results(rule_set, emit);
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
       context, &resolved_emit->descriptor, lane_operands,
       emit->operand_ref_count, attrs, result_types, emit->result_ref_count,
-      NULL, 0, source_op->location, &low_op));
+      tied_results, emit->tied_result_count, source_op->location, &low_op));
   loom_value_slice_t low_results = loom_low_op_results(low_op);
   return loom_low_lower_rule_bind_results(context, rule_set, source_op, state,
                                           emit, low_results.values);
@@ -2691,7 +2700,6 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane(
   const loom_low_lower_emit_t* emit = resolved_emit->emit;
   IREE_ASSERT_GT(emit->operand_ref_count, 0);
   IREE_ASSERT_EQ(emit->result_ref_count, 1);
-  IREE_ASSERT_EQ(emit->tied_result_count, 0);
   IREE_ASSERT_EQ(emit->source_memory_ordinal, 0);
 
   loom_value_id_t* low_operands = NULL;
@@ -2722,10 +2730,12 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane(
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_attrs(
         context, rule_set, source_op, emit, NULL, &attrs));
     loom_op_t* low_op = NULL;
+    const loom_tied_result_t* tied_results =
+        loom_low_lower_rule_emit_tied_results(rule_set, emit);
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
         context, &resolved_emit->descriptor, low_operands,
-        emit->operand_ref_count, attrs, &result_type, 1, NULL, 0,
-        source_op->location, &low_op));
+        emit->operand_ref_count, attrs, &result_type, 1, tied_results,
+        emit->tied_result_count, source_op->location, &low_op));
     return loom_low_lower_rule_bind_results(context, rule_set, source_op, state,
                                             emit,
                                             loom_low_op_results(low_op).values);
@@ -2741,6 +2751,8 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane(
   loom_value_id_t* lane_results = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
       context, lane_count, sizeof(*lane_results), (void**)&lane_results));
+  const loom_tied_result_t* tied_results =
+      loom_low_lower_rule_emit_tied_results(rule_set, emit);
   for (uint32_t lane_index = 0; lane_index < lane_count; ++lane_index) {
     for (uint16_t operand_index = 0; operand_index < emit->operand_ref_count;
          ++operand_index) {
@@ -2756,8 +2768,8 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane(
     loom_op_t* lane_op = NULL;
     IREE_RETURN_IF_ERROR(loom_low_lower_emit_resolved_descriptor_op(
         context, &resolved_emit->descriptor, lane_operands,
-        emit->operand_ref_count, attrs, &lane_result_type, 1, NULL, 0,
-        source_op->location, &lane_op));
+        emit->operand_ref_count, attrs, &lane_result_type, 1, tied_results,
+        emit->tied_result_count, source_op->location, &lane_op));
     lane_results[lane_index] =
         loom_value_slice_get(loom_low_op_results(lane_op), 0);
   }
