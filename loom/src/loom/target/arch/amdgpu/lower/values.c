@@ -411,11 +411,6 @@ static bool loom_amdgpu_is_scalar_conversion_op_kind(loom_op_kind_t op_kind) {
   }
 }
 
-bool loom_amdgpu_value_plan_needs_preselection(const loom_op_t* source_op) {
-  return loom_scalar_cmpi_isa(source_op) || loom_vector_insert_isa(source_op) ||
-         loom_amdgpu_is_scalar_conversion_op_kind(source_op->kind);
-}
-
 static loom_scalar_type_t loom_amdgpu_scalar_type_or_none(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {
     return LOOM_SCALAR_TYPE_COUNT_;

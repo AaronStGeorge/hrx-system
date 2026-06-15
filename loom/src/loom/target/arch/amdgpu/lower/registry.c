@@ -73,6 +73,7 @@ typedef iree_status_t (*loom_amdgpu_lower_verify_fn_t)(
     bool* out_handled);
 
 typedef uint8_t loom_amdgpu_storage_policy_t;
+typedef uint8_t loom_amdgpu_preselect_policy_t;
 
 enum loom_amdgpu_storage_policy_e {
   // Conservative callback-plan behavior: keep every source operand available.
@@ -89,11 +90,25 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_ATOMIC = 5,
 };
 
+enum loom_amdgpu_preselect_policy_e {
+  // The row does not need target-owned preselection before generated rules.
+  LOOM_AMDGPU_PRESELECT_NONE = 0,
+  // Invoke value lowering preselection for conversion and value-shaping plans.
+  LOOM_AMDGPU_PRESELECT_VALUE_PLAN = 1,
+  // Invoke the ordinary callback selector before generated rules.
+  LOOM_AMDGPU_PRESELECT_PLAN_ID = 2,
+  // Invoke the ordinary callback selector and emit FMA literal diagnostics when
+  // no plan is selected.
+  LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC = 3,
+};
+
 typedef struct loom_amdgpu_lower_dispatch_row_t {
   // Source op kind covered by this AMDGPU lowering row.
   loom_op_kind_t source_op_kind;
   // Callback-plan source storage policy used during demand analysis.
   loom_amdgpu_storage_policy_t storage_policy;
+  // Preselection policy run before generated lowering rules.
+  loom_amdgpu_preselect_policy_t preselect_policy;
   // Bytes of plan data allocated by typed data selectors. Direct selector
   // hooks keep this zero and own any mixed plan allocation themselves.
   uint16_t plan_data_size;
@@ -642,23 +657,28 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
                                               loom_low_lower_plan_t* out_plan) {
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
-  if (loom_amdgpu_value_plan_needs_preselection(source_op)) {
-    return loom_amdgpu_preselect_value_plan(context, source_op, out_plan);
+  const loom_amdgpu_lower_dispatch_row_t* row =
+      loom_amdgpu_find_lower_dispatch_row(source_op->kind);
+  const loom_amdgpu_preselect_policy_t preselect_policy =
+      row != NULL ? row->preselect_policy : LOOM_AMDGPU_PRESELECT_NONE;
+  switch (preselect_policy) {
+    case LOOM_AMDGPU_PRESELECT_VALUE_PLAN:
+      return loom_amdgpu_preselect_value_plan(context, source_op, out_plan);
+    case LOOM_AMDGPU_PRESELECT_PLAN_ID:
+    case LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC: {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_select_plan_id(context, source_op, out_plan));
+      if (preselect_policy == LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC &&
+          loom_low_lower_plan_is_empty(*out_plan)) {
+        IREE_RETURN_IF_ERROR(
+            loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(context,
+                                                                  source_op));
+      }
+      return iree_ok_status();
+    }
+    default:
+      return iree_ok_status();
   }
-  if (!loom_vector_dotf_isa(source_op) && !loom_index_add_isa(source_op) &&
-      !loom_index_cmp_isa(source_op) && !loom_scalar_fmaf_isa(source_op) &&
-      !loom_vector_fmaf_isa(source_op) && !loom_vector_fmai_isa(source_op) &&
-      !loom_scalar_mulf_isa(source_op) && !loom_vector_mulf_isa(source_op)) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_select_plan_id(context, source_op, out_plan));
-  if (loom_low_lower_plan_is_empty(*out_plan) &&
-      (loom_scalar_fmaf_isa(source_op) || loom_vector_fmaf_isa(source_op))) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fmaf_literal_operand_form_diagnostic(
-        context, source_op));
-  }
-  return iree_ok_status();
 }
 
 static void loom_amdgpu_mark_plan_storage_demands(
