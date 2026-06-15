@@ -497,6 +497,47 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @f16_mfma_fragment_memor
 // ====
 
 amdgpu.target<gfx942> @target
+kernel.def target(@target) @f32_fragment_memory_static_offsets() {
+  %unit = index.constant 1 : index
+  %threads = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch(%input_buffer: buffer, %out_buffer: buffer) {
+  %input_base = index.constant 256 : offset
+  %out_base = index.constant 512 : offset
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %input_view = buffer.view %input_buffer[%input_base] : buffer -> view<32x32xf32, #dense>
+  %out_view = buffer.view %out_buffer[%out_base] : buffer -> view<32x32xf32, #dense>
+  %fragment = vector.fragment.load<init> %input_view[1, 2] shape [%m, %n] : view<32x32xf32, #dense> -> vector<4xf32>
+  vector.fragment.store<result> %fragment, %out_view[3, 4] shape [%m, %n] : vector<4xf32>, view<32x32xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_fragment_memory_static_offsets() asm<amdgpu.cdna3.core> {
+  %11 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4352} : reg<amdgpu.sgpr x2>
+  %out_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4608} : reg<amdgpu.sgpr x2>
+  %15 = v_and_b32_src0_inline %11, 15
+  %16 = v_lshrrev_b32_src0_inline %11, 4
+  %17 = v_lshlrev_b32_src0_inline %16, 9
+  %18 = v_lshlrev_b32_src0_inline %15, 2
+  %19 = v_add_u32 %17, %18
+  %20 = s_mov_b32_m0_imm 0
+  %21 = global_load_dword_saddr %19, %input_view, %20 {offset = 392}
+  %26 = global_load_dword_saddr %19, %input_view, %20 {offset = 520}
+  %31 = global_load_dword_saddr %19, %input_view, %20 {offset = 648}
+  %36 = global_load_dword_saddr %19, %input_view, %20 {offset = 776}
+  global_store_dword_saddr %19, %21, %out_view, %20 {offset = 912}
+  global_store_dword_saddr %19, %26, %out_view, %20 {offset = 1040}
+  global_store_dword_saddr %19, %31, %out_view, %20 {offset = 1168}
+  global_store_dword_saddr %19, %36, %out_view, %20 {offset = 1296}
+  return
+}
+
+// ====
+
+amdgpu.target<gfx942> @target
 func.def target(@target) @bf16_smfmac(%lhs_data: vector<2xi32>, %rhs_data: vector<4xi32>, %init_data: vector<4xf32>, %sparsity: vector<1xi32>) -> (vector<4xf32>) {
   %m = index.constant 16 : index
   %n = index.constant 16 : index
