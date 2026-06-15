@@ -61,7 +61,11 @@ static const loom_target_math_policy_t kSpirvMathPolicy = {
     .query = loom_spirv_math_policy_query,
 };
 
-#include "loom/target/arch/spirv/math_policy_tables.inl"
+static const loom_target_math_policy_registry_entry_t
+    kSpirvMathPolicyEntries[] = {
+        {/*.contract_set_key=*/IREE_SVL("spirv.logical.core"),
+         /*.policy=*/&kSpirvMathPolicy},
+};
 
 void loom_spirv_math_policy_registry_initialize(
     loom_target_math_policy_registry_t* out_registry) {

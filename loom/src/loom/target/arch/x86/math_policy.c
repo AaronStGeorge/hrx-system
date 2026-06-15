@@ -49,7 +49,17 @@ static const loom_target_math_policy_t kX86MathPolicy = {
     .query = loom_x86_math_policy_query,
 };
 
-#include "loom/target/arch/x86/math_policy_tables.inl"
+static const loom_target_math_policy_registry_entry_t kX86MathPolicyEntries[] =
+    {
+        {/*.contract_set_key=*/IREE_SVL("x86.avx512.core"),
+         /*.policy=*/&kX86MathPolicy},
+        {/*.contract_set_key=*/IREE_SVL("x86.avx2.core"),
+         /*.policy=*/&kX86MathPolicy},
+        {/*.contract_set_key=*/IREE_SVL("x86.packed_dot.core"),
+         /*.policy=*/&kX86MathPolicy},
+        {/*.contract_set_key=*/IREE_SVL("x86.avx512_packed_dot.core"),
+         /*.policy=*/&kX86MathPolicy},
+};
 
 void loom_x86_math_policy_registry_initialize(
     loom_target_math_policy_registry_t* out_registry) {

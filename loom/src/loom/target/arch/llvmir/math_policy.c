@@ -67,7 +67,13 @@ static const loom_target_math_policy_t kLlvmirMathPolicy = {
     .query = loom_llvmir_math_policy_query,
 };
 
-#include "loom/target/arch/llvmir/math_policy_tables.inl"
+static const loom_target_math_policy_registry_entry_t
+    kLlvmirMathPolicyEntries[] = {
+        {
+            /*.contract_set_key=*/IREE_SVL("llvmir.generic.core"),
+            /*.policy=*/&kLlvmirMathPolicy,
+        },
+};
 
 void loom_llvmir_math_policy_registry_initialize(
     loom_target_math_policy_registry_t* out_registry) {
