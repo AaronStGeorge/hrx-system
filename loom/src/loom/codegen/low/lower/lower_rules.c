@@ -225,23 +225,14 @@ iree_status_t loom_low_lower_rule_resolve_descriptor_ref(
   if (descriptor_ref == LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE) {
     return iree_ok_status();
   }
-  if (descriptor_ref >= rule_set->descriptor_ref_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "generated target-low rule references descriptor ref %" PRIu32
-        " outside rule-set descriptor ref table of size %" PRIu32,
-        (uint32_t)descriptor_ref, (uint32_t)rule_set->descriptor_ref_count);
-  }
+  IREE_ASSERT_LT(descriptor_ref, rule_set->descriptor_ref_count);
   if (match_context->descriptor_ref.fn != NULL) {
     return match_context->descriptor_ref.fn(
         match_context->descriptor_ref.user_data, match_context, rule_set,
         descriptor_ref, out_descriptor);
   }
-  if (match_context->descriptor_set == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "target-low rule descriptor refs require a selected descriptor set");
-  }
+  IREE_ASSERT(match_context->descriptor_set != NULL);
+  IREE_ASSERT(rule_set->descriptor_refs != NULL);
   const iree_string_view_t key = rule_set->descriptor_refs[descriptor_ref].key;
   const uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor(
       match_context->descriptor_set, key);
@@ -250,12 +241,7 @@ iree_status_t loom_low_lower_rule_resolve_descriptor_ref(
   }
   *out_descriptor = loom_low_descriptor_set_descriptor_at(
       match_context->descriptor_set, descriptor_ordinal);
-  if (*out_descriptor == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "descriptor ref '%.*s' resolved to invalid descriptor ordinal %" PRIu32,
-        (int)key.size, key.data, descriptor_ordinal);
-  }
+  IREE_ASSERT(*out_descriptor != NULL);
   return iree_ok_status();
 }
 
@@ -316,13 +302,7 @@ static iree_status_t loom_low_lower_rule_resolve_materializer_descriptor(
     iree_string_view_t descriptor_purpose,
     loom_low_lower_resolved_descriptor_t* out_descriptor) {
   *out_descriptor = (loom_low_lower_resolved_descriptor_t){0};
-  if (descriptor_ref == LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "generated source-memory byte-offset materializer is missing '%.*s' "
-        "descriptor ref",
-        (int)descriptor_purpose.size, descriptor_purpose.data);
-  }
+  IREE_ASSERT_NE(descriptor_ref, LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE);
   const loom_low_lower_rule_match_context_t match_context = {
       .descriptor_set = loom_low_lower_context_descriptor_set(context),
       .descriptor_ref =
@@ -336,7 +316,7 @@ static iree_status_t loom_low_lower_rule_resolve_materializer_descriptor(
       &match_context, rule_set, descriptor_ref, &descriptor));
   if (descriptor == NULL) {
     return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
+        IREE_STATUS_INTERNAL,
         "generated source-memory byte-offset materializer references missing "
         "'%.*s' descriptor",
         (int)descriptor_purpose.size, descriptor_purpose.data);
@@ -1604,14 +1584,9 @@ loom_low_lower_rule_descriptor_map_find(
 static iree_status_t loom_low_lower_rule_descriptor_maps_initialize(
     loom_low_lower_context_t* context,
     const loom_low_descriptor_set_t* descriptor_set) {
-  if (context->lowering.rule_descriptor_map_set == descriptor_set) {
+  IREE_ASSERT(descriptor_set != NULL);
+  if (context->lowering.rule_descriptor_map_set == descriptor_set)
     return iree_ok_status();
-  }
-  if (descriptor_set == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "target-low rule descriptor refs require a selected descriptor set");
-  }
 
   context->lowering.rule_descriptor_map_set = descriptor_set;
   context->lowering.rule_descriptor_maps = NULL;
@@ -1640,12 +1615,7 @@ static iree_status_t loom_low_lower_rule_descriptor_maps_initialize(
     if (rule_set->descriptor_ref_count == 0) {
       continue;
     }
-    if (rule_set->descriptor_refs == NULL) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "generated target-low rule set has %" PRIu32
-                              " descriptor refs but no descriptor-ref table",
-                              (uint32_t)rule_set->descriptor_ref_count);
-    }
+    IREE_ASSERT(rule_set->descriptor_refs != NULL);
     const loom_low_descriptor_t** descriptors = NULL;
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         &context->arena, rule_set->descriptor_ref_count, sizeof(*descriptors),
@@ -1661,12 +1631,7 @@ static iree_status_t loom_low_lower_rule_descriptor_maps_initialize(
       }
       descriptors[j] = loom_low_descriptor_set_descriptor_at(
           descriptor_set, descriptor_ordinal);
-      if (descriptors[j] == NULL) {
-        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                                "descriptor ref '%.*s' resolved to invalid "
-                                "descriptor ordinal %" PRIu32,
-                                (int)key.size, key.data, descriptor_ordinal);
-      }
+      IREE_ASSERT(descriptors[j] != NULL);
     }
   }
   return iree_ok_status();
@@ -1683,18 +1648,8 @@ iree_status_t loom_low_lower_rule_match_descriptor_ref_from_lowering(
       context, match_context->descriptor_set));
   const loom_low_lower_rule_descriptor_map_t* map =
       loom_low_lower_rule_descriptor_map_find(context, rule_set);
-  if (map == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "generated target-low rule set is not registered in active policy");
-  }
-  if (descriptor_ref >= map->descriptor_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "generated target-low rule references descriptor ref %" PRIu32
-        " outside resolved descriptor-ref map of size %" PRIu32,
-        (uint32_t)descriptor_ref, (uint32_t)map->descriptor_count);
-  }
+  IREE_ASSERT(map != NULL);
+  IREE_ASSERT_LT(descriptor_ref, map->descriptor_count);
   *out_descriptor = map->descriptors[descriptor_ref];
   return iree_ok_status();
 }
@@ -1910,11 +1865,7 @@ iree_status_t loom_low_lower_rule_set_resolve_emit_program(
     const uint16_t emit_index = (uint16_t)(rule->emit_start + i);
     const loom_low_lower_emit_t* emit = &rule_set->emits[emit_index];
     resolved_emits[i].emit = emit;
-    if (emit->descriptor_ref == LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "generated target-low emit row has no descriptor ref");
-    }
+    IREE_ASSERT_NE(emit->descriptor_ref, LOOM_LOW_LOWER_DESCRIPTOR_REF_NONE);
     const loom_low_descriptor_t* descriptor = NULL;
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_resolve_descriptor_ref(
         &match_context, rule_set, emit->descriptor_ref, &descriptor));
@@ -1922,7 +1873,7 @@ iree_status_t loom_low_lower_rule_set_resolve_emit_program(
       const iree_string_view_t key =
           rule_set->descriptor_refs[emit->descriptor_ref].key;
       return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
+          IREE_STATUS_INTERNAL,
           "generated target-low rule references missing descriptor '%.*s'",
           (int)key.size, key.data);
     }
