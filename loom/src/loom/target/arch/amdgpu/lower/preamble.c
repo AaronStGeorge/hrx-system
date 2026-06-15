@@ -97,17 +97,15 @@ iree_status_t loom_amdgpu_target_wavefront_size(
     const loom_target_bundle_t* bundle, uint32_t* out_wavefront_size) {
   *out_wavefront_size = 0;
   if (bundle == NULL || bundle->snapshot == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU preamble lowering requires a target "
-                            "snapshot");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU preamble target snapshot");
+    IREE_BUILTIN_UNREACHABLE();
   }
-  if (bundle->snapshot->subgroup_size != 0) {
-    *out_wavefront_size = bundle->snapshot->subgroup_size;
-    return iree_ok_status();
+  if (bundle->snapshot->subgroup_size == 0) {
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU preamble subgroup size");
+    IREE_BUILTIN_UNREACHABLE();
   }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "AMDGPU preamble lowering requires a fixed "
-                          "subgroup size");
+  *out_wavefront_size = bundle->snapshot->subgroup_size;
+  return iree_ok_status();
 }
 
 static uint32_t loom_amdgpu_ceil_div_u32(uint32_t numerator,
@@ -376,9 +374,8 @@ static iree_status_t loom_amdgpu_uses_packed_workitem_id(
           loom_low_lower_context_module(context),
           loom_low_lower_context_target_ref(context));
   if (processor == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU preamble lowering requires an AMDGPU "
-                            "processor target record");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU processor target record");
+    IREE_BUILTIN_UNREACHABLE();
   }
   *out_uses_packed_workitem_id =
       loom_amdgpu_processor_kernel_descriptor_has_flags(
@@ -474,9 +471,8 @@ static iree_status_t loom_amdgpu_emit_packed_workitem_id_extract(
       break;
     }
     default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unknown AMDGPU workitem-id dimension %u",
-                              (unsigned)dimension);
+      IREE_ASSERT_UNREACHABLE("unknown AMDGPU workitem-id dimension");
+      IREE_BUILTIN_UNREACHABLE();
   }
 
   return loom_amdgpu_emit_vgpr_binary_immediate(
@@ -566,10 +562,8 @@ static iree_status_t loom_amdgpu_lookup_workitem_id_live_in(
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_live_in_by_source(
       context, loom_amdgpu_workitem_id_source(dimension), out_value_id));
   if (*out_value_id == LOOM_VALUE_ID_INVALID) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU preamble lowering did not emit the requested workitem-id "
-        "live-in");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU workitem-id live-in");
+    IREE_BUILTIN_UNREACHABLE();
   }
   return iree_ok_status();
 }
@@ -581,11 +575,8 @@ static iree_status_t loom_amdgpu_lookup_workitem_id(
   *out_low_value_id = LOOM_VALUE_ID_INVALID;
   if (packed_workitem_id != LOOM_VALUE_ID_INVALID) {
     if ((uint32_t)dimension >= packed_dimension_count) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU packed workitem-id live-in does not cover requested "
-          "dimension %u",
-          (unsigned)dimension);
+      IREE_ASSERT_UNREACHABLE("selected AMDGPU packed workitem-id dimension");
+      IREE_BUILTIN_UNREACHABLE();
     }
     return loom_amdgpu_emit_packed_workitem_id_extract(
         context, source_op, packed_workitem_id, dimension,
@@ -601,10 +592,8 @@ static iree_status_t loom_amdgpu_lookup_workgroup_id_live_in(
   IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_live_in_by_source(
       context, loom_amdgpu_workgroup_id_source(dimension), out_value_id));
   if (*out_value_id == LOOM_VALUE_ID_INVALID) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU preamble lowering did not emit the requested workgroup-id "
-        "live-in");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU workgroup-id live-in");
+    IREE_BUILTIN_UNREACHABLE();
   }
   return iree_ok_status();
 }
@@ -615,10 +604,8 @@ static iree_status_t loom_amdgpu_lookup_dispatch_ptr_live_in(
       context, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_DISPATCH_PTR_SOURCE),
       out_value_id));
   if (*out_value_id == LOOM_VALUE_ID_INVALID) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU preamble lowering did not emit the requested dispatch pointer "
-        "live-in");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU dispatch pointer live-in");
+    IREE_BUILTIN_UNREACHABLE();
   }
   return iree_ok_status();
 }
@@ -639,18 +626,16 @@ static iree_status_t loom_amdgpu_mark_lane_query_workitem_id_live_ins(
           loom_low_lower_context_bundle(context),
           &unused_flat_workgroup_size) ||
       workgroup_size.x == 0 || workgroup_size.y == 0 || workgroup_size.z == 0) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU subgroup query lowering requires a fixed workgroup size");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU fixed workgroup size");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
   if (!loom_amdgpu_u32_is_power_of_two(wavefront_size)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU subgroup query lowering requires a power-of-two subgroup size");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU power-of-two subgroup size");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   uint32_t exact_result = 0;
@@ -686,10 +671,8 @@ static iree_status_t loom_amdgpu_mark_subgroup_query_workitem_id_live_ins(
       source_result = loom_kernel_subgroup_lane_id_result(source_op);
       break;
     default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "AMDGPU subgroup query live-in marking received "
-                              "unexpected op kind %u",
-                              (unsigned)source_op->kind);
+      IREE_ASSERT_UNREACHABLE("selected AMDGPU subgroup query op kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
   return loom_amdgpu_mark_lane_query_workitem_id_live_ins(
       context, source_op, source_result, first_workitem_id_ops);
@@ -759,9 +742,8 @@ static iree_status_t loom_amdgpu_emit_workitem_dispatch_id(
           loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), dimension, &workgroup_size)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU workitem dispatch-id lowering requires a fixed workgroup size");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU dispatch-id workgroup size");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   const loom_value_id_t source_result =
@@ -773,9 +755,8 @@ static iree_status_t loom_amdgpu_emit_workitem_dispatch_id(
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, result_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &result_is_vgpr));
   if (!result_is_vgpr) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU workitem dispatch-id result must lower to a VGPR");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU dispatch-id VGPR result");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   loom_value_id_t low_scaled_workgroup_id = LOOM_VALUE_ID_INVALID;
@@ -1087,27 +1068,24 @@ static iree_status_t loom_amdgpu_emit_subgroup_query_linear_id(
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), &flat_workgroup_size) ||
       workgroup_size.x == 0 || workgroup_size.y == 0 || workgroup_size.z == 0) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU subgroup query lowering requires a fixed workgroup size");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU fixed workgroup size");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   uint32_t wavefront_size = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
       loom_low_lower_context_bundle(context), &wavefront_size));
   if (!loom_amdgpu_u32_is_power_of_two(wavefront_size)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU subgroup query lowering requires a power-of-two subgroup size");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU power-of-two subgroup size");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   bool result_is_vgpr = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, result_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &result_is_vgpr));
   if (!result_is_vgpr) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU subgroup query result must lower to a VGPR");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU subgroup query VGPR result");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   uint32_t packed_dimension_count = 0;
@@ -1240,15 +1218,13 @@ static iree_status_t loom_amdgpu_emit_workgroup_count_value(
           loom_low_lower_context_module(context),
           loom_low_lower_context_source_function(context),
           loom_low_lower_context_bundle(context), dimension, &workgroup_size)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU workgroup-count lowering requires a fixed workgroup size");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU workgroup-count workgroup size");
+    IREE_BUILTIN_UNREACHABLE();
   }
   if (!loom_amdgpu_u32_is_power_of_two(workgroup_size)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU workgroup-count lowering requires a power-of-two workgroup "
-        "size");
+    IREE_ASSERT_UNREACHABLE(
+        "selected AMDGPU power-of-two workgroup-count size");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   const loom_value_id_t source_result =
@@ -1356,11 +1332,9 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
         const loom_kernel_dimension_t dimension =
             loom_kernel_workitem_id_dimension(source_op);
         if ((uint32_t)dimension >= packed_dimension_count) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "AMDGPU packed workitem-id live-in does not cover requested "
-              "dimension %u",
-              (unsigned)dimension);
+          IREE_ASSERT_UNREACHABLE(
+              "selected AMDGPU packed workitem-id dimension");
+          IREE_BUILTIN_UNREACHABLE();
         }
         loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
         IREE_RETURN_IF_ERROR(loom_amdgpu_emit_packed_workitem_id_extract(
@@ -1386,9 +1360,8 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
               loom_low_lower_context_bundle(context),
               loom_kernel_workgroup_size_dimension(source_op),
               &workgroup_size)) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "AMDGPU workgroup-size lowering requires a fixed workgroup size");
+        IREE_ASSERT_UNREACHABLE("selected AMDGPU workgroup-size query");
+        IREE_BUILTIN_UNREACHABLE();
       }
       return loom_amdgpu_emit_query_constant(
           context, source_op, loom_kernel_workgroup_size_result(source_op),
@@ -1432,9 +1405,9 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
               loom_low_lower_context_module(context),
               loom_low_lower_context_source_function(context),
               loom_low_lower_context_bundle(context), &flat_workgroup_size)) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "AMDGPU subgroup-count lowering requires a fixed workgroup size");
+        IREE_ASSERT_UNREACHABLE(
+            "selected AMDGPU subgroup-count workgroup size");
+        IREE_BUILTIN_UNREACHABLE();
       }
       uint32_t wavefront_size = 0;
       IREE_RETURN_IF_ERROR(loom_amdgpu_target_wavefront_size(
