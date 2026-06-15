@@ -166,8 +166,23 @@ iree_status_t iree_hal_streaming_device_memory_info(
   iree_hal_streaming_device_t* device = NULL;
   iree_status_t status = iree_hal_streaming_device_by_ordinal(ordinal, &device);
   if (iree_status_is_ok(status)) {
-    *out_free_memory = device->free_memory;
-    *out_total_memory = device->total_memory;
+    size_t free_memory = 0;
+    size_t total_memory = 0;
+    status = HRX_CALL(hrx_device_memory_info(device->hrx_device, &free_memory,
+                                             &total_memory));
+    if (iree_status_is_ok(status)) {
+      if (free_memory > IREE_DEVICE_SIZE_MAX ||
+          total_memory > IREE_DEVICE_SIZE_MAX) {
+        status =
+            iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                             "HRX device memory info exceeds the representable "
+                             "iree_device_size_t range");
+      }
+    }
+    if (iree_status_is_ok(status)) {
+      *out_free_memory = (iree_device_size_t)free_memory;
+      *out_total_memory = (iree_device_size_t)total_memory;
+    }
   }
   return status;
 }

@@ -80,6 +80,32 @@ static iree_status_t iree_hal_amdgpu_logical_device_queue_from_ordinal(
   return iree_ok_status();
 }
 
+static iree_status_t
+iree_hal_amdgpu_logical_device_query_device_memory_capacity(
+    iree_hal_amdgpu_logical_device_t* logical_device,
+    uint64_t* out_capacity_bytes) {
+  iree_hal_amdgpu_system_t* system = logical_device->system;
+  uint64_t capacity_bytes = 0;
+  for (iree_host_size_t i = 0; i < logical_device->physical_device_count; ++i) {
+    iree_hal_amdgpu_physical_device_t* physical_device =
+        logical_device->physical_devices[i];
+    hsa_amd_memory_pool_t pool =
+        physical_device->coarse_block_pools.large.memory_pool;
+    if (!pool.handle) continue;
+    size_t pool_size = 0;
+    IREE_RETURN_IF_ERROR(iree_hsa_amd_memory_pool_get_info(
+        IREE_LIBHSA(&system->libhsa), pool, HSA_AMD_MEMORY_POOL_INFO_SIZE,
+        &pool_size));
+    if (IREE_UNLIKELY(pool_size > UINT64_MAX - capacity_bytes)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU device memory capacity sum overflowed");
+    }
+    capacity_bytes += (uint64_t)pool_size;
+  }
+  *out_capacity_bytes = capacity_bytes;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // iree_hal_amdgpu_logical_device_options_t
 //===----------------------------------------------------------------------===//
@@ -1549,6 +1575,12 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
     physical_params->wavefront_size = physical_device->wavefront_size;
   }
 
+  uint64_t device_memory_capacity_bytes = 0;
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_logical_device_query_device_memory_capacity(
+        logical_device, &device_memory_capacity_bytes);
+  }
+
   if (iree_status_is_ok(status)) {
     iree_hal_amdgpu_device_spec_params_t spec_params = {
         .logical_device_id = logical_device->identifier,
@@ -1557,6 +1589,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
             logical_device->system->info.timestamp_frequency,
         .physical_device_count = physical_device_count,
         .physical_devices = physical_devices,
+        .device_memory_capacity_bytes = device_memory_capacity_bytes,
         .device_allocator = logical_device->device_allocator,
         .flags = logical_device->system->info.dmabuf_supported
                      ? IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_DMABUF
@@ -1992,24 +2025,25 @@ static iree_status_t iree_hal_amdgpu_logical_device_query_i64(
                    ((int64_t)version.minor << 8) | (int64_t)version.stepping;
       return iree_ok_status();
     }
-    if (iree_string_view_equal(key, IREE_SV("memory.total")) ||
-        iree_string_view_equal(key, IREE_SV("memory.free"))) {
+    if (iree_string_view_equal(key, IREE_SV("memory.total"))) {
       uint64_t total = 0;
-      for (iree_host_size_t i = 0; i < logical_device->physical_device_count;
-           ++i) {
-        iree_hal_amdgpu_physical_device_t* physical_device =
-            logical_device->physical_devices[i];
-        hsa_amd_memory_pool_t pool =
-            physical_device->coarse_block_pools.large.memory_pool;
-        if (!pool.handle) continue;
-        size_t pool_size = 0;
-        IREE_RETURN_IF_ERROR(iree_hsa_amd_memory_pool_get_info(
-            IREE_LIBHSA(&system->libhsa), pool, HSA_AMD_MEMORY_POOL_INFO_SIZE,
-            &pool_size));
-        total += (uint64_t)pool_size;
+      IREE_RETURN_IF_ERROR(
+          iree_hal_amdgpu_logical_device_query_device_memory_capacity(
+              logical_device, &total));
+      if (IREE_UNLIKELY(total > (uint64_t)INT64_MAX)) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU device memory capacity exceeds the representable int64_t "
+            "range");
       }
       *out_value = (int64_t)total;
       return iree_ok_status();
+    }
+    if (iree_string_view_equal(key, IREE_SV("memory.free"))) {
+      return iree_make_status(
+          IREE_STATUS_UNAVAILABLE,
+          "AMDGPU live free memory is not available through scalar device "
+          "queries");
     }
   } else if (iree_string_view_equal(category, IREE_SV("amdgpu.device"))) {
     if (iree_string_view_equal(key, IREE_SV("physical_device.count"))) {

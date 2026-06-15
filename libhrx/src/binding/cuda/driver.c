@@ -662,17 +662,13 @@ CUDAAPI CUresult cuDeviceTotalMem(size_t* bytes, CUdevice dev) {
     return CUDA_ERROR_INVALID_VALUE;
   }
 
-  iree_device_size_t free_memory = 0;
-  iree_device_size_t total_memory = 0;
-  iree_status_t status =
-      iree_hal_streaming_device_memory_info(dev, &free_memory, &total_memory);
-  if (!iree_status_is_ok(status)) {
-    iree_status_ignore(status);
+  iree_hal_streaming_device_t* device = iree_hal_streaming_device_entry(dev);
+  if (!device) {
     IREE_TRACE_ZONE_END(z0);
     return CUDA_ERROR_INVALID_DEVICE;
   }
 
-  *bytes = total_memory;
+  *bytes = (size_t)device->total_memory;
   IREE_TRACE_ZONE_END(z0);
   return CUDA_SUCCESS;
 }

@@ -7,6 +7,7 @@
 #include "binding/hip/api.h"
 
 #include <dlfcn.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "common/graph.h"
@@ -870,17 +871,14 @@ HIPAPI hipError_t hipGetDeviceProperties(hipDeviceProp_t* prop, int device) {
     HIP_RETURN_ERROR(hipErrorInvalidDevice);
   }
 
-  // Get memory information using libhrx.
-  size_t free_memory = 0;
-  size_t total_memory = 0;
+  // Get total memory information using libhrx.
+  uint64_t total_memory = 0;
   HIP_RETURN_STATUS_AND_END_ZONE_IF_ERROR(
       z0,
-      HRX_CALL(hrx_device_memory_info(device_obj->hrx_device, &free_memory,
-                                      &total_memory)),
+      HRX_CALL(hrx_device_get_property(device_obj->hrx_device,
+                                       HRX_DEVICE_PROPERTY_TOTAL_MEMORY,
+                                       &total_memory, sizeof(total_memory))),
       hipErrorInvalidDevice);
-  if (device_obj->total_memory > total_memory) {
-    total_memory = (size_t)device_obj->total_memory;
-  }
 
   // Fill device properties from device entry.
   memset(prop, 0, sizeof(hipDeviceProp_t));
@@ -1353,20 +1351,15 @@ HIPAPI hipError_t hipDeviceTotalMem(size_t* bytes, int device) {
     HIP_RETURN_ERROR(init_result);
   }
 
-  size_t free_memory = 0;
-  size_t total_memory = 0;
+  uint64_t total_memory = 0;
   HIP_RETURN_STATUS_AND_END_ZONE_IF_ERROR(
       z0,
-      HRX_CALL(hrx_device_memory_info(iree_hip_hrx_device(device), &free_memory,
-                                      &total_memory)),
+      HRX_CALL(hrx_device_get_property(iree_hip_hrx_device(device),
+                                       HRX_DEVICE_PROPERTY_TOTAL_MEMORY,
+                                       &total_memory, sizeof(total_memory))),
       hipErrorInvalidDevice);
-  iree_hal_streaming_device_t* device_obj =
-      iree_hal_streaming_device_entry(device);
-  if (device_obj && device_obj->total_memory > total_memory) {
-    total_memory = (size_t)device_obj->total_memory;
-  }
 
-  *bytes = total_memory;
+  *bytes = (size_t)total_memory;
   IREE_TRACE_ZONE_END(z0);
   return hipSuccess;
 }
@@ -3010,15 +3003,6 @@ HIPAPI hipError_t hipMemGetInfo(size_t* free, size_t* total) {
                                       &free_memory, &total_memory)),
       hipErrorInvalidDevice);
 
-  // Use the binding's tracked free memory instead of the static HAL value.
-  // The HAL reports a snapshot from driver init and doesn't track our allocs.
-  if (context->device_entry) {
-    free_memory = context->device_entry->free_memory;
-    if (context->device_entry->total_memory > total_memory) {
-      total_memory = (size_t)context->device_entry->total_memory;
-    }
-  }
-
   if (free) *free = (size_t)free_memory;
   if (total) *total = (size_t)total_memory;
 
@@ -3425,7 +3409,7 @@ HIPAPI hipError_t hipMalloc(void** ptr, size_t size) {
   p->offset += aligned_size;
   p->alloc_count++;
 
-  // Track free memory for hipMemGetInfo.
+  // Update the local allocation ledger.
   if (context->device_entry) {
     if (context->device_entry->free_memory >= aligned_size) {
       context->device_entry->free_memory -= aligned_size;
@@ -3626,7 +3610,7 @@ HIPAPI hipError_t hipFree(void* ptr) {
       // so memory freed here may still be in use by an in-flight kernel (e.g.
       // hipBLASLt workspace); reclaiming immediately risks silent corruption.
 
-      // Restore free memory tracking for hipMemGetInfo.
+      // Update the local allocation ledger.
       if (found && freed_size > 0 && p->device_entry) {
         p->device_entry->free_memory += freed_size;
       }

@@ -40,6 +40,7 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
       /*.timestamp_frequency_hz=*/1000000000ull,
       /*.physical_device_count=*/1,
       /*.physical_devices=*/&physical_device,
+      /*.device_memory_capacity_bytes=*/64ull * 1024ull * 1024ull * 1024ull,
       /*.device_allocator=*/allocator,
       /*.flags=*/IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_DMABUF,
   };
@@ -74,6 +75,15 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
   EXPECT_EQ(dispatch->subgroup.default_size, 32);
   EXPECT_EQ(dispatch->subgroup.supported_size_mask, 1ull << 32);
   EXPECT_EQ(dispatch->execution.unit_count, 40);
+
+  const iree_hal_device_memory_spec_t* memory =
+      iree_hal_device_spec_memory(device_spec);
+  ASSERT_NE(memory, nullptr);
+  ASSERT_EQ(memory->heap_count, 1);
+  EXPECT_EQ(memory->heaps[0].capacity_bytes,
+            64ull * 1024ull * 1024ull * 1024ull);
+  EXPECT_FALSE(iree_all_bits_set(
+      memory->heaps[0].flags, IREE_HAL_MEMORY_HEAP_SPEC_FLAG_CAPACITY_UNKNOWN));
 
   const iree_hal_device_executable_spec_t* executables =
       iree_hal_device_spec_executables(device_spec);

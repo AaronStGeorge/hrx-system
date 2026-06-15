@@ -70,6 +70,8 @@ typedef struct iree_hal_amdgpu_device_spec_params_t {
   iree_host_size_t physical_device_count;
   // Physical devices covered by the logical device.
   const iree_hal_amdgpu_device_spec_physical_device_params_t* physical_devices;
+  // Total logical device-local memory capacity in bytes, if known.
+  uint64_t device_memory_capacity_bytes;
   // Device allocator used to query stable allocation classes.
   iree_hal_allocator_t* device_allocator;
   // Optional AMDGPU device spec parameter flags.

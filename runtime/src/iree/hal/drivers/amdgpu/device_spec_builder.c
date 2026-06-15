@@ -104,6 +104,11 @@ static iree_hal_memory_access_t iree_hal_amdgpu_device_spec_memory_access(
   return IREE_HAL_MEMORY_ACCESS_NONE;
 }
 
+static bool iree_hal_amdgpu_device_spec_memory_heap_is_device_local(
+    const iree_hal_allocator_memory_heap_t* heap) {
+  return iree_all_bits_set(heap->type, IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL);
+}
+
 static iree_status_t iree_hal_amdgpu_device_spec_populate_memory(
     const iree_hal_amdgpu_device_spec_params_t* params,
     iree_hal_device_spec_builder_t* builder) {
@@ -139,11 +144,24 @@ static iree_status_t iree_hal_amdgpu_device_spec_populate_memory(
   if (iree_status_is_ok(status)) {
     memset(heaps, 0, heap_count * sizeof(*heaps));
     memset(memory_types, 0, heap_count * sizeof(*memory_types));
+    bool device_memory_capacity_attached = false;
     for (iree_host_size_t i = 0; i < heap_count; ++i) {
       const iree_hal_allocator_memory_heap_t* allocator_heap =
           &allocator_heaps[i];
+      iree_hal_memory_heap_spec_flags_t heap_flags =
+          IREE_HAL_MEMORY_HEAP_SPEC_FLAG_CAPACITY_UNKNOWN;
+      uint64_t capacity_bytes = 0;
+      if (!device_memory_capacity_attached &&
+          params->device_memory_capacity_bytes != 0 &&
+          iree_hal_amdgpu_device_spec_memory_heap_is_device_local(
+              allocator_heap)) {
+        capacity_bytes = params->device_memory_capacity_bytes;
+        heap_flags = IREE_HAL_MEMORY_HEAP_SPEC_FLAG_NONE;
+        device_memory_capacity_attached = true;
+      }
       heaps[i] = (iree_hal_memory_heap_spec_t){
           .name = iree_hal_amdgpu_device_spec_memory_heap_name(allocator_heap),
+          .capacity_bytes = capacity_bytes,
           .allocation_granularity = 1,
           .allocation_alignment = allocator_heap->min_alignment,
           .maximum_allocation_size = allocator_heap->max_allocation_size,
@@ -151,7 +169,7 @@ static iree_status_t iree_hal_amdgpu_device_spec_populate_memory(
               params->physical_device_count == 64
                   ? UINT64_MAX
                   : ((1ull << params->physical_device_count) - 1ull),
-          .flags = IREE_HAL_MEMORY_HEAP_SPEC_FLAG_CAPACITY_UNKNOWN,
+          .flags = heap_flags,
       };
       memory_types[i] = (iree_hal_memory_type_spec_t){
           .heap_index = (uint32_t)i,

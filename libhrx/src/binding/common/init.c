@@ -91,24 +91,18 @@ static iree_status_t iree_hal_streaming_query_device_info(
     memcpy(device->gcn_arch_name, "gfx942", 7);
   }
 
-  // Query memory info from the HAL device.
-  int64_t total_memory = 0;
-  iree_status_t status =
-      iree_hal_device_query_i64(device->hal_device, IREE_SV("hal.device"),
-                                IREE_SV("memory.total"), &total_memory);
-  if (iree_status_is_ok(status) && total_memory > 0) {
-    device->total_memory = (iree_device_size_t)total_memory;
-  } else {
-    // Fall back to known HIP-visible memory sizes when the HAL cannot query
-    // VRAM. rocBLAS/hipBLASLt use this value when selecting solution kernels.
-    iree_status_ignore(status);
-    if (device->info.name.data &&
-        strstr(device->info.name.data, "Radeon PRO W7900")) {
-      device->total_memory = 48301604864ULL;
-    } else {
-      device->total_memory = 8ULL * 1024 * 1024 * 1024;
-    }
+  // Query total memory from the HAL device observation API.
+  uint64_t total_memory = 0;
+  iree_status_t status = HRX_CALL(hrx_device_get_property(
+      device->hrx_device, HRX_DEVICE_PROPERTY_TOTAL_MEMORY, &total_memory,
+      sizeof(total_memory)));
+  if (!iree_status_is_ok(status)) return status;
+  if (total_memory > IREE_DEVICE_SIZE_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "HRX device total memory exceeds the representable "
+                            "iree_device_size_t range");
   }
+  device->total_memory = (iree_device_size_t)total_memory;
   device->free_memory = device->total_memory;
 
   // Query cooperative launch support.
