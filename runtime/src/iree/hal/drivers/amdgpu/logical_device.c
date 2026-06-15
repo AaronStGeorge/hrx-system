@@ -14,6 +14,7 @@
 #include "iree/hal/drivers/amdgpu/api.h"
 #include "iree/hal/drivers/amdgpu/aql_command_buffer.h"
 #include "iree/hal/drivers/amdgpu/aql_program_builder.h"
+#include "iree/hal/drivers/amdgpu/device_spec_builder.h"
 #include "iree/hal/drivers/amdgpu/executable.h"
 #include "iree/hal/drivers/amdgpu/executable_cache.h"
 #include "iree/hal/drivers/amdgpu/host_queue_profile.h"
@@ -31,7 +32,6 @@
 #include "iree/hal/drivers/amdgpu/util/notification_ring.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/hal/drivers/amdgpu/util/vmem.h"
-#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 
 //===----------------------------------------------------------------------===//
@@ -1497,6 +1497,79 @@ static iree_status_t iree_hal_amdgpu_logical_device_warmup_host_pools(
       &logical_device->host_block_pools.command_buffer, 16);
 }
 
+static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
+    iree_hal_amdgpu_logical_device_t* logical_device,
+    iree_allocator_t host_allocator) {
+  const iree_host_size_t physical_device_count =
+      logical_device->physical_device_count;
+  iree_hal_amdgpu_device_spec_physical_device_params_t* physical_devices = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
+      host_allocator, physical_device_count, sizeof(*physical_devices),
+      (void**)&physical_devices));
+  memset(physical_devices, 0,
+         physical_device_count * sizeof(*physical_devices));
+
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < physical_device_count && iree_status_is_ok(status); ++i) {
+    const iree_hal_amdgpu_physical_device_t* physical_device =
+        logical_device->physical_devices[i];
+    if (IREE_UNLIKELY(physical_device->device_ordinal > UINT32_MAX ||
+                      physical_device->host_queue_count > UINT32_MAX)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU device spec physical row out of range: "
+          "device_ordinal=%" PRIhsz ", queue_count=%" PRIhsz,
+          physical_device->device_ordinal, physical_device->host_queue_count);
+      break;
+    }
+
+    iree_hal_amdgpu_device_spec_physical_device_params_t* physical_params =
+        &physical_devices[i];
+    physical_params->target_id = physical_device->isa.target_id;
+    if (physical_device->has_physical_device_uuid) {
+      physical_params->flags |=
+          IREE_HAL_AMDGPU_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_UUID;
+      memcpy(physical_params->uuid.bytes, physical_device->physical_device_uuid,
+             sizeof(physical_params->uuid.bytes));
+    }
+    if (physical_device->has_pci_identity) {
+      physical_params->flags |=
+          IREE_HAL_AMDGPU_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_PCI_ADDRESS;
+      physical_params->pci.domain = physical_device->pci_domain;
+      physical_params->pci.bus = physical_device->pci_bus;
+      physical_params->pci.device = physical_device->pci_device;
+      physical_params->pci.function = physical_device->pci_function;
+    }
+    physical_params->numa.node_id = physical_device->host_numa_node;
+    physical_params->physical_ordinal =
+        (uint32_t)physical_device->device_ordinal;
+    physical_params->queue_count = (uint32_t)physical_device->host_queue_count;
+    physical_params->compute_unit_count = physical_device->compute_unit_count;
+    physical_params->wavefront_size = physical_device->wavefront_size;
+  }
+
+  if (iree_status_is_ok(status)) {
+    iree_hal_amdgpu_device_spec_params_t spec_params = {
+        .logical_device_id = logical_device->identifier,
+        .display_name = logical_device->identifier,
+        .timestamp_frequency_hz =
+            logical_device->system->info.timestamp_frequency,
+        .physical_device_count = physical_device_count,
+        .physical_devices = physical_devices,
+        .device_allocator = logical_device->device_allocator,
+        .flags = logical_device->system->info.dmabuf_supported
+                     ? IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_DMABUF
+                     : IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_NONE,
+    };
+    status = iree_hal_amdgpu_device_spec_create(&spec_params, host_allocator,
+                                                &logical_device->device_spec);
+  }
+
+  iree_allocator_free(host_allocator, physical_devices);
+  return status;
+}
+
 iree_status_t iree_hal_amdgpu_logical_device_create(
     iree_string_view_t identifier,
     const iree_hal_amdgpu_logical_device_options_t* options,
@@ -1545,9 +1618,7 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
       z0, iree_hal_amdgpu_logical_device_allocate_storage(
               identifier, topology, physical_device_size, host_allocator,
               &logical_device));
-  iree_status_t status = iree_hal_device_spec_create_minimal(
-      identifier, identifier, IREE_SV("amdgpu"), IREE_SV("hsa"), host_allocator,
-      &logical_device->device_spec);
+  iree_status_t status = iree_ok_status();
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_logical_device_initialize_host_resources(
         logical_device, options, create_params->proactor_pool, host_allocator);
@@ -1564,6 +1635,10 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_logical_device_initialize_physical_devices(
         logical_device, topology, &physical_device_options, host_allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_logical_device_create_device_spec(logical_device,
+                                                               host_allocator);
   }
 
   // If requested then warmup pools that we expect to grow on the first usage of

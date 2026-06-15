@@ -28,6 +28,7 @@ iree_runtime_cc_library(
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:target_id",
         "//runtime/src/iree/hal/utils:device_spec_builder",
     ],
 )
@@ -219,6 +220,7 @@ iree_runtime_cc_library(
     deps = [
         ":access_policy",
         ":buffer",
+        ":device_spec_builder",
         ":executable_metadata",
         ":executable_metadata_hsaco",
         ":kernarg_layout",
@@ -261,7 +263,6 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/memory:slab_provider",
         "//runtime/src/iree/hal/memory:tlsf_pool",
         "//runtime/src/iree/hal/memory:tracing",
-        "//runtime/src/iree/hal/utils:device_spec_builder",
         "//runtime/src/iree/hal/utils:elf_format",
         "//runtime/src/iree/hal/utils:files",
         "//runtime/src/iree/hal/utils:resource_set",

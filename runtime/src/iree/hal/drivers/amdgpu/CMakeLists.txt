@@ -20,6 +20,7 @@ iree_cc_library(
   DEPS
     iree::base
     iree::hal
+    iree::hal::drivers::amdgpu::util::target_id
     iree::hal::utils::device_spec_builder
   PUBLIC
 )
@@ -247,6 +248,7 @@ iree_cc_library(
   DEPS
     ::access_policy
     ::buffer
+    ::device_spec_builder
     ::executable_metadata
     ::executable_metadata_hsaco
     ::kernarg_layout
@@ -289,7 +291,6 @@ iree_cc_library(
     iree::hal::memory::slab_provider
     iree::hal::memory::tlsf_pool
     iree::hal::memory::tracing
-    iree::hal::utils::device_spec_builder
     iree::hal::utils::elf_format
     iree::hal::utils::files
     iree::hal::utils::resource_set
