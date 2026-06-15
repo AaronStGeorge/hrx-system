@@ -27,32 +27,6 @@
 extern "C" {
 #endif
 
-typedef struct loom_amdgpu_bitfield_extract_plan_t {
-  // Source vector value containing i32 lanes.
-  loom_value_id_t source;
-  // Result vector value containing i32 lanes.
-  loom_value_id_t result;
-  // Least-significant source bit of the extracted field.
-  uint32_t offset;
-  // Number of bits extracted from each lane.
-  uint32_t width;
-  // True when the extracted field is sign-extended.
-  bool is_signed;
-} loom_amdgpu_bitfield_extract_plan_t;
-
-typedef struct loom_amdgpu_bitfield_insert_plan_t {
-  // Field vector value containing i32 lanes.
-  loom_value_id_t field;
-  // Base vector value containing i32 lanes.
-  loom_value_id_t base;
-  // Result vector value containing i32 lanes.
-  loom_value_id_t result;
-  // Least-significant destination bit of the inserted field.
-  uint32_t offset;
-  // Number of low field bits inserted into each base lane.
-  uint32_t width;
-} loom_amdgpu_bitfield_insert_plan_t;
-
 typedef struct loom_amdgpu_bitpack_plan_t {
   // Source vector value containing unpacked i32 lanes.
   loom_value_id_t source;

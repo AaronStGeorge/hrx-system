@@ -71,6 +71,7 @@ class LowerEmitKind(Enum):
     DESCRIPTOR_CONST = "descriptor_const"
     DESCRIPTOR_OP_FIRST_LANE = "descriptor_op_first_lane"
     DESCRIPTOR_OP_PER_LANE = "descriptor_op_per_lane"
+    DESCRIPTOR_OP_PER_LANE_SEQUENCE = "descriptor_op_per_lane_sequence"
     DESCRIPTOR_OP_ACCUMULATE_LANES = "descriptor_op_accumulate_lanes"
 
 
@@ -1677,6 +1678,8 @@ def _lower_emit_kind(
         return LowerEmitKind.DESCRIPTOR_OP_FIRST_LANE
     if emit.form == DescriptorEmitForm.PER_LANE:
         return LowerEmitKind.DESCRIPTOR_OP_PER_LANE
+    if emit.form == DescriptorEmitForm.PER_LANE_SEQUENCE:
+        return LowerEmitKind.DESCRIPTOR_OP_PER_LANE_SEQUENCE
     if emit.form == DescriptorEmitForm.ACCUMULATE_LANES:
         return LowerEmitKind.DESCRIPTOR_OP_ACCUMULATE_LANES
 

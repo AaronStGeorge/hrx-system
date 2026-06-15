@@ -111,14 +111,14 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %27 = v_bfe_u32_offset_width_inline %17 {offset = 4, width = 2}
   %29 = v_bfe_u32_offset_width_inline %19 {offset = 4, width = 2}
   %31 = v_bfe_u32_offset_width_inline %21 {offset = 4, width = 2}
-  %35 = v_lshlrev_b32_src0_inline %25, 4
-  %36 = v_bfi_b32_src0_lit %35, %16, 48
-  %39 = v_lshlrev_b32_src0_inline %27, 4
-  %40 = v_bfi_b32_src0_lit %39, %18, 48
-  %43 = v_lshlrev_b32_src0_inline %29, 4
-  %44 = v_bfi_b32_src0_lit %43, %20, 48
-  %47 = v_lshlrev_b32_src0_inline %31, 4
-  %48 = v_bfi_b32_src0_lit %47, %22, 48
+  %34 = v_lshlrev_b32_src0_inline %25, 4
+  %36 = v_bfi_b32_src0_lit %34, %16, 48
+  %38 = v_lshlrev_b32_src0_inline %27, 4
+  %40 = v_bfi_b32_src0_lit %38, %18, 48
+  %42 = v_lshlrev_b32_src0_inline %29, 4
+  %44 = v_bfi_b32_src0_lit %42, %20, 48
+  %46 = v_lshlrev_b32_src0_inline %31, 4
+  %48 = v_bfi_b32_src0_lit %46, %22, 48
   %50 = v_mov_b32 32
   %57 = v_sub_nc_u32 %36, %50
   %60 = v_sub_nc_u32 %40, %50

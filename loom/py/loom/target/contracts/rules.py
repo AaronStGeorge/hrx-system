@@ -13,11 +13,11 @@ from dataclasses import dataclass
 
 from loom.dsl import Op
 from loom.target.contracts.descriptors import _require_descriptor
-from loom.target.contracts.emits import EmitDescriptorOp
+from loom.target.contracts.emits import DescriptorEmitForm, EmitDescriptorOp
 from loom.target.contracts.guards import Guard
 from loom.target.contracts.kinds import ContractSystem, SourceValueKind
 from loom.target.contracts.source import ValueRef
-from loom.target.low_descriptors import Descriptor, DescriptorSet
+from loom.target.low_descriptors import Descriptor, DescriptorSet, OperandRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +65,60 @@ class DescriptorRule:
                 defined_temporaries,
             )
             defined_temporaries.update(produced_temporaries)
+        self._validate_per_lane_sequence()
+
+    def _validate_per_lane_sequence(self) -> None:
+        sequence_emit_count = sum(
+            emit.form == DescriptorEmitForm.PER_LANE_SEQUENCE for emit in self.emit
+        )
+        if sequence_emit_count == 0:
+            return
+        if sequence_emit_count != len(self.emit):
+            raise ValueError(
+                f"{self.source_op.name}: per-lane-sequence emit programs cannot "
+                "mix emission forms"
+            )
+        if sequence_emit_count < 2:
+            raise ValueError(
+                f"{self.source_op.name}: per-lane-sequence emit programs need "
+                "at least two emits"
+            )
+        for emit_index, emit in enumerate(self.emit):
+            result_bindings = emit.results if emit.results is not None else {}
+            result_refs = []
+            for descriptor_operand in emit.descriptor.operands:
+                if descriptor_operand.role not in (
+                    OperandRole.RESULT,
+                    OperandRole.OPERAND_RESULT,
+                ):
+                    continue
+                value_ref = result_bindings.get(descriptor_operand.field_name)
+                if value_ref is not None:
+                    result_refs.append(value_ref)
+            if len(result_refs) != 1:
+                raise ValueError(
+                    f"{self.source_op.name}: per-lane-sequence emit "
+                    f"{emit_index} must bind exactly one result"
+                )
+            result_ref = result_refs[0]
+            if emit_index + 1 == len(self.emit):
+                if result_ref.kind != SourceValueKind.RESULT:
+                    raise ValueError(
+                        f"{self.source_op.name}: per-lane-sequence final emit "
+                        "must bind a source result"
+                    )
+            elif result_ref.kind != SourceValueKind.TEMPORARY:
+                raise ValueError(
+                    f"{self.source_op.name}: per-lane-sequence intermediate emit "
+                    "must bind a temporary"
+                )
+            operand_bindings = emit.operands if emit.operands is not None else {}
+            for value_ref in operand_bindings.values():
+                if value_ref.materializer is not None:
+                    raise ValueError(
+                        f"{self.source_op.name}: per-lane-sequence operands "
+                        "cannot use value materializers"
+                    )
 
 
 @dataclass(frozen=True, slots=True)

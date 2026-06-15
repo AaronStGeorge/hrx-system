@@ -539,10 +539,13 @@ typedef enum loom_low_lower_emit_kind_e {
   // Slices register-range operands, emits one descriptor-backed low.op per
   // register lane, and concatenates the lane results.
   LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE = 4,
+  // Executes a rule's whole emit program once per register lane using
+  // lane-local temporaries, then concatenates the final lane results.
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE_SEQUENCE = 5,
   // Slices register-range operands, emits one descriptor-backed low.op per
   // register lane, and threads one scalar accumulator operand through the
   // emitted results.
-  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES = 5,
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES = 6,
 } loom_low_lower_emit_kind_t;
 
 typedef uint16_t loom_low_lower_emit_flags_t;

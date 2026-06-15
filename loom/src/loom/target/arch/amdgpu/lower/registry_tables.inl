@@ -319,24 +319,6 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_select_vector_table_lookup_dispatch,
                 loom_amdgpu_emit_vector_table_lookup_dispatch,
                 loom_amdgpu_low_legality_verify_vector_table),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITFIELD_EXTRACTU)] =
-            LOOM_AMDGPU_DATA_ROW(
-                LOOM_OP_VECTOR_BITFIELD_EXTRACTU,
-                loom_amdgpu_bitfield_extract_plan_t,
-                loom_amdgpu_select_vector_bitfield_extract_dispatch,
-                loom_amdgpu_emit_vector_bitfield_extract_dispatch, NULL),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITFIELD_EXTRACTS)] =
-            LOOM_AMDGPU_DATA_ROW(
-                LOOM_OP_VECTOR_BITFIELD_EXTRACTS,
-                loom_amdgpu_bitfield_extract_plan_t,
-                loom_amdgpu_select_vector_bitfield_extract_dispatch,
-                loom_amdgpu_emit_vector_bitfield_extract_dispatch, NULL),
-        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITFIELD_INSERT)] =
-            LOOM_AMDGPU_DATA_ROW(
-                LOOM_OP_VECTOR_BITFIELD_INSERT,
-                loom_amdgpu_bitfield_insert_plan_t,
-                loom_amdgpu_select_vector_bitfield_insert_dispatch,
-                loom_amdgpu_emit_vector_bitfield_insert_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_BITPACK)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_BITPACK, loom_amdgpu_bitpack_plan_t,
             loom_amdgpu_select_vector_bitpack_dispatch,

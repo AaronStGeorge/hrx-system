@@ -455,7 +455,7 @@ def _dot2f_bf16_fallback_rule() -> DescriptorRule:
                 results={"dst": ValueRef.temporary("lhs_low")},
                 result_types={"dst": ValueRef.result("result")},
                 immediates={"imm32": 16},
-                form=DescriptorEmitForm.PER_LANE,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=shift_up,
@@ -463,7 +463,7 @@ def _dot2f_bf16_fallback_rule() -> DescriptorRule:
                 results={"dst": ValueRef.temporary("rhs_low")},
                 result_types={"dst": ValueRef.result("result")},
                 immediates={"imm32": 16},
-                form=DescriptorEmitForm.PER_LANE,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=high_bits,
@@ -471,7 +471,7 @@ def _dot2f_bf16_fallback_rule() -> DescriptorRule:
                 results={"dst": ValueRef.temporary("lhs_high")},
                 result_types={"dst": ValueRef.result("result")},
                 immediates={"imm32": _BF16_HIGH_MASK},
-                form=DescriptorEmitForm.PER_LANE,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=high_bits,
@@ -479,7 +479,7 @@ def _dot2f_bf16_fallback_rule() -> DescriptorRule:
                 results={"dst": ValueRef.temporary("rhs_high")},
                 result_types={"dst": ValueRef.result("result")},
                 immediates={"imm32": _BF16_HIGH_MASK},
-                form=DescriptorEmitForm.PER_LANE,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=fma,
@@ -490,7 +490,7 @@ def _dot2f_bf16_fallback_rule() -> DescriptorRule:
                 },
                 results={"dst": ValueRef.temporary("partial")},
                 result_types={"dst": ValueRef.result("result")},
-                form=DescriptorEmitForm.PER_LANE,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
             EmitDescriptorOp(
                 descriptor=fma,
@@ -500,7 +500,7 @@ def _dot2f_bf16_fallback_rule() -> DescriptorRule:
                     "c": ValueRef.temporary("partial"),
                 },
                 results={"dst": ValueRef.result("result")},
-                form=DescriptorEmitForm.PER_LANE,
+                form=DescriptorEmitForm.PER_LANE_SEQUENCE,
             ),
         ),
     )

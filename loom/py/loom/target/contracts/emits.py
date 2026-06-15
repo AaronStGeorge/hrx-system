@@ -49,6 +49,7 @@ class DescriptorEmitForm(Enum):
     CONST = "const"
     FIRST_LANE = "first_lane"
     PER_LANE = "per_lane"
+    PER_LANE_SEQUENCE = "per_lane_sequence"
     ACCUMULATE_LANES = "accumulate_lanes"
 
 

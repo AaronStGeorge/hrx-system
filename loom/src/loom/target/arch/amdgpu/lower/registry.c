@@ -36,7 +36,6 @@
 #include "loom/target/arch/amdgpu/lower/abi.h"
 #include "loom/target/arch/amdgpu/lower/arithmetic.h"
 #include "loom/target/arch/amdgpu/lower/async.h"
-#include "loom/target/arch/amdgpu/lower/bitfield.h"
 #include "loom/target/arch/amdgpu/lower/bitpack.h"
 #include "loom/target/arch/amdgpu/lower/buffer.h"
 #include "loom/target/arch/amdgpu/lower/control.h"
@@ -415,24 +414,6 @@ LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_table_lookup_dispatch,
 LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_table_lookup_dispatch,
                              loom_amdgpu_table_lookup_plan_t,
                              loom_amdgpu_lower_vector_table_lookup)
-
-LOOM_AMDGPU_DEFINE_DATA_SELECT(
-    loom_amdgpu_select_vector_bitfield_extract_dispatch,
-    loom_amdgpu_bitfield_extract_plan_t,
-    loom_amdgpu_select_vector_bitfield_extract_plan)
-
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bitfield_extract_dispatch,
-                             loom_amdgpu_bitfield_extract_plan_t,
-                             loom_amdgpu_lower_vector_bitfield_extract)
-
-LOOM_AMDGPU_DEFINE_DATA_SELECT(
-    loom_amdgpu_select_vector_bitfield_insert_dispatch,
-    loom_amdgpu_bitfield_insert_plan_t,
-    loom_amdgpu_select_vector_bitfield_insert_plan)
-
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_bitfield_insert_dispatch,
-                             loom_amdgpu_bitfield_insert_plan_t,
-                             loom_amdgpu_lower_vector_bitfield_insert)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_fmaf_mix_dispatch,
                                loom_amdgpu_fma_mix_plan_t,
