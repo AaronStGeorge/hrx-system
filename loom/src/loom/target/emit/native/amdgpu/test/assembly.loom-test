@@ -74,6 +74,52 @@ low.func.def target(@gfx11_target) @gfx11_fma_mix_f16_lanes_native(%addr: reg<am
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_d16_high_consumer_blocks_tied_high_reload waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_d16_high_consumer_blocks_tied_high_reload(%addr: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %low = ds_load_u16_d16 %addr
+  %full = ds_load_u16_d16_hi %low, %addr {offset = 2}
+  %high_read = v_fma_mix_f32_f16hi_f32_f32 %full, %b, %c
+  %next = ds_load_u16_d16_hi %full, %addr {offset = 4}
+  %next_read = v_fma_mix_f32_f16hi_f32_f32 %next, %high_read, %c
+  ds_write_b32 %addr, %next_read
+  return
+}
+
+// ----
+  ds_load_u16_d16 v3, v2 offset:0
+  ds_load_u16_d16_hi v3, v2 offset:2
+  v_fma_mix_f32_f16hi_f32_f32 v0, v3, v0, v1
+  ds_load_u16_d16_hi v3, v2 offset:4
+  v_fma_mix_f32_f16hi_f32_f32 v0, v3, v0, v1
+  ds_write_b32 v2, v0 offset:0
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_d16_full_consumer_blocks_tied_high_reload waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_d16_full_consumer_blocks_tied_high_reload(%addr: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %low = ds_load_u16_d16 %addr
+  %full = ds_load_u16_d16_hi %low, %addr {offset = 2}
+  %full_read = v_add_f32 %full, %b
+  %next = ds_load_u16_d16_hi %full, %addr {offset = 4}
+  %next_read = v_fma_mix_f32_f16hi_f32_f32 %next, %full_read, %c
+  ds_write_b32 %addr, %next_read
+  return
+}
+
+// ----
+  ds_load_u16_d16 v3, v2 offset:0
+  ds_load_u16_d16_hi v3, v2 offset:2
+  v_add_f32 v0, v3, v0
+  ds_load_u16_d16_hi v3, v2 offset:4
+  v_fma_mix_f32_f16hi_f32_f32 v0, v3, v0, v1
+  ds_write_b32 v2, v0 offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_fma_mix_source2_literal waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_fma_mix_source2_literal(%a: reg<amdgpu.vgpr>, %b_half: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
