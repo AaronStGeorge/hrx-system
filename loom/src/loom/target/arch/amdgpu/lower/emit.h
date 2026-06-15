@@ -63,6 +63,19 @@ iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
                                           loom_value_id_t source_result,
                                           loom_type_t* out_low_type);
 
+// Builds a low register range value from one or more already-emitted register
+// units.
+iree_status_t loom_amdgpu_build_low_register_range(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_value_id_t* low_registers, uint32_t register_count,
+    loom_type_t result_type, loom_value_id_t* out_low_result);
+
+// Binds a source result to one or more already-emitted low register units.
+iree_status_t loom_amdgpu_bind_low_register_range(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_result, const loom_value_id_t* low_registers,
+    uint32_t register_count);
+
 // Resolves an optional AMDGPU descriptor ref against the active descriptor set.
 iree_status_t loom_amdgpu_resolve_descriptor_ref_if_present(
     loom_low_lower_context_t* context,

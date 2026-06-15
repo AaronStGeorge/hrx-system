@@ -503,6 +503,44 @@ iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_build_low_register_range(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_value_id_t* low_registers, uint32_t register_count,
+    loom_type_t result_type, loom_value_id_t* out_low_result) {
+  IREE_ASSERT_GT(register_count, 0);
+  IREE_ASSERT_LE(register_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
+  *out_low_result = LOOM_VALUE_ID_INVALID;
+  if (register_count == 1) {
+    *out_low_result = low_registers[0];
+    return iree_ok_status();
+  }
+
+  loom_op_t* concat_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_concat_build(
+      loom_low_lower_context_builder(context), low_registers, register_count,
+      result_type, source_op->location, &concat_op));
+  *out_low_result = loom_low_concat_result(concat_op);
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_bind_low_register_range(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_result, const loom_value_id_t* low_registers,
+    uint32_t register_count) {
+  if (register_count == 1) {
+    return loom_low_lower_bind_value(context, source_result, low_registers[0]);
+  }
+
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
+      context, source_op, source_result, &result_type));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
+      context, source_op, low_registers, register_count, result_type,
+      &low_result));
+  return loom_low_lower_bind_value(context, source_result, low_result);
+}
+
 iree_status_t loom_amdgpu_resolve_descriptor_ref_if_present(
     loom_low_lower_context_t* context,
     loom_amdgpu_descriptor_ref_t descriptor_ref,

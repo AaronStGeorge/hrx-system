@@ -595,19 +595,8 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
         mask_lane_type, &result_lanes[i]));
   }
 
-  if (plan->result_lane_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, result_lanes[0]);
-  }
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), result_lanes,
-      plan->result_lane_count, result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(
+      context, source_op, plan->result, result_lanes, plan->result_lane_count);
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_vector_table(
