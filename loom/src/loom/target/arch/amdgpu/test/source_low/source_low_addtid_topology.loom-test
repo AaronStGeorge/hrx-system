@@ -1,0 +1,69 @@
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx942> @target
+kernel.def target(@target) @wave64_workgroup_memory_workitem_x_b32() {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch() {
+  %lane = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %scratch_view[%lane] : vector<1xi32>, view<64xi32, #dense>
+  %loaded = vector.load %scratch_view[%lane] : view<64xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%lane] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @wave64_workgroup_memory_workitem_x_b32() asm<amdgpu.cdna3.core> {
+  %11 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %one = v_mov_b32 1
+  %14 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %one, %14
+  %loaded = ds_read_addtid_b32 %14
+  ds_write_addtid_b32 %loaded, %14
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @multidim_workgroup_memory_workitem_xy_b32() {
+  %unit = index.constant 1 : index
+  %tile = index.constant 8 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%tile, %tile, %unit) : index
+} launch() {
+  %column = kernel.workitem.id<x> : index
+  %row = kernel.workitem.id<y> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<8x8xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %scratch_view[%row, %column] : vector<1xi32>, view<8x8xi32, #dense>
+  %loaded = vector.load %scratch_view[%column, %row] : view<8x8xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%row, %column] : vector<1xi32>, view<8x8xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 8, 1) @multidim_workgroup_memory_workitem_xy_b32() asm<amdgpu.rdna3.core> {
+  %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
+  %column = v_and_b32_lit %packed_tid, 1023
+  %20 = v_lshrrev_b32_src0_inline %packed_tid, 10
+  %row = v_and_b32_lit %20, 1023
+  %23 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %one = v_mov_b32 1
+  %26 = v_lshl_add_u32_shift_imm %row, %column, 3
+  %27 = v_lshlrev_b32_src0_inline %26, 2
+  ds_write_b32 %27, %one
+  %28 = v_lshl_add_u32_shift_imm %column, %row, 3
+  %29 = v_lshlrev_b32_src0_inline %28, 2
+  %loaded = ds_read_b32 %29
+  ds_write_b32 %27, %loaded
+  return
+}

@@ -39,6 +39,7 @@ python dev.py bazel run //loom/src/loom/tools/loom-opt:loom-opt -- \
 | `global_load_b32`, packed bytes, `q8`, bitfield, unpack | `vector.load`, `vector.bitunpacks<8>`, `scalar.extf`, `vector.dotf` | `q8_block_unroll.loom` |
 | `global_load_b32`, `global_load_b128`, `uint4`, adjacent scalar loads, coalescing | `vector.load -> vector<1xi32>` versus `vector.load -> vector<4xi32>` | `q8_load_width.loom` |
 | `__shared__`, `__syncthreads`, LDS, tile staging, cross-lane exchange | `buffer.alloca ... memory_space = workgroup`, `buffer.view`, `kernel.barrier<workgroup>` | `shared_memory_tile.loom` |
+| `__shared__`, `__syncthreads`, LDS, 2D tile, transpose, double buffering | two workgroup `buffer.alloca` tiles, x/y workitem ids, repeated `kernel.barrier<workgroup>` | `shared_memory_transpose.loom` |
 | `q8`, `q4`, `u8`, `s8`, `u4`, `s4`, `v_dot4_i32_iu8`, `dp4a` | `vector.bitunpacku`, `vector.bitunpacks`, `vector.dot4i<u8s8>` | `q8_q4_signedness.loom` |
 | `q2`, `q3`, `q4`, `q5`, `q6`, split high bits, lookup tables, offset-binary, packed-dot repack | `vector.bitunpacku`, `vector.bitfield.extractu`, `vector.bitfield.insert`, `vector.table.lookup`, `vector.dot8i4` | `packed_field_contracts.loom` |
 | dynamic lower-bound unroll, missing facts | structured diagnostic, exact/range facts | `q8_hip_shaped_unroll_unresolved.loom` |
@@ -321,6 +322,82 @@ Expected signal: the dry run lists `case_shared_memory_tile_reverse` and
 `local_memory_bytes` as `256` for the 64-element i32 tile, two local memory
 instructions, and one barrier. On AMDGPU targets, object disassembly should
 show LDS read/write instructions and a workgroup barrier.
+
+## Shared Memory Transpose
+
+Tags: `__shared__`, `__syncthreads`, `LDS`, `workgroup memory`, `2D tile`,
+`transpose`, `double buffering`, `threadIdx.x`, `threadIdx.y`.
+
+HIP habit:
+
+```c++
+__shared__ int scratch_a[8][8];
+__shared__ int scratch_b[8][8];
+int row = threadIdx.y;
+int column = threadIdx.x;
+
+scratch_a[row][column] = input[row][column];
+__syncthreads();
+scratch_b[row][column] = scratch_a[column][row];
+__syncthreads();
+output[row][column] = scratch_b[column][row];
+```
+
+Loom spelling:
+
+```loom
+%row = kernel.workitem.id<y> : index
+%column = kernel.workitem.id<x> : index
+%scratch_a = buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+%scratch_b = buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+
+vector.store %loaded, %scratch_a_view[%row, %column] : vector<1xi32>, view<8x8xi32, #dense>
+kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+%transposed = vector.load %scratch_a_view[%column, %row] : view<8x8xi32, #dense> -> vector<1xi32>
+vector.store %transposed, %scratch_b_view[%row, %column] : vector<1xi32>, view<8x8xi32, #dense>
+kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+%roundtrip = vector.load %scratch_b_view[%column, %row] : view<8x8xi32, #dense> -> vector<1xi32>
+```
+
+This recipe is a stronger LDS smoke test than a one-dimensional lane exchange:
+it uses x/y workitem ids, two scratch allocations, two synchronization points,
+and source-visible cross-axis addressing. The correctness oracle stays small:
+transposing through LDS twice must reproduce the original row-major iota.
+
+Proof command:
+
+```bash
+iree-benchmark-loom shared_memory_transpose.loom --dry-run
+```
+
+Target compile evidence:
+
+```bash
+loom-compile shared_memory_transpose.loom \
+  --backend=amdgpu-hal \
+  --target=gfx11-generic \
+  --output=/tmp/shared-memory-transpose.vmfb \
+  --emit-target-artifact=/tmp/shared-memory-transpose.hsaco \
+  --artifact-manifest=summary \
+  --compile-report=summary \
+  --compile-report-output=/tmp/shared-memory-transpose.compile-report.json
+```
+
+Useful queries:
+
+```bash
+jq '{status, target_key, local:.entries.rows[0].local_memory_bytes, lds_ops:.static_instruction_mix.local_memory_count, barriers:.static_instruction_mix.barrier_count}' \
+  /tmp/shared-memory-transpose.compile-report.json
+
+llvm-objdump -d --mcpu=gfx1100 /tmp/shared-memory-transpose.hsaco | rg 'ds_(read|store)|s_barrier'
+```
+
+Expected signal: the dry run lists
+`case_shared_memory_tile_double_transpose` and
+`bench_shared_memory_tile_double_transpose`; the compile report records
+`local_memory_bytes` as `512` for the two 8x8 i32 tiles, four local memory
+instructions, and two barriers. AMDGPU object disassembly should show two LDS
+stores, two LDS reads, and two workgroup barriers.
 
 ## Packed Signedness
 

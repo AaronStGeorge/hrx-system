@@ -240,6 +240,87 @@
       ]
     },
     {
+      "name": "plans shared memory transpose recipe",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/shared_memory_transpose.loom",
+          "--dry-run"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "bench_shared_memory_tile_double_transpose",
+          "case_shared_memory_tile_double_transpose"
+        ]
+      }
+    },
+    {
+      "name": "preserves shared memory transpose source shape",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "{srcdir}/shared_memory_transpose.loom",
+          "--pass=canonicalize",
+          "--output={tmp}/shared_memory_transpose.loom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/shared_memory_transpose.loom",
+          "contains": [
+            "kernel.workitem.id<y>",
+            "kernel.workitem.id<x>",
+            "buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup}",
+            "vector.load %scratch_a_view[%column, %row] : view<8x8xi32, #dense> -> vector<1xi32>",
+            "vector.store %transposed, %scratch_b_view[%row, %column] : vector<1xi32>, view<8x8xi32, #dense>",
+            "vector.load %scratch_b_view[%column, %row] : view<8x8xi32, #dense> -> vector<1xi32>"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "compiles shared memory transpose to AMDGPU HAL artifact",
+      "run": {
+        "tool": "loom-compile",
+        "args": [
+          "{srcdir}/shared_memory_transpose.loom",
+          "--backend=amdgpu-hal",
+          "--target=gfx11-generic",
+          "--output={tmp}/shared_memory_transpose.vmfb",
+          "--emit-target-artifact={tmp}/shared_memory_transpose.hsaco",
+          "--artifact-manifest=summary",
+          "--compile-report=summary"
+        ]
+      },
+      "stderr": {
+        "contains": {
+          "unordered": [
+            "\"target_key\":\"gfx11-generic\"",
+            "\"executable_format\":\"amdgcn-amd-amdhsa--gfx11-generic\"",
+            "\"status\":\"OK\"",
+            "\"local_memory_bytes\":512",
+            "\"local_memory_count\":4",
+            "\"barrier_count\":2"
+          ]
+        }
+      },
+      "files": [
+        {
+          "path": "{tmp}/shared_memory_transpose.vmfb",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/shared_memory_transpose.hsaco",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/shared_memory_transpose.hsaco.manifest.json",
+          "non_empty": true
+        }
+      ]
+    },
+    {
       "name": "plans packed field contracts recipe",
       "run": {
         "tool": "iree-benchmark-loom",

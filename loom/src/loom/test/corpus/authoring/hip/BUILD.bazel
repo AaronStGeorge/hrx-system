@@ -22,6 +22,7 @@ exports_files([
     "q8_load_width.loom",
     "q8_q4_signedness.loom",
     "shared_memory_tile.loom",
+    "shared_memory_transpose.loom",
     "target_provider_selection.loom",
 ])
 
@@ -43,6 +44,7 @@ iree_execution_test_suite(
         "q8_load_width.loom",
         "q8_q4_signedness.loom",
         "shared_memory_tile.loom",
+        "shared_memory_transpose.loom",
         "target_provider_selection.loom",
     ],
     manifests = ["hip_authoring.test.json"],
@@ -72,6 +74,33 @@ iree_executable_test(
     ],
     data = [
         "shared_memory_tile.loom",
+    ],
+    tags = [
+        "iree-run-requirement=runtime.resource.amd_gpu",
+        "manual",
+        "requires-gpu-amd",
+        "runtime-resource=amd-gpu",
+    ],
+    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
+)
+
+iree_executable_test(
+    name = "shared_memory_transpose_amdgpu_test",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
+    args = [
+        "$(location shared_memory_transpose.loom)",
+        "--device=amdgpu",
+        "--measure=dispatch_complete",
+        "--sample-compilation=per_sample",
+        "--iterations=1",
+        "--warmup-iterations=0",
+        "--batch-size=1",
+        "--min-time-ms=0",
+        "--max-batches=1",
+        "--input-ring-count=1",
+    ],
+    data = [
+        "shared_memory_transpose.loom",
     ],
     tags = [
         "iree-run-requirement=runtime.resource.amd_gpu",
