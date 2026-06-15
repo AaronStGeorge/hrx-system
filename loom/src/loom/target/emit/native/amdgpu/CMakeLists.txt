@@ -339,6 +339,7 @@ loom_cc_library(
     loom::codegen::low::allocation
     loom::codegen::low::diagnostics
     loom::codegen::low::schedule
+    loom::codegen::low::storage_layout
     loom::error::emitter
     loom::error::error_defs
     loom::target::arch::amdgpu::error_defs
@@ -356,9 +357,13 @@ loom_cc_test(
     "preflight_test.cc"
   DEPS
     ::preflight
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
+    loom::ir
+    loom::ops::low
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::error_defs
     loom::testing::diagnostic_matchers

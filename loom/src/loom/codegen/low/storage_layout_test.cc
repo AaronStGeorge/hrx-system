@@ -16,6 +16,19 @@
 namespace loom {
 namespace {
 
+TEST(LowStorageSpaceSetTest, NamesUseStableDeclarationOrder) {
+  iree_string_view_t names[LOOM_STORAGE_SPACE_COUNT_];
+  const iree_host_size_t count = loom_low_storage_space_set_names(
+      LOOM_LOW_STORAGE_SPACE_SET_WORKGROUP | LOOM_LOW_STORAGE_SPACE_SET_STACK |
+          LOOM_LOW_STORAGE_SPACE_SET_PRIVATE,
+      IREE_ARRAYSIZE(names), names);
+
+  ASSERT_EQ(count, 3u);
+  EXPECT_TRUE(iree_string_view_equal(names[0], IREE_SV("stack")));
+  EXPECT_TRUE(iree_string_view_equal(names[1], IREE_SV("private")));
+  EXPECT_TRUE(iree_string_view_equal(names[2], IREE_SV("workgroup")));
+}
+
 class LowStorageLayoutTest : public ::testing::Test {
  protected:
   void SetUp() override {

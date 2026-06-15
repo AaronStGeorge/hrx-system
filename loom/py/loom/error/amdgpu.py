@@ -781,6 +781,34 @@ ERR_AMDGPU_035 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_036: AMDGPU native emission storage space is unsupported.
+ERR_AMDGPU_036 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=36,
+    severity=Severity.ERROR,
+    summary="AMDGPU native emission storage space is unsupported.",
+    message=(
+        "AMDGPU target '{target_key}' export '{export_name}' config "
+        "'{config_key}' cannot emit native storage for '@{function_name}': "
+        "storage value '{storage_value_name}' reserves '{storage_space}' "
+        "storage, but AMDGPU native emission supports "
+        "{supported_storage_spaces}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("storage_value_name", ParamKind.STRING),
+        ErrorParam("storage_space", ParamKind.STRING),
+        ErrorParam("supported_storage_spaces", ParamKind.STRING_LIST),
+    ),
+    fix_hint=(
+        "Use scratch, private, or workgroup storage for AMDGPU native emission, "
+        "or add native ABI lowering for the selected storage space"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -816,4 +844,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_033,
     ERR_AMDGPU_034,
     ERR_AMDGPU_035,
+    ERR_AMDGPU_036,
 )
