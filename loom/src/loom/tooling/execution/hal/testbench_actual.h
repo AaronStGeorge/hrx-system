@@ -16,7 +16,6 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
-#include "iree/vm/api.h"
 #include "loom/pass/types.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/execution/compile_options.h"
@@ -246,8 +245,8 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
 // Testbench invocation callback for HAL actual invocations.
 iree_status_t loom_run_hal_testbench_actual_invoke(
     void* user_data, const loom_testbench_invocation_plan_t* invocation,
-    iree_host_size_t input_count, const iree_vm_variant_t* inputs,
-    iree_host_size_t result_count, iree_vm_variant_t* out_results);
+    iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+    iree_host_size_t result_count, loom_testbench_value_t* out_results);
 
 // Initializes a compile-on-first-use provider sequence for every actual
 // invocation in a check.case.
@@ -262,17 +261,16 @@ void loom_run_hal_testbench_actual_sequence_deinitialize(
 // Testbench invocation callback for HAL actual invocation sequences.
 iree_status_t loom_run_hal_testbench_actual_sequence_invoke(
     void* user_data, const loom_testbench_invocation_plan_t* invocation,
-    iree_host_size_t input_count, const iree_vm_variant_t* inputs,
-    iree_host_size_t result_count, iree_vm_variant_t* out_results);
+    iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+    iree_host_size_t result_count, loom_testbench_value_t* out_results);
 
-// Appends borrowed testbench input variants to HAL bindings/constants.
+// Appends borrowed testbench input values to HAL bindings/constants.
 //
 // Scalar constants are packed according to the corresponding Loom source input
-// type, not only the VM carrier type. This matters for index/offset values,
-// which the testbench materializes as VM i64 values before the HAL direct
-// constant ABI narrows them to one 32-bit word.
-iree_status_t loom_run_hal_testbench_invocation_inputs_from_variants(
-    const iree_vm_variant_t* inputs, const loom_type_t* input_types,
+// type, not only the scalar carrier type. This matters for index/offset values,
+// which have target ABI widths independent of the materialized scalar storage.
+iree_status_t loom_run_hal_testbench_invocation_inputs_from_values(
+    const loom_testbench_value_t* inputs, const loom_type_t* input_types,
     iree_host_size_t input_count, loom_run_hal_invocation_options_t* options,
     iree_allocator_t allocator, loom_run_hal_binding_list_t* out_bindings);
 

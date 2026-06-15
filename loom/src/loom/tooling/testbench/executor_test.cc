@@ -11,7 +11,6 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "iree/vm/api.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -82,27 +81,29 @@ class ExecutorTest : public ::testing::Test {
 
   static iree_status_t InvokeDelta(
       void* user_data, const loom_testbench_invocation_plan_t* invocation,
-      iree_host_size_t input_count, const iree_vm_variant_t* inputs,
-      iree_host_size_t result_count, iree_vm_variant_t* out_results) {
+      iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+      iree_host_size_t result_count, loom_testbench_value_t* out_results) {
     (void)invocation;
     DeltaProviderState* state = static_cast<DeltaProviderState*>(user_data);
     if (input_count != 1 || result_count != 1) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "delta provider expects one input and result");
     }
-    if (!iree_vm_variant_is_value(inputs[0])) {
+    if (!loom_testbench_value_is_scalar(&inputs[0])) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "delta provider input is not a VM value");
+                              "delta provider input is not a scalar value");
     }
-    iree_vm_value_t input_value = iree_vm_variant_value(inputs[0]);
-    if (input_value.type != IREE_VM_VALUE_TYPE_I32) {
+    const iree_tooling_value_t* input_value = &inputs[0].scalar;
+    if (input_value->kind != IREE_TOOLING_VALUE_KIND_I32) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "delta provider input is not i32");
     }
     ++state->invocation_count;
-    state->last_input = input_value.i32;
-    out_results[0] = iree_vm_make_variant_value(
-        iree_vm_value_make_i32(input_value.i32 + state->delta));
+    state->last_input = input_value->storage.i32;
+    out_results[0] = {};
+    out_results[0].kind = LOOM_TESTBENCH_VALUE_KIND_SCALAR;
+    out_results[0].scalar.kind = IREE_TOOLING_VALUE_KIND_I32;
+    out_results[0].scalar.storage.i32 = input_value->storage.i32 + state->delta;
     return iree_ok_status();
   }
 

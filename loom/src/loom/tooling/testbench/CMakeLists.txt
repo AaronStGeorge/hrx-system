@@ -39,9 +39,8 @@ loom_cc_library(
     iree::base::internal::prng
     iree::hal
     iree::io::stream
-    iree::modules::hal::types
     iree::tooling::numpy_io
-    iree::vm
+    iree::tooling::value_io
     loom::ir
     loom::util::math
   PUBLIC
@@ -59,7 +58,6 @@ loom_cc_library(
     ::value_materializer
     iree::base
     iree::base::internal::arena
-    iree::vm
     loom::ir
   PUBLIC
 )
@@ -78,9 +76,7 @@ loom_cc_library(
     iree::base::internal
     iree::base::internal::arena
     iree::hal
-    iree::modules::hal::types
     iree::tooling::buffer_view_matchers
-    iree::vm
     loom::ir
     loom::util::json
     loom::util::stream
@@ -134,8 +130,6 @@ loom_cc_library(
     iree::base
     iree::base::internal
     iree::hal
-    iree::modules::hal::types
-    iree::vm
   PUBLIC
 )
 
@@ -169,7 +163,6 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
-    iree::vm
     loom::format::text::parser
     loom::ir
     loom::ops::check
@@ -188,10 +181,8 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     iree::hal
-    iree::modules::hal::types
     iree::testing::gtest
     iree::testing::gtest_main
-    iree::vm
     loom::format::text::parser
     loom::ir
     loom::ops::check
@@ -210,7 +201,6 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
-    iree::vm
     loom::format::text::parser
     loom::ir
     loom::ops::check
@@ -229,10 +219,8 @@ loom_cc_test(
     iree::base::internal
     iree::base::internal::arena
     iree::hal
-    iree::modules::hal::types
     iree::testing::gtest
     iree::testing::gtest_main
-    iree::vm
     loom::ir
 )
 
@@ -267,12 +255,10 @@ loom_cc_test(
     iree::base::internal::arena
     iree::hal
     iree::io::stream
-    iree::modules::hal::types
     iree::testing::gtest
     iree::testing::gtest_main
     iree::tooling::numpy_io
     iree::tooling::testdata::npy
-    iree::vm
     loom::format::text::parser
     loom::ir
     loom::ops::check

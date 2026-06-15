@@ -17,6 +17,30 @@ using ::testing::HasSubstr;
 
 class HalTestbenchActualTest : public ::testing::Test {};
 
+static loom_testbench_value_t I32Value(int32_t value) {
+  loom_testbench_value_t result = {};
+  result.kind = LOOM_TESTBENCH_VALUE_KIND_SCALAR;
+  result.scalar.kind = IREE_TOOLING_VALUE_KIND_I32;
+  result.scalar.storage.i32 = value;
+  return result;
+}
+
+static loom_testbench_value_t I64Value(int64_t value) {
+  loom_testbench_value_t result = {};
+  result.kind = LOOM_TESTBENCH_VALUE_KIND_SCALAR;
+  result.scalar.kind = IREE_TOOLING_VALUE_KIND_I64;
+  result.scalar.storage.i64 = value;
+  return result;
+}
+
+static loom_testbench_value_t F64Value(double value) {
+  loom_testbench_value_t result = {};
+  result.kind = LOOM_TESTBENCH_VALUE_KIND_SCALAR;
+  result.scalar.kind = IREE_TOOLING_VALUE_KIND_F64;
+  result.scalar.storage.f64 = value;
+  return result;
+}
+
 static const loom_run_hal_artifact_provider_t kFakeHalArtifactProvider = {
     /*.name=*/IREE_SVL("fake-hal"),
     /*.hal_driver_name=*/IREE_SVL("fake"),
@@ -45,10 +69,9 @@ TEST_F(HalTestbenchActualTest, RequiresExplicitDeviceWhenHalProviderExists) {
 }
 
 TEST_F(HalTestbenchActualTest, ScalarInputsPackDispatchConstantWords) {
-  iree_vm_variant_t inputs[] = {
-      iree_vm_make_variant_value(iree_vm_value_make_i32(0x12345678)),
-      iree_vm_make_variant_value(
-          iree_vm_value_make_i64(static_cast<int64_t>(0x1122334455667788ull))),
+  loom_testbench_value_t inputs[] = {
+      I32Value(0x12345678),
+      I64Value(static_cast<int64_t>(0x1122334455667788ull)),
   };
   loom_type_t input_types[] = {
       loom_type_scalar(LOOM_SCALAR_TYPE_I32),
@@ -58,7 +81,7 @@ TEST_F(HalTestbenchActualTest, ScalarInputsPackDispatchConstantWords) {
   loom_run_hal_invocation_options_initialize(&options);
   loom_run_hal_binding_list_t bindings = {};
 
-  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
+  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_values(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 
@@ -72,8 +95,8 @@ TEST_F(HalTestbenchActualTest, ScalarInputsPackDispatchConstantWords) {
 }
 
 TEST_F(HalTestbenchActualTest, F64InputsPackDispatchConstantWords) {
-  iree_vm_variant_t inputs[] = {
-      iree_vm_make_variant_value(iree_vm_value_make_f64(1.0)),
+  loom_testbench_value_t inputs[] = {
+      F64Value(1.0),
   };
   loom_type_t input_types[] = {
       loom_type_scalar(LOOM_SCALAR_TYPE_F64),
@@ -82,7 +105,7 @@ TEST_F(HalTestbenchActualTest, F64InputsPackDispatchConstantWords) {
   loom_run_hal_invocation_options_initialize(&options);
   loom_run_hal_binding_list_t bindings = {};
 
-  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
+  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_values(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 
@@ -95,8 +118,8 @@ TEST_F(HalTestbenchActualTest, F64InputsPackDispatchConstantWords) {
 }
 
 TEST_F(HalTestbenchActualTest, IndexInputPacksAsOneDispatchConstantWord) {
-  iree_vm_variant_t inputs[] = {
-      iree_vm_make_variant_value(iree_vm_value_make_i64(3584)),
+  loom_testbench_value_t inputs[] = {
+      I64Value(3584),
   };
   loom_type_t input_types[] = {
       loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
@@ -105,7 +128,7 @@ TEST_F(HalTestbenchActualTest, IndexInputPacksAsOneDispatchConstantWord) {
   loom_run_hal_invocation_options_initialize(&options);
   loom_run_hal_binding_list_t bindings = {};
 
-  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
+  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_values(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 
@@ -117,9 +140,8 @@ TEST_F(HalTestbenchActualTest, IndexInputPacksAsOneDispatchConstantWord) {
 }
 
 TEST_F(HalTestbenchActualTest, OffsetInputPacksAsTwoDispatchConstantWords) {
-  iree_vm_variant_t inputs[] = {
-      iree_vm_make_variant_value(
-          iree_vm_value_make_i64(static_cast<int64_t>(0x1122334455667788ull))),
+  loom_testbench_value_t inputs[] = {
+      I64Value(static_cast<int64_t>(0x1122334455667788ull)),
   };
   loom_type_t input_types[] = {
       loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET),
@@ -128,7 +150,7 @@ TEST_F(HalTestbenchActualTest, OffsetInputPacksAsTwoDispatchConstantWords) {
   loom_run_hal_invocation_options_initialize(&options);
   loom_run_hal_binding_list_t bindings = {};
 
-  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
+  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_values(
       inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
       iree_allocator_system(), &bindings));
 

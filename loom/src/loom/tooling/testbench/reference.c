@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "iree/base/internal/math.h"
-#include "iree/modules/hal/types.h"
 
 typedef struct loom_testbench_reference_rank2_view_t {
   // Borrowed HAL buffer view.
@@ -89,15 +88,13 @@ typedef struct loom_testbench_reference_matmul_contract_t {
   loom_testbench_reference_numeric_kind_t result;
 } loom_testbench_reference_matmul_contract_t;
 
-static iree_status_t loom_testbench_reference_variant_buffer_view(
-    const iree_vm_variant_t* variant, iree_hal_buffer_view_t** out_view) {
-  *out_view = NULL;
-  if (!iree_vm_variant_is_ref(*variant) ||
-      !iree_hal_buffer_view_isa(variant->ref)) {
+static iree_status_t loom_testbench_reference_value_buffer_view(
+    const loom_testbench_value_t* value, iree_hal_buffer_view_t** out_view) {
+  *out_view = loom_testbench_value_buffer_view(value);
+  if (*out_view == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "reference oracle expects buffer view inputs");
   }
-  *out_view = iree_hal_buffer_view_deref(variant->ref);
   return iree_ok_status();
 }
 
@@ -1159,8 +1156,8 @@ static iree_status_t loom_testbench_reference_tiled_matmul_element_count(
 
 static iree_status_t loom_testbench_reference_matmul_invoke(
     void* user_data, const loom_testbench_invocation_plan_t* invocation,
-    iree_host_size_t input_count, const iree_vm_variant_t* inputs,
-    iree_host_size_t result_count, iree_vm_variant_t* out_results) {
+    iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+    iree_host_size_t result_count, loom_testbench_value_t* out_results) {
   const loom_testbench_reference_matmul_oracle_options_t* options =
       (const loom_testbench_reference_matmul_oracle_options_t*)user_data;
   if (input_count != 3 || result_count != 1) {
@@ -1175,13 +1172,13 @@ static iree_status_t loom_testbench_reference_matmul_invoke(
 
   iree_hal_buffer_view_t* lhs_view = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_reference_variant_buffer_view(&inputs[0], &lhs_view));
+      loom_testbench_reference_value_buffer_view(&inputs[0], &lhs_view));
   iree_hal_buffer_view_t* rhs_view = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_reference_variant_buffer_view(&inputs[1], &rhs_view));
+      loom_testbench_reference_value_buffer_view(&inputs[1], &rhs_view));
   iree_hal_buffer_view_t* init_view = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_reference_variant_buffer_view(&inputs[2], &init_view));
+      loom_testbench_reference_value_buffer_view(&inputs[2], &init_view));
 
   loom_testbench_reference_rank2_view_t lhs = {0};
   IREE_RETURN_IF_ERROR(
@@ -1235,15 +1232,18 @@ static iree_status_t loom_testbench_reference_matmul_invoke(
   if (!iree_status_is_ok(status)) {
     return status;
   }
-  iree_vm_ref_t result_ref = iree_hal_buffer_view_move_ref(result_view);
-  out_results[0] = iree_vm_make_variant_ref_assign(result_ref);
-  return iree_ok_status();
+  status =
+      loom_testbench_value_set_buffer_view_move(result_view, &out_results[0]);
+  if (!iree_status_is_ok(status)) {
+    iree_hal_buffer_view_release(result_view);
+  }
+  return status;
 }
 
 static iree_status_t loom_testbench_reference_tiled_matmul_invoke(
     void* user_data, const loom_testbench_invocation_plan_t* invocation,
-    iree_host_size_t input_count, const iree_vm_variant_t* inputs,
-    iree_host_size_t result_count, iree_vm_variant_t* out_results) {
+    iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+    iree_host_size_t result_count, loom_testbench_value_t* out_results) {
   const loom_testbench_reference_matmul_oracle_options_t* options =
       (const loom_testbench_reference_matmul_oracle_options_t*)user_data;
   if (input_count != 3 || result_count != 1) {
@@ -1259,13 +1259,13 @@ static iree_status_t loom_testbench_reference_tiled_matmul_invoke(
 
   iree_hal_buffer_view_t* lhs_view = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_reference_variant_buffer_view(&inputs[0], &lhs_view));
+      loom_testbench_reference_value_buffer_view(&inputs[0], &lhs_view));
   iree_hal_buffer_view_t* rhs_view = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_reference_variant_buffer_view(&inputs[1], &rhs_view));
+      loom_testbench_reference_value_buffer_view(&inputs[1], &rhs_view));
   iree_hal_buffer_view_t* init_view = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_testbench_reference_variant_buffer_view(&inputs[2], &init_view));
+      loom_testbench_reference_value_buffer_view(&inputs[2], &init_view));
 
   loom_testbench_reference_rank4_view_t lhs = {0};
   IREE_RETURN_IF_ERROR(
@@ -1318,9 +1318,12 @@ static iree_status_t loom_testbench_reference_tiled_matmul_invoke(
   if (!iree_status_is_ok(status)) {
     return status;
   }
-  iree_vm_ref_t result_ref = iree_hal_buffer_view_move_ref(result_view);
-  out_results[0] = iree_vm_make_variant_ref_assign(result_ref);
-  return iree_ok_status();
+  status =
+      loom_testbench_value_set_buffer_view_move(result_view, &out_results[0]);
+  if (!iree_status_is_ok(status)) {
+    iree_hal_buffer_view_release(result_view);
+  }
+  return status;
 }
 
 void loom_testbench_reference_matmul_oracle_provider_initialize(

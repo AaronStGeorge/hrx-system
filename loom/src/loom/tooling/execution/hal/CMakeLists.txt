@@ -97,7 +97,6 @@ loom_cc_library(
     iree::base
     iree::hal
     iree::tooling::device_util
-    iree::vm
     loom::error::diagnostic
     loom::ir
     loom::ir::facts
@@ -210,7 +209,6 @@ loom_cc_test(
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
-    iree::vm
     loom::format::text::parser
     loom::ir
     loom::ops::index

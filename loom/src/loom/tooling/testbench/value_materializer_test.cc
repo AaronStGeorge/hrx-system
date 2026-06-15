@@ -14,12 +14,10 @@
 #include "iree/hal/api.h"
 #include "iree/io/memory_stream.h"
 #include "iree/io/vec_stream.h"
-#include "iree/modules/hal/types.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "iree/tooling/numpy_io.h"
 #include "iree/tooling/testdata/npy/npy_files.h"
-#include "iree/vm/api.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -39,9 +37,6 @@ class ValueMaterializerTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_CHECK, loom_check_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
-    IREE_ASSERT_OK(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
-                                           host_allocator_, &vm_instance_));
-    IREE_ASSERT_OK(iree_hal_module_register_all_types(vm_instance_));
     IREE_ASSERT_OK(
         iree_hal_allocator_create_heap(IREE_SV("testbench"), host_allocator_,
                                        host_allocator_, &device_allocator_));
@@ -50,7 +45,6 @@ class ValueMaterializerTest : public ::testing::Test {
   void TearDown() override {
     iree_io_stream_release(written_stream_);
     iree_hal_allocator_release(device_allocator_);
-    iree_vm_instance_release(vm_instance_);
     iree_arena_deinitialize(&plan_arena_);
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
@@ -136,13 +130,11 @@ class ValueMaterializerTest : public ::testing::Test {
 
   iree_hal_buffer_view_t* LookupBufferView(
       const loom_testbench_value_table_t* table, loom_value_id_t value_id,
-      iree_vm_variant_t* out_variant) {
+      loom_testbench_value_t* out_value) {
     IREE_EXPECT_OK(
-        loom_testbench_value_table_lookup_retain(table, value_id, out_variant));
-    EXPECT_TRUE(iree_vm_variant_is_ref(*out_variant));
-    iree_hal_buffer_view_t* buffer_view = nullptr;
-    IREE_EXPECT_OK(
-        iree_hal_buffer_view_check_deref(out_variant->ref, &buffer_view));
+        loom_testbench_value_table_lookup_retain(table, value_id, out_value));
+    iree_hal_buffer_view_t* buffer_view =
+        loom_testbench_value_buffer_view(out_value);
     EXPECT_NE(buffer_view, nullptr);
     return buffer_view;
   }
@@ -176,7 +168,6 @@ class ValueMaterializerTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_;
   iree_arena_allocator_t plan_arena_;
   loom_context_t context_;
-  iree_vm_instance_t* vm_instance_ = nullptr;
   iree_hal_allocator_t* device_allocator_ = nullptr;
   iree_io_stream_t* written_stream_ = nullptr;
   std::string written_path_;
@@ -213,60 +204,59 @@ check.case @generated {
 
   ASSERT_EQ(case_plan.parameter_count, 2u);
   ASSERT_EQ(case_plan.value_source_count, 8u);
-  iree_vm_variant_t scalar = iree_vm_variant_empty();
+  loom_testbench_value_t scalar = {};
   IREE_ASSERT_OK(loom_testbench_value_table_lookup_retain(
       &table, case_plan.value_sources[0].value_id, &scalar));
-  ASSERT_TRUE(iree_vm_variant_is_value(scalar));
-  iree_vm_value_t scalar_value = iree_vm_variant_value(scalar);
-  EXPECT_EQ(scalar_value.type, IREE_VM_VALUE_TYPE_I32);
-  EXPECT_EQ(scalar_value.i32, 42);
-  iree_vm_variant_reset(&scalar);
+  ASSERT_TRUE(loom_testbench_value_is_scalar(&scalar));
+  EXPECT_EQ(scalar.scalar.kind, IREE_TOOLING_VALUE_KIND_I32);
+  EXPECT_EQ(scalar.scalar.storage.i32, 42);
+  loom_testbench_value_deinitialize(&scalar);
 
-  iree_vm_variant_t i8 = iree_vm_variant_empty();
+  loom_testbench_value_t i8 = {};
   iree_hal_buffer_view_t* i8_view =
       LookupBufferView(&table, case_plan.value_sources[1].value_id, &i8);
   ExpectBufferViewContents<int8_t>(i8_view, {4}, IREE_HAL_ELEMENT_TYPE_SINT_8,
                                    {-2, -1, 0, 1});
-  iree_vm_variant_reset(&i8);
+  loom_testbench_value_deinitialize(&i8);
 
-  iree_vm_variant_t i8_down = iree_vm_variant_empty();
+  loom_testbench_value_t i8_down = {};
   iree_hal_buffer_view_t* i8_down_view =
       LookupBufferView(&table, case_plan.value_sources[2].value_id, &i8_down);
   ExpectBufferViewContents<int8_t>(i8_down_view, {4},
                                    IREE_HAL_ELEMENT_TYPE_SINT_8, {2, 1, 0, -1});
-  iree_vm_variant_reset(&i8_down);
+  loom_testbench_value_deinitialize(&i8_down);
 
-  iree_vm_variant_t iota = iree_vm_variant_empty();
+  loom_testbench_value_t iota = {};
   iree_hal_buffer_view_t* iota_view =
       LookupBufferView(&table, case_plan.value_sources[3].value_id, &iota);
   ExpectBufferViewContents<int32_t>(iota_view, {3},
                                     IREE_HAL_ELEMENT_TYPE_SINT_32, {0, 1, 2});
-  iree_vm_variant_reset(&iota);
+  loom_testbench_value_deinitialize(&iota);
 
-  iree_vm_variant_t f16 = iree_vm_variant_empty();
+  loom_testbench_value_t f16 = {};
   iree_hal_buffer_view_t* f16_view =
       LookupBufferView(&table, case_plan.value_sources[4].value_id, &f16);
   ExpectBufferViewContents<uint16_t>(
       f16_view, {2}, IREE_HAL_ELEMENT_TYPE_FLOAT_16,
       {iree_math_f32_to_f16(0.5f), iree_math_f32_to_f16(0.5f)});
-  iree_vm_variant_reset(&f16);
+  loom_testbench_value_deinitialize(&f16);
 
-  iree_vm_variant_t fill = iree_vm_variant_empty();
+  loom_testbench_value_t fill = {};
   iree_hal_buffer_view_t* fill_view =
       LookupBufferView(&table, case_plan.value_sources[5].value_id, &fill);
   ExpectBufferViewContents<float>(
       fill_view, {3}, IREE_HAL_ELEMENT_TYPE_FLOAT_32, {1.5f, 1.5f, 1.5f});
-  iree_vm_variant_reset(&fill);
+  loom_testbench_value_deinitialize(&fill);
 
-  iree_vm_variant_t bf16 = iree_vm_variant_empty();
+  loom_testbench_value_t bf16 = {};
   iree_hal_buffer_view_t* bf16_view =
       LookupBufferView(&table, case_plan.value_sources[6].value_id, &bf16);
   ExpectBufferViewContents<uint16_t>(
       bf16_view, {2}, IREE_HAL_ELEMENT_TYPE_BFLOAT_16,
       {iree_math_f32_to_bf16(0.25f), iree_math_f32_to_bf16(0.25f)});
-  iree_vm_variant_reset(&bf16);
+  loom_testbench_value_deinitialize(&bf16);
 
-  iree_vm_variant_t uniform = iree_vm_variant_empty();
+  loom_testbench_value_t uniform = {};
   iree_hal_buffer_view_t* uniform_view =
       LookupBufferView(&table, case_plan.value_sources[7].value_id, &uniform);
   ASSERT_EQ(iree_hal_buffer_view_shape_rank(uniform_view), 1u);
@@ -281,7 +271,7 @@ check.case @generated {
     EXPECT_GE(value, -1.0f);
     EXPECT_LE(value, 1.0f);
   }
-  iree_vm_variant_reset(&uniform);
+  loom_testbench_value_deinitialize(&uniform);
 
   loom_testbench_value_table_deinitialize(&table);
   loom_module_free(module);
@@ -318,21 +308,21 @@ check.case @sweep {
   IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
       &options, &case_plan, /*sample_ordinal=*/5, &table));
 
-  iree_vm_variant_t m = iree_vm_variant_empty();
+  loom_testbench_value_t m = {};
   IREE_ASSERT_OK(loom_testbench_value_table_lookup_retain(
       &table, case_plan.parameters[0].value_id, &m));
-  ASSERT_TRUE(iree_vm_variant_is_value(m));
-  EXPECT_EQ(iree_vm_variant_value(m).type, IREE_VM_VALUE_TYPE_I32);
-  EXPECT_EQ(iree_vm_variant_value(m).i32, 3);
-  iree_vm_variant_reset(&m);
+  ASSERT_TRUE(loom_testbench_value_is_scalar(&m));
+  EXPECT_EQ(m.scalar.kind, IREE_TOOLING_VALUE_KIND_I32);
+  EXPECT_EQ(m.scalar.storage.i32, 3);
+  loom_testbench_value_deinitialize(&m);
 
-  iree_vm_variant_t n = iree_vm_variant_empty();
+  loom_testbench_value_t n = {};
   IREE_ASSERT_OK(loom_testbench_value_table_lookup_retain(
       &table, case_plan.parameters[1].value_id, &n));
-  ASSERT_TRUE(iree_vm_variant_is_value(n));
-  EXPECT_EQ(iree_vm_variant_value(n).type, IREE_VM_VALUE_TYPE_I32);
-  EXPECT_EQ(iree_vm_variant_value(n).i32, 20);
-  iree_vm_variant_reset(&n);
+  ASSERT_TRUE(loom_testbench_value_is_scalar(&n));
+  EXPECT_EQ(n.scalar.kind, IREE_TOOLING_VALUE_KIND_I32);
+  EXPECT_EQ(n.scalar.storage.i32, 20);
+  loom_testbench_value_deinitialize(&n);
 
   loom_testbench_value_table_deinitialize(&table);
   loom_module_free(module);
@@ -360,7 +350,7 @@ check.case @file_io {
       &options, &case_plan, /*sample_ordinal=*/0, &table));
 
   ASSERT_EQ(case_plan.value_source_count, 1u);
-  iree_vm_variant_t input = iree_vm_variant_empty();
+  loom_testbench_value_t input = {};
   iree_hal_buffer_view_t* input_view =
       LookupBufferView(&table, case_plan.value_sources[0].value_id, &input);
   ExpectBufferViewContents<float>(
@@ -386,7 +376,7 @@ check.case @file_io {
                                   {1.1f, 2.2f, 3.3f});
   iree_hal_buffer_view_release(written_buffer_view);
 
-  iree_vm_variant_reset(&input);
+  loom_testbench_value_deinitialize(&input);
   loom_testbench_value_table_deinitialize(&table);
   loom_module_free(module);
 }

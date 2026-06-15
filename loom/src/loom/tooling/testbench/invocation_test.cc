@@ -9,7 +9,6 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "iree/vm/api.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -72,38 +71,40 @@ class InvocationTest : public ::testing::Test {
 
   static iree_status_t InvokeDelta(
       void* user_data, const loom_testbench_invocation_plan_t* invocation,
-      iree_host_size_t input_count, const iree_vm_variant_t* inputs,
-      iree_host_size_t result_count, iree_vm_variant_t* out_results) {
+      iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+      iree_host_size_t result_count, loom_testbench_value_t* out_results) {
     (void)invocation;
     DeltaProviderState* state = static_cast<DeltaProviderState*>(user_data);
     if (input_count != 1 || result_count != 1) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "delta provider expects one input and result");
     }
-    if (!iree_vm_variant_is_value(inputs[0])) {
+    if (!loom_testbench_value_is_scalar(&inputs[0])) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "delta provider input is not a VM value");
+                              "delta provider input is not a scalar value");
     }
-    iree_vm_value_t input_value = iree_vm_variant_value(inputs[0]);
-    if (input_value.type != IREE_VM_VALUE_TYPE_I32) {
+    const iree_tooling_value_t* input_value = &inputs[0].scalar;
+    if (input_value->kind != IREE_TOOLING_VALUE_KIND_I32) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "delta provider input is not i32");
     }
-    out_results[0] = iree_vm_make_variant_value(
-        iree_vm_value_make_i32(input_value.i32 + state->delta));
+    out_results[0] = {};
+    out_results[0].kind = LOOM_TESTBENCH_VALUE_KIND_SCALAR;
+    out_results[0].scalar.kind = IREE_TOOLING_VALUE_KIND_I32;
+    out_results[0].scalar.storage.i32 = input_value->storage.i32 + state->delta;
     return iree_ok_status();
   }
 
   static int32_t LookupI32(const loom_testbench_value_table_t* table,
                            loom_value_id_t value_id) {
-    iree_vm_variant_t variant = iree_vm_variant_empty();
+    loom_testbench_value_t value = {};
     IREE_EXPECT_OK(
-        loom_testbench_value_table_lookup_retain(table, value_id, &variant));
-    EXPECT_TRUE(iree_vm_variant_is_value(variant));
-    iree_vm_value_t value = iree_vm_variant_value(variant);
-    EXPECT_EQ(value.type, IREE_VM_VALUE_TYPE_I32);
-    iree_vm_variant_reset(&variant);
-    return value.i32;
+        loom_testbench_value_table_lookup_retain(table, value_id, &value));
+    EXPECT_TRUE(loom_testbench_value_is_scalar(&value));
+    EXPECT_EQ(value.scalar.kind, IREE_TOOLING_VALUE_KIND_I32);
+    int32_t result = value.scalar.storage.i32;
+    loom_testbench_value_deinitialize(&value);
+    return result;
   }
 
   iree_arena_block_pool_t block_pool_;

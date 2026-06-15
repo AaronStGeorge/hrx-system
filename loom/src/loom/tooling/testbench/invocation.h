@@ -7,16 +7,15 @@
 // Prepared invocation execution for check testbench cases.
 //
 // This layer resolves target/oracle providers once per planned case and then
-// executes the resulting direct callbacks against materialized VM variants. It
-// stays target-free: VM, HAL, native, or reference execution providers are
-// injected by callers instead of linked into the core testbench library.
+// executes the resulting direct callbacks against materialized values. It stays
+// target-free: VM, HAL, native, or reference execution providers are injected
+// by callers instead of linked into the core testbench library.
 
 #ifndef LOOM_TOOLING_TESTBENCH_INVOCATION_H_
 #define LOOM_TOOLING_TESTBENCH_INVOCATION_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "iree/vm/api.h"
 #include "loom/tooling/testbench/value_materializer.h"
 
 #ifdef __cplusplus
@@ -25,8 +24,8 @@ extern "C" {
 
 typedef iree_status_t(IREE_API_PTR* loom_testbench_invocation_fn_t)(
     void* user_data, const loom_testbench_invocation_plan_t* invocation,
-    iree_host_size_t input_count, const iree_vm_variant_t* inputs,
-    iree_host_size_t result_count, iree_vm_variant_t* out_results);
+    iree_host_size_t input_count, const loom_testbench_value_t* inputs,
+    iree_host_size_t result_count, loom_testbench_value_t* out_results);
 
 typedef struct loom_testbench_invocation_callback_t {
   // Callback function, or NULL when this provider is unavailable.
@@ -114,10 +113,10 @@ typedef struct loom_testbench_invocation_executor_t {
   const loom_testbench_invocation_schedule_t* schedule;
   // Host allocator that owns |inputs| and |results|.
   iree_allocator_t host_allocator;
-  // Retained input variants reused for each invocation.
-  iree_vm_variant_t* inputs;
-  // Move-owned result variants reused for each invocation.
-  iree_vm_variant_t* results;
+  // Retained input values reused for each invocation.
+  loom_testbench_value_t* inputs;
+  // Move-owned result values reused for each invocation.
+  loom_testbench_value_t* results;
   // Number of entries in |inputs|.
   iree_host_size_t input_capacity;
   // Number of entries in |results|.

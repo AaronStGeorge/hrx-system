@@ -18,25 +18,23 @@ static void RetainedStorageBinding(iree_hal_buffer_t* buffer,
                                    iree_device_size_t byte_offset,
                                    iree_device_size_t byte_length,
                                    iree_tooling_buffer_binding_t* binding) {
-  *binding = (iree_tooling_buffer_binding_t){
-      .kind = IREE_TOOLING_BUFFER_BINDING_KIND_STORAGE_BUFFER,
-      .buffer = buffer,
-      .byte_offset = byte_offset,
-      .byte_length = byte_length,
-  };
+  *binding = {};
+  binding->kind = IREE_TOOLING_BUFFER_BINDING_KIND_STORAGE_BUFFER;
+  binding->buffer = buffer;
+  binding->byte_offset = byte_offset;
+  binding->byte_length = byte_length;
   iree_hal_buffer_retain(binding->buffer);
 }
 
 static void RetainedBufferViewBinding(iree_hal_buffer_view_t* buffer_view,
                                       iree_tooling_buffer_binding_t* binding) {
   iree_hal_buffer_t* buffer = iree_hal_buffer_view_buffer(buffer_view);
-  *binding = (iree_tooling_buffer_binding_t){
-      .kind = IREE_TOOLING_BUFFER_BINDING_KIND_BUFFER_VIEW,
-      .buffer = buffer,
-      .buffer_view = buffer_view,
-      .byte_offset = 0,
-      .byte_length = iree_hal_buffer_view_byte_length(buffer_view),
-  };
+  *binding = {};
+  binding->kind = IREE_TOOLING_BUFFER_BINDING_KIND_BUFFER_VIEW;
+  binding->buffer = buffer;
+  binding->buffer_view = buffer_view;
+  binding->byte_offset = 0;
+  binding->byte_length = iree_hal_buffer_view_byte_length(buffer_view);
   iree_hal_buffer_retain(binding->buffer);
   iree_hal_buffer_view_retain(binding->buffer_view);
 }
