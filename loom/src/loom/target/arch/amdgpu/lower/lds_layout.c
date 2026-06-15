@@ -4,14 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU source workgroup-storage layout.
+// AMDGPU source allocation layout.
 //
-// Source-to-low lowering must know the final workgroup-storage base for packets
-// that encode a workgroup-storage destination directly, such as
-// global_load_lds. This layout mirrors the low.storage.reserve order emitted by
-// lower_buffer.c: source block order, then source op order, with each
-// workgroup buffer.alloca packed into the workgroup segment after applying its
-// declared alignment.
+// Source-to-low lowering must know the final storage base for packets that
+// encode a source allocation directly, such as LDS and scratch memory packets.
+// This layout mirrors the low.storage.reserve order emitted by lower_buffer.c:
+// source block order, then source op order, with each buffer.alloca in the same
+// source memory space packed after applying its declared alignment.
 
 #include <stdint.h>
 
@@ -20,7 +19,7 @@
 #include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/util/fact_table.h"
 
-static bool loom_amdgpu_source_lds_layout_checked_align(
+static bool loom_amdgpu_source_alloca_layout_checked_align(
     uint64_t value, uint64_t alignment, uint64_t* out_aligned_value) {
   *out_aligned_value = 0;
   if (alignment == 0 || (alignment & (alignment - 1)) != 0) {
@@ -34,7 +33,7 @@ static bool loom_amdgpu_source_lds_layout_checked_align(
   return true;
 }
 
-static bool loom_amdgpu_source_lds_layout_alloca_size(
+static bool loom_amdgpu_source_alloca_layout_alloca_size(
     const loom_value_fact_table_t* fact_table, const loom_op_t* alloca_op,
     uint64_t* out_byte_length) {
   *out_byte_length = 0;
@@ -50,7 +49,7 @@ static bool loom_amdgpu_source_lds_layout_alloca_size(
   return true;
 }
 
-static bool loom_amdgpu_source_lds_layout_alloca_alignment(
+static bool loom_amdgpu_source_alloca_layout_alloca_alignment(
     const loom_op_t* alloca_op, uint64_t* out_byte_alignment) {
   *out_byte_alignment = 0;
   const int64_t base_alignment = loom_buffer_alloca_base_alignment(alloca_op);
@@ -62,9 +61,10 @@ static bool loom_amdgpu_source_lds_layout_alloca_alignment(
   return true;
 }
 
-bool loom_amdgpu_source_lds_layout_lookup_root(
+bool loom_amdgpu_source_alloca_layout_lookup_root(
     const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
-    loom_value_id_t root_value_id, uint64_t* out_byte_offset) {
+    loom_value_fact_memory_space_t memory_space, loom_value_id_t root_value_id,
+    uint64_t* out_byte_offset) {
   *out_byte_offset = 0;
   if (!loom_func_like_isa(source_function)) {
     return false;
@@ -74,31 +74,30 @@ bool loom_amdgpu_source_lds_layout_lookup_root(
     return false;
   }
 
-  uint64_t lds_byte_size = 0;
+  uint64_t segment_byte_size = 0;
   for (uint16_t block_index = 0; block_index < body->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(body, block_index);
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       if (!loom_buffer_alloca_isa(op) ||
-          loom_buffer_alloca_memory_space(op) !=
-              LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+          loom_buffer_alloca_memory_space(op) != memory_space) {
         continue;
       }
 
       uint64_t byte_alignment = 0;
-      if (!loom_amdgpu_source_lds_layout_alloca_alignment(op,
-                                                          &byte_alignment)) {
+      if (!loom_amdgpu_source_alloca_layout_alloca_alignment(op,
+                                                             &byte_alignment)) {
         return false;
       }
       uint64_t slot_byte_offset = 0;
-      if (!loom_amdgpu_source_lds_layout_checked_align(
-              lds_byte_size, byte_alignment, &slot_byte_offset)) {
+      if (!loom_amdgpu_source_alloca_layout_checked_align(
+              segment_byte_size, byte_alignment, &slot_byte_offset)) {
         return false;
       }
       uint64_t byte_length = 0;
-      if (!loom_amdgpu_source_lds_layout_alloca_size(fact_table, op,
-                                                     &byte_length)) {
+      if (!loom_amdgpu_source_alloca_layout_alloca_size(fact_table, op,
+                                                        &byte_length)) {
         return false;
       }
       if (loom_buffer_alloca_result(op) == root_value_id) {
@@ -109,8 +108,16 @@ bool loom_amdgpu_source_lds_layout_lookup_root(
       if (slot_byte_offset > UINT64_MAX - byte_length) {
         return false;
       }
-      lds_byte_size = slot_byte_offset + byte_length;
+      segment_byte_size = slot_byte_offset + byte_length;
     }
   }
   return false;
+}
+
+bool loom_amdgpu_source_lds_layout_lookup_root(
+    const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
+    loom_value_id_t root_value_id, uint64_t* out_byte_offset) {
+  return loom_amdgpu_source_alloca_layout_lookup_root(
+      fact_table, source_function, LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP,
+      root_value_id, out_byte_offset);
 }

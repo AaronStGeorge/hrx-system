@@ -96,6 +96,7 @@ _GS = AmdgpuMemoryDescriptorDomain.GLOBAL_SADDR
 _L = AmdgpuMemoryDescriptorDomain.LDS
 _GF = AmdgpuMemoryDescriptorDomain.GLOBAL_FLAT
 _SM = AmdgpuMemoryDescriptorDomain.GLOBAL_SMEM
+_SC = AmdgpuMemoryDescriptorDomain.SCRATCH
 
 _AD = AmdgpuMemoryAddressForm.DEFAULT
 _BOZ = AmdgpuMemoryAddressForm.BUFFER_OFF_ZERO
@@ -104,6 +105,7 @@ _SA = AmdgpuMemoryAddressForm.GLOBAL_SADDR
 _ADT = AmdgpuMemoryAddressForm.DS_ADDTID
 _FL = AmdgpuMemoryAddressForm.FLAT
 _SMEM = AmdgpuMemoryAddressForm.GLOBAL_SMEM
+_SV = AmdgpuMemoryAddressForm.SCRATCH_VADDR
 
 _LD = AmdgpuMemoryOperationKind.LOAD
 _ST = AmdgpuMemoryOperationKind.STORE
@@ -213,6 +215,18 @@ _MEMORY_DESCRIPTOR_CANDIDATE_ROWS = (
     (_L, _DS2, _ST, 8, _V, _G, 2, "DS_WRITE2ST64_B32"),
     (_L, _ADT, _LD, 4, _V, _G, 1, "DS_READ_ADDTID_B32"),
     (_L, _ADT, _ST, 4, _V, _G, 1, "DS_WRITE_ADDTID_B32"),
+    (_SC, _SV, _LD, 1, _V, _G, 1, "SCRATCH_LOAD_I8_VADDR"),
+    (_SC, _SV, _LD, 1, _V, _G, 1, "SCRATCH_LOAD_U8_VADDR"),
+    (_SC, _SV, _LD, 2, _V, _G, 1, "SCRATCH_LOAD_U16_VADDR"),
+    (_SC, _SV, _LD, 2, _V, _I16, 1, "SCRATCH_LOAD_I16_VADDR"),
+    (_SC, _SV, _LD, 4, _V, _G, 1, "SCRATCH_LOAD_B32_VADDR"),
+    (_SC, _SV, _LD, 8, _V, _G, 2, "SCRATCH_LOAD_B64_VADDR"),
+    (_SC, _SV, _LD, 12, _V, _G, 3, "SCRATCH_LOAD_B96_VADDR"),
+    (_SC, _SV, _LD, 16, _V, _G, 4, "SCRATCH_LOAD_B128_VADDR"),
+    (_SC, _SV, _ST, 4, _V, _G, 1, "SCRATCH_STORE_B32_VADDR"),
+    (_SC, _SV, _ST, 8, _V, _G, 2, "SCRATCH_STORE_B64_VADDR"),
+    (_SC, _SV, _ST, 12, _V, _G, 3, "SCRATCH_STORE_B96_VADDR"),
+    (_SC, _SV, _ST, 16, _V, _G, 4, "SCRATCH_STORE_B128_VADDR"),
 )
 
 _MEMORY_DESCRIPTOR_CANDIDATES = tuple(

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU launch topology and LDS layout lowering helpers.
+// AMDGPU launch topology and source-allocation layout lowering helpers.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_TOPOLOGY_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_TOPOLOGY_H_
@@ -21,9 +21,16 @@
 extern "C" {
 #endif
 
+// Resolves the source-order storage base for a source buffer.alloca root in
+// the requested memory space. The layout must match the low.storage.reserve
+// order emitted by buffer lowering.
+bool loom_amdgpu_source_alloca_layout_lookup_root(
+    const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
+    loom_value_fact_memory_space_t memory_space, loom_value_id_t root_value_id,
+    uint64_t* out_byte_offset);
+
 // Resolves the source-order workgroup-storage base for a workgroup
-// buffer.alloca root. The layout must match the low.storage.reserve order
-// emitted by buffer lowering.
+// buffer.alloca root.
 bool loom_amdgpu_source_lds_layout_lookup_root(
     const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
     loom_value_id_t root_value_id, uint64_t* out_byte_offset);

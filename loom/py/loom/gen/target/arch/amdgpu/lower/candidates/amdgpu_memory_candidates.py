@@ -45,6 +45,7 @@ _MEMORY_DESCRIPTOR_DOMAIN_INDEX = {
     AmdgpuMemoryDescriptorDomain.LDS: 2,
     AmdgpuMemoryDescriptorDomain.GLOBAL_FLAT: 3,
     AmdgpuMemoryDescriptorDomain.GLOBAL_SMEM: 4,
+    AmdgpuMemoryDescriptorDomain.SCRATCH: 5,
 }
 
 _MEMORY_ADDRESS_FORM_INDEX = {
@@ -55,6 +56,7 @@ _MEMORY_ADDRESS_FORM_INDEX = {
     AmdgpuMemoryAddressForm.DS_ADDTID: 4,
     AmdgpuMemoryAddressForm.FLAT: 5,
     AmdgpuMemoryAddressForm.GLOBAL_SMEM: 6,
+    AmdgpuMemoryAddressForm.SCRATCH_VADDR: 7,
 }
 
 _MEMORY_OPERATION_KIND_INDEX = {

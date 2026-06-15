@@ -369,6 +369,10 @@ static const loom_amdgpu_memory_access_rejection_key_t
             .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_ROOT,
             .constraint_key = IREE_SVL("memory_access.workgroup_root"),
         },
+        {
+            .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PRIVATE_ROOT,
+            .constraint_key = IREE_SVL("memory_access.private_root"),
+        },
 };
 
 static loom_amdgpu_memory_access_bank_summary_t
