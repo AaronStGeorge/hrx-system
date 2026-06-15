@@ -29,6 +29,9 @@ pass.pipeline<module> @__loom_check_source_low pipeline {
       unroll-scf-for
       canonicalize
       cse
+      promote-private-fragments
+      canonicalize
+      cse
       scf-to-cfg
       cfg-simplify
       canonicalize
@@ -123,6 +126,9 @@ pass.pipeline<module> @__loom_check_prepared_low pipeline {
       canonicalize
       cse
       unroll-scf-for
+      canonicalize
+      cse
+      promote-private-fragments
       canonicalize
       cse
       scf-to-cfg
