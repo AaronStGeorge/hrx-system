@@ -1531,19 +1531,8 @@ static iree_status_t loom_amdgpu_lower_vector_compare(
     lane_results[i] = loom_value_slice_get(loom_low_op_results(lane_op), 0);
   }
 
-  if (lane_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, lane_results[0]);
-  }
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lane_results, lane_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             lane_results, lane_count);
 }
 
 iree_status_t loom_amdgpu_lower_vector_cmpi(
@@ -1818,19 +1807,8 @@ iree_status_t loom_amdgpu_lower_clampf(loom_low_lower_context_t* context,
     }
   }
 
-  if (lane_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, lane_results[0]);
-  }
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lane_results, lane_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                             lane_results, lane_count);
 }
 
 static iree_status_t loom_amdgpu_emit_i1_mask_binary(
@@ -1873,12 +1851,9 @@ static iree_status_t loom_amdgpu_emit_i1_zero_mask(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0, lane_type,
       &zero));
   const loom_value_id_t zero_lanes[] = {zero, zero};
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), zero_lanes,
-      IREE_ARRAYSIZE(zero_lanes), mask_type, source_op->location, &concat_op));
-  *out_mask = loom_low_concat_result(concat_op);
-  return iree_ok_status();
+  return loom_amdgpu_build_low_register_range(context, source_op, zero_lanes,
+                                              IREE_ARRAYSIZE(zero_lanes),
+                                              mask_type, out_mask);
 }
 
 static iree_status_t loom_amdgpu_lookup_or_emit_i1_mask_value(
@@ -1973,13 +1948,11 @@ static iree_status_t loom_amdgpu_lower_i1_mask_select(
           &select_op));
       lane_results[i] = loom_value_slice_get(loom_low_op_results(select_op), 0);
     }
-    loom_op_t* concat_op = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_low_concat_build(loom_low_lower_context_builder(context),
-                              lane_results, IREE_ARRAYSIZE(lane_results),
-                              mask_type, source_op->location, &concat_op));
-    return loom_low_lower_bind_value(context, plan->result,
-                                     loom_low_concat_result(concat_op));
+    loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
+        context, source_op, lane_results, IREE_ARRAYSIZE(lane_results),
+        mask_type, &low_result));
+    return loom_low_lower_bind_value(context, plan->result, low_result);
   }
 
   IREE_ASSERT_EQ(plan->condition_kind,
@@ -2131,18 +2104,8 @@ iree_status_t loom_amdgpu_lower_select(
           &select_op));
       lane_results[i] = loom_value_slice_get(loom_low_op_results(select_op), 0);
     }
-    if (lane_count == 1) {
-      return loom_low_lower_bind_value(context, plan->result, lane_results[0]);
-    }
-    loom_type_t result_type = loom_type_none();
-    IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-        context, source_op, plan->result, &result_type));
-    loom_op_t* concat_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_concat_build(
-        loom_low_lower_context_builder(context), lane_results, lane_count,
-        result_type, source_op->location, &concat_op));
-    return loom_low_lower_bind_value(context, plan->result,
-                                     loom_low_concat_result(concat_op));
+    return loom_amdgpu_bind_low_register_range(context, source_op, plan->result,
+                                               lane_results, lane_count);
   }
 
   loom_type_t lane_type = loom_type_none();
@@ -2213,17 +2176,11 @@ iree_status_t loom_amdgpu_lower_select(
     lane_results[i] = loom_value_slice_get(loom_low_op_results(lane_op), 0);
   }
 
-  if (lane_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, lane_results[0]);
-  }
-
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_make_vgpr_range_type(context, lane_count, &result_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lane_results, lane_count,
-      result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, plan->result,
-                                   loom_low_concat_result(concat_op));
+  loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
+      context, source_op, lane_results, lane_count, result_type, &low_result));
+  return loom_low_lower_bind_value(context, plan->result, low_result);
 }

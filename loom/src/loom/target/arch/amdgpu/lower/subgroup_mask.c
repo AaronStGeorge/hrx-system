@@ -277,13 +277,11 @@ static iree_status_t loom_amdgpu_bind_subgroup_lane_mask_result(
       IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_range_type(
           context, /*unit_count=*/2, &source_mask_type));
       loom_value_id_t zero_extended_halves[] = {low_half, zero_high};
-      loom_op_t* concat_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_concat_build(
-          loom_low_lower_context_builder(context), zero_extended_halves,
-          IREE_ARRAYSIZE(zero_extended_halves), source_mask_type,
-          source_op->location, &concat_op));
-      return loom_low_lower_bind_value(context, source_mask,
-                                       loom_low_concat_result(concat_op));
+      loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_build_low_register_range(
+          context, source_op, zero_extended_halves,
+          IREE_ARRAYSIZE(zero_extended_halves), source_mask_type, &low_result));
+      return loom_low_lower_bind_value(context, source_mask, low_result);
     }
     return loom_low_lower_bind_value(context, source_mask, low_mask);
   }
@@ -319,12 +317,9 @@ static iree_status_t loom_amdgpu_emit_subgroup_zero_lane_mask(
   loom_type_t mask_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_make_sgpr_range_type(context, /*unit_count=*/2, &mask_type));
-  loom_op_t* concat_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), zero_halves,
-      IREE_ARRAYSIZE(zero_halves), mask_type, source_op->location, &concat_op));
-  *out_mask = loom_low_concat_result(concat_op);
-  return iree_ok_status();
+  return loom_amdgpu_build_low_register_range(context, source_op, zero_halves,
+                                              IREE_ARRAYSIZE(zero_halves),
+                                              mask_type, out_mask);
 }
 
 static iree_status_t loom_amdgpu_emit_subgroup_resolved_mask_compare(
