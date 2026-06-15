@@ -161,6 +161,85 @@
       ]
     },
     {
+      "name": "plans shared memory tile recipe",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/shared_memory_tile.loom",
+          "--dry-run"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "bench_shared_memory_tile_reverse",
+          "case_shared_memory_tile_reverse"
+        ]
+      }
+    },
+    {
+      "name": "preserves shared memory tile source shape",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "{srcdir}/shared_memory_tile.loom",
+          "--pass=canonicalize",
+          "--output={tmp}/shared_memory_tile.loom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/shared_memory_tile.loom",
+          "contains": [
+            "buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup}",
+            "vector.store %loaded, %scratch_view[%lane] : vector<1xi32>, view<64xi32, #dense>",
+            "kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}",
+            "vector.load %scratch_view[%reverse_lane] : view<64xi32, #dense> -> vector<1xi32>"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "compiles shared memory tile to AMDGPU HAL artifact",
+      "run": {
+        "tool": "loom-compile",
+        "args": [
+          "{srcdir}/shared_memory_tile.loom",
+          "--backend=amdgpu-hal",
+          "--target=gfx11-generic",
+          "--output={tmp}/shared_memory_tile.vmfb",
+          "--emit-target-artifact={tmp}/shared_memory_tile.hsaco",
+          "--artifact-manifest=summary",
+          "--compile-report=summary"
+        ]
+      },
+      "stderr": {
+        "contains": {
+          "unordered": [
+            "\"target_key\":\"gfx11-generic\"",
+            "\"executable_format\":\"amdgcn-amd-amdhsa--gfx11-generic\"",
+            "\"status\":\"OK\"",
+            "\"local_memory_bytes\":256",
+            "\"local_memory_count\":2",
+            "\"barrier_count\":1"
+          ]
+        }
+      },
+      "files": [
+        {
+          "path": "{tmp}/shared_memory_tile.vmfb",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/shared_memory_tile.hsaco",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/shared_memory_tile.hsaco.manifest.json",
+          "non_empty": true
+        }
+      ]
+    },
+    {
       "name": "plans packed field contracts recipe",
       "run": {
         "tool": "iree-benchmark-loom",

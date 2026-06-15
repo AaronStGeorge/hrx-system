@@ -33,6 +33,7 @@ belong to `iree-benchmark-loom` flags or embedding APIs.
 | Benchmark slices | `mlp_down_projection_residual_bf16.loom` has an anonymous full sweep plus named decode/full rows with assignment dictionaries. |
 | HIP C++ porting motifs | `hip/README.md` maps HIP/CUDA kernel habits to Loom source spellings, proof commands, diagnostics, and report queries. |
 | Packed field contracts | `hip/packed_field_contracts.loom` shows q2/q3/q4/q5/q6-style fields as explicit storage/decode/repack contracts instead of fake scalar element types. |
+| HIP shared memory tile | `hip/shared_memory_tile.loom` stages a 64-lane i32 tile through workgroup memory, synchronizes, and reads a reversed lane so correctness depends on LDS traffic. |
 
 ## FFN q6/q8 Gate-Up SwiGLU
 
