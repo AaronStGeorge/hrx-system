@@ -203,7 +203,6 @@ void iree_hal_amdgpu_profile_metadata_initialize(
     iree_hal_amdgpu_profile_metadata_registry_t* out_registry) {
   memset(out_registry, 0, sizeof(*out_registry));
   out_registry->host_allocator = host_allocator;
-  out_registry->next_executable_id = 1;
   out_registry->next_command_buffer_id = 1;
   iree_slim_mutex_initialize(&out_registry->mutex);
 }
@@ -450,9 +449,11 @@ iree_status_t iree_hal_amdgpu_profile_metadata_register_executable(
     iree_host_size_t function_count,
     const iree_hal_executable_function_info_t* function_infos,
     const iree_host_size_t* function_parameter_offsets,
-    const uint64_t code_object_hash[2], uint64_t* out_executable_id) {
-  IREE_ASSERT_ARGUMENT(out_executable_id);
-  *out_executable_id = 0;
+    const uint64_t code_object_hash[2], uint64_t executable_id) {
+  if (IREE_UNLIKELY(executable_id == 0)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU executable id is required");
+  }
   if (IREE_UNLIKELY(function_count > 0 &&
                     (!function_infos || !function_parameter_offsets))) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -474,8 +475,14 @@ iree_status_t iree_hal_amdgpu_profile_metadata_register_executable(
 
   iree_slim_mutex_lock(&registry->mutex);
 
-  const uint64_t executable_id = registry->next_executable_id;
   iree_status_t status = iree_ok_status();
+  if (IREE_UNLIKELY(iree_hal_amdgpu_profile_metadata_has_executable_locked(
+          registry, executable_id))) {
+    status = iree_make_status(IREE_STATUS_ALREADY_EXISTS,
+                              "profile executable metadata already registered "
+                              "for executable %" PRIu64,
+                              executable_id);
+  }
 
   if (iree_status_is_ok(status) && registry->executable_record_count + 1 >
                                        registry->executable_record_capacity) {
@@ -532,8 +539,6 @@ iree_status_t iree_hal_amdgpu_profile_metadata_register_executable(
           record;
       registry->executable_function_record_data_length =
           new_function_data_length;
-      ++registry->next_executable_id;
-      *out_executable_id = executable_id;
     }
   }
 
@@ -551,7 +556,7 @@ iree_status_t iree_hal_amdgpu_profile_metadata_register_executable_artifacts(
         code_object_load_infos) {
   if (IREE_UNLIKELY(executable_id == 0)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "profile executable id is required");
+                            "AMDGPU executable id is required");
   }
   if (IREE_UNLIKELY(code_object_load_info_count > UINT32_MAX)) {
     return iree_make_status(

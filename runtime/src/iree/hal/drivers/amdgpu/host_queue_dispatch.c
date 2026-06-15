@@ -577,7 +577,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_direct_dispatch(
   uint64_t executable_id = 0;
   bool should_profile_dispatch = false;
   if (queue->profiling.dispatch_profiling_enabled) {
-    executable_id = iree_hal_amdgpu_executable_profile_id(executable);
+    executable_id = iree_hal_amdgpu_executable_id(executable);
     should_profile_dispatch =
         iree_hal_amdgpu_host_queue_should_profile_dispatch(queue, executable_id,
                                                            export_ordinal);
@@ -680,7 +680,7 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_indirect_dispatch(
   uint64_t executable_id = 0;
   bool should_profile_dispatch = false;
   if (queue->profiling.dispatch_profiling_enabled) {
-    executable_id = iree_hal_amdgpu_executable_profile_id(executable);
+    executable_id = iree_hal_amdgpu_executable_id(executable);
     should_profile_dispatch =
         iree_hal_amdgpu_host_queue_should_profile_dispatch(queue, executable_id,
                                                            export_ordinal);

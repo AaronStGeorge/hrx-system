@@ -3313,10 +3313,9 @@ static iree_status_t iree_hal_amdgpu_pm4_command_buffer_record_dispatch(
       iree_hal_executable_function_index(export_ordinal);
   iree_status_t status =
       iree_hal_amdgpu_pm4_command_buffer_append_dispatch_record(
-          command_buffer, descriptor,
-          iree_hal_amdgpu_executable_profile_id(executable), command_index,
-          function_index, config, constants, bindings, record_flags,
-          barrier_acquire_scope, barrier_release_scope);
+          command_buffer, descriptor, iree_hal_amdgpu_executable_id(executable),
+          command_index, function_index, config, constants, bindings,
+          record_flags, barrier_acquire_scope, barrier_release_scope);
   if (iree_status_is_ok(status)) {
     ++command_buffer->record_command_count;
   }

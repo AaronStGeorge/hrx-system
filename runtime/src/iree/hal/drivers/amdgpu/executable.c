@@ -913,10 +913,10 @@ typedef struct iree_hal_amdgpu_executable_t {
   // Loaded HSA executable with a code object for each device.
   hsa_executable_t handle;
 
-  // Producer-local profile executable id assigned at creation.
-  uint64_t profile_id;
+  // Logical-device-local executable identifier assigned at creation.
+  uint64_t executable_id;
   // Stable content hash for the exact loaded HSACO/code-object bytes.
-  uint64_t profile_code_object_hash[2];
+  uint64_t code_object_hash[2];
   // Provider-neutral metadata borrowing from |handle|'s loaded code object.
   iree_hal_amdgpu_executable_metadata_t* metadata;
 
@@ -1313,9 +1313,9 @@ static iree_status_t iree_hal_amdgpu_executable_register_profile_artifacts(
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_profile_metadata_register_executable_artifacts(
-        profile_metadata, executable->profile_id, code_object_data,
-        executable->profile_code_object_hash,
-        executable->loaded_physical_device_count, load_infos);
+        profile_metadata, executable->executable_id, code_object_data,
+        executable->code_object_hash, executable->loaded_physical_device_count,
+        load_infos);
   }
 
   iree_allocator_free(executable->host_allocator, load_infos);
@@ -1331,8 +1331,8 @@ static iree_status_t iree_hal_amdgpu_executable_register_profile_metadata(
     iree_hal_amdgpu_executable_t* executable) {
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_profile_metadata_register_executable(
       profile_metadata, executable->kernel_count, executable->export_infos,
-      executable->export_parameter_offsets,
-      executable->profile_code_object_hash, &executable->profile_id));
+      executable->export_parameter_offsets, executable->code_object_hash,
+      executable->executable_id));
 
   // Executable trace profiling may begin after executable preparation. Preserve
   // exact code-object bytes and loader load ranges while |code_object_data| is
@@ -1525,13 +1525,17 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
     const iree_hal_amdgpu_queue_affinity_physical_device_set_t*
         physical_devices,
     const iree_hal_executable_params_t* executable_params,
-    const iree_hal_amdgpu_device_limits_t* limits,
+    uint64_t executable_id, const iree_hal_amdgpu_device_limits_t* limits,
     const iree_hal_amdgpu_feedback_state_t* feedback_state,
     const iree_hal_amdgpu_asan_state_t* asan_state,
     hsa_agent_t any_device_agent, iree_hal_amdgpu_gfxip_version_t gfxip_version,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable) {
   *out_executable = NULL;
+  if (IREE_UNLIKELY(executable_id == 0)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU executable id is required");
+  }
 
   iree_const_byte_span_t code_object_data = executable_params->executable_data;
   iree_hal_amdgpu_hsaco_metadata_t hsaco_metadata = {0};
@@ -1551,8 +1555,9 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
         metadata_counts.export_count, host_allocator, &executable);
   }
   if (iree_status_is_ok(status)) {
+    executable->executable_id = executable_id;
     iree_hal_amdgpu_profile_metadata_hash_code_object(
-        code_object_data, executable->profile_code_object_hash);
+        code_object_data, executable->code_object_hash);
   }
 
   // Load executable and register it with selected GPU agents.
@@ -1674,7 +1679,7 @@ iree_status_t iree_hal_amdgpu_executable_create(
     iree_hal_device_t* device, const iree_hal_amdgpu_libhsa_t* libhsa,
     const iree_hal_amdgpu_topology_t* topology,
     const iree_hal_executable_params_t* executable_params,
-    iree_hal_amdgpu_feedback_state_t* feedback_state,
+    uint64_t executable_id, iree_hal_amdgpu_feedback_state_t* feedback_state,
     iree_hal_amdgpu_asan_state_t* asan_state,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable) {
@@ -1684,6 +1689,11 @@ iree_status_t iree_hal_amdgpu_executable_create(
   *out_executable = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
 
+  if (IREE_UNLIKELY(executable_id == 0)) {
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(
+        z0, iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                             "AMDGPU executable id is required"));
+  }
   if (IREE_UNLIKELY(topology->gpu_agent_count == 0)) {
     IREE_RETURN_AND_END_ZONE_IF_ERROR(
         z0, iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1731,9 +1741,9 @@ iree_status_t iree_hal_amdgpu_executable_create(
       agent_isa_target.target_id.version;
 
   iree_status_t status = iree_hal_amdgpu_executable_create_from_raw_hsaco(
-      device, libhsa, topology, &physical_devices, executable_params, &limits,
-      feedback_state, asan_state, any_device_agent, gfxip_version,
-      profile_metadata, host_allocator, out_executable);
+      device, libhsa, topology, &physical_devices, executable_params,
+      executable_id, &limits, feedback_state, asan_state, any_device_agent,
+      gfxip_version, profile_metadata, host_allocator, out_executable);
   if (!iree_status_is_ok(status)) {
     iree_hal_executable_release(*out_executable);
     *out_executable = NULL;
@@ -1742,11 +1752,10 @@ iree_status_t iree_hal_amdgpu_executable_create(
   return status;
 }
 
-uint64_t iree_hal_amdgpu_executable_profile_id(
-    iree_hal_executable_t* base_executable) {
+uint64_t iree_hal_amdgpu_executable_id(iree_hal_executable_t* base_executable) {
   iree_hal_amdgpu_executable_t* executable =
       iree_hal_amdgpu_executable_cast(base_executable);
-  return executable->profile_id;
+  return executable->executable_id;
 }
 
 static void iree_hal_amdgpu_executable_destroy(

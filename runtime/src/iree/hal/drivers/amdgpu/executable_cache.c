@@ -7,6 +7,7 @@
 #include "iree/hal/drivers/amdgpu/executable_cache.h"
 
 #include "iree/hal/drivers/amdgpu/executable.h"
+#include "iree/hal/drivers/amdgpu/logical_device.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 
 //===----------------------------------------------------------------------===//
@@ -134,9 +135,12 @@ static iree_status_t iree_hal_amdgpu_executable_cache_prepare_executable(
     iree_hal_executable_t** out_executable) {
   iree_hal_amdgpu_executable_cache_t* executable_cache =
       iree_hal_amdgpu_executable_cache_cast(base_executable_cache);
+  uint64_t executable_id = 0;
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_logical_device_allocate_executable_id(
+      executable_cache->device, &executable_id));
   return iree_hal_amdgpu_executable_create(
       executable_cache->device, executable_cache->libhsa,
-      executable_cache->topology, executable_params,
+      executable_cache->topology, executable_params, executable_id,
       executable_cache->feedback_state, executable_cache->asan_state,
       executable_cache->profile_metadata, executable_cache->host_allocator,
       out_executable);

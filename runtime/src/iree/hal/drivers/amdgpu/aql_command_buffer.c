@@ -2250,7 +2250,7 @@ static void iree_hal_amdgpu_aql_command_buffer_initialize_dispatch_command(
       plan->kernel_args->group_segment_size +
       inputs->config.dynamic_workgroup_local_memory;
   dispatch_command->executable_id =
-      iree_hal_amdgpu_executable_profile_id(inputs->executable);
+      iree_hal_amdgpu_executable_id(inputs->executable);
 }
 
 static iree_status_t

@@ -579,6 +579,34 @@ static void iree_hal_amdgpu_logical_device_reset_profile_options(
   logical_device->profiling.options = (iree_hal_device_profiling_options_t){0};
 }
 
+iree_status_t iree_hal_amdgpu_logical_device_allocate_executable_id(
+    iree_hal_device_t* base_device, uint64_t* out_executable_id) {
+  IREE_ASSERT_ARGUMENT(out_executable_id);
+  *out_executable_id = 0;
+  iree_hal_amdgpu_logical_device_t* logical_device =
+      iree_hal_amdgpu_logical_device_cast(base_device);
+
+  uint64_t executable_id = iree_atomic_load(&logical_device->next_executable_id,
+                                            iree_memory_order_relaxed);
+  while (executable_id != 0 && executable_id != UINT64_MAX) {
+    uint64_t next_executable_id = executable_id + 1;
+    if (iree_atomic_compare_exchange_weak(&logical_device->next_executable_id,
+                                          &executable_id, next_executable_id,
+                                          iree_memory_order_relaxed,
+                                          iree_memory_order_relaxed)) {
+      *out_executable_id = executable_id;
+      return iree_ok_status();
+    }
+  }
+  if (IREE_UNLIKELY(executable_id == 0)) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "AMDGPU executable id allocator is invalid");
+  } else {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU executable id space exhausted");
+  }
+}
+
 bool iree_hal_amdgpu_logical_device_should_profile_dispatch(
     iree_hal_amdgpu_logical_device_t* logical_device, uint64_t executable_id,
     uint32_t export_ordinal, uint64_t command_buffer_id, uint32_t command_index,
@@ -1573,6 +1601,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_allocate_storage(
   logical_device->host_allocator = host_allocator;
   logical_device->failure_status = IREE_ATOMIC_VAR_INIT(0);
   iree_atomic_store(&logical_device->epoch, 0, iree_memory_order_relaxed);
+  iree_atomic_store(&logical_device->next_executable_id, 1,
+                    iree_memory_order_relaxed);
   logical_device->next_profile_session_id = 1;
   iree_hal_amdgpu_profile_metadata_initialize(
       host_allocator, &logical_device->profile_metadata);
