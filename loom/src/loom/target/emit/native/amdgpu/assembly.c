@@ -2737,6 +2737,22 @@ static iree_status_t loom_amdgpu_append_vopd_fmamk_component(
   return loom_amdgpu_append_operand(&component_context, 1);
 }
 
+static iree_status_t loom_amdgpu_append_vopd_binary_component(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_packet_view_t* packet, const char* mnemonic) {
+  loom_native_assembly_packet_context_t component_context = *context;
+  component_context.packet = packet;
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, mnemonic));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(&component_context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(&component_context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return loom_amdgpu_append_operand(&component_context, 1);
+}
+
 static iree_status_t loom_amdgpu_append_vopd_mov_component(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_packet_view_t* packet) {
@@ -2762,6 +2778,15 @@ static iree_status_t loom_amdgpu_append_vopd_component(
     case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
       return loom_amdgpu_append_vopd_fmamk_component(context, packet,
                                                      literal_u32);
+    case LOOM_AMDGPU_VOPD_OP_MUL_F32:
+      return loom_amdgpu_append_vopd_binary_component(context, packet,
+                                                      "v_dual_mul_f32");
+    case LOOM_AMDGPU_VOPD_OP_ADD_F32:
+      return loom_amdgpu_append_vopd_binary_component(context, packet,
+                                                      "v_dual_add_f32");
+    case LOOM_AMDGPU_VOPD_OP_SUB_F32:
+      return loom_amdgpu_append_vopd_binary_component(context, packet,
+                                                      "v_dual_sub_f32");
     case LOOM_AMDGPU_VOPD_OP_MOV_B32:
       return loom_amdgpu_append_vopd_mov_component(context, packet);
     default:
@@ -2775,16 +2800,6 @@ static iree_status_t loom_amdgpu_append_vopd_component(
 static iree_status_t loom_amdgpu_append_vopd_pair_packet(
     const loom_native_assembly_packet_context_t* context,
     const loom_amdgpu_vopd_pair_t* pair) {
-  if (pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32) {
-    iree_string_view_t reason = loom_amdgpu_vopd_pair_reason_name(pair->reason);
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU assembly VOPD pair reason '%.*s' is not "
-                            "supported",
-                            (int)reason.size, reason.data);
-  }
   loom_low_packet_view_t second = {0};
   IREE_RETURN_IF_ERROR(
       loom_low_packet_view_at(context->schedule, context->allocation,

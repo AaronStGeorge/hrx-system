@@ -37,8 +37,14 @@ extern "C" {
 #define LOOM_AMDGPU_VOPD_OP_FMAAK_F32 UINT16_C(1)
 // Component opcode for v_fmamk_f32 in a VOPD X/Y slot.
 #define LOOM_AMDGPU_VOPD_OP_FMAMK_F32 UINT16_C(2)
+// Component opcode for v_mul_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_MUL_F32 UINT16_C(3)
+// Component opcode for v_add_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_ADD_F32 UINT16_C(4)
+// Component opcode for v_sub_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_SUB_F32 UINT16_C(5)
 // Component opcode for v_mov_b32 in a VOPD X/Y slot.
-#define LOOM_AMDGPU_VOPD_OP_MOV_B32 UINT16_C(3)
+#define LOOM_AMDGPU_VOPD_OP_MOV_B32 UINT16_C(8)
 
 typedef enum loom_amdgpu_vopd_packet_role_e {
   // Packet is not part of a VOPD pair.
@@ -58,9 +64,15 @@ typedef enum loom_amdgpu_vopd_pair_reason_e {
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 = 2,
   // Two independent v_fmamk_f32 packets were fused into v_dual_fmamk_f32.
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32 = 3,
+  // Two independent v_mul_f32 packets were fused into v_dual_mul_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MUL_F32 = 4,
+  // Two independent v_add_f32 packets were fused into v_dual_add_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_ADD_F32 = 5,
+  // Two independent v_sub_f32 packets were fused into v_dual_sub_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_SUB_F32 = 6,
   // Two independent inline-source v_mov_b32 packets were fused into
   // v_dual_mov_b32.
-  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32 = 4,
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32 = 7,
 } loom_amdgpu_vopd_pair_reason_t;
 
 typedef enum loom_amdgpu_vopd_rejection_reason_e {

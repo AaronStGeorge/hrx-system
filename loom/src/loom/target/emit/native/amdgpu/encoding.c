@@ -1603,6 +1603,44 @@ static iree_status_t loom_amdgpu_encode_vopd_literal_fma_component(
   return loom_amdgpu_read_immediate_u32(state, packet, 0, out_literal_u32);
 }
 
+static iree_status_t loom_amdgpu_encode_vopd_binary_vgpr_component(
+    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet,
+    loom_amdgpu_encoding_vopdxy_fields_t* fields,
+    loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
+    loom_amdgpu_vopd_component_slot_t slot) {
+  loom_amdgpu_vopd_component_fields_t slot_fields =
+      loom_amdgpu_vopd_component_fields_for_slot(fields, slot);
+  *slot_fields.vdst = 0;
+  *slot_fields.src0 = 0;
+  *slot_fields.vsrc1 = 0;
+  *out_flags = LOOM_AMDGPU_VOPD_PAIR_FLAG_NONE;
+  *out_literal_u32 = 0;
+
+  const loom_op_t* op = packet->node->op;
+  if (op->result_count != 1 || op->operand_count != 2 ||
+      packet->descriptor->immediate_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU VOPD binary component has unexpected "
+                            "operand shape");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_packet_result_vgpr(state, packet, 0, slot_fields.vdst));
+
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  const loom_low_allocation_assignment_t* src0_assignment =
+      loom_amdgpu_map_assignment(state->allocation, operands[0]);
+  uint16_t src0_vgpr = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_vgpr(
+      state->allocation, src0_assignment, &src0_vgpr));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_encode_vopd_vgpr_src0(state, src0_vgpr, slot_fields.src0));
+
+  const loom_low_allocation_assignment_t* vsrc1_assignment =
+      loom_amdgpu_map_assignment(state->allocation, operands[1]);
+  return loom_amdgpu_assignment_vgpr(state->allocation, vsrc1_assignment,
+                                     slot_fields.vsrc1);
+}
+
 static iree_status_t loom_amdgpu_encode_vopd_mov_component(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet,
     loom_amdgpu_encoding_vopdxy_fields_t* fields,
@@ -1610,7 +1648,6 @@ static iree_status_t loom_amdgpu_encode_vopd_mov_component(
     loom_amdgpu_vopd_component_slot_t slot) {
   loom_amdgpu_vopd_component_fields_t slot_fields =
       loom_amdgpu_vopd_component_fields_for_slot(fields, slot);
-  *slot_fields.op = 8;
   *slot_fields.vdst = 0;
   *slot_fields.src0 = 0;
   *slot_fields.vsrc1 = 0;
@@ -1654,6 +1691,11 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
     case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
       return loom_amdgpu_encode_vopd_literal_fma_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
+    case LOOM_AMDGPU_VOPD_OP_MUL_F32:
+    case LOOM_AMDGPU_VOPD_OP_ADD_F32:
+    case LOOM_AMDGPU_VOPD_OP_SUB_F32:
+      return loom_amdgpu_encode_vopd_binary_vgpr_component(
+          state, packet, fields, out_flags, out_literal_u32, slot);
     case LOOM_AMDGPU_VOPD_OP_MOV_B32:
       return loom_amdgpu_encode_vopd_mov_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
@@ -1668,17 +1710,6 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
 static iree_status_t loom_amdgpu_encode_vopd_pair(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* first,
     const loom_amdgpu_vopd_pair_t* pair) {
-  if (pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAMK_F32 &&
-      pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32) {
-    iree_string_view_t reason = loom_amdgpu_vopd_pair_reason_name(pair->reason);
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU native encoding VOPD pair reason '%.*s' "
-                            "is not supported",
-                            (int)reason.size, reason.data);
-  }
-
   loom_low_packet_view_t second = {0};
   IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
       state->schedule, state->allocation, pair->second_packet_index, &second));
