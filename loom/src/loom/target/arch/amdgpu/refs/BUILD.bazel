@@ -15,8 +15,8 @@ load(
 load("//loom/build_tools/amdgpu/isa_xml:archive.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_generated_cc_library",
     "loom_low_descriptor_data_archive",
-    "loom_target_table_cc_library",
 )
 
 package(
@@ -80,10 +80,13 @@ loom_low_descriptor_data_archive(
     urls = AMDGPU_ISA_XML_ARCHIVE["urls"],
 )
 
-loom_target_table_cc_library(
+loom_generated_cc_library(
     name = "target_refs",
+    srcs = ["target_refs.c"],
     args = ["--public-header=loom/target/arch/amdgpu/refs/target_refs.h"] +
            loom_amdgpu_selected_descriptor_set_generator_args(_AMDGPU_TARGET_REF_ARGS),
+    generated_hdr_flags = ["--header"],
+    generated_hdrs = ["target_refs.h"],
     generator = _AMDGPU_TARGET_REF_GENERATOR,
     inputs = [
         "@amdgpu_isa_xml//:amdgpu_isa_cdna3.xml",
@@ -92,6 +95,7 @@ loom_target_table_cc_library(
         "@amdgpu_isa_xml//:amdgpu_isa_rdna3_5.xml",
         "@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml",
     ],
+    source = "target_refs_data.c",
     visibility = _AMDGPU_TARGET_REFS_VISIBILITY,
     deps = [
         "//loom/src/loom/codegen/low:descriptors",
