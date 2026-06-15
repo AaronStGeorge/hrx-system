@@ -123,6 +123,22 @@ extern "C" {
 // Stable low.live_in source ID for the M0 special register.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE_ID UINT64_C(0x0667779E351A470C)
 
+// Stable source kinds carried by AMDGPU ABI low.live_in ops.
+typedef enum loom_amdgpu_hal_kernel_abi_source_kind_e {
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_UNKNOWN = 0,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_KERNARG_SEGMENT_PTR = 1,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_DISPATCH_PTR = 2,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_X = 3,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Y = 4,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKGROUP_ID_Z = 5,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_X = 6,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Y = 7,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_Z = 8,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XY = 9,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_WORKITEM_ID_PACKED_XYZ = 10,
+  LOOM_AMDGPU_HAL_KERNEL_ABI_SOURCE_M0 = 11,
+} loom_amdgpu_hal_kernel_abi_source_kind_t;
+
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
   // Defining low.resource op for diagnostics and cross-checks.
   const loom_op_t* resource_op;
@@ -235,6 +251,12 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_attr(
     const loom_module_t* module, const loom_op_t* function_op,
     loom_amdgpu_hal_kernel_abi_layout_t* out_layout,
     iree_arena_allocator_t* arena);
+
+// Returns the ABI source kind for |value_id| when it is defined by an AMDGPU
+// low.live_in op, or UNKNOWN otherwise.
+loom_amdgpu_hal_kernel_abi_source_kind_t
+loom_amdgpu_hal_kernel_abi_live_in_source_kind(const loom_module_t* module,
+                                               loom_value_id_t value_id);
 
 // Returns true if |value_id| is defined by the kernarg segment pointer live-in.
 bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
