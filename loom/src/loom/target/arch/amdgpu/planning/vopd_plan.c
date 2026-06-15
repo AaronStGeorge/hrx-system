@@ -255,6 +255,32 @@ static const loom_amdgpu_vopd_component_rule_t kVopdComponentRules[] = {
                     LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_BINARY,
             },
     },
+    {
+        .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32,
+        .info =
+            {
+                .op = LOOM_AMDGPU_VOPD_OP_ADD_U32,
+                .op_name = IREE_SVL("add_u32"),
+                .assembly_mnemonic = IREE_SVL("v_dual_add_nc_u32"),
+                .form = LOOM_AMDGPU_VOPD_COMPONENT_FORM_BINARY_VGPR,
+                .lane_mask = LOOM_AMDGPU_VOPD_COMPONENT_LANE_Y,
+                .source_register_mask =
+                    LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_BINARY,
+            },
+    },
+    {
+        .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32,
+        .info =
+            {
+                .op = LOOM_AMDGPU_VOPD_OP_LSHLREV_B32,
+                .op_name = IREE_SVL("lshlrev_b32"),
+                .assembly_mnemonic = IREE_SVL("v_dual_lshlrev_b32"),
+                .form = LOOM_AMDGPU_VOPD_COMPONENT_FORM_BINARY_VGPR,
+                .lane_mask = LOOM_AMDGPU_VOPD_COMPONENT_LANE_Y,
+                .source_register_mask =
+                    LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_BINARY,
+            },
+    },
 };
 
 const loom_amdgpu_vopd_component_info_t* loom_amdgpu_vopd_component_info_for_op(

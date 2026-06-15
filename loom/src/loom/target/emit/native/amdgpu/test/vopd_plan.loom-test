@@ -69,6 +69,21 @@ low.func.def target(@gfx11_target) @gfx11_vopd_plan_mixed_binary_f32_pair(%a0: r
 
 // ====
 
+// RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_y_only_integer_pairs strategy=source fixed=%a0:physical_register:0:1 fixed=%b0:physical_register:1:1 fixed=%i0:physical_register:2:1 fixed=%i1:physical_register:3:1 fixed=%product:physical_register:4:1 fixed=%sum:physical_register:5:1 fixed=%scale:physical_register:6:1 fixed=%shifted:physical_register:7:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_plan_y_only_integer_pairs(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %i0: reg<amdgpu.vgpr>, %i1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %product = v_mul_f32 %a0, %b0
+  %sum = v_add_u32 %i0, %i1
+  %scale = v_add_f32 %a0, %b0
+  %shifted = v_lshlrev_b32 %i0, %i1
+  return
+}
+
+// ----
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_y_only_integer_pairs","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":2,"rejection_count":0,"packet_count":5,"pairs":[{"index":0,"reason":"mixed_components","block":0,"flags":0,"literal_u32":null,"x":{"packet":0,"node":0,"descriptor":"amdgpu.v_mul_f32","op_id":3,"op":"mul_f32","vdst":4,"src0":0,"vsrc1":1},"y":{"packet":1,"node":1,"descriptor":"amdgpu.v_add_u32","op_id":16,"op":"add_u32","vdst":5,"src0":2,"vsrc1":3}},{"index":1,"reason":"mixed_components","block":0,"flags":0,"literal_u32":null,"x":{"packet":2,"node":2,"descriptor":"amdgpu.v_add_f32","op_id":4,"op":"add_f32","vdst":6,"src0":0,"vsrc1":1},"y":{"packet":3,"node":3,"descriptor":"amdgpu.v_lshlrev_b32","op_id":17,"op":"lshlrev_b32","vdst":7,"src0":2,"vsrc1":3}}],"rejections":[],"packets":[{"index":0,"role":"first","pair":0},{"index":1,"role":"second","pair":0},{"index":2,"role":"first","pair":1},{"index":3,"role":"second","pair":1},{"index":4,"role":"none","pair":null}]}
+
+// ====
+
 // RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_mov_pair fixed=%zero:physical_register:0:1 fixed=%answer:physical_register:1:1
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_plan_mov_pair(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
