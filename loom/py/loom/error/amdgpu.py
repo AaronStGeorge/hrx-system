@@ -809,6 +809,80 @@ ERR_AMDGPU_036 = ErrorDef(
     ),
 )
 
+# ERR_AMDGPU_037: AMDGPU spill traffic storage space is unsupported.
+ERR_AMDGPU_037 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=37,
+    severity=Severity.ERROR,
+    summary="AMDGPU spill traffic storage space is unsupported.",
+    message=(
+        "AMDGPU spill lowering rejected '{op_name}' in '@{function_name}': "
+        "storage value '{storage_value_name}' reserves '{storage_space}' "
+        "storage, but spill traffic lowering supports "
+        "{supported_storage_spaces}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("storage_value_name", ParamKind.STRING),
+        ErrorParam("storage_space", ParamKind.STRING),
+        ErrorParam("supported_storage_spaces", ParamKind.STRING_LIST),
+    ),
+    fix_hint=(
+        "Use scratch or private storage for AMDGPU spill traffic, or let "
+        "target allocation materialization create the spill storage"
+    ),
+)
+
+# ERR_AMDGPU_038: AMDGPU spill traffic register type is unsupported.
+ERR_AMDGPU_038 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=38,
+    severity=Severity.ERROR,
+    summary="AMDGPU spill traffic register type is unsupported.",
+    message=(
+        "AMDGPU spill lowering rejected '{op_name}' in '@{function_name}': "
+        "value '{value_name}' has type {actual_type}, but spill traffic "
+        "lowering supports AMDGPU SGPR or VGPR register values"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Spill only values allocated in the selected AMDGPU SGPR or VGPR "
+        "descriptor register class"
+    ),
+)
+
+# ERR_AMDGPU_039: AMDGPU spill traffic storage access is out of bounds.
+ERR_AMDGPU_039 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=39,
+    severity=Severity.ERROR,
+    summary="AMDGPU spill traffic storage access is out of bounds.",
+    message=(
+        "AMDGPU spill lowering rejected '{op_name}' in '@{function_name}': "
+        "access to storage value '{storage_value_name}' starts at byte offset "
+        "{access_byte_offset} with byte length {access_byte_length}, but the "
+        "resolved storage reference has byte length {storage_byte_length}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("storage_value_name", ParamKind.STRING),
+        ErrorParam("access_byte_offset", ParamKind.I64),
+        ErrorParam("access_byte_length", ParamKind.U64),
+        ErrorParam("storage_byte_length", ParamKind.U64),
+    ),
+    fix_hint=(
+        "Use a non-negative spill/reload byte offset whose accessed range fits "
+        "inside the selected storage reservation or storage view"
+    ),
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -845,4 +919,7 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_034,
     ERR_AMDGPU_035,
     ERR_AMDGPU_036,
+    ERR_AMDGPU_037,
+    ERR_AMDGPU_038,
+    ERR_AMDGPU_039,
 )

@@ -84,11 +84,18 @@ typedef struct loom_low_emission_frame_t {
   loom_low_allocation_table_t allocation;
 } loom_low_emission_frame_t;
 
+// Summary from target structural spill-traffic lowering.
+typedef struct loom_low_emission_frame_lower_spill_traffic_result_t {
+  // Number of user-facing diagnostics emitted while lowering spill traffic.
+  uint32_t error_count;
+} loom_low_emission_frame_lower_spill_traffic_result_t;
+
 // Target callback that rewrites structural low.spill/low.reload traffic into
 // target packets before the next emission-frame scheduling/allocation round.
 typedef iree_status_t (*loom_low_emission_frame_lower_spill_traffic_fn_t)(
     void* user_data, loom_module_t* module, loom_op_t* low_func_op,
-    iree_arena_allocator_t* arena);
+    iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* arena,
+    loom_low_emission_frame_lower_spill_traffic_result_t* out_result);
 
 // Summary from target address-state materialization.
 typedef struct loom_low_emission_frame_materialize_address_state_result_t {

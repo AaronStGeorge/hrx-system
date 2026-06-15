@@ -10,15 +10,21 @@
 #include <string.h>
 
 #include "loom/codegen/low/builder.h"
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/registers.h"
 
 #define LOOM_AMDGPU_SCRATCH_SPILL_UNIT_BITS 32u
+
+static const loom_low_storage_space_set_t kLoomAmdgpuSpillStorageSpaces =
+    LOOM_LOW_STORAGE_SPACE_SET_SCRATCH | LOOM_LOW_STORAGE_SPACE_SET_PRIVATE;
 
 typedef struct loom_amdgpu_spill_descriptor_t {
   // Descriptor table row for the selected scratch packet.
@@ -58,6 +64,8 @@ typedef struct loom_amdgpu_spill_register_t {
 typedef struct loom_amdgpu_spill_lowering_context_t {
   // Module being rewritten.
   loom_module_t* module;
+  // Low function owning the spill traffic being rewritten.
+  loom_op_t* function_op;
   // Target-low descriptor set selected for this function.
   const loom_low_descriptor_set_t* descriptor_set;
   // Built fixed-segment layout for the function storage reservations.
@@ -72,6 +80,10 @@ typedef struct loom_amdgpu_spill_lowering_context_t {
   uint32_t vgpr_unit_bytes;
   // Attribute name used by scratch packet descriptors.
   loom_string_id_t offset_attr_id;
+  // Optional structured diagnostic emitter for user-authored spill traffic.
+  iree_diagnostic_emitter_t emitter;
+  // Mutable result receiving emitted diagnostic counts.
+  loom_amdgpu_spill_lowering_result_t* result;
 } loom_amdgpu_spill_lowering_context_t;
 
 static iree_status_t loom_amdgpu_spill_lowering_checked_add_u64(
@@ -224,19 +236,50 @@ static iree_status_t loom_amdgpu_spill_lowering_resolve_storage_reference(
       out_reference);
 }
 
-static iree_status_t loom_amdgpu_spill_lowering_validate_storage_space(
+static bool loom_amdgpu_spill_lowering_storage_space_supported(
     const loom_amdgpu_storage_layout_reference_t* storage_reference) {
-  switch (storage_reference->reservation.space) {
-    case LOOM_STORAGE_SPACE_PRIVATE:
-    case LOOM_STORAGE_SPACE_SCRATCH:
-      return iree_ok_status();
-    default:
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU spill lowering only supports private or scratch storage, not "
-          "%s storage",
-          loom_storage_space_name(storage_reference->reservation.space));
+  return loom_low_storage_space_set_contains(
+      kLoomAmdgpuSpillStorageSpaces, storage_reference->reservation.space);
+}
+
+static iree_status_t loom_amdgpu_spill_lowering_emit_unsupported_storage_space(
+    const loom_amdgpu_spill_lowering_context_t* context, const loom_op_t* op,
+    loom_value_id_t storage_value_id,
+    const loom_amdgpu_storage_layout_reference_t* storage_reference) {
+  const iree_string_view_t storage_space = iree_make_cstring_view(
+      loom_storage_space_name(storage_reference->reservation.space));
+  if (context->emitter.fn == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU spill lowering cannot lower storage space '%.*s'",
+        (int)storage_space.size, storage_space.data);
   }
+
+  iree_string_view_t supported_storage_space_names[LOOM_STORAGE_SPACE_COUNT_];
+  const iree_host_size_t supported_storage_space_count =
+      loom_low_storage_space_set_names(
+          kLoomAmdgpuSpillStorageSpaces,
+          IREE_ARRAYSIZE(supported_storage_space_names),
+          supported_storage_space_names);
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_function_name(
+          context->module, context->function_op)),
+      loom_param_string(loom_op_name(context->module, op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(context->module, storage_value_id)),
+      loom_param_string(storage_space),
+      loom_param_string_list(supported_storage_space_names,
+                             supported_storage_space_count),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = LOOM_ERR_AMDGPU_037,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  IREE_RETURN_IF_ERROR(iree_diagnostic_emit(context->emitter, &emission));
+  ++context->result->error_count;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_spill_lowering_resolve_access(
@@ -244,24 +287,12 @@ static iree_status_t loom_amdgpu_spill_lowering_resolve_access(
     int64_t operation_offset, uint64_t chunk_byte_offset,
     uint64_t chunk_byte_length, loom_amdgpu_spill_access_t* out_access) {
   *out_access = (loom_amdgpu_spill_access_t){0};
-  if (operation_offset < 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU spill lowering requires non-negative spill offsets");
-  }
-  uint64_t access_offset = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_checked_add_u64(
-      (uint64_t)operation_offset, chunk_byte_offset, &access_offset));
-  uint64_t access_end = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_checked_add_u64(
-      access_offset, chunk_byte_length, &access_end));
-  if (access_end > storage_reference->byte_length) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU spill lowering access range [%" PRIu64 ", %" PRIu64
-        ") exceeds storage reference size %" PRIu64,
-        access_offset, access_end, storage_reference->byte_length);
-  }
+  IREE_ASSERT(operation_offset >= 0,
+              "spill access range must be validated before chunk lowering");
+  const uint64_t access_offset = (uint64_t)operation_offset + chunk_byte_offset;
+  const uint64_t access_end = access_offset + chunk_byte_length;
+  IREE_ASSERT(access_end <= storage_reference->byte_length,
+              "spill access range must fit before chunk lowering");
 
   uint64_t absolute_offset = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_checked_add_u64(
@@ -277,6 +308,65 @@ static iree_status_t loom_amdgpu_spill_lowering_resolve_access(
   }
   out_access->storage_offset = access_offset;
   out_access->segment_offset = (int64_t)absolute_offset;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_spill_lowering_emit_out_of_bounds_access(
+    const loom_amdgpu_spill_lowering_context_t* context, const loom_op_t* op,
+    loom_value_id_t storage_value_id, int64_t access_byte_offset,
+    uint64_t access_byte_length,
+    const loom_amdgpu_storage_layout_reference_t* storage_reference) {
+  if (context->emitter.fn == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU spill lowering cannot lower out-of-bounds spill access");
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_function_name(
+          context->module, context->function_op)),
+      loom_param_string(loom_op_name(context->module, op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(context->module, storage_value_id)),
+      loom_param_i64(access_byte_offset),
+      loom_param_u64(access_byte_length),
+      loom_param_u64(storage_reference->byte_length),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = LOOM_ERR_AMDGPU_039,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  IREE_RETURN_IF_ERROR(iree_diagnostic_emit(context->emitter, &emission));
+  ++context->result->error_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_spill_lowering_validate_access_range(
+    const loom_amdgpu_spill_lowering_context_t* context, const loom_op_t* op,
+    loom_value_id_t storage_value_id,
+    const loom_amdgpu_storage_layout_reference_t* storage_reference,
+    int64_t operation_offset, uint64_t access_byte_length,
+    bool* out_supported) {
+  *out_supported = false;
+  if (operation_offset < 0) {
+    return loom_amdgpu_spill_lowering_emit_out_of_bounds_access(
+        context, op, storage_value_id, operation_offset, access_byte_length,
+        storage_reference);
+  }
+  const uint64_t access_offset = (uint64_t)operation_offset;
+  if (access_offset > UINT64_MAX - access_byte_length) {
+    return loom_amdgpu_spill_lowering_emit_out_of_bounds_access(
+        context, op, storage_value_id, (int64_t)access_offset,
+        access_byte_length, storage_reference);
+  }
+  const uint64_t access_end = access_offset + access_byte_length;
+  if (access_end > storage_reference->byte_length) {
+    return loom_amdgpu_spill_lowering_emit_out_of_bounds_access(
+        context, op, storage_value_id, (int64_t)access_offset,
+        access_byte_length, storage_reference);
+  }
+  *out_supported = true;
   return iree_ok_status();
 }
 
@@ -370,15 +460,13 @@ static iree_status_t loom_amdgpu_spill_lowering_make_register_type(
 
 static iree_status_t loom_amdgpu_spill_lowering_resolve_register_type(
     const loom_amdgpu_spill_lowering_context_t* context, loom_type_t type,
-    loom_amdgpu_spill_register_t* out_register) {
+    loom_amdgpu_spill_register_t* out_register, bool* out_supported) {
   *out_register = (loom_amdgpu_spill_register_t){0};
+  *out_supported = false;
   if (!loom_low_type_is_register(type) ||
       loom_low_register_type_descriptor_set_stable_id(type) !=
           context->descriptor_set->stable_id) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU spill lowering supports only AMDGPU SGPR or VGPR register "
-        "values");
+    return iree_ok_status();
   }
   const uint16_t class_id = loom_low_register_type_class_id(type);
   if (class_id == context->vgpr_class_id) {
@@ -391,6 +479,7 @@ static iree_status_t loom_amdgpu_spill_lowering_resolve_register_type(
         .kind = LOOM_AMDGPU_SPILL_REGISTER_KIND_VGPR,
         .unit_bytes = context->vgpr_unit_bytes,
     };
+    *out_supported = true;
     return iree_ok_status();
   }
   if (class_id == context->sgpr_class_id) {
@@ -403,12 +492,37 @@ static iree_status_t loom_amdgpu_spill_lowering_resolve_register_type(
         .kind = LOOM_AMDGPU_SPILL_REGISTER_KIND_SGPR,
         .unit_bytes = context->sgpr_unit_bytes,
     };
+    *out_supported = true;
     return iree_ok_status();
   }
-  return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
-      "AMDGPU spill lowering supports only AMDGPU SGPR or VGPR register "
-      "values");
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_spill_lowering_emit_unsupported_register_type(
+    const loom_amdgpu_spill_lowering_context_t* context, const loom_op_t* op,
+    loom_value_id_t value_id, loom_type_t type) {
+  if (context->emitter.fn == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU spill lowering cannot lower spill value type");
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_function_name(
+          context->module, context->function_op)),
+      loom_param_string(loom_op_name(context->module, op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(context->module, value_id)),
+      loom_param_type(type),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = LOOM_ERR_AMDGPU_038,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  IREE_RETURN_IF_ERROR(iree_diagnostic_emit(context->emitter, &emission));
+  ++context->result->error_count;
+  return iree_ok_status();
 }
 
 static uint32_t loom_amdgpu_spill_lowering_register_chunk_units(
@@ -593,7 +707,7 @@ static iree_status_t loom_amdgpu_spill_lowering_initialize_register_class(
   }
   if (reg_class->alloc_unit_bits != LOOM_AMDGPU_SCRATCH_SPILL_UNIT_BITS) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU spill lowering expects 32-bit %.*s allocation units for "
         "scratch packets, but register class '%.*s' has %" PRIu16 " bits",
         (int)expected_name.size, expected_name.data, (int)class_name.size,
@@ -739,8 +853,13 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_spill(
   const loom_value_id_t value = loom_low_spill_value(op);
   const loom_type_t value_type = loom_module_value_type(context->module, value);
   loom_amdgpu_spill_register_t spill_register = {0};
+  bool register_supported = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_resolve_register_type(
-      context, value_type, &spill_register));
+      context, value_type, &spill_register, &register_supported));
+  if (!register_supported) {
+    return loom_amdgpu_spill_lowering_emit_unsupported_register_type(
+        context, op, value, value_type);
+  }
   const uint32_t unit_count = loom_low_register_type_unit_count(value_type);
   if (unit_count == 0) {
     return iree_make_status(
@@ -748,11 +867,23 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_spill(
         "AMDGPU spill lowering found a zero-unit spill value");
   }
 
+  const loom_value_id_t storage = loom_low_spill_storage(op);
   loom_amdgpu_storage_layout_reference_t storage_reference = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_resolve_storage_reference(
-      context, loom_low_spill_storage(op), &storage_reference));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_spill_lowering_validate_storage_space(&storage_reference));
+      context, storage, &storage_reference));
+  if (!loom_amdgpu_spill_lowering_storage_space_supported(&storage_reference)) {
+    return loom_amdgpu_spill_lowering_emit_unsupported_storage_space(
+        context, op, storage, &storage_reference);
+  }
+  const uint64_t access_byte_length =
+      (uint64_t)unit_count * spill_register.unit_bytes;
+  bool access_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_validate_access_range(
+      context, op, storage, &storage_reference, loom_low_spill_offset(op),
+      access_byte_length, &access_supported));
+  if (!access_supported) {
+    return iree_ok_status();
+  }
 
   loom_builder_set_before(&rewriter->builder, op);
   loom_value_id_t saved_exec = LOOM_VALUE_ID_INVALID;
@@ -784,8 +915,8 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_spill(
         context, rewriter, &spill_register, chunk_value, chunk_units,
         op->location, &chunk_value, &scratch_value_type));
     IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_store_chunk(
-        context, rewriter, loom_low_spill_storage(op), chunk_value, chunk_units,
-        &access, scratch_value_type, op->location));
+        context, rewriter, storage, chunk_value, chunk_units, &access,
+        scratch_value_type, op->location));
     chunk_start += chunk_units;
   }
   if (saved_exec != LOOM_VALUE_ID_INVALID) {
@@ -802,8 +933,13 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_reload(
   const loom_type_t result_type =
       loom_module_value_type(context->module, result);
   loom_amdgpu_spill_register_t spill_register = {0};
+  bool register_supported = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_resolve_register_type(
-      context, result_type, &spill_register));
+      context, result_type, &spill_register, &register_supported));
+  if (!register_supported) {
+    return loom_amdgpu_spill_lowering_emit_unsupported_register_type(
+        context, op, result, result_type);
+  }
   const uint32_t unit_count = loom_low_register_type_unit_count(result_type);
   if (unit_count == 0) {
     return iree_make_status(
@@ -811,11 +947,23 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_reload(
         "AMDGPU spill lowering found a zero-unit reload result");
   }
 
+  const loom_value_id_t storage = loom_low_reload_storage(op);
   loom_amdgpu_storage_layout_reference_t storage_reference = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_resolve_storage_reference(
-      context, loom_low_reload_storage(op), &storage_reference));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_spill_lowering_validate_storage_space(&storage_reference));
+      context, storage, &storage_reference));
+  if (!loom_amdgpu_spill_lowering_storage_space_supported(&storage_reference)) {
+    return loom_amdgpu_spill_lowering_emit_unsupported_storage_space(
+        context, op, storage, &storage_reference);
+  }
+  const uint64_t access_byte_length =
+      (uint64_t)unit_count * spill_register.unit_bytes;
+  bool access_supported = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_validate_access_range(
+      context, op, storage, &storage_reference, loom_low_reload_offset(op),
+      access_byte_length, &access_supported));
+  if (!access_supported) {
+    return iree_ok_status();
+  }
 
   loom_builder_set_before(&rewriter->builder, op);
   loom_value_id_t saved_exec = LOOM_VALUE_ID_INVALID;
@@ -850,8 +998,8 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_reload(
         context, &spill_register, chunk_units, result_type, &chunk_type));
     loom_value_id_t loaded_chunk = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_load_chunk(
-        context, rewriter, loom_low_reload_storage(op), chunk_units, chunk_type,
-        &access, op->location, &loaded_chunk));
+        context, rewriter, storage, chunk_units, chunk_type, &access,
+        op->location, &loaded_chunk));
     IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_materialize_loaded_value(
         context, rewriter, &spill_register, loaded_chunk, chunk_units,
         op->location, &loaded_chunks[loaded_chunk_count++]));
@@ -906,11 +1054,16 @@ static iree_status_t loom_amdgpu_spill_lowering_collect_ops(
 static iree_status_t loom_amdgpu_spill_lowering_initialize_context(
     loom_module_t* module, loom_op_t* function_op,
     const loom_low_descriptor_set_t* descriptor_set,
+    iree_diagnostic_emitter_t emitter,
+    loom_amdgpu_spill_lowering_result_t* result,
     loom_amdgpu_spill_lowering_context_t* out_context,
     iree_arena_allocator_t* scratch_arena) {
   *out_context = (loom_amdgpu_spill_lowering_context_t){
       .module = module,
+      .function_op = function_op,
       .descriptor_set = descriptor_set,
+      .emitter = emitter,
+      .result = result,
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_initialize_register_class(
       descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, IREE_SV("amdgpu.sgpr"),
@@ -929,14 +1082,17 @@ static iree_status_t loom_amdgpu_spill_lowering_initialize_context(
 iree_status_t loom_amdgpu_lower_spill_traffic(
     loom_module_t* module, loom_op_t* function_op,
     const loom_low_descriptor_set_t* descriptor_set,
+    iree_diagnostic_emitter_t emitter,
+    loom_amdgpu_spill_lowering_result_t* out_result,
     iree_arena_allocator_t* scratch_arena) {
   if (module == NULL || function_op == NULL || descriptor_set == NULL ||
-      scratch_arena == NULL) {
+      out_result == NULL || scratch_arena == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU spill lowering requires module, function, descriptor set, and "
-        "scratch arena");
+        "AMDGPU spill lowering requires module, function, descriptor set, "
+        "result, and scratch arena");
   }
+  *out_result = (loom_amdgpu_spill_lowering_result_t){0};
   loom_region_t* body = loom_low_function_body(function_op);
   if (body == NULL) {
     return iree_make_status(
@@ -965,7 +1121,8 @@ iree_status_t loom_amdgpu_lower_spill_traffic(
 
   loom_amdgpu_spill_lowering_context_t context = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_initialize_context(
-      module, function_op, descriptor_set, &context, scratch_arena));
+      module, function_op, descriptor_set, emitter, out_result, &context,
+      scratch_arena));
 
   loom_rewriter_t rewriter = {0};
   IREE_RETURN_IF_ERROR(

@@ -174,14 +174,18 @@ iree_status_t loom_low_emission_frame_build(
 }
 
 static iree_status_t loom_low_emission_frame_lower_spill_traffic(
+    const loom_low_emission_frame_options_t* frame_options,
     const loom_low_emission_frame_spill_free_options_t* options,
     loom_module_t* module, loom_op_t* low_func_op,
+    loom_low_emission_frame_lower_spill_traffic_result_t* out_result,
     iree_arena_allocator_t* arena) {
+  *out_result = (loom_low_emission_frame_lower_spill_traffic_result_t){0};
   if (options->lower_spill_traffic == NULL) {
     return iree_ok_status();
   }
-  return options->lower_spill_traffic(options->lower_spill_traffic_user_data,
-                                      module, low_func_op, arena);
+  return options->lower_spill_traffic(
+      options->lower_spill_traffic_user_data, module, low_func_op,
+      frame_options->emitter, arena, out_result);
 }
 
 static iree_status_t loom_low_emission_frame_materialize_address_state(
@@ -362,8 +366,14 @@ iree_status_t loom_low_emission_frame_build_spill_free(
         "options");
   }
 
+  loom_low_emission_frame_lower_spill_traffic_result_t spill_lowering_result = {
+      0};
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_lower_spill_traffic(
-      spill_free_options, module, low_func_op, arena));
+      frame_options, spill_free_options, module, low_func_op,
+      &spill_lowering_result, arena));
+  if (spill_lowering_result.error_count != 0) {
+    return iree_ok_status();
+  }
   iree_host_size_t iteration_count = 0;
   iree_host_size_t iteration_limit = 0;
   iree_host_size_t address_state_iteration_count = 0;
@@ -456,7 +466,11 @@ iree_status_t loom_low_emission_frame_build_spill_free(
     }
 
     IREE_RETURN_IF_ERROR(loom_low_emission_frame_lower_spill_traffic(
-        spill_free_options, module, low_func_op, arena));
+        frame_options, spill_free_options, module, low_func_op,
+        &spill_lowering_result, arena));
+    if (spill_lowering_result.error_count != 0) {
+      return iree_ok_status();
+    }
     ++iteration_count;
   }
 }

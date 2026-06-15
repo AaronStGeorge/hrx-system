@@ -235,10 +235,13 @@ loom_cc_library(
     iree::base::internal::arena
     loom::codegen::low::builder
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
     loom::codegen::low::function
+    loom::error::emitter
     loom::ir
     loom::ops::low
     loom::rewrite::rewriter
+    loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   PUBLIC
@@ -260,7 +263,9 @@ loom_cc_test(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::refs::target_refs
+    loom::testing::diagnostic_matchers
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"

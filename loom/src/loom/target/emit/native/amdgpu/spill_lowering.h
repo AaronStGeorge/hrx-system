@@ -17,11 +17,17 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct loom_amdgpu_spill_lowering_result_t {
+  // Number of user-facing diagnostics emitted while lowering spill traffic.
+  uint32_t error_count;
+} loom_amdgpu_spill_lowering_result_t;
 
 // Rewrites low.spill/low.reload in |function_op| into descriptor-backed AMDGPU
 // scratch load/store packets. The descriptor set must be the already-selected
@@ -29,6 +35,8 @@ extern "C" {
 iree_status_t loom_amdgpu_lower_spill_traffic(
     loom_module_t* module, loom_op_t* function_op,
     const loom_low_descriptor_set_t* descriptor_set,
+    iree_diagnostic_emitter_t emitter,
+    loom_amdgpu_spill_lowering_result_t* out_result,
     iree_arena_allocator_t* scratch_arena);
 
 #ifdef __cplusplus
