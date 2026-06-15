@@ -105,9 +105,11 @@ bool loom_spirv_component_type_from_numeric_format(
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ:
       *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2FNUZ:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8:
       *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV;
       return true;

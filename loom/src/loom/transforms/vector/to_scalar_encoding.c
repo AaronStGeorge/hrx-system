@@ -43,9 +43,11 @@ static bool loom_vector_to_scalar_numeric_format_to_scalar_type(
       *out_scalar_type = LOOM_SCALAR_TYPE_BF16;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ:
       *out_scalar_type = LOOM_SCALAR_TYPE_F8E4M3;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2FNUZ:
       *out_scalar_type = LOOM_SCALAR_TYPE_F8E5M2;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_I32:
@@ -135,7 +137,9 @@ static bool loom_vector_to_scalar_encoded_schema_is_supported(
               LOOM_VALUE_FACT_NUMERIC_FORMAT_F16 |
               LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16 |
               LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3 |
+              LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ |
               LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2 |
+              LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2FNUZ |
               LOOM_VALUE_FACT_NUMERIC_FORMAT_I32 |
               LOOM_VALUE_FACT_NUMERIC_FORMAT_U32 |
               LOOM_VALUE_FACT_NUMERIC_FORMAT_I16 |
@@ -154,6 +158,7 @@ static bool loom_vector_to_scalar_encoded_schema_is_supported(
                                    LOOM_VALUE_FACT_NUMERIC_FORMAT_F16 |
                                    LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16 |
                                    LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3 |
+                                   LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ |
                                    LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2)) {
     return false;
   }

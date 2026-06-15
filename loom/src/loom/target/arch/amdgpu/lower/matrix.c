@@ -296,9 +296,11 @@ static bool loom_amdgpu_matrix_format_selector_from_encoded_format(
   switch (format) {
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ:
       *out_value = LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_FP8;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2FNUZ:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8:
       *out_value = LOOM_AMDGPU_MATRIX_FORMAT_SELECTOR_BF8;
       return true;
@@ -326,6 +328,7 @@ static bool loom_amdgpu_matrix_scale_format_selector_from_encoded_format(
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN:
+    case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FNUZ:
       *out_value = LOOM_AMDGPU_MATRIX_SCALE_FORMAT_SELECTOR_FP8_E4M3;
       return true;
     default:

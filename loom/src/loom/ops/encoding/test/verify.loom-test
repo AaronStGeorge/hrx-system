@@ -96,6 +96,24 @@ func.def @physical_storage_static_params() {
 
 // ====
 
+func.def @physical_storage_fp8_fnuz_params() {
+  %layout = encoding.layout.dense : encoding<layout>
+  %schema = encoding.define #fp8_e4m3fnuz : encoding<schema>
+  %storage = encoding.define #physical_storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
+  %storage2 = encoding.define #physical_storage<layout=#dense, schema=#fp8_e5m2fnuz> : encoding<storage>
+  func.return
+}
+
+// ====
+
+func.def @matrix_operand_fp8_fnuz_formats() {
+  %e4m3 = encoding.define #matrix_operand<element_format=f8e4m3fnuz, payload_elements=8, payload_registers=2> : encoding<schema>
+  %e5m2 = encoding.define #matrix_operand<element_format=f8e5m2fnuz, payload_elements=8, payload_registers=2> : encoding<schema>
+  func.return
+}
+
+// ====
+
 func.def @physical_storage_missing_schema() {
   %layout = encoding.layout.dense : encoding<layout>
   // ERROR@+1: ENCODING/007 {encoding_name="physical_storage", param_name="schema"}

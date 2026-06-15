@@ -146,6 +146,9 @@ TEST(MatrixContractProjectionTest, ProjectsRoleLocalScaleFacts) {
   EXPECT_TRUE(iree_any_bit_set(amdgpu_request.available_flags,
                                LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED));
   EXPECT_TRUE(
+      iree_any_bit_set(amdgpu_request.available_flags,
+                       LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS));
+  EXPECT_FALSE(
       iree_any_bit_set(amdgpu_request.required_flags,
                        LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS));
 }
