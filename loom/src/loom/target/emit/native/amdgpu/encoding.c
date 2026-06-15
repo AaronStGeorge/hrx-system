@@ -2319,32 +2319,6 @@ static iree_status_t loom_amdgpu_encode_wait_states_before_packet(
   return iree_ok_status();
 }
 
-typedef iree_status_t (*loom_amdgpu_encode_structural_packet_fn_t)(
-    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet);
-
-typedef struct loom_amdgpu_encode_structural_dispatch_t {
-  // Structural op handled by this row.
-  loom_op_kind_t op_kind;
-  // Encoder for the structural packet.
-  loom_amdgpu_encode_structural_packet_fn_t encode;
-} loom_amdgpu_encode_structural_dispatch_t;
-
-static const loom_amdgpu_encode_structural_dispatch_t
-    kLoomAmdgpuEncodeStructuralDispatch[] = {
-        {LOOM_OP_LOW_LIVE_IN, loom_amdgpu_encode_live_in_packet},
-        {LOOM_OP_LOW_STORAGE_RESERVE,
-         loom_amdgpu_encode_storage_reserve_packet},
-        {LOOM_OP_LOW_STORAGE_VIEW, loom_amdgpu_encode_storage_view_packet},
-        {LOOM_OP_LOW_COPY, loom_amdgpu_encode_copy_packet},
-        {LOOM_OP_LOW_SLICE, loom_amdgpu_encode_slice_packet},
-        {LOOM_OP_LOW_CONCAT, loom_amdgpu_encode_concat_packet},
-        {LOOM_OP_LOW_STORAGE_ADDRESS,
-         loom_amdgpu_encode_storage_address_packet},
-        {LOOM_OP_LOW_BR, loom_amdgpu_encode_branch_packet},
-        {LOOM_OP_LOW_COND_BR, loom_amdgpu_encode_cond_branch_packet},
-        {LOOM_OP_LOW_RETURN, loom_amdgpu_encode_return_packet},
-};
-
 static iree_status_t loom_amdgpu_encode_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   state->packet_emitted_delay_alu = false;
@@ -2364,14 +2338,29 @@ static iree_status_t loom_amdgpu_encode_packet(
     return loom_amdgpu_update_vgpr_msb_mode_after_descriptor(state, packet);
   }
   const loom_op_t* op = packet->node->op;
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kLoomAmdgpuEncodeStructuralDispatch); ++i) {
-    const loom_amdgpu_encode_structural_dispatch_t* row =
-        &kLoomAmdgpuEncodeStructuralDispatch[i];
-    if (op->kind != row->op_kind) {
-      continue;
-    }
-    return row->encode(state, packet);
+  switch (op->kind) {
+    case LOOM_OP_LOW_LIVE_IN:
+      return loom_amdgpu_encode_live_in_packet(state, packet);
+    case LOOM_OP_LOW_STORAGE_RESERVE:
+      return loom_amdgpu_encode_storage_reserve_packet(state, packet);
+    case LOOM_OP_LOW_STORAGE_VIEW:
+      return loom_amdgpu_encode_storage_view_packet(state, packet);
+    case LOOM_OP_LOW_COPY:
+      return loom_amdgpu_encode_copy_packet(state, packet);
+    case LOOM_OP_LOW_SLICE:
+      return loom_amdgpu_encode_slice_packet(state, packet);
+    case LOOM_OP_LOW_CONCAT:
+      return loom_amdgpu_encode_concat_packet(state, packet);
+    case LOOM_OP_LOW_STORAGE_ADDRESS:
+      return loom_amdgpu_encode_storage_address_packet(state, packet);
+    case LOOM_OP_LOW_BR:
+      return loom_amdgpu_encode_branch_packet(state, packet);
+    case LOOM_OP_LOW_COND_BR:
+      return loom_amdgpu_encode_cond_branch_packet(state, packet);
+    case LOOM_OP_LOW_RETURN:
+      return loom_amdgpu_encode_return_packet(state, packet);
+    default:
+      break;
   }
   const loom_op_vtable_t* vtable = loom_op_vtable(state->schedule->module, op);
   iree_string_view_t op_name =
