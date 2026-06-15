@@ -139,7 +139,7 @@
           "name": "write-source",
           "write": {
             "path": "{tmp}/bad_terminal_status_amdgpu.loom",
-            "text": "kernel.def export(\"bad_terminal_status_kernel\") @bad_terminal_status_kernel(%n: i32) {\n  %n_idx = index.cast %n : i32 to index\n  %c1 = index.constant 1 : index\n  kernel.launch.config workgroups(%n_idx, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index\n} launch(%input_handle: buffer, %output_handle: buffer, %n: i32) {\n  %c0_bytes = index.constant 0 : offset\n  %layout = encoding.layout.dense : encoding<layout>\n  %n_idx = index.cast %n : i32 to index\n  %input = buffer.view %input_handle[%c0_bytes] : buffer -> view<[%n_idx]x2xf32, %layout>\n  %output = buffer.view %output_handle[%c0_bytes] : buffer -> view<[%n_idx]x2xf32, %layout>\n  %bx = kernel.workgroup.id<x> : index\n  %c0 = index.constant 0 : index\n  %c1 = index.constant 1 : index\n  %c2 = index.constant 2 : index\n  scf.for %i = [%c0 to %c2 step %c1] {\n    %madd = index.madd %bx, %c2, %i : index\n    %cmp = index.cmp slt, %madd, %n_idx : index\n    scf.if %cmp {\n      %load = view.load %input[%madd, %c0] : view<[%n_idx]x2xf32, %layout> -> f32\n      view.store %load, %output[%madd, %c0] : f32, view<[%n_idx]x2xf32, %layout>\n    }\n  }\n  kernel.return\n}\n"
+            "text": "kernel.def export(\"bad_terminal_status_kernel\") @bad_terminal_status_kernel() {\n  %unit = index.constant 1 : index\n  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index\n} launch(%output_handle: buffer, %lhs: i64, %rhs: i64) {\n  %c0_bytes = index.constant 0 : offset\n  %c0 = index.constant 0 : index\n  %layout = encoding.layout.dense : encoding<layout>\n  %remainder = scalar.remsi %lhs, %rhs : i64\n  %global = buffer.assume.memory_space<global> %output_handle : buffer\n  %output = buffer.view %global[%c0_bytes] : buffer -> view<1xi64, %layout>\n  view.store %remainder, %output[%c0] : i64, view<1xi64, %layout>\n  kernel.return\n}\n"
           }
         },
         {
@@ -168,10 +168,50 @@
           },
           "stderr": {
             "contains": [
-              "DOMINANCE/002",
-              "use of consumed value"
+              "AMDGPU/023",
+              "scalar_remsi.signed_i64_dynamic"
             ]
           }
+        }
+      ]
+    },
+    {
+      "name": "compiles loop index madd without destructive live-in consume",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/loop_index_madd_amdgpu.loom",
+            "text": "kernel.def export(\"loop_index_madd_kernel\") @loop_index_madd_kernel(%n: i32) {\n  %n_idx = index.cast %n : i32 to index\n  %c1 = index.constant 1 : index\n  kernel.launch.config workgroups(%n_idx, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index\n} launch(%input_handle: buffer, %output_handle: buffer, %n: i32) {\n  %c0_bytes = index.constant 0 : offset\n  %layout = encoding.layout.dense : encoding<layout>\n  %n_idx = index.cast %n : i32 to index\n  %input_global = buffer.assume.memory_space<global> %input_handle : buffer\n  %output_global = buffer.assume.memory_space<global> %output_handle : buffer\n  %input = buffer.view %input_global[%c0_bytes] : buffer -> view<[%n_idx]x2xf32, %layout>\n  %output = buffer.view %output_global[%c0_bytes] : buffer -> view<[%n_idx]x2xf32, %layout>\n  %bx = kernel.workgroup.id<x> : index\n  %c0 = index.constant 0 : index\n  %c1 = index.constant 1 : index\n  %c2 = index.constant 2 : index\n  scf.for %i = [%c0 to %c2 step %c1] {\n    %madd = index.madd %bx, %c2, %i : index\n    %cmp = index.cmp slt, %madd, %n_idx : index\n    scf.if %cmp {\n      %load = view.load %input[%madd, %c0] : view<[%n_idx]x2xf32, %layout> -> f32\n      view.store %load, %output[%madd, %c0] : f32, view<[%n_idx]x2xf32, %layout>\n    }\n  }\n  kernel.return\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/loop_index_madd_amdgpu.loom",
+              "--backend=amdgpu-hal",
+              "--target=gfx11-generic",
+              "--output={tmp}/loop_index_madd_amdgpu.hsaco",
+              "--compile-report=summary"
+            ]
+          },
+          "stderr": {
+            "contains": {
+              "unordered": [
+                "\"target_key\":\"gfx11-generic\"",
+                "\"executable_format\":\"amdgcn-amd-amdhsa--gfx11-generic\"",
+                "\"status\":\"OK\""
+              ]
+            }
+          },
+          "files": [
+            {
+              "path": "{tmp}/loop_index_madd_amdgpu.hsaco",
+              "non_empty": true
+            }
+          ]
         }
       ]
     },

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/analysis/consumption.h"
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/descriptor_traits.h"
 #include "loom/codegen/low/diagnostics.h"
@@ -167,6 +168,10 @@ typedef struct loom_low_select_operand_forms_state_t {
   const loom_low_resolved_target_t* target;
   // Scoped function facts used to match descriptor operand-form predicates.
   loom_value_fact_table_t* value_facts;
+  // Reusable consumed-value query for the currently inspected region.
+  loom_consumption_region_query_t consumption_query;
+  // True once |consumption_query| has been initialized.
+  bool consumption_query_initialized;
   // True when the pass should emit operand-form selection diagnostics.
   bool emit_operand_form_diagnostics;
   // True once this pass has rewritten at least one packet.
@@ -594,14 +599,58 @@ static bool loom_low_select_operand_form_operand_has_single_use(
   return loom_value_has_single_use(loom_module_value(module, value_id));
 }
 
-static bool loom_low_select_operand_form_can_rewrite_destructive(
-    const loom_module_t* module,
+static iree_status_t loom_low_select_operand_forms_consumption_query(
+    loom_low_select_operand_forms_state_t* state, const loom_op_t* consuming_op,
+    loom_consumption_region_query_t** out_query) {
+  *out_query = NULL;
+  if (!consuming_op->parent_block ||
+      !consuming_op->parent_block->parent_region) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "operand-form consumption query requires a consuming op in a region");
+  }
+  const loom_region_t* region = consuming_op->parent_block->parent_region;
+  if (!state->consumption_query_initialized ||
+      state->consumption_query.region != region) {
+    IREE_RETURN_IF_ERROR(loom_consumption_region_query_initialize(
+        state->module, region, state->pass->arena, &state->consumption_query));
+    state->consumption_query_initialized = true;
+  }
+  *out_query = &state->consumption_query;
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_low_select_operand_form_operand_has_dynamic_use_after_consume(
+    loom_low_select_operand_forms_state_t* state, const loom_op_t* consuming_op,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    uint16_t operand_index, bool* out_has_dynamic_use_after_consume) {
+  *out_has_dynamic_use_after_consume = false;
+  IREE_ASSERT(operand_index < operand_count);
+  const loom_value_id_t value_id = operands[operand_index];
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      value_id >= state->module->values.count) {
+    return iree_ok_status();
+  }
+  loom_consumption_region_query_t* query = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_select_operand_forms_consumption_query(
+      state, consuming_op, &query));
+  loom_consumption_use_t use = {0};
+  return loom_consumption_find_use_after(query, consuming_op, value_id, &use,
+                                         out_has_dynamic_use_after_consume);
+}
+
+static iree_status_t loom_low_select_operand_form_can_rewrite_destructive(
+    loom_low_select_operand_forms_state_t* state, const loom_op_t* op,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* replacement_descriptor,
     const loom_low_operand_form_t* form, const loom_value_id_t* operands,
     iree_host_size_t operand_count,
-    loom_low_select_operand_form_destructive_info_t* out_info) {
+    loom_low_select_operand_form_destructive_info_t* out_info,
+    iree_string_view_t* out_reject_reason, bool* out_can_rewrite) {
   loom_low_select_operand_form_reset_destructive_info(out_info);
+  *out_reject_reason = IREE_SV("selected");
+  *out_can_rewrite = true;
   for (uint16_t i = 0; i < replacement_descriptor->constraint_count; ++i) {
     const loom_low_constraint_t* constraint =
         &descriptor_set
@@ -626,17 +675,36 @@ static bool loom_low_select_operand_form_can_rewrite_destructive(
       };
     }
     if (!loom_low_select_operand_form_operand_has_single_use(
-            module, operands, operand_count, tied_packet_operand_index)) {
+            state->module, operands, operand_count,
+            tied_packet_operand_index)) {
       *out_info = (loom_low_select_operand_form_destructive_info_t){
           .has_destructive_operand = true,
           .tied_descriptor_operand_index = constraint->rhs_operand_index,
           .tied_source_packet_operand_index = source_packet_operand_index,
           .tied_value_id = operands[tied_packet_operand_index],
       };
-      return false;
+      *out_reject_reason = IREE_SV("destructive_operand_not_single_use");
+      *out_can_rewrite = false;
+      return iree_ok_status();
+    }
+    bool has_dynamic_use_after_consume = false;
+    IREE_RETURN_IF_ERROR(
+        loom_low_select_operand_form_operand_has_dynamic_use_after_consume(
+            state, op, operands, operand_count, tied_packet_operand_index,
+            &has_dynamic_use_after_consume));
+    if (has_dynamic_use_after_consume) {
+      *out_info = (loom_low_select_operand_form_destructive_info_t){
+          .has_destructive_operand = true,
+          .tied_descriptor_operand_index = constraint->rhs_operand_index,
+          .tied_source_packet_operand_index = source_packet_operand_index,
+          .tied_value_id = operands[tied_packet_operand_index],
+      };
+      *out_reject_reason = IREE_SV("destructive_operand_reused_after_consume");
+      *out_can_rewrite = false;
+      return iree_ok_status();
     }
   }
-  return true;
+  return iree_ok_status();
 }
 
 static bool loom_low_descriptor_result_has_unary_constraint(
@@ -1024,14 +1092,18 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
   }
 
   loom_low_select_operand_form_destructive_info_t destructive_info;
-  if (!loom_low_select_operand_form_can_rewrite_destructive(
-          state->module, descriptor_set, replacement_descriptor, form, operands,
-          form->operand_map_count, &destructive_info)) {
+  iree_string_view_t destructive_reject_reason = IREE_SV("selected");
+  bool can_rewrite_destructive = false;
+  IREE_RETURN_IF_ERROR(loom_low_select_operand_form_can_rewrite_destructive(
+      state, op, descriptor_set, replacement_descriptor, form, operands,
+      form->operand_map_count, &destructive_info, &destructive_reject_reason,
+      &can_rewrite_destructive));
+  if (!can_rewrite_destructive) {
     ++state->statistics->forms_rejected;
     IREE_RETURN_IF_ERROR(loom_low_select_operand_form_emit_decision(
         state, op, source_descriptor, replacement_descriptor, form,
-        IREE_SV("rejected"), IREE_SV("destructive_operand_not_single_use"),
-        immediate_value, &destructive_info));
+        IREE_SV("rejected"), destructive_reject_reason, immediate_value,
+        &destructive_info));
     return iree_ok_status();
   }
 

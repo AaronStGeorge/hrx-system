@@ -59,6 +59,7 @@ loom_cc_library(
     srcs = ["operand_forms.c"],
     hdrs = ["operand_forms.h"],
     deps = [
+        "//loom/src/loom/analysis:consumption",
         "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/codegen/low:descriptor_traits",
         "//loom/src/loom/codegen/low:descriptors",
