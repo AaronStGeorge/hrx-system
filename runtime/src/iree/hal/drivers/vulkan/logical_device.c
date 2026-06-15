@@ -590,25 +590,91 @@ static iree_status_t iree_hal_vulkan_logical_device_trim(
   return iree_hal_allocator_trim(device->device_allocator);
 }
 
-static bool iree_hal_vulkan_logical_device_query_queue_i64(
-    iree_hal_vulkan_logical_device_t* device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  int64_t total_value = 0;
-  bool has_value = false;
+static uint64_t iree_hal_vulkan_stats_saturating_add(uint64_t lhs,
+                                                     uint64_t rhs) {
+  return rhs > UINT64_MAX - lhs ? UINT64_MAX : lhs + rhs;
+}
+
+static void iree_hal_vulkan_bda_publication_cache_stats_accumulate(
+    const iree_hal_vulkan_bda_publication_cache_stats_t* source,
+    iree_hal_vulkan_bda_publication_cache_stats_t* target) {
+  target->block_count = iree_hal_vulkan_stats_saturating_add(
+      target->block_count, source->block_count);
+}
+
+static void iree_hal_vulkan_native_replay_cache_stats_accumulate(
+    const iree_hal_vulkan_native_replay_cache_stats_t* source,
+    iree_hal_vulkan_native_replay_cache_stats_t* target) {
+  target->instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->instance_count, source->instance_count);
+  target->max_instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->max_instance_count, source->max_instance_count);
+  target->retained_instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->retained_instance_count, source->retained_instance_count);
+  target->publication_bytes = iree_hal_vulkan_stats_saturating_add(
+      target->publication_bytes, source->publication_bytes);
+  target->max_publication_bytes = iree_hal_vulkan_stats_saturating_add(
+      target->max_publication_bytes, source->max_publication_bytes);
+  target->peak_instance_count = iree_hal_vulkan_stats_saturating_add(
+      target->peak_instance_count, source->peak_instance_count);
+  target->peak_publication_bytes = iree_hal_vulkan_stats_saturating_add(
+      target->peak_publication_bytes, source->peak_publication_bytes);
+  target->hit_count = iree_hal_vulkan_stats_saturating_add(target->hit_count,
+                                                           source->hit_count);
+  target->miss_count = iree_hal_vulkan_stats_saturating_add(target->miss_count,
+                                                            source->miss_count);
+  target->create_count = iree_hal_vulkan_stats_saturating_add(
+      target->create_count, source->create_count);
+  target->fork_count = iree_hal_vulkan_stats_saturating_add(target->fork_count,
+                                                            source->fork_count);
+  target->publication_skip_count = iree_hal_vulkan_stats_saturating_add(
+      target->publication_skip_count, source->publication_skip_count);
+  target->publication_update_count = iree_hal_vulkan_stats_saturating_add(
+      target->publication_update_count, source->publication_update_count);
+  target->descriptor_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->descriptor_bypass_count, source->descriptor_bypass_count);
+  target->profile_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->profile_bypass_count, source->profile_bypass_count);
+  target->one_shot_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->one_shot_bypass_count, source->one_shot_bypass_count);
+  target->capacity_bypass_count = iree_hal_vulkan_stats_saturating_add(
+      target->capacity_bypass_count, source->capacity_bypass_count);
+  target->trim_count = iree_hal_vulkan_stats_saturating_add(target->trim_count,
+                                                            source->trim_count);
+}
+
+void iree_hal_vulkan_logical_device_sample_bda_publication_cache_stats(
+    iree_hal_device_t* base_device,
+    iree_hal_vulkan_bda_publication_cache_stats_t* out_stats) {
+  IREE_ASSERT_ARGUMENT(base_device);
+  IREE_ASSERT_ARGUMENT(out_stats);
+  iree_hal_vulkan_logical_device_t* device =
+      iree_hal_vulkan_logical_device_cast(base_device);
+  memset(out_stats, 0, sizeof(*out_stats));
   for (iree_host_size_t i = 0; i < device->queues.lane_count; ++i) {
-    int64_t queue_value = 0;
-    if (iree_hal_vulkan_queue_query_i64(&device->queues.lanes[i], category, key,
-                                        &queue_value)) {
-      has_value = true;
-      if (queue_value > INT64_MAX - total_value) {
-        total_value = INT64_MAX;
-      } else {
-        total_value += queue_value;
-      }
-    }
+    iree_hal_vulkan_bda_publication_cache_stats_t lane_stats;
+    iree_hal_vulkan_queue_sample_bda_publication_cache_stats(
+        &device->queues.lanes[i], &lane_stats);
+    iree_hal_vulkan_bda_publication_cache_stats_accumulate(&lane_stats,
+                                                           out_stats);
   }
-  *out_value = total_value;
-  return has_value;
+}
+
+void iree_hal_vulkan_logical_device_sample_native_replay_cache_stats(
+    iree_hal_device_t* base_device,
+    iree_hal_vulkan_native_replay_cache_stats_t* out_stats) {
+  IREE_ASSERT_ARGUMENT(base_device);
+  IREE_ASSERT_ARGUMENT(out_stats);
+  iree_hal_vulkan_logical_device_t* device =
+      iree_hal_vulkan_logical_device_cast(base_device);
+  memset(out_stats, 0, sizeof(*out_stats));
+  for (iree_host_size_t i = 0; i < device->queues.lane_count; ++i) {
+    iree_hal_vulkan_native_replay_cache_stats_t lane_stats;
+    iree_hal_vulkan_queue_sample_native_replay_cache_stats(
+        &device->queues.lanes[i], &lane_stats);
+    iree_hal_vulkan_native_replay_cache_stats_accumulate(&lane_stats,
+                                                         out_stats);
+  }
 }
 
 static int64_t iree_hal_vulkan_feature_query_value(
@@ -798,9 +864,6 @@ static iree_status_t iree_hal_vulkan_logical_device_query_i64(
                        : 0;
       return iree_ok_status();
     }
-  } else if (iree_hal_vulkan_logical_device_query_queue_i64(device, category,
-                                                            key, out_value)) {
-    return iree_ok_status();
   }
 
   return iree_make_status(

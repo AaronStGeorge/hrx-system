@@ -69,6 +69,7 @@ iree_cc_library(
     "executable.h"
     "physical_device.h"
     "physical_device_selection.h"
+    "queue_stats.h"
     "spirv.h"
   DEPS
     ::api
@@ -273,6 +274,7 @@ iree_cc_library(
     "physical_device_selection.h"
     "queue.c"
     "queue.h"
+    "queue_stats.h"
     "semaphore.c"
     "semaphore.h"
     "slab_provider.c"
