@@ -4,6 +4,9 @@
 // expert ids, and those ids immediately feed indexed row movement. The two
 // checked cases below cover both strictly ordered scores and the equal-score
 // first-wins policy used by the update helper.
+// Numeric policy is routing-focused rather than FMA-focused: score comparisons
+// preserve exact first-wins behavior, and the payload combine has no product
+// contraction opportunity.
 func.def inline @top2_route_update(%score: f32, %expert_id: i32, %expert_row: index, %best_score: f32, %best_id: i32, %best_row: index, %second_score: f32, %second_id: i32, %second_row: index) -> (f32, i32, index, f32, i32, index) {
   %beats_best = scalar.cmpf olt, %best_score, %score : f32
   %beats_second = scalar.cmpf olt, %second_score, %score : f32

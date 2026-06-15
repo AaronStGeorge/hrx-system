@@ -6,6 +6,8 @@
 // update a four-channel value accumulator. The invalid value row is deliberately
 // nonzero so the correctness check proves the mask gates both the sum and the
 // value accumulation.
+// Numeric policy is ML-fast attention math: exp is approximate, reductions may
+// reassociate, and rescale/PV accumulation combines are contractable.
 kernel.def @online_softmax_tail_attention_tile_f32() {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
@@ -50,7 +52,7 @@ kernel.def @online_softmax_tail_attention_tile_f32() {
   %zero_weights = vector.splat %zero_f32 : vector<4xf32>
   %weights = vector.select %valid, %raw_weights, %zero_weights : vector<4xf32>
   %block_sum = vector.reduce<addf, reassoc|nnan|nsz> %weights, %zero_f32 : vector<4xf32>, f32
-  %new_sum = scalar.addf<reassoc|nnan|nsz> %rescaled_old_sum, %block_sum : f32
+  %new_sum = scalar.addf<reassoc|nnan|nsz|contract> %rescaled_old_sum, %block_sum : f32
 
   %value0 = vector.load %values_view[0, 0] : view<4x4xf32, #dense> -> vector<4xf32>
   %value1 = vector.load %values_view[1, 0] : view<4x4xf32, #dense> -> vector<4xf32>
@@ -68,10 +70,10 @@ kernel.def @online_softmax_tail_attention_tile_f32() {
   %weighted_value1 = vector.mulf<reassoc|nnan|nsz|contract> %value1, %weight1_vector : vector<4xf32>
   %weighted_value2 = vector.mulf<reassoc|nnan|nsz|contract> %value2, %weight2_vector : vector<4xf32>
   %weighted_value3 = vector.mulf<reassoc|nnan|nsz|contract> %value3, %weight3_vector : vector<4xf32>
-  %new_acc0 = vector.addf<reassoc|nnan|nsz> %rescaled_old_acc, %weighted_value0 : vector<4xf32>
-  %new_acc1 = vector.addf<reassoc|nnan|nsz> %new_acc0, %weighted_value1 : vector<4xf32>
-  %new_acc2 = vector.addf<reassoc|nnan|nsz> %new_acc1, %weighted_value2 : vector<4xf32>
-  %new_acc3 = vector.addf<reassoc|nnan|nsz> %new_acc2, %weighted_value3 : vector<4xf32>
+  %new_acc0 = vector.addf<reassoc|nnan|nsz|contract> %rescaled_old_acc, %weighted_value0 : vector<4xf32>
+  %new_acc1 = vector.addf<reassoc|nnan|nsz|contract> %new_acc0, %weighted_value1 : vector<4xf32>
+  %new_acc2 = vector.addf<reassoc|nnan|nsz|contract> %new_acc1, %weighted_value2 : vector<4xf32>
+  %new_acc3 = vector.addf<reassoc|nnan|nsz|contract> %new_acc2, %weighted_value3 : vector<4xf32>
 
   view.store %new_max, %new_state_view[%zero_index] : f32, view<2xf32, #dense>
   view.store %new_sum, %new_state_view[1] : f32, view<2xf32, #dense>
