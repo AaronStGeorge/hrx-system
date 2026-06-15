@@ -132,7 +132,7 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
         "",
         *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.planning.amdgpu_occupancy_tables"),
         "",
-        '#include "loom/target/arch/amdgpu/planning/occupancy_tables.h"',
+        '#include "loom/target/arch/amdgpu/planning/occupancy_model.h"',
         "",
         "// clang-format off",
     ]

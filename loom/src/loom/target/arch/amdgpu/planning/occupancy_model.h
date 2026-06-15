@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU occupancy model rows derived from target descriptor-set facts.
+// AMDGPU occupancy model rows consumed by register-pressure diagnostics.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_TABLES_H_
-#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_TABLES_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_MODEL_H_
+#define LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_MODEL_H_
 
 #include <stdint.h>
 
@@ -64,7 +64,8 @@ typedef struct loom_amdgpu_occupancy_model_t {
   iree_host_size_t resource_count;
 } loom_amdgpu_occupancy_model_t;
 
-// Returns the generated occupancy model for descriptor_set_ordinal.
+// Returns the occupancy model for |descriptor_set_ordinal|, or NULL when the
+// descriptor set does not define one.
 const loom_amdgpu_occupancy_model_t*
 loom_amdgpu_occupancy_model_for_descriptor_set_ordinal(
     uint16_t descriptor_set_ordinal);
@@ -73,4 +74,4 @@ loom_amdgpu_occupancy_model_for_descriptor_set_ordinal(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_TABLES_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_MODEL_H_

@@ -273,15 +273,15 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_generated_cc_library(
   NAME
-    occupancy_tables
+    occupancy_model
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::planning::occupancy_tables
   SOURCE
-    "occupancy_tables_data.c"
+    "occupancy_model_tables.c"
   SRCS
-    "occupancy_tables.c"
+    "occupancy_model.c"
   HDRS
-    "occupancy_tables.h"
+    "occupancy_model.h"
   DEPS
     iree::base
     loom::target::arch::amdgpu::target_info
@@ -297,7 +297,7 @@ loom_cc_library(
   SRCS
     "occupancy.c"
   DEPS
-    ::occupancy_tables
+    ::occupancy_model
     iree::base
     iree::base::internal::arena
     loom::codegen::low::allocation

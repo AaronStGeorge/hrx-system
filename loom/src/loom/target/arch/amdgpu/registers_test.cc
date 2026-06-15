@@ -9,7 +9,7 @@
 #include "iree/testing/gtest.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
-#include "loom/target/arch/amdgpu/planning/occupancy_tables.h"
+#include "loom/target/arch/amdgpu/planning/occupancy_model.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 

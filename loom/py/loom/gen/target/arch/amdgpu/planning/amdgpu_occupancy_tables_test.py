@@ -9,7 +9,7 @@ from __future__ import annotations
 from loom.gen.target.arch.amdgpu.planning import amdgpu_occupancy_tables
 from loom.target.arch.amdgpu.target_info import sorted_occupancy_model_infos
 
-_OCCUPANCY_HEADER = "loom/target/arch/amdgpu/planning/occupancy_tables.h"
+_OCCUPANCY_HEADER = "loom/target/arch/amdgpu/planning/occupancy_model.h"
 
 
 def test_occupancy_generator_emits_data_source_only() -> None:
