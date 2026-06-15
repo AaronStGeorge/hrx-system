@@ -105,6 +105,44 @@ TEST(DeviceSpecTest, MockDeviceExposesCachedSpec) {
   iree_hal_device_release(device);
 }
 
+TEST(DeviceObservationTest, RejectsUnknownObservationFlags) {
+  iree_hal_mock_device_options_t mock_options;
+  iree_hal_mock_device_options_initialize(&mock_options);
+
+  iree_hal_device_t* device = NULL;
+  IREE_ASSERT_OK(iree_hal_mock_device_create(&mock_options,
+                                             iree_allocator_system(), &device));
+
+  iree_hal_device_observation_t observation = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      iree_hal_device_sample_observation(
+          device, static_cast<iree_hal_device_observation_flags_t>(1ull << 63),
+          &observation));
+
+  iree_hal_device_release(device);
+}
+
+TEST(DeviceObservationTest, MinimalSpecLeavesMemoryUnprovided) {
+  iree_hal_mock_device_options_t mock_options;
+  iree_hal_mock_device_options_initialize(&mock_options);
+
+  iree_hal_device_t* device = NULL;
+  IREE_ASSERT_OK(iree_hal_mock_device_create(&mock_options,
+                                             iree_allocator_system(), &device));
+
+  iree_hal_device_observation_t observation = {};
+  IREE_ASSERT_OK(iree_hal_device_sample_observation(
+      device, IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY, &observation));
+  EXPECT_EQ(IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY,
+            observation.requested_flags);
+  EXPECT_EQ(IREE_HAL_DEVICE_OBSERVATION_FLAG_NONE, observation.provided_flags);
+  EXPECT_EQ(IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_NONE,
+            observation.memory.flags);
+
+  iree_hal_device_release(device);
+}
+
 class DeviceProfilingTest : public ::testing::Test {
  protected:
   void SetUp() override {

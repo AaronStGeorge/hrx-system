@@ -305,6 +305,90 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
   iree_hal_device_spec_release(spec);
 }
 
+TEST(DeviceObservationTest, MemoryTotalFromSpecSumsKnownHeaps) {
+  uint8_t facet_payload_storage[] = {0x01, 0x02, 0x03};
+  iree_hal_device_identity_spec_t identity;
+  iree_hal_physical_device_spec_t physical_devices[1];
+  iree_hal_device_topology_spec_t topology;
+  iree_hal_topology_edge_t topology_edges[1];
+  iree_hal_device_memory_spec_t memory;
+  iree_hal_memory_heap_spec_t memory_heaps[1];
+  iree_hal_memory_type_spec_t memory_types[1];
+  iree_hal_device_queue_spec_t queues;
+  iree_hal_queue_family_spec_t queue_families[1];
+  iree_hal_device_dispatch_spec_t dispatch;
+  iree_hal_device_timing_spec_t timing;
+  iree_hal_device_executable_spec_t executables;
+  iree_hal_executable_format_spec_t executable_formats[1];
+  iree_hal_executable_target_t executable_targets[3];
+  iree_hal_device_spec_facet_t facets[1];
+  iree_hal_device_spec_params_t params = MakeTestSpecParams(
+      &identity, physical_devices, &topology, topology_edges, &memory,
+      memory_heaps, memory_types, &queues, queue_families, &dispatch, &timing,
+      &executables, executable_formats, executable_targets, facets,
+      iree_make_const_byte_span(facet_payload_storage,
+                                sizeof(facet_payload_storage)));
+
+  iree_hal_device_spec_t* spec = NULL;
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_create(&params, iree_allocator_system(), &spec));
+
+  iree_hal_device_observation_t observation = {};
+  iree_hal_device_observation_initialize(
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY, &observation);
+  IREE_ASSERT_OK(iree_hal_device_observation_populate_memory_total_from_spec(
+      spec, &observation));
+  EXPECT_EQ(IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY,
+            observation.provided_flags);
+  EXPECT_EQ(IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES,
+            observation.memory.flags);
+  EXPECT_EQ(1024ull * 1024ull * 1024ull, observation.memory.total_bytes);
+  EXPECT_EQ(0, observation.memory.available_bytes);
+
+  iree_hal_device_spec_release(spec);
+}
+
+TEST(DeviceObservationTest, MemoryTotalFromSpecSkipsUnknownCapacity) {
+  uint8_t facet_payload_storage[] = {0x01, 0x02, 0x03};
+  iree_hal_device_identity_spec_t identity;
+  iree_hal_physical_device_spec_t physical_devices[1];
+  iree_hal_device_topology_spec_t topology;
+  iree_hal_topology_edge_t topology_edges[1];
+  iree_hal_device_memory_spec_t memory;
+  iree_hal_memory_heap_spec_t memory_heaps[1];
+  iree_hal_memory_type_spec_t memory_types[1];
+  iree_hal_device_queue_spec_t queues;
+  iree_hal_queue_family_spec_t queue_families[1];
+  iree_hal_device_dispatch_spec_t dispatch;
+  iree_hal_device_timing_spec_t timing;
+  iree_hal_device_executable_spec_t executables;
+  iree_hal_executable_format_spec_t executable_formats[1];
+  iree_hal_executable_target_t executable_targets[3];
+  iree_hal_device_spec_facet_t facets[1];
+  iree_hal_device_spec_params_t params = MakeTestSpecParams(
+      &identity, physical_devices, &topology, topology_edges, &memory,
+      memory_heaps, memory_types, &queues, queue_families, &dispatch, &timing,
+      &executables, executable_formats, executable_targets, facets,
+      iree_make_const_byte_span(facet_payload_storage,
+                                sizeof(facet_payload_storage)));
+  memory_heaps[0].flags = IREE_HAL_MEMORY_HEAP_SPEC_FLAG_CAPACITY_UNKNOWN;
+
+  iree_hal_device_spec_t* spec = NULL;
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_create(&params, iree_allocator_system(), &spec));
+
+  iree_hal_device_observation_t observation = {};
+  iree_hal_device_observation_initialize(
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY, &observation);
+  IREE_ASSERT_OK(iree_hal_device_observation_populate_memory_total_from_spec(
+      spec, &observation));
+  EXPECT_EQ(IREE_HAL_DEVICE_OBSERVATION_FLAG_NONE, observation.provided_flags);
+  EXPECT_EQ(IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_NONE,
+            observation.memory.flags);
+
+  iree_hal_device_spec_release(spec);
+}
+
 TEST(DeviceSpecTest, FindsVirtualMemoryAndExternalHandleRecords) {
   iree_hal_memory_heap_spec_t memory_heaps[1] = {
       {

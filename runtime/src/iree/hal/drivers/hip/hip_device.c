@@ -999,6 +999,20 @@ static const iree_hal_device_spec_t* iree_hal_hip_device_spec(
   return device->device_spec;
 }
 
+static iree_status_t iree_hal_hip_device_sample_observation(
+    iree_hal_device_t* base_device,
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation) {
+  iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
+    IREE_RETURN_IF_ERROR(
+        iree_hal_device_observation_populate_memory_total_from_spec(
+            device->device_spec, out_observation));
+  }
+  return iree_ok_status();
+}
+
 static const iree_hal_device_topology_info_t* iree_hal_hip_device_topology_info(
     iree_hal_device_t* base_device) {
   iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
@@ -3052,6 +3066,7 @@ static const iree_hal_device_vtable_t iree_hal_hip_device_vtable = {
     .query_i64 = iree_hal_hip_device_query_i64,
     .query_capabilities = iree_hal_hip_device_query_capabilities,
     .device_spec = iree_hal_hip_device_spec,
+    .sample_observation = iree_hal_hip_device_sample_observation,
     .topology_info = iree_hal_hip_device_topology_info,
     .refine_topology_edge = iree_hal_hip_device_refine_topology_edge,
     .assign_topology_info = iree_hal_hip_device_assign_topology_info,

@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "iree/base/api.h"
+#include "iree/base/time.h"
 #include "iree/hal/allocator.h"
 #include "iree/hal/buffer.h"
 #include "iree/hal/channel.h"
@@ -449,6 +450,60 @@ static inline iree_hal_topology_edge_t iree_hal_device_topology_query_edge(
       src_info->topology, src_info->topology_index, dst_info->topology_index);
 }
 
+// Top-level device observation groups requested by callers and populated by
+// devices during a point-in-time sample.
+typedef uint64_t iree_hal_device_observation_flags_t;
+typedef enum iree_hal_device_observation_flag_bits_e {
+  // No observation groups are requested or populated.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_NONE = 0ull,
+  // Device memory availability and capacity fields are requested or populated.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY = 1ull << 0,
+  // All currently defined observation groups.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_ALL =
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY,
+} iree_hal_device_observation_flag_bits_t;
+
+// Memory fields populated in an observation sample.
+typedef uint64_t iree_hal_device_memory_observation_flags_t;
+typedef enum iree_hal_device_memory_observation_flag_bits_e {
+  // No memory observation fields are populated.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_NONE = 0ull,
+  // The total_bytes field is populated.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES = 1ull << 0,
+  // The available_bytes field is populated.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_AVAILABLE_BYTES = 1ull << 1,
+  // All currently defined memory observation fields.
+  IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_ALL =
+      IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_TOTAL_BYTES |
+      IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_AVAILABLE_BYTES,
+} iree_hal_device_memory_observation_flag_bits_t;
+
+// Sampled device memory state.
+typedef struct iree_hal_device_memory_observation_t {
+  // Memory fields populated by the device.
+  iree_hal_device_memory_observation_flags_t flags;
+  // Total memory capacity in bytes.
+  iree_device_size_t total_bytes;
+  // Memory bytes available for new allocations at sample time.
+  iree_device_size_t available_bytes;
+} iree_hal_device_memory_observation_t;
+
+// Point-in-time device state observation.
+//
+// Observations contain sampled device state that may change over the lifetime
+// of a device. Immutable hardware and driver-interface facts belong in
+// iree_hal_device_spec_t instead.
+typedef struct iree_hal_device_observation_t {
+  // Top-level observation groups requested by the caller.
+  iree_hal_device_observation_flags_t requested_flags;
+  // Top-level observation groups populated by the device.
+  iree_hal_device_observation_flags_t provided_flags;
+  // Monotonic host timestamp captured when sampling began.
+  iree_time_t sample_time_ns;
+  // Sampled memory state.
+  iree_hal_device_memory_observation_t memory;
+} iree_hal_device_observation_t;
+
 //===----------------------------------------------------------------------===//
 // iree_hal_device_t
 //===----------------------------------------------------------------------===//
@@ -556,6 +611,41 @@ IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
 // retain it.
 IREE_API_EXPORT const iree_hal_device_spec_t* iree_hal_device_spec(
     iree_hal_device_t* device);
+
+// Initializes |out_observation| for a device state sample.
+IREE_API_EXPORT void iree_hal_device_observation_initialize(
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation);
+
+// Marks |total_bytes| as populated in |out_observation|.
+IREE_API_EXPORT void iree_hal_device_observation_set_memory_total(
+    iree_device_size_t total_bytes,
+    iree_hal_device_observation_t* out_observation);
+
+// Marks |available_bytes| as populated in |out_observation|.
+IREE_API_EXPORT void iree_hal_device_observation_set_memory_available(
+    iree_device_size_t available_bytes,
+    iree_hal_device_observation_t* out_observation);
+
+// Populates memory total capacity from known heap capacities in |device_spec|.
+//
+// Heap capacities marked unknown are skipped. If no known heap capacities are
+// present then |out_observation| is left unchanged.
+IREE_API_EXPORT iree_status_t
+iree_hal_device_observation_populate_memory_total_from_spec(
+    const iree_hal_device_spec_t* device_spec,
+    iree_hal_device_observation_t* out_observation);
+
+// Samples dynamic state from |device| into |out_observation|.
+//
+// The returned observation is a point-in-time snapshot: devices populate only
+// requested groups and fields they can sample without inventing fallback
+// values. Missing groups and fields are reported by leaving the corresponding
+// provided/field flags unset.
+IREE_API_EXPORT iree_status_t iree_hal_device_sample_observation(
+    iree_hal_device_t* device,
+    iree_hal_device_observation_flags_t requested_flags,
+    iree_hal_device_observation_t* out_observation);
 
 // Returns a pointer to device's topology info populated during device creation.
 // Returns NULL if device is not part of a topology.
@@ -1011,6 +1101,11 @@ typedef struct iree_hal_device_vtable_t {
 
   const iree_hal_device_spec_t*(IREE_API_PTR* device_spec)(
       iree_hal_device_t* device);
+
+  iree_status_t(IREE_API_PTR* sample_observation)(
+      iree_hal_device_t* device,
+      iree_hal_device_observation_flags_t requested_flags,
+      iree_hal_device_observation_t* out_observation);
 
   const iree_hal_device_topology_info_t*(IREE_API_PTR* topology_info)(
       iree_hal_device_t* device);
