@@ -1,0 +1,396 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include <cstring>
+
+#include "iree/hal/api.h"
+#include "iree/hal/utils/device_spec_builder.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+
+namespace iree::hal {
+namespace {
+
+using ::iree::testing::status::IsOk;
+
+static void ExpectStringViewEq(iree_string_view_t actual,
+                               const char* expected) {
+  EXPECT_TRUE(iree_string_view_equal(actual, iree_make_cstring_view(expected)));
+}
+
+static iree_hal_device_spec_params_t MakeTestSpecParams(
+    iree_hal_device_identity_spec_t* out_identity,
+    iree_hal_physical_device_spec_t* out_physical_devices,
+    iree_hal_device_topology_spec_t* out_topology,
+    iree_hal_topology_edge_t* out_topology_edges,
+    iree_hal_device_memory_spec_t* out_memory,
+    iree_hal_memory_heap_spec_t* out_memory_heaps,
+    iree_hal_memory_type_spec_t* out_memory_types,
+    iree_hal_device_queue_spec_t* out_queues,
+    iree_hal_queue_family_spec_t* out_queue_families,
+    iree_hal_device_dispatch_spec_t* out_dispatch,
+    iree_hal_device_timing_spec_t* out_timing,
+    iree_hal_device_executable_spec_t* out_executables,
+    iree_hal_executable_format_spec_t* out_executable_formats,
+    iree_hal_executable_target_t* out_executable_targets,
+    iree_hal_device_spec_facet_t* out_facets,
+    iree_const_byte_span_t facet_payload) {
+  out_physical_devices[0] = {
+      /*.identity=*/
+      {
+          /*.display_name=*/iree_make_cstring_view("Test GPU"),
+          /*.backend_path=*/iree_make_cstring_view("pci:0000:01:00.0"),
+          /*.vendor_id=*/0x1002,
+          /*.device_id=*/0x744c,
+          /*.revision_id=*/1,
+          /*.uuid=*/{{0}},
+          /*.pci=*/{0, 1, 0, 0},
+          /*.numa=*/{0},
+          /*.flags=*/IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_PCI_ADDRESS,
+      },
+      /*.physical_ordinal=*/0,
+      /*.partition_ordinal=*/0,
+      /*.partition_count=*/1,
+      /*.physical_device_affinity=*/1,
+  };
+  *out_identity = {
+      /*.logical_device_id=*/iree_make_cstring_view("test-device-0"),
+      /*.display_name=*/iree_make_cstring_view("Test Device"),
+      /*.driver_id=*/iree_make_cstring_view("test"),
+      /*.driver_version=*/iree_make_cstring_view("1.0"),
+      /*.backend_id=*/iree_make_cstring_view("test-backend"),
+      /*.device_path=*/iree_make_cstring_view("test://0"),
+      /*.vendor_name=*/iree_make_cstring_view("Example"),
+      /*.vendor_id=*/0x1002,
+      /*.device_id=*/0x744c,
+      /*.revision_id=*/1,
+      /*.logical_ordinal=*/0,
+      /*.physical_device_count=*/1,
+      /*.physical_devices=*/out_physical_devices,
+      /*.flags=*/IREE_HAL_DEVICE_IDENTITY_FLAG_NONE,
+  };
+
+  out_topology_edges[0] = iree_hal_topology_edge_make_self();
+  *out_topology = {
+      /*.device_count=*/1,
+      /*.device_ordinal=*/0,
+      /*.edge_count=*/1,
+      /*.edges=*/out_topology_edges,
+      /*.local_device_mask=*/1,
+      /*.flags=*/IREE_HAL_DEVICE_TOPOLOGY_SPEC_FLAG_NONE,
+  };
+
+  out_memory_heaps[0] = {
+      /*.name=*/iree_make_cstring_view("device-local"),
+      /*.capacity_bytes=*/1024ull * 1024ull * 1024ull,
+      /*.allocation_granularity=*/4096,
+      /*.allocation_alignment=*/256,
+      /*.maximum_allocation_size=*/512ull * 1024ull * 1024ull,
+      /*.physical_device_affinity=*/1,
+      /*.flags=*/IREE_HAL_MEMORY_HEAP_SPEC_FLAG_NONE,
+  };
+  out_memory_types[0] = {
+      /*.heap_index=*/0,
+      /*.memory_type=*/IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+      /*.allowed_buffer_usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT,
+      /*.allowed_memory_access=*/IREE_HAL_MEMORY_ACCESS_ALL,
+      /*.minimum_alignment=*/256,
+      /*.optimal_transfer_granularity=*/4096,
+      /*.flags=*/IREE_HAL_MEMORY_TYPE_SPEC_FLAG_NONE,
+  };
+  *out_memory = {
+      /*.heap_count=*/1,
+      /*.heaps=*/out_memory_heaps,
+      /*.memory_type_count=*/1,
+      /*.memory_types=*/out_memory_types,
+      /*.external_buffer_handle_count=*/0,
+      /*.external_buffer_handles=*/NULL,
+      /*.flags=*/IREE_HAL_DEVICE_MEMORY_SPEC_FLAG_NONE,
+  };
+
+  out_queue_families[0] = {
+      /*.name=*/iree_make_cstring_view("default"),
+      /*.queue_count=*/1,
+      /*.priority_count=*/1,
+      /*.timestamp_valid_bits=*/64,
+      /*.timestamp_frequency_hz=*/1000000000ull,
+      /*.physical_device_affinity=*/1,
+      /*.role_flags=*/IREE_HAL_QUEUE_FAMILY_ROLE_FLAG_DISPATCH |
+          IREE_HAL_QUEUE_FAMILY_ROLE_FLAG_TRANSFER,
+      /*.flags=*/IREE_HAL_QUEUE_FAMILY_SPEC_FLAG_NONE,
+  };
+  *out_queues = {
+      /*.family_count=*/1,
+      /*.families=*/out_queue_families,
+      /*.external_timepoint_handle_count=*/0,
+      /*.external_timepoint_handles=*/NULL,
+      /*.flags=*/IREE_HAL_DEVICE_QUEUE_SPEC_FLAG_NONE,
+  };
+
+  *out_dispatch = {
+      /*.launch=*/
+      {
+          /*.maximum_workgroup_invocations=*/1024,
+          /*.maximum_workgroup_size=*/{1024, 1024, 64},
+          /*.maximum_workgroup_count=*/{65535, 65535, 65535},
+      },
+      /*.subgroup=*/
+      {
+          /*.default_size=*/64,
+          /*.minimum_size=*/32,
+          /*.maximum_size=*/64,
+          /*.supported_size_mask=*/1ull << 32,
+      },
+      /*.execution=*/
+      {
+          /*.unit_count=*/120,
+          /*.group_count=*/1,
+          /*.maximum_resident_workgroup_count=*/16,
+          /*.maximum_resident_invocation_count=*/2048,
+          /*.maximum_resident_subgroup_count=*/0,
+          /*.maximum_register_count=*/65536,
+          /*.maximum_workgroup_register_count=*/65536,
+          /*.maximum_local_memory_size=*/64 * 1024,
+          /*.maximum_workgroup_local_memory_size=*/64 * 1024,
+          /*.maximum_workgroup_local_memory_size_optin=*/64 * 1024,
+      },
+      /*.addressing=*/
+      {
+          /*.pointer_size_bits=*/64,
+          /*.address_space_bits=*/64,
+          /*.minimum_buffer_device_address_alignment=*/0,
+      },
+      /*.flags=*/IREE_HAL_DEVICE_DISPATCH_SPEC_FLAG_NONE,
+  };
+  *out_timing = {
+      /*.timestamp_valid_bits=*/64,
+      /*.timestamp_frequency_hz=*/1000000000ull,
+      /*.flags=*/IREE_HAL_DEVICE_TIMING_SPEC_FLAG_DEVICE_TIMESTAMPS,
+  };
+
+  out_executable_formats[0] = {
+      /*.format=*/iree_make_cstring_view("test-elf"),
+      /*.caching_modes=*/IREE_HAL_EXECUTABLE_CACHING_MODE_ALIAS_PROVIDED_DATA,
+      /*.flags=*/IREE_HAL_EXECUTABLE_FORMAT_SPEC_FLAG_NONE,
+  };
+  out_executable_targets[0] = {
+      /*.family=*/iree_make_cstring_view("amdgpu"),
+      /*.architecture=*/iree_make_cstring_view("gfx11"),
+      /*.processor=*/iree_make_cstring_view("gfx1100"),
+      /*.features=*/iree_make_cstring_view("+wavefrontsize64"),
+      /*.artifact_format=*/iree_make_cstring_view("test-elf"),
+      /*.runtime_abi=*/iree_make_cstring_view("hsa-kernel"),
+      /*.loader_namespace=*/iree_make_cstring_view("amdgpu"),
+      /*.loader_target=*/iree_make_cstring_view("amdgpu-gfx1100"),
+      /*.metadata_schema=*/iree_make_cstring_view("msgpack"),
+      /*.kind=*/IREE_HAL_EXECUTABLE_TARGET_KIND_EXACT,
+      /*.priority=*/100,
+      /*.physical_device_affinity=*/1,
+      /*.flags=*/IREE_HAL_EXECUTABLE_TARGET_FLAG_NONE,
+  };
+  out_executable_targets[1] = out_executable_targets[0];
+  out_executable_targets[1].processor = iree_make_cstring_view("gfx11-generic");
+  out_executable_targets[1].kind = IREE_HAL_EXECUTABLE_TARGET_KIND_GENERIC;
+  out_executable_targets[1].priority = 10;
+  out_executable_targets[2] = out_executable_targets[1];
+  out_executable_targets[2].loader_target =
+      iree_make_cstring_view("amdgpu-gfx11-generic-alt");
+  *out_executables = {
+      /*.format_count=*/1,
+      /*.formats=*/out_executable_formats,
+      /*.target_count=*/3,
+      /*.targets=*/out_executable_targets,
+      /*.flags=*/IREE_HAL_DEVICE_EXECUTABLE_SPEC_FLAG_NONE,
+  };
+
+  out_facets[0] = {
+      /*.schema_id=*/iree_make_cstring_view("test.facet"),
+      /*.schema_version=*/1,
+      /*.payload=*/facet_payload,
+  };
+
+  return {
+      /*.identity=*/out_identity,
+      /*.topology=*/out_topology,
+      /*.memory=*/out_memory,
+      /*.virtual_memory=*/NULL,
+      /*.queues=*/out_queues,
+      /*.dispatch=*/out_dispatch,
+      /*.timing=*/out_timing,
+      /*.executables=*/out_executables,
+      /*.facet_count=*/1,
+      /*.facets=*/out_facets,
+  };
+}
+
+TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
+  uint8_t facet_payload_storage[] = {0x01, 0x02, 0x03};
+  iree_hal_device_identity_spec_t identity;
+  iree_hal_physical_device_spec_t physical_devices[1];
+  iree_hal_device_topology_spec_t topology;
+  iree_hal_topology_edge_t topology_edges[1];
+  iree_hal_device_memory_spec_t memory;
+  iree_hal_memory_heap_spec_t memory_heaps[1];
+  iree_hal_memory_type_spec_t memory_types[1];
+  iree_hal_device_queue_spec_t queues;
+  iree_hal_queue_family_spec_t queue_families[1];
+  iree_hal_device_dispatch_spec_t dispatch;
+  iree_hal_device_timing_spec_t timing;
+  iree_hal_device_executable_spec_t executables;
+  iree_hal_executable_format_spec_t executable_formats[1];
+  iree_hal_executable_target_t executable_targets[3];
+  iree_hal_device_spec_facet_t facets[1];
+  iree_hal_device_spec_params_t params = MakeTestSpecParams(
+      &identity, physical_devices, &topology, topology_edges, &memory,
+      memory_heaps, memory_types, &queues, queue_families, &dispatch, &timing,
+      &executables, executable_formats, executable_targets, facets,
+      iree_make_const_byte_span(facet_payload_storage,
+                                sizeof(facet_payload_storage)));
+
+  iree_hal_device_spec_t* spec = NULL;
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_create(&params, iree_allocator_system(), &spec));
+
+  ExpectStringViewEq(iree_hal_device_spec_identity(spec)->display_name,
+                     "Test Device");
+  EXPECT_EQ(iree_hal_device_spec_memory(spec)->heap_count, 1);
+  EXPECT_EQ(iree_hal_device_spec_queues(spec)->family_count, 1);
+  EXPECT_EQ(iree_hal_device_spec_facet_count(spec), 1);
+  const iree_hal_device_spec_facet_t* facet = iree_hal_device_spec_find_facet(
+      spec, iree_make_cstring_view("test.facet"));
+  ASSERT_NE(facet, nullptr);
+  EXPECT_EQ(facet->schema_version, 1);
+  ASSERT_EQ(facet->payload.data_length, 3);
+  EXPECT_EQ(0, memcmp(facet->payload.data, facet_payload_storage,
+                      sizeof(facet_payload_storage)));
+
+  const iree_hal_executable_target_t* selected_target = NULL;
+  iree_hal_executable_target_selection_t exact_selection = {
+      /*.policy=*/
+      IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_EXACT_DEVICE,
+      /*.family=*/iree_make_cstring_view("amdgpu"),
+  };
+  EXPECT_EQ(IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_SELECTED,
+            iree_hal_device_spec_select_executable_target(
+                spec, &exact_selection, &selected_target));
+  ASSERT_NE(selected_target, nullptr);
+  ExpectStringViewEq(selected_target->processor, "gfx1100");
+
+  selected_target = NULL;
+  iree_hal_executable_target_selection_t generic_selection = {
+      /*.policy=*/
+      IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_COMPATIBLE_GENERIC,
+      /*.family=*/iree_make_cstring_view("amdgpu"),
+  };
+  EXPECT_EQ(IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_AMBIGUOUS,
+            iree_hal_device_spec_select_executable_target(
+                spec, &generic_selection, &selected_target));
+  EXPECT_EQ(selected_target, nullptr);
+
+  iree_byte_span_t serialized_bytes = iree_byte_span_empty();
+  IREE_ASSERT_OK(iree_hal_device_spec_serialize(spec, iree_allocator_system(),
+                                                &serialized_bytes));
+  iree_hal_device_spec_t* parsed_spec = NULL;
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_parse(iree_const_cast_byte_span(serialized_bytes),
+                                 iree_allocator_system(), &parsed_spec));
+  EXPECT_EQ(iree_hal_device_spec_digest(spec),
+            iree_hal_device_spec_digest(parsed_spec));
+  ExpectStringViewEq(iree_hal_device_spec_identity(parsed_spec)->display_name,
+                     "Test Device");
+
+  iree_hal_device_spec_release(parsed_spec);
+  iree_allocator_free(iree_allocator_system(), serialized_bytes.data);
+  iree_hal_device_spec_release(spec);
+}
+
+TEST(DeviceSpecBuilderTest, CopiesInputsAndFinalizes) {
+  iree_hal_device_identity_spec_t identity = {
+      /*.logical_device_id=*/iree_make_cstring_view("builder-device"),
+      /*.display_name=*/iree_make_cstring_view("Builder Device"),
+      /*.driver_id=*/iree_make_cstring_view("test"),
+      /*.driver_version=*/iree_make_cstring_view("1.0"),
+      /*.backend_id=*/iree_make_cstring_view("test"),
+      /*.device_path=*/iree_make_cstring_view("test://builder"),
+      /*.vendor_name=*/iree_make_cstring_view("Example"),
+      /*.vendor_id=*/1,
+      /*.device_id=*/2,
+      /*.revision_id=*/3,
+      /*.logical_ordinal=*/0,
+      /*.physical_device_count=*/0,
+      /*.physical_devices=*/NULL,
+      /*.flags=*/IREE_HAL_DEVICE_IDENTITY_FLAG_NONE,
+  };
+  iree_hal_device_dispatch_spec_t dispatch = {
+      /*.launch=*/
+      {
+          /*.maximum_workgroup_invocations=*/256,
+          /*.maximum_workgroup_size=*/{256, 1, 1},
+          /*.maximum_workgroup_count=*/{1024, 1, 1},
+      },
+      /*.subgroup=*/
+      {
+          /*.default_size=*/32,
+          /*.minimum_size=*/32,
+          /*.maximum_size=*/32,
+          /*.supported_size_mask=*/1ull << 32,
+      },
+      /*.execution=*/
+      {
+          /*.unit_count=*/1,
+          /*.group_count=*/1,
+          /*.maximum_resident_workgroup_count=*/1,
+          /*.maximum_resident_invocation_count=*/256,
+          /*.maximum_resident_subgroup_count=*/0,
+          /*.maximum_register_count=*/65536,
+          /*.maximum_workgroup_register_count=*/65536,
+          /*.maximum_local_memory_size=*/32 * 1024,
+          /*.maximum_workgroup_local_memory_size=*/32 * 1024,
+          /*.maximum_workgroup_local_memory_size_optin=*/32 * 1024,
+      },
+      /*.addressing=*/
+      {
+          /*.pointer_size_bits=*/64,
+          /*.address_space_bits=*/64,
+          /*.minimum_buffer_device_address_alignment=*/0,
+      },
+      /*.flags=*/IREE_HAL_DEVICE_DISPATCH_SPEC_FLAG_NONE,
+  };
+  uint8_t payload_storage[] = {0xaa, 0xbb};
+  iree_hal_device_spec_facet_t facet = {
+      /*.schema_id=*/iree_make_cstring_view("builder.facet"),
+      /*.schema_version=*/7,
+      /*.payload=*/
+      iree_make_const_byte_span(payload_storage, sizeof(payload_storage)),
+  };
+
+  iree_hal_device_spec_builder_t builder;
+  iree_hal_device_spec_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_builder_set_identity(&builder, &identity));
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_builder_set_dispatch(&builder, &dispatch));
+  IREE_ASSERT_OK(iree_hal_device_spec_builder_add_facet(&builder, &facet));
+
+  iree_hal_device_spec_t* spec = NULL;
+  IREE_ASSERT_OK(iree_hal_device_spec_builder_finalize(&builder, &spec));
+  ExpectStringViewEq(iree_hal_device_spec_identity(spec)->logical_device_id,
+                     "builder-device");
+  EXPECT_EQ(
+      iree_hal_device_spec_dispatch(spec)->launch.maximum_workgroup_invocations,
+      256);
+  const iree_hal_device_spec_facet_t* copied_facet =
+      iree_hal_device_spec_facet_at(spec, 0);
+  ASSERT_NE(copied_facet, nullptr);
+  ExpectStringViewEq(copied_facet->schema_id, "builder.facet");
+  EXPECT_EQ(copied_facet->schema_version, 7);
+
+  iree_hal_device_spec_release(spec);
+  iree_hal_device_spec_builder_deinitialize(&builder);
+}
+
+}  // namespace
+}  // namespace iree::hal
