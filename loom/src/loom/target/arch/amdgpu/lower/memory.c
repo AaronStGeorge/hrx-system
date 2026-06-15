@@ -394,6 +394,7 @@ typedef enum loom_amdgpu_memory_descriptor_domain_e {
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS = 2,
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT = 3,
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM = 4,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_COUNT_,
 } loom_amdgpu_memory_descriptor_domain_t;
 
 typedef enum loom_amdgpu_memory_address_attempt_kind_e {
@@ -504,653 +505,344 @@ static bool loom_amdgpu_memory_descriptor_domain_from_memory_space(
   return false;
 }
 
-typedef struct loom_amdgpu_memory_descriptor_candidate_t {
-  // Memory resource domain accepted by this row.
-  loom_amdgpu_memory_descriptor_domain_t domain;
-  // Addressing form selected by this row.
-  loom_amdgpu_memory_address_form_t address_form;
-  // Number of bytes transferred by the memory packet.
-  uint32_t packet_byte_count;
-  // Register file selected for the memory packet payload.
-  loom_amdgpu_memory_payload_register_class_t payload_register_class;
-  // Semantic payload family required by this row.
-  loom_amdgpu_memory_payload_format_t payload_format;
-  // Number of registers containing the packet payload.
-  uint32_t payload_register_count;
-  // Direction of the memory packet.
-  loom_amdgpu_memory_operation_kind_t kind;
-  // Stable descriptor ref selected when present in the descriptor set.
-  loom_amdgpu_descriptor_ref_t descriptor_ref;
-} loom_amdgpu_memory_descriptor_candidate_t;
+typedef uint32_t loom_amdgpu_memory_descriptor_candidate_key_t;
 
-static const loom_amdgpu_memory_descriptor_candidate_t
-    kAmdgpuMemoryDescriptorCandidates[] = {
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 1,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_I8,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 1,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_B8,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 2,
-            .payload_format = LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_B16_D16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 2,
-            .payload_format =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_I16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 2,
-            .payload_format =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_I16_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_U16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_U16_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_B16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORD,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORD_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_B64,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_B64_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORDX2,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORDX2_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_B128,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_B128_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORDX4,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORDX4_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORD,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORD_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_B64,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_B64_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORDX2,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORDX2_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_B128,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_B128_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORDX4,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORDX4_OFF_ZERO,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM,
-            .packet_byte_count = 4,
-            .payload_register_class =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORD,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM,
-            .packet_byte_count = 8,
-            .payload_register_class =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX2,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM,
-            .packet_byte_count = 16,
-            .payload_register_class =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_S_LOAD_DWORDX4,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 1,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_I8_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 1,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B8_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 2,
-            .payload_format = LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B16_D16_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 2,
-            .payload_format =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_I16_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_U16_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B16_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B128_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref =
-                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B128_SADDR,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 1,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_I8,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 1,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B8,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 2,
-            .payload_format = LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B16_D16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 2,
-            .payload_format =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_I16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_U16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B64,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B128,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B128,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 2,
-            .payload_format =
-                LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_U16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_U16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B64,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 12,
-            .payload_register_count = 3,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B96,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_B128,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 2,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B16,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B64,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 12,
-            .payload_register_count = 3,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B96,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
-            .packet_byte_count = 16,
-            .payload_register_count = 4,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B128,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ2_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE2_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ2ST64_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR,
-            .packet_byte_count = 8,
-            .payload_register_count = 2,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE2ST64_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_READ_ADDTID_B32,
-        },
-        {
-            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID,
-            .packet_byte_count = 4,
-            .payload_register_count = 1,
-            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
-            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_ADDTID_B32,
-        },
+enum {
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_BITS = 3u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_BITS = 3u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_BITS = 1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_BITS = 5u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_BITS = 1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_BITS = 2u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_BITS = 3u,
+
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_SHIFT = 0u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_SHIFT =
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_SHIFT +
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_BITS,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_SHIFT =
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_SHIFT +
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_BITS,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_SHIFT =
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_SHIFT +
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_BITS,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_SHIFT =
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_SHIFT +
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_BITS,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_SHIFT =
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_SHIFT +
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_BITS,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_SHIFT =
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_SHIFT +
+      LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_BITS,
+
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_MAX =
+      (1u << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_BITS) - 1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_MAX =
+      (1u << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_BITS) - 1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_MAX =
+      (1u << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_BITS) - 1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_MAX =
+      (1u << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_BITS) -
+      1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_MAX =
+      (1u
+       << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_BITS) -
+      1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_MAX =
+      (1u << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_BITS) - 1u,
+  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_MAX =
+      (1u
+       << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_BITS) -
+      1u,
 };
 
-static bool loom_amdgpu_memory_descriptor_candidate_matches(
-    const loom_amdgpu_memory_descriptor_candidate_t* candidate,
+static_assert(LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_COUNT_ - 1u <=
+                  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_MAX,
+              "memory descriptor domain key field is too small");
+static_assert(LOOM_AMDGPU_MEMORY_ADDRESS_FORM_COUNT_ - 1u <=
+                  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_MAX,
+              "memory address form key field is too small");
+static_assert(LOOM_AMDGPU_MEMORY_OPERATION_COUNT_ - 1u <=
+                  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_MAX,
+              "memory operation key field is too small");
+static_assert(4u * LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES <=
+                  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_MAX,
+              "memory packet byte count key field is too small");
+static_assert(
+    LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_COUNT_ - 1u <=
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_MAX,
+    "memory payload register class key field is too small");
+static_assert(LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_COUNT_ - 1u <=
+                  LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_MAX,
+              "memory payload format key field is too small");
+static_assert(
+    LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES <=
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_MAX,
+    "memory payload register count key field is too small");
+static_assert(
+    LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_SHIFT +
+            LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_BITS <=
+        8u * sizeof(loom_amdgpu_memory_descriptor_candidate_key_t),
+    "memory descriptor candidate key storage is too small");
+
+#define LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KEY(                           \
+    domain, address_form, kind, packet_byte_count, payload_register_class,     \
+    payload_format, payload_register_count)                                    \
+  ((((loom_amdgpu_memory_descriptor_candidate_key_t)(domain))                  \
+    << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_DOMAIN_SHIFT) |                 \
+   (((loom_amdgpu_memory_descriptor_candidate_key_t)(address_form))            \
+    << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_ADDRESS_FORM_SHIFT) |           \
+   (((loom_amdgpu_memory_descriptor_candidate_key_t)(kind))                    \
+    << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KIND_SHIFT) |                   \
+   (((loom_amdgpu_memory_descriptor_candidate_key_t)(packet_byte_count))       \
+    << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_SHIFT) |      \
+   (((loom_amdgpu_memory_descriptor_candidate_key_t)(payload_register_class))  \
+    << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_CLASS_SHIFT) | \
+   (((loom_amdgpu_memory_descriptor_candidate_key_t)(payload_format))          \
+    << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_FORMAT_SHIFT) |         \
+   (((loom_amdgpu_memory_descriptor_candidate_key_t)(payload_register_count))  \
+    << LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_SHIFT))
+
+#define LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(                              \
+    domain, address_form, kind, packet_byte_count, payload_register_class,    \
+    payload_format, payload_register_count, descriptor_ref_name)              \
+  {                                                                           \
+      .key = LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KEY(                     \
+          LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_##domain,                      \
+          LOOM_AMDGPU_MEMORY_ADDRESS_FORM_##address_form,                     \
+          LOOM_AMDGPU_MEMORY_OPERATION_##kind, (packet_byte_count),           \
+          LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_##payload_register_class, \
+          LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_##payload_format,                 \
+          (payload_register_count)),                                          \
+      .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_##descriptor_ref_name,     \
+  }
+
+static bool loom_amdgpu_memory_descriptor_candidate_key(
     loom_amdgpu_memory_descriptor_domain_t domain,
     loom_amdgpu_memory_address_form_t address_form,
     loom_amdgpu_memory_operation_kind_t kind, uint32_t packet_byte_count,
     loom_amdgpu_memory_payload_register_class_t payload_register_class,
     loom_amdgpu_memory_payload_format_t payload_format,
-    uint32_t payload_register_count) {
-  return candidate->domain == domain &&
-         candidate->address_form == address_form && candidate->kind == kind &&
-         candidate->packet_byte_count == packet_byte_count &&
-         candidate->payload_register_class == payload_register_class &&
-         candidate->payload_format == payload_format &&
-         candidate->payload_register_count == payload_register_count;
+    uint32_t payload_register_count,
+    loom_amdgpu_memory_descriptor_candidate_key_t* out_key) {
+  if (packet_byte_count >
+          LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PACKET_BYTE_COUNT_MAX ||
+      payload_register_count >
+          LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_PAYLOAD_REGISTER_COUNT_MAX) {
+    *out_key = 0;
+    return false;
+  }
+  *out_key = LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KEY(
+      domain, address_form, kind, packet_byte_count, payload_register_class,
+      payload_format, payload_register_count);
+  return true;
 }
+
+typedef struct loom_amdgpu_memory_descriptor_candidate_t {
+  // Packed selector key for memory operation shape and payload format.
+  loom_amdgpu_memory_descriptor_candidate_key_t key;
+  // Stable descriptor ref selected when present in the descriptor set.
+  loom_amdgpu_descriptor_ref_t descriptor_ref;
+} loom_amdgpu_memory_descriptor_candidate_t;
+static_assert(sizeof(loom_amdgpu_memory_descriptor_candidate_t) == 8,
+              "memory descriptor candidate rows must stay compact");
+
+static const loom_amdgpu_memory_descriptor_candidate_t
+    kAmdgpuMemoryDescriptorCandidates[] = {
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                1, VGPR, GENERIC, 1,
+                                                BUFFER_LOAD_I8),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, STORE,
+                                                1, VGPR, GENERIC, 1,
+                                                BUFFER_STORE_B8),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                2, VGPR, LOW_16BIT_FLOAT, 1,
+                                                BUFFER_LOAD_B16_D16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                2, VGPR, SIGNED_16BIT_INTEGER,
+                                                1, BUFFER_LOAD_I16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, LOAD, 2, VGPR,
+            SIGNED_16BIT_INTEGER, 1, BUFFER_LOAD_I16_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                2, VGPR, GENERIC, 1,
+                                                BUFFER_LOAD_U16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, LOAD, 2, VGPR, GENERIC, 1,
+            BUFFER_LOAD_U16_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, STORE,
+                                                2, VGPR, GENERIC, 1,
+                                                BUFFER_STORE_B16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                4, VGPR, GENERIC, 1,
+                                                BUFFER_LOAD_DWORD),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, LOAD, 4, VGPR, GENERIC, 1,
+            BUFFER_LOAD_DWORD_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                8, VGPR, GENERIC, 2,
+                                                BUFFER_LOAD_B64),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, LOAD, 8, VGPR, GENERIC, 2,
+            BUFFER_LOAD_B64_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                8, VGPR, GENERIC, 2,
+                                                BUFFER_LOAD_DWORDX2),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, LOAD, 8, VGPR, GENERIC, 2,
+            BUFFER_LOAD_DWORDX2_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                16, VGPR, GENERIC, 4,
+                                                BUFFER_LOAD_B128),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, LOAD, 16, VGPR, GENERIC, 4,
+            BUFFER_LOAD_B128_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, LOAD,
+                                                16, VGPR, GENERIC, 4,
+                                                BUFFER_LOAD_DWORDX4),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, LOAD, 16, VGPR, GENERIC, 4,
+            BUFFER_LOAD_DWORDX4_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, STORE,
+                                                4, VGPR, GENERIC, 1,
+                                                BUFFER_STORE_DWORD),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, STORE, 4, VGPR, GENERIC, 1,
+            BUFFER_STORE_DWORD_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, STORE,
+                                                8, VGPR, GENERIC, 2,
+                                                BUFFER_STORE_B64),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, STORE, 8, VGPR, GENERIC, 2,
+            BUFFER_STORE_B64_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, STORE,
+                                                8, VGPR, GENERIC, 2,
+                                                BUFFER_STORE_DWORDX2),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, STORE, 8, VGPR, GENERIC, 2,
+            BUFFER_STORE_DWORDX2_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, STORE,
+                                                16, VGPR, GENERIC, 4,
+                                                BUFFER_STORE_B128),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, STORE, 16, VGPR, GENERIC, 4,
+            BUFFER_STORE_B128_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(BUFFER_RESOURCE, DEFAULT, STORE,
+                                                16, VGPR, GENERIC, 4,
+                                                BUFFER_STORE_DWORDX4),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            BUFFER_RESOURCE, BUFFER_OFF_ZERO, STORE, 16, VGPR, GENERIC, 4,
+            BUFFER_STORE_DWORDX4_OFF_ZERO),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_SMEM, GLOBAL_SMEM, LOAD, 4, SGPR, GENERIC, 1, S_LOAD_DWORD),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SMEM, GLOBAL_SMEM, LOAD,
+                                                8, SGPR, GENERIC, 2,
+                                                S_LOAD_DWORDX2),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SMEM, GLOBAL_SMEM, LOAD,
+                                                16, SGPR, GENERIC, 4,
+                                                S_LOAD_DWORDX4),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                LOAD, 1, VGPR, GENERIC, 1,
+                                                GLOBAL_LOAD_I8_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                STORE, 1, VGPR, GENERIC, 1,
+                                                GLOBAL_STORE_B8_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                LOAD, 2, VGPR, LOW_16BIT_FLOAT,
+                                                1, GLOBAL_LOAD_B16_D16_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_SADDR, GLOBAL_SADDR, LOAD, 2, VGPR, SIGNED_16BIT_INTEGER, 1,
+            GLOBAL_LOAD_I16_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                LOAD, 2, VGPR, GENERIC, 1,
+                                                GLOBAL_LOAD_U16_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                STORE, 2, VGPR, GENERIC, 1,
+                                                GLOBAL_STORE_B16_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                LOAD, 4, VGPR, GENERIC, 1,
+                                                GLOBAL_LOAD_B32_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                LOAD, 8, VGPR, GENERIC, 2,
+                                                GLOBAL_LOAD_B64_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                LOAD, 16, VGPR, GENERIC, 4,
+                                                GLOBAL_LOAD_B128_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                STORE, 4, VGPR, GENERIC, 1,
+                                                GLOBAL_STORE_B32_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                STORE, 8, VGPR, GENERIC, 2,
+                                                GLOBAL_STORE_B64_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_SADDR, GLOBAL_SADDR,
+                                                STORE, 16, VGPR, GENERIC, 4,
+                                                GLOBAL_STORE_B128_SADDR),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, LOAD, 1, VGPR, GENERIC, 1, GLOBAL_LOAD_I8),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, STORE, 1, VGPR, GENERIC, 1, GLOBAL_STORE_B8),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_FLAT, FLAT, LOAD, 2,
+                                                VGPR, LOW_16BIT_FLOAT, 1,
+                                                GLOBAL_LOAD_B16_D16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(GLOBAL_FLAT, FLAT, LOAD, 2,
+                                                VGPR, SIGNED_16BIT_INTEGER, 1,
+                                                GLOBAL_LOAD_I16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, LOAD, 2, VGPR, GENERIC, 1, GLOBAL_LOAD_U16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, STORE, 2, VGPR, GENERIC, 1, GLOBAL_STORE_B16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, LOAD, 4, VGPR, GENERIC, 1, GLOBAL_LOAD_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, LOAD, 8, VGPR, GENERIC, 2, GLOBAL_LOAD_B64),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, LOAD, 16, VGPR, GENERIC, 4, GLOBAL_LOAD_B128),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, STORE, 4, VGPR, GENERIC, 1, GLOBAL_STORE_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, STORE, 8, VGPR, GENERIC, 2, GLOBAL_STORE_B64),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            GLOBAL_FLAT, FLAT, STORE, 16, VGPR, GENERIC, 4, GLOBAL_STORE_B128),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            LDS, DEFAULT, LOAD, 2, VGPR, SIGNED_16BIT_INTEGER, 1, DS_READ_U16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, LOAD, 2, VGPR,
+                                                GENERIC, 1, DS_READ_U16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, LOAD, 4, VGPR,
+                                                GENERIC, 1, DS_READ_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, LOAD, 8, VGPR,
+                                                GENERIC, 2, DS_READ_B64),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, LOAD, 12, VGPR,
+                                                GENERIC, 3, DS_READ_B96),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, LOAD, 16, VGPR,
+                                                GENERIC, 4, DS_READ_B128),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, STORE, 2, VGPR,
+                                                GENERIC, 1, DS_WRITE_B16),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, STORE, 4, VGPR,
+                                                GENERIC, 1, DS_WRITE_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, STORE, 8, VGPR,
+                                                GENERIC, 2, DS_WRITE_B64),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, STORE, 12, VGPR,
+                                                GENERIC, 3, DS_WRITE_B96),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DEFAULT, STORE, 16, VGPR,
+                                                GENERIC, 4, DS_WRITE_B128),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DS_2ADDR, LOAD, 8, VGPR,
+                                                GENERIC, 2, DS_READ2_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DS_2ADDR, STORE, 8, VGPR,
+                                                GENERIC, 2, DS_WRITE2_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DS_2ADDR, LOAD, 8, VGPR,
+                                                GENERIC, 2, DS_READ2ST64_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DS_2ADDR, STORE, 8, VGPR,
+                                                GENERIC, 2, DS_WRITE2ST64_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(LDS, DS_ADDTID, LOAD, 4, VGPR,
+                                                GENERIC, 1, DS_READ_ADDTID_B32),
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE(
+            LDS, DS_ADDTID, STORE, 4, VGPR, GENERIC, 1, DS_WRITE_ADDTID_B32),
+};
+
+#undef LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE
+
+#undef LOOM_AMDGPU_MEMORY_DESCRIPTOR_CANDIDATE_KEY
 
 static bool loom_amdgpu_select_memory_descriptor_candidate(
     const loom_low_descriptor_set_t* descriptor_set,
@@ -1164,13 +856,17 @@ static bool loom_amdgpu_select_memory_descriptor_candidate(
     uint32_t* out_descriptor_ordinal) {
   *out_descriptor = NULL;
   *out_descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  loom_amdgpu_memory_descriptor_candidate_key_t candidate_key = 0;
+  if (!loom_amdgpu_memory_descriptor_candidate_key(
+          domain, address_form, kind, packet_byte_count, payload_register_class,
+          payload_format, payload_register_count, &candidate_key)) {
+    return false;
+  }
   for (iree_host_size_t i = 0;
        i < IREE_ARRAYSIZE(kAmdgpuMemoryDescriptorCandidates); ++i) {
     const loom_amdgpu_memory_descriptor_candidate_t* candidate =
         &kAmdgpuMemoryDescriptorCandidates[i];
-    if (!loom_amdgpu_memory_descriptor_candidate_matches(
-            candidate, domain, address_form, kind, packet_byte_count,
-            payload_register_class, payload_format, payload_register_count)) {
+    if (candidate->key != candidate_key) {
       continue;
     }
     const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
@@ -1678,16 +1374,23 @@ static bool loom_amdgpu_select_ds2_memory_descriptor(
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  loom_amdgpu_memory_descriptor_candidate_key_t candidate_key = 0;
+  if (!loom_amdgpu_memory_descriptor_candidate_key(
+          LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
+          LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR, kind,
+          access->packet_byte_count, access->payload_register_class,
+          access->payload_format, access->payload_register_count,
+          &candidate_key)) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_MISSING;
+    return false;
+  }
   bool found_kind_descriptor = false;
   for (iree_host_size_t i = 0;
        i < IREE_ARRAYSIZE(kAmdgpuMemoryDescriptorCandidates); ++i) {
     const loom_amdgpu_memory_descriptor_candidate_t* candidate =
         &kAmdgpuMemoryDescriptorCandidates[i];
-    if (!loom_amdgpu_memory_descriptor_candidate_matches(
-            candidate, LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-            LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR, kind,
-            access->packet_byte_count, access->payload_register_class,
-            access->payload_format, access->payload_register_count)) {
+    if (candidate->key != candidate_key) {
       continue;
     }
     const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(

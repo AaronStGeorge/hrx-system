@@ -714,17 +714,20 @@ typedef enum loom_amdgpu_memory_dynamic_index_kind_e {
 typedef enum loom_amdgpu_memory_operation_kind_e {
   LOOM_AMDGPU_MEMORY_OPERATION_LOAD = 0,
   LOOM_AMDGPU_MEMORY_OPERATION_STORE = 1,
+  LOOM_AMDGPU_MEMORY_OPERATION_COUNT_,
 } loom_amdgpu_memory_operation_kind_t;
 
 typedef enum loom_amdgpu_memory_payload_register_class_e {
   LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_VGPR = 0,
   LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR = 1,
+  LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_COUNT_,
 } loom_amdgpu_memory_payload_register_class_t;
 
 typedef enum loom_amdgpu_memory_payload_format_e {
   LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_GENERIC = 0,
   LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT = 1,
   LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER = 2,
+  LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_COUNT_,
 } loom_amdgpu_memory_payload_format_t;
 
 typedef enum loom_amdgpu_memory_scalar_offset_placement_e {
