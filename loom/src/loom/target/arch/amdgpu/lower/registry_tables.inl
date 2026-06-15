@@ -60,6 +60,10 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_low_legality_verify_scalar_i64_alu,
                 LOOM_AMDGPU_STORAGE_VALUE_PLAN,
                 LOOM_AMDGPU_PRESELECT_VALUE_PLAN),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_REMSI)] =
+            LOOM_AMDGPU_LEGALITY_ROW(
+                LOOM_OP_SCALAR_REMSI,
+                loom_amdgpu_low_legality_verify_scalar_remsi_i64),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_TRUNCI)] =
             LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW(
                 LOOM_OP_SCALAR_TRUNCI, loom_amdgpu_select_value_dispatch,
