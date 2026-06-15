@@ -11,7 +11,7 @@
         "contains": {
           "unordered": [
             "## loom-compile",
-            "--backend=amdgpu",
+            "--backend=amdgpu-hal",
             "--compile-report=summary",
             "--artifact-manifest=summary",
             "--emit-target-artifact=kernel.hsaco",
