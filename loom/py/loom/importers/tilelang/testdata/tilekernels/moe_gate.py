@@ -158,7 +158,11 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
   %c2 = index.constant 2 : index
   %scores_fragment_state_next_2, %idx_reducer_state_next = scf.for %k = [%c0 to %c2 step %c1](%scores_fragment_state_iter = %scores_fragment_state_next : vector<32xf32>, %idx_reducer_state_iter = %idx_reducer_state : vector<1xi32>) -> (vector<32xf32>, vector<1xi32>) unroll {
     %identity = scalar.constant -inf : f32
-    %reduce = vector.reduce<maxnumf> %scores_fragment_state_iter, %identity : vector<32xf32>, f32
+    %reduce = scf.for %r = [%c0 to %c32 step %c1](%acc = %identity : f32) -> (f32) {
+      %reduce_value = view.load %scores_fragment[%r] : view<32xf32, %layout> -> f32
+      %maxnumf = scalar.maxnumf %acc, %reduce_value : f32
+      scf.yield %maxnumf : f32
+    }
     %store_4 = vector.insert %reduce into %amax_fragment_state[%c0] : f32, vector<1xf32>
     %const_2 = scalar.constant 2147483647 : i32
     %fill = vector.splat %const_2 : vector<1xi32>

@@ -16,6 +16,7 @@ iree_py_library(
     "__init__.py"
     "annotations.py"
     "cases.py"
+    "import_test.py"
     "loom_verifier.py"
     "main.py"
     "python.py"
@@ -56,6 +57,7 @@ iree_py_test(
   ARGS
     "loom.importers.check.annotations_test"
     "loom.importers.check.cases_test"
+    "loom.importers.check.import_test_test"
     "loom.importers.check.main_test"
     "loom.importers.check.python_test"
     "loom.importers.check.registry_test"

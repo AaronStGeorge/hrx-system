@@ -37,6 +37,7 @@ from loom.importers.tilelang.ops.topology import (
 def register(registry: TileLangConverterRegistry) -> None:
     registry.register_statement("Block", convert_block)
     registry.register_statement("BlockRealize", convert_block_realize)
+    registry.register_statement("Bind", convert_bind)
     registry.register_statement("LetStmt", convert_let_stmt)
     registry.register_statement("AttrStmt", convert_attr_stmt)
 
@@ -224,6 +225,23 @@ def convert_let_stmt(
     context.map_value(var, value, str(value.type))
     converter.convert_stmt(getattr(stmt, "body", None), context)
     context.record_converted(node_text(stmt), f"tir.LetStmt %{name} normalized")
+
+
+def convert_bind(
+    stmt: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+) -> None:
+    """Normalize a TileLang eager Bind statement to an SSA value binding."""
+
+    value = converter.convert_expr(getattr(stmt, "value", None), context)
+    if value is None:
+        context.record_blocked(node_text(stmt), "bind value is not mapped")
+        return
+    var = getattr(stmt, "var", None)
+    name = source_name(var, fallback="bind")
+    context.map_value(var, value, str(value.type))
+    context.record_converted(node_text(stmt), f"tir.Bind %{name} normalized")
 
 
 def convert_attr_stmt(

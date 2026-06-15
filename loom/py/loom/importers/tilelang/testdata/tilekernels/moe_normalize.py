@@ -102,12 +102,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
   %total_bytes = index.constant 4 : offset
   %total_buffer = buffer.alloca %total_bytes {base_alignment = 4, memory_space = private} : buffer
   %total = buffer.view %total_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
-  %c0 = index.constant 0 : index
-  %const = scalar.constant 9.9999999999999995e-21 : f32
   %c128 = index.constant 128 : index
   %madd = index.madd %bx, %c128, %tid : index
   %cmp = index.cmp slt, %madd, %num_tokens_idx : index
-  %total_state_if = scf.if %cmp -> (f32) {
+  scf.if %cmp {
+    %const = scalar.constant 9.9999999999999995e-21 : f32
+    %c0 = index.constant 0 : index
     %c2 = index.constant 2 : index
     %c1 = index.constant 1 : index
     scf.for %i = [%c0 to %c2 step %c1] {
@@ -125,9 +125,6 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
       %divf = scalar.divf %load_3, %total_state_next : f32
       view.store %divf, %normalized_weights[%madd, %i] : f32, view<[%num_tokens_idx]x2xf32, %layout>
     }
-    scf.yield %total_state_next : f32
-  } else {
-    scf.yield %const : f32
   }
   kernel.return
 }

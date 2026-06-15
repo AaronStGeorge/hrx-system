@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from enum import IntEnum, unique
 from typing import Any, Protocol, runtime_checkable
 
-from loom.dsl import Op
+from loom.dsl import FuncLikeInterface, Op
 from loom.ir import (
     Block,
     Module,
@@ -163,6 +163,7 @@ class FieldLayout:
     variadic_successor: str | None  # Name of the variadic successor, if any.
     variadic_region: str | None  # Name of the variadic region, if any.
     segmented_operands: bool = False
+    func_body_region_index: int | None = None
 
 
 def compute_layout(op_decl: Op) -> FieldLayout:
@@ -337,7 +338,22 @@ def compute_layout(op_decl: Op) -> FieldLayout:
         variadic_successor=variadic_successor,
         variadic_region=variadic_region,
         segmented_operands=segmented_operands,
+        func_body_region_index=_func_body_region_index(op_decl),
     )
+
+
+def _func_body_region_index(op_decl: Op) -> int | None:
+    body_name: str | None = None
+    for interface in op_decl.interfaces:
+        if isinstance(interface, FuncLikeInterface):
+            body_name = interface.body
+            break
+    if body_name is None:
+        return None
+    for index, region in enumerate(op_decl.regions):
+        if region.name == body_name:
+            return index
+    return None
 
 
 # ============================================================================
@@ -584,7 +600,12 @@ class ResolvedFields:
         entry block's arguments. For declaration-style ops (func.decl,
         func.ukernel), args are the op's operands.
         """
-        if self._op.regions:
+        body_region_index = self._layout.func_body_region_index
+        if body_region_index is not None and body_region_index < len(self._op.regions):
+            region = self._op.regions[body_region_index]
+            entry = region.blocks[0] if region.blocks else None
+            arg_ids = list(entry.arg_ids) if entry else []
+        elif self._op.regions:
             entry = (
                 self._op.regions[0].blocks[0] if self._op.regions[0].blocks else None
             )

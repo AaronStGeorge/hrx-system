@@ -26,8 +26,54 @@ class TileLangModules:
 
     tilelang: ModuleType
     tvm: ModuleType
-    tir: ModuleType
+    tir: TileLangTirCompat
     T: ModuleType
+
+
+class TileLangTirCompat:
+    """Compatibility facade for TileLang's current vendored TIR module."""
+
+    def __init__(self, module: ModuleType) -> None:
+        self._module = module
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "Block":
+            return self._module.SBlock
+        if name == "BlockRealize":
+            return self._module.SBlockRealize
+        return getattr(self._module, name)
+
+    def Call(
+        self,
+        dtype: str,
+        op: object,
+        args: list[object],
+        annotations: dict[object, object] | None = None,
+        span: object | None = None,
+    ) -> object:
+        return self._module.Call(
+            dtype,
+            _normalize_tir_op_name(op),
+            args,
+            annotations=annotations,
+            span=span,
+        )
+
+    def call_intrin(
+        self,
+        dtype: str,
+        func_name: object,
+        *args: object,
+        annotations: dict[object, object] | None = None,
+        span: object | None = None,
+    ) -> object:
+        return self._module.call_intrin(
+            dtype,
+            _normalize_tir_op_name(func_name),
+            *args,
+            annotations=annotations,
+            span=span,
+        )
 
 
 class TileLangHarness:
@@ -49,7 +95,7 @@ class TileLangHarness:
         return self.modules.tvm
 
     @property
-    def tir(self) -> ModuleType:
+    def tir(self) -> TileLangTirCompat:
         return self.modules.tir
 
     def input(
@@ -76,15 +122,29 @@ class TileLangHarness:
         try:
             tilelang = importlib.import_module("tilelang")
             tvm = importlib.import_module("tvm")
-            tir = importlib.import_module("tvm.tir")
+            tir = importlib.import_module("tvm.tirx")
             language = importlib.import_module("tilelang.language")
+            print_op = importlib.import_module("tilelang.language.print_op")
         except Exception as exc:
             raise TileLangHarnessError(
                 f"failed to import TileLang fixture dependencies: {exc}"
             ) from exc
+        # TileLang currently gates T.device_assert macro emission on CUDA
+        # discovery at import time. Importer checks inspect frontend IR and do
+        # not execute CUDA, so keep debug/assert fixture output independent of
+        # whether the host test environment exposes nvcc.
+        print_op._IS_CUDA_AVAILABLE = True
         return TileLangModules(
             tilelang=tilelang,
             tvm=tvm,
-            tir=tir,
+            tir=TileLangTirCompat(tir),
             T=language,
         )
+
+
+def _normalize_tir_op_name(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    if value.startswith("tir."):
+        return "tirx." + value[len("tir.") :]
+    return value

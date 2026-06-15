@@ -69,6 +69,11 @@ def test_create_kernel_module_splits_config_and_body_arguments() -> None:
     assert body_arg.name == "n"
     assert config_arg.type == I32
     assert body_arg.type == I32
+    with shell.builder.insertion_block(shell.body_block):
+        shell.builder.kernel.return_()
+    assert "} launch(%n: i32) {\n  kernel.return\n}" in print_loom_module(
+        shell.module, ops=kernel_module_ops("hip -mcpu=gfx1100")
+    )
 
 
 def test_create_kernel_module_uses_supported_amdgpu_target_record() -> None:

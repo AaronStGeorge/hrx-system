@@ -121,22 +121,21 @@ def create_kernel_module(spec: KernelModuleSpec) -> KernelModuleShell:
         ]
     )
     body = builder.region()
-    builder.kernel.def_(
-        target=target_symbol,
-        export_symbol=spec.export_symbol,
-        callee=spec.callee,
-        config_args=[
-            (
-                config_arguments_by_ordinal[argument.ordinal].name,
-                config_arguments_by_ordinal[argument.ordinal].type,
-            )
-            for argument in spec.config_arguments
-        ],
-        args=[
+    attributes = {
+        "callee": spec.callee,
+        "target": target_symbol,
+        "export_symbol": spec.export_symbol,
+    }
+    builder.ir.build(
+        "kernel.def",
+        attributes=attributes,
+        func_args=[
             body_arguments_by_ordinal[argument.ordinal] for argument in spec.arguments
         ],
-        config=config,
-        body=body,
+        regions=[
+            config,
+            body,
+        ],
     )
     if spec.launch_config is not None:
         build_static_launch_config(builder, config, spec.launch_config)

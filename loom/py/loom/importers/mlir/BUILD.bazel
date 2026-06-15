@@ -50,12 +50,6 @@ iree_py_library(
 
 iree_py_library(
     name = "mlir_packages",
-    deps = iree_select({
-        "//loom/config/import:mlir": [
-            "@importer_pip//iree_base_compiler",
-        ],
-        "//conditions:default": [],
-    }),
 )
 
 iree_cmake_extra_content(
@@ -101,7 +95,7 @@ iree_py_test(
 )
 
 filegroup(
-    name = "import_tests",
+    name = "mlir_import_tests",
     srcs = [
         "testdata/vector_reduce_amdgpu.mlir",
     ],
@@ -114,10 +108,10 @@ iree_py_test(
         "mlir",
         "--fail-on-skip",
         "--loom-opt=$(location //loom/src/loom/tools/loom-opt:loom-opt)",
-        "$(locations :import_tests)",
+        "$(locations :mlir_import_tests)",
     ],
     data = [
-        ":import_tests",
+        ":mlir_import_tests",
         "//loom/src/loom/tools/loom-opt",
     ],
     main = "import_test.py",

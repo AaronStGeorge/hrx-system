@@ -187,16 +187,16 @@ def call_op_name(call: object) -> str | None:
         return None
     name = getattr(op, "name", None)
     if name:
-        return str(name)
+        return _canonical_op_name(str(name))
     get_name = getattr(op, "get_name", None)
     if get_name is not None:
         resolved_name = get_name()
         if resolved_name:
-            return str(resolved_name)
+            return _canonical_op_name(str(resolved_name))
     if isinstance(op, str):
-        return op
+        return _canonical_op_name(op)
     text = str(op)
-    return text if text else None
+    return _canonical_op_name(text) if text else None
 
 
 def is_thread_return_call(call: object) -> bool:
@@ -1507,6 +1507,12 @@ def _string_value(value: object) -> str:
     return str(payload)
 
 
+def _canonical_op_name(name: str) -> str:
+    if name.startswith("tirx."):
+        return "tir." + name[len("tirx.") :]
+    return name
+
+
 _UNARY_FLOAT_CALLS = {
     "tir.acos": UnaryCallSpec("acosf"),
     "tir.acosh": UnaryCallSpec("acoshf"),
@@ -1659,6 +1665,8 @@ _ASSUME_CALLS = {
 }
 
 _DEVICE_ASSERT_CALLS = {
+    "tir.device_assert",
+    "tir.device_assert_with_msg",
     "tl.device_assert",
     "tl.device_assert_with_msg",
 }

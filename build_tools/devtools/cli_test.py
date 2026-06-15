@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from build_tools.devtools import aliases, cli
 from build_tools.devtools import bazel as bazel_dev
@@ -38,6 +40,30 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(cm.exception.code, 0)
         return output.getvalue()
+
+    def importer_manifest_patch(self):
+        return mock.patch(
+            "build_tools.devtools.importers.selected_manifests",
+            return_value=({"site_packages": "/tmp/loom-tilelang-site"},),
+        )
+
+    def test_importers_setup_uses_locked_requirements(self):
+        args = cli.parse_arguments(["importers", "setup", "tilelang"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn(".tmp/importers/tilelang/venv", description)
+        self.assertIn("pip install --require-hashes --only-binary=:all:", description)
+        self.assertIn("requirements-importers-tilelang.lock.txt", description)
+
+    def test_importers_env_prints_manifest(self):
+        args = cli.parse_arguments(["importers", "env", "tilelang", "--format=shell"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("# print importer environment tilelang manifest", description)
 
     def test_cmake_configure_forwards_options_without_separator(self):
         args = cli.parse_arguments(["cmake", "configure", "--fresh"])
@@ -95,6 +121,14 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("-DLOOM_TARGET_AMDGPU=ON", description)
 
+    def test_bazel_configure_accepts_importer_environment(self):
+        args = cli.parse_arguments(["bazel", "configure", "--importer-env", "tilelang"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("-DLOOM_IMPORT_TILELANG=ON", description)
+
     def test_bazel_configure_accepts_native_driver_options(self):
         args = cli.parse_arguments(
             [
@@ -129,6 +163,45 @@ class CliTest(unittest.TestCase):
         self.assertIn("--config=asan", description)
         self.assertIn("//runtime/...", description)
         self.assertIn("//libhrx/...", description)
+
+    def test_bazel_test_importer_environment_adds_config_and_pythonpath(self):
+        with self.importer_manifest_patch():
+            args = cli.parse_arguments(
+                [
+                    "bazel",
+                    "test",
+                    "--importer-env",
+                    "tilelang",
+                    "//loom/py/loom/importers/tilelang:tilelang_import_test",
+                ]
+            )
+            plan = args.handler(args)
+
+        description = plan.describe()
+        self.assertIn("--config=loom-importer-tilelang", description)
+        self.assertIn("--test_env=PYTHONPATH=/tmp/loom-tilelang-site", description)
+        self.assertIn(
+            "//loom/py/loom/importers/tilelang:tilelang_import_test",
+            description,
+        )
+
+    def test_bazel_test_all_importer_environments_use_aggregate_config(self):
+        with self.importer_manifest_patch():
+            args = cli.parse_arguments(
+                [
+                    "bazel",
+                    "test",
+                    "--importer-env",
+                    "mlir,tilelang",
+                    "//loom/py/loom/importers/...",
+                ]
+            )
+            plan = args.handler(args)
+
+        description = plan.describe()
+        self.assertIn("--config=loom-importers", description)
+        self.assertNotIn("--config=loom-importer-mlir", description)
+        self.assertNotIn("--config=loom-importer-tilelang", description)
 
     def test_bazel_build_preserves_negative_target_separator(self):
         argv = self.planned_argv(
@@ -264,6 +337,27 @@ class CliTest(unittest.TestCase):
         self.assertIn("bazel cquery --output=files --config=asan", description)
         self.assertIn("exec '<built executable>' --benchmark_filter=Alloc", description)
 
+    def test_bazel_run_importer_environment_adds_config_and_pythonpath(self):
+        with self.importer_manifest_patch():
+            args = cli.parse_arguments(
+                [
+                    "bazel",
+                    "run",
+                    "--importer-env=tilelang",
+                    "//loom/py/loom/importers/check:loom_import_check",
+                    "--",
+                    "--list-importers",
+                ]
+            )
+            plan = args.handler(args)
+
+        description = plan.describe()
+        self.assertIn("--config=loom-importer-tilelang", description)
+        self.assertEqual(
+            plan.steps[0].env.get("PYTHONPATH", "").split(os.pathsep)[0],
+            "/tmp/loom-tilelang-site",
+        )
+
     def test_bazel_run_can_print_resolved_executable_path(self):
         args = cli.parse_arguments(
             [
@@ -318,6 +412,39 @@ class CliTest(unittest.TestCase):
         self.assertIn("cmake -S", description)
         self.assertIn("--target iree_cmake_try_snippet", description)
         self.assertIn("# compile only", description)
+
+    def test_cmake_configure_importer_environment_adds_option_and_pythonpath(self):
+        with self.importer_manifest_patch():
+            args = cli.parse_arguments(
+                ["cmake", "configure", "--importer-env=tilelang"]
+            )
+            plan = args.handler(args)
+
+        description = plan.describe()
+        self.assertIn("-DLOOM_IMPORT_TILELANG=ON", description)
+        self.assertIn("PYTHONPATH=/tmp/loom-tilelang-site", description)
+
+    def test_cmake_test_importer_environment_adds_pythonpath(self):
+        with self.importer_manifest_patch():
+            args = cli.parse_arguments(
+                ["cmake", "test", "--importer-env", "tilelang", "-R", "tilelang"]
+            )
+            plan = args.handler(args)
+
+        description = plan.describe()
+        self.assertIn("PYTHONPATH=/tmp/loom-tilelang-site", description)
+        self.assertIn("-R tilelang", description)
+
+    def test_cmake_build_importer_environment_adds_pythonpath(self):
+        with self.importer_manifest_patch():
+            args = cli.parse_arguments(
+                ["cmake", "build", "--importer-env", "tilelang", "loom-opt"]
+            )
+            plan = args.handler(args)
+
+        description = plan.describe()
+        self.assertIn("PYTHONPATH=/tmp/loom-tilelang-site", description)
+        self.assertIn("--target loom-opt", description)
 
     def test_bazel_try_preserves_local_input_paths(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -736,7 +863,7 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("### CMake", output)
         self.assertIn("iree-cmake-build", output)
-        self.assertIn("build_tools/bin/iree-*-*", output)
+        self.assertIn("python dev.py", output)
         self.assertNotIn("### Bazel", output)
 
     def test_bazel_build_agents_md_uses_public_wrapper_names(self):

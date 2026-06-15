@@ -80,8 +80,8 @@ iree_py_test(
 )
 endif()
 
-add_custom_command(OUTPUT import_tests.stamp
-    COMMAND ${CMAKE_COMMAND} -E touch import_tests.stamp
+add_custom_command(OUTPUT tilelang_import_tests.stamp
+    COMMAND ${CMAKE_COMMAND} -E touch tilelang_import_tests.stamp
   DEPENDS
     "testdata/allocations.py"
     "testdata/analysis.py"
@@ -106,8 +106,8 @@ add_custom_command(OUTPUT import_tests.stamp
     "testdata/vector_memory.py"
 )
 
-add_custom_target(import_tests
-    DEPENDS import_tests.stamp
+add_custom_target(tilelang_import_tests
+    DEPENDS tilelang_import_tests.stamp
 )
 
 if(LOOM_IMPORT_TILELANG)
