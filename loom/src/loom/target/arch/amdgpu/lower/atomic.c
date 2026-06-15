@@ -487,7 +487,7 @@ static bool loom_amdgpu_atomic_value_can_feed_vgpr_operand(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_op_t* source_op,
     const loom_amdgpu_atomic_descriptor_candidate_t* candidate) {
-  if (candidate->operation_kind == LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG) {
+  if (loom_view_atomic_cmpxchg_isa(source_op)) {
     const loom_value_id_t expected =
         loom_view_atomic_cmpxchg_expected(source_op);
     const loom_value_id_t replacement =
@@ -519,6 +519,92 @@ static bool loom_amdgpu_atomic_source_plan_proves_workgroup_root(
   return root_op != NULL && loom_buffer_alloca_isa(root_op);
 }
 
+static bool loom_amdgpu_atomic_memory_space_candidate_index(
+    loom_value_fact_memory_space_t memory_space, uint32_t* out_index) {
+  *out_index = 0;
+  switch (memory_space) {
+    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
+      *out_index = 0;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
+      *out_index = 1;
+      return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
+      *out_index = 2;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_amdgpu_atomic_address_form_candidate_index(
+    loom_amdgpu_memory_address_form_t address_form, uint32_t* out_index) {
+  *out_index = 0;
+  switch (address_form) {
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT:
+      *out_index = 0;
+      return true;
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR:
+      *out_index = 1;
+      return true;
+    case LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT:
+      *out_index = 2;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_host_size_t loom_amdgpu_atomic_address_form_order(
+    loom_value_fact_memory_space_t memory_space, bool prefer_global_saddr,
+    loom_amdgpu_memory_address_form_t* out_address_forms) {
+  switch (memory_space) {
+    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
+      out_address_forms[0] = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT;
+      return 1;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
+      out_address_forms[0] = prefer_global_saddr
+                                 ? LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR
+                                 : LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT;
+      out_address_forms[1] = prefer_global_saddr
+                                 ? LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT
+                                 : LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR;
+      return 2;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
+      out_address_forms[0] = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static bool loom_amdgpu_atomic_kind_candidate_index(
+    loom_amdgpu_atomic_operation_kind_t operation_kind, uint8_t atomic_kind,
+    uint32_t* out_index) {
+  if (operation_kind == LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG) {
+    *out_index = LOOM_AMDGPU_ATOMIC_KIND_INDEX_NONE;
+    return true;
+  }
+  if (atomic_kind >= LOOM_ATOMIC_KIND_COUNT_) {
+    *out_index = 0;
+    return false;
+  }
+  *out_index = atomic_kind;
+  return true;
+}
+
+static const loom_amdgpu_atomic_descriptor_candidate_range_t*
+loom_amdgpu_atomic_descriptor_candidate_range(
+    uint32_t memory_space_index, uint32_t address_form_index,
+    loom_amdgpu_atomic_operation_kind_t operation_kind,
+    uint32_t atomic_kind_index) {
+  const uint32_t range_index =
+      LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE_RANGE_INDEX(
+          memory_space_index, address_form_index, operation_kind,
+          atomic_kind_index);
+  return &kLoomAmdgpuAtomicDescriptorCandidateRanges[range_index];
+}
+
 static bool loom_amdgpu_atomic_select_descriptor(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
@@ -530,34 +616,44 @@ static bool loom_amdgpu_atomic_select_descriptor(
       descriptor_set, selection->source.memory_space);
   bool found_kind = false;
   bool found_type = false;
-  const iree_host_size_t pass_count = prefer_global_saddr ? 2 : 1;
-  for (iree_host_size_t pass = 0; pass < pass_count; ++pass) {
-    const bool global_saddr_only = prefer_global_saddr && pass == 0;
-    for (iree_host_size_t i = 0; i < kLoomAmdgpuAtomicDescriptorCandidateCount;
-         ++i) {
+  uint32_t memory_space_index = 0;
+  uint32_t atomic_kind_index = 0;
+  if (!loom_amdgpu_atomic_memory_space_candidate_index(
+          selection->source.memory_space, &memory_space_index) ||
+      selection->operation_kind >= LOOM_AMDGPU_ATOMIC_OPERATION_COUNT_ ||
+      !loom_amdgpu_atomic_kind_candidate_index(
+          selection->operation_kind, atomic_kind, &atomic_kind_index)) {
+    diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_ATOMIC_KIND;
+    return false;
+  }
+
+  loom_amdgpu_memory_address_form_t address_forms[2] = {0};
+  const iree_host_size_t address_form_count =
+      loom_amdgpu_atomic_address_form_order(selection->source.memory_space,
+                                            prefer_global_saddr, address_forms);
+  for (iree_host_size_t address_form_ordinal = 0;
+       address_form_ordinal < address_form_count; ++address_form_ordinal) {
+    const loom_amdgpu_memory_address_form_t address_form =
+        address_forms[address_form_ordinal];
+    uint32_t address_form_index = 0;
+    if (!loom_amdgpu_atomic_address_form_candidate_index(address_form,
+                                                         &address_form_index)) {
+      continue;
+    }
+    const loom_amdgpu_atomic_descriptor_candidate_range_t* range =
+        loom_amdgpu_atomic_descriptor_candidate_range(
+            memory_space_index, address_form_index, selection->operation_kind,
+            atomic_kind_index);
+    if (range->candidate_count == 0) {
+      continue;
+    }
+    found_kind = true;
+    const iree_host_size_t first_candidate = range->first_candidate;
+    const iree_host_size_t end_candidate =
+        first_candidate + range->candidate_count;
+    for (iree_host_size_t i = first_candidate; i < end_candidate; ++i) {
       const loom_amdgpu_atomic_descriptor_candidate_t* candidate =
           &kLoomAmdgpuAtomicDescriptorCandidates[i];
-      if (prefer_global_saddr) {
-        if (global_saddr_only &&
-            candidate->address_form !=
-                LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR) {
-          continue;
-        }
-        if (!global_saddr_only &&
-            candidate->address_form ==
-                LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR) {
-          continue;
-        }
-      }
-      if (candidate->memory_space != selection->source.memory_space ||
-          candidate->operation_kind != selection->operation_kind) {
-        continue;
-      }
-      if (selection->operation_kind != LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG &&
-          candidate->atomic_kind != atomic_kind) {
-        continue;
-      }
-      found_kind = true;
       if (!loom_amdgpu_atomic_value_kind_matches(value_type,
                                                  candidate->value_kind)) {
         continue;
@@ -578,7 +674,7 @@ static bool loom_amdgpu_atomic_select_descriptor(
           loom_low_descriptor_set_descriptor_at(descriptor_set,
                                                 descriptor_ordinal);
       IREE_ASSERT(descriptor != NULL);
-      selection->address_form = candidate->address_form;
+      selection->address_form = address_form;
       selection->descriptor_ref = candidate->descriptor_ref;
       if (loom_amdgpu_descriptor_has_implicit_resource_operand(descriptor_set,
                                                                descriptor)) {

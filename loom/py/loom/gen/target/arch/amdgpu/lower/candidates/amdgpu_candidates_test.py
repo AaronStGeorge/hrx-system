@@ -25,6 +25,23 @@ def test_atomic_generator_emits_data_source_only() -> None:
     assert "\nreturn " not in source
     assert "kLoomAmdgpuAtomicDescriptorCandidates[]" in source
     assert "kLoomAmdgpuAtomicDescriptorCandidateCount" in source
+    assert "kLoomAmdgpuAtomicDescriptorCandidateRanges" in source
+    assert ".memory_space" not in source
+    assert ".address_form" not in source
+    assert ".operation_kind" not in source
+    assert ".atomic_kind" not in source
+    assert ".value_kind" in source
+    assert ".descriptor_ref" in source
+
+
+def test_atomic_generator_builds_contiguous_candidate_ranges() -> None:
+    candidates = amdgpu_atomic_candidates.amdgpu_atomic_descriptor_candidates()
+    ranges = amdgpu_atomic_candidates._candidate_ranges(candidates)
+
+    assert ranges
+    assert len(ranges) < len(candidates)
+    covered_candidate_count = sum(candidate_count for _, _, candidate_count in ranges)
+    assert covered_candidate_count == len(candidates)
 
 
 def test_compare_generator_emits_data_source_only() -> None:

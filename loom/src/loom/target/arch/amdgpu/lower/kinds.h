@@ -62,6 +62,7 @@ typedef enum loom_amdgpu_atomic_operation_kind_e {
   LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE = 0,
   LOOM_AMDGPU_ATOMIC_OPERATION_RMW = 1,
   LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG = 2,
+  LOOM_AMDGPU_ATOMIC_OPERATION_COUNT_,
 } loom_amdgpu_atomic_operation_kind_t;
 
 #ifdef __cplusplus
