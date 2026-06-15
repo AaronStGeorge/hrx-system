@@ -456,7 +456,8 @@ typedef uint64_t iree_hal_device_observation_flags_t;
 typedef enum iree_hal_device_observation_flag_bits_e {
   // No observation groups are requested or populated.
   IREE_HAL_DEVICE_OBSERVATION_FLAG_NONE = 0ull,
-  // Device memory availability and capacity fields are requested or populated.
+  // Device memory availability and total allocation budget fields are requested
+  // or populated.
   IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY = 1ull << 0,
   // All currently defined observation groups.
   IREE_HAL_DEVICE_OBSERVATION_FLAG_ALL =
@@ -482,7 +483,12 @@ typedef enum iree_hal_device_memory_observation_flag_bits_e {
 typedef struct iree_hal_device_memory_observation_t {
   // Memory fields populated by the device.
   iree_hal_device_memory_observation_flags_t flags;
-  // Total memory capacity in bytes.
+  // Total memory bytes represented by this sample.
+  //
+  // The value is source-defined: it may be immutable physical capacity when
+  // sourced from device specs or a live allocation budget when sourced from a
+  // backend budget query. Callers that need immutable hardware capacity should
+  // use iree_hal_device_spec_t instead.
   iree_device_size_t total_bytes;
   // Memory bytes available for new allocations at sample time.
   iree_device_size_t available_bytes;

@@ -26,7 +26,7 @@ extern "C" {
 #define IREE_HAL_VULKAN_MAX_QUEUE_LANES 3
 
 // Maximum recognized device extension names enabled during VkDevice creation.
-#define IREE_HAL_VULKAN_MAX_DEVICE_EXTENSION_NAMES 8
+#define IREE_HAL_VULKAN_MAX_DEVICE_EXTENSION_NAMES 9
 
 // Maximum queue-family create infos needed for current queue role assignment.
 #define IREE_HAL_VULKAN_MAX_QUEUE_CREATE_INFOS 3

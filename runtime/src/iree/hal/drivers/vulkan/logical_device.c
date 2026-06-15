@@ -907,6 +907,86 @@ static const iree_hal_device_spec_t* iree_hal_vulkan_logical_device_spec(
   return device->device_spec;
 }
 
+static iree_status_t iree_hal_vulkan_logical_device_sample_memory_observation(
+    iree_hal_vulkan_logical_device_t* device,
+    iree_hal_device_observation_t* out_observation) {
+  IREE_RETURN_IF_ERROR(
+      iree_hal_device_observation_populate_memory_total_from_spec(
+          device->device_spec, out_observation));
+  if (!iree_all_bits_set(device->enabled_extensions,
+                         IREE_HAL_VULKAN_DEVICE_EXTENSION_EXT_MEMORY_BUDGET)) {
+    return iree_ok_status();
+  }
+
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT memory_budget = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT,
+  };
+  VkPhysicalDeviceMemoryProperties2 memory_properties = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+      .pNext = &memory_budget,
+  };
+  IREE_LEAK_CHECK_DISABLE_PUSH();
+  iree_vkGetPhysicalDeviceMemoryProperties2(
+      IREE_VULKAN_INSTANCE(&device->instance.syms),
+      device->physical_device.handle, &memory_properties);
+  IREE_LEAK_CHECK_DISABLE_POP();
+
+  iree_device_size_t aggregate_budget_bytes = 0;
+  iree_device_size_t aggregate_available_bytes = 0;
+  iree_status_t status = iree_ok_status();
+  const uint32_t heap_count =
+      memory_properties.memoryProperties.memoryHeapCount;
+  for (uint32_t i = 0; i < heap_count && iree_status_is_ok(status); ++i) {
+    const VkDeviceSize heap_budget_bytes = memory_budget.heapBudget[i];
+    const VkDeviceSize heap_usage_bytes = memory_budget.heapUsage[i];
+    if (heap_budget_bytes > (VkDeviceSize)IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "Vulkan heap memory budget exceeds the representable "
+          "iree_device_size_t range");
+    }
+
+    const VkDeviceSize heap_available_bytes =
+        heap_budget_bytes > heap_usage_bytes
+            ? heap_budget_bytes - heap_usage_bytes
+            : 0;
+    if (iree_status_is_ok(status) &&
+        heap_available_bytes > (VkDeviceSize)IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "Vulkan heap memory availability exceeds the representable "
+          "iree_device_size_t range");
+    }
+
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_budget_bytes,
+                                      (iree_device_size_t)heap_budget_bytes,
+                                      &aggregate_budget_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate Vulkan memory budget exceeds the representable "
+          "iree_device_size_t range");
+    }
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_available_bytes,
+                                      (iree_device_size_t)heap_available_bytes,
+                                      &aggregate_available_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate Vulkan memory availability exceeds the representable "
+          "iree_device_size_t range");
+    }
+  }
+
+  if (iree_status_is_ok(status) && heap_count > 0) {
+    iree_hal_device_observation_set_memory_total(aggregate_budget_bytes,
+                                                 out_observation);
+    iree_hal_device_observation_set_memory_available(aggregate_available_bytes,
+                                                     out_observation);
+  }
+  return status;
+}
+
 static iree_status_t iree_hal_vulkan_logical_device_sample_observation(
     iree_hal_device_t* base_device,
     iree_hal_device_observation_flags_t requested_flags,
@@ -916,8 +996,8 @@ static iree_status_t iree_hal_vulkan_logical_device_sample_observation(
   if (iree_any_bit_set(requested_flags,
                        IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
     IREE_RETURN_IF_ERROR(
-        iree_hal_device_observation_populate_memory_total_from_spec(
-            device->device_spec, out_observation));
+        iree_hal_vulkan_logical_device_sample_memory_observation(
+            device, out_observation));
   }
   return iree_ok_status();
 }
