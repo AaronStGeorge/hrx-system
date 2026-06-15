@@ -120,6 +120,18 @@ static const loom_amdgpu_memory_cache_policy_encoding_row_t
     kAmdgpuMemoryCachePolicyEncodingRows[] = {
         {
             .encoding =
+                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+            .encoding_key = {.data = "gfx9_11_glc_slc_dlc",
+                             .size = sizeof("gfx9_11_glc_slc_dlc") - 1},
+            .selected_key =
+                {.data = "memory_cache_policy.gfx9_11_glc_slc_dlc",
+                 .size = sizeof("memory_cache_policy.gfx9_11_glc_slc_dlc") - 1},
+            .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
+            .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR),
+            .attr_flags = 0,
+        },
+        {
+            .encoding =
                 LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
             .encoding_key = {.data = "gfx12_nv_scope_th",
                              .size = sizeof("gfx12_nv_scope_th") - 1},
@@ -144,30 +156,18 @@ static const loom_amdgpu_memory_cache_policy_encoding_row_t
                              LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL),
             .attr_flags = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT,
         },
-        {
-            .encoding =
-                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
-            .encoding_key = {.data = "gfx9_11_glc_slc_dlc",
-                             .size = sizeof("gfx9_11_glc_slc_dlc") - 1},
-            .selected_key =
-                {.data = "memory_cache_policy.gfx9_11_glc_slc_dlc",
-                 .size = sizeof("memory_cache_policy.gfx9_11_glc_slc_dlc") - 1},
-            .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
-            .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR),
-            .attr_flags = 0,
-        },
 };
 
 static const loom_amdgpu_memory_cache_policy_encoding_row_t*
 loom_amdgpu_memory_cache_policy_encoding_row(
     loom_amdgpu_vector_memory_cache_policy_encoding_t encoding) {
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuMemoryCachePolicyEncodingRows); ++i) {
-    const loom_amdgpu_memory_cache_policy_encoding_row_t* row =
-        &kAmdgpuMemoryCachePolicyEncodingRows[i];
-    if (row->encoding == encoding) {
-      return row;
-    }
+  if (encoding == LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE) {
+    return NULL;
+  }
+  const iree_host_size_t row_index = (iree_host_size_t)encoding - 1u;
+  if (row_index < IREE_ARRAYSIZE(kAmdgpuMemoryCachePolicyEncodingRows) &&
+      kAmdgpuMemoryCachePolicyEncodingRows[row_index].encoding == encoding) {
+    return &kAmdgpuMemoryCachePolicyEncodingRows[row_index];
   }
   return NULL;
 }
