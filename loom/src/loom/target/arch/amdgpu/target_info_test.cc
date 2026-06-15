@@ -15,6 +15,7 @@ namespace {
 
 using SchedulingBits = loom_amdgpu_processor_scheduling_bits_t;
 using KernelDescriptorFlags = loom_amdgpu_kernel_descriptor_abi_flags_t;
+using WavefrontSizeFlags = loom_amdgpu_wavefront_size_flags_t;
 
 static constexpr KernelDescriptorFlags kCdnaGfx9DescriptorFlags =
     LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH |
@@ -216,15 +217,20 @@ TEST(AmdgpuTargetInfoTest, WavefrontSizeSupportMatchesGfxFamilies) {
     bool supports_wave64;
   };
   static const Case cases[] = {
-      {IREE_SV("gfx942"), false, true},  {IREE_SV("gfx950"), false, true},
-      {IREE_SV("gfx1100"), true, true},  {IREE_SV("gfx1200"), true, true},
-      {IREE_SV("gfx1250"), true, false},
+      {IREE_SV("gfx90a"), false, false}, {IREE_SV("gfx942"), false, true},
+      {IREE_SV("gfx950"), false, true},  {IREE_SV("gfx1100"), true, true},
+      {IREE_SV("gfx1200"), true, true},  {IREE_SV("gfx1250"), true, false},
   };
   for (const Case& c : cases) {
     const loom_amdgpu_processor_info_t* processor = nullptr;
     IREE_ASSERT_OK(
         loom_amdgpu_target_info_lookup_processor(c.processor_name, &processor));
     ASSERT_NE(processor, nullptr);
+    const WavefrontSizeFlags expected_supported_sizes =
+        (c.supports_wave32 ? LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32 : 0) |
+        (c.supports_wave64 ? LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64 : 0);
+    EXPECT_EQ(processor->wavefront.supported_sizes, expected_supported_sizes)
+        << std::string(c.processor_name.data, c.processor_name.size);
     EXPECT_EQ(loom_amdgpu_processor_supports_wavefront_size(processor, 32),
               c.supports_wave32)
         << std::string(c.processor_name.data, c.processor_name.size);

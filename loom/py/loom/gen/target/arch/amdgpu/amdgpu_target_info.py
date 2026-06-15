@@ -62,6 +62,8 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
     AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE,
+    AMDGPU_WAVEFRONT_SIZE_FLAG_32,
+    AMDGPU_WAVEFRONT_SIZE_FLAG_64,
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
     amdgpu_descriptor_set_ordinal,
@@ -134,6 +136,17 @@ _DESCRIPTOR_SET_INFO_FLAG_EXPRS = (
     ),
 )
 
+_WAVEFRONT_SIZE_FLAG_EXPRS = (
+    (
+        AMDGPU_WAVEFRONT_SIZE_FLAG_32,
+        "LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32",
+    ),
+    (
+        AMDGPU_WAVEFRONT_SIZE_FLAG_64,
+        "LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64",
+    ),
+)
+
 
 def _enum_expr(value: str, table: Mapping[str, str], description: str) -> str:
     try:
@@ -178,6 +191,30 @@ def _descriptor_set_info_flags_expr(flags: int) -> str:
     if remaining_flags != 0:
         raise ValueError(f"unknown AMDGPU descriptor-set info flags 0x{remaining_flags:x}")
     return " | ".join(exprs)
+
+
+def _wavefront_size_flags_expr(flags: int) -> str:
+    if flags == 0:
+        return "UINT32_C(0)"
+    remaining_flags = flags
+    exprs: list[str] = []
+    for flag, expr in _WAVEFRONT_SIZE_FLAG_EXPRS:
+        if flags & flag:
+            exprs.append(expr)
+            remaining_flags &= ~flag
+    if remaining_flags != 0:
+        raise ValueError(f"unknown AMDGPU wavefront-size flags 0x{remaining_flags:x}")
+    return " | ".join(exprs)
+
+
+def _supported_wavefront_sizes(info: AmdgpuProcessorInfo) -> int:
+    profile = info.kernel_descriptor.profile
+    flags = 0
+    if kernel_descriptor_profile_supports_wavefront_size(profile, 32):
+        flags |= AMDGPU_WAVEFRONT_SIZE_FLAG_32
+    if kernel_descriptor_profile_supports_wavefront_size(profile, 64):
+        flags |= AMDGPU_WAVEFRONT_SIZE_FLAG_64
+    return flags
 
 
 def _parse_isa_xml_argument(value: str) -> tuple[str, Path]:
@@ -336,6 +373,7 @@ def _validate_processors(
             raise ValueError(f"AMDGPU ELF feature flags for {info.processor} must not overlap EF_AMDGPU_MACH")
         if info.wavefront.default_size not in (32, 64):
             raise ValueError(f"AMDGPU default wavefront size for {info.processor} must be 32 or 64")
+        supported_wavefront_sizes = _supported_wavefront_sizes(info)
         _matrix_feature_profile_expr(info.features.matrix)
         if kernel_descriptor.flags < 0 or kernel_descriptor.flags > 0xFFFFFFFFFFFFFFFF:
             raise ValueError(f"AMDGPU kernel descriptor ABI flags for {info.processor} must fit u64")
@@ -349,7 +387,8 @@ def _validate_processors(
             if profileless_flags != 0:
                 raise ValueError(f"AMDGPU processor {info.processor} has no kernel descriptor profile but has profile-owned ABI flags 0x{profileless_flags:x}")
         else:
-            if not kernel_descriptor_profile_supports_wavefront_size(profile, info.wavefront.default_size):
+            default_wavefront_size = AMDGPU_WAVEFRONT_SIZE_FLAG_32 if info.wavefront.default_size == 32 else AMDGPU_WAVEFRONT_SIZE_FLAG_64
+            if (supported_wavefront_sizes & default_wavefront_size) == 0:
                 raise ValueError(f"AMDGPU default wavefront size for {info.processor} is not supported by its kernel descriptor profile")
             if vgpr_granules.wave32 == 0 or vgpr_granules.wave64 == 0:
                 raise ValueError(f"AMDGPU processor {info.processor} has descriptor profile but no VGPR encoding granules")
@@ -490,13 +529,14 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     machine_flags_width = len("0x000")
     feature_flags_width = len("0x0")
     wavefront_width = 2
+    wavefront_flags_width = max(len(_wavefront_size_flags_expr(_supported_wavefront_sizes(info))) for info in processors)
     kernel_profile_width = max(len(_kernel_descriptor_profile_expr(info.kernel_descriptor.profile)) for info in processors)
     kernel_flags_width = max(len(f"0x{info.kernel_descriptor.flags:x}") for info in processors)
     matrix_profile_width = max(len(_matrix_feature_profile_expr(info.features.matrix)) for info in processors)
     scheduling_width = max(len(f"0x{info.features.scheduling:03x}") for info in processors)
     register_granule_width = 1
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kd_profile_, kd_flags_, matrix_profile_, scheduling_bits_, vgpr_granule_wave32_, vgpr_granule_wave64_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, supported_wavefront_sizes_, kd_profile_, kd_flags_, matrix_profile_, scheduling_bits_, vgpr_granule_wave32_, vgpr_granule_wave64_) \\",
         "  { \\",
         "    .name = IREE_SVL(processor_), \\",
         "    .descriptor_set = { \\",
@@ -509,6 +549,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "    }, \\",
         "    .wavefront = { \\",
         "      .default_size = default_wavefront_size_, \\",
+        "      .supported_sizes = supported_wavefront_sizes_, \\",
         "    }, \\",
         "    .kernel_descriptor = { \\",
         "      .profile = kd_profile_, \\",
@@ -525,7 +566,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "  }",
         "",
         "const loom_amdgpu_processor_info_t loom_amdgpu_target_info_processor_infos[] = {",
-        "  // processor descriptor_set_key    ordinal         mach  feat wave kernel_profile                              kd_flags matrix_profile                             sched vgpr32 vgpr64",
+        "  // processor descriptor_set_key    ordinal         mach  feat wave wave_flags kernel_profile                              kd_flags matrix_profile                             sched vgpr32 vgpr64",
     ]
     lines.extend(
         (
@@ -536,6 +577,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
             f"{_padded_arg(f'0x{info.elf.machine_flags:03x}', machine_flags_width)}"
             f"{_padded_arg(f'0x{info.elf.feature_flags:x}', feature_flags_width)}"
             f"{_padded_arg(str(info.wavefront.default_size), wavefront_width)}"
+            f"{_padded_arg(_wavefront_size_flags_expr(_supported_wavefront_sizes(info)), wavefront_flags_width)}"
             f"{_padded_arg(_kernel_descriptor_profile_expr(info.kernel_descriptor.profile), kernel_profile_width)}"
             f"{_padded_arg(f'0x{info.kernel_descriptor.flags:x}', kernel_flags_width)}"
             f"{_padded_arg(_matrix_feature_profile_expr(info.features.matrix), matrix_profile_width)}"

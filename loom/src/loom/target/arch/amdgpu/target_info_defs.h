@@ -96,6 +96,19 @@ typedef enum loom_amdgpu_processor_scheduling_bit_e {
 // Bitset of loom_amdgpu_processor_scheduling_bit_t values.
 typedef uint32_t loom_amdgpu_processor_scheduling_bits_t;
 
+typedef enum loom_amdgpu_wavefront_size_flag_bits_e {
+  // Processor supports wavefront-size-32 kernels.
+  LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32 = 1u << 0,
+  // Processor supports wavefront-size-64 kernels.
+  LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64 = 1u << 1,
+  // Wavefront-size flags known by the AMDGPU target package.
+  LOOM_AMDGPU_WAVEFRONT_SIZE_KNOWN_FLAGS =
+      LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32 | LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64,
+} loom_amdgpu_wavefront_size_flag_bits_t;
+
+// Bitset of loom_amdgpu_wavefront_size_flag_bits_t values.
+typedef uint32_t loom_amdgpu_wavefront_size_flags_t;
+
 typedef enum loom_amdgpu_descriptor_set_info_flag_bits_e {
   // Descriptor packets have implemented native binary encoding.
   LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING = UINT64_C(1)
@@ -208,6 +221,8 @@ typedef struct loom_amdgpu_processor_elf_info_t {
 typedef struct loom_amdgpu_processor_wavefront_info_t {
   // Default metadata wavefront size in lanes.
   uint32_t default_size;
+  // Wavefront-size modes supported by the processor kernel descriptor ABI.
+  loom_amdgpu_wavefront_size_flags_t supported_sizes;
 } loom_amdgpu_processor_wavefront_info_t;
 
 typedef struct loom_amdgpu_kernel_descriptor_vgpr_granules_t {
@@ -261,20 +276,19 @@ static inline bool loom_amdgpu_processor_supports_wavefront_size(
   if (processor == NULL) {
     return false;
   }
+  loom_amdgpu_wavefront_size_flags_t requested_size = 0;
   switch (wavefront_size) {
     case 32:
-      return processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
-             processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9;
+      requested_size = LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_32;
+      break;
     case 64:
-      return processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
-             processor->kernel_descriptor.profile !=
-                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125;
+      requested_size = LOOM_AMDGPU_WAVEFRONT_SIZE_FLAG_64;
+      break;
     default:
       return false;
   }
+  return iree_all_bits_set(processor->wavefront.supported_sizes,
+                           requested_size);
 }
 
 // Returns true when |processor| advertises every requested kernel descriptor
