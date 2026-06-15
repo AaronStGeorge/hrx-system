@@ -57,6 +57,14 @@ iree_status_t loom_amdgpu_low_legality_verify_descriptor_requirements(
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(
     const loom_target_bundle_t* bundle);
 
+// Returns true when the descriptor set belongs to the AMDGPU target.
+bool loom_amdgpu_low_legality_descriptor_set_is_amdgpu(
+    const loom_low_descriptor_set_t* descriptor_set);
+
+// Returns true when source-to-low legality is evaluating an AMDGPU target.
+bool loom_amdgpu_low_legality_context_is_amdgpu(
+    loom_target_low_legality_context_t* context);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

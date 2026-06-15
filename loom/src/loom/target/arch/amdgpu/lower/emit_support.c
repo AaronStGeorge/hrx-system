@@ -10,8 +10,10 @@
 #include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/target/arch/amdgpu/target_info_defs.h"
 
 iree_status_t loom_amdgpu_intern(loom_low_lower_context_t* context,
                                  iree_string_view_t string,
@@ -1199,10 +1201,11 @@ iree_status_t loom_amdgpu_emit_vgpr64_add(loom_low_lower_context_t* context,
   return iree_ok_status();
 }
 
-iree_status_t loom_amdgpu_emit_vgpr64_mul_lo(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t low_lhs, loom_value_id_t low_rhs,
-    loom_value_id_t* out_low_product) {
+iree_status_t loom_amdgpu_emit_vgpr64_mul_lo(loom_low_lower_context_t* context,
+                                             const loom_op_t* source_op,
+                                             loom_value_id_t low_lhs,
+                                             loom_value_id_t low_rhs,
+                                             loom_value_id_t* out_low_product) {
   *out_low_product = LOOM_VALUE_ID_INVALID;
 
   loom_type_t vgpr_type = loom_type_none();
@@ -1740,4 +1743,18 @@ bool loom_amdgpu_low_legality_bundle_is_amdgpu(
   return bundle != NULL && bundle->config != NULL &&
          iree_string_view_starts_with(bundle->config->contract_set_key,
                                       IREE_SV("amdgpu."));
+}
+
+bool loom_amdgpu_low_legality_descriptor_set_is_amdgpu(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  return descriptor_set != NULL &&
+         descriptor_set->target_stable_id == LOOM_AMDGPU_TARGET_STABLE_ID;
+}
+
+bool loom_amdgpu_low_legality_context_is_amdgpu(
+    loom_target_low_legality_context_t* context) {
+  return loom_amdgpu_low_legality_bundle_is_amdgpu(
+             loom_target_low_legality_bundle(context)) ||
+         loom_amdgpu_low_legality_descriptor_set_is_amdgpu(
+             loom_target_low_legality_descriptor_set(context));
 }

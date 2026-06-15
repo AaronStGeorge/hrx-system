@@ -762,6 +762,10 @@ static bool loom_amdgpu_scalar_i64_binary_result_follows_operand_vgpr(
     return false;
   }
   switch (defining_op->kind) {
+    case LOOM_OP_SCALAR_ADDI:
+      *out_lhs = loom_scalar_addi_lhs(defining_op);
+      *out_rhs = loom_scalar_addi_rhs(defining_op);
+      return true;
     case LOOM_OP_SCALAR_MULI:
       *out_lhs = loom_scalar_muli_lhs(defining_op);
       *out_rhs = loom_scalar_muli_rhs(defining_op);
@@ -1743,8 +1747,8 @@ bool loom_amdgpu_source_value_prefers_vgpr(
       loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
       if (loom_amdgpu_scalar_i64_binary_result_follows_operand_vgpr(
               module, source_value_id, defining_op, &lhs, &rhs)) {
-        return loom_amdgpu_source_value_prefers_vgpr(
-                   module, fact_table, view_regions, lhs) ||
+        return loom_amdgpu_source_value_prefers_vgpr(module, fact_table,
+                                                     view_regions, lhs) ||
                loom_amdgpu_source_value_prefers_vgpr(module, fact_table,
                                                      view_regions, rhs);
       }
