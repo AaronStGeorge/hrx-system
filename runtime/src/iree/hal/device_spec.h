@@ -196,6 +196,10 @@ typedef uint32_t iree_hal_memory_heap_spec_flags_t;
 typedef enum iree_hal_memory_heap_spec_flag_bits_e {
   // No memory heap flags are present.
   IREE_HAL_MEMORY_HEAP_SPEC_FLAG_NONE = 0u,
+  // Heap capacity is not known at device creation time.
+  IREE_HAL_MEMORY_HEAP_SPEC_FLAG_CAPACITY_UNKNOWN = 1u << 0,
+  // Maximum single allocation size is not known at device creation time.
+  IREE_HAL_MEMORY_HEAP_SPEC_FLAG_MAXIMUM_ALLOCATION_SIZE_UNKNOWN = 1u << 1,
 } iree_hal_memory_heap_spec_flag_bits_t;
 
 // Stable memory heap available to the device allocator.

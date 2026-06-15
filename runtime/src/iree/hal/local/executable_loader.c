@@ -93,6 +93,14 @@ bool iree_hal_executable_loader_query_support(
       executable_loader, caching_mode, executable_format);
 }
 
+void iree_hal_executable_loader_query_spec(
+    iree_hal_executable_loader_t* executable_loader,
+    iree_hal_device_executable_spec_t* out_executable_spec) {
+  IREE_ASSERT_ARGUMENT(executable_loader);
+  IREE_ASSERT_ARGUMENT(out_executable_spec);
+  executable_loader->vtable->query_spec(executable_loader, out_executable_spec);
+}
+
 bool iree_hal_query_any_executable_loader_support(
     iree_host_size_t loader_count, iree_hal_executable_loader_t** loaders,
     iree_hal_executable_caching_mode_t caching_mode,

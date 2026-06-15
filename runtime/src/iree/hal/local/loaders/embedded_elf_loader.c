@@ -384,6 +384,23 @@ static bool iree_hal_embedded_elf_loader_query_support(
       executable_format, iree_make_cstring_view("embedded-elf-" IREE_ARCH));
 }
 
+static void iree_hal_embedded_elf_loader_query_spec(
+    iree_hal_executable_loader_t* base_executable_loader,
+    iree_hal_device_executable_spec_t* out_executable_spec) {
+  static const iree_hal_executable_format_spec_t executable_formats[] = {
+      {
+          .format = IREE_SVL("embedded-elf-" IREE_ARCH),
+          .caching_modes = IREE_HAL_EXECUTABLE_CACHING_MODE_NONE,
+          .flags = IREE_HAL_EXECUTABLE_FORMAT_SPEC_FLAG_NONE,
+      },
+  };
+  *out_executable_spec = (iree_hal_device_executable_spec_t){
+      .format_count = IREE_ARRAYSIZE(executable_formats),
+      .formats = executable_formats,
+      .flags = IREE_HAL_DEVICE_EXECUTABLE_SPEC_FLAG_NONE,
+  };
+}
+
 static iree_status_t iree_hal_embedded_elf_loader_try_load(
     iree_hal_executable_loader_t* base_executable_loader,
     const iree_hal_executable_params_t* executable_params,
@@ -406,5 +423,6 @@ static const iree_hal_executable_loader_vtable_t
         .destroy = iree_hal_embedded_elf_loader_destroy,
         .infer_format = iree_hal_embedded_elf_loader_infer_format,
         .query_support = iree_hal_embedded_elf_loader_query_support,
+        .query_spec = iree_hal_embedded_elf_loader_query_spec,
         .try_load = iree_hal_embedded_elf_loader_try_load,
 };

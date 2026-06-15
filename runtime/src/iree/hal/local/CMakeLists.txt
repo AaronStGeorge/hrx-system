@@ -11,6 +11,36 @@ iree_add_all_subdirs()
 
 iree_cc_library(
   NAME
+    device_spec_builder
+  HDRS
+    "device_spec_builder.h"
+  SRCS
+    "device_spec_builder.c"
+  DEPS
+    ::executable_loader
+    iree::base
+    iree::hal
+    iree::hal::memory::cpu_slab_provider
+    iree::hal::utils::device_spec_builder
+  PUBLIC
+)
+
+iree_cc_test(
+  NAME
+    device_spec_builder_test
+  SRCS
+    "device_spec_builder_test.cc"
+  DEPS
+    ::device_spec_builder
+    iree::hal
+    iree::hal::local::loaders::static_library_loader
+    iree::hal::memory::cpu_slab_provider
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+iree_cc_library(
+  NAME
     executable_environment
   HDRS
     "executable_environment.h"

@@ -18,6 +18,7 @@
 #include "iree/base/internal/cpu.h"
 #include "iree/hal/drivers/local_sync/sync_event.h"
 #include "iree/hal/drivers/local_sync/sync_semaphore.h"
+#include "iree/hal/local/device_spec_builder.h"
 #include "iree/hal/local/executable_environment.h"
 #include "iree/hal/local/inline_command_buffer.h"
 #include "iree/hal/local/inline_dispatch.h"
@@ -28,7 +29,6 @@
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/utils/deferred_command_buffer.h"
-#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 
 typedef struct iree_hal_sync_device_t {
@@ -210,9 +210,18 @@ iree_status_t iree_hal_sync_device_create(
   iree_status_t status =
       iree_async_proactor_pool_get(device->proactor_pool, 0, &device->proactor);
   if (iree_status_is_ok(status)) {
-    status = iree_hal_device_spec_create_minimal(
-        identifier, identifier, IREE_SV("local-sync"), IREE_SV("local"),
-        host_allocator, &device->device_spec);
+    iree_hal_local_device_spec_params_t spec_params = {
+        .logical_device_id = identifier,
+        .display_name = identifier,
+        .driver_id = IREE_SV("local-sync"),
+        .backend_id = IREE_SV("local"),
+        .queue_count = 1,
+        .default_queue_worker_count = 1,
+        .loader_count = loader_count,
+        .loaders = loaders,
+    };
+    status = iree_hal_local_device_spec_create(&spec_params, host_allocator,
+                                               &device->device_spec);
   }
 
   if (iree_status_is_ok(status)) {
