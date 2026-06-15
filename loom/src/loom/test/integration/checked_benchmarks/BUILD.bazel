@@ -28,6 +28,23 @@ _CHECKED_BENCHMARK_CASES = [
         ],
     },
     {
+        "name": "top2_routing_expert_gather_f32",
+        "rows": [
+            {
+                "benchmark": "@top2_routing_expert_gather_ordered_smoke",
+                "target_name": "top2_routing_expert_gather_ordered",
+            },
+            {
+                "benchmark": "@top2_routing_expert_gather_tie_smoke",
+                "target_name": "top2_routing_expert_gather_tie",
+            },
+        ],
+        "source": "top2_routing_expert_gather_f32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
         "name": "packed_s8_fields_f16scale_f32dot",
         "rows": [
             {

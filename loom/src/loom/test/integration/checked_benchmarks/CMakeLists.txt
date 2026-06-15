@@ -28,6 +28,38 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
+    "top2_routing_expert_gather_ordered_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/top2_routing_expert_gather_f32.loom}}"
+    "--benchmark=@top2_routing_expert_gather_ordered_smoke"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
+    "top2_routing_expert_gather_tie_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/top2_routing_expert_gather_f32.loom}}"
+    "--benchmark=@top2_routing_expert_gather_tie_smoke"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
     "packed_s8_fields_f16scale_f32dot_plan_test"
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/packed_s8_fields_f16scale_f32dot.loom}}"
@@ -48,6 +80,58 @@ iree_native_test(
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/online_softmax_tail_attention_tile_f32.loom}}"
     "--benchmark=@online_softmax_tail_attention_tile_f32_smoke"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "top2_routing_expert_gather_ordered_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/top2_routing_expert_gather_f32.loom}}"
+    "--benchmark=@top2_routing_expert_gather_ordered_smoke"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "top2_routing_expert_gather_tie_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/top2_routing_expert_gather_f32.loom}}"
+    "--benchmark=@top2_routing_expert_gather_tie_smoke"
     "--device=amdgpu"
     "--measure=dispatch_complete"
     "--iterations=1"

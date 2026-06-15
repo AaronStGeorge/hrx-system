@@ -706,13 +706,6 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
   if (!condition_is_mask) {
     return iree_ok_status();
   }
-  bool result_is_vgpr = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_is_register_class_count(
-      context, result_low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, register_count,
-      &result_is_vgpr));
-  if (!result_is_vgpr) {
-    return iree_ok_status();
-  }
 
   loom_amdgpu_select_descriptors_t select_descriptors = {0};
   bool descriptors_present = false;
@@ -2225,8 +2218,8 @@ iree_status_t loom_amdgpu_lower_select(
   }
 
   loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
-                                                   plan->result, &result_type));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_make_vgpr_range_type(context, lane_count, &result_type));
   loom_op_t* concat_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_concat_build(
       loom_low_lower_context_builder(context), lane_results, lane_count,

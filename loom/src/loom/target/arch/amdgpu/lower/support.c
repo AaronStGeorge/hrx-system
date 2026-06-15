@@ -1505,6 +1505,67 @@ static bool loom_amdgpu_source_value_scf_select_payload_use_requires_vgpr(
       source_value_id);
 }
 
+static bool loom_amdgpu_scf_select_result_requires_vgpr(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id, const loom_op_t* defining_op) {
+  if (!loom_scf_select_isa(defining_op) ||
+      loom_scf_select_result(defining_op) != source_value_id) {
+    return false;
+  }
+  const loom_value_id_t condition = loom_scf_select_condition(defining_op);
+  return loom_amdgpu_source_value_is_native_i1_mask_excluding(
+      module, fact_table, view_regions, condition, source_value_id);
+}
+
+static bool loom_amdgpu_index_arithmetic_result_follows_operand_vgpr(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id, const loom_op_t* defining_op) {
+  if (loom_value_def_index(loom_module_value(module, source_value_id)) != 0) {
+    return false;
+  }
+
+  uint16_t operand_count = 0;
+  switch (defining_op->kind) {
+    case LOOM_OP_INDEX_ADD:
+    case LOOM_OP_INDEX_SUB:
+    case LOOM_OP_INDEX_MUL:
+    case LOOM_OP_INDEX_SCALE:
+    case LOOM_OP_INDEX_DIV:
+    case LOOM_OP_INDEX_REM:
+    case LOOM_OP_INDEX_MIN:
+    case LOOM_OP_INDEX_MAX:
+    case LOOM_OP_INDEX_ANDI:
+    case LOOM_OP_INDEX_ORI:
+    case LOOM_OP_INDEX_XORI:
+    case LOOM_OP_INDEX_SHLI:
+    case LOOM_OP_INDEX_SHRSI:
+    case LOOM_OP_INDEX_SHRUI:
+    case LOOM_OP_INDEX_ROTLI:
+    case LOOM_OP_INDEX_ROTRI:
+      operand_count = 2;
+      break;
+    case LOOM_OP_INDEX_MADD:
+      operand_count = 3;
+      break;
+    default:
+      return false;
+  }
+  if (operand_count > defining_op->operand_count) {
+    return false;
+  }
+  const loom_value_id_t* operands = loom_op_const_operands(defining_op);
+  for (uint16_t i = 0; i < operand_count; ++i) {
+    if (operands[i] != source_value_id &&
+        loom_amdgpu_source_value_prefers_vgpr(module, fact_table, view_regions,
+                                              operands[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_amdgpu_source_value_has_vgpr_payload_use(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_view_region_table_t* view_regions,
@@ -1576,6 +1637,16 @@ bool loom_amdgpu_source_value_prefers_vgpr(
   }
 
   if (loom_amdgpu_scalar_i32_to_i64_conversion_consumers_require_vgpr(
+          module, fact_table, view_regions, source_value_id, defining_op)) {
+    return true;
+  }
+
+  if (loom_amdgpu_scf_select_result_requires_vgpr(
+          module, fact_table, view_regions, source_value_id, defining_op)) {
+    return true;
+  }
+
+  if (loom_amdgpu_index_arithmetic_result_follows_operand_vgpr(
           module, fact_table, view_regions, source_value_id, defining_op)) {
     return true;
   }
