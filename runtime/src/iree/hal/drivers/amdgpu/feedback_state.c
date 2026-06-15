@@ -81,6 +81,7 @@ static void iree_hal_amdgpu_feedback_state_publish_asan_event(
   event.source.device = state->device;
   event.source.device_id = state->device_id;
   event.source.driver_id = IREE_SV("amdgpu");
+  event.source.executable_id = packet->source_executable_id;
   event.source.physical_device_ordinal =
       iree_hal_amdgpu_feedback_state_physical_device_ordinal(
           physical_device_ordinal);
@@ -143,13 +144,14 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
       " site_id=0x%016" PRIx64 " fault_address=0x%016" PRIx64
       " access_size=%" PRIu64 " shadow_address=0x%016" PRIx64
       " shadow_value=0x%016" PRIx64
-      " workgroup_x=%u workitem_x=%u dispatch=0x%016" PRIx64,
+      " workgroup_x=%u workitem_x=%u executable_id=%" PRIu64
+      " dispatch=0x%016" PRIx64,
       iree_hal_amdgpu_feedback_state_asan_access_kind_string(
           report->access_kind),
       physical_device_ordinal, report->site_id, report->fault_address,
       report->access_size, report->shadow_address, report->shadow_value,
       packet->source_workgroup_id_x, packet->source_workitem_id_x,
-      packet->source_dispatch_ptr);
+      packet->source_executable_id, packet->source_dispatch_ptr);
 }
 
 static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
@@ -164,10 +166,11 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
           "unhandled AMDGPU feedback packet kind %u on physical device %" PRIhsz
-          " workgroup_x=%u workitem_x=%u dispatch=0x%016" PRIx64,
+          " workgroup_x=%u workitem_x=%u executable_id=%" PRIu64
+          " dispatch=0x%016" PRIx64,
           (uint32_t)packet->kind, physical_device_ordinal,
           packet->source_workgroup_id_x, packet->source_workitem_id_x,
-          packet->source_dispatch_ptr);
+          packet->source_executable_id, packet->source_dispatch_ptr);
   }
 }
 

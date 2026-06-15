@@ -123,8 +123,7 @@ iree_hal_amdgpu_feedback_try_reserve(
     packet->source_workgroup_id_x = 0;
     packet->source_workitem_id_x = 0;
 #endif  // IREE_AMDGPU_TARGET_DEVICE
-    packet->reserved0 = 0;
-    packet->reserved1 = 0;
+    packet->source_executable_id = config->executable_id;
     packet->reserved[0] = 0;
     packet->reserved[1] = 0;
     *out_packet = packet;

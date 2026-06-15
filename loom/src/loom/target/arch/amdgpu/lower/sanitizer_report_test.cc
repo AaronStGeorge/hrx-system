@@ -374,6 +374,7 @@ TEST_F(AmdgpuSanitizerReportTest, EmitsAccessReportPayloadStores) {
       /*.source_dispatch_ptr=*/config_values.notify_signal,
       /*.source_workgroup_id_x=*/config_values.flags,
       /*.source_workitem_id_x=*/channel_values.flags,
+      /*.source_executable_id=*/config_values.executable_id,
   };
   IREE_ASSERT_OK(loom_amdgpu_build_feedback_packet_header(
       &builder_, descriptor_set_, &packet_address, &header,
@@ -402,61 +403,61 @@ TEST_F(AmdgpuSanitizerReportTest, EmitsAccessReportPayloadStores) {
   const uint32_t payload_base = LOOM_AMDGPU_FEEDBACK_PACKET_BYTE_LENGTH;
   std::vector<loom_op_t*> b32_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
-  ASSERT_EQ(b32_stores.size(), 12u);
+  ASSERT_EQ(b32_stores.size(), 10u);
   ExpectStoreOp(
-      b32_stores[8], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
+      b32_stores[6], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
       packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_RECORD_LENGTH_OFFSET,
       1);
-  ExpectLowConstU32(loom_low_op_operands(b32_stores[8]).values[1],
+  ExpectLowConstU32(loom_low_op_operands(b32_stores[6]).values[1],
                     LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_BYTE_LENGTH);
+  ExpectStoreOp(
+      b32_stores[7], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
+      packet_address,
+      payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_ABI_VERSION_OFFSET, 1);
+  ExpectLowConstU32(loom_low_op_operands(b32_stores[7]).values[1],
+                    LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_ABI_VERSION);
+  ExpectStoreOp(
+      b32_stores[8], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
+      packet_address,
+      payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_ACCESS_KIND_OFFSET, 1);
+  ExpectLowConstU32(loom_low_op_operands(b32_stores[8]).values[1],
+                    LOOM_AMDGPU_SANITIZER_ACCESS_KIND_WRITE);
   ExpectStoreOp(
       b32_stores[9], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
       packet_address,
-      payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_ABI_VERSION_OFFSET, 1);
-  ExpectLowConstU32(loom_low_op_operands(b32_stores[9]).values[1],
-                    LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_ABI_VERSION);
-  ExpectStoreOp(
-      b32_stores[10], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
-      packet_address,
-      payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_ACCESS_KIND_OFFSET, 1);
-  ExpectLowConstU32(loom_low_op_operands(b32_stores[10]).values[1],
-                    LOOM_AMDGPU_SANITIZER_ACCESS_KIND_WRITE);
-  ExpectStoreOp(
-      b32_stores[11], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
-      packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_FLAGS_OFFSET, 1);
-  ExpectLowConstU32(loom_low_op_operands(b32_stores[11]).values[1],
+  ExpectLowConstU32(loom_low_op_operands(b32_stores[9]).values[1],
                     LOOM_AMDGPU_SANITIZER_REPORT_FLAG_NONE);
 
   std::vector<loom_op_t*> b64_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
-  ASSERT_EQ(b64_stores.size(), 10u);
+  ASSERT_EQ(b64_stores.size(), 11u);
   ExpectStoreOp(
-      b64_stores[4], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+      b64_stores[5], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
       packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_FAULT_ADDRESS_OFFSET,
       2);
   ExpectStoreOp(
-      b64_stores[5], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+      b64_stores[6], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
       packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_ACCESS_SIZE_OFFSET, 2);
   ExpectStoreOp(
-      b64_stores[6], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+      b64_stores[7], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
       packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_SITE_ID_OFFSET, 2);
   ExpectStoreOp(
-      b64_stores[7], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+      b64_stores[8], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
       packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_SHADOW_ADDRESS_OFFSET,
       2);
   ExpectStoreOp(
-      b64_stores[8], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+      b64_stores[9], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
       packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_SHADOW_VALUE_OFFSET,
       2);
   ExpectStoreOp(
-      b64_stores[9], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+      b64_stores[10], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
       packet_address,
       payload_base + LOOM_AMDGPU_SANITIZER_ACCESS_REPORT_RESERVED0_OFFSET, 2);
 }
@@ -538,10 +539,10 @@ TEST_F(AmdgpuSanitizerReportTest, EmitsFatalAccessReportProducerCfg) {
 
   std::vector<loom_op_t*> report_b32_stores = OpsForDescriptorRefInBlock(
       report_block, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
-  ASSERT_EQ(report_b32_stores.size(), 13u);
+  ASSERT_EQ(report_b32_stores.size(), 11u);
   std::vector<loom_op_t*> report_b64_stores = OpsForDescriptorRefInBlock(
       report_block, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
-  ASSERT_EQ(report_b64_stores.size(), 11u);
+  ASSERT_EQ(report_b64_stores.size(), 12u);
   std::vector<loom_op_t*> ready_state_stores;
   for (loom_op_t* store_op : report_b32_stores) {
     loom_named_attr_slice_t attrs = loom_low_op_attrs(store_op);
@@ -660,8 +661,8 @@ TEST_F(AmdgpuSanitizerReportTest, BranchesColdSitesToSharedReportIsland) {
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
   std::vector<loom_op_t*> report_b64_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
-  EXPECT_EQ(report_b32_stores.size(), 13u);
-  EXPECT_EQ(report_b64_stores.size(), 11u);
+  EXPECT_EQ(report_b32_stores.size(), 11u);
+  EXPECT_EQ(report_b64_stores.size(), 12u);
   std::vector<loom_op_t*> trap_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP);
   ASSERT_EQ(trap_ops.size(), 1u);
@@ -769,8 +770,8 @@ TEST_F(AmdgpuSanitizerReportTest, SplitsHotFailurePredicateToColdSiteBlock) {
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
   std::vector<loom_op_t*> report_b64_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
-  EXPECT_EQ(report_b32_stores.size(), 13u);
-  EXPECT_EQ(report_b64_stores.size(), 11u);
+  EXPECT_EQ(report_b32_stores.size(), 11u);
+  EXPECT_EQ(report_b64_stores.size(), 12u);
   std::vector<loom_op_t*> trap_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP);
   ASSERT_EQ(trap_ops.size(), 1u);
@@ -883,8 +884,8 @@ TEST_F(AmdgpuSanitizerReportTest, NarrowsExecForMaskedColdSiteBlock) {
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
   std::vector<loom_op_t*> report_b64_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
-  EXPECT_EQ(report_b32_stores.size(), 13u);
-  EXPECT_EQ(report_b64_stores.size(), 11u);
+  EXPECT_EQ(report_b32_stores.size(), 11u);
+  EXPECT_EQ(report_b64_stores.size(), 12u);
   std::vector<loom_op_t*> trap_ops =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_S_TRAP);
   ASSERT_EQ(trap_ops.size(), 1u);

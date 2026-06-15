@@ -33,6 +33,7 @@ IREE_AMDGPU_ATTRIBUTE_KERNEL void export0(uint64_t* lhs, uint64_t* rhs,
     lhs[1] = iree_feedback_config.flags;
     lhs[2] = iree_feedback_config.channel_base;
     lhs[3] = iree_feedback_config.notify_signal.handle;
+    lhs[4] = iree_feedback_config.executable_id;
   } else if (c0 == 0x4153414Eu && c1 == 0x52505421u) {
     lhs[0] = iree_hal_amdgpu_asan_report_access(
                  &iree_feedback_config, IREE_HAL_AMDGPU_ASAN_ACCESS_KIND_WRITE,

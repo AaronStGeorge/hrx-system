@@ -819,6 +819,7 @@ iree_status_t BuildAsanReportPublishAndReturn(
       /*.source_dispatch_ptr=*/source->dispatch_ptr,
       /*.source_workgroup_id_x=*/source->workgroup_id_x,
       /*.source_workitem_id_x=*/source->workitem_id_x,
+      /*.source_executable_id=*/config_values.executable_id,
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_packet_header(
       builder, descriptor_set, &reservation.packet_address, &header, location));
@@ -1259,6 +1260,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
       0u);
   EXPECT_NE(feedback_configs[0].channel_base, 0u);
   EXPECT_NE(feedback_configs[0].notify_signal.handle, 0u);
+  EXPECT_NE(feedback_configs[0].executable_id, 0u);
 }
 
 TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
@@ -1487,6 +1489,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
 
   iree_hal_device_event_source_t source = recorder.last_source();
   EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
+  EXPECT_NE(source.executable_id, 0u);
   EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
   IREE_EXPECT_OK(iree_hal_device_queue_flush(runtime.runtime()->device,
                                              IREE_HAL_QUEUE_AFFINITY_ANY));

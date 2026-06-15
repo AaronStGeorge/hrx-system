@@ -656,6 +656,9 @@ TEST_F(AmdgpuFeedbackTest, LoadsCommonFeedbackConfigValues) {
   ExpectUniformGlobalLoadB64(values.address,
                              LOOM_AMDGPU_FEEDBACK_CONFIG_NOTIFY_SIGNAL_OFFSET,
                              values.notify_signal);
+  ExpectUniformGlobalLoadB64(values.address,
+                             LOOM_AMDGPU_FEEDBACK_CONFIG_EXECUTABLE_ID_OFFSET,
+                             values.executable_id);
 
   loom_type_t sgpr_type = loom_low_register_type(
       descriptor_set_->stable_id, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1);
@@ -669,6 +672,8 @@ TEST_F(AmdgpuFeedbackTest, LoadsCommonFeedbackConfigValues) {
       sgpr_x2_type, loom_module_value_type(module_, values.channel_base)));
   EXPECT_TRUE(loom_type_equal(
       sgpr_x2_type, loom_module_value_type(module_, values.notify_signal)));
+  EXPECT_TRUE(loom_type_equal(
+      sgpr_x2_type, loom_module_value_type(module_, values.executable_id)));
 }
 
 TEST_F(AmdgpuFeedbackTest, TestsFeedbackConfigEnabledFlag) {
@@ -1401,7 +1406,7 @@ TEST_F(AmdgpuFeedbackTest, TestsReservationSucceededMask) {
   VerifyLowModuleOk();
 }
 
-TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
+TEST_F(AmdgpuFeedbackTest, EmitsPacketHeaderStores) {
   loom_symbol_ref_t config_symbol = AddSymbol(IREE_SV("iree_feedback_config"));
   loom_amdgpu_feedback_config_values_t config_values = {};
   IREE_ASSERT_OK(loom_amdgpu_build_feedback_config_values(
@@ -1425,6 +1430,7 @@ TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
       /*.source_dispatch_ptr=*/config_values.notify_signal,
       /*.source_workgroup_id_x=*/config_values.flags,
       /*.source_workitem_id_x=*/channel_values.flags,
+      /*.source_executable_id=*/config_values.executable_id,
   };
   IREE_ASSERT_OK(loom_amdgpu_build_feedback_packet_header(
       &builder_, descriptor_set_, &packet_address, &header,
@@ -1432,7 +1438,7 @@ TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
 
   std::vector<loom_op_t*> b32_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR);
-  ASSERT_EQ(b32_stores.size(), 8u);
+  ASSERT_EQ(b32_stores.size(), 6u);
   ExpectStoreOp(
       b32_stores[0], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
       packet_address, LOOM_AMDGPU_FEEDBACK_PACKET_RECORD_LENGTH_OFFSET, 1);
@@ -1465,16 +1471,10 @@ TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
                 LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_WORKITEM_ID_X_OFFSET, 1);
   EXPECT_NE(loom_low_op_operands(b32_stores[5]).values[1],
             header.source_workitem_id_x);
-  ExpectStoreOp(
-      b32_stores[6], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
-      packet_address, LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED0_OFFSET, 1);
-  ExpectStoreOp(
-      b32_stores[7], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B32_SADDR,
-      packet_address, LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED1_OFFSET, 1);
 
   std::vector<loom_op_t*> b64_stores =
       OpsForDescriptorRef(LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR);
-  ASSERT_EQ(b64_stores.size(), 4u);
+  ASSERT_EQ(b64_stores.size(), 5u);
   ExpectStoreOp(b64_stores[0],
                 LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
                 packet_address, LOOM_AMDGPU_FEEDBACK_PACKET_SEQUENCE_OFFSET, 2);
@@ -1485,11 +1485,17 @@ TEST_F(AmdgpuFeedbackTest, EmitsReservedPacketHeaderStores) {
                 LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_DISPATCH_PTR_OFFSET, 2);
   EXPECT_NE(loom_low_op_operands(b64_stores[1]).values[1],
             header.source_dispatch_ptr);
-  ExpectStoreOp(
-      b64_stores[2], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
-      packet_address, LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_0_OFFSET, 2);
+  ExpectStoreOp(b64_stores[2],
+                LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+                packet_address,
+                LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_EXECUTABLE_ID_OFFSET, 2);
+  EXPECT_NE(loom_low_op_operands(b64_stores[2]).values[1],
+            header.source_executable_id);
   ExpectStoreOp(
       b64_stores[3], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
+      packet_address, LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_0_OFFSET, 2);
+  ExpectStoreOp(
+      b64_stores[4], LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B64_SADDR,
       packet_address, LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_1_OFFSET, 2);
 }
 

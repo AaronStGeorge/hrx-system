@@ -27,6 +27,7 @@ namespace iree::hal::amdgpu {
 namespace {
 
 constexpr char kTestCodeObjectBaseName[] = "feedback_channel_test_kernels";
+constexpr uint64_t kExecutableId = 0x454845434944ull;
 constexpr uint64_t kMagic = 0x4644424752494E47ull;
 constexpr uint16_t kWorkgroupSize[3] = {64, 1, 1};
 constexpr uint32_t kDispatchGridSize[3] = {64, 1, 1};
@@ -352,6 +353,7 @@ TEST_F(FeedbackChannelLiveTest, DeviceProducerSignalsHost) {
                                                   /*num_agents=*/1, &gpu_agent,
                                                   /*flags=*/nullptr, memory));
   memory->config = channel.config;
+  memory->config.executable_id = kExecutableId;
   memory->kernargs.config = &memory->config;
   memory->kernargs.magic = kMagic;
 
@@ -413,6 +415,7 @@ TEST_F(FeedbackChannelLiveTest, DeviceProducerSignalsHost) {
     EXPECT_EQ(packet.source_workgroup_id_x, 0u);
     EXPECT_LT(packet.source_workitem_id_x, kWorkgroupSize[0]);
     EXPECT_NE(packet.source_dispatch_ptr, 0u);
+    EXPECT_EQ(packet.source_executable_id, kExecutableId);
     EXPECT_EQ(payload.magic, kMagic);
     EXPECT_EQ(payload.workgroup_id_x, packet.source_workgroup_id_x);
     EXPECT_EQ(payload.workitem_id_x, packet.source_workitem_id_x);

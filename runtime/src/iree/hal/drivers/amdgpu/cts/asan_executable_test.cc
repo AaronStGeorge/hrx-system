@@ -147,10 +147,11 @@ TEST_P(AsanExecutableTest, PublishesFeedbackConfigGlobal) {
   EXPECT_NE(config.flags & IREE_HAL_AMDGPU_FEEDBACK_CONFIG_FLAG_ENABLED, 0u);
   EXPECT_NE(config.channel_base, 0u);
   EXPECT_NE(config.notify_signal.handle, 0u);
+  EXPECT_NE(config.executable_id, 0u);
 
   Ref<iree_hal_buffer_t> output_buffer;
   IREE_ASSERT_OK(
-      CreateZeroedDeviceBuffer(4 * sizeof(uint64_t), output_buffer.out()));
+      CreateZeroedDeviceBuffer(5 * sizeof(uint64_t), output_buffer.out()));
   Ref<iree_hal_buffer_t> fallback_buffer;
   const uint64_t fallback_value = 0xAAAAAAAA55555555ull;
   IREE_ASSERT_OK(CreateDeviceBufferWithData(
@@ -184,11 +185,12 @@ TEST_P(AsanExecutableTest, PublishesFeedbackConfigGlobal) {
   std::vector<uint64_t> output_data;
   IREE_ASSERT_OK(AsanReadBufferData(device_, device_allocator_, output_buffer,
                                     &output_data));
-  ASSERT_EQ(output_data.size(), 4u);
+  ASSERT_EQ(output_data.size(), 5u);
   EXPECT_EQ(output_data[0], config.record_length);
   EXPECT_EQ(output_data[1], config.flags);
   EXPECT_EQ(output_data[2], config.channel_base);
   EXPECT_EQ(output_data[3], config.notify_signal.handle);
+  EXPECT_EQ(output_data[4], config.executable_id);
 }
 
 TEST_P(AsanExecutableTest, ReportsAsanPacketThroughFeedback) {
@@ -271,6 +273,7 @@ TEST_P(AsanExecutableTest, ReportsAsanPacketThroughFeedback) {
 
   iree_hal_device_event_source_t source = asan_device.recorder()->last_source();
   EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
+  EXPECT_NE(source.executable_id, 0u);
   EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
   IREE_EXPECT_OK(iree_hal_device_queue_flush(asan_device.device(),
                                              IREE_HAL_QUEUE_AFFINITY_ANY));

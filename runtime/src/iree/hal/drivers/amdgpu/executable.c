@@ -1193,6 +1193,7 @@ static iree_status_t iree_hal_amdgpu_executable_publish_feedback_config(
                                                        device_ordinal, &config),
         "populating feedback config for physical device %" PRIhsz,
         device_ordinal);
+    config.executable_id = executable->executable_id;
 
     iree_hal_queue_affinity_t queue_affinity = 0;
     IREE_RETURN_IF_ERROR(iree_hal_amdgpu_queue_affinity_for_physical_device(

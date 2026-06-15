@@ -170,6 +170,7 @@ class AmdgpuEncodingTest : public ::testing::Test {
         /*.target_selection=*/{},
         /*.memory_access_table=*/{},
         /*.schedule_pressure_cliffs=*/{},
+        /*.schedule_pair_affinities=*/{},
         /*.schedule_strategy=*/LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
     };
     return loom_low_emission_frame_build(module_, low_function, &frame_options,
