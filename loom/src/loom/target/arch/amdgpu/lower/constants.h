@@ -56,6 +56,12 @@ bool loom_amdgpu_value_as_exact_i32(const loom_module_t* module,
 bool loom_amdgpu_value_facts_as_f32_bit_pattern(loom_value_facts_t facts,
                                                 uint32_t* out_bit_pattern);
 
+// Extracts an exact f32 constant as a raw IEEE bit pattern from value facts or
+// a module constant.
+bool loom_amdgpu_value_as_f32_bit_pattern(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, uint32_t* out_bit_pattern);
+
 // Extracts an exact integer or f32 value as a raw 32-bit payload.
 bool loom_amdgpu_value_facts_as_u32_bits(loom_value_facts_t facts,
                                          uint32_t* out_bits);

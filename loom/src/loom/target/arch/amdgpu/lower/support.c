@@ -2192,7 +2192,8 @@ bool loom_amdgpu_value_as_exact_i32(const loom_module_t* module,
                                     loom_value_id_t value_id,
                                     int64_t* out_value) {
   *out_value = 0;
-  if (loom_amdgpu_value_facts_as_exact_i32(
+  if (fact_table != NULL &&
+      loom_amdgpu_value_facts_as_exact_i32(
           loom_value_fact_table_lookup(fact_table, value_id), out_value)) {
     return true;
   }
@@ -2208,6 +2209,23 @@ bool loom_amdgpu_value_facts_as_f32_bit_pattern(loom_value_facts_t facts,
   const float f32_value = (float)loom_value_facts_as_f64(facts);
   memcpy(out_bit_pattern, &f32_value, sizeof(*out_bit_pattern));
   return true;
+}
+
+bool loom_amdgpu_value_as_f32_bit_pattern(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, uint32_t* out_bit_pattern) {
+  *out_bit_pattern = 0;
+  if (!loom_amdgpu_type_is_f32(loom_module_value_type(module, value_id))) {
+    return false;
+  }
+  if (fact_table != NULL &&
+      loom_amdgpu_value_facts_as_f32_bit_pattern(
+          loom_value_fact_table_lookup(fact_table, value_id),
+          out_bit_pattern)) {
+    return true;
+  }
+  return loom_amdgpu_module_value_as_f32_constant(module, value_id,
+                                                  out_bit_pattern);
 }
 
 static bool loom_amdgpu_i64_value_as_u32_bits(int64_t value,
@@ -2369,19 +2387,10 @@ bool loom_amdgpu_value_as_f32_constant(loom_low_lower_context_t* context,
                                        uint32_t* out_bit_pattern) {
   *out_bit_pattern = 0;
   const loom_module_t* module = loom_low_lower_context_module(context);
-  if (!loom_amdgpu_type_is_f32(loom_module_value_type(module, value_id))) {
-    return false;
-  }
   const loom_value_fact_table_t* fact_table =
       loom_low_lower_context_fact_table(context);
-  if (fact_table != NULL &&
-      loom_amdgpu_value_facts_as_f32_bit_pattern(
-          loom_value_fact_table_lookup(fact_table, value_id),
-          out_bit_pattern)) {
-    return true;
-  }
-  return loom_amdgpu_module_value_as_f32_constant(module, value_id,
-                                                  out_bit_pattern);
+  return loom_amdgpu_value_as_f32_bit_pattern(module, fact_table, value_id,
+                                              out_bit_pattern);
 }
 
 bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,

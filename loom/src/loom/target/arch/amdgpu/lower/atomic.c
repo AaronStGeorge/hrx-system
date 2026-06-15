@@ -465,27 +465,6 @@ static bool loom_amdgpu_atomic_source_shape_supported(
                                                      value_type);
 }
 
-static bool loom_amdgpu_atomic_value_as_i32_constant(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t value_id, int64_t* out_value) {
-  *out_value = 0;
-  return fact_table != NULL &&
-         loom_amdgpu_type_is_i32(loom_module_value_type(module, value_id)) &&
-         loom_amdgpu_value_facts_as_exact_i32(
-             loom_value_fact_table_lookup(fact_table, value_id), out_value);
-}
-
-static bool loom_amdgpu_atomic_value_as_f32_bit_pattern(
-    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
-    loom_value_id_t value_id, uint32_t* out_bit_pattern) {
-  *out_bit_pattern = 0;
-  return fact_table != NULL &&
-         loom_amdgpu_type_is_f32(loom_module_value_type(module, value_id)) &&
-         loom_amdgpu_value_facts_as_f32_bit_pattern(
-             loom_value_fact_table_lookup(fact_table, value_id),
-             out_bit_pattern);
-}
-
 static bool loom_amdgpu_atomic_value_can_feed_vgpr(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, loom_amdgpu_atomic_value_kind_t value_kind) {
@@ -495,12 +474,13 @@ static bool loom_amdgpu_atomic_value_can_feed_vgpr(
   }
   if (value_kind == LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32) {
     uint32_t unused_bit_pattern = 0;
-    return loom_amdgpu_atomic_value_as_f32_bit_pattern(
-        module, fact_table, value_id, &unused_bit_pattern);
+    return loom_amdgpu_value_as_f32_bit_pattern(module, fact_table, value_id,
+                                                &unused_bit_pattern);
   }
   int64_t unused_value = 0;
-  return loom_amdgpu_atomic_value_as_i32_constant(module, fact_table, value_id,
-                                                  &unused_value);
+  return loom_amdgpu_type_is_i32(loom_module_value_type(module, value_id)) &&
+         loom_amdgpu_value_as_exact_i32(module, fact_table, value_id,
+                                        &unused_value);
 }
 
 static bool loom_amdgpu_atomic_value_can_feed_vgpr_operand(
