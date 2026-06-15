@@ -17,15 +17,6 @@
 // Reduction lowering
 //===----------------------------------------------------------------------===//
 
-static iree_status_t loom_vector_to_scalar_get_reduce_scalar_kind(
-    loom_combining_kind_t reduce_kind, loom_op_kind_t* out_scalar_kind) {
-  if (!loom_scalar_combining_kind_op(reduce_kind, out_scalar_kind)) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "unsupported vector reduce combining kind");
-  }
-  return iree_ok_status();
-}
-
 typedef struct loom_vector_to_scalar_accumulator_state_t {
   loom_vector_to_scalar_state_t lane_state;
   loom_value_id_t input;
@@ -423,8 +414,11 @@ iree_status_t loom_vector_to_scalar_lower_reduce(
   loom_combining_kind_t reduce_kind = loom_vector_reduce_kind(state->op);
   uint8_t reduce_flags = loom_vector_reduce_fastmath(state->op);
   loom_op_kind_t scalar_kind = LOOM_OP_KIND_UNKNOWN;
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_get_reduce_scalar_kind(reduce_kind, &scalar_kind));
+  const bool has_scalar_kind =
+      loom_scalar_combining_kind_op(reduce_kind, &scalar_kind);
+  IREE_ASSERT(has_scalar_kind,
+              "verified vector.reduce must use a scalar-representable "
+              "combining kind");
   loom_vector_to_scalar_accumulator_state_t accumulator_state = {
       .lane_state = *state,
       .input = loom_vector_reduce_input(state->op),
@@ -822,8 +816,11 @@ iree_status_t loom_vector_to_scalar_lower_reduce_axes(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
   loom_combining_kind_t reduce_kind = loom_vector_reduce_axes_kind(state->op);
   loom_op_kind_t scalar_kind = LOOM_OP_KIND_UNKNOWN;
-  IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_get_reduce_scalar_kind(reduce_kind, &scalar_kind));
+  const bool has_scalar_kind =
+      loom_scalar_combining_kind_op(reduce_kind, &scalar_kind);
+  IREE_ASSERT(has_scalar_kind,
+              "verified vector.reduce.axes must use a scalar-representable "
+              "combining kind");
 
   loom_type_t result_type = loom_module_value_type(
       state->rewriter->module, loom_vector_reduce_axes_result(state->op));
