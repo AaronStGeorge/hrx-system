@@ -510,6 +510,30 @@ void iree_hal_amdgpu_shadow_map_deinitialize(
   memset(map, 0, sizeof(*map));
 }
 
+void iree_hal_amdgpu_shadow_map_query_statistics(
+    iree_hal_amdgpu_shadow_map_t* map,
+    iree_hal_amdgpu_shadow_map_statistics_t* out_statistics) {
+  IREE_ASSERT_ARGUMENT(out_statistics);
+  memset(out_statistics, 0, sizeof(*out_statistics));
+  if (!map || !map->initialized) return;
+
+  iree_slim_mutex_lock(&map->mutex);
+  out_statistics->mapped_slab_count = map->slab_count;
+  if (!iree_device_size_checked_mul((iree_device_size_t)map->slab_count,
+                                    map->slab_size,
+                                    &out_statistics->committed_size)) {
+    out_statistics->committed_size = IREE_DEVICE_SIZE_MAX;
+  }
+  if (iree_hal_amdgpu_shadow_map_hsa_has_alias_slabs(map) &&
+      out_statistics->committed_size != IREE_DEVICE_SIZE_MAX &&
+      !iree_device_size_checked_add(out_statistics->committed_size,
+                                    map->slab_size,
+                                    &out_statistics->committed_size)) {
+    out_statistics->committed_size = IREE_DEVICE_SIZE_MAX;
+  }
+  iree_slim_mutex_unlock(&map->mutex);
+}
+
 iree_status_t iree_hal_amdgpu_shadow_map_calculate_range(
     const iree_hal_amdgpu_shadow_map_t* map, uint64_t application_address,
     iree_device_size_t application_length,

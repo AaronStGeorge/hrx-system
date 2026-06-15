@@ -44,6 +44,20 @@ typedef struct iree_hal_amdgpu_asan_quarantine_entry_t {
   void* user_data;
 } iree_hal_amdgpu_asan_quarantine_entry_t;
 
+typedef struct iree_hal_amdgpu_asan_state_statistics_t {
+  // Current total bytes retained by the quarantine FIFO.
+  iree_device_size_t quarantine_size;
+
+  // Cumulative count of mappings released due to quarantine pressure.
+  uint64_t quarantine_eviction_count;
+
+  // Number of precise physical shadow slabs mapped in the shadow map.
+  iree_host_size_t shadow_mapped_slab_count;
+
+  // Physical shadow bytes committed by the shadow map.
+  iree_device_size_t shadow_committed_size;
+} iree_hal_amdgpu_asan_state_statistics_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
@@ -92,6 +106,9 @@ typedef struct iree_hal_amdgpu_asan_state_t {
 
   // Maximum total bytes to retain in the quarantine FIFO.
   iree_device_size_t quarantine_limit;
+
+  // Cumulative count of mappings released due to quarantine pressure.
+  uint64_t quarantine_eviction_count;
 } iree_hal_amdgpu_asan_state_t;
 
 // Initializes |out_state| from logical-device options.
@@ -114,6 +131,15 @@ void iree_hal_amdgpu_asan_state_deinitialize(
 // Returns true when |state| owns enabled ASAN resources.
 bool iree_hal_amdgpu_asan_state_is_enabled(
     const iree_hal_amdgpu_asan_state_t* state);
+
+// Snapshots ASAN memory-pressure counters.
+//
+// Disabled ASAN state reports all-zero counters. The snapshot uses the
+// quarantine and shadow-map locks independently and may race with later
+// allocation, release, or shadow-slab mapping work.
+void iree_hal_amdgpu_asan_state_query_statistics(
+    iree_hal_amdgpu_asan_state_t* state,
+    iree_hal_amdgpu_asan_state_statistics_t* out_statistics);
 
 // Returns the mutable ASAN shadow map, or NULL when ASAN is disabled.
 iree_hal_amdgpu_shadow_map_t* iree_hal_amdgpu_asan_state_shadow_map(

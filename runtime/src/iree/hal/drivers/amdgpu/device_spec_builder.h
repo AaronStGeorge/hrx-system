@@ -74,6 +74,8 @@ typedef struct iree_hal_amdgpu_device_spec_params_t {
   uint64_t device_memory_capacity_bytes;
   // Device allocator used to query stable allocation classes.
   iree_hal_allocator_t* device_allocator;
+  // Sanitizer configuration selected for this logical device.
+  iree_hal_device_sanitizer_spec_t sanitizer;
   // Optional AMDGPU device spec parameter flags.
   iree_hal_amdgpu_device_spec_param_flags_t flags;
 } iree_hal_amdgpu_device_spec_params_t;

@@ -29,6 +29,8 @@ struct iree_hal_device_spec_builder_storage_t {
   iree_hal_device_timing_spec_t timing;
   // Builder-owned executable capability facet.
   iree_hal_device_executable_spec_t executables;
+  // Builder-owned sanitizer configuration facet.
+  iree_hal_device_sanitizer_spec_t sanitizer;
   // Builder-owned physical device identity records.
   iree_hal_physical_device_spec_t* physical_devices;
   // Builder-owned memory heap records.
@@ -255,6 +257,13 @@ static void iree_hal_device_spec_builder_reset_executables(
   builder->storage->params.executables = NULL;
 }
 
+static void iree_hal_device_spec_builder_reset_sanitizer(
+    iree_hal_device_spec_builder_t* builder) {
+  if (!builder->storage) return;
+  memset(&builder->storage->sanitizer, 0, sizeof(builder->storage->sanitizer));
+  builder->storage->params.sanitizer = NULL;
+}
+
 static void iree_hal_device_spec_builder_reset_facets(
     iree_hal_device_spec_builder_t* builder) {
   if (!builder->storage) return;
@@ -283,6 +292,7 @@ static void iree_hal_device_spec_builder_reset_all(
   iree_hal_device_spec_builder_reset_dispatch(builder);
   iree_hal_device_spec_builder_reset_timing(builder);
   iree_hal_device_spec_builder_reset_executables(builder);
+  iree_hal_device_spec_builder_reset_sanitizer(builder);
   iree_hal_device_spec_builder_reset_facets(builder);
 }
 
@@ -579,6 +589,18 @@ iree_status_t iree_hal_device_spec_builder_set_executables(
     iree_hal_device_spec_builder_reset_executables(builder);
   }
   return status;
+}
+
+iree_status_t iree_hal_device_spec_builder_set_sanitizer(
+    iree_hal_device_spec_builder_t* builder,
+    const iree_hal_device_sanitizer_spec_t* sanitizer) {
+  IREE_ASSERT_ARGUMENT(builder);
+  IREE_ASSERT_ARGUMENT(sanitizer);
+  IREE_RETURN_IF_ERROR(iree_hal_device_spec_builder_ensure_storage(builder));
+  iree_hal_device_spec_builder_reset_sanitizer(builder);
+  builder->storage->sanitizer = *sanitizer;
+  builder->storage->params.sanitizer = &builder->storage->sanitizer;
+  return iree_ok_status();
 }
 
 iree_status_t iree_hal_device_spec_builder_add_facet(

@@ -449,6 +449,26 @@ bool iree_hal_amdgpu_asan_state_is_enabled(
   return state && state->is_enabled;
 }
 
+void iree_hal_amdgpu_asan_state_query_statistics(
+    iree_hal_amdgpu_asan_state_t* state,
+    iree_hal_amdgpu_asan_state_statistics_t* out_statistics) {
+  IREE_ASSERT_ARGUMENT(out_statistics);
+  memset(out_statistics, 0, sizeof(*out_statistics));
+  if (!iree_hal_amdgpu_asan_state_is_enabled(state)) return;
+
+  iree_slim_mutex_lock(&state->quarantine_mutex);
+  out_statistics->quarantine_size = state->quarantine_size;
+  out_statistics->quarantine_eviction_count = state->quarantine_eviction_count;
+  iree_slim_mutex_unlock(&state->quarantine_mutex);
+
+  iree_hal_amdgpu_shadow_map_statistics_t shadow_statistics;
+  iree_hal_amdgpu_shadow_map_query_statistics(&state->shadow_map,
+                                              &shadow_statistics);
+  out_statistics->shadow_mapped_slab_count =
+      shadow_statistics.mapped_slab_count;
+  out_statistics->shadow_committed_size = shadow_statistics.committed_size;
+}
+
 iree_hal_amdgpu_shadow_map_t* iree_hal_amdgpu_asan_state_shadow_map(
     iree_hal_amdgpu_asan_state_t* state) {
   return iree_hal_amdgpu_asan_state_is_enabled(state) ? &state->shadow_map
@@ -680,8 +700,16 @@ void iree_hal_amdgpu_asan_state_quarantine_entry(
     iree_hal_amdgpu_asan_quarantine_release_fn_t release_fn, void* user_data) {
   IREE_ASSERT_ARGUMENT(entry);
   IREE_ASSERT_ARGUMENT(release_fn);
-  if (!iree_hal_amdgpu_asan_state_is_enabled(state) ||
-      state->quarantine_limit == 0) {
+  if (!iree_hal_amdgpu_asan_state_is_enabled(state)) {
+    release_fn(user_data);
+    return;
+  }
+  if (state->quarantine_limit == 0) {
+    iree_slim_mutex_lock(&state->quarantine_mutex);
+    if (state->quarantine_eviction_count < UINT64_MAX) {
+      ++state->quarantine_eviction_count;
+    }
+    iree_slim_mutex_unlock(&state->quarantine_mutex);
     release_fn(user_data);
     return;
   }
@@ -715,6 +743,9 @@ void iree_hal_amdgpu_asan_state_quarantine_entry(
     oldest_entry->next = NULL;
     state->quarantine_size -=
         iree_min(state->quarantine_size, oldest_entry->mapped_size);
+    if (state->quarantine_eviction_count < UINT64_MAX) {
+      ++state->quarantine_eviction_count;
+    }
     if (release_tail) {
       release_tail->next = oldest_entry;
     } else {

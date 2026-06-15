@@ -32,6 +32,7 @@ static iree_hal_device_spec_params_t MakeTestSpecParams(
     iree_hal_device_executable_spec_t* out_executables,
     iree_hal_executable_format_spec_t* out_executable_formats,
     iree_hal_executable_target_t* out_executable_targets,
+    iree_hal_device_sanitizer_spec_t* out_sanitizer,
     iree_hal_device_spec_facet_t* out_facets,
     iree_const_byte_span_t facet_payload) {
   out_physical_devices[0] = {
@@ -194,6 +195,21 @@ static iree_hal_device_spec_params_t MakeTestSpecParams(
       /*.flags=*/IREE_HAL_DEVICE_EXECUTABLE_SPEC_FLAG_NONE,
   };
 
+  *out_sanitizer = {
+      /*.flags=*/IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN,
+      /*.asan=*/
+      {
+          /*.pool_options=*/
+          {
+              /*.mode=*/IREE_HAL_ASAN_POOL_MODE_SHADOW,
+              /*.shadow_granule_size=*/8,
+              /*.redzone_size=*/64,
+              /*.backing_alignment=*/4096,
+              /*.quarantine_size=*/1024 * 1024,
+          },
+      },
+  };
+
   out_facets[0] = {
       /*.schema_id=*/iree_make_cstring_view("test.facet"),
       /*.schema_version=*/1,
@@ -208,6 +224,7 @@ static iree_hal_device_spec_params_t MakeTestSpecParams(
       /*.dispatch=*/out_dispatch,
       /*.timing=*/out_timing,
       /*.executables=*/out_executables,
+      /*.sanitizer=*/out_sanitizer,
       /*.facet_count=*/1,
       /*.facets=*/out_facets,
   };
@@ -227,11 +244,12 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
   iree_hal_device_executable_spec_t executables;
   iree_hal_executable_format_spec_t executable_formats[1];
   iree_hal_executable_target_t executable_targets[3];
+  iree_hal_device_sanitizer_spec_t sanitizer;
   iree_hal_device_spec_facet_t facets[1];
   iree_hal_device_spec_params_t params = MakeTestSpecParams(
       &identity, physical_devices, &memory, memory_heaps, memory_types, &queues,
       queue_families, &dispatch, &timing, &executables, executable_formats,
-      executable_targets, facets,
+      executable_targets, &sanitizer, facets,
       iree_make_const_byte_span(facet_payload_storage,
                                 sizeof(facet_payload_storage)));
 
@@ -243,6 +261,16 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
                      "Test Device");
   EXPECT_EQ(iree_hal_device_spec_memory(spec)->heap_count, 1);
   EXPECT_EQ(iree_hal_device_spec_queues(spec)->family_count, 1);
+  const iree_hal_device_sanitizer_spec_t* sanitizer_spec =
+      iree_hal_device_spec_sanitizer(spec);
+  EXPECT_TRUE(iree_all_bits_set(sanitizer_spec->flags,
+                                IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN));
+  EXPECT_EQ(sanitizer_spec->asan.pool_options.mode,
+            IREE_HAL_ASAN_POOL_MODE_SHADOW);
+  EXPECT_EQ(sanitizer_spec->asan.pool_options.shadow_granule_size, 8u);
+  EXPECT_EQ(sanitizer_spec->asan.pool_options.redzone_size, 64u);
+  EXPECT_EQ(sanitizer_spec->asan.pool_options.backing_alignment, 4096u);
+  EXPECT_EQ(sanitizer_spec->asan.pool_options.quarantine_size, 1024u * 1024u);
   EXPECT_EQ(iree_hal_device_spec_facet_count(spec), 1);
   const iree_hal_device_spec_facet_t* facet = iree_hal_device_spec_find_facet(
       spec, iree_make_cstring_view("test.facet"));
@@ -307,6 +335,9 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
             iree_hal_device_spec_digest(parsed_spec));
   ExpectStringViewEq(iree_hal_device_spec_identity(parsed_spec)->display_name,
                      "Test Device");
+  EXPECT_EQ(iree_hal_device_spec_sanitizer(parsed_spec)
+                ->asan.pool_options.redzone_size,
+            64u);
 
   iree_hal_device_spec_release(parsed_spec);
   iree_allocator_free(iree_allocator_system(), serialized_bytes.data);
@@ -327,11 +358,12 @@ TEST(DeviceObservationTest, MemoryTotalFromSpecSumsKnownHeaps) {
   iree_hal_device_executable_spec_t executables;
   iree_hal_executable_format_spec_t executable_formats[1];
   iree_hal_executable_target_t executable_targets[3];
+  iree_hal_device_sanitizer_spec_t sanitizer;
   iree_hal_device_spec_facet_t facets[1];
   iree_hal_device_spec_params_t params = MakeTestSpecParams(
       &identity, physical_devices, &memory, memory_heaps, memory_types, &queues,
       queue_families, &dispatch, &timing, &executables, executable_formats,
-      executable_targets, facets,
+      executable_targets, &sanitizer, facets,
       iree_make_const_byte_span(facet_payload_storage,
                                 sizeof(facet_payload_storage)));
 
@@ -368,11 +400,12 @@ TEST(DeviceObservationTest, MemoryTotalFromSpecSkipsUnknownCapacity) {
   iree_hal_device_executable_spec_t executables;
   iree_hal_executable_format_spec_t executable_formats[1];
   iree_hal_executable_target_t executable_targets[3];
+  iree_hal_device_sanitizer_spec_t sanitizer;
   iree_hal_device_spec_facet_t facets[1];
   iree_hal_device_spec_params_t params = MakeTestSpecParams(
       &identity, physical_devices, &memory, memory_heaps, memory_types, &queues,
       queue_families, &dispatch, &timing, &executables, executable_formats,
-      executable_targets, facets,
+      executable_targets, &sanitizer, facets,
       iree_make_const_byte_span(facet_payload_storage,
                                 sizeof(facet_payload_storage)));
   memory_heaps[0].flags = IREE_HAL_MEMORY_HEAP_SPEC_FLAG_CAPACITY_UNKNOWN;
@@ -530,6 +563,7 @@ TEST(DeviceSpecTest, FindsVirtualMemoryAndExternalHandleRecords) {
       /*.dispatch=*/NULL,
       /*.timing=*/NULL,
       /*.executables=*/NULL,
+      /*.sanitizer=*/NULL,
       /*.facet_count=*/0,
       /*.facets=*/NULL,
   };
@@ -681,6 +715,22 @@ TEST(DeviceSpecBuilderTest, CopiesInputsAndFinalizes) {
       iree_hal_device_spec_builder_set_identity(&builder, &identity));
   IREE_ASSERT_OK(
       iree_hal_device_spec_builder_set_dispatch(&builder, &dispatch));
+  iree_hal_device_sanitizer_spec_t sanitizer = {
+      /*.flags=*/IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN,
+      /*.asan=*/
+      {
+          /*.pool_options=*/
+          {
+              /*.mode=*/IREE_HAL_ASAN_POOL_MODE_SHADOW,
+              /*.shadow_granule_size=*/16,
+              /*.redzone_size=*/128,
+              /*.backing_alignment=*/4096,
+              /*.quarantine_size=*/0,
+          },
+      },
+  };
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_builder_set_sanitizer(&builder, &sanitizer));
   IREE_ASSERT_OK(iree_hal_device_spec_builder_add_facet(&builder, &facet));
 
   iree_hal_device_spec_t* spec = NULL;
@@ -690,6 +740,9 @@ TEST(DeviceSpecBuilderTest, CopiesInputsAndFinalizes) {
   EXPECT_EQ(
       iree_hal_device_spec_dispatch(spec)->launch.maximum_workgroup_invocations,
       256);
+  EXPECT_EQ(
+      iree_hal_device_spec_sanitizer(spec)->asan.pool_options.redzone_size,
+      128u);
   const iree_hal_device_spec_facet_t* copied_facet =
       iree_hal_device_spec_facet_at(spec, 0);
   ASSERT_NE(copied_facet, nullptr);

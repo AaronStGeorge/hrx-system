@@ -395,9 +395,12 @@ typedef enum iree_hal_device_observation_flag_bits_e {
   // Device memory availability and total allocation budget fields are requested
   // or populated.
   IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY = 1ull << 0,
+  // Device sanitizer state fields are requested or populated.
+  IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER = 1ull << 1,
   // All currently defined observation groups.
   IREE_HAL_DEVICE_OBSERVATION_FLAG_ALL =
-      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY,
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY |
+      IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER,
 } iree_hal_device_observation_flag_bits_t;
 
 // Memory fields populated in an observation sample.
@@ -430,6 +433,47 @@ typedef struct iree_hal_device_memory_observation_t {
   iree_device_size_t available_bytes;
 } iree_hal_device_memory_observation_t;
 
+// ASAN fields populated in an observation sample.
+typedef uint64_t iree_hal_device_asan_observation_flags_t;
+typedef enum iree_hal_device_asan_observation_flag_bits_e {
+  // No ASAN observation fields are populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_NONE = 0ull,
+  // The quarantine_size field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_SIZE = 1ull << 0,
+  // The quarantine_eviction_count field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_EVICTION_COUNT = 1ull << 1,
+  // The shadow_mapped_slab_count field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_MAPPED_SLAB_COUNT = 1ull << 2,
+  // The shadow_committed_size field is populated.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_COMMITTED_SIZE = 1ull << 3,
+  // All currently defined ASAN observation fields.
+  IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_ALL =
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_SIZE |
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_QUARANTINE_EVICTION_COUNT |
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_MAPPED_SLAB_COUNT |
+      IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_SHADOW_COMMITTED_SIZE,
+} iree_hal_device_asan_observation_flag_bits_t;
+
+// Sampled ASAN state.
+typedef struct iree_hal_device_asan_observation_t {
+  // ASAN fields populated by the device.
+  iree_hal_device_asan_observation_flags_t flags;
+  // Current total bytes retained by the ASAN quarantine FIFO.
+  iree_device_size_t quarantine_size;
+  // Cumulative count of mappings released due to ASAN quarantine pressure.
+  uint64_t quarantine_eviction_count;
+  // Number of precise physical shadow slabs currently mapped.
+  uint64_t shadow_mapped_slab_count;
+  // Physical shadow bytes currently committed.
+  iree_device_size_t shadow_committed_size;
+} iree_hal_device_asan_observation_t;
+
+// Sampled device sanitizer state.
+typedef struct iree_hal_device_sanitizer_observation_t {
+  // Sampled ASAN state.
+  iree_hal_device_asan_observation_t asan;
+} iree_hal_device_sanitizer_observation_t;
+
 // Point-in-time device state observation.
 //
 // Observations contain sampled device state that may change over the lifetime
@@ -444,6 +488,8 @@ typedef struct iree_hal_device_observation_t {
   iree_time_t sample_time_ns;
   // Sampled memory state.
   iree_hal_device_memory_observation_t memory;
+  // Sampled sanitizer state.
+  iree_hal_device_sanitizer_observation_t sanitizer;
 } iree_hal_device_observation_t;
 
 //===----------------------------------------------------------------------===//

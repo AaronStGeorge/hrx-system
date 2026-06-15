@@ -1707,6 +1707,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_warmup_host_pools(
 
 static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
     iree_hal_amdgpu_logical_device_t* logical_device,
+    const iree_hal_amdgpu_physical_device_options_t* physical_options,
     iree_allocator_t host_allocator) {
   const iree_host_size_t physical_device_count =
       logical_device->physical_device_count;
@@ -1764,6 +1765,12 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
   }
 
   if (iree_status_is_ok(status)) {
+    iree_hal_device_sanitizer_spec_t sanitizer = {0};
+    if (iree_hal_asan_pool_options_is_enabled(
+            &physical_options->default_pool.asan)) {
+      sanitizer.flags = IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN;
+      sanitizer.asan.pool_options = physical_options->default_pool.asan;
+    }
     iree_hal_amdgpu_device_spec_params_t spec_params = {
         .logical_device_id = logical_device->identifier,
         .display_name = logical_device->identifier,
@@ -1773,6 +1780,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_create_device_spec(
         .physical_devices = physical_devices,
         .device_memory_capacity_bytes = device_memory_capacity_bytes,
         .device_allocator = logical_device->device_allocator,
+        .sanitizer = sanitizer,
         .flags = logical_device->system->info.dmabuf_supported
                      ? IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_DMABUF
                      : IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_NONE,
@@ -1853,8 +1861,8 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
         logical_device, topology, &physical_device_options, host_allocator);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_logical_device_create_device_spec(logical_device,
-                                                               host_allocator);
+    status = iree_hal_amdgpu_logical_device_create_device_spec(
+        logical_device, &physical_device_options, host_allocator);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_amdgpu_feedback_state_initialize(
@@ -2049,6 +2057,27 @@ static iree_status_t iree_hal_amdgpu_logical_device_sample_observation(
     IREE_RETURN_IF_ERROR(
         iree_hal_device_observation_populate_memory_total_from_spec(
             logical_device->device_spec, out_observation));
+  }
+  if (iree_any_bit_set(requested_flags,
+                       IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER)) {
+    if (!iree_hal_amdgpu_asan_state_is_enabled(&logical_device->asan)) {
+      return iree_ok_status();
+    }
+    iree_hal_amdgpu_asan_state_statistics_t statistics;
+    iree_hal_amdgpu_asan_state_query_statistics(&logical_device->asan,
+                                                &statistics);
+    out_observation->provided_flags |=
+        IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER;
+    out_observation->sanitizer.asan.flags =
+        IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_ALL;
+    out_observation->sanitizer.asan.quarantine_size =
+        statistics.quarantine_size;
+    out_observation->sanitizer.asan.quarantine_eviction_count =
+        statistics.quarantine_eviction_count;
+    out_observation->sanitizer.asan.shadow_mapped_slab_count =
+        (uint64_t)statistics.shadow_mapped_slab_count;
+    out_observation->sanitizer.asan.shadow_committed_size =
+        statistics.shadow_committed_size;
   }
   return iree_ok_status();
 }

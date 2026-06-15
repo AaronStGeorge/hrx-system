@@ -112,6 +112,9 @@ TEST(DeviceObservationTest, RejectsUnknownObservationFlags) {
   iree_hal_device_t* device = NULL;
   IREE_ASSERT_OK(iree_hal_mock_device_create(&mock_options,
                                              iree_allocator_system(), &device));
+  EXPECT_EQ(
+      IREE_HAL_DEVICE_SANITIZER_FLAG_NONE,
+      iree_hal_device_spec_sanitizer(iree_hal_device_spec(device))->flags);
 
   iree_hal_device_observation_t observation = {};
   IREE_EXPECT_STATUS_IS(
@@ -139,6 +142,26 @@ TEST(DeviceObservationTest, MinimalSpecLeavesMemoryUnprovided) {
   EXPECT_EQ(IREE_HAL_DEVICE_OBSERVATION_FLAG_NONE, observation.provided_flags);
   EXPECT_EQ(IREE_HAL_DEVICE_MEMORY_OBSERVATION_FLAG_NONE,
             observation.memory.flags);
+
+  iree_hal_device_release(device);
+}
+
+TEST(DeviceObservationTest, MinimalSpecLeavesSanitizerUnprovided) {
+  iree_hal_mock_device_options_t mock_options;
+  iree_hal_mock_device_options_initialize(&mock_options);
+
+  iree_hal_device_t* device = NULL;
+  IREE_ASSERT_OK(iree_hal_mock_device_create(&mock_options,
+                                             iree_allocator_system(), &device));
+
+  iree_hal_device_observation_t observation = {};
+  IREE_ASSERT_OK(iree_hal_device_sample_observation(
+      device, IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER, &observation));
+  EXPECT_EQ(IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER,
+            observation.requested_flags);
+  EXPECT_EQ(IREE_HAL_DEVICE_OBSERVATION_FLAG_NONE, observation.provided_flags);
+  EXPECT_EQ(IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_NONE,
+            observation.sanitizer.asan.flags);
 
   iree_hal_device_release(device);
 }

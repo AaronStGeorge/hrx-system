@@ -223,6 +223,30 @@ TEST(ShadowMapTest, MapRangeCoalescesDuplicateSlabs) {
   EXPECT_EQ(mapper.unmap_slab_call_count, 2u);
 }
 
+TEST(ShadowMapTest, QueryStatisticsReportsMappedPhysicalSlabs) {
+  FakeMapper mapper;
+  hsa_amd_memory_access_desc_t access_desc = FakeAccessDesc();
+  iree_hal_amdgpu_shadow_map_params_t params =
+      DefaultParams(&mapper, &access_desc);
+
+  iree_hal_amdgpu_shadow_map_t map;
+  IREE_ASSERT_OK(iree_hal_amdgpu_shadow_map_initialize(&params, &map));
+
+  iree_hal_amdgpu_shadow_map_statistics_t statistics;
+  iree_hal_amdgpu_shadow_map_query_statistics(&map, &statistics);
+  EXPECT_EQ(statistics.mapped_slab_count, 0u);
+  EXPECT_EQ(statistics.committed_size, 0u);
+
+  IREE_ASSERT_OK(iree_hal_amdgpu_shadow_map_map_slab(&map, 3));
+  IREE_ASSERT_OK(iree_hal_amdgpu_shadow_map_map_slab(&map, 7));
+
+  iree_hal_amdgpu_shadow_map_query_statistics(&map, &statistics);
+  EXPECT_EQ(statistics.mapped_slab_count, 2u);
+  EXPECT_EQ(statistics.committed_size, 2 * params.slab_size);
+
+  iree_hal_amdgpu_shadow_map_deinitialize(&map);
+}
+
 TEST(ShadowMapTest, MapExplicitDistantSlab) {
   FakeMapper mapper;
   hsa_amd_memory_access_desc_t access_desc = FakeAccessDesc();

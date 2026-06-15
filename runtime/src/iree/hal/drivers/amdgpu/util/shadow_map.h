@@ -161,6 +161,15 @@ typedef struct iree_hal_amdgpu_shadow_map_slab_t {
   hsa_amd_vmem_alloc_handle_t allocation_handle;
 } iree_hal_amdgpu_shadow_map_slab_t;
 
+typedef struct iree_hal_amdgpu_shadow_map_statistics_t {
+  // Number of precise physical shadow slabs mapped in |slabs|.
+  iree_host_size_t mapped_slab_count;
+
+  // Physical shadow bytes committed for precise slabs and any shared alias
+  // slab.
+  iree_device_size_t committed_size;
+} iree_hal_amdgpu_shadow_map_statistics_t;
+
 typedef struct iree_hal_amdgpu_shadow_map_t {
   // True when the map has been initialized and must be deinitialized.
   bool initialized;
@@ -247,6 +256,14 @@ iree_status_t iree_hal_amdgpu_shadow_map_initialize_hsa(
 
 // Releases all mapped slabs and the shadow virtual address reservation.
 void iree_hal_amdgpu_shadow_map_deinitialize(iree_hal_amdgpu_shadow_map_t* map);
+
+// Snapshots the map's current physical shadow pressure counters.
+//
+// Uninitialized or NULL maps report all-zero counters. The snapshot is taken
+// under the shadow-map slab-table lock and may race with later mappings.
+void iree_hal_amdgpu_shadow_map_query_statistics(
+    iree_hal_amdgpu_shadow_map_t* map,
+    iree_hal_amdgpu_shadow_map_statistics_t* out_statistics);
 
 // Calculates the shadow bytes and slabs covering an application byte range.
 iree_status_t iree_hal_amdgpu_shadow_map_calculate_range(

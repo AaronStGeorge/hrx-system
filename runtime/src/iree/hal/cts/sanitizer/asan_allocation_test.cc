@@ -130,19 +130,14 @@ class AsanAllocationTest : public ::testing::TestWithParam<BackendInfo> {
     }
     IREE_ASSERT_OK(status);
 
-    int64_t asan_enabled = 0;
-    status = iree_hal_device_query_i64(asan_device_.device(),
-                                       IREE_SV("hal.sanitizer"),
-                                       IREE_SV("asan"), &asan_enabled);
-    if (iree_status_is_not_found(status) ||
-        iree_status_is_unimplemented(status) ||
-        iree_status_is_unavailable(status)) {
-      iree_status_free(status);
+    const iree_hal_device_sanitizer_spec_t* sanitizer =
+        iree_hal_device_spec_sanitizer(iree_hal_device_spec(device()));
+    if (!iree_all_bits_set(sanitizer->flags,
+                           IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN)) {
       GTEST_SKIP() << "Backend '" << GetParam().name
                    << "' does not advertise HAL ASAN";
     }
-    IREE_ASSERT_OK(status);
-    if (!asan_enabled) {
+    if (!iree_hal_asan_pool_options_is_enabled(&sanitizer->asan.pool_options)) {
       GTEST_SKIP() << "Backend '" << GetParam().name
                    << "' was created without HAL ASAN enabled";
     }

@@ -42,6 +42,7 @@ TEST(DeviceSpecTest, CreatesSpecFromParams) {
       /*.physical_devices=*/&physical_device,
       /*.device_memory_capacity_bytes=*/64ull * 1024ull * 1024ull * 1024ull,
       /*.device_allocator=*/allocator,
+      /*.sanitizer=*/{},
       /*.flags=*/IREE_HAL_AMDGPU_DEVICE_SPEC_PARAM_FLAG_DMABUF,
   };
 

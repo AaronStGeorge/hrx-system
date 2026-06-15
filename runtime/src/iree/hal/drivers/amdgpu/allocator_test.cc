@@ -64,6 +64,28 @@ static iree_status_t AllocateAndExportDevicePointer(
   return status;
 }
 
+static iree_hal_device_asan_observation_t QueryAsanObservation(
+    iree_hal_device_t* device) {
+  iree_hal_device_observation_t observation = {};
+  IREE_EXPECT_OK(iree_hal_device_sample_observation(
+      device, IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER, &observation));
+  EXPECT_TRUE(iree_all_bits_set(observation.provided_flags,
+                                IREE_HAL_DEVICE_OBSERVATION_FLAG_SANITIZER));
+  EXPECT_EQ(IREE_HAL_DEVICE_ASAN_OBSERVATION_FLAG_ALL,
+            observation.sanitizer.asan.flags);
+  return observation.sanitizer.asan;
+}
+
+static iree_hal_device_asan_spec_t QueryAsanSpec(iree_hal_device_t* device) {
+  const iree_hal_device_sanitizer_spec_t* sanitizer =
+      iree_hal_device_spec_sanitizer(iree_hal_device_spec(device));
+  EXPECT_TRUE(
+      iree_all_bits_set(sanitizer->flags, IREE_HAL_DEVICE_SANITIZER_FLAG_ASAN));
+  EXPECT_TRUE(
+      iree_hal_asan_pool_options_is_enabled(&sanitizer->asan.pool_options));
+  return sanitizer->asan;
+}
+
 class AllocatorTest : public ::testing::Test {
  protected:
   class HsaAllocation {
@@ -356,6 +378,81 @@ TEST_F(
                                                 &second_buffer, &second_ptr));
   EXPECT_EQ(second_ptr, first_ptr);
   iree_hal_buffer_release(second_buffer);
+}
+
+TEST_F(AllocatorTest, AsanDiagnosticsExposeDefaultQuarantineRetention) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  const iree_hal_device_asan_spec_t asan_spec =
+      QueryAsanSpec(test_device.device());
+  EXPECT_EQ(asan_spec.pool_options.quarantine_size,
+            options.asan.quarantine_size);
+
+  iree_hal_device_asan_observation_t asan =
+      QueryAsanObservation(test_device.device());
+  EXPECT_EQ(asan.quarantine_size, 0u);
+  EXPECT_EQ(asan.quarantine_eviction_count, 0u);
+  EXPECT_EQ(asan.shadow_mapped_slab_count, 0u);
+  EXPECT_EQ(asan.shadow_committed_size, 0u);
+
+  iree_hal_buffer_params_t params = {0};
+  params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
+  params.usage =
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_DISPATCH;
+  params.queue_affinity = 1ull;
+
+  iree_hal_buffer_t* buffer = nullptr;
+  uint64_t ptr = 0;
+  IREE_ASSERT_OK(AllocateAndExportDevicePointer(test_device.allocator(), params,
+                                                /*allocation_size=*/4096,
+                                                &buffer, &ptr));
+  iree_hal_buffer_release(buffer);
+
+  asan = QueryAsanObservation(test_device.device());
+  EXPECT_GT(asan.quarantine_size, 0u);
+  EXPECT_EQ(asan.quarantine_eviction_count, 0u);
+  EXPECT_GT(asan.shadow_mapped_slab_count, 0u);
+  EXPECT_GT(asan.shadow_committed_size, 0u);
+}
+
+TEST_F(AllocatorTest, AsanDiagnosticsExposeZeroQuarantineRelease) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.quarantine_size = 0;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+  const iree_hal_device_asan_spec_t asan_spec =
+      QueryAsanSpec(test_device.device());
+  EXPECT_EQ(asan_spec.pool_options.quarantine_size, 0u);
+
+  iree_hal_buffer_params_t params = {0};
+  params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
+  params.usage =
+      IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_DISPATCH;
+  params.queue_affinity = 1ull;
+
+  iree_hal_buffer_t* buffer = nullptr;
+  uint64_t ptr = 0;
+  IREE_ASSERT_OK(AllocateAndExportDevicePointer(test_device.allocator(), params,
+                                                /*allocation_size=*/4096,
+                                                &buffer, &ptr));
+  iree_hal_buffer_release(buffer);
+
+  const iree_hal_device_asan_observation_t asan =
+      QueryAsanObservation(test_device.device());
+  EXPECT_EQ(asan.quarantine_size, 0u);
+  EXPECT_EQ(asan.quarantine_eviction_count, 1u);
+  EXPECT_GT(asan.shadow_mapped_slab_count, 0u);
+  EXPECT_GT(asan.shadow_committed_size, 0u);
 }
 
 TEST_F(AllocatorTest, QueryMemoryHeapsReportsHsaLimits) {
