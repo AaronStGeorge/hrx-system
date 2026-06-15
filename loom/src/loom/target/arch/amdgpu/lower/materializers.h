@@ -26,6 +26,11 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
 bool loom_amdgpu_value_can_materialize_as_vgpr_f32(
     loom_low_lower_context_t* context, loom_value_id_t value_id);
 
+// Returns true when a source i64 scalar can be materialized as a VGPR pair for
+// vector-style packets.
+bool loom_amdgpu_value_can_materialize_as_vgpr_i64(
+    loom_low_lower_context_t* context, loom_value_id_t value_id);
+
 // Returns true when a source address scalar can be materialized as a VGPR
 // operand for vector-style address arithmetic.
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(
@@ -47,6 +52,13 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
 // constants into VGPRs when a vector-style packet cannot consume the existing
 // lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_f32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value, loom_value_id_t* out_low_value);
+
+// Looks up a lowered i64 scalar value and materializes each 32-bit register
+// unit into a VGPR pair when a vector-style packet cannot consume the existing
+// lowering.
+iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i64(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_value, loom_value_id_t* out_low_value);
 

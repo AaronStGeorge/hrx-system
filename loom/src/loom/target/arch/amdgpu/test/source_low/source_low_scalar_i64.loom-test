@@ -2,6 +2,56 @@
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i64_bitwise_sgpr(%lhs: i64, %rhs: i64) -> (i64, i64, i64) {
+  %and = scalar.andi %lhs, %rhs : i64
+  %or = scalar.ori %and, %lhs : i64
+  %xor = scalar.xori %or, %rhs : i64
+  func.return %and, %or, %xor : i64, i64, i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i64_bitwise_sgpr(%lhs: reg<amdgpu.sgpr x2>, %rhs: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %and = s_and_b64 %lhs, %rhs
+  %or = s_or_b64 %and, %lhs
+  %xor = s_xor_b64 %or, %rhs
+  return %and, %or, %xor
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_i64_muli_bitwise_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2xi64>, %mask_values: vector<2xi64>) -> (i64) {
+  %lhs = vector.extract %lhs_values[0] : vector<2xi64> -> i64
+  %rhs = vector.extract %rhs_values[0] : vector<2xi64> -> i64
+  %mask = vector.extract %mask_values[0] : vector<2xi64> -> i64
+  %product = scalar.muli %lhs, %rhs : i64
+  %mixed = scalar.xori %product, %mask : i64
+  func.return %mixed : i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i64_muli_bitwise_vgpr(%lhs_values: reg<amdgpu.vgpr x4>, %rhs_values: reg<amdgpu.vgpr x4>, %mask_values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %13 = slice %lhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %14 = slice %lhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %16 = slice %rhs_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %17 = slice %rhs_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = slice %mask_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %20 = slice %mask_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %26 = v_mul_lo_u32 %13, %16
+  %27 = v_mul_hi_u32 %13, %16
+  %28 = v_mul_lo_u32 %13, %17
+  %29 = v_mul_lo_u32 %14, %16
+  %30 = v_add_u32 %27, %28
+  %31 = v_add_u32 %30, %29
+  %35 = v_xor_b32 %26, %19
+  %38 = v_xor_b32 %31, %20
+  %mixed = concat(%35, %38) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %mixed
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @scalar_i64_compare_eq_scc(%lhs: i64, %rhs: i64) -> (i1) {
   %cmp = scalar.cmpi eq, %lhs, %rhs : i64
   func.return %cmp : i1

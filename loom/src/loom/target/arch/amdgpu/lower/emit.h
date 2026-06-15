@@ -267,6 +267,12 @@ iree_status_t loom_amdgpu_emit_vgpr64_add(loom_low_lower_context_t* context,
                                           loom_value_id_t low_rhs,
                                           loom_value_id_t* out_low_sum);
 
+// Emits the low 64 bits of a VGPR x2 multiply.
+iree_status_t loom_amdgpu_emit_vgpr64_mul_lo(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_lhs, loom_value_id_t low_rhs,
+    loom_value_id_t* out_low_product);
+
 // Emits round-to-nearest-even conversion from one f32 lane to one BF16 lane.
 // The result is held in the low 16 bits of a one-unit VGPR.
 iree_status_t loom_amdgpu_emit_f32_to_bf16_lane(

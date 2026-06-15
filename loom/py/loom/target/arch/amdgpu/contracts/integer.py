@@ -18,6 +18,7 @@ from loom.target.arch.amdgpu.contracts.materializers import (
     ADDRESS_VGPR_MATERIALIZER,
     I1_NATIVE_MASK_MATERIALIZER,
     I32_VGPR_MATERIALIZER,
+    I64_VGPR_MATERIALIZER,
 )
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
@@ -55,6 +56,8 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.s_and_b64",
     "amdgpu.s_or_b64",
     "amdgpu.s_xor_b64",
+    "amdgpu.s_lshl_b64",
+    "amdgpu.s_lshr_b64",
     "amdgpu.s_lshl_b32",
     "amdgpu.s_lshr_b32",
     "amdgpu.s_ashr_i32",
@@ -93,6 +96,7 @@ _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
 
 _I1 = Scalar("i1")
 _I32 = Scalar("i32")
+_I64 = Scalar("i64")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
 _DIRECT_LHS = ValueRef.operand("lhs")
@@ -239,6 +243,37 @@ def _vgpr_binary_rule(
                     descriptor_rhs: _materialized_operand(source_rhs, materializer),
                 },
                 results={"dst": _RESULT},
+            ),
+        ),
+    )
+
+
+def _i64_vgpr_per_lane_binary_rule(
+    source_op: Op,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_binary_guards(_I64),
+            Guard.low_value_register_class("result", "amdgpu.vgpr"),
+            Guard.low_value_register_unit_count("result", 2),
+            Guard.value_materializable("lhs", I64_VGPR_MATERIALIZER.name),
+            Guard.value_materializable("rhs", I64_VGPR_MATERIALIZER.name),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "lhs": _materialized_operand("lhs", I64_VGPR_MATERIALIZER),
+                    "rhs": _materialized_operand("rhs", I64_VGPR_MATERIALIZER),
+                },
+                results={"dst": _RESULT},
+                result_types={"dst": _RESULT},
+                form=DescriptorEmitForm.PER_LANE,
             ),
         ),
     )
@@ -1441,6 +1476,19 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.s_and_b64",
         )
     )
+    rules.append(
+        _sgpr_binary_rule(
+            scalar_bitwise.scalar_andi,
+            _I64,
+            _descriptor("amdgpu.s_and_b64"),
+        )
+    )
+    rules.append(
+        _i64_vgpr_per_lane_binary_rule(
+            scalar_bitwise.scalar_andi,
+            "amdgpu.v_and_b32",
+        )
+    )
     rules.extend(
         _i32_sgpr_vgpr_literal_rules(
             scalar_bitwise.scalar_andi,
@@ -1461,6 +1509,19 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.s_or_b64",
         )
     )
+    rules.append(
+        _sgpr_binary_rule(
+            scalar_bitwise.scalar_ori,
+            _I64,
+            _descriptor("amdgpu.s_or_b64"),
+        )
+    )
+    rules.append(
+        _i64_vgpr_per_lane_binary_rule(
+            scalar_bitwise.scalar_ori,
+            "amdgpu.v_or_b32",
+        )
+    )
     rules.extend(
         _i32_sgpr_vgpr_literal_rules(
             scalar_bitwise.scalar_ori,
@@ -1479,6 +1540,19 @@ def _rules() -> tuple[DescriptorRule, ...]:
         _i1_sgpr_mask_rule(
             scalar_bitwise.scalar_xori,
             "amdgpu.s_xor_b64",
+        )
+    )
+    rules.append(
+        _sgpr_binary_rule(
+            scalar_bitwise.scalar_xori,
+            _I64,
+            _descriptor("amdgpu.s_xor_b64"),
+        )
+    )
+    rules.append(
+        _i64_vgpr_per_lane_binary_rule(
+            scalar_bitwise.scalar_xori,
+            "amdgpu.v_xor_b32",
         )
     )
     rules.extend(
@@ -1612,6 +1686,7 @@ AMDGPU_INTEGER_CONTRACT_FRAGMENT = ContractFragment(
     public_header="loom/target/arch/amdgpu/contracts/integer.h",
     materializers=(
         I32_VGPR_MATERIALIZER,
+        I64_VGPR_MATERIALIZER,
         ADDRESS_VGPR_MATERIALIZER,
         I1_NATIVE_MASK_MATERIALIZER,
     ),
