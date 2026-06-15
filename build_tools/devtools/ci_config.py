@@ -36,6 +36,16 @@ CMAKE_SANITIZER_SMOKE_CTEST_REGEXES = (
     "^iree/base/status_test$",
     "^loom/format/bytecode/varint_test$",
 )
+IMPORTER_TILELANG_BAZEL_TEST_TARGETS = (
+    "//loom/py/loom/importers/check/tilelang:tilelang_test",
+    "//loom/py/loom/importers/tilelang:tilelang_test",
+    "//loom/py/loom/importers/tilelang:tilelang_import_test",
+)
+IMPORTER_TILELANG_CTEST_REGEXES = (
+    "^loom/py/loom/importers/check/tilelang/tilelang_test$",
+    "^loom/py/loom/importers/tilelang/tilelang_test$",
+    "^loom/py/loom/importers/tilelang/tilelang_import_test$",
+)
 
 
 @dataclass(frozen=True)

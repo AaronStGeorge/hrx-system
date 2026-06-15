@@ -27,9 +27,9 @@ selected:
 ```bash
 iree-bazel-configure -DLOOM_IMPORT_TILELANG=ON
 iree-bazel-configure -DLOOM_IMPORT_MLIR=ON
-iree-bazel-test --config=loom-importer-tilelang <targets>
-iree-bazel-test --config=loom-importer-mlir <targets>
-iree-bazel-test --config=loom-importers <targets>
+iree-bazel-test --importer-env tilelang <targets>
+iree-bazel-test --importer-env mlir <targets>
+iree-bazel-test --importer-env mlir --importer-env tilelang <targets>
 ```
 
 The native Bazel setting behind those shorthands is:
@@ -84,6 +84,16 @@ iree-cmake-test --importer-env mlir -R mlir
 
 The flag refuses missing, stale, or failed environments instead of silently
 running against whatever packages happen to be importable.
+
+## CI
+
+Importer CI is intentionally separate from the base Bazel and CMake lanes. The
+`CI Importers` workflow is path-scoped to importer code, importer environment
+locks, and devtools/CI machinery. Its TileLang matrix entry installs the
+hash-locked environment, prints the environment manifest, and runs the
+dedicated `iree-importers-tilelang` command profile across Bazel and CMake.
+Checked-in importer tests use fail-on-skip semantics so missing frontend
+packages fail the selected importer lane instead of reporting a false green.
 
 ## Importer Map
 

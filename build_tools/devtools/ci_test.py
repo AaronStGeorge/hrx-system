@@ -142,6 +142,50 @@ class CiTest(unittest.TestCase):
             any("-DIREE_HAL_DRIVER_AMDGPU=ON" in line for line in command_lines)
         )
 
+    def test_tilelang_importer_command_sets_up_and_tests_bazel_and_cmake(self):
+        args = ci.parse_arguments(["iree-importers-tilelang"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertEqual(
+            [step.name for step in steps],
+            [
+                "Setup TileLang importer environment",
+                "Report TileLang importer environment",
+                "Test TileLang importer with Bazel",
+                "Configure TileLang importer CMake",
+                "Build TileLang importer CMake verifier",
+                "Test TileLang importer with CMake",
+            ],
+        )
+        self.assertIn("python3 dev.py importers setup tilelang", command_lines)
+        self.assertIn("python3 dev.py importers env tilelang", command_lines)
+        self.assertIn("--importer-env tilelang", command_lines[2])
+        self.assertIn(
+            "//loom/py/loom/importers/tilelang:tilelang_import_test",
+            command_lines[2],
+        )
+        self.assertIn(
+            "--cmake-build-dir build/ci/iree-importers-tilelang",
+            command_lines[3],
+        )
+        self.assertIn("--importer-env tilelang", command_lines[3])
+        self.assertIn("cmake build loom-opt --parallel", command_lines[4])
+        self.assertIn(
+            "loom/py/loom/importers/tilelang/tilelang_import_test",
+            command_lines[5],
+        )
+
+    def test_importer_command_rejects_target_override(self):
+        args = ci.parse_arguments(["iree-importers-tilelang", "--target", "//loom/..."])
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "--target is not supported for importer CI commands",
+        ):
+            ci.steps_from_args(args)
+
     def test_sanitizer_command_runs_tests_and_msan_build(self):
         args = ci.parse_arguments(
             [
@@ -573,6 +617,38 @@ class CiTest(unittest.TestCase):
                 self.assertIn('- "runtime/**"', text)
                 self.assertIn('- "loom/**"', text)
                 self.assertNotIn('- "libhrx/**"', text)
+
+    def test_importer_workflow_is_path_scoped_and_uses_locked_cache_key(self):
+        text = Path(".github/workflows/ci_importers.yml").read_text()
+
+        self.assertIn("name: CI Importers", text)
+        self.assertIn('- "requirements-importers-*.lock.txt"', text)
+        self.assertIn('- "requirements-importers-*.in"', text)
+        self.assertIn('- "build_tools/devtools/**"', text)
+        self.assertIn('- "loom/config/**"', text)
+        self.assertIn('- "loom/py/loom/importers/**"', text)
+        self.assertNotIn('- "runtime/**"', text)
+        self.assertNotIn('- "libhrx/**"', text)
+
+        block = self.workflow_job_block(
+            ".github/workflows/ci_importers.yml", "linux_importer"
+        )
+        self.assertIn("profile: tilelang", block)
+        self.assertIn("command: iree-importers-tilelang", block)
+        self.assertIn("lock_file: requirements-importers-tilelang.lock.txt", block)
+        self.assertIn("RUNNER_OS", block)
+        self.assertIn("RUNNER_ARCH", block)
+        self.assertIn("IMPORTER_LOCK_FILE", block)
+        self.assertIn("requirements-dev.lock.txt", block)
+        self.assertIn("requirements-analysis.lock.txt", block)
+        self.assertIn("actions/cache@", block)
+        self.assertIn("PIP_CACHE_DIR", block)
+        self.assertIn("python3 dev.py bazel setup --venv", block)
+        self.assertIn("python3 dev.py cmake setup --venv", block)
+        self.assertIn(
+            'python3 build_tools/devtools/ci.py "${IMPORTER_COMMAND}" --keep-going',
+            block,
+        )
 
     def test_xfails_project_to_ctest_regexes(self):
         self.assertIn(
