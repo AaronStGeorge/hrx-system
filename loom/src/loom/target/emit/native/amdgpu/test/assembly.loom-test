@@ -449,6 +449,20 @@ low.func.def target(@gfx11_target) @gfx11_vopd_minmax_f32_pairs(%a0: reg<amdgpu.
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_vopd_subrev_f32_pairs strategy=source fixed=%a0:physical_register:0:1 fixed=%b0:physical_register:1:1 fixed=%a1:physical_register:2:1 fixed=%b1:physical_register:3:1 fixed=%diff0:physical_register:4:1 fixed=%diff1:physical_register:5:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_subrev_f32_pairs(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %diff0 = v_subrev_f32 %a0, %b0
+  %diff1 = v_subrev_f32 %a1, %b1
+  return
+}
+
+// ----
+  v_dual_subrev_f32 v4, v0, v1 :: v_dual_subrev_f32 v5, v2, v3
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_vopd_mixed_binary_f32_pair strategy=source fixed=%a0:physical_register:0:1 fixed=%b0:physical_register:1:1 fixed=%a1:physical_register:2:1 fixed=%b1:physical_register:3:1 fixed=%product:physical_register:4:1 fixed=%sum:physical_register:5:1
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_mixed_binary_f32_pair(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
@@ -541,6 +555,18 @@ low.func.def target(@gfx11_target) @gfx11_vopd_minmax_f32_pairs_native(%a0: reg<
   %min1 = v_min_f32 %a1, %b1
   %max0 = v_max_f32 %a0, %b0
   %max1 = v_max_f32 %a1, %b1
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_vopd_subrev_f32_pairs_native strategy=source fixed=%a0:physical_register:0:1 fixed=%b0:physical_register:1:1 fixed=%a1:physical_register:2:1 fixed=%b1:physical_register:3:1 fixed=%diff0:physical_register:4:1 fixed=%diff1:physical_register:5:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_subrev_f32_pairs_native(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %diff0 = v_subrev_f32 %a0, %b0
+  %diff1 = v_subrev_f32 %a1, %b1
   return
 }
 

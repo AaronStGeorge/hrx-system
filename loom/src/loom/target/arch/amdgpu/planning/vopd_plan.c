@@ -195,6 +195,21 @@ static const loom_amdgpu_vopd_component_rule_t kVopdComponentRules[] = {
             },
     },
     {
+        .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_SUBREV_F32,
+        .info =
+            {
+                .op = LOOM_AMDGPU_VOPD_OP_SUBREV_F32,
+                .same_op_reason = LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_SUBREV_F32,
+                .op_name = IREE_SVL("subrev_f32"),
+                .same_op_reason_name = IREE_SVL("dual_subrev_f32"),
+                .assembly_mnemonic = IREE_SVL("v_dual_subrev_f32"),
+                .form = LOOM_AMDGPU_VOPD_COMPONENT_FORM_BINARY_VGPR,
+                .lane_mask = LOOM_AMDGPU_VOPD_COMPONENT_LANE_XY,
+                .source_register_mask =
+                    LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_BINARY,
+            },
+    },
+    {
         .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
         .info =
             {

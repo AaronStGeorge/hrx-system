@@ -43,6 +43,8 @@ extern "C" {
 #define LOOM_AMDGPU_VOPD_OP_ADD_F32 UINT16_C(4)
 // Component opcode for v_sub_f32 in a VOPD X/Y slot.
 #define LOOM_AMDGPU_VOPD_OP_SUB_F32 UINT16_C(5)
+// Component opcode for v_subrev_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_SUBREV_F32 UINT16_C(6)
 // Component opcode for v_mov_b32 in a VOPD X/Y slot.
 #define LOOM_AMDGPU_VOPD_OP_MOV_B32 UINT16_C(8)
 // Component opcode for v_max_f32 in a VOPD X/Y slot.
@@ -81,8 +83,10 @@ typedef enum loom_amdgpu_vopd_pair_reason_e {
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MAX_F32 = 8,
   // Two independent v_min_f32 packets were fused into v_dual_min_f32.
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MIN_F32 = 9,
+  // Two independent v_subrev_f32 packets were fused into v_dual_subrev_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_SUBREV_F32 = 10,
   // Two different component opcodes were fused into one legal VOPD packet.
-  LOOM_AMDGPU_VOPD_PAIR_REASON_MIXED_COMPONENTS = 10,
+  LOOM_AMDGPU_VOPD_PAIR_REASON_MIXED_COMPONENTS = 11,
 } loom_amdgpu_vopd_pair_reason_t;
 
 typedef enum loom_amdgpu_vopd_component_form_e {
