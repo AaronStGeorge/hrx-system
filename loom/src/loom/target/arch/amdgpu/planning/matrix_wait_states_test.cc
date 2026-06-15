@@ -83,4 +83,16 @@ TEST(AmdgpuMatrixWaitStatesTest, ExposesRowsByOrdinal) {
             nullptr);
 }
 
+TEST(AmdgpuMatrixWaitStatesTest, RowsRoundTripThroughLookup) {
+  const iree_host_size_t row_count = loom_amdgpu_matrix_wait_result_row_count();
+  for (iree_host_size_t i = 0; i < row_count; ++i) {
+    const loom_amdgpu_matrix_wait_result_row_t* row =
+        loom_amdgpu_matrix_wait_result_row_at(i);
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(loom_amdgpu_matrix_wait_result_find(row->profile, row->pass_count,
+                                                  row->use),
+              row);
+  }
+}
+
 }  // namespace

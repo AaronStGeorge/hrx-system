@@ -28,6 +28,8 @@ typedef enum loom_amdgpu_matrix_wait_profile_e {
   LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950 = 1,
   // MFMA/SMFMAC wait rows used by gfx950-family processors.
   LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950 = 2,
+  // Number of matrix wait profile values.
+  LOOM_AMDGPU_MATRIX_WAIT_PROFILE_COUNT_,
 } loom_amdgpu_matrix_wait_profile_t;
 
 typedef enum loom_amdgpu_matrix_wait_result_use_e {
@@ -42,6 +44,8 @@ typedef enum loom_amdgpu_matrix_wait_result_use_e {
   LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP = 3,
   // A matrix packet reads outstanding matrix result storage as SrcA/SrcB/index.
   LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB = 4,
+  // Number of matrix result use values.
+  LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_COUNT_,
 } loom_amdgpu_matrix_wait_result_use_t;
 
 typedef struct loom_amdgpu_matrix_wait_result_row_t {
