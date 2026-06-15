@@ -224,17 +224,18 @@ TEST_F(AmdgpuHalArtifactProviderTest,
   ASSERT_NE(processor, nullptr);
   const loom_target_bundle_t* target_bundle =
       loom_amdgpu_target_bundle_for_descriptor_set(
-          processor->descriptor_set_ordinal);
+          processor->descriptor_set.ordinal);
   ASSERT_NE(target_bundle, nullptr);
 
   const loom_run_hal_device_target_t target = {
       /*.data=*/processor,
       /*.target_storage=*/{},
       /*.target_bundle=*/target_bundle,
-      /*.target_key=*/processor->processor,
+      /*.target_key=*/processor->name,
   };
   const loom_target_pipeline_options_t target_pipeline_options = {
       /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
       /*.control_flow_lowering=*/{},
       /*.sanitizer=*/
       {

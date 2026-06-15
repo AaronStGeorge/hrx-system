@@ -34,7 +34,7 @@ static uint32_t loom_amdgpu_kernel_assembly_flag(
 
 static bool loom_amdgpu_kernel_assembly_supports_wgp_mode(
     const loom_amdgpu_processor_info_t* processor) {
-  switch (processor->kernel_descriptor_profile) {
+  switch (processor->kernel_descriptor.profile) {
     case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
     case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12:
       return true;
@@ -50,7 +50,21 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
     const loom_amdgpu_kernel_record_t* record, iree_string_builder_t* builder) {
   const loom_amdgpu_metadata_kernel_t* kernel = &record->metadata;
   const bool has_architected_flat_scratch =
-      record->processor->kernel_descriptor_has_architected_flat_scratch;
+      loom_amdgpu_processor_kernel_descriptor_has_flags(
+          record->processor,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH);
+  const bool uses_gfx10_sgpr_encoding =
+      loom_amdgpu_processor_kernel_descriptor_has_flags(
+          record->processor,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING);
+  const bool has_accum_offset =
+      loom_amdgpu_processor_kernel_descriptor_has_flags(
+          record->processor,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET);
+  const bool has_dx10_clamp_and_ieee_mode =
+      loom_amdgpu_processor_kernel_descriptor_has_flags(
+          record->processor,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE);
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, "\n.rodata\n.p2align 6\n"));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -103,7 +117,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
       loom_amdgpu_kernel_assembly_flag(
           record,
           LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_SIZE)));
-  if (record->processor->kernel_descriptor_uses_gfx10_sgpr_encoding) {
+  if (uses_gfx10_sgpr_encoding) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder, "  .amdhsa_wavefront_size32 %u\n",
         kernel->wavefront_size == 32 ? 1u : 0u));
@@ -140,7 +154,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
       builder, "  .amdhsa_next_free_vgpr %" PRIu32 "\n", kernel->vgpr_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "  .amdhsa_next_free_sgpr %" PRIu32 "\n", kernel->sgpr_count));
-  if (record->processor->kernel_descriptor_has_accum_offset) {
+  if (has_accum_offset) {
     uint32_t accum_offset = 0;
     IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_accum_offset(
         kernel->vgpr_count, &accum_offset));
@@ -159,7 +173,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
       "  .amdhsa_float_round_mode_16_64 0\n"
       "  .amdhsa_float_denorm_mode_32 3\n"
       "  .amdhsa_float_denorm_mode_16_64 3\n"));
-  if (record->processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode) {
+  if (has_dx10_clamp_and_ieee_mode) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(builder,
                                            "  .amdhsa_dx10_clamp 1\n"
@@ -167,7 +181,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
   }
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       builder, "  .amdhsa_fp16_overflow 0\n"));
-  if (record->processor->kernel_descriptor_has_accum_offset) {
+  if (has_accum_offset) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(builder, "  .amdhsa_tg_split 0\n"));
   }
@@ -175,30 +189,30 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder, "  .amdhsa_workgroup_processor_mode %u\n", 1u));
   }
-  if (record->processor->kernel_descriptor_uses_gfx10_sgpr_encoding) {
+  if (uses_gfx10_sgpr_encoding) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_format(builder,
                                           "  .amdhsa_memory_ordered %u\n"
                                           "  .amdhsa_forward_progress %u\n",
                                           1u, 1u));
   }
-  if (record->processor->kernel_descriptor_profile ==
+  if (record->processor->kernel_descriptor.profile ==
       LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(builder,
                                            "  .amdhsa_shared_vgpr_count 0\n"
                                            "  .amdhsa_inst_pref_size 0\n"));
   }
-  if (record->processor->kernel_descriptor_profile ==
+  if (record->processor->kernel_descriptor.profile ==
           LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12 ||
-      record->processor->kernel_descriptor_profile ==
+      record->processor->kernel_descriptor.profile ==
           LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
         builder,
         "  .amdhsa_inst_pref_size 0\n"
         "  .amdhsa_round_robin_scheduling 0\n"));
   }
-  if (record->processor->kernel_descriptor_profile ==
+  if (record->processor->kernel_descriptor.profile ==
       LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
         builder, "  .amdhsa_named_barrier_count 0\n"));

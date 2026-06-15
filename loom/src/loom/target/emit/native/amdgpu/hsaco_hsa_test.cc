@@ -922,7 +922,7 @@ iree_status_t EmitB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
 std::string AmdhsaTargetIdForProcessor(
     const loom_amdgpu_processor_info_t* processor) {
   return std::string("amdgcn-amd-amdhsa--") +
-         std::string(processor->processor.data, processor->processor.size);
+         std::string(processor->name.data, processor->name.size);
 }
 
 loom_amdgpu_metadata_kernel_t MinimalKernel(iree_string_view_t name,
@@ -957,7 +957,7 @@ iree_status_t EmitRuntimeGlobalKernelForAmdgpu(const AmdgpuHsaTarget& target,
   const loom_amdgpu_hsaco_kernel_t kernel = {
       /*.metadata=*/MinimalKernel(IREE_SV("loom_kernel"),
                                   IREE_SV("loom_kernel.kd"),
-                                  processor->default_wavefront_size),
+                                  processor->wavefront.default_size),
       /*.descriptor_options=*/{},
       /*.text=*/iree_make_const_byte_span(s_endpgm, sizeof(s_endpgm)),
   };
@@ -980,7 +980,7 @@ iree_status_t EmitRuntimeGlobalKernelForAmdgpu(const AmdgpuHsaTarget& target,
   const std::string target_id = AmdhsaTargetIdForProcessor(processor);
   const loom_amdgpu_hsaco_file_t file = {
       /*.target=*/iree_make_string_view(target_id.data(), target_id.size()),
-      /*.processor=*/processor->processor,
+      /*.processor=*/processor->name,
       /*.kernels=*/&kernel,
       /*.kernel_count=*/1,
       /*.data_symbols=*/data_symbols,

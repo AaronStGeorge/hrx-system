@@ -155,6 +155,7 @@ TEST_F(TargetPipelineTest, EnabledChecksBuildSanitizerPassSlots) {
   ModulePtr module = AllocateModule(IREE_SV("pipeline"));
   const loom_target_pipeline_options_t options = {
       /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
       /*.control_flow_lowering=*/{},
       /*.sanitizer=*/
       {
@@ -180,6 +181,7 @@ TEST_F(TargetPipelineTest, UnknownCheckBitsFailValidation) {
   ModulePtr module = AllocateModule(IREE_SV("pipeline"));
   const loom_target_pipeline_options_t options = {
       /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
       /*.control_flow_lowering=*/{},
       /*.sanitizer=*/
       {

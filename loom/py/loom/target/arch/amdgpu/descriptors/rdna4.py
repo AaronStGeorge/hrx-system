@@ -478,14 +478,6 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             hazards=_matrix_hazards(_RESOURCE_WMMA),
             model_quality=ModelQuality.ESTIMATED,
         ),
-        ScheduleClass(
-            _SCHEDULE_MODE_CONTROL,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
-            flags=(ScheduleClassFlag.CONTROL,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
     ),
     descriptors=(
         _s_set_vgpr_msb_descriptor(),

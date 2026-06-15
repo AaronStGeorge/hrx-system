@@ -60,7 +60,7 @@ std::string StringViewToString(iree_string_view_t value) {
 }
 
 bool SupportsWgpMode(const loom_amdgpu_processor_info_t* processor) {
-  switch (processor->kernel_descriptor_profile) {
+  switch (processor->kernel_descriptor.profile) {
     case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
     case LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12:
       return true;
@@ -553,6 +553,9 @@ TEST_F(AmdgpuHalKernelLibraryTest, EmitsDynamicLocalSizeKernel) {
   loom_amdgpu_hal_kernel_library_options_t options = {
       /*.processor=*/{},
       /*.target_selection=*/{},
+      /*.runtime_globals=*/{},
+      /*.data_symbols=*/{},
+      /*.data_symbol_count=*/{},
       /*.diagnostic_sink=*/capture.sink(),
       /*.source_resolver=*/{},
       /*.max_errors=*/20,
@@ -785,7 +788,11 @@ TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
     const std::string listing(library.target_listing_data,
                               library.target_listing_data_length);
 
-    if (processor->kernel_descriptor_has_architected_flat_scratch) {
+    const bool has_architected_flat_scratch =
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH);
+    if (has_architected_flat_scratch) {
       EXPECT_NE(listing.find("  .amdhsa_enable_private_segment 0\n"),
                 std::string::npos)
           << processor_name;
@@ -817,7 +824,10 @@ TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
           << processor_name;
     }
 
-    if (processor->kernel_descriptor_has_accum_offset) {
+    const bool has_accum_offset =
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor, LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ACCUM_OFFSET);
+    if (has_accum_offset) {
       EXPECT_NE(listing.find("  .amdhsa_accum_offset 4\n"), std::string::npos)
           << processor_name;
       EXPECT_NE(listing.find("  .amdhsa_tg_split 0\n"), std::string::npos)
@@ -829,7 +839,11 @@ TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
           << processor_name;
     }
 
-    if (processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode) {
+    const bool has_dx10_clamp_and_ieee_mode =
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_DX10_CLAMP_AND_IEEE_MODE);
+    if (has_dx10_clamp_and_ieee_mode) {
       EXPECT_NE(listing.find("  .amdhsa_dx10_clamp 1\n"), std::string::npos)
           << processor_name;
       EXPECT_NE(listing.find("  .amdhsa_ieee_mode 1\n"), std::string::npos)
@@ -851,7 +865,11 @@ TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
           << processor_name;
     }
 
-    if (processor->kernel_descriptor_uses_gfx10_sgpr_encoding) {
+    const bool uses_gfx10_sgpr_encoding =
+        loom_amdgpu_processor_kernel_descriptor_has_flags(
+            processor,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_GFX10_SGPR_ENCODING);
+    if (uses_gfx10_sgpr_encoding) {
       EXPECT_NE(listing.find("  .amdhsa_wavefront_size32 1\n"),
                 std::string::npos)
           << processor_name;
@@ -869,7 +887,7 @@ TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
           << processor_name;
     }
 
-    if (processor->kernel_descriptor_profile ==
+    if (processor->kernel_descriptor.profile ==
         LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11) {
       EXPECT_NE(listing.find("  .amdhsa_shared_vgpr_count 0\n"),
                 std::string::npos)
@@ -881,7 +899,7 @@ TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
           << processor_name;
       EXPECT_EQ(listing.find(".amdhsa_named_barrier_count"), std::string::npos)
           << processor_name;
-    } else if (processor->kernel_descriptor_profile ==
+    } else if (processor->kernel_descriptor.profile ==
                LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12) {
       EXPECT_EQ(listing.find(".amdhsa_shared_vgpr_count"), std::string::npos)
           << processor_name;
@@ -892,7 +910,7 @@ TEST_F(AmdgpuHalKernelLibraryTest, CapturesTargetSpecificKernelDirectives) {
           << processor_name;
       EXPECT_EQ(listing.find(".amdhsa_named_barrier_count"), std::string::npos)
           << processor_name;
-    } else if (processor->kernel_descriptor_profile ==
+    } else if (processor->kernel_descriptor.profile ==
                LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125) {
       EXPECT_EQ(listing.find(".amdhsa_shared_vgpr_count"), std::string::npos)
           << processor_name;

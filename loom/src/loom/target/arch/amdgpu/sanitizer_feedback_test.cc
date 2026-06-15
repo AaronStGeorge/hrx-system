@@ -1195,6 +1195,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
 
   const loom_target_pipeline_options_t target_pipeline_options = {
       /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
       /*.control_flow_lowering=*/{},
       /*.sanitizer=*/
       {
@@ -1295,6 +1296,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
 
   const loom_target_pipeline_options_t target_pipeline_options = {
       /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
       /*.control_flow_lowering=*/{},
       /*.sanitizer=*/
       {
@@ -1424,6 +1426,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
 
   const loom_target_pipeline_options_t target_pipeline_options = {
       /*.source_to_low_max_errors=*/{},
+      /*.source_to_low_legality_diagnostic_flags=*/{},
       /*.control_flow_lowering=*/{},
       /*.sanitizer=*/
       {
