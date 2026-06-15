@@ -15,6 +15,27 @@ package(
 
 _CHECKED_BENCHMARK_CASES = [
     {
+        "name": "paged_kv_block_gather_score_tile_f32",
+        "rows": [
+            {
+                "benchmark": "@paged_kv_block_gather_score_tile_page1_lane2",
+                "target_name": "paged_kv_block_gather_score_tile_page1_lane2",
+            },
+            {
+                "benchmark": "@paged_kv_block_gather_score_tile_page0_lane1",
+                "target_name": "paged_kv_block_gather_score_tile_page0_lane1",
+            },
+            {
+                "benchmark": "@paged_kv_block_gather_score_tile_tail",
+                "target_name": "paged_kv_block_gather_score_tile_tail",
+            },
+        ],
+        "source": "paged_kv_block_gather_score_tile_f32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
         "name": "rope_pair_rotate_tile_f32",
         "rows": [
             {

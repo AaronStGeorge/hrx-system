@@ -12,6 +12,54 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
+    "paged_kv_block_gather_score_tile_page1_lane2_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/paged_kv_block_gather_score_tile_f32.loom}}"
+    "--benchmark=@paged_kv_block_gather_score_tile_page1_lane2"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
+    "paged_kv_block_gather_score_tile_page0_lane1_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/paged_kv_block_gather_score_tile_f32.loom}}"
+    "--benchmark=@paged_kv_block_gather_score_tile_page0_lane1"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
+    "paged_kv_block_gather_score_tile_tail_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/paged_kv_block_gather_score_tile_f32.loom}}"
+    "--benchmark=@paged_kv_block_gather_score_tile_tail"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
     "rope_pair_rotate_tile_identity_plan_test"
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/rope_pair_rotate_tile_f32.loom}}"
@@ -102,6 +150,84 @@ iree_native_test(
     loom::tools::iree-benchmark-loom
   LABELS
     "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "paged_kv_block_gather_score_tile_page1_lane2_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/paged_kv_block_gather_score_tile_f32.loom}}"
+    "--benchmark=@paged_kv_block_gather_score_tile_page1_lane2"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "paged_kv_block_gather_score_tile_page0_lane1_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/paged_kv_block_gather_score_tile_f32.loom}}"
+    "--benchmark=@paged_kv_block_gather_score_tile_page0_lane1"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "paged_kv_block_gather_score_tile_tail_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/paged_kv_block_gather_score_tile_f32.loom}}"
+    "--benchmark=@paged_kv_block_gather_score_tile_tail"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 endif()
 
