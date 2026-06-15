@@ -813,9 +813,9 @@ static iree_status_t loom_amdgpu_select_clampf_number_descriptors(
 }
 
 static iree_status_t loom_amdgpu_select_clampf_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t value, loom_value_id_t lower, loom_value_id_t upper,
-    loom_value_id_t result, uint32_t lane_count, loom_op_kind_t compare_op_kind,
+    loom_low_lower_context_t* context, loom_value_id_t value,
+    loom_value_id_t lower, loom_value_id_t upper, loom_value_id_t result,
+    uint32_t lane_count, loom_op_kind_t compare_op_kind,
     loom_amdgpu_clampf_mode_t mode, loom_amdgpu_clampf_plan_t* out_plan,
     bool* out_selected) {
   *out_plan = (loom_amdgpu_clampf_plan_t){0};
@@ -883,9 +883,9 @@ iree_status_t loom_amdgpu_select_scalar_clampf_plan(
     case LOOM_SCALAR_CLAMPF_MODE_COUNT_:
       return iree_ok_status();
   }
-  return loom_amdgpu_select_clampf_plan(
-      context, source_op, value, lower, upper, result, /*lane_count=*/1,
-      LOOM_OP_SCALAR_CMPF, mode, out_plan, out_selected);
+  return loom_amdgpu_select_clampf_plan(context, value, lower, upper, result,
+                                        /*lane_count=*/1, LOOM_OP_SCALAR_CMPF,
+                                        mode, out_plan, out_selected);
 }
 
 iree_status_t loom_amdgpu_select_vector_clampf_plan(
@@ -919,9 +919,9 @@ iree_status_t loom_amdgpu_select_vector_clampf_plan(
     case LOOM_VECTOR_CLAMPF_MODE_COUNT_:
       return iree_ok_status();
   }
-  return loom_amdgpu_select_clampf_plan(context, source_op, value, lower, upper,
-                                        result, lane_count, LOOM_OP_VECTOR_CMPF,
-                                        mode, out_plan, out_selected);
+  return loom_amdgpu_select_clampf_plan(context, value, lower, upper, result,
+                                        lane_count, LOOM_OP_VECTOR_CMPF, mode,
+                                        out_plan, out_selected);
 }
 
 static iree_status_t loom_amdgpu_slice_lane_if_needed(
@@ -1745,10 +1745,6 @@ iree_status_t loom_amdgpu_lower_clampf(loom_low_lower_context_t* context,
   const bool has_valid_mode = plan->mode == LOOM_AMDGPU_CLAMPF_MODE_ORDERED ||
                               plan->mode == LOOM_AMDGPU_CLAMPF_MODE_NUMBER;
   IREE_ASSERT_TRUE(has_valid_mode);
-  if (!has_valid_mode) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "invalid AMDGPU clamp lowering plan");
-  }
   const uint32_t lane_count = plan->lane_count;
   IREE_ASSERT_GT(lane_count, 0);
   IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
@@ -1801,9 +1797,9 @@ iree_status_t loom_amdgpu_lower_clampf(loom_low_lower_context_t* context,
             lane_type, &lane_results[i]));
         break;
       }
-      case LOOM_AMDGPU_CLAMPF_MODE_NONE: {
-        break;
-      }
+      case LOOM_AMDGPU_CLAMPF_MODE_NONE:
+        IREE_ASSERT_UNREACHABLE("unselected AMDGPU clamp plan");
+        IREE_BUILTIN_UNREACHABLE();
     }
   }
 

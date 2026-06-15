@@ -130,10 +130,11 @@ iree_status_t loom_amdgpu_lower_kernel_barrier(
       return loom_amdgpu_emit_explicit_packet_plan(context, source_op,
                                                    &plan->wait);
     case LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_NONE:
-      break;
+      IREE_ASSERT_UNREACHABLE("unselected AMDGPU kernel barrier plan");
+      IREE_BUILTIN_UNREACHABLE();
   }
-  return iree_make_status(IREE_STATUS_INTERNAL,
-                          "AMDGPU kernel barrier plan has no lowering kind");
+  IREE_ASSERT_UNREACHABLE("unknown AMDGPU kernel barrier lowering kind");
+  IREE_BUILTIN_UNREACHABLE();
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
