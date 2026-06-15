@@ -121,6 +121,15 @@ typedef struct loom_amdgpu_lower_dispatch_row_t {
 static_assert(sizeof(loom_amdgpu_lower_dispatch_row_t) == 32,
               "AMDGPU lower dispatch rows must stay cache dense");
 
+typedef struct loom_amdgpu_lower_dispatch_table_t {
+  // Dialect-local dispatch rows indexed by the low byte of a source op kind.
+  const loom_amdgpu_lower_dispatch_row_t* rows;
+  // Number of entries in |rows|, or 0 when the dialect is unsupported.
+  uint8_t row_count;
+} loom_amdgpu_lower_dispatch_table_t;
+static_assert(sizeof(loom_amdgpu_lower_dispatch_table_t) == 16,
+              "AMDGPU dispatch table references must stay cache dense");
+
 #define LOOM_AMDGPU_DEFINE_DATA_SELECT(name, plan_type, select_fn)             \
   static iree_status_t name(loom_low_lower_context_t* context,                 \
                             const loom_op_t* source_op,                        \
@@ -626,6 +635,35 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
 
 #include "loom/target/arch/amdgpu/lower/registry_tables.inl"  // IWYU pragma: keep
 
+#define LOOM_AMDGPU_DISPATCH_TABLE(rows_value)                                 \
+  {                                                                            \
+      .rows = (rows_value),                                                    \
+      .row_count =                                                             \
+          (uint8_t)(IREE_ARRAYSIZE(rows_value) +                               \
+                    0u * sizeof(char[(IREE_ARRAYSIZE(rows_value) <= UINT8_MAX) \
+                                         ? 1                                   \
+                                         : -1])),                              \
+  }
+
+static const loom_amdgpu_lower_dispatch_table_t
+    kAmdgpuDispatchTables[LOOM_DIALECT_BUILTIN_COUNT_] = {
+        [LOOM_DIALECT_INDEX] =
+            LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuIndexDispatchRows),
+        [LOOM_DIALECT_SCALAR] =
+            LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuScalarDispatchRows),
+        [LOOM_DIALECT_SCF] = LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuScfDispatchRows),
+        [LOOM_DIALECT_BUFFER] =
+            LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuBufferDispatchRows),
+        [LOOM_DIALECT_VIEW] =
+            LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuViewDispatchRows),
+        [LOOM_DIALECT_VECTOR] =
+            LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuVectorDispatchRows),
+        [LOOM_DIALECT_KERNEL] =
+            LOOM_AMDGPU_DISPATCH_TABLE(kAmdgpuKernelDispatchRows),
+};
+
+#undef LOOM_AMDGPU_DISPATCH_TABLE
+
 #undef LOOM_AMDGPU_LEGALITY_ROW
 #undef LOOM_AMDGPU_DATA_PRESELECT_ROW
 #undef LOOM_AMDGPU_DATA_STORAGE_ROW
@@ -642,7 +680,7 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
 static const loom_amdgpu_lower_dispatch_row_t*
 loom_amdgpu_lower_dispatch_row_from_table(
     loom_op_kind_t op_kind, const loom_amdgpu_lower_dispatch_row_t* rows,
-    iree_host_size_t row_count) {
+    uint8_t row_count) {
   const uint8_t op_index = loom_op_dialect_index(op_kind);
   if (op_index >= row_count) {
     return NULL;
@@ -657,50 +695,36 @@ loom_amdgpu_find_lower_dispatch_row(loom_low_lower_plan_id_t plan_id) {
     return NULL;
   }
   const loom_op_kind_t op_kind = (loom_op_kind_t)plan_id;
-  switch (loom_op_dialect_id(op_kind)) {
-    case LOOM_DIALECT_INDEX:
-      return loom_amdgpu_lower_dispatch_row_from_table(
-          op_kind, kAmdgpuIndexDispatchRows,
-          IREE_ARRAYSIZE(kAmdgpuIndexDispatchRows));
-    case LOOM_DIALECT_SCALAR:
-      return loom_amdgpu_lower_dispatch_row_from_table(
-          op_kind, kAmdgpuScalarDispatchRows,
-          IREE_ARRAYSIZE(kAmdgpuScalarDispatchRows));
-    case LOOM_DIALECT_SCF:
-      return loom_amdgpu_lower_dispatch_row_from_table(
-          op_kind, kAmdgpuScfDispatchRows,
-          IREE_ARRAYSIZE(kAmdgpuScfDispatchRows));
-    case LOOM_DIALECT_BUFFER:
-      return loom_amdgpu_lower_dispatch_row_from_table(
-          op_kind, kAmdgpuBufferDispatchRows,
-          IREE_ARRAYSIZE(kAmdgpuBufferDispatchRows));
-    case LOOM_DIALECT_VIEW:
-      return loom_amdgpu_lower_dispatch_row_from_table(
-          op_kind, kAmdgpuViewDispatchRows,
-          IREE_ARRAYSIZE(kAmdgpuViewDispatchRows));
-    case LOOM_DIALECT_VECTOR:
-      return loom_amdgpu_lower_dispatch_row_from_table(
-          op_kind, kAmdgpuVectorDispatchRows,
-          IREE_ARRAYSIZE(kAmdgpuVectorDispatchRows));
-    case LOOM_DIALECT_KERNEL:
-      return loom_amdgpu_lower_dispatch_row_from_table(
-          op_kind, kAmdgpuKernelDispatchRows,
-          IREE_ARRAYSIZE(kAmdgpuKernelDispatchRows));
-    default:
-      return NULL;
+  const uint8_t dialect_id = loom_op_dialect_id(op_kind);
+  if (dialect_id >= IREE_ARRAYSIZE(kAmdgpuDispatchTables)) {
+    return NULL;
   }
+  const loom_amdgpu_lower_dispatch_table_t* table =
+      &kAmdgpuDispatchTables[dialect_id];
+  if (table->rows == NULL) {
+    return NULL;
+  }
+  return loom_amdgpu_lower_dispatch_row_from_table(op_kind, table->rows,
+                                                   table->row_count);
+}
+
+static iree_status_t loom_amdgpu_select_dispatch_row(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_lower_dispatch_row_t* row,
+    loom_low_lower_plan_t* out_plan) {
+  *out_plan = loom_low_lower_plan_empty();
+  if (row == NULL || row->select == NULL) {
+    return iree_ok_status();
+  }
+  return row->select(context, source_op, row, out_plan);
 }
 
 static iree_status_t loom_amdgpu_select_plan_id(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
-  *out_plan = loom_low_lower_plan_empty();
   const loom_amdgpu_lower_dispatch_row_t* row =
       loom_amdgpu_find_lower_dispatch_row(source_op->kind);
-  if (row == NULL || row->select == NULL) {
-    return iree_ok_status();
-  }
-  return row->select(context, source_op, row, out_plan);
+  return loom_amdgpu_select_dispatch_row(context, source_op, row, out_plan);
 }
 
 static iree_status_t loom_amdgpu_select_op(void* user_data,
@@ -727,7 +751,7 @@ static iree_status_t loom_amdgpu_preselect_op(void* user_data,
     case LOOM_AMDGPU_PRESELECT_PLAN_ID:
     case LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC: {
       IREE_RETURN_IF_ERROR(
-          loom_amdgpu_select_plan_id(context, source_op, out_plan));
+          loom_amdgpu_select_dispatch_row(context, source_op, row, out_plan));
       if (preselect_policy == LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC &&
           loom_low_lower_plan_is_empty(*out_plan)) {
         IREE_RETURN_IF_ERROR(
