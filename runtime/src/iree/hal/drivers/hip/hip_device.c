@@ -6,6 +6,7 @@
 
 #include "iree/hal/drivers/hip/hip_device.h"
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -999,6 +1000,81 @@ static const iree_hal_device_spec_t* iree_hal_hip_device_spec(
   return device->device_spec;
 }
 
+static iree_status_t iree_hal_hip_device_sample_memory_observation(
+    iree_hal_hip_device_t* device,
+    iree_hal_device_observation_t* out_observation) {
+  IREE_RETURN_IF_ERROR(
+      iree_hal_device_observation_populate_memory_total_from_spec(
+          device->device_spec, out_observation));
+
+  iree_device_size_t aggregate_available_bytes = 0;
+  iree_device_size_t aggregate_total_bytes = 0;
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < device->device_count && iree_status_is_ok(status); ++i) {
+    bool context_pushed = false;
+    status = IREE_HIP_CALL_TO_STATUS(
+        device->hip_symbols, hipCtxPushCurrent(device->devices[i].hip_context));
+    if (iree_status_is_ok(status)) {
+      context_pushed = true;
+    }
+
+    size_t available_bytes = 0;
+    size_t total_bytes = 0;
+    if (iree_status_is_ok(status)) {
+      status = IREE_HIP_CALL_TO_STATUS(
+          device->hip_symbols, hipMemGetInfo(&available_bytes, &total_bytes));
+    }
+
+    if (iree_status_is_ok(status) && total_bytes > IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HIP device memory total byte count %" PRIu64
+          " exceeds the representable iree_device_size_t range",
+          (uint64_t)total_bytes);
+    }
+    if (iree_status_is_ok(status) && available_bytes > IREE_DEVICE_SIZE_MAX) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HIP device memory available byte count %" PRIu64
+          " exceeds the representable iree_device_size_t range",
+          (uint64_t)available_bytes);
+    }
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_total_bytes,
+                                      (iree_device_size_t)total_bytes,
+                                      &aggregate_total_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate HIP device memory total byte count exceeds the "
+          "representable iree_device_size_t range");
+    }
+    if (iree_status_is_ok(status) &&
+        !iree_device_size_checked_add(aggregate_available_bytes,
+                                      (iree_device_size_t)available_bytes,
+                                      &aggregate_available_bytes)) {
+      status = iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "aggregate HIP device memory available byte count exceeds the "
+          "representable iree_device_size_t range");
+    }
+
+    if (context_pushed) {
+      status = iree_status_join(
+          status,
+          IREE_HIP_CALL_TO_STATUS(device->hip_symbols, hipCtxPopCurrent(NULL)));
+    }
+  }
+
+  if (iree_status_is_ok(status) && device->device_count > 0) {
+    iree_hal_device_observation_set_memory_total(aggregate_total_bytes,
+                                                 out_observation);
+    iree_hal_device_observation_set_memory_available(aggregate_available_bytes,
+                                                     out_observation);
+  }
+  return status;
+}
+
 static iree_status_t iree_hal_hip_device_sample_observation(
     iree_hal_device_t* base_device,
     iree_hal_device_observation_flags_t requested_flags,
@@ -1007,8 +1083,7 @@ static iree_status_t iree_hal_hip_device_sample_observation(
   if (iree_any_bit_set(requested_flags,
                        IREE_HAL_DEVICE_OBSERVATION_FLAG_MEMORY)) {
     IREE_RETURN_IF_ERROR(
-        iree_hal_device_observation_populate_memory_total_from_spec(
-            device->device_spec, out_observation));
+        iree_hal_hip_device_sample_memory_observation(device, out_observation));
   }
   return iree_ok_status();
 }
