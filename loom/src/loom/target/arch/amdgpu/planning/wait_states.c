@@ -30,7 +30,6 @@
 #define LOOM_AMDGPU_WAIT_STATE_DPP_VGPR_READ_CYCLES 2u
 #define LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES 1u
 #define LOOM_AMDGPU_WAIT_STATE_DST_SEL_FORWARDING_CYCLES 1u
-#define LOOM_AMDGPU_WAIT_STATE_REASON_COUNT 9u
 
 #define LOOM_AMDGPU_DELAY_ALU_VALU_MAX 5u
 #define LOOM_AMDGPU_DELAY_ALU_VALU_CYCLES 4u
@@ -138,14 +137,14 @@ typedef struct loom_amdgpu_delay_alu_info_t {
 
 typedef struct loom_amdgpu_wait_state_vgpr_t {
   // Per-reason outstanding fixed-wait hazard state for this physical VGPR.
-  loom_amdgpu_wait_state_hazard_t hazards[LOOM_AMDGPU_WAIT_STATE_REASON_COUNT];
+  loom_amdgpu_wait_state_hazard_t hazards[LOOM_AMDGPU_WAIT_STATE_REASON_COUNT_];
   // Recent ALU producer state for S_DELAY_ALU dependency insertion.
   loom_amdgpu_delay_alu_info_t delay_alu;
 } loom_amdgpu_wait_state_vgpr_t;
 
 typedef struct loom_amdgpu_wait_state_sgpr_t {
   // Per-reason outstanding fixed-wait hazard state for this physical SGPR.
-  loom_amdgpu_wait_state_hazard_t hazards[LOOM_AMDGPU_WAIT_STATE_REASON_COUNT];
+  loom_amdgpu_wait_state_hazard_t hazards[LOOM_AMDGPU_WAIT_STATE_REASON_COUNT_];
   // Recent ALU producer state for S_DELAY_ALU dependency insertion.
   loom_amdgpu_delay_alu_info_t delay_alu;
 } loom_amdgpu_wait_state_sgpr_t;
@@ -283,7 +282,7 @@ static loom_amdgpu_wait_state_reason_flags_t loom_amdgpu_wait_state_reason_flag(
 static bool loom_amdgpu_wait_state_reason_is_valid(
     loom_amdgpu_wait_state_reason_t reason) {
   return reason > LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN &&
-         reason < LOOM_AMDGPU_WAIT_STATE_REASON_COUNT;
+         reason < LOOM_AMDGPU_WAIT_STATE_REASON_COUNT_;
 }
 
 static bool loom_amdgpu_wait_state_assignment_is_physical_vgpr(
@@ -963,7 +962,7 @@ static void loom_amdgpu_wait_state_match_assignment(
     const loom_amdgpu_wait_state_vgpr_t* vgpr_state =
         &builder->vgprs[assignment->location_base + i];
     for (uint32_t reason = LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN + 1;
-         reason < LOOM_AMDGPU_WAIT_STATE_REASON_COUNT; ++reason) {
+         reason < LOOM_AMDGPU_WAIT_STATE_REASON_COUNT_; ++reason) {
       const loom_amdgpu_wait_state_hazard_t* hazard =
           &vgpr_state->hazards[reason];
       if (!iree_any_bit_set(hazard->flags,
@@ -1005,7 +1004,7 @@ static void loom_amdgpu_wait_state_match_sgpr_assignment(
     const loom_amdgpu_wait_state_sgpr_t* sgpr_state =
         &builder->sgprs[assignment->location_base + i];
     for (uint32_t reason = LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN + 1;
-         reason < LOOM_AMDGPU_WAIT_STATE_REASON_COUNT; ++reason) {
+         reason < LOOM_AMDGPU_WAIT_STATE_REASON_COUNT_; ++reason) {
       const loom_amdgpu_wait_state_hazard_t* hazard =
           &sgpr_state->hazards[reason];
       if (!iree_any_bit_set(hazard->flags,
