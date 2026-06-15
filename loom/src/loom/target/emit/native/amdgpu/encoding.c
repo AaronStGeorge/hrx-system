@@ -230,7 +230,7 @@ static iree_status_t loom_amdgpu_assignment_sgpr(
                             assignment->value_id);
   }
   if (assignment->location_count != 1) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU native encoding SGPR value %" PRIu32
                             " requires %" PRIu32
                             " registers; only scalar registers are supported",
@@ -259,7 +259,7 @@ static iree_status_t loom_amdgpu_assignment_vgpr(
                             assignment->value_id);
   }
   if (assignment->location_count != 1) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU native encoding VGPR value %" PRIu32
                             " requires %" PRIu32
                             " registers; only scalar registers are supported",
@@ -447,7 +447,7 @@ static iree_status_t loom_amdgpu_assignment_vgpr_low_register(
   *out_register = 0;
   if (state->encoding_table == NULL) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU native encoding descriptor set '%.*s' has no encoding table "
         "for VGPR operand encoding",
         (int)state->target->key.size, state->target->key.data);
@@ -595,7 +595,7 @@ static iree_status_t loom_amdgpu_assignment_field_value(
   iree_string_view_t register_class = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
       state->allocation, assignment, &register_class));
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                           "AMDGPU native encoding register class '%.*s' is not "
                           "supported by the generic packet encoder",
                           (int)register_class.size, register_class.data);
@@ -984,7 +984,7 @@ static iree_status_t loom_amdgpu_encode_v_mov_b32_register(
     loom_amdgpu_encode_state_t* state, uint16_t vdst, uint16_t src0) {
   if (state->encoding_table == NULL) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU native encoding descriptor set '%.*s' has no encoding table "
         "for v_mov_b32 register moves",
         (int)state->target->key.size, state->target->key.data);
@@ -1000,7 +1000,7 @@ static iree_status_t loom_amdgpu_encode_v_mov_b32_u32(
     loom_amdgpu_encode_state_t* state, uint16_t vdst, uint32_t imm32) {
   if (state->encoding_table == NULL) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU native encoding descriptor set '%.*s' has no encoding table "
         "for v_mov_b32 immediate moves",
         (int)state->target->key.size, state->target->key.data);
@@ -1022,7 +1022,7 @@ static iree_status_t loom_amdgpu_encode_vgpr_move_location(
   if (state->encoding_table == NULL ||
       state->encoding_table->vector_source_vgpr_count == 0) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU native encoding descriptor set '%.*s' has no VGPR source "
         "window for move encoding",
         (int)state->target->key.size, state->target->key.data);
@@ -1062,7 +1062,7 @@ static iree_status_t loom_amdgpu_encode_vgpr_move_immediate(
   if (state->encoding_table == NULL ||
       state->encoding_table->vector_source_vgpr_count == 0) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU native encoding descriptor set '%.*s' has no VGPR source "
         "window for immediate move encoding",
         (int)state->target->key.size, state->target->key.data);
@@ -1093,7 +1093,7 @@ static iree_status_t loom_amdgpu_encode_move(
   loom_amdgpu_encode_state_t* state = (loom_amdgpu_encode_state_t*)user_data;
   if (destination->descriptor_reg_class_id != source->descriptor_reg_class_id) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU native encoding move between descriptor register class IDs "
         "%" PRIu16 " and %" PRIu16 " is unsupported",
         destination->descriptor_reg_class_id, source->descriptor_reg_class_id);
@@ -1103,7 +1103,7 @@ static iree_status_t loom_amdgpu_encode_move(
   }
   if (destination->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU native encoding move for descriptor register class ID %" PRIu16
         " is unsupported",
         destination->descriptor_reg_class_id);
@@ -1885,7 +1885,7 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
   if (!loom_amdgpu_descriptor_set_info_has_flags(
           state->target,
           LOOM_AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING)) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU descriptor packet encoding for descriptor "
                             "set '%.*s' is not supported yet",
                             (int)state->target->key.size,
@@ -1893,7 +1893,7 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
   }
 
   if (state->encoding_table == NULL) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU native encoding has no bit table for "
                             "descriptor set '%.*s'",
                             (int)state->target->key.size,
@@ -1910,7 +1910,7 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
     iree_string_view_t format_name =
         loom_amdgpu_encoding_format_name(encoding_format);
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU descriptor '%.*s' uses unsupported native encoding format "
         "'%.*s'",
         (int)key.size, key.data, (int)format_name.size, format_name.data);
@@ -2156,7 +2156,7 @@ static iree_status_t loom_amdgpu_encode_generic_wait_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_descriptor_t* descriptor,
     const loom_amdgpu_wait_packet_t* wait_packet) {
   if (state->encoding_table == NULL) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU native encoding has no bit table for "
                             "descriptor set '%.*s'",
                             (int)state->target->key.size,
@@ -2263,7 +2263,7 @@ static iree_status_t loom_amdgpu_encode_wait_packet(
   }
   iree_string_view_t format_name =
       loom_amdgpu_encoding_format_name(descriptor->encoding_format_id);
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                           "AMDGPU wait packet uses unsupported native encoding "
                           "format '%.*s'",
                           (int)format_name.size, format_name.data);
@@ -2376,7 +2376,7 @@ static iree_status_t loom_amdgpu_encode_packet(
   const loom_op_vtable_t* vtable = loom_op_vtable(state->schedule->module, op);
   iree_string_view_t op_name =
       vtable ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                           "AMDGPU native encoding does not support "
                           "structural op %.*s",
                           (int)op_name.size, op_name.data);
