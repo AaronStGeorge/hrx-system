@@ -97,6 +97,8 @@ typedef enum loom_amdgpu_fma_mix_source_kind_e {
   LOOM_AMDGPU_FMA_MIX_SOURCE_F16LO = 1,
   // Source operand is interpreted as the high f16 lane in a 32-bit register.
   LOOM_AMDGPU_FMA_MIX_SOURCE_F16HI = 2,
+  // Number of FMA-mix source interpretation kinds.
+  LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_ = 3,
 } loom_amdgpu_fma_mix_source_kind_t;
 
 typedef struct loom_amdgpu_fma_mix_plan_t {

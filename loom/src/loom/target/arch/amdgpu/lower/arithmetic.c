@@ -23,8 +23,6 @@
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 #include "loom/util/fact_table.h"
 
-#define LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT 3u
-
 #define MIX_F32 LOOM_AMDGPU_FMA_MIX_SOURCE_F32
 #define MIX_F16LO LOOM_AMDGPU_FMA_MIX_SOURCE_F16LO
 #define MIX_F16HI LOOM_AMDGPU_FMA_MIX_SOURCE_F16HI
@@ -116,16 +114,16 @@
   }
 
 static const loom_amdgpu_descriptor_ref_t
-    kFmaMixF32DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT] =
+    kFmaMixF32DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
                                 LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
                                     FMA_MIX_F32,
                                     LOOM_AMDGPU_DESCRIPTOR_REF_NONE);
 
 static const loom_amdgpu_descriptor_ref_t kFmaMixF32Src2LiteralDescriptorRefs
-    [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-    [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT] = {
+    [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+    [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] = {
         [MIX_F32] =
             {
                 [MIX_F32] = LOOM_AMDGPU_DESCRIPTOR_REF_NONE,
@@ -147,46 +145,46 @@ static const loom_amdgpu_descriptor_ref_t kFmaMixF32Src2LiteralDescriptorRefs
 };
 
 static const loom_amdgpu_descriptor_ref_t
-    kMadMixF32DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT] =
+    kMadMixF32DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                            [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
                                 LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
                                     MAD_MIX_F32,
                                     LOOM_AMDGPU_DESCRIPTOR_REF_NONE);
 
 static const loom_amdgpu_descriptor_ref_t
-    kFmaMixloF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT] =
+    kFmaMixloF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
                                   LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
                                       FMA_MIXLO_F16, FMA_MIXLO_F16_ALL_F32);
 
 static const loom_amdgpu_descriptor_ref_t
-    kFmaMixhiF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT] =
+    kFmaMixhiF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
                                   LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
                                       FMA_MIXHI_F16, FMA_MIXHI_F16_ALL_F32);
 
 static const loom_amdgpu_descriptor_ref_t
-    kMadMixloF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT] =
+    kMadMixloF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
                                   LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
                                       MAD_MIXLO_F16, MAD_MIXLO_F16_ALL_F32);
 
 static const loom_amdgpu_descriptor_ref_t
-    kMadMixhiF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT] =
+    kMadMixhiF16DescriptorRefs[LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+                              [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_] =
                                   LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE(
                                       MAD_MIXHI_F16, MAD_MIXHI_F16_ALL_F32);
 
 typedef const loom_amdgpu_descriptor_ref_t
     loom_amdgpu_fma_mix_descriptor_ref_cube_t
-        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT]
-        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT];
+        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_]
+        [LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_];
 
 #undef LOOM_AMDGPU_FMA_MIX_DESCRIPTOR_REF_TABLE
 #undef MAD_MIXHI_F16_ALL_F32
@@ -267,7 +265,7 @@ static bool loom_amdgpu_fma_mix_source_is_f16(
 
 static bool loom_amdgpu_fma_mix_source_ref_is_valid(
     loom_amdgpu_fma_mix_source_kind_t source_kind) {
-  return (uint32_t)source_kind < LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT;
+  return (uint32_t)source_kind < LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_;
 }
 
 static const loom_op_t* loom_amdgpu_source_defining_op(
