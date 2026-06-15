@@ -75,7 +75,7 @@ iree_status_t FormatTargetRecordForProcessor(
       loom_amdgpu_target_record_default_info_for_descriptor_set(
           processor->descriptor_set.ordinal);
   if (record_info == nullptr) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU HSA processor has no target record for "
                             "descriptor set ordinal %" PRIu16,
                             processor->descriptor_set.ordinal);
@@ -820,7 +820,7 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
   *out_processor = nullptr;
   if (!target.feature_suffix.empty()) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_UNAVAILABLE,
         "AMDGPU HSACO target-feature suffixes are not supported yet: %s",
         target.feature_suffix.c_str());
   }
@@ -832,7 +832,7 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_processor_supports_hsaco(
       processor, &hsaco_supported));
   if (!hsaco_supported) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
                             "AMDGPU processor '%s' does not have native "
                             "HSACO support",
                             target.processor.c_str());
@@ -841,7 +841,7 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
       loom_amdgpu_target_record_default_info_for_descriptor_set(
           processor->descriptor_set.ordinal);
   if (record_info == nullptr) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
                             "AMDGPU processor '%s' has no target-low record",
                             target.processor.c_str());
   }
