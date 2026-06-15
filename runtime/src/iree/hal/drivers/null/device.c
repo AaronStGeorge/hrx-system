@@ -17,6 +17,7 @@
 #include "iree/hal/drivers/null/executable.h"
 #include "iree/hal/drivers/null/executable_cache.h"
 #include "iree/hal/drivers/null/semaphore.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 #include "iree/hal/utils/file_transfer.h"
 #include "iree/hal/utils/queue_emulation.h"
@@ -73,6 +74,9 @@ typedef struct iree_hal_null_device_t {
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
 
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
+
   // Topology information if this device is part of a multi-device topology.
   iree_hal_device_topology_info_t topology_info;
 
@@ -119,6 +123,11 @@ iree_status_t iree_hal_null_device_create(
   iree_atomic_store(&device->epoch, 0, iree_memory_order_relaxed);
   iree_status_t status =
       iree_async_proactor_pool_get(device->proactor_pool, 0, &device->proactor);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_spec_create_minimal(
+        identifier, identifier, IREE_SV("null"), IREE_SV("null"),
+        host_allocator, &device->device_spec);
+  }
 
   // TODO(null): pass device handles and pool configuration to the allocator.
   // Some implementations may share allocators across multiple devices created
@@ -164,6 +173,7 @@ static void iree_hal_null_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_null_device_clear_topology_info(device);
   iree_hal_allocator_release(device->device_allocator);
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
   iree_async_proactor_pool_release(device->proactor_pool);
 
   iree_allocator_free(host_allocator, device);
@@ -278,6 +288,12 @@ static iree_status_t iree_hal_null_device_query_capabilities(
   // - driver_device_handle: Opaque handle to the underlying device
   memset(out_capabilities, 0, sizeof(*out_capabilities));
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_null_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_null_device_t* device = iree_hal_null_device_cast(base_device);
+  return device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t*
@@ -718,6 +734,7 @@ static const iree_hal_device_vtable_t iree_hal_null_device_vtable = {
     .trim = iree_hal_null_device_trim,
     .query_i64 = iree_hal_null_device_query_i64,
     .query_capabilities = iree_hal_null_device_query_capabilities,
+    .device_spec = iree_hal_null_device_spec,
     .topology_info = iree_hal_null_device_topology_info,
     .refine_topology_edge = iree_hal_null_device_refine_topology_edge,
     .assign_topology_info = iree_hal_null_device_assign_topology_info,

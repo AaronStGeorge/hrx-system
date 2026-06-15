@@ -29,6 +29,7 @@
 #include "iree/hal/drivers/cuda/timepoint_pool.h"
 #include "iree/hal/utils/deferred_command_buffer.h"
 #include "iree/hal/utils/deferred_work_queue.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 #include "iree/hal/utils/file_transfer.h"
 #include "iree/hal/utils/queue_emulation.h"
@@ -105,6 +106,9 @@ typedef struct iree_hal_cuda_device_t {
 
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   iree_hal_device_topology_info_t topology_info;
 } iree_hal_cuda_device_t;
@@ -440,6 +444,7 @@ static iree_status_t iree_hal_cuda_device_create_internal(
   iree_host_size_t total_size = iree_sizeof_struct(*device) + identifier.size;
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(host_allocator, total_size, (void**)&device));
+  memset(device, 0, total_size);
 
   iree_hal_resource_initialize(&iree_hal_cuda_device_vtable, &device->resource);
   iree_string_view_append_to_buffer(
@@ -457,11 +462,17 @@ static iree_status_t iree_hal_cuda_device_create_internal(
   device->dispatch_cu_stream = dispatch_stream;
   device->host_allocator = host_allocator;
 
+  iree_status_t status = iree_hal_device_spec_create_minimal(
+      device->identifier, device->identifier, IREE_SV("cuda"), IREE_SV("cuda"),
+      host_allocator, &device->device_spec);
+
   iree_hal_cuda_deferred_work_queue_device_interface_t* device_interface;
-  iree_status_t status = iree_allocator_malloc(
-      host_allocator,
-      sizeof(iree_hal_cuda_deferred_work_queue_device_interface_t),
-      (void**)&device_interface);
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc(
+        host_allocator,
+        sizeof(iree_hal_cuda_deferred_work_queue_device_interface_t),
+        (void**)&device_interface);
+  }
   if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
     iree_hal_device_release((iree_hal_device_t*)device);
     return status;
@@ -484,7 +495,7 @@ static iree_status_t iree_hal_cuda_device_create_internal(
     if (device->params.stream_tracing >=
             IREE_HAL_STREAM_TRACING_VERBOSITY_MAX ||
         device->params.stream_tracing < IREE_HAL_STREAM_TRACING_VERBOSITY_OFF) {
-      return iree_make_status(
+      status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "invalid stream_tracing argument: expected to be between %d and %d",
           IREE_HAL_STREAM_TRACING_VERBOSITY_OFF,
@@ -492,27 +503,26 @@ static iree_status_t iree_hal_cuda_device_create_internal(
     }
 
     iree_hal_cuda_tracing_device_interface_t* tracing_device_interface = NULL;
-    status = iree_allocator_malloc(
-        host_allocator, sizeof(iree_hal_cuda_tracing_device_interface_t),
-        (void**)&tracing_device_interface);
-
-    if (IREE_UNLIKELY(!iree_status_is_ok(status))) {
-      iree_hal_device_release((iree_hal_device_t*)device);
-      return status;
+    if (iree_status_is_ok(status)) {
+      status = iree_allocator_malloc(
+          host_allocator, sizeof(iree_hal_cuda_tracing_device_interface_t),
+          (void**)&tracing_device_interface);
     }
 
-    tracing_device_interface->base.vtable =
-        &iree_hal_cuda_tracing_device_interface_vtable_t;
-    tracing_device_interface->cu_context = context;
-    tracing_device_interface->cu_device = cu_device;
-    tracing_device_interface->dispatch_cu_stream = dispatch_stream;
-    tracing_device_interface->host_allocator = host_allocator;
-    tracing_device_interface->cuda_symbols = cuda_symbols;
+    if (iree_status_is_ok(status)) {
+      tracing_device_interface->base.vtable =
+          &iree_hal_cuda_tracing_device_interface_vtable_t;
+      tracing_device_interface->cu_context = context;
+      tracing_device_interface->cu_device = cu_device;
+      tracing_device_interface->dispatch_cu_stream = dispatch_stream;
+      tracing_device_interface->host_allocator = host_allocator;
+      tracing_device_interface->cuda_symbols = cuda_symbols;
 
-    status = iree_hal_stream_tracing_context_allocate(
-        (iree_hal_stream_tracing_device_interface_t*)tracing_device_interface,
-        device->identifier, device->params.stream_tracing, &device->block_pool,
-        host_allocator, &device->tracing_context);
+      status = iree_hal_stream_tracing_context_allocate(
+          (iree_hal_stream_tracing_device_interface_t*)tracing_device_interface,
+          device->identifier, device->params.stream_tracing,
+          &device->block_pool, host_allocator, &device->tracing_context);
+    }
   }
 
   // Memory pool support is conditional.
@@ -677,6 +687,7 @@ static void iree_hal_cuda_device_destroy(iree_hal_device_t* base_device) {
 
   // Buffers may have been retaining collective resources.
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
 
   // Destroy memory pools that hold on to reserved memory.
   iree_hal_cuda_memory_pools_deinitialize(&device->memory_pools);
@@ -803,6 +814,12 @@ static iree_status_t iree_hal_cuda_device_query_capabilities(
     iree_hal_device_capabilities_t* out_capabilities) {
   memset(out_capabilities, 0, sizeof(*out_capabilities));
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_cuda_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
+  return device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t*
@@ -1247,6 +1264,7 @@ static const iree_hal_device_vtable_t iree_hal_cuda_device_vtable = {
     .trim = iree_hal_cuda_device_trim,
     .query_i64 = iree_hal_cuda_device_query_i64,
     .query_capabilities = iree_hal_cuda_device_query_capabilities,
+    .device_spec = iree_hal_cuda_device_spec,
     .topology_info = iree_hal_cuda_device_topology_info,
     .refine_topology_edge = iree_hal_cuda_device_refine_topology_edge,
     .assign_topology_info = iree_hal_cuda_device_assign_topology_info,

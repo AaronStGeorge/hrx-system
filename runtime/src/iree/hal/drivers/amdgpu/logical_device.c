@@ -31,6 +31,7 @@
 #include "iree/hal/drivers/amdgpu/util/notification_ring.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/hal/drivers/amdgpu/util/vmem.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 
 //===----------------------------------------------------------------------===//
@@ -1544,10 +1545,13 @@ iree_status_t iree_hal_amdgpu_logical_device_create(
       z0, iree_hal_amdgpu_logical_device_allocate_storage(
               identifier, topology, physical_device_size, host_allocator,
               &logical_device));
-  iree_status_t status =
-      iree_hal_amdgpu_logical_device_initialize_host_resources(
-          logical_device, options, create_params->proactor_pool,
-          host_allocator);
+  iree_status_t status = iree_hal_device_spec_create_minimal(
+      identifier, identifier, IREE_SV("amdgpu"), IREE_SV("hsa"), host_allocator,
+      &logical_device->device_spec);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_amdgpu_logical_device_initialize_host_resources(
+        logical_device, options, create_params->proactor_pool, host_allocator);
+  }
   logical_device->command_buffer_mode = options->command_buffer_mode;
   logical_device->pm4_command_buffer_publication_mode =
       options->pm4_command_buffer_publication_mode;
@@ -1630,6 +1634,7 @@ static void iree_hal_amdgpu_logical_device_destroy(
 
   iree_hal_allocator_release(logical_device->device_allocator);
   iree_hal_channel_provider_release(logical_device->channel_provider);
+  iree_hal_device_spec_release(logical_device->device_spec);
 
   // This may unload HSA; must come after all resources are released.
   iree_hal_amdgpu_system_free(logical_device->system);
@@ -2057,6 +2062,13 @@ static iree_status_t iree_hal_amdgpu_logical_device_query_capabilities(
   }
 
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_amdgpu_logical_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_amdgpu_logical_device_t* logical_device =
+      iree_hal_amdgpu_logical_device_cast(base_device);
+  return logical_device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t*
@@ -3185,6 +3197,7 @@ static const iree_hal_device_vtable_t iree_hal_amdgpu_logical_device_vtable = {
     .trim = iree_hal_amdgpu_logical_device_trim,
     .query_i64 = iree_hal_amdgpu_logical_device_query_i64,
     .query_capabilities = iree_hal_amdgpu_logical_device_query_capabilities,
+    .device_spec = iree_hal_amdgpu_logical_device_spec,
     .topology_info = iree_hal_amdgpu_logical_device_topology_info,
     .refine_topology_edge = iree_hal_amdgpu_logical_device_refine_topology_edge,
     .assign_topology_info = iree_hal_amdgpu_logical_device_assign_topology_info,

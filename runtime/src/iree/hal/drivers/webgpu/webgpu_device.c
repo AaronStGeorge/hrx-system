@@ -16,6 +16,7 @@
 #include "iree/hal/drivers/webgpu/webgpu_imports.h"
 #include "iree/hal/drivers/webgpu/webgpu_queue.h"
 #include "iree/hal/drivers/webgpu/webgpu_semaphore.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/memory_file.h"
 
 //===----------------------------------------------------------------------===//
@@ -53,6 +54,9 @@ typedef struct iree_hal_webgpu_device_t {
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
 
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
+
   // Topology information if this device is part of a multi-device topology.
   iree_hal_device_topology_info_t topology_info;
 
@@ -87,6 +91,7 @@ iree_status_t iree_hal_webgpu_device_create(
   iree_host_size_t total_size = sizeof(*device) + identifier.size;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_allocator_malloc(host_allocator, total_size, (void**)&device));
+  memset(device, 0, total_size);
   iree_hal_resource_initialize(&iree_hal_webgpu_device_vtable,
                                &device->resource);
   iree_string_view_append_to_buffer(
@@ -106,6 +111,11 @@ iree_status_t iree_hal_webgpu_device_create(
   iree_async_proactor_t* proactor = NULL;
   iree_status_t status =
       iree_async_proactor_pool_get(device->proactor_pool, 0, &proactor);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_spec_create_minimal(
+        identifier, identifier, IREE_SV("webgpu"), IREE_SV("webgpu"),
+        host_allocator, &device->device_spec);
+  }
 
   // Create the builtin compute pipelines for fill/copy operations.
   if (iree_status_is_ok(status)) {
@@ -178,6 +188,7 @@ static void iree_hal_webgpu_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_webgpu_queue_deinitialize(&device->queue);
   iree_hal_webgpu_builtins_deinitialize(&device->builtins);
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
   iree_async_proactor_pool_release(device->proactor_pool);
 
   // Release the GPUDevice bridge handle only if we own it. When created via
@@ -277,6 +288,12 @@ static iree_status_t iree_hal_webgpu_device_query_capabilities(
   // no NUMA information. The capabilities struct remains zeroed.
   memset(out_capabilities, 0, sizeof(*out_capabilities));
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_webgpu_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_webgpu_device_t* device = iree_hal_webgpu_device_cast(base_device);
+  return device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t*
@@ -605,6 +622,7 @@ static const iree_hal_device_vtable_t iree_hal_webgpu_device_vtable = {
     .trim = iree_hal_webgpu_device_trim,
     .query_i64 = iree_hal_webgpu_device_query_i64,
     .query_capabilities = iree_hal_webgpu_device_query_capabilities,
+    .device_spec = iree_hal_webgpu_device_spec,
     .topology_info = iree_hal_webgpu_device_topology_info,
     .refine_topology_edge = iree_hal_webgpu_device_refine_topology_edge,
     .assign_topology_info = iree_hal_webgpu_device_assign_topology_info,

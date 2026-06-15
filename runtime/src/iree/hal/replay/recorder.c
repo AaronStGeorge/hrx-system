@@ -710,6 +710,12 @@ static iree_status_t iree_hal_replay_device_query_capabilities(
                                                           out_capabilities));
 }
 
+static const iree_hal_device_spec_t* iree_hal_replay_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_replay_device_t* device = iree_hal_replay_device_cast(base_device);
+  return iree_hal_device_spec(device->base_device);
+}
+
 static const iree_hal_device_topology_info_t*
 iree_hal_replay_device_topology_info(iree_hal_device_t* base_device) {
   iree_hal_replay_device_t* device = iree_hal_replay_device_cast(base_device);
@@ -2057,6 +2063,7 @@ static const iree_hal_device_vtable_t iree_hal_replay_device_vtable = {
     .trim = iree_hal_replay_device_trim,
     .query_i64 = iree_hal_replay_device_query_i64,
     .query_capabilities = iree_hal_replay_device_query_capabilities,
+    .device_spec = iree_hal_replay_device_spec,
     .topology_info = iree_hal_replay_device_topology_info,
     .refine_topology_edge = iree_hal_replay_device_refine_topology_edge,
     .assign_topology_info = iree_hal_replay_device_assign_topology_info,

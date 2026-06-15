@@ -16,6 +16,7 @@
 #include "iree/hal/channel.h"
 #include "iree/hal/channel_provider.h"
 #include "iree/hal/command_buffer.h"
+#include "iree/hal/device_spec.h"
 #include "iree/hal/event.h"
 #include "iree/hal/executable_cache.h"
 #include "iree/hal/fence.h"
@@ -548,6 +549,14 @@ IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
     iree_hal_device_t* device,
     iree_hal_device_capabilities_t* out_capabilities);
 
+// Returns immutable facts for |device|.
+//
+// The returned pointer is owned by |device| and remains valid until |device| is
+// destroyed. Callers that need to keep the spec beyond the device lifetime must
+// retain it.
+IREE_API_EXPORT const iree_hal_device_spec_t* iree_hal_device_spec(
+    iree_hal_device_t* device);
+
 // Returns a pointer to device's topology info populated during device creation.
 // Returns NULL if device is not part of a topology.
 // Pointer lifetime matches device lifetime.
@@ -999,6 +1008,9 @@ typedef struct iree_hal_device_vtable_t {
   iree_status_t(IREE_API_PTR* query_capabilities)(
       iree_hal_device_t* device,
       iree_hal_device_capabilities_t* out_capabilities);
+
+  const iree_hal_device_spec_t*(IREE_API_PTR* device_spec)(
+      iree_hal_device_t* device);
 
   const iree_hal_device_topology_info_t*(IREE_API_PTR* topology_info)(
       iree_hal_device_t* device);

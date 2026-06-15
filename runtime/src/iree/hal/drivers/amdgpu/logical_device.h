@@ -142,6 +142,9 @@ typedef struct iree_hal_amdgpu_logical_device_t {
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
 
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
+
   // Sticky logical device-global error flag.
   // Asynchronous errors from subsystems get routed back to this as our "device
   // loss" trigger.

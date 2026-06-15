@@ -84,6 +84,12 @@ IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
   return iree_ok_status();
 }
 
+IREE_API_EXPORT const iree_hal_device_spec_t* iree_hal_device_spec(
+    iree_hal_device_t* device) {
+  IREE_ASSERT_ARGUMENT(device);
+  return _VTABLE_DISPATCH(device, device_spec)(device);
+}
+
 IREE_API_EXPORT const iree_hal_device_topology_info_t*
 iree_hal_device_topology_info(iree_hal_device_t* device) {
   IREE_ASSERT_ARGUMENT(device);

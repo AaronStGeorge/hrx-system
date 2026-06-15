@@ -33,6 +33,7 @@
 #include "iree/hal/drivers/vulkan/semaphore.h"
 #include "iree/hal/drivers/vulkan/syms.h"
 #include "iree/hal/local/profile.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 
 //===----------------------------------------------------------------------===//
@@ -162,6 +163,9 @@ struct iree_hal_vulkan_logical_device_t {
 
   // Logical allocator.
   iree_hal_allocator_t* device_allocator;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   // Active profiling session state.
   struct {
@@ -525,6 +529,7 @@ static void iree_hal_vulkan_logical_device_destroy(
     iree_hal_vulkan_instance_deinitialize(&device->instance);
   }
   iree_hal_vulkan_libvulkan_deinitialize(&device->libvulkan);
+  iree_hal_device_spec_release(device->device_spec);
   iree_arena_block_pool_deinitialize(&device->command_buffer_block_pool);
   iree_slim_mutex_deinitialize(&device->profile.clock_alignment.mutex);
   iree_slim_mutex_deinitialize(&device->queues.handle_mutexes.sparse_binding);
@@ -893,6 +898,13 @@ static iree_status_t iree_hal_vulkan_logical_device_query_capabilities(
         IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD;
   }
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_vulkan_logical_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_vulkan_logical_device_t* device =
+      iree_hal_vulkan_logical_device_cast(base_device);
+  return device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t*
@@ -1694,8 +1706,12 @@ static iree_status_t iree_hal_vulkan_logical_device_create(
   iree_string_view_append_to_buffer(identifier, &device->identifier,
                                     (char*)device + sizeof(*device));
 
-  iree_status_t status =
-      iree_hal_vulkan_libvulkan_copy(libvulkan, &device->libvulkan);
+  iree_status_t status = iree_hal_device_spec_create_minimal(
+      identifier, identifier, IREE_SV("vulkan"), IREE_SV("vulkan"),
+      host_allocator, &device->device_spec);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_vulkan_libvulkan_copy(libvulkan, &device->libvulkan);
+  }
   if (iree_status_is_ok(status)) {
     iree_slim_mutex_initialize(&device->queues.handle_mutexes.compute);
     iree_slim_mutex_initialize(&device->queues.handle_mutexes.transfer);
@@ -1705,6 +1721,7 @@ static iree_status_t iree_hal_vulkan_logical_device_create(
         &device->profile.clock_alignment);
     *out_device = device;
   } else {
+    iree_hal_device_spec_release(device->device_spec);
     iree_arena_block_pool_deinitialize(&device->command_buffer_block_pool);
     iree_allocator_free(host_allocator, device);
   }
@@ -2235,6 +2252,7 @@ static const iree_hal_device_vtable_t iree_hal_vulkan_logical_device_vtable = {
     .trim = iree_hal_vulkan_logical_device_trim,
     .query_i64 = iree_hal_vulkan_logical_device_query_i64,
     .query_capabilities = iree_hal_vulkan_logical_device_query_capabilities,
+    .device_spec = iree_hal_vulkan_logical_device_spec,
     .topology_info = iree_hal_vulkan_logical_device_topology_info,
     .refine_topology_edge = iree_hal_vulkan_logical_device_refine_topology_edge,
     .assign_topology_info = iree_hal_vulkan_logical_device_assign_topology_info,

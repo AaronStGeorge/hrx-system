@@ -674,3 +674,28 @@ iree_status_t iree_hal_device_spec_builder_finalize(
       builder->storage ? &builder->storage->params : NULL;
   return iree_hal_device_spec_create(params, builder->host_allocator, out_spec);
 }
+
+iree_status_t iree_hal_device_spec_create_minimal(
+    iree_string_view_t logical_device_id, iree_string_view_t display_name,
+    iree_string_view_t driver_id, iree_string_view_t backend_id,
+    iree_allocator_t host_allocator, iree_hal_device_spec_t** out_spec) {
+  IREE_ASSERT_ARGUMENT(out_spec);
+  *out_spec = NULL;
+
+  iree_hal_device_spec_builder_t builder;
+  iree_hal_device_spec_builder_initialize(host_allocator, &builder);
+  iree_hal_device_identity_spec_t identity = {
+      .logical_device_id = logical_device_id,
+      .display_name = display_name,
+      .driver_id = driver_id,
+      .backend_id = backend_id,
+      .flags = IREE_HAL_DEVICE_IDENTITY_FLAG_NONE,
+  };
+  iree_status_t status =
+      iree_hal_device_spec_builder_set_identity(&builder, &identity);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_spec_builder_finalize(&builder, out_spec);
+  }
+  iree_hal_device_spec_builder_deinitialize(&builder);
+  return status;
+}

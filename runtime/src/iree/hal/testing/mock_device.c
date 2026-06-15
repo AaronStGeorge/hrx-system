@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "iree/hal/utils/device_spec_builder.h"
+
 //===----------------------------------------------------------------------===//
 // Mock executable support
 //===----------------------------------------------------------------------===//
@@ -360,6 +362,9 @@ typedef struct iree_hal_mock_device_t {
   // True when create_executable_cache returns mock executable caches.
   bool executable_cache_enabled;
 
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
+
   // Topology information assigned during group creation.
   iree_hal_device_topology_info_t topology_info;
 } iree_hal_mock_device_t;
@@ -402,6 +407,14 @@ iree_status_t iree_hal_mock_device_create(
       options->identifier, &device->identifier,
       (char*)device + total_size - options->identifier.size);
 
+  iree_status_t status = iree_hal_device_spec_create_minimal(
+      device->identifier, device->identifier, IREE_SV("mock"), IREE_SV("mock"),
+      host_allocator, &device->device_spec);
+  if (!iree_status_is_ok(status)) {
+    iree_hal_device_release((iree_hal_device_t*)device);
+    return status;
+  }
+
   *out_device = (iree_hal_device_t*)device;
   return iree_ok_status();
 }
@@ -413,6 +426,7 @@ iree_status_t iree_hal_mock_device_create(
 static void iree_hal_mock_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
   iree_allocator_t host_allocator = device->host_allocator;
+  iree_hal_device_spec_release(device->device_spec);
   iree_allocator_free(host_allocator, device);
 }
 
@@ -434,6 +448,12 @@ static iree_status_t iree_hal_mock_device_query_capabilities(
   iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
   *out_capabilities = device->capabilities;
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_mock_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_mock_device_t* device = iree_hal_mock_device_cast(base_device);
+  return device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t*
@@ -696,6 +716,7 @@ static const iree_hal_device_vtable_t iree_hal_mock_device_vtable = {
     .trim = iree_hal_mock_device_trim,
     .query_i64 = iree_hal_mock_device_query_i64,
     .query_capabilities = iree_hal_mock_device_query_capabilities,
+    .device_spec = iree_hal_mock_device_spec,
     .topology_info = iree_hal_mock_device_topology_info,
     .refine_topology_edge = iree_hal_mock_device_refine_topology_edge,
     .assign_topology_info = iree_hal_mock_device_assign_topology_info,

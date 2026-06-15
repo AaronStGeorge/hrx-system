@@ -289,6 +289,7 @@ iree_cc_library(
     iree::hal::memory::slab_provider
     iree::hal::memory::tlsf_pool
     iree::hal::memory::tracing
+    iree::hal::utils::device_spec_builder
     iree::hal::utils::elf_format
     iree::hal::utils::files
     iree::hal::utils::resource_set

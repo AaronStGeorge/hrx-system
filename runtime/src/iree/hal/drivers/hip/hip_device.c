@@ -33,6 +33,7 @@
 #include "iree/hal/drivers/hip/status_util.h"
 #include "iree/hal/drivers/hip/stream_command_buffer.h"
 #include "iree/hal/utils/deferred_command_buffer.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 #include "iree/hal/utils/file_transfer.h"
 #include "iree/hal/utils/queue_emulation.h"
@@ -103,6 +104,9 @@ typedef struct iree_hal_hip_device_t {
 
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   iree_hal_device_topology_info_t topology_info;
 
@@ -335,9 +339,11 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
   iree_hal_driver_retain(device->driver);
   device->hip_symbols = symbols;
   device->nccl_symbols = nccl_symbols;
-  iree_status_t status = iree_ok_status();
+  iree_status_t status = iree_hal_device_spec_create_minimal(
+      device->identifier, device->identifier, IREE_SV("hip"), IREE_SV("hip"),
+      host_allocator, &device->device_spec);
   // Enable tracing for each of the streams - no-op if disabled.
-  if (device->params.stream_tracing) {
+  if (iree_status_is_ok(status) && device->params.stream_tracing) {
     for (iree_host_size_t i = 0; i < device->device_count; ++i) {
       iree_hal_hip_tracing_device_interface_t* tracing_device_interface = NULL;
       status = iree_allocator_malloc(host_allocator,
@@ -653,6 +659,7 @@ static void iree_hal_hip_device_destroy(iree_hal_device_t* base_device) {
 
   // Buffers may have been retaining collective resources.
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
 
   for (iree_host_size_t i = 0; i < device->device_count; ++i) {
     iree_hal_hip_memory_pools_deinitialize(&device->devices[i].memory_pools);
@@ -791,6 +798,12 @@ static iree_status_t iree_hal_hip_device_query_capabilities(
     iree_hal_device_capabilities_t* out_capabilities) {
   memset(out_capabilities, 0, sizeof(*out_capabilities));
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_hip_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
+  return device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t* iree_hal_hip_device_topology_info(
@@ -2845,6 +2858,7 @@ static const iree_hal_device_vtable_t iree_hal_hip_device_vtable = {
     .trim = iree_hal_hip_device_trim,
     .query_i64 = iree_hal_hip_device_query_i64,
     .query_capabilities = iree_hal_hip_device_query_capabilities,
+    .device_spec = iree_hal_hip_device_spec,
     .topology_info = iree_hal_hip_device_topology_info,
     .refine_topology_edge = iree_hal_hip_device_refine_topology_edge,
     .assign_topology_info = iree_hal_hip_device_assign_topology_info,

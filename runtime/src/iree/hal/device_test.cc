@@ -80,6 +80,31 @@ static iree_hal_profile_sink_t* CountingProfileSinkAsBase(
   return reinterpret_cast<iree_hal_profile_sink_t*>(sink);
 }
 
+TEST(DeviceSpecTest, MockDeviceExposesCachedSpec) {
+  iree_hal_mock_device_options_t mock_options;
+  iree_hal_mock_device_options_initialize(&mock_options);
+  mock_options.identifier = IREE_SV("mock0");
+
+  iree_hal_device_t* device = NULL;
+  IREE_ASSERT_OK(iree_hal_mock_device_create(&mock_options,
+                                             iree_allocator_system(), &device));
+
+  const iree_hal_device_spec_t* spec = iree_hal_device_spec(device);
+  ASSERT_NE(spec, nullptr);
+  EXPECT_EQ(spec, iree_hal_device_spec(device));
+
+  const iree_hal_device_identity_spec_t* identity =
+      iree_hal_device_spec_identity(spec);
+  ASSERT_NE(identity, nullptr);
+  EXPECT_TRUE(
+      iree_string_view_equal(identity->logical_device_id, IREE_SV("mock0")));
+  EXPECT_TRUE(iree_string_view_equal(identity->display_name, IREE_SV("mock0")));
+  EXPECT_TRUE(iree_string_view_equal(identity->driver_id, IREE_SV("mock")));
+  EXPECT_TRUE(iree_string_view_equal(identity->backend_id, IREE_SV("mock")));
+
+  iree_hal_device_release(device);
+}
+
 class DeviceProfilingTest : public ::testing::Test {
  protected:
   void SetUp() override {

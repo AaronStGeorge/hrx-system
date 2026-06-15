@@ -28,6 +28,7 @@
 #include "iree/hal/memory/cpu_slab_provider.h"
 #include "iree/hal/memory/passthrough_pool.h"
 #include "iree/hal/memory/tlsf_pool.h"
+#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 
 typedef struct iree_hal_task_device_t {
@@ -76,6 +77,9 @@ typedef struct iree_hal_task_device_t {
 
   // Optional provider used for creating/configuring collective channels.
   iree_hal_channel_provider_t* channel_provider;
+
+  // Immutable device facts captured at creation time.
+  iree_hal_device_spec_t* device_spec;
 
   // Active HAL-native profiling recorder, or NULL when profiling is disabled.
   iree_hal_local_profile_recorder_t* profile_recorder;
@@ -327,6 +331,11 @@ iree_status_t iree_hal_task_device_create(
       iree_task_executor_node_id(queue_executors[0]);
   iree_status_t status = iree_async_proactor_pool_get_for_node(
       device->proactor_pool, default_node_id, &device->proactor);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_device_spec_create_minimal(
+        identifier, identifier, IREE_SV("local-task"), IREE_SV("local"),
+        host_allocator, &device->device_spec);
+  }
 
   if (iree_status_is_ok(status)) {
     status = iree_hal_task_device_create_default_pools(
@@ -417,6 +426,7 @@ static void iree_hal_task_device_destroy(iree_hal_device_t* base_device) {
   iree_async_notification_release(device->default_pool_notification);
   iree_hal_allocator_release(device->device_allocator);
   iree_hal_channel_provider_release(device->channel_provider);
+  iree_hal_device_spec_release(device->device_spec);
   iree_async_proactor_pool_release(device->proactor_pool);
 
   iree_arena_block_pool_deinitialize(&device->large_block_pool);
@@ -528,6 +538,12 @@ static iree_status_t iree_hal_task_device_query_capabilities(
     iree_hal_device_capabilities_t* out_capabilities) {
   memset(out_capabilities, 0, sizeof(*out_capabilities));
   return iree_ok_status();
+}
+
+static const iree_hal_device_spec_t* iree_hal_task_device_spec(
+    iree_hal_device_t* base_device) {
+  iree_hal_task_device_t* device = iree_hal_task_device_cast(base_device);
+  return device->device_spec;
 }
 
 static const iree_hal_device_topology_info_t*
@@ -1204,6 +1220,7 @@ static const iree_hal_device_vtable_t iree_hal_task_device_vtable = {
     .trim = iree_hal_task_device_trim,
     .query_i64 = iree_hal_task_device_query_i64,
     .query_capabilities = iree_hal_task_device_query_capabilities,
+    .device_spec = iree_hal_task_device_spec,
     .topology_info = iree_hal_task_device_topology_info,
     .refine_topology_edge = iree_hal_task_device_refine_topology_edge,
     .assign_topology_info = iree_hal_task_device_assign_topology_info,

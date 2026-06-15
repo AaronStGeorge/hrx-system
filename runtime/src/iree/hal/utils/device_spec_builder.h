@@ -88,6 +88,16 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_add_facet(
 IREE_API_EXPORT iree_status_t iree_hal_device_spec_builder_finalize(
     iree_hal_device_spec_builder_t* builder, iree_hal_device_spec_t** out_spec);
 
+// Creates an immutable device spec containing only logical identity facts.
+//
+// Driver implementations use this when they have not yet populated richer
+// capability facts but still need to satisfy the core invariant that every HAL
+// device has a cached immutable spec.
+IREE_API_EXPORT iree_status_t iree_hal_device_spec_create_minimal(
+    iree_string_view_t logical_device_id, iree_string_view_t display_name,
+    iree_string_view_t driver_id, iree_string_view_t backend_id,
+    iree_allocator_t host_allocator, iree_hal_device_spec_t** out_spec);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
