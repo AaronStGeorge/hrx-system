@@ -149,6 +149,33 @@ TEST(AmdgpuMetadataTest, AppendsAssemblyMetadataForNoArgumentKernel) {
   EXPECT_TRUE(Contains(text, ".end_amdgpu_metadata\n")) << text;
 }
 
+TEST(AmdgpuMetadataTest, OmitsOptionalRequiredWorkgroupSize) {
+  loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
+  kernel.required_workgroup_size = {};
+  kernel.has_required_workgroup_size = false;
+  loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);
+
+  iree_string_builder_t text_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &text_builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_metadata_append_assembly(&metadata, &text_builder));
+  std::string text = BuilderString(text_builder);
+  iree_string_builder_deinitialize(&text_builder);
+
+  EXPECT_TRUE(Contains(text, "      .max_flat_workgroup_size: 64\n")) << text;
+  EXPECT_FALSE(Contains(text, "      .reqd_workgroup_size:\n")) << text;
+
+  iree_string_builder_t msgpack_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &msgpack_builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_metadata_append_msgpack(&metadata, &msgpack_builder));
+  std::string bytes = BuilderString(msgpack_builder);
+  iree_string_builder_deinitialize(&msgpack_builder);
+
+  EXPECT_TRUE(Contains(bytes, ".max_flat_workgroup_size"));
+  EXPECT_FALSE(Contains(bytes, ".reqd_workgroup_size"));
+}
+
 TEST(AmdgpuMetadataTest, AppendsMsgpackMetadataForNoArgumentKernel) {
   loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
   loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);

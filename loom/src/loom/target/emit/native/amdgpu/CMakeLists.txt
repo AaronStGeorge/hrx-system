@@ -472,7 +472,6 @@ loom_cc_library(
     loom::target::compile_report_low
     loom::target::entry_selection
     loom::target::function_contract
-    loom::target::launch
     loom::target::provider
     loom::target::types
     loom::verify

@@ -38,7 +38,6 @@
 #include "loom/target/emit/native/amdgpu/spill_lowering.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/function_contract.h"
-#include "loom/target/launch.h"
 #include "loom/target/provider.h"
 
 #define LOOM_AMDGPU_HAL_KERNEL_LIBRARY_DEFAULT_MAX_ERRORS 20u
@@ -525,11 +524,6 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
         report, out_contribution->summary.private_segment_fixed_size,
         out_contribution->summary.group_segment_fixed_size);
   }
-
-  const loom_target_hal_kernel_abi_t* hal_kernel =
-      &plan->entry->bundle_storage.bundle.export_plan->hal_kernel;
-  IREE_RETURN_IF_ERROR(loom_target_require_concrete_hal_kernel_launch(
-      hal_kernel, IREE_SV("AMDGPU HAL kernel-library entry")));
   return iree_ok_status();
 }
 

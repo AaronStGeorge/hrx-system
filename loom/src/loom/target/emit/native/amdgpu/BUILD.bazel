@@ -340,7 +340,6 @@ loom_cc_library(
         "//loom/src/loom/target:compile_report_low",
         "//loom/src/loom/target:entry_selection",
         "//loom/src/loom/target:function_contract",
-        "//loom/src/loom/target:launch",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/amdgpu:error_defs",
