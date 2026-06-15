@@ -1087,6 +1087,26 @@ def _scc_state_read(field_name: str = "scc_in") -> Operand:
     )
 
 
+def _vcc_state_read(field_name: str = "vcc_in") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _SGPR_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        unit_count=2,
+    )
+
+
+def _vcc_predicate(field_name: str) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.PREDICATE,
+        _SGPR_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        unit_count=2,
+    )
+
+
 def _scc_predicate(field_name: str) -> Operand:
     return Operand(
         field_name,
@@ -2072,6 +2092,17 @@ def _scc_input(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
     )
 
 
+def _vcc_input(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_VCC",
+        descriptor_operand=descriptor_operand,
+        data_format_name="FMT_NUM_M64",
+        size_bits=64,
+        is_input=True,
+        is_output=False,
+    )
+
+
 _SCC_CLOBBER_OUTPUT = _scc_output(_scc_clobber())
 
 _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
@@ -2876,6 +2907,9 @@ __all__ = (
     "_source_inline_u32_immediate",
     "_stack_memory_effect",
     "_u32_immediate",
+    "_vcc_input",
+    "_vcc_predicate",
+    "_vcc_state_read",
     "_vgpr_agpr_const_operand",
     "_vgpr_agpr_operand",
     "_vgpr_agpr_result",

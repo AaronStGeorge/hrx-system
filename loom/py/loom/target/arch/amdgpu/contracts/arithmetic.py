@@ -70,6 +70,9 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_sqrt_f32",
     "amdgpu.v_rsq_f32",
     "amdgpu.v_rcp_f32",
+    "amdgpu.v_div_scale_f32",
+    "amdgpu.v_div_fmas_f32",
+    "amdgpu.v_div_fixup_f32",
     "amdgpu.v_cvt_f32_f16",
     "amdgpu.v_cvt_f16_f32",
     "amdgpu.v_pk_fmac_f16",
@@ -182,6 +185,7 @@ _VEC_I8_PACKED = Vector(
     minimum_lanes=1,
     maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I8_LANES",
 )
+_VCC_MASK = Vector("i1", lanes=1)
 _I8 = Scalar("i8")
 _I16 = Scalar("i16")
 _I32 = Scalar("i32")
@@ -192,6 +196,7 @@ _F32 = Scalar("f32")
 _F64 = Scalar("f64")
 _INDEX = Scalar("index")
 _F32_ABS_MASK = 0x7FFFFFFF
+_F32_ONE_BITS = 0x3F800000
 _F32_SIGN_MASK = 0x80000000
 _BF16_ROUND_BIAS = 0x7FFF
 _SOURCE_INLINE_F32_VALUES = (
@@ -1399,6 +1404,183 @@ def _divf_arcp_rule(
     )
 
 
+def _divf_exact_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
+    scale = _descriptor("amdgpu.v_div_scale_f32")
+    reciprocal = _descriptor("amdgpu.v_rcp_f32")
+    negate = _descriptor("amdgpu.v_xor_b32.lit")
+    multiply = _descriptor("amdgpu.v_mul_f32")
+    fma = _descriptor("amdgpu.v_fma_f32")
+    fmaak = _descriptor("amdgpu.v_fmaak_f32")
+    fmas = _descriptor("amdgpu.v_div_fmas_f32")
+    fixup = _descriptor("amdgpu.v_div_fixup_f32")
+    result_type = _F32
+    numerator = _f32_vgpr_operand("lhs")
+    denominator = _f32_vgpr_operand("rhs")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=scale,
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), type_pattern),
+            Guard.value_materializable(
+                "lhs",
+                F32_VGPR_MATERIALIZER.name,
+                diagnostic=_F32_VGPR_DIAGNOSTIC,
+            ),
+            Guard.value_materializable(
+                "rhs",
+                F32_VGPR_MATERIALIZER.name,
+                diagnostic=_F32_VGPR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(scale),
+            Guard.descriptor_available(reciprocal),
+            Guard.descriptor_available(negate),
+            Guard.descriptor_available(multiply),
+            Guard.descriptor_available(fma),
+            Guard.descriptor_available(fmaak),
+            Guard.descriptor_available(fmas),
+            Guard.descriptor_available(fixup),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=scale,
+                operands={
+                    "value": denominator,
+                    "denominator": denominator,
+                    "numerator": numerator,
+                },
+                results={
+                    "dst": ValueRef.temporary("scaled_denominator"),
+                    "mask": ValueRef.temporary("denominator_scale_mask"),
+                },
+                result_types={
+                    "dst": result_type,
+                    "mask": _VCC_MASK,
+                },
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=reciprocal,
+                operands={"input": ValueRef.temporary("scaled_denominator")},
+                results={"dst": ValueRef.temporary("reciprocal")},
+                result_types={"dst": result_type},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=negate,
+                operands={"rhs": ValueRef.temporary("scaled_denominator")},
+                results={"dst": ValueRef.temporary("neg_scaled_denominator")},
+                result_types={"dst": result_type},
+                immediates={"imm32": _F32_SIGN_MASK},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=fmaak,
+                operands={
+                    "a": ValueRef.temporary("neg_scaled_denominator"),
+                    "b": ValueRef.temporary("reciprocal"),
+                },
+                results={"dst": ValueRef.temporary("reciprocal_error")},
+                result_types={"dst": result_type},
+                immediates={"imm32": _F32_ONE_BITS},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=fma,
+                operands={
+                    "a": ValueRef.temporary("reciprocal_error"),
+                    "b": ValueRef.temporary("reciprocal"),
+                    "c": ValueRef.temporary("reciprocal"),
+                },
+                results={"dst": ValueRef.temporary("refined_reciprocal")},
+                result_types={"dst": result_type},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=scale,
+                operands={
+                    "value": numerator,
+                    "denominator": denominator,
+                    "numerator": numerator,
+                },
+                results={
+                    "dst": ValueRef.temporary("scaled_numerator"),
+                    "mask": ValueRef.temporary("scale_mask"),
+                },
+                result_types={
+                    "dst": result_type,
+                    "mask": _VCC_MASK,
+                },
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=multiply,
+                operands={
+                    "lhs": ValueRef.temporary("scaled_numerator"),
+                    "rhs": ValueRef.temporary("refined_reciprocal"),
+                },
+                results={"dst": ValueRef.temporary("quotient0")},
+                result_types={"dst": result_type},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=fma,
+                operands={
+                    "a": ValueRef.temporary("neg_scaled_denominator"),
+                    "b": ValueRef.temporary("quotient0"),
+                    "c": ValueRef.temporary("scaled_numerator"),
+                },
+                results={"dst": ValueRef.temporary("remainder0")},
+                result_types={"dst": result_type},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=fma,
+                operands={
+                    "a": ValueRef.temporary("remainder0"),
+                    "b": ValueRef.temporary("refined_reciprocal"),
+                    "c": ValueRef.temporary("quotient0"),
+                },
+                results={"dst": ValueRef.temporary("quotient1")},
+                result_types={"dst": result_type},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=fma,
+                operands={
+                    "a": ValueRef.temporary("neg_scaled_denominator"),
+                    "b": ValueRef.temporary("quotient1"),
+                    "c": ValueRef.temporary("scaled_numerator"),
+                },
+                results={"dst": ValueRef.temporary("remainder1")},
+                result_types={"dst": result_type},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=fmas,
+                operands={
+                    "a": ValueRef.temporary("remainder1"),
+                    "b": ValueRef.temporary("refined_reciprocal"),
+                    "c": ValueRef.temporary("quotient1"),
+                    "scale_mask": ValueRef.temporary("scale_mask"),
+                },
+                results={"dst": ValueRef.temporary("quotient2")},
+                result_types={"dst": result_type},
+                form=_emit_form(type_pattern),
+            ),
+            EmitDescriptorOp(
+                descriptor=fixup,
+                operands={
+                    "quotient": ValueRef.temporary("quotient2"),
+                    "denominator": denominator,
+                    "numerator": numerator,
+                },
+                results={"dst": ValueRef.result("result")},
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
 def _cast_rule(
     source_op: Op,
     input_type: TypePattern,
@@ -2560,6 +2742,7 @@ def _rules() -> tuple[ContractCase, ...]:
             _f32_abs_rule(vector.vector_absf, _VEC_F32, f32_operand=True),
             _divf_arcp_one_rule(vector.vector_divf, _VEC_F32),
             _divf_arcp_rule(vector.vector_divf, _VEC_F32),
+            _divf_exact_rule(vector.vector_divf, _VEC_F32),
             *_commutative_f32_binary_rules(
                 vector.vector_minnumf,
                 _VEC_F32,
@@ -2766,6 +2949,7 @@ def _rules() -> tuple[ContractCase, ...]:
             _f32_abs_rule(scalar_arithmetic.scalar_absf, _F32, f32_operand=True),
             _divf_arcp_one_rule(scalar_arithmetic.scalar_divf, _F32),
             _divf_arcp_rule(scalar_arithmetic.scalar_divf, _F32),
+            _divf_exact_rule(scalar_arithmetic.scalar_divf, _F32),
             *_commutative_f32_binary_rules(
                 scalar_arithmetic.scalar_minnumf,
                 _F32,

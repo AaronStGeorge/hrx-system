@@ -283,6 +283,31 @@ def test_trans_descriptors_read_exec_state() -> None:
     assert OperandFlag.SCHEDULE_ONLY_STATE in exec_operand.flags
 
 
+def test_div_fmas_low_asm_preserves_vcc_scale_mask_operand() -> None:
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx117x_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        descriptor = descriptors["amdgpu.v_div_fmas_f32"]
+        assert len(descriptor.implicit_operands) == 1
+        scale_mask_operand = descriptor.implicit_operands[0].descriptor_operand
+        assert scale_mask_operand is not None
+        assert scale_mask_operand.field_name == "scale_mask"
+        assert scale_mask_operand.role is OperandRole.PREDICATE
+        assert OperandFlag.IMPLICIT in scale_mask_operand.flags
+        assert OperandFlag.STATE_READ in scale_mask_operand.flags
+        assert scale_mask_operand.unit_count == 2
+
+        form = descriptor.asm_forms[0]
+        assert form.results == ("dst",)
+        assert form.operands == ("a", "b", "c", "scale_mask")
+
+
 def test_scalar_descriptors_do_not_get_execution_mask_state_read() -> None:
     descriptor = Descriptor(
         key="amdgpu.s_add_u32",

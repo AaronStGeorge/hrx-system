@@ -1995,6 +1995,9 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   if (loom_amdgpu_type_is_address_scalar(source_type)) {
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
   }
+  if (loom_amdgpu_type_is_f32(source_type)) {
+    return loom_amdgpu_make_vgpr_type(context, out_low_type);
+  }
   if (loom_amdgpu_type_is_16bit_float(source_type)) {
     return loom_amdgpu_make_vgpr_type(context, out_low_type);
   }
