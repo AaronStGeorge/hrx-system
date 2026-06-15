@@ -188,27 +188,16 @@ typedef struct loom_amdgpu_vector_interleave_plan_t {
   uint32_t result_register_count;
 } loom_amdgpu_vector_interleave_plan_t;
 
-typedef struct loom_amdgpu_vector_shuffle_plan_t {
-  // Source vector value whose lanes are read by the static lane map.
+typedef struct loom_amdgpu_vector_permutation_plan_t {
+  // Source vector value read by the static register map.
   loom_value_id_t source;
-  // Result vector value receiving shuffled lane payloads.
-  loom_value_id_t result;
-  // Static 32-bit backing register count for the source and result vectors.
-  uint32_t register_count;
-  // Source register index selected for each result register.
-  uint32_t source_register_indices[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-} loom_amdgpu_vector_shuffle_plan_t;
-
-typedef struct loom_amdgpu_vector_transpose_plan_t {
-  // Source vector value being transposed.
-  loom_value_id_t source;
-  // Result vector value receiving transposed lane payloads.
+  // Result vector value receiving permuted register payloads.
   loom_value_id_t result;
   // Static flattened 32-bit register count for the source and result vectors.
   uint32_t register_count;
   // Source register index selected for each flattened result register.
   uint32_t source_register_indices[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-} loom_amdgpu_vector_transpose_plan_t;
+} loom_amdgpu_vector_permutation_plan_t;
 
 typedef struct loom_amdgpu_vector_extract_plan_t {
   // Source vector value containing the extracted payload.
