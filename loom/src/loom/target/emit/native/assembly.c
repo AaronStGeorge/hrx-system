@@ -78,6 +78,21 @@ iree_status_t loom_native_assembly_append_block_label(
                                            block_index);
 }
 
+iree_status_t loom_native_assembly_make_unsupported_structural_packet_status(
+    iree_string_view_t target_name,
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  const loom_op_vtable_t* vtable =
+      loom_op_vtable(context->schedule->module, op);
+  iree_string_view_t op_name =
+      vtable ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "%.*s assembly emitter does not support structural "
+                          "op %.*s",
+                          (int)target_name.size, target_name.data,
+                          (int)op_name.size, op_name.data);
+}
+
 static iree_status_t loom_native_assembly_append_with_callback(
     const loom_native_assembly_append_packet_callback_t* callback,
     iree_string_view_t op_name,
@@ -98,20 +113,8 @@ static iree_status_t loom_native_assembly_append_structural_packet(
       loom_op_vtable(context->schedule->module, op);
   iree_string_view_t op_name =
       vtable ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
-  for (iree_host_size_t i = 0; i < options->structural_packet_callback_count;
-       ++i) {
-    const loom_native_assembly_structural_packet_callback_t* row =
-        &options->structural_packet_callbacks[i];
-    if (op->kind != row->op_kind) {
-      continue;
-    }
-    return loom_native_assembly_append_with_callback(&row->append_packet,
-                                                     op_name, context);
-  }
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "native assembly emitter does not support "
-                          "structural op %.*s",
-                          (int)op_name.size, op_name.data);
+  return loom_native_assembly_append_with_callback(
+      &options->append_structural_packet, op_name, context);
 }
 
 static iree_status_t loom_native_assembly_append_packet(

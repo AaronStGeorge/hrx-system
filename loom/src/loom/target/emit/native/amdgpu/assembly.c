@@ -3198,52 +3198,43 @@ static iree_status_t loom_amdgpu_verify_assembly_target(
   return iree_ok_status();
 }
 
-typedef struct loom_amdgpu_assembly_structural_packet_row_t {
-  // Structural op handled by this row.
-  loom_op_kind_t op_kind;
-  // Formatter for packets with |op_kind|.
-  loom_native_assembly_append_packet_fn_t fn;
-} loom_amdgpu_assembly_structural_packet_row_t;
-
-static const loom_amdgpu_assembly_structural_packet_row_t
-    kLoomAmdgpuAssemblyStructuralPacketRows[] = {
-        {LOOM_OP_LOW_COPY, loom_amdgpu_append_copy_packet},
-        {LOOM_OP_LOW_SLICE, loom_amdgpu_append_slice_packet},
-        {LOOM_OP_LOW_CONCAT, loom_amdgpu_append_concat_packet},
-        {LOOM_OP_LOW_STORAGE_ADDRESS,
-         loom_amdgpu_append_storage_address_packet},
-        {LOOM_OP_LOW_RETURN, loom_amdgpu_append_return_packet},
-        {LOOM_OP_LOW_BR, loom_amdgpu_append_branch_packet},
-        {LOOM_OP_LOW_COND_BR, loom_amdgpu_append_cond_branch_packet},
-};
-
-static void loom_amdgpu_initialize_assembly_structural_packet_callbacks(
-    loom_amdgpu_assembly_emit_state_t* emit_state,
-    loom_native_assembly_structural_packet_callback_t* callbacks) {
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kLoomAmdgpuAssemblyStructuralPacketRows); ++i) {
-    callbacks[i] = (loom_native_assembly_structural_packet_callback_t){
-        .op_kind = kLoomAmdgpuAssemblyStructuralPacketRows[i].op_kind,
-        .append_packet =
-            {
-                .fn = kLoomAmdgpuAssemblyStructuralPacketRows[i].fn,
-                .user_data = emit_state,
-            },
-    };
+static iree_status_t loom_amdgpu_append_structural_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  switch (op->kind) {
+    case LOOM_OP_LOW_COPY:
+      return loom_amdgpu_append_copy_packet(user_data, context);
+    case LOOM_OP_LOW_SLICE:
+      return loom_amdgpu_append_slice_packet(user_data, context);
+    case LOOM_OP_LOW_CONCAT:
+      return loom_amdgpu_append_concat_packet(user_data, context);
+    case LOOM_OP_LOW_STORAGE_ADDRESS:
+      return loom_amdgpu_append_storage_address_packet(user_data, context);
+    case LOOM_OP_LOW_RETURN:
+      return loom_amdgpu_append_return_packet(user_data, context);
+    case LOOM_OP_LOW_BR:
+      return loom_amdgpu_append_branch_packet(user_data, context);
+    case LOOM_OP_LOW_COND_BR:
+      return loom_amdgpu_append_cond_branch_packet(user_data, context);
+    default:
+      break;
   }
+  return loom_native_assembly_make_unsupported_structural_packet_status(
+      IREE_SV("AMDGPU"), context);
 }
 
 static loom_native_assembly_format_options_t loom_amdgpu_assembly_options(
-    const loom_native_assembly_structural_packet_callback_t*
-        structural_packet_callbacks,
+    loom_amdgpu_assembly_emit_state_t* emit_state,
     loom_native_assembly_append_packet_callback_t append_before_packet,
     loom_native_assembly_append_packet_callback_t append_descriptor_packet) {
   return (loom_native_assembly_format_options_t){
       .append_before_packet = append_before_packet,
       .append_descriptor_packet = append_descriptor_packet,
-      .structural_packet_callbacks = structural_packet_callbacks,
-      .structural_packet_callback_count =
-          IREE_ARRAYSIZE(kLoomAmdgpuAssemblyStructuralPacketRows),
+      .append_structural_packet =
+          {
+              .fn = loom_amdgpu_append_structural_packet,
+              .user_data = emit_state,
+          },
   };
 }
 
@@ -3253,15 +3244,9 @@ iree_status_t loom_amdgpu_emit_assembly_fragment(
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_assembly_target(schedule));
   loom_amdgpu_assembly_emit_state_t emit_state = {0};
-  loom_native_assembly_structural_packet_callback_t
-      structural_packet_callbacks[IREE_ARRAYSIZE(
-          kLoomAmdgpuAssemblyStructuralPacketRows)];
-  loom_amdgpu_initialize_assembly_structural_packet_callbacks(
-      &emit_state, structural_packet_callbacks);
   const loom_native_assembly_format_options_t options =
       loom_amdgpu_assembly_options(
-          structural_packet_callbacks,
-          (loom_native_assembly_append_packet_callback_t){0},
+          &emit_state, (loom_native_assembly_append_packet_callback_t){0},
           (loom_native_assembly_append_packet_callback_t){
               .fn = loom_amdgpu_append_stateful_descriptor_packet,
               .user_data = &emit_state,
@@ -3292,14 +3277,9 @@ iree_status_t loom_amdgpu_emit_assembly_fragment_with_options(
       .wait_states = wait_states,
       .vopd_plan = vopd_plan,
   };
-  loom_native_assembly_structural_packet_callback_t
-      structural_packet_callbacks[IREE_ARRAYSIZE(
-          kLoomAmdgpuAssemblyStructuralPacketRows)];
-  loom_amdgpu_initialize_assembly_structural_packet_callbacks(
-      &emit_state, structural_packet_callbacks);
   const loom_native_assembly_format_options_t format_options =
       loom_amdgpu_assembly_options(
-          structural_packet_callbacks,
+          &emit_state,
           (loom_native_assembly_append_packet_callback_t){
               .fn = loom_amdgpu_append_waits_before_packet,
               .user_data = &emit_state,
