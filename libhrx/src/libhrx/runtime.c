@@ -105,23 +105,45 @@ hrx_status_t hrx_ensure_shared_state(void) {
 }
 
 #ifdef HRX_HAS_IREE_AMDGPU_DRIVER
-static void hrx_set_gpu_architecture_from_hal(iree_hal_device_t* hal_device,
-                                              hrx_device_s* dev) {
-  int64_t gfxip = 0;
-  iree_status_t status = iree_hal_device_query_i64(
-      hal_device, iree_make_cstring_view("hal.device"),
-      iree_make_cstring_view("gfxip"), &gfxip);
-  if (!iree_status_is_ok(status)) {
-    iree_status_ignore(status);
-    snprintf(dev->architecture, sizeof(dev->architecture), "unknown");
-    return;
+static iree_status_t hrx_set_gpu_architecture_from_hal(
+    iree_hal_device_t* hal_device, hrx_device_s* dev) {
+  const iree_hal_device_spec_t* device_spec = iree_hal_device_spec(hal_device);
+  iree_hal_executable_target_selection_t selection = {
+      .policy = IREE_HAL_EXECUTABLE_TARGET_SELECTION_POLICY_EXACT_DEVICE,
+      .family = IREE_SV("amdgpu"),
+  };
+  const iree_hal_executable_target_t* target = NULL;
+  const iree_hal_executable_target_selection_result_t result =
+      iree_hal_device_spec_select_executable_target(device_spec, &selection,
+                                                    &target);
+  if (result == IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_NO_MATCH) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU HAL device spec does not report an exact executable target");
+  } else if (result == IREE_HAL_EXECUTABLE_TARGET_SELECTION_RESULT_AMBIGUOUS) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU HAL device spec reports ambiguous exact executable targets");
   }
 
-  int major = (int)((gfxip >> 16) & 0xff);
-  int minor = (int)((gfxip >> 8) & 0xff);
-  int stepping = (int)(gfxip & 0xff);
-  snprintf(dev->architecture, sizeof(dev->architecture), "gfx%d%d%d", major,
-           minor, stepping);
+  iree_string_view_t architecture = target->loader_target;
+  if (iree_string_view_is_empty(architecture)) {
+    architecture = target->processor;
+  }
+  if (iree_string_view_is_empty(architecture)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU HAL device spec exact target has no architecture string");
+  }
+  if (architecture.size >= sizeof(dev->architecture)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU architecture string length %" PRIhsz
+                            " exceeds HRX storage capacity",
+                            architecture.size);
+  }
+  memcpy(dev->architecture, architecture.data, architecture.size);
+  dev->architecture[architecture.size] = 0;
+  return iree_ok_status();
 }
 #endif  // HRX_HAS_IREE_AMDGPU_DRIVER
 
@@ -659,7 +681,16 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
     memcpy(dev->name, device_infos[info_index].name.data, name_len);
     dev->name[name_len] = '\0';
 
-    hrx_set_gpu_architecture_from_hal(hal_device, dev);
+    iree_status = hrx_set_gpu_architecture_from_hal(hal_device, dev);
+    if (!iree_status_is_ok(iree_status)) {
+      hrx_device_release(dev);
+      hrx_gpu_release_created_devices(created_count);
+      iree_hal_profile_sink_release(profile_sink);
+      iree_allocator_free(alloc, device_infos);
+      iree_hal_driver_release(driver);
+      hrx_release_shared_state();
+      return hrx_status_from_iree(iree_status);
+    }
 
     iree_status = hrx_device_profile_begin(dev, profile_sink);
     hrx_debug_print_iree_status("begin device profiling", iree_status);
