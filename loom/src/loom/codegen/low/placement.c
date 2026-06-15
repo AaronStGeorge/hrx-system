@@ -50,35 +50,24 @@ bool loom_low_placement_cause_can_alias(loom_low_placement_cause_t cause) {
   }
 }
 
-static iree_status_t loom_low_placement_value_ordinal(
-    const loom_low_placement_build_state_t* state, loom_value_id_t value_id,
-    loom_value_ordinal_t* out_value_ordinal) {
+static loom_value_ordinal_t loom_low_placement_value_ordinal(
+    const loom_low_placement_build_state_t* state, loom_value_id_t value_id) {
   const loom_value_ordinal_t value_ordinal =
       loom_local_value_domain_try_ordinal(state->value_domain, value_id);
-  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "low placement saw value %u outside the local value domain",
-        (unsigned)value_id);
-  }
-  *out_value_ordinal = value_ordinal;
-  return iree_ok_status();
+  IREE_ASSERT(value_ordinal != LOOM_VALUE_ORDINAL_INVALID,
+              "verified low placement value must be inside the local value "
+              "domain");
+  return value_ordinal;
 }
 
-static iree_status_t loom_low_placement_interval_for_ordinal(
+static const loom_liveness_interval_t* loom_low_placement_interval_for_ordinal(
     const loom_low_placement_build_state_t* state,
-    loom_value_ordinal_t value_ordinal,
-    const loom_liveness_interval_t** out_interval) {
+    loom_value_ordinal_t value_ordinal) {
   const loom_liveness_interval_t* interval =
       loom_liveness_interval_for_value_ordinal(state->liveness, value_ordinal);
-  if (!interval) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "low placement saw value ordinal %u without a liveness interval",
-        (unsigned)value_ordinal);
-  }
-  *out_interval = interval;
-  return iree_ok_status();
+  IREE_ASSERT(interval != NULL,
+              "verified low placement value must have a liveness interval");
+  return interval;
 }
 
 static iree_status_t loom_low_placement_increment_relation_count(
@@ -111,12 +100,10 @@ static iree_status_t loom_low_placement_increment_relation_count(
 static iree_status_t loom_low_placement_count_relation(
     loom_low_placement_build_state_t* state, loom_value_id_t result_value_id,
     loom_value_id_t source_value_id) {
-  loom_value_ordinal_t result_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(state, result_value_id,
-                                                        &result_ordinal));
-  loom_value_ordinal_t source_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(state, source_value_id,
-                                                        &source_ordinal));
+  const loom_value_ordinal_t result_ordinal =
+      loom_low_placement_value_ordinal(state, result_value_id);
+  const loom_value_ordinal_t source_ordinal =
+      loom_low_placement_value_ordinal(state, source_value_id);
   return loom_low_placement_increment_relation_count(state, result_ordinal,
                                                      source_ordinal);
 }
@@ -164,19 +151,16 @@ static void loom_low_placement_append_relation(
   ++state->appended_source_relation_count;
 }
 
-static iree_status_t loom_low_placement_relation_unit_counts(
+static void loom_low_placement_relation_unit_counts(
     const loom_low_placement_build_state_t* state,
     loom_value_ordinal_t result_ordinal, loom_value_ordinal_t source_ordinal,
     uint32_t* out_result_unit_count, uint32_t* out_source_unit_count) {
-  const loom_liveness_interval_t* result_interval = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_placement_interval_for_ordinal(
-      state, result_ordinal, &result_interval));
-  const loom_liveness_interval_t* source_interval = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_placement_interval_for_ordinal(
-      state, source_ordinal, &source_interval));
+  const loom_liveness_interval_t* result_interval =
+      loom_low_placement_interval_for_ordinal(state, result_ordinal);
+  const loom_liveness_interval_t* source_interval =
+      loom_low_placement_interval_for_ordinal(state, source_ordinal);
   *out_result_unit_count = result_interval->unit_count;
   *out_source_unit_count = source_interval->unit_count;
-  return iree_ok_status();
 }
 
 static iree_status_t loom_low_placement_append_same_storage_relation(
@@ -184,22 +168,18 @@ static iree_status_t loom_low_placement_append_same_storage_relation(
     loom_value_id_t result_value_id, loom_value_id_t source_value_id,
     loom_low_placement_cause_t cause,
     loom_low_placement_relation_flags_t flags) {
-  loom_value_ordinal_t result_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(state, result_value_id,
-                                                        &result_ordinal));
-  loom_value_ordinal_t source_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(state, source_value_id,
-                                                        &source_ordinal));
+  const loom_value_ordinal_t result_ordinal =
+      loom_low_placement_value_ordinal(state, result_value_id);
+  const loom_value_ordinal_t source_ordinal =
+      loom_low_placement_value_ordinal(state, source_value_id);
   uint32_t result_unit_count = 0;
   uint32_t source_unit_count = 0;
-  IREE_RETURN_IF_ERROR(loom_low_placement_relation_unit_counts(
-      state, result_ordinal, source_ordinal, &result_unit_count,
-      &source_unit_count));
-  if (result_unit_count != source_unit_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low placement same-storage relation saw "
-                            "mismatched unit counts");
-  }
+  loom_low_placement_relation_unit_counts(state, result_ordinal, source_ordinal,
+                                          &result_unit_count,
+                                          &source_unit_count);
+  IREE_ASSERT_EQ(result_unit_count, source_unit_count,
+                 "verified same-storage placement relation must use matching "
+                 "unit counts");
   const loom_low_placement_relation_t relation = {
       .op = op,
       .result_ordinal = result_ordinal,
@@ -218,28 +198,21 @@ static iree_status_t loom_low_placement_append_same_storage_relation(
 static iree_status_t loom_low_placement_append_slice_relation(
     loom_low_placement_build_state_t* state, const loom_op_t* op) {
   const int64_t offset = loom_low_slice_offset(op);
-  if (offset < 0 || offset > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low placement saw malformed low.slice offset");
-  }
-  loom_value_ordinal_t result_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(
-      state, loom_low_slice_result(op), &result_ordinal));
-  loom_value_ordinal_t source_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(
-      state, loom_low_slice_source(op), &source_ordinal));
+  IREE_ASSERT(offset >= 0 && offset <= UINT32_MAX,
+              "verified low.slice offset must fit in uint32_t");
+  const loom_value_ordinal_t result_ordinal =
+      loom_low_placement_value_ordinal(state, loom_low_slice_result(op));
+  const loom_value_ordinal_t source_ordinal =
+      loom_low_placement_value_ordinal(state, loom_low_slice_source(op));
   uint32_t result_unit_count = 0;
   uint32_t source_unit_count = 0;
-  IREE_RETURN_IF_ERROR(loom_low_placement_relation_unit_counts(
-      state, result_ordinal, source_ordinal, &result_unit_count,
-      &source_unit_count));
+  loom_low_placement_relation_unit_counts(state, result_ordinal, source_ordinal,
+                                          &result_unit_count,
+                                          &source_unit_count);
   const uint32_t source_offset = (uint32_t)offset;
-  if (source_offset > source_unit_count ||
-      result_unit_count > source_unit_count - source_offset) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low placement slice relation exceeds source "
-                            "unit count");
-  }
+  IREE_ASSERT(source_offset <= source_unit_count &&
+                  result_unit_count <= source_unit_count - source_offset,
+              "verified low.slice range must fit source unit count");
   const loom_low_placement_relation_t relation = {
       .op = op,
       .result_ordinal = result_ordinal,
@@ -257,27 +230,20 @@ static iree_status_t loom_low_placement_append_slice_relation(
 
 static iree_status_t loom_low_placement_append_concat_relations(
     loom_low_placement_build_state_t* state, const loom_op_t* op) {
-  loom_value_ordinal_t result_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(
-      state, loom_low_concat_result(op), &result_ordinal));
-  const loom_liveness_interval_t* result_interval = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_placement_interval_for_ordinal(
-      state, result_ordinal, &result_interval));
+  const loom_value_ordinal_t result_ordinal =
+      loom_low_placement_value_ordinal(state, loom_low_concat_result(op));
+  const loom_liveness_interval_t* result_interval =
+      loom_low_placement_interval_for_ordinal(state, result_ordinal);
 
   uint32_t result_offset = 0;
   loom_value_slice_t sources = loom_low_concat_sources(op);
   for (uint16_t i = 0; i < sources.count; ++i) {
-    loom_value_ordinal_t source_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-    IREE_RETURN_IF_ERROR(loom_low_placement_value_ordinal(
-        state, sources.values[i], &source_ordinal));
-    const loom_liveness_interval_t* source_interval = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_placement_interval_for_ordinal(
-        state, source_ordinal, &source_interval));
-    if (source_interval->unit_count > UINT32_MAX - result_offset) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "low placement concat relation exceeds u32 "
-                              "unit range");
-    }
+    const loom_value_ordinal_t source_ordinal =
+        loom_low_placement_value_ordinal(state, sources.values[i]);
+    const loom_liveness_interval_t* source_interval =
+        loom_low_placement_interval_for_ordinal(state, source_ordinal);
+    IREE_ASSERT(source_interval->unit_count <= UINT32_MAX - result_offset,
+                "verified low.concat range must fit uint32_t unit offsets");
     const loom_low_placement_relation_t relation = {
         .op = op,
         .result_ordinal = result_ordinal,
@@ -292,11 +258,8 @@ static iree_status_t loom_low_placement_append_concat_relations(
     loom_low_placement_append_relation(state, &relation);
     result_offset += source_interval->unit_count;
   }
-  if (result_offset != result_interval->unit_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low placement concat relation unit count does "
-                            "not match result");
-  }
+  IREE_ASSERT_EQ(result_offset, result_interval->unit_count,
+                 "verified low.concat source units must cover the result");
   return iree_ok_status();
 }
 
@@ -307,12 +270,10 @@ static iree_status_t loom_low_placement_count_tied_results(
   const loom_tied_result_t* tied_results = loom_op_tied_results(op);
   for (uint16_t i = 0; i < op->tied_result_count; ++i) {
     const loom_tied_result_t tied = tied_results[i];
-    if (tied.result_index >= op->result_count ||
-        tied.operand_index >= op->operand_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "low placement saw malformed tied result "
-                              "metadata");
-    }
+    IREE_ASSERT(tied.result_index < op->result_count &&
+                    tied.operand_index < op->operand_count,
+                "verified tied result metadata must reference existing "
+                "fields");
     IREE_RETURN_IF_ERROR(loom_low_placement_count_relation(
         state, results[tied.result_index], operands[tied.operand_index]));
   }
@@ -326,18 +287,13 @@ static iree_status_t loom_low_placement_append_tied_results(
   const loom_tied_result_t* tied_results = loom_op_tied_results(op);
   for (uint16_t i = 0; i < op->tied_result_count; ++i) {
     const loom_tied_result_t tied = tied_results[i];
-    if (tied.result_index >= op->result_count ||
-        tied.operand_index >= op->operand_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "low placement saw malformed tied result "
-                              "metadata");
-    }
-    if (tied.has_type_change) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "low placement requires explicit materialization for type-changing "
-          "tied results");
-    }
+    IREE_ASSERT(tied.result_index < op->result_count &&
+                    tied.operand_index < op->operand_count,
+                "verified tied result metadata must reference existing "
+                "fields");
+    IREE_ASSERT(!tied.has_type_change,
+                "low verification must reject type-changing tied results "
+                "before placement analysis");
     IREE_RETURN_IF_ERROR(loom_low_placement_append_same_storage_relation(
         state, op, results[tied.result_index], operands[tied.operand_index],
         LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT,
@@ -368,10 +324,8 @@ static iree_status_t loom_low_placement_count_structural_relations(
   if (loom_low_br_isa(op)) {
     const loom_block_t* dest = loom_low_br_dest(op);
     loom_value_slice_t args = loom_low_br_args(op);
-    if (args.count != dest->arg_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "low placement saw low.br payload mismatch");
-    }
+    IREE_ASSERT_EQ(args.count, dest->arg_count,
+                   "verified low.br payload must match destination block");
     for (uint16_t i = 0; i < args.count; ++i) {
       IREE_RETURN_IF_ERROR(loom_low_placement_count_relation(
           state, dest->arg_ids[i], args.values[i]));
@@ -397,10 +351,8 @@ static iree_status_t loom_low_placement_append_structural_relations(
   if (loom_low_br_isa(op)) {
     const loom_block_t* dest = loom_low_br_dest(op);
     loom_value_slice_t args = loom_low_br_args(op);
-    if (args.count != dest->arg_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "low placement saw low.br payload mismatch");
-    }
+    IREE_ASSERT_EQ(args.count, dest->arg_count,
+                   "verified low.br payload must match destination block");
     for (uint16_t i = 0; i < args.count; ++i) {
       IREE_RETURN_IF_ERROR(loom_low_placement_append_same_storage_relation(
           state, op, dest->arg_ids[i], args.values[i],
@@ -463,12 +415,10 @@ iree_status_t loom_low_placement_analyze_region(
     loom_low_placement_table_t* out_table) {
   IREE_ASSERT(loom_local_value_domain_is_acquired(value_domain));
   *out_table = (loom_low_placement_table_t){0};
-  if (value_domain->value_count != liveness->value_count ||
-      value_domain->value_ids != liveness->value_ids) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low placement requires liveness over the same "
-                            "local value domain");
-  }
+  IREE_ASSERT(value_domain->value_count == liveness->value_count &&
+                  value_domain->value_ids == liveness->value_ids,
+              "low placement requires liveness over the same local value "
+              "domain");
 
   loom_low_placement_build_state_t state = {
       .module = module,

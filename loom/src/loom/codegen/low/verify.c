@@ -1444,6 +1444,22 @@ static bool loom_low_verify_descriptor_tied_operand_index(
   return false;
 }
 
+static bool loom_low_verify_descriptor_declares_tied_result(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, loom_tied_result_t tied) {
+  if (descriptor == NULL || tied.result_index >= descriptor->result_count) {
+    return false;
+  }
+  const uint16_t expected_operand_index =
+      descriptor->result_count + tied.operand_index;
+  if (expected_operand_index >= descriptor->operand_count) return false;
+  uint16_t tied_operand_index = LOOM_LOW_ID_NONE;
+  return loom_low_verify_descriptor_tied_operand_index(
+             descriptor_set, descriptor, tied.result_index,
+             &tied_operand_index) &&
+         tied_operand_index == expected_operand_index;
+}
+
 static iree_status_t loom_low_verify_descriptor_register_parts(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     iree_string_view_t opcode, const loom_low_descriptor_t* descriptor) {
@@ -1552,6 +1568,61 @@ static iree_status_t loom_low_verify_structural_register_parts(
   }
 
   return loom_low_verify_define_full_register_results(function_state, op);
+}
+
+static iree_status_t loom_low_verify_type_changing_tied_results(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t op_name,
+    const loom_low_resolved_descriptor_packet_t* packet) {
+  if (op->tied_result_count == 0) return iree_ok_status();
+
+  const loom_module_t* module = function_state->state->module;
+  const loom_low_descriptor_set_t* descriptor_set =
+      function_state->target->descriptor_set;
+  const loom_value_id_t* results = loom_op_const_results(op);
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  const loom_tied_result_t* tied_results = loom_op_tied_results(op);
+  for (uint16_t i = 0; i < op->tied_result_count; ++i) {
+    const loom_tied_result_t tied = tied_results[i];
+    if (!tied.has_type_change) {
+      continue;
+    }
+    if (tied.result_index >= op->result_count ||
+        tied.operand_index >= op->operand_count) {
+      continue;
+    }
+    if (packet != NULL && loom_low_verify_descriptor_declares_tied_result(
+                              descriptor_set, packet->descriptor, tied)) {
+      continue;
+    }
+
+    const loom_type_t result_type =
+        loom_module_value_type(module, results[tied.result_index]);
+    const loom_type_t operand_type =
+        loom_module_value_type(module, operands[tied.operand_index]);
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(function_state->function_name),
+        loom_param_string(op_name),
+        loom_param_with_field_ref(
+            loom_param_u32(tied.result_index),
+            loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT,
+                                      tied.result_index)),
+        loom_param_type(result_type),
+        loom_param_with_field_ref(
+            loom_param_u32(tied.operand_index),
+            loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                      tied.operand_index)),
+        loom_param_type(operand_type),
+    };
+    IREE_RETURN_IF_ERROR(loom_low_verify_emit(
+        function_state->state, op, LOOM_ERR_TARGET_057, params,
+        IREE_ARRAYSIZE(params), /*related_ops=*/NULL,
+        /*related_op_count=*/0));
+    if (loom_low_verify_should_stop(function_state->state)) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_descriptor_features(
@@ -1811,6 +1882,13 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
   IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
       function_state->state->module, function_state->target, op, &packet));
   if (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
+    const loom_module_t* module = function_state->state->module;
+    IREE_RETURN_IF_ERROR(loom_low_verify_type_changing_tied_results(
+        function_state, op, loom_op_name(module, op), /*packet=*/NULL));
+    if (loom_low_verify_should_stop(function_state->state)) {
+      *out_result = LOOM_WALK_ABORT;
+      return iree_ok_status();
+    }
     if (loom_low_resource_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_low_verify_resource(function_state, op));
     }
@@ -1831,6 +1909,12 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
       IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
     }
   } else {
+    IREE_RETURN_IF_ERROR(loom_low_verify_type_changing_tied_results(
+        function_state, op, packet.key, &packet));
+    if (loom_low_verify_should_stop(function_state->state)) {
+      *out_result = LOOM_WALK_ABORT;
+      return iree_ok_status();
+    }
     IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
     IREE_RETURN_IF_ERROR(
         loom_low_verify_run_op_providers(function_state, &packet));

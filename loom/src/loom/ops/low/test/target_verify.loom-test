@@ -28,6 +28,15 @@ low.func.def target(@test_target) @partial_register_pair(%ptr: reg<test.ptr>, %r
 // ====
 
 test.target<low_core> @test_target
+low.func.def target(@test_target) @type_changing_tied_result_requires_materialization(%src: reg<test.i32>) -> (reg<test.i64>) {
+  // ERROR@+1: TARGET/057 {function_name="type_changing_tied_result_requires_materialization", op_name="test.pass.any", result_index="0", result_type="reg<test.i64>", operand_index="0", operand_type="reg<test.i32>"}
+  %changed = low.op<test.pass.any>(%src) : (reg<test.i32>) -> %src as reg<test.i64>
+  low.return %changed : reg<test.i64>
+}
+
+// ====
+
+test.target<low_core> @test_target
 low.func.def target(@test_target) @partial_register_full_use(%ptr: reg<test.ptr>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %low = low.op<test.write.low16.i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32>
   // ERROR@+1: DOMINANCE/011 {op_name="test.add.i32", field_name="lhs"}

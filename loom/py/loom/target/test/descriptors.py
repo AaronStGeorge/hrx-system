@@ -548,6 +548,16 @@ TEST_LOW_AMBIGUOUS_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
+TEST_LOW_PASS_ANY_DESCRIPTOR = Descriptor(
+    key="test.pass.any",
+    mnemonic="test.pass.any",
+    semantic_tag="test.pass.any",
+    operands=(_i32_i64_result(), _i32_i64_operand("src")),
+    asm_forms=_asm(results=("dst",), operands=("src",)),
+    schedule_class=_SCHEDULE_SCALAR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
 TEST_LOW_READ_LOW16_I32_DESCRIPTOR = Descriptor(
     key="test.read.low16.i32",
     mnemonic="test.read.low16.i32",
@@ -1040,6 +1050,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_SUB_F32_DESCRIPTOR,
         TEST_LOW_MUL_F32_DESCRIPTOR,
         TEST_LOW_AMBIGUOUS_DESCRIPTOR,
+        TEST_LOW_PASS_ANY_DESCRIPTOR,
         TEST_LOW_TIED_ANY_DESCRIPTOR,
         TEST_LOW_READ_LOW16_I32_DESCRIPTOR,
         TEST_LOW_READ_HIGH16_I32_DESCRIPTOR,
