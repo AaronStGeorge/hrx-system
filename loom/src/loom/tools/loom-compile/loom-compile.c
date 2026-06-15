@@ -1225,6 +1225,10 @@ int main(int argc, char** argv) {
     status =
         iree_status_join(status, loom_tooling_pass_trace_close(&pass_trace));
     if (iree_status_is_ok(status) && pass_run_result.error_count != 0) {
+      if (compile_options.report != NULL) {
+        loom_target_compile_report_record_status(
+            compile_options.report, IREE_STATUS_FAILED_PRECONDITION);
+      }
       exit_code = 1;
     }
   }
@@ -1249,12 +1253,16 @@ int main(int argc, char** argv) {
                                     &emitted);
     }
   }
+  if (iree_status_is_ok(status) && exit_code == 0 && !emitted) {
+    if (compile_options.report != NULL) {
+      loom_target_compile_report_record_status(compile_options.report,
+                                               IREE_STATUS_FAILED_PRECONDITION);
+    }
+    exit_code = 1;
+  }
   if (iree_status_is_ok(status) && !report_written) {
     status = loom_compile_write_report(
         &compile_report_capture, artifact_manifest_output_path, allocator);
-  }
-  if (iree_status_is_ok(status) && exit_code == 0 && !emitted) {
-    exit_code = 1;
   }
 
   status = iree_status_join(status, loom_tooling_pass_trace_close(&pass_trace));

@@ -205,6 +205,48 @@
       ]
     },
     {
+      "name": "reports pass diagnostic failure status",
+      "steps": [
+        {
+          "name": "write-source",
+          "write": {
+            "path": "{tmp}/bad_return.loom",
+            "text": "amdgpu.target<gfx1100> @target\n\nlow.func.def target(@target) @bad_return(%predicate: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) {\n  low.return %predicate : reg<amdgpu.sgpr x2>\n}\n"
+          }
+        },
+        {
+          "name": "compile",
+          "run": {
+            "tool": "loom-compile",
+            "args": [
+              "{tmp}/bad_return.loom",
+              "--pipeline=canonicalize",
+              "--output={tmp}/unused.vmfb",
+              "--compile-report=summary",
+              "--compile-report-output=-"
+            ]
+          },
+          "exit": {
+            "nonzero": true
+          },
+          "stdout": {
+            "contains": [
+              "\"status\":\"FAILED_PRECONDITION\""
+            ],
+            "not_contains": [
+              "\"status\":\"OK\""
+            ]
+          },
+          "stderr": {
+            "contains": [
+              "yielded value has type",
+              "but expected"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "applies config file and reports invalid config states",
       "steps": [
         {
