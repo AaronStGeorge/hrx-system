@@ -295,6 +295,17 @@ static bool loom_amdgpu_wait_plan_reason_has_consumer(
   }
 }
 
+static bool loom_amdgpu_wait_plan_reason_is_storage_release(
+    loom_amdgpu_wait_plan_reason_t reason) {
+  switch (reason) {
+    case LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE:
+    case LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_amdgpu_wait_plan_allocate(
     loom_amdgpu_wait_plan_builder_t* builder) {
   const loom_low_schedule_table_t* schedule = builder->schedule;
@@ -1141,18 +1152,17 @@ static iree_status_t loom_amdgpu_wait_plan_drain_mask(
 static iree_status_t loom_amdgpu_wait_plan_storage_release_reason(
     const loom_low_storage_release_action_t* action,
     loom_amdgpu_wait_plan_reason_t* out_reason) {
-  switch (action->release_reason_id) {
-    case LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE:
-    case LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE:
-      *out_reason = (loom_amdgpu_wait_plan_reason_t)action->release_reason_id;
-      return iree_ok_status();
-    default:
-      *out_reason = LOOM_AMDGPU_WAIT_PLAN_REASON_UNKNOWN;
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU storage release action has unsupported reason id %" PRIu16,
-          action->release_reason_id);
+  loom_amdgpu_wait_plan_reason_t reason =
+      (loom_amdgpu_wait_plan_reason_t)action->release_reason_id;
+  if (!loom_amdgpu_wait_plan_reason_is_storage_release(reason)) {
+    *out_reason = LOOM_AMDGPU_WAIT_PLAN_REASON_UNKNOWN;
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU storage release action has unsupported reason id %" PRIu16,
+        action->release_reason_id);
   }
+  *out_reason = reason;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_wait_plan_storage_release_is_satisfied(
@@ -1771,8 +1781,7 @@ static iree_status_t loom_amdgpu_wait_plan_hazard_query(
         !loom_amdgpu_wait_plan_action_matches_packet(action, packet)) {
       continue;
     }
-    if (action->reason == LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE ||
-        action->reason == LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE) {
+    if (loom_amdgpu_wait_plan_reason_is_storage_release(action->reason)) {
       continue;
     }
     IREE_RETURN_IF_ERROR(
