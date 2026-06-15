@@ -17,6 +17,7 @@
 #include "iree/base/internal/math.h"
 #include "iree/base/tracing.h"
 #include "iree/hal/drivers/hip/cleanup_thread.h"
+#include "iree/hal/drivers/hip/device_spec_builder.h"
 #include "iree/hal/drivers/hip/dispatch_thread.h"
 #include "iree/hal/drivers/hip/dynamic_symbols.h"
 #include "iree/hal/drivers/hip/event_pool.h"
@@ -33,7 +34,6 @@
 #include "iree/hal/drivers/hip/status_util.h"
 #include "iree/hal/drivers/hip/stream_command_buffer.h"
 #include "iree/hal/utils/deferred_command_buffer.h"
-#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 #include "iree/hal/utils/file_transfer.h"
 #include "iree/hal/utils/queue_emulation.h"
@@ -43,6 +43,7 @@
 #define IREE_HAL_DEVICE_TRANSFER_DEFAULT_BUFFER_SIZE (128 * 1024 * 1024)
 #define IREE_HAL_DEVICE_MAX_TRANSFER_DEFAULT_CHUNK_SIZE (64 * 1024 * 1024)
 #define IREE_HAL_DEVICE_INVALID_EXTERNAL_STREAM (0xFFFFFFFFFFFFFFFFul)
+#define IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH (4 + 36 + 1)
 
 //===----------------------------------------------------------------------===//
 // iree_hal_hip_device_t
@@ -281,9 +282,10 @@ static iree_status_t iree_hal_hip_device_check_params(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "arena block size too small (< 4096 bytes)");
   }
-  if (params->queue_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "at least one queue is required");
+  if (params->queue_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HIP currently exposes exactly one queue per physical device");
   }
   if (params->external_stream != IREE_HAL_DEVICE_INVALID_EXTERNAL_STREAM) {
     if (device_count != 1) {
@@ -300,6 +302,195 @@ static iree_hal_hip_device_topology_t iree_hal_hip_device_make_topology(
   iree_hal_hip_device_topology_t topology = {.count = device->device_count,
                                              .devices = device->devices};
   return topology;
+}
+
+static uint32_t iree_hal_hip_u32_from_nonnegative_int(int value) {
+  return value > 0 ? (uint32_t)value : 0;
+}
+
+static uint64_t iree_hal_hip_hz_from_khz_int(int value) {
+  return value > 0 ? (uint64_t)value * 1000ull : 0;
+}
+
+static void iree_hal_hip_copy_fixed_cstring(const char* source,
+                                            iree_host_size_t target_capacity,
+                                            char* target) {
+  iree_host_size_t source_length = 0;
+  while (source_length < target_capacity - 1 && source[source_length]) {
+    ++source_length;
+  }
+  memcpy(target, source, source_length);
+  target[source_length] = 0;
+}
+
+static iree_hal_hip_device_facts_t iree_hal_hip_device_spec_from_properties(
+    const hipDeviceProp_tR0000* properties) {
+  iree_hal_hip_device_facts_t spec = {
+      .architecture = {0},
+      .launch =
+          {
+              .maximum_workgroup_invocations =
+                  iree_hal_hip_u32_from_nonnegative_int(
+                      properties->maxThreadsPerBlock),
+              .maximum_workgroup_size =
+                  {
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxThreadsDim[0]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxThreadsDim[1]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxThreadsDim[2]),
+                  },
+              .maximum_workgroup_count =
+                  {
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxGridSize[0]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxGridSize[1]),
+                      iree_hal_hip_u32_from_nonnegative_int(
+                          properties->maxGridSize[2]),
+                  },
+              .maximum_invocations_per_execution_unit =
+                  iree_hal_hip_u32_from_nonnegative_int(
+                      properties->maxThreadsPerMultiProcessor),
+              .maximum_workgroup_register_count =
+                  iree_hal_hip_u32_from_nonnegative_int(
+                      properties->regsPerBlock),
+              .maximum_local_memory_size =
+                  properties->maxSharedMemoryPerMultiProcessor,
+              .maximum_workgroup_local_memory_size =
+                  properties->sharedMemPerBlock,
+          },
+      .clocks =
+          {
+              .clock_instruction_frequency_hz = iree_hal_hip_hz_from_khz_int(
+                  properties->clockInstructionRate),
+          },
+      .execution_unit_count = iree_hal_hip_u32_from_nonnegative_int(
+          properties->multiProcessorCount),
+      .subgroup_size =
+          iree_hal_hip_u32_from_nonnegative_int(properties->warpSize),
+  };
+  iree_hal_hip_copy_fixed_cstring(properties->gcnArchName,
+                                  sizeof(spec.architecture.gcn_arch_name),
+                                  spec.architecture.gcn_arch_name);
+  return spec;
+}
+
+static void iree_hal_hip_device_format_uuid_path(const hipUUID* uuid,
+                                                 char* storage) {
+  iree_snprintf(storage, IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH,
+                "GPU-"
+                "%02x%02x%02x%02x-"
+                "%02x%02x-"
+                "%02x%02x-"
+                "%02x%02x-"
+                "%02x%02x%02x%02x%02x%02x",
+                (uint8_t)uuid->bytes[0], (uint8_t)uuid->bytes[1],
+                (uint8_t)uuid->bytes[2], (uint8_t)uuid->bytes[3],
+                (uint8_t)uuid->bytes[4], (uint8_t)uuid->bytes[5],
+                (uint8_t)uuid->bytes[6], (uint8_t)uuid->bytes[7],
+                (uint8_t)uuid->bytes[8], (uint8_t)uuid->bytes[9],
+                (uint8_t)uuid->bytes[10], (uint8_t)uuid->bytes[11],
+                (uint8_t)uuid->bytes[12], (uint8_t)uuid->bytes[13],
+                (uint8_t)uuid->bytes[14], (uint8_t)uuid->bytes[15]);
+}
+
+static iree_status_t iree_hal_hip_device_query_spec_physical_device(
+    iree_hal_hip_device_t* device, iree_host_size_t device_ordinal,
+    hipDeviceProp_tR0000* properties, char* backend_path_storage,
+    iree_hal_hip_device_spec_physical_device_params_t* out_physical_device) {
+  memset(properties, 0, sizeof(*properties));
+  IREE_HIP_RETURN_IF_ERROR(
+      device->hip_symbols,
+      hipGetDeviceProperties(properties,
+                             device->devices[device_ordinal].hip_device),
+      "hipGetDeviceProperties");
+
+  hipUUID uuid = {0};
+  IREE_HIP_RETURN_IF_ERROR(
+      device->hip_symbols,
+      hipDeviceGetUuid(&uuid, device->devices[device_ordinal].hip_device),
+      "hipDeviceGetUuid");
+  iree_hal_hip_device_format_uuid_path(&uuid, backend_path_storage);
+
+  iree_hal_uuid_t device_uuid = {{0}};
+  memcpy(device_uuid.bytes, uuid.bytes, sizeof(device_uuid.bytes));
+  *out_physical_device = (iree_hal_hip_device_spec_physical_device_params_t){
+      .display_name = iree_make_cstring_view(properties->name),
+      .backend_path = iree_make_cstring_view(backend_path_storage),
+      .uuid = device_uuid,
+      .pci =
+          {
+              .domain = iree_hal_hip_u32_from_nonnegative_int(
+                  properties->pciDomainID),
+              .bus =
+                  iree_hal_hip_u32_from_nonnegative_int(properties->pciBusID),
+              .device = iree_hal_hip_u32_from_nonnegative_int(
+                  properties->pciDeviceID),
+              .function = 0,
+          },
+      .physical_ordinal = (uint32_t)device->devices[device_ordinal].hip_device,
+      .facts = iree_hal_hip_device_spec_from_properties(properties),
+      .flags = IREE_HAL_HIP_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_UUID |
+               IREE_HAL_HIP_DEVICE_SPEC_PHYSICAL_DEVICE_FLAG_PCI_ADDRESS,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_hip_device_create_device_spec(
+    iree_hal_hip_device_t* device, iree_allocator_t host_allocator) {
+  if (!device->hip_symbols->hipGetDeviceProperties) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "HIP runtime does not export hipGetDeviceProperties");
+  }
+
+  iree_hal_hip_device_spec_physical_device_params_t* physical_devices = NULL;
+  iree_status_t status = iree_allocator_malloc_array(
+      host_allocator, device->device_count, sizeof(*physical_devices),
+      (void**)&physical_devices);
+
+  hipDeviceProp_tR0000* properties = NULL;
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_allocator_malloc_array(host_allocator, device->device_count,
+                                    sizeof(*properties), (void**)&properties);
+  }
+
+  char* backend_paths = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc(
+        host_allocator,
+        device->device_count * IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH,
+        (void**)&backend_paths);
+  }
+
+  for (iree_host_size_t i = 0;
+       i < device->device_count && iree_status_is_ok(status); ++i) {
+    status = iree_hal_hip_device_query_spec_physical_device(
+        device, i, &properties[i],
+        backend_paths + i * IREE_HAL_HIP_DEVICE_UUID_PATH_LENGTH,
+        &physical_devices[i]);
+  }
+
+  if (iree_status_is_ok(status)) {
+    iree_hal_hip_device_spec_params_t spec_params = {
+        .logical_device_id = device->identifier,
+        .display_name = device->identifier,
+        .queue_count = device->params.queue_count,
+        .physical_device_count = device->device_count,
+        .physical_devices = physical_devices,
+        .device_allocator = device->device_allocator,
+    };
+    status = iree_hal_hip_device_spec_create(&spec_params, host_allocator,
+                                             &device->device_spec);
+  }
+
+  iree_allocator_free(host_allocator, backend_paths);
+  iree_allocator_free(host_allocator, properties);
+  iree_allocator_free(host_allocator, physical_devices);
+  return status;
 }
 
 static iree_status_t iree_hal_hip_device_initialize_internal(
@@ -339,9 +530,7 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
   iree_hal_driver_retain(device->driver);
   device->hip_symbols = symbols;
   device->nccl_symbols = nccl_symbols;
-  iree_status_t status = iree_hal_device_spec_create_minimal(
-      device->identifier, device->identifier, IREE_SV("hip"), IREE_SV("hip"),
-      host_allocator, &device->device_spec);
+  iree_status_t status = iree_ok_status();
   // Enable tracing for each of the streams - no-op if disabled.
   if (iree_status_is_ok(status) && device->params.stream_tracing) {
     for (iree_host_size_t i = 0; i < device->device_count; ++i) {
@@ -408,6 +597,10 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
       (iree_hal_device_t*)device, symbols,
       iree_hal_hip_device_make_topology(device), device->supports_memory_pools,
       host_allocator, &device->device_allocator);
+
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_hip_device_create_device_spec(device, host_allocator);
+  }
 
   if (iree_status_is_ok(status)) {
     status = iree_hal_hip_cleanup_thread_allocate(symbols, host_allocator,

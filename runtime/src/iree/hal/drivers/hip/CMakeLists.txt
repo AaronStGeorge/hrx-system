@@ -53,6 +53,7 @@ iree_cc_library(
     "stream_command_buffer.c"
     "stream_command_buffer.h"
   DEPS
+    ::device_spec_builder
     ::dynamic_symbols
     iree::async
     iree::async::util::proactor_pool
@@ -68,7 +69,6 @@ iree_cc_library(
     iree::hal::drivers::hip::util::hip_util
     iree::hal::utils::collective_batch
     iree::hal::utils::deferred_command_buffer
-    iree::hal::utils::device_spec_builder
     iree::hal::utils::executable_debug_info
     iree::hal::utils::executable_header
     iree::hal::utils::file_transfer
@@ -82,6 +82,44 @@ iree_cc_library(
   DEFINES
     ${_hip_platform_defines}
   PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_HIP)
+iree_cc_library(
+  NAME
+    device_spec_builder
+  HDRS
+    "device_spec_builder.h"
+  SRCS
+    "device_spec_builder.c"
+  DEPS
+    iree::base
+    iree::base::core_headers
+    iree::hal
+    iree::hal::utils::device_spec_builder
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_HIP)
+iree_cc_test(
+  NAME
+    device_spec_test
+  SRCS
+    "device_spec_test.cc"
+  DEPS
+    ::device_spec_builder
+    iree::base
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.hip"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-hip-tests
 )
 endif()
 
