@@ -138,44 +138,6 @@ static bool loom_amdgpu_memory_access_has_contiguous_vector_lanes(
              access->source.element_byte_count;
 }
 
-typedef uint32_t loom_amdgpu_dynamic_index_source_rule_flags_t;
-
-#define LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REJECT_WORKGROUP_MEMORY \
-  ((uint32_t)1u << 0)
-
-typedef struct loom_amdgpu_dynamic_index_source_rule_t {
-  // Source dynamic-index producer matched by this rule.
-  loom_low_source_memory_dynamic_index_source_t source;
-  // Target operand path selected by this rule.
-  loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
-  // Extra semantic predicates required by this rule.
-  loom_amdgpu_dynamic_index_source_rule_flags_t flags;
-  // Rejection bits reported when the matched rule fails its predicates.
-  loom_amdgpu_memory_access_rejection_flags_t rejection_bits;
-} loom_amdgpu_dynamic_index_source_rule_t;
-
-static const loom_amdgpu_dynamic_index_source_rule_t
-    kAmdgpuDynamicIndexSourceRules[] = {
-        {
-            .source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID,
-            .dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET,
-            .flags =
-                LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REJECT_WORKGROUP_MEMORY,
-            .rejection_bits =
-                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE,
-        },
-        {
-            .source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID,
-            .dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR,
-        },
-        {
-            .source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE,
-            .dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR,
-            .rejection_bits =
-                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE,
-        },
-};
-
 static bool loom_amdgpu_memory_dynamic_index_can_materialize_vaddr(
     const loom_module_t* module, loom_value_id_t value_id) {
   if (value_id >= module->values.count) {
@@ -266,45 +228,91 @@ static bool loom_amdgpu_memory_dynamic_term_can_materialize_vaddr(
   return true;
 }
 
+typedef struct loom_amdgpu_memory_dynamic_term_materialization_t {
+  // Term requires materializing scaled address arithmetic.
+  bool needs_scaled_materialization;
+  // Term and stride inputs can be materialized through a scalar offset operand.
+  bool can_materialize_soffset;
+  // Term and stride inputs can be materialized through a vector address
+  // operand.
+  bool can_materialize_vaddr;
+} loom_amdgpu_memory_dynamic_term_materialization_t;
+
 static bool loom_amdgpu_memory_dynamic_term_select_value_kind(
-    bool can_materialize_soffset, bool can_materialize_vaddr,
+    const loom_amdgpu_memory_dynamic_term_materialization_t* materialization,
     loom_amdgpu_memory_dynamic_index_kind_t* out_dynamic_index_kind) {
-  if (can_materialize_soffset) {
+  if (materialization->can_materialize_soffset) {
     *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
     return true;
   }
-  if (can_materialize_vaddr) {
+  if (materialization->can_materialize_vaddr) {
     *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
     return true;
   }
   return false;
 }
 
-static bool loom_amdgpu_memory_dynamic_term_select_rule_kind(
-    const loom_amdgpu_dynamic_index_source_rule_t* rule,
-    bool needs_scaled_materialization, bool can_materialize_soffset,
-    bool can_materialize_vaddr,
+static bool loom_amdgpu_memory_dynamic_term_select_preferred_kind(
+    loom_amdgpu_memory_dynamic_index_kind_t preferred_kind,
+    const loom_amdgpu_memory_dynamic_term_materialization_t* materialization,
     loom_amdgpu_memory_dynamic_index_kind_t* out_dynamic_index_kind) {
-  *out_dynamic_index_kind = rule->dynamic_index_kind;
-  if (rule->source == LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE) {
-    return loom_amdgpu_memory_dynamic_term_select_value_kind(
-        can_materialize_soffset, can_materialize_vaddr, out_dynamic_index_kind);
+  *out_dynamic_index_kind = preferred_kind;
+  if (!materialization->needs_scaled_materialization) {
+    return preferred_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
+               ? materialization->can_materialize_soffset
+               : materialization->can_materialize_vaddr;
   }
-  if (!needs_scaled_materialization) {
-    return rule->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
-               ? can_materialize_soffset
-               : can_materialize_vaddr;
-  }
-  if (rule->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET &&
-      can_materialize_soffset) {
+  if (preferred_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET &&
+      materialization->can_materialize_soffset) {
     *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
     return true;
   }
-  if (can_materialize_vaddr) {
+  if (materialization->can_materialize_vaddr) {
     *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
     return true;
   }
   return false;
+}
+
+static bool loom_amdgpu_memory_dynamic_term_select_source_kind(
+    const loom_amdgpu_memory_access_t* access,
+    const loom_low_source_memory_dynamic_term_t* term,
+    const loom_amdgpu_memory_dynamic_term_materialization_t* materialization,
+    loom_amdgpu_memory_dynamic_index_kind_t* out_dynamic_index_kind,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  switch (term->source) {
+    case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID:
+      if (access->source.memory_space ==
+          LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+        diagnostic->rejection_bits |=
+            LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE;
+        return false;
+      }
+      if (!loom_amdgpu_memory_dynamic_term_select_preferred_kind(
+              LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET, materialization,
+              out_dynamic_index_kind)) {
+        diagnostic->rejection_bits |=
+            LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE;
+        return false;
+      }
+      return true;
+    case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID:
+      return loom_amdgpu_memory_dynamic_term_select_preferred_kind(
+          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR, materialization,
+          out_dynamic_index_kind);
+    case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE:
+      if (!loom_amdgpu_memory_dynamic_term_select_value_kind(
+              materialization, out_dynamic_index_kind)) {
+        diagnostic->rejection_bits |=
+            LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE;
+        return false;
+      }
+      return true;
+    default:
+      diagnostic->rejection_bits |=
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE;
+      return false;
+  }
 }
 
 bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
@@ -321,46 +329,22 @@ bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_STRIDE;
       return false;
     }
-    bool selected = false;
-    for (iree_host_size_t i = 0;
-         i < IREE_ARRAYSIZE(kAmdgpuDynamicIndexSourceRules); ++i) {
-      const loom_amdgpu_dynamic_index_source_rule_t* rule =
-          &kAmdgpuDynamicIndexSourceRules[i];
-      if (rule->source != term->source) {
-        continue;
-      }
-      if (iree_any_bit_set(
-              rule->flags,
-              LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REJECT_WORKGROUP_MEMORY) &&
-          access->source.memory_space ==
-              LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
-        diagnostic->rejection_bits |= rule->rejection_bits;
-        return false;
-      }
-      const bool needs_scaled_materialization =
-          loom_amdgpu_memory_dynamic_term_needs_scaled_materialization(term);
-      const bool can_materialize_soffset =
-          loom_amdgpu_memory_dynamic_term_can_materialize_soffset(
-              module, fact_table, view_regions, term);
-      const bool can_materialize_vaddr =
-          loom_amdgpu_memory_dynamic_term_can_materialize_vaddr(module, term);
-      loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind =
-          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE;
-      if (!loom_amdgpu_memory_dynamic_term_select_rule_kind(
-              rule, needs_scaled_materialization, can_materialize_soffset,
-              can_materialize_vaddr, &dynamic_index_kind)) {
-        diagnostic->rejection_bits |= rule->rejection_bits;
-        return false;
-      }
-      access->dynamic_term_kinds[term_index] = dynamic_index_kind;
-      selected = true;
-      break;
-    }
-    if (!selected) {
-      diagnostic->rejection_bits |=
-          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE;
+    const loom_amdgpu_memory_dynamic_term_materialization_t materialization = {
+        .needs_scaled_materialization =
+            loom_amdgpu_memory_dynamic_term_needs_scaled_materialization(term),
+        .can_materialize_soffset =
+            loom_amdgpu_memory_dynamic_term_can_materialize_soffset(
+                module, fact_table, view_regions, term),
+        .can_materialize_vaddr =
+            loom_amdgpu_memory_dynamic_term_can_materialize_vaddr(module, term),
+    };
+    loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind =
+        LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE;
+    if (!loom_amdgpu_memory_dynamic_term_select_source_kind(
+            access, term, &materialization, &dynamic_index_kind, diagnostic)) {
       return false;
     }
+    access->dynamic_term_kinds[term_index] = dynamic_index_kind;
   }
   return true;
 }
@@ -454,55 +438,45 @@ static const loom_amdgpu_memory_address_attempt_t
         },
 };
 
-typedef struct loom_amdgpu_memory_space_descriptor_domain_t {
-  // Source memory-space fact matched by this row.
-  loom_value_fact_memory_space_t memory_space;
-  // Default descriptor domain selected for this memory space.
-  loom_amdgpu_memory_descriptor_domain_t descriptor_domain;
-} loom_amdgpu_memory_space_descriptor_domain_t;
-
-static const loom_amdgpu_memory_space_descriptor_domain_t
-    kAmdgpuMemorySpaceDescriptorDomains[] = {
-        {
-            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
-            .descriptor_domain =
-                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-        },
-        {
-            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL,
-            .descriptor_domain =
-                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-        },
-        {
-            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT,
-            .descriptor_domain =
-                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-        },
-        {
-            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR,
-            .descriptor_domain =
-                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
-        },
-        {
-            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP,
-            .descriptor_domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
-        },
+static const uint8_t kAmdgpuMemorySpaceDescriptorDomainMap[] = {
+    [LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+    [LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+    [LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
+    [LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_COUNT_,
+    [LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+    [LOOM_VALUE_FACT_MEMORY_SPACE_HOST] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_COUNT_,
+    [LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+    [LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC] =
+        LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_COUNT_,
 };
+static_assert(IREE_ARRAYSIZE(kAmdgpuMemorySpaceDescriptorDomainMap) ==
+                  LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC + 1u,
+              "AMDGPU memory-space map must cover every memory-space fact");
 
 static bool loom_amdgpu_memory_descriptor_domain_from_memory_space(
     loom_value_fact_memory_space_t memory_space,
     loom_amdgpu_memory_descriptor_domain_t* out_descriptor_domain) {
   *out_descriptor_domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE;
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kAmdgpuMemorySpaceDescriptorDomains); ++i) {
-    const loom_amdgpu_memory_space_descriptor_domain_t* row =
-        &kAmdgpuMemorySpaceDescriptorDomains[i];
-    if (row->memory_space == memory_space) {
-      *out_descriptor_domain = row->descriptor_domain;
-      return true;
-    }
+  const uint32_t memory_space_ordinal = (uint32_t)memory_space;
+  if (memory_space_ordinal >=
+      IREE_ARRAYSIZE(kAmdgpuMemorySpaceDescriptorDomainMap)) {
+    return false;
   }
-  return false;
+  const uint8_t descriptor_domain =
+      kAmdgpuMemorySpaceDescriptorDomainMap[memory_space_ordinal];
+  if (descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_COUNT_) {
+    return false;
+  }
+  *out_descriptor_domain =
+      (loom_amdgpu_memory_descriptor_domain_t)descriptor_domain;
+  return true;
 }
 
 typedef uint32_t loom_amdgpu_memory_descriptor_candidate_key_t;
