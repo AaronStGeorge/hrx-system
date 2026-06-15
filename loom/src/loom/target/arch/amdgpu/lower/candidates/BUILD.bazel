@@ -7,7 +7,6 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_generated_cc_library",
-    "loom_target_table_cc_library",
 )
 
 package(
@@ -32,8 +31,9 @@ loom_generated_cc_library(
     ],
 )
 
-loom_target_table_cc_library(
+loom_generated_cc_library(
     name = "compare_candidates",
+    hdrs = ["compare_candidates.h"],
     generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:compare_candidates",
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
