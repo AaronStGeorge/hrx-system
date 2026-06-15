@@ -45,6 +45,10 @@ extern "C" {
 #define LOOM_AMDGPU_VOPD_OP_SUB_F32 UINT16_C(5)
 // Component opcode for v_mov_b32 in a VOPD X/Y slot.
 #define LOOM_AMDGPU_VOPD_OP_MOV_B32 UINT16_C(8)
+// Component opcode for v_max_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_MAX_F32 UINT16_C(10)
+// Component opcode for v_min_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_MIN_F32 UINT16_C(11)
 
 typedef enum loom_amdgpu_vopd_packet_role_e {
   // Packet is not part of a VOPD pair.
@@ -73,7 +77,58 @@ typedef enum loom_amdgpu_vopd_pair_reason_e {
   // Two independent inline-source v_mov_b32 packets were fused into
   // v_dual_mov_b32.
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MOV_B32 = 7,
+  // Two independent v_max_f32 packets were fused into v_dual_max_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MAX_F32 = 8,
+  // Two independent v_min_f32 packets were fused into v_dual_min_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MIN_F32 = 9,
 } loom_amdgpu_vopd_pair_reason_t;
+
+typedef enum loom_amdgpu_vopd_component_form_e {
+  // Tied accumulate FMA component form.
+  LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_FMAC = 0,
+  // Two-source FMA component with a shared K literal in the last asm operand.
+  LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAAK_LITERAL = 1,
+  // Two-source FMA component with a shared K literal in the middle asm operand.
+  LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAMK_LITERAL = 2,
+  // Ordinary two-VGPR-source VALU component form.
+  LOOM_AMDGPU_VOPD_COMPONENT_FORM_BINARY_VGPR = 3,
+  // Inline-source move component form.
+  LOOM_AMDGPU_VOPD_COMPONENT_FORM_INLINE_MOV = 4,
+} loom_amdgpu_vopd_component_form_t;
+
+typedef enum loom_amdgpu_vopd_component_source_bits_e {
+  // Component has no register source operands.
+  LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_NONE = 0u,
+  // Component source 0 is a VGPR and participates in VOPD constraints.
+  LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_SRC0 = 1u << 0,
+  // Component source 1 is a VGPR and participates in VOPD constraints.
+  LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_VSRC1 = 1u << 1,
+  // Component has both VOPD source operands modeled as VGPRs.
+  LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_BINARY =
+      LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_SRC0 |
+      LOOM_AMDGPU_VOPD_COMPONENT_SOURCE_VSRC1,
+} loom_amdgpu_vopd_component_source_bits_t;
+typedef uint8_t loom_amdgpu_vopd_component_source_mask_t;
+
+// Descriptor-independent facts for one native VOPD component opcode.
+typedef struct loom_amdgpu_vopd_component_info_t {
+  // VOPD operation id encoded in this component slot.
+  uint16_t op;
+  // Same-op pair reason used when two adjacent components match this opcode.
+  loom_amdgpu_vopd_pair_reason_t same_op_reason;
+  // Stable JSON/report spelling for |op|.
+  iree_string_view_t op_name;
+  // Stable JSON/report spelling for |same_op_reason|.
+  iree_string_view_t same_op_reason_name;
+  // Native assembly mnemonic for this component inside a VOPD packet.
+  iree_string_view_t assembly_mnemonic;
+  // RDNA4 native assembly mnemonic override, or empty to use assembly_mnemonic.
+  iree_string_view_t rdna4_assembly_mnemonic;
+  // Operand/register form shared by planning, assembly, and encoding.
+  loom_amdgpu_vopd_component_form_t form;
+  // Source operand slots that contain real VGPRs.
+  loom_amdgpu_vopd_component_source_mask_t source_register_mask;
+} loom_amdgpu_vopd_component_info_t;
 
 typedef enum loom_amdgpu_vopd_rejection_reason_e {
   // Unknown or uninitialized VOPD rejection reason.
@@ -210,6 +265,10 @@ iree_string_view_t loom_amdgpu_vopd_pair_reason_name(
 // Returns the stable spelling for a VOPD rejection reason.
 iree_string_view_t loom_amdgpu_vopd_rejection_reason_name(
     loom_amdgpu_vopd_rejection_reason_t reason);
+
+// Returns descriptor-independent facts for the native VOPD component opcode.
+const loom_amdgpu_vopd_component_info_t* loom_amdgpu_vopd_component_info_for_op(
+    uint16_t op);
 
 // Builds conservative AMDGPU VOPD pairings from a scheduled and allocated low
 // function. Optional wait packet/state plans suppress pairs that would consume

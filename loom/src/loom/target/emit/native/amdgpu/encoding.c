@@ -1681,29 +1681,32 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
     uint16_t vopd_op, loom_amdgpu_encoding_vopdxy_fields_t* fields,
     loom_amdgpu_vopd_pair_flags_t* out_flags, uint32_t* out_literal_u32,
     loom_amdgpu_vopd_component_slot_t slot) {
-  switch (vopd_op) {
-    case LOOM_AMDGPU_VOPD_OP_FMAC_F32:
+  const loom_amdgpu_vopd_component_info_t* info =
+      loom_amdgpu_vopd_component_info_for_op(vopd_op);
+  if (info == NULL) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU native encoding VOPD component op "
+                            "%" PRIu16 " is not supported",
+                            vopd_op);
+  }
+  switch (info->form) {
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_FMAC:
       return loom_amdgpu_encode_vopd_fmac_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
-    case LOOM_AMDGPU_VOPD_OP_FMAAK_F32:
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAAK_LITERAL:
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAMK_LITERAL:
       return loom_amdgpu_encode_vopd_literal_fma_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
-    case LOOM_AMDGPU_VOPD_OP_FMAMK_F32:
-      return loom_amdgpu_encode_vopd_literal_fma_component(
-          state, packet, fields, out_flags, out_literal_u32, slot);
-    case LOOM_AMDGPU_VOPD_OP_MUL_F32:
-    case LOOM_AMDGPU_VOPD_OP_ADD_F32:
-    case LOOM_AMDGPU_VOPD_OP_SUB_F32:
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_BINARY_VGPR:
       return loom_amdgpu_encode_vopd_binary_vgpr_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
-    case LOOM_AMDGPU_VOPD_OP_MOV_B32:
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_INLINE_MOV:
       return loom_amdgpu_encode_vopd_mov_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
     default:
-      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                              "AMDGPU native encoding VOPD component op "
-                              "%" PRIu16 " is not supported",
-                              vopd_op);
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "AMDGPU native encoding VOPD component has "
+                              "unknown form");
   }
 }
 
