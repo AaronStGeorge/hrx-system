@@ -13,9 +13,23 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-exports_files([
-    "packed_s8_fields_f16scale_f32dot.loom",
-])
+_CHECKED_BENCHMARK_CASES = [
+    {
+        "name": "packed_s8_fields_f16scale_f32dot",
+        "rows": [
+            {
+                "benchmark": "@packed_s8_fields_f16scale_f32dot_smoke",
+                "target_name": "packed_s8_fields_f16scale_f32dot",
+            },
+        ],
+        "source": "packed_s8_fields_f16scale_f32dot.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+]
+
+exports_files([_case["source"] for _case in _CHECKED_BENCHMARK_CASES])
 
 _AMDGPU_ARTIFACTS_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/target:amdgpu_artifacts",
@@ -25,46 +39,55 @@ _AMDGPU_HAL_COMPATIBLE_WITH = loom_config_compatible_with([
     "//loom/config/execute:amdgpu_hal",
 ])
 
-iree_executable_test(
-    name = "packed_s8_fields_f16scale_f32dot_plan_test",
-    src = "//loom/src/loom/tools/iree-benchmark-loom",
-    args = [
-        "$(location packed_s8_fields_f16scale_f32dot.loom)",
-        "--benchmark=@packed_s8_fields_f16scale_f32dot_smoke",
-        "--dry-run",
-        "--output-format=jsonl",
-    ],
-    data = [
-        "packed_s8_fields_f16scale_f32dot.loom",
-    ],
-    tags = ["hostonly"],
-    target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
-)
+[
+    iree_executable_test(
+        name = _row["target_name"] + "_plan_test",
+        src = "//loom/src/loom/tools/iree-benchmark-loom",
+        args = [
+            "$(location %s)" % _case["source"],
+            "--benchmark=%s" % _row["benchmark"],
+            "--dry-run",
+            "--output-format=jsonl",
+        ],
+        data = [
+            _case["source"],
+        ],
+        tags = ["hostonly"],
+        target_compatible_with = _AMDGPU_ARTIFACTS_COMPATIBLE_WITH,
+    )
+    for _case in _CHECKED_BENCHMARK_CASES
+    for _row in _case["rows"]
+]
 
-iree_executable_test(
-    name = "packed_s8_fields_f16scale_f32dot_amdgpu_test",
-    src = "//loom/src/loom/tools/iree-benchmark-loom",
-    args = [
-        "$(location packed_s8_fields_f16scale_f32dot.loom)",
-        "--benchmark=@packed_s8_fields_f16scale_f32dot_smoke",
-        "--device=amdgpu",
-        "--measure=dispatch_complete",
-        "--iterations=1",
-        "--warmup-iterations=0",
-        "--batch-size=1",
-        "--min-time-ms=0",
-        "--max-batches=1",
-        "--input-ring-count=1",
-        "--output-format=jsonl",
-    ],
-    data = [
-        "packed_s8_fields_f16scale_f32dot.loom",
-    ],
-    tags = [
-        "iree-run-requirement=runtime.resource.amd_gpu",
-        "manual",
-        "requires-gpu-amd",
-        "runtime-resource=amd-gpu",
-    ],
-    target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
-)
+[
+    iree_executable_test(
+        name = _row["target_name"] + "_amdgpu_test",
+        src = "//loom/src/loom/tools/iree-benchmark-loom",
+        args = [
+            "$(location %s)" % _case["source"],
+            "--benchmark=%s" % _row["benchmark"],
+            "--device=amdgpu",
+            "--measure=dispatch_complete",
+            "--iterations=1",
+            "--warmup-iterations=0",
+            "--batch-size=1",
+            "--min-time-ms=0",
+            "--max-batches=1",
+            "--input-ring-count=1",
+            "--output-format=jsonl",
+        ],
+        data = [
+            _case["source"],
+        ],
+        tags = [
+            "iree-run-requirement=runtime.resource.amd_gpu",
+            "manual",
+            "requires-gpu-amd",
+            "runtime-resource=amd-gpu",
+        ],
+        target_compatible_with = _AMDGPU_HAL_COMPATIBLE_WITH,
+    )
+    for _case in _CHECKED_BENCHMARK_CASES
+    if "amdgpu" in _case["targets"]
+    for _row in _case["rows"]
+]
