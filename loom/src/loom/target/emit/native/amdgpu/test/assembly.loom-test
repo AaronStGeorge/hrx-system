@@ -47,8 +47,8 @@ low.func.def target(@gfx11_target) @gfx11_fma_mix_f16_lanes(%addr: reg<amdgpu.vg
 
 // ----
   ds_load_u16_d16 v3, v2 offset:0
-  ds_load_u16_d16_hi v3, v2 offset:2
   v_fma_mix_f32_f16lo_f32_f32 v4, v3, v0, v1
+  ds_load_u16_d16_hi v3, v2 offset:2
   v_fma_mix_f32_f16hi_f32_f32 v4, v3, v4, v1
   v_fma_mix_f32_f32_f16hi_f32 v0, v0, v3, v4
   v_fma_mix_f32_f32_f32_f16lo v0, v0, v1, v3
@@ -1323,6 +1323,35 @@ low.func.def target(@gfx11_target) @gfx11_s_load_offset_only_tied(%kernarg: reg<
 
 // ----
   s_load_dwordx2 s[0:1], s[0:1] offset:32
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_s_load_tied_after_prior_kernarg_read waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_s_load_tied_after_prior_kernarg_read() {
+  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+  %loaded = low.op<amdgpu.s_load_dwordx4_offset_only>(%kernarg) {offset = 0} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %view = low.op<amdgpu.s_load_dwordx2_offset_only>(%kernarg) {offset = 16} : (reg<amdgpu.sgpr x2>) -> %kernarg as reg<amdgpu.sgpr x2>
+  %a = low.slice %loaded[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %pointer_low = low.slice %a[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %pointer_high = low.slice %a[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %mask = low.const<amdgpu.s_mov_b32> {imm32 = 65535} : reg<amdgpu.sgpr>
+  %masked_high = low.op<amdgpu.s_and_b32>(%pointer_high, %mask) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %pointer = low.concat(%pointer_low, %masked_high) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %range = low.const<amdgpu.s_mov_b32> {imm32 = 16} : reg<amdgpu.sgpr>
+  %flags = low.const<amdgpu.s_mov_b32> {imm32 = 822243328} : reg<amdgpu.sgpr>
+  %descriptor = low.concat(%pointer, %range, %flags) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  low.return
+}
+
+// ----
+  s_load_dwordx4 s[4:7], s[0:1] offset:0
+  s_load_dwordx2 s[0:1], s[0:1] offset:16
+  s_mov_b32 s0, 65535
+  s_mov_b32 s2, 16
+  s_mov_b32 s3, 822243328
+  s_and_b32 s5, s5, s0
   s_endpgm
 
 // ====

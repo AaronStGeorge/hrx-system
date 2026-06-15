@@ -205,6 +205,29 @@ static iree_status_t loom_low_schedule_initialize_storage(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_initialize_storage_read_tables(
+    loom_low_schedule_build_state_t* state, iree_host_size_t node_count) {
+  bool has_tied_results = false;
+  for (iree_host_size_t node_index = 0; node_index < node_count; ++node_index) {
+    if (state->nodes[node_index].op->tied_result_count != 0) {
+      has_tied_results = true;
+      break;
+    }
+  }
+  if (!has_tied_results || state->value_domain->value_count == 0) {
+    return iree_ok_status();
+  }
+  const loom_value_ordinal_t value_count = state->value_domain->value_count;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, value_count, sizeof(*state->storage_reads.heads),
+      (void**)&state->storage_reads.heads));
+  memset(state->storage_reads.heads, 0xFF,
+         value_count * sizeof(*state->storage_reads.heads));
+  return iree_arena_allocate_array(
+      state->arena, value_count, sizeof(*state->storage_reads.touched_ordinals),
+      (void**)&state->storage_reads.touched_ordinals);
+}
+
 static iree_status_t loom_low_schedule_initialize_pressure_cliff_ranges(
     loom_low_schedule_build_state_t* state) {
   if (loom_low_schedule_pressure_cliff_list_is_empty(
@@ -1544,6 +1567,10 @@ iree_status_t loom_low_schedule_function(
   }
   if (iree_status_is_ok(status)) {
     status = loom_low_schedule_fill_nodes(&state);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_low_schedule_initialize_storage_read_tables(&state, node_count);
   }
   if (iree_status_is_ok(status)) {
     status = loom_low_schedule_initialize_descriptor_tables(&state, node_count);
