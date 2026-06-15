@@ -101,22 +101,32 @@ typedef enum loom_amdgpu_fma_mix_source_kind_e {
   LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_ = 3,
 } loom_amdgpu_fma_mix_source_kind_t;
 
+enum {
+  // Number of source operands in mixed-FMA packet order.
+  LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT = 3,
+  // Number of multiplicand operands in mixed-multiply source order.
+  LOOM_AMDGPU_MULF_MIX_SOURCE_COUNT = 2,
+  // Number of source operands in packed ternary packet order.
+  LOOM_AMDGPU_PACKED_TERNARY_SOURCE_COUNT = 3,
+};
+
 typedef struct loom_amdgpu_fma_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b, c order.
-  loom_value_id_t sources[3];
+  loom_value_id_t sources[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
   // Source register-unit offsets consumed by the selected descriptor.
-  uint32_t source_register_offsets[3];
+  uint32_t source_register_offsets[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
   // Source result value produced by the selected mixed-FMA packet.
   loom_value_id_t result;
   // Descriptor row selected for the mixed-source fma/mad packet.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
   // Descriptor source interpretation for each source value.
-  loom_amdgpu_fma_mix_source_kind_t source_kinds[3];
+  loom_amdgpu_fma_mix_source_kind_t
+      source_kinds[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
 } loom_amdgpu_fma_mix_plan_t;
 
 typedef struct loom_amdgpu_packed_ternary_plan_t {
   // Packed vector values consumed in the selected descriptor's operand order.
-  loom_value_id_t sources[3];
+  loom_value_id_t sources[LOOM_AMDGPU_PACKED_TERNARY_SOURCE_COUNT];
   // Packed vector result value.
   loom_value_id_t result;
   // Descriptor row selected for each packed ternary packet.
@@ -131,9 +141,9 @@ typedef struct loom_amdgpu_packed_ternary_plan_t {
 
 typedef struct loom_amdgpu_mulf_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b order.
-  loom_value_id_t sources[2];
+  loom_value_id_t sources[LOOM_AMDGPU_MULF_MIX_SOURCE_COUNT];
   // Source register-unit offsets consumed by the selected descriptor.
-  uint32_t source_register_offsets[2];
+  uint32_t source_register_offsets[LOOM_AMDGPU_MULF_MIX_SOURCE_COUNT];
   // Scalar or vector mulf result value.
   loom_value_id_t result;
   // Descriptor row selected for the mixed-source fma/mad packet.
@@ -141,7 +151,8 @@ typedef struct loom_amdgpu_mulf_mix_plan_t {
   // True when the selected descriptor encodes source 2 as a literal zero.
   bool addend_literal_zero;
   // Descriptor source interpretation for each multiplicand source value.
-  loom_amdgpu_fma_mix_source_kind_t source_kinds[2];
+  loom_amdgpu_fma_mix_source_kind_t
+      source_kinds[LOOM_AMDGPU_MULF_MIX_SOURCE_COUNT];
   // Static f32 lane count produced by the multiply.
   uint32_t lane_count;
 } loom_amdgpu_mulf_mix_plan_t;
