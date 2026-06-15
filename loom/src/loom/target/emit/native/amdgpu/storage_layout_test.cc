@@ -179,7 +179,7 @@ TEST_F(AmdgpuStorageLayoutTest, RejectsStackStorage) {
   Reserve(LOOM_STORAGE_SPACE_STACK, 8, 4);
 
   loom_amdgpu_storage_layout_segment_sizes_t sizes = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         loom_amdgpu_storage_layout_collect_segment_sizes(
                             module_, function_op_, &sizes));
 }
