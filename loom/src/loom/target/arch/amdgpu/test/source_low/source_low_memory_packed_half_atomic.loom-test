@@ -112,6 +112,36 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_packed_f16_atomic
 
 // ====
 
+amdgpu.target<gfx1200> @target
+func.def target(@target) @generic_packed_f16_atomic_add(%input: buffer, %value: vector<2xf16>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %zero = index.constant 0 : offset
+  %generic = buffer.assume.memory_space<generic> %input : buffer
+  %generic_aligned = buffer.assume.alignment %generic {minimum_alignment = 4} : buffer
+  %view = buffer.view %generic_aligned[%zero] : buffer -> view<64xf16, #dense>
+  %offsets = vector.iota %c0 step %c1 : vector<2xindex>
+  vector.atomic.reduce<addf> %value, %view[0][%offsets] {ordering = relaxed, scope = device} : vector<2xf16>, view<64xf16, #dense>, vector<2xindex>
+  %old = vector.atomic.rmw<addf> %value, %view[0][%offsets] {ordering = relaxed, scope = device} : vector<2xf16>, view<64xf16, #dense>, vector<2xindex>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @generic_packed_f16_atomic_add(%value: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
+  %15 = slice %view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %16 = slice %view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %17 = v_mov_b32_copy %15
+  %18 = v_mov_b32_copy %16
+  %19 = concat(%17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  flat_atomic_pk_add_f16 %19, %value {scope = 2}
+  %24 = concat(%17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %old = flat_atomic_pk_add_f16_rtn %24, %value {scope = 2}
+  return
+}
+
+// ====
+
 amdgpu.target<gfx942> @target
 kernel.def target(@target) @lds_half4_atomic_rejected() {
   %c1 = index.constant 1 : index
