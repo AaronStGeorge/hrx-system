@@ -47,8 +47,8 @@ low.func.def target(@gfx11_target) @gfx11_fma_mix_f16_lanes(%addr: reg<amdgpu.vg
 
 // ----
   ds_load_u16_d16 v3, v2 offset:0
-  v_fma_mix_f32_f16lo_f32_f32 v4, v3, v0, v1
   ds_load_u16_d16_hi v3, v2 offset:2
+  v_fma_mix_f32_f16lo_f32_f32 v4, v3, v0, v1
   v_fma_mix_f32_f16hi_f32_f32 v4, v3, v4, v1
   v_fma_mix_f32_f32_f16hi_f32 v0, v0, v3, v4
   v_fma_mix_f32_f32_f32_f16lo v0, v0, v1, v3

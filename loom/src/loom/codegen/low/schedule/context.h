@@ -75,6 +75,8 @@ typedef struct loom_low_schedule_state_chain_read_record_t {
 typedef struct loom_low_schedule_storage_read_record_t {
   // Node that reads a value whose storage may later be consumed by a tied op.
   uint32_t reader_node;
+  // Register part mask read by reader_node.
+  loom_low_register_part_mask_t read_mask;
   // Next outstanding storage-read record for the same value ordinal.
   uint32_t next_record;
 } loom_low_schedule_storage_read_record_t;
