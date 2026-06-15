@@ -298,6 +298,8 @@ def convert_binary_expr(
         scalar_builder_name = _BINARY_FLOAT_OPS.get(kind)
     elif _is_unsigned_dtype(dtype(expr)):
         scalar_builder_name = _BINARY_UNSIGNED_INTEGER_OPS.get(kind)
+    elif kind == "FloorMod" and _is_integer_type(str(result_type)):
+        return _convert_signed_floor_mod_expr(expr, context, lhs, rhs, result_type)
     else:
         scalar_builder_name = _BINARY_INTEGER_OPS.get(kind)
     if scalar_builder_name is None:
@@ -316,6 +318,86 @@ def convert_binary_expr(
             name=context.fresh_name(scalar_builder_name),
             **builder_kwargs,
         ),
+    )
+    context.map_value(expr, result, str(result_type))
+    return result
+
+
+def _convert_signed_floor_mod_expr(
+    expr: object,
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    rhs: ValueRef,
+    result_type: Type,
+) -> ValueRef:
+    remainder = cast(
+        ValueRef,
+        context.builder.scalar.remsi(
+            lhs=lhs,
+            rhs=rhs,
+            results=[result_type],
+            name=context.fresh_name("remsi"),
+        ),
+    )
+    zero = context.ensure_typed_constant("0", result_type, "zero")
+    divisor_nonnegative = context.builder.scalar.cmpi(
+        predicate="sge",
+        lhs=rhs,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("divisor_nonnegative"),
+    )
+    remainder_nonnegative = context.builder.scalar.cmpi(
+        predicate="sge",
+        lhs=remainder,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("remainder_nonnegative"),
+    )
+    positive_case = context.builder.scalar.andi(
+        lhs=divisor_nonnegative,
+        rhs=remainder_nonnegative,
+        results=[I1],
+        name=context.fresh_name("positive_floor_mod"),
+    )
+    divisor_negative = context.builder.scalar.cmpi(
+        predicate="slt",
+        lhs=rhs,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("divisor_negative"),
+    )
+    remainder_nonpositive = context.builder.scalar.cmpi(
+        predicate="sle",
+        lhs=remainder,
+        rhs=zero,
+        results=[I1],
+        name=context.fresh_name("remainder_nonpositive"),
+    )
+    negative_case = context.builder.scalar.andi(
+        lhs=divisor_negative,
+        rhs=remainder_nonpositive,
+        results=[I1],
+        name=context.fresh_name("negative_floor_mod"),
+    )
+    keep_remainder = context.builder.scalar.ori(
+        lhs=positive_case,
+        rhs=negative_case,
+        results=[I1],
+        name=context.fresh_name("floor_mod_keep_remainder"),
+    )
+    adjusted = context.builder.scalar.addi(
+        lhs=remainder,
+        rhs=rhs,
+        results=[result_type],
+        name=context.fresh_name("floor_mod_adjusted"),
+    )
+    result = context.builder.scf.select(
+        condition=keep_remainder,
+        true_value=remainder,
+        false_value=adjusted,
+        results=[result_type],
+        name=context.fresh_name("floor_mod"),
     )
     context.map_value(expr, result, str(result_type))
     return result
@@ -761,7 +843,6 @@ _BINARY_INTEGER_OPS = {
     "Sub": "subi",
     "Mul": "muli",
     "FloorDiv": "floordivsi",
-    "FloorMod": "remsi",
     "Mod": "remsi",
     "Div": "divsi",
     "Min": "minsi",

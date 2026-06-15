@@ -6,7 +6,6 @@
 
 from dataclasses import dataclass
 
-from loom.format.text.printer import print_type
 from loom.importers.tilelang.types import TileLangTypeConverter
 
 
@@ -21,11 +20,15 @@ def test_maps_tilelang_float8_spelling_variants() -> None:
 
     assert str(converter.map_dtype("float8_e4m3")) == "f8E4M3"
     assert str(converter.map_dtype("float8_e5m2")) == "f8E5M2"
+    assert str(converter.map_dtype("float8_e4m3x4")) == "vector<4xf8E4M3>"
+    assert str(converter.map_dtype("float8_e5m2x4")) == "vector<4xf8E5M2>"
 
     for source_dtype in (
         "float8_e4m3fn",
         "float8_e4m3fnuz",
+        "float8_e4m3fnuzx4",
         "float8_e5m2fnuz",
+        "float8_e5m2fnuzx4",
     ):
         message = ""
         try:
@@ -44,14 +47,20 @@ def test_counts_tilelang_float8_buffers_as_one_byte_per_element() -> None:
     assert converter.buffer_base_alignment(Buffer("float8_e5m2fnuz", (16,))) == 1
 
 
-def test_preserves_tilelang_float8_storage_format_on_views() -> None:
+def test_preserves_tilelang_float8_storage_format_as_schema() -> None:
     converter = TileLangTypeConverter()
 
     assert (
-        print_type(converter.view_type(Buffer("float8_e4m3fnuz", (16,))))
-        == 'view<16xf8E4M3, #tilelang.fp8<format="e4m3fnuz">>'
+        str(converter.view_type(Buffer("float8_e4m3fnuz", (16,))).element_type)
+        == "f8E4M3"
     )
+    e4m3fnuz_schema = converter.buffer_storage_schema(Buffer("float8_e4m3fnuz", (16,)))
+    assert e4m3fnuz_schema is not None
+    assert e4m3fnuz_schema.name == "fp8_e4m3fnuz"
     assert (
-        print_type(converter.view_type(Buffer("float8_e5m2fnuz", (16,))))
-        == 'view<16xf8E5M2, #tilelang.fp8<format="e5m2fnuz">>'
+        str(converter.view_type(Buffer("float8_e5m2fnuz", (16,))).element_type)
+        == "f8E5M2"
     )
+    e5m2fnuz_schema = converter.buffer_storage_schema(Buffer("float8_e5m2fnuz", (16,)))
+    assert e5m2fnuz_schema is not None
+    assert e5m2fnuz_schema.name == "fp8_e5m2fnuz"

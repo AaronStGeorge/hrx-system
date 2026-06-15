@@ -134,7 +134,7 @@ the test environment matches CI.
 iree-bazel-test --config=asan //loom/py/loom/importers/check:check_test
 python dev.py importers setup tilelang
 iree-bazel-test --config=asan \\
-    --config=loom-importer-mlir \\
+    --importer-env mlir \\
     //loom/py/loom/importers/mlir:mlir_import_test
 iree-bazel-test --config=asan \\
     --importer-env tilelang \\
@@ -147,12 +147,13 @@ iree-bazel-test --config=asan \\
 Importer-specific tests are disabled by default because the frontend packages
 are not part of the base Python environment. Bazel enables importer targets
 through the importer-level `--//loom/config/import:enable=<name>[,<name>...]`
-build setting. Prefer the `--config=loom-importer-mlir`,
-`--config=loom-importer-tilelang`, or `--config=loom-importers` shorthands so
-the repo-local compatibility setting is spelled consistently. Those configs do
-not fetch frontend Python packages or expand the base module lock; the importer
-backends probe the runtime Python environment and report structured skips when
-the selected package is unavailable. CMake uses matching top-level options:
+build setting. Prefer `--importer-env <name>` so the repo-local compatibility
+setting and locked site-packages path are selected together. Raw configs such as
+`--config=loom-importer-mlir`, `--config=loom-importer-tilelang`, and
+`--config=loom-importers` only select build compatibility; they do not fetch
+frontend Python packages or expand the base module lock. The importer backends
+probe the runtime Python environment and report structured skips when the
+selected package is unavailable. CMake uses matching top-level options:
 
 ```shell
 iree-cmake-configure --importer-env tilelang
@@ -173,18 +174,22 @@ and the same `--importer-env tilelang` selection.
 
 ### Update expected output
 
-Pass the update flag through Bazel with `--test_arg=--update` and the same
-importer config used for verification:
+Run the checker binary from the worktree with the same importer environment
+used for verification:
 
 ```shell
-iree-bazel-test --config=asan --config=<importer-config> \\
-    <import-check-test-target> --test_arg=--update
+iree-bazel-build //loom/src/loom/tools/loom-opt
+iree-bazel-run --importer-env <name> \\
+    //loom/py/loom/importers/check:loom_import_check -- \\
+    <name> --update \\
+    --loom-opt=bazel-bin/loom/src/loom/tools/loom-opt/loom-opt \\
+    <fixture.py> [<fixture.py> ...]
 ```
 
-`iree-bazel-test` detects this flag and uses Bazel's standalone TestRunner
-strategy so update-capable tests can rewrite checked-in fixture files. The
-fixture runner still fails if an importer crashes, produces a failed case, or
-emits Loom IR rejected by the production verifier.
+Bazel test runfiles are read-only, so `iree-bazel-test` remains the verification
+path and source mutation belongs in `iree-bazel-run`. The fixture runner still
+fails if an importer crashes, produces a failed case, or emits Loom IR rejected
+by the production verifier.
 
 ### Fixture shape
 
@@ -208,12 +213,14 @@ paths.
 
 TileLang checks also have an opt-in oracle lane for comparing against
 TileLang/TVM generated artifacts. `--oracle=source` asks TileLang for generated
-device source, and `--oracle=code-object` additionally compiles, unbundles, and
-externally disassembles a code object when the ROCm tools are available. This
-metadata is sidecar validation evidence: the checked stdout remains imported
-Loom IR. Use `--oracle-output-dir` or `--dump-temp-dir` to retain the generated
-source, bundled HSACO, unbundled code object, raw disassembly, metadata JSON,
-and parsed instruction-summary JSON.
+device source, `--oracle=code-object` additionally compiles, unbundles, and
+externally disassembles a code object when the ROCm tools are available, and
+`--oracle=differential` also compiles the imported Loom IR through
+`loom-compile --backend=amdgpu-hal` for side-by-side disassembly-family
+comparison. This metadata is sidecar validation evidence: the checked stdout
+remains imported Loom IR. Use `--oracle-output-dir` or `--dump-temp-dir` to
+retain the generated source, bundled HSACO, unbundled code object, Loom HSACO,
+raw disassembly, metadata JSON, and parsed instruction-summary JSON.
 Oracle modes detect their optional dependencies at runtime. Missing TileLang
 source-codegen hooks, HIP/ROCm tools, or LLVM tools produce skipped cases with
 structured JSON metadata, not fake passes, and do not expand the minimal
@@ -236,12 +243,12 @@ Direct invocations are useful for inspection, but Bazel remains the update path
 for checked-in tests:
 
 ```shell
-iree-bazel-run --config=loom-importers \\
+iree-bazel-run --importer-env mlir --importer-env tilelang \\
     //loom/py/loom/importers/check:loom_import_check -- --list-importers
-iree-bazel-run --config=loom-importer-tilelang \\
+iree-bazel-run --importer-env tilelang \\
     //loom/py/loom/importers/check:loom_import_check -- \\
     tilelang path/to/case.py
-iree-bazel-run --config=loom-importer-tilelang \\
+iree-bazel-run --importer-env tilelang \\
     //loom/py/loom/importers/check:loom_import_check -- \\
     tilelang --update path/to/case.py
 ```

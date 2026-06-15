@@ -253,6 +253,19 @@ def target_preset_amdgpu_kind(target_preset: str) -> str | None:
     return selection.kind if selection is not None else None
 
 
+def target_preset_amdgpu_subgroup_size(target_preset: str) -> int | None:
+    """Return the fixed AMDGPU subgroup size selected by a target preset."""
+    selection = _amdgpu_target_selection(target_preset)
+    if selection is None:
+        return None
+    from loom.target.arch.amdgpu.target_info import amdgpu_processor_info_by_name
+
+    processor_info = amdgpu_processor_info_by_name(
+        selection.processor or selection.kind
+    )
+    return processor_info.wavefront.default_size if processor_info is not None else None
+
+
 def _build_target_record(
     builder: loom.LoomBuilder,
     target_symbol: str,

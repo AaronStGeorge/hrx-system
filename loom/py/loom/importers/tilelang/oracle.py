@@ -178,8 +178,15 @@ def capture_generated_source(
     _require_codegen_hook(modules, resolved_target_text)
     resolved = resolve_tilelang_input(normalized)
     pass_configs = _pass_configs(modules, normalized.source)
-    target = _target_object(modules, resolved_target_text)
-    target_host = modules.tvm.target.Target.canon_target("c")
+    try:
+        target = _target_object(modules, resolved_target_text)
+    except Exception as exc:
+        raise TileLangOracleUnavailable(
+            "tilelang-target",
+            f"TileLang target construction failed: {type(exc).__name__}: {exc}",
+            target_text=resolved_target_text,
+        ) from exc
+    target_host = modules.tvm.target.Target("c")
     with (
         modules.tvm.transform.PassContext(
             opt_level=3,
@@ -264,8 +271,9 @@ def compile_hip_code_object(
         disassembly=disassembly,
         disassembly_summary=summarize_amdgpu_disassembly(disassembly),
     )
+    metadata = dict(result.metadata())
     (output_directory / f"{stem}.{generated_source.arch}.metadata.json").write_text(
-        json.dumps(result.metadata(), indent=2, sort_keys=True) + "\n",
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     (output_directory / f"{stem}.{generated_source.arch}.disasm").write_text(
@@ -273,7 +281,11 @@ def compile_hip_code_object(
         encoding="utf-8",
     )
     (output_directory / f"{stem}.{generated_source.arch}.instructions.json").write_text(
-        json.dumps(result.disassembly_summary.metadata(), indent=2, sort_keys=True)
+        json.dumps(
+            dict(result.disassembly_summary.metadata()),
+            indent=2,
+            sort_keys=True,
+        )
         + "\n",
         encoding="utf-8",
     )
@@ -357,10 +369,25 @@ def _pass_configs(modules: _TileLangModules, source: object) -> Mapping[str, Any
     )
 
 
+def tilelang_target_config(target_text: str) -> str | Mapping[str, str]:
+    """Returns a TileLang/TVM target config for the current target API."""
+
+    if not target_text.startswith("hip"):
+        return target_text
+    for token in shlex.split(target_text):
+        if token.startswith("-mcpu="):
+            return {"kind": "hip", "mcpu": token.split("=", 1)[1]}
+        if token.startswith("--offload-arch="):
+            return {"kind": "hip", "mcpu": token.split("=", 1)[1]}
+    return target_text
+
+
 def _target_object(modules: _TileLangModules, target_text: str) -> Any:
-    target = modules.target.determine_target(target_text, return_object=True)
-    target_host = modules.tvm.target.Target.canon_target("c")
-    return modules.tvm.target.Target(target, target_host)
+    target = modules.target.determine_target(
+        tilelang_target_config(target_text),
+        return_object=True,
+    )
+    return modules.tvm.target.Target(target)
 
 
 def _require_codegen_hook(modules: _TileLangModules, target_text: str) -> None:

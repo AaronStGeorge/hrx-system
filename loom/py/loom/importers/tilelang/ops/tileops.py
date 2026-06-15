@@ -42,7 +42,16 @@ from loom.importers.tilelang.ops.topology import (
     integer_value,
     map_thread_axis,
 )
-from loom.ir import INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
+from loom.ir import (
+    I32,
+    INDEX,
+    EncodingInstance,
+    ScalarType,
+    ShapedType,
+    StaticDim,
+    Type,
+    TypeKind,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +83,35 @@ class _DenseGemmSpec:
     rhs_type: ScalarType
     accumulator_type: ScalarType
     clear_accumulator: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _CdnaFp8GemmSpec:
+    """Decoded CDNA FP8 TileLang GEMM tile for the staged MFMA bridge."""
+
+    lhs: TileLangBufferRegion
+    rhs: TileLangBufferRegion
+    accumulator: TileLangBufferRegion
+    lhs_type: ScalarType
+    rhs_type: ScalarType
+    accumulator_type: ScalarType
+    lhs_format: str
+    rhs_format: str
+
+
+class _BlockedCdnaFp8Gemm:
+    pass
+
+
+_CDNA_FP8_TARGET_KINDS = frozenset(("gfx940", "gfx941", "gfx942"))
+_FP8_ELEMENT_TYPES = frozenset(("f8E4M3", "f8E5M2"))
+_FP8_SOURCE_FORMATS = {
+    "float8_e4m3": "f8e4m3",
+    "float8_e4m3fn": "f8e4m3fn",
+    "float8_e4m3fnuz": "f8e4m3fnuz",
+    "float8_e5m2": "f8e5m2",
+    "float8_e5m2fnuz": "f8e5m2fnuz",
+}
 
 
 def is_tileop_call(op_name: str) -> bool:
@@ -998,7 +1036,8 @@ def _convert_region_reduce_call(
         )
         if init is None:
             return
-        result = _emit_scalar_reduce_loop(
+        result = _try_emit_fragment_vector_reduce(
+            expr,
             source,
             dim,
             output_indices,
@@ -1008,6 +1047,17 @@ def _convert_region_reduce_call(
             element_type,
             body_context,
         )
+        if result is None:
+            result = _emit_scalar_reduce_loop(
+                source,
+                dim,
+                output_indices,
+                init,
+                reduce_spec,
+                source_element_type,
+                element_type,
+                body_context,
+            )
         if result is None:
             return
         _store_tracked_local_value(
@@ -1371,6 +1421,8 @@ def _convert_gemm_call(
             f"call `{op_name}` expects at least 19 descriptor operands",
         )
         return None
+    if _convert_cdna_fp8_gemm_call(expr, context, converter, args):
+        return None
     spec = _decode_dense_gemm_spec(expr, context, converter, args)
     if spec is None:
         return None
@@ -1540,6 +1592,450 @@ def _decode_dense_gemm_spec(
         rhs_type=rhs_type,
         accumulator_type=accumulator_type,
         clear_accumulator=clear_accumulator,
+    )
+
+
+def _convert_cdna_fp8_gemm_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    args: tuple[object, ...],
+) -> bool:
+    decoded = _decode_cdna_fp8_gemm_spec(expr, context, converter, args)
+    if decoded is None:
+        return False
+    if decoded is _CDNA_FP8_GEMM_BLOCKED:
+        return True
+    spec = decoded
+    if context.flush_pending_workgroup_memory_barrier():
+        context.record_converted(
+            node_text(expr), "kernel.barrier<workgroup> before cdna fp8 gemm"
+        )
+    thread_index = map_thread_axis(
+        axis=THREAD_AXES["threadIdx.x"],
+        sources=(),
+        context=context,
+        converter=converter,
+        name="tx",
+    )
+    if thread_index is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires mapped threadIdx.x",
+        )
+        return True
+
+    lhs_state = _build_cdna_fp8_lhs_staging(expr, context, spec, thread_index)
+    rhs_state = _build_cdna_fp8_rhs_staging(expr, context, spec, thread_index)
+    _emit_cdna_fp8_mfma_updates(expr, context, spec, lhs_state, rhs_state)
+    context.record_converted(node_text(expr), "tl.tileop.gemm cdna fp8")
+    return True
+
+
+def _decode_cdna_fp8_gemm_spec(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    args: tuple[object, ...],
+) -> _CdnaFp8GemmSpec | _BlockedCdnaFp8Gemm | None:
+    target_kind = target_preset_amdgpu_kind(context.target_preset)
+    if target_kind not in _CDNA_FP8_TARGET_KINDS:
+        return None
+    lhs_format = _region_source_element_format(args[0])
+    rhs_format = _region_source_element_format(args[1])
+    if lhs_format is None or rhs_format is None:
+        return None
+    transpose_lhs = _static_bool(args[3])
+    transpose_rhs = _static_bool(args[4])
+    if transpose_lhs is None or transpose_rhs is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 transpose flags must be static",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if transpose_lhs is not False or transpose_rhs is not True:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires transpose_B=True only",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    shape = tuple(integer_value(arg) for arg in args[5:8])
+    if shape != (64, 64, 64):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires m/n/k = 64/64/64",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if integer_value(args[8]) != 1:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires FullRow warp policy",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    clear_accumulator = _static_bool(args[9])
+    if clear_accumulator is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 clear_accum flag must be static",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if integer_value(args[10]) != 64 or integer_value(args[11]) != 64:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires 64x64 warp tile extents",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if integer_value(args[14]) != 2:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires k_pack = 2",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if integer_value(args[15]) != 0:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge does not import async waits",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if context.static_topology_extent("threadIdx.x") != 256:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires 256 workitems",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+
+    lhs = _decode_region(args[0], expr, context, converter, expected_access=1)
+    rhs = _decode_region(args[1], expr, context, converter, expected_access=1)
+    accumulator = _decode_region(args[2], expr, context, converter, expected_access=2)
+    if lhs is None or rhs is None or accumulator is None:
+        return _CDNA_FP8_GEMM_BLOCKED
+    lhs_type = _view_element_type(lhs.view, context)
+    rhs_type = _view_element_type(rhs.view, context)
+    accumulator_type = _view_element_type(accumulator.view, context)
+    if lhs_type is None or rhs_type is None or accumulator_type is None:
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge regions must resolve to shaped views",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if (
+        str(lhs_type) not in _FP8_ELEMENT_TYPES
+        or str(rhs_type) not in _FP8_ELEMENT_TYPES
+    ):
+        return None
+    if str(accumulator_type) != "f32":
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires f32 accumulator",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if not _region_is_shared(lhs) or not _region_is_shared(rhs):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires shared input tiles",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if accumulator.index_map.memory_scope != "local.fragment":
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires local.fragment accumulator",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    if (
+        _static_extent_tuple(lhs.extents, context) != (64, 64)
+        or _static_extent_tuple(rhs.extents, context) != (64, 64)
+        or _static_extent_tuple(accumulator.extents, context) != (64, 64)
+    ):
+        context.record_blocked(
+            node_text(expr),
+            "tl.tileop.gemm CDNA FP8 bridge requires full 64x64 tile regions",
+        )
+        return _CDNA_FP8_GEMM_BLOCKED
+    return _CdnaFp8GemmSpec(
+        lhs=lhs,
+        rhs=rhs,
+        accumulator=accumulator,
+        lhs_type=lhs_type,
+        rhs_type=rhs_type,
+        accumulator_type=accumulator_type,
+        lhs_format=lhs_format,
+        rhs_format=rhs_format,
+    )
+
+
+_CDNA_FP8_GEMM_BLOCKED = _BlockedCdnaFp8Gemm()
+
+
+def _build_cdna_fp8_lhs_staging(
+    expr: object,
+    context: TileLangConversionContext,
+    spec: _CdnaFp8GemmSpec,
+    thread_index: ValueRef,
+) -> ValueRef:
+    state = _zero_cdna_fp8_staging_vector(context, spec.lhs_type, "lhs_state")
+    lane_mod_16 = _index_rem_const(context, thread_index, 64, "lhs_lane_group")
+    lane_div_16 = _index_div_const(context, lane_mod_16, 16, "lhs_lane_row")
+    lane_mod_16 = _index_rem_const(context, lane_mod_16, 16, "lhs_lane_col")
+    row_group = _index_div_const(context, thread_index, 64, "lhs_row_group")
+    row_group = _index_rem_const(context, row_group, 2, "lhs_row_group")
+    row_group = _index_mul_const(context, row_group, 32, "lhs_row_base")
+    column_group = _index_mul_const(context, lane_div_16, 16, "lhs_col_base")
+    for tile in range(2):
+        tile_row = _index_add_const(context, row_group, tile * 16, "lhs_tile_row")
+        row = context.builder.index.add(
+            lhs=tile_row,
+            rhs=lane_mod_16,
+            results=[INDEX],
+            name=context.fresh_name("lhs_row"),
+        )
+        for lane in range(16):
+            column = _index_add_const(context, column_group, lane, "lhs_column")
+            value = context.builder.view.load(
+                view=spec.lhs.view,
+                indices=[row, column],
+                results=[spec.lhs_type],
+                name=context.fresh_name("lhs_load"),
+            )
+            state = context.builder.vector.insert(
+                value=value,
+                dest=state,
+                indices=[tile * 16 + lane],
+                results=[state.type],
+                name=context.fresh_name("lhs_store"),
+            )
+    return state
+
+
+def _build_cdna_fp8_rhs_staging(
+    expr: object,
+    context: TileLangConversionContext,
+    spec: _CdnaFp8GemmSpec,
+    thread_index: ValueRef,
+) -> ValueRef:
+    state = _zero_cdna_fp8_staging_vector(context, spec.rhs_type, "rhs_state")
+    lane_mod_64 = _index_rem_const(context, thread_index, 64, "rhs_lane_group")
+    lane_div_16 = _index_div_const(context, lane_mod_64, 16, "rhs_lane_row")
+    lane_mod_16 = _index_rem_const(context, lane_mod_64, 16, "rhs_lane_col")
+    column_group = _index_mul_const(context, lane_div_16, 16, "rhs_col_base")
+    row_group = _index_div_const(context, thread_index, 128, "rhs_row_group")
+    row_group = _index_rem_const(context, row_group, 2, "rhs_row_group")
+    row_group = _index_mul_const(context, row_group, 32, "rhs_row_base")
+    for tile in range(2):
+        tile_row = _index_add_const(context, row_group, tile * 16, "rhs_tile_row")
+        row = context.builder.index.add(
+            lhs=tile_row,
+            rhs=lane_mod_16,
+            results=[INDEX],
+            name=context.fresh_name("rhs_row"),
+        )
+        for lane in range(16):
+            column = _index_add_const(context, column_group, lane, "rhs_column")
+            value = context.builder.view.load(
+                view=spec.rhs.view,
+                indices=[row, column],
+                results=[spec.rhs_type],
+                name=context.fresh_name("rhs_load"),
+            )
+            state = context.builder.vector.insert(
+                value=value,
+                dest=state,
+                indices=[tile * 16 + lane],
+                results=[state.type],
+                name=context.fresh_name("rhs_store"),
+            )
+    return state
+
+
+def _emit_cdna_fp8_mfma_updates(
+    expr: object,
+    context: TileLangConversionContext,
+    spec: _CdnaFp8GemmSpec,
+    lhs_state: ValueRef,
+    rhs_state: ValueRef,
+) -> None:
+    source_lhs_type = context.type_converter.vector_type(spec.lhs_type, 8)
+    source_rhs_type = context.type_converter.vector_type(spec.rhs_type, 8)
+    payload_type = context.type_converter.vector_type(I32, 2)
+    accumulator_type = context.type_converter.vector_type(spec.accumulator_type, 4)
+    m = context.ensure_constant("16", "index", "c16")
+    n = context.ensure_constant("16", "index", "c16")
+    k = context.ensure_constant("32", "index", "c32")
+    lhs_schema = _cdna_fp8_matrix_schema(context, spec.lhs_format)
+    rhs_schema = _cdna_fp8_matrix_schema(context, spec.rhs_format)
+    zero = context.ensure_constant("0", "index", "c0")
+    for k_part in range(2):
+        for row_tile in range(2):
+            for column_tile in range(2):
+                lhs_lanes = context.builder.vector.slice(
+                    source=lhs_state,
+                    offsets=[_index_const(context, (row_tile * 2 + k_part) * 8)],
+                    results=[source_lhs_type],
+                    name=context.fresh_name("lhs_lanes"),
+                )
+                lhs_payload = context.builder.vector.bitcast(
+                    input=lhs_lanes,
+                    results=[payload_type],
+                    name=context.fresh_name("lhs_payload"),
+                )
+                lhs = context.builder.vector.fragment(
+                    role="lhs",
+                    data=lhs_payload,
+                    rows=m,
+                    columns=k,
+                    params={"schema": lhs_schema},
+                    results=[payload_type],
+                    name=context.fresh_name("lhs"),
+                )
+                rhs_lanes = context.builder.vector.slice(
+                    source=rhs_state,
+                    offsets=[_index_const(context, (column_tile * 2 + k_part) * 8)],
+                    results=[source_rhs_type],
+                    name=context.fresh_name("rhs_lanes"),
+                )
+                rhs_payload = context.builder.vector.bitcast(
+                    input=rhs_lanes,
+                    results=[payload_type],
+                    name=context.fresh_name("rhs_payload"),
+                )
+                rhs = context.builder.vector.fragment(
+                    role="rhs",
+                    data=rhs_payload,
+                    rows=k,
+                    columns=n,
+                    params={"schema": rhs_schema},
+                    results=[payload_type],
+                    name=context.fresh_name("rhs"),
+                )
+                accumulator_column = _index_const(
+                    context,
+                    (row_tile * 2 + column_tile) * 4,
+                )
+                accumulator_payload = context.builder.vector.load(
+                    view=spec.accumulator.view,
+                    indices=[zero, accumulator_column],
+                    results=[accumulator_type],
+                    name=context.fresh_name("acc_payload"),
+                )
+                init = context.builder.vector.fragment(
+                    role="init",
+                    data=accumulator_payload,
+                    rows=m,
+                    columns=n,
+                    results=[accumulator_type],
+                    name=context.fresh_name("init"),
+                )
+                result = context.builder.vector.mma(
+                    lhs=lhs,
+                    rhs=rhs,
+                    init=init,
+                    results=[accumulator_type],
+                    name=context.fresh_name("mfma"),
+                )
+                context.builder.vector.store(
+                    value=result,
+                    view=spec.accumulator.view,
+                    indices=[zero, accumulator_column],
+                )
+
+
+def _zero_cdna_fp8_staging_vector(
+    context: TileLangConversionContext,
+    element_type: ScalarType,
+    name: str,
+) -> ValueRef:
+    zero = context.ensure_typed_constant(0.0, element_type, base="zero")
+    return context.builder.vector.splat(
+        scalar=zero,
+        results=[context.type_converter.vector_type(element_type, 32)],
+        name=context.fresh_name(name),
+    )
+
+
+def _cdna_fp8_matrix_schema(
+    context: TileLangConversionContext,
+    element_format: str,
+) -> ValueRef:
+    return context.storage_schema_value(
+        EncodingInstance(
+            name="matrix_operand",
+            params=(
+                ("element_format", element_format),
+                ("payload_elements", 8),
+                ("payload_registers", 2),
+            ),
+        )
+    )
+
+
+def _region_source_element_format(expr: object) -> str | None:
+    if _call_op_name(expr) != "tl.tileop.region":
+        return None
+    args = _args(expr)
+    if not args or node_kind(args[0]) != "BufferLoad":
+        return None
+    source_dtype = dtype(getattr(args[0], "buffer", None))
+    return _FP8_SOURCE_FORMATS.get(source_dtype)
+
+
+def _index_const(context: TileLangConversionContext, value: int) -> ValueRef:
+    return context.ensure_constant(str(value), "index", f"c{value}")
+
+
+def _index_add_const(
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    rhs: int,
+    name: str,
+) -> ValueRef:
+    if rhs == 0:
+        return lhs
+    return context.builder.index.add(
+        lhs=lhs,
+        rhs=_index_const(context, rhs),
+        results=[INDEX],
+        name=context.fresh_name(name),
+    )
+
+
+def _index_mul_const(
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    rhs: int,
+    name: str,
+) -> ValueRef:
+    return context.builder.index.mul(
+        lhs=lhs,
+        rhs=_index_const(context, rhs),
+        results=[INDEX],
+        name=context.fresh_name(name),
+    )
+
+
+def _index_div_const(
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    rhs: int,
+    name: str,
+) -> ValueRef:
+    return context.builder.index.div(
+        lhs=lhs,
+        rhs=_index_const(context, rhs),
+        results=[INDEX],
+        name=context.fresh_name(name),
+    )
+
+
+def _index_rem_const(
+    context: TileLangConversionContext,
+    lhs: ValueRef,
+    rhs: int,
+    name: str,
+) -> ValueRef:
+    return context.builder.index.rem(
+        lhs=lhs,
+        rhs=_index_const(context, rhs),
+        results=[INDEX],
+        name=context.fresh_name(name),
     )
 
 
@@ -2463,6 +2959,77 @@ def _reduction_target_indices(
         zero = context.ensure_constant("0", "index", "c0")
         return _region_indices(target, (zero,), context)
     return None
+
+
+def _try_emit_fragment_vector_reduce(
+    owner: object,
+    source: TileLangBufferRegion,
+    dim: int,
+    output_indices: tuple[ValueRef, ...],
+    init: ValueRef,
+    reduce_spec: TileReduceSpec,
+    source_element_type: ScalarType,
+    element_type: ScalarType,
+    context: TileLangConversionContext,
+) -> ValueRef | None:
+    if dim != 0 or output_indices:
+        return None
+    if not _region_is_fragment(source) or len(source.extents) != 1:
+        return None
+    fragment_value = context.fragment_vector(source.view)
+    if fragment_value is None or fragment_value.base is not None:
+        return None
+    extent_value = static_index_value(source.extents[0], context)
+    if extent_value is None or extent_value != fragment_value.lane_count:
+        return None
+    zero = context.ensure_constant("0", "index", "c0")
+    source_indices = _region_indices(source, (zero,), context)
+    if not _all_zero_indices(source_indices, context):
+        return None
+    source_type = context.builder.module.values[fragment_value.value.id].type
+    if not _is_rank_one_vector_type(source_type):
+        return None
+    source_type = cast(ShapedType, source_type)
+    if source_type.dims[0].size != fragment_value.lane_count:
+        return None
+    source_value = _reduce_vector_value_cast(
+        fragment_value.value,
+        source_type,
+        source_element_type,
+        element_type,
+        owner,
+        context,
+    )
+    if source_value is None:
+        return None
+    source_value = _build_vector_reduce_input(
+        source_value,
+        reduce_spec,
+        element_type,
+        context,
+    )
+    reduce_name = context.fresh_name("reduce")
+    reduce_fastmath = _additive_reduce_fastmath_flags(
+        reduce_spec,
+        element_type,
+        context,
+    )
+    if reduce_fastmath is None:
+        return context.builder.vector.reduce(
+            kind=reduce_spec.combiner,
+            input=source_value,
+            init=init,
+            results=[element_type],
+            name=reduce_name,
+        )
+    return context.builder.vector.reduce(
+        kind=reduce_spec.combiner,
+        fastmath=reduce_fastmath,
+        input=source_value,
+        init=init,
+        results=[element_type],
+        name=reduce_name,
+    )
 
 
 def _emit_scalar_reduce_loop(

@@ -19,9 +19,12 @@ from loom.importers.tilelang.nodes import dtype, node_kind, source_name
 from loom.importers.tilelang.types import TileLangTypeConverter
 from loom.ir import (
     ENCODING_LAYOUT_TYPE,
+    ENCODING_SCHEMA_TYPE,
+    ENCODING_STORAGE_TYPE,
     INDEX,
     OFFSET,
     DynamicEncoding,
+    EncodingInstance,
     ScalarType,
     ScalarTypeKind,
     ShapedType,
@@ -115,6 +118,14 @@ class TileLangConversionContext(SourceImportSession):
         default_factory=dict
     )
     address_layout_values: dict[object, ValueRef] = field(default_factory=dict)
+    storage_schema_values: dict[EncodingInstance, ValueRef] = field(
+        default_factory=dict
+    )
+    physical_storage_values: dict[tuple[int, EncodingInstance], ValueRef] = field(
+        default_factory=dict
+    )
+    named_buffer_values: dict[str, ValueRef] = field(default_factory=dict)
+    named_buffer_sources: dict[str, object] = field(default_factory=dict)
     kernel_body_block: object | None = None
     dense_layout: ValueRef | None = None
     pending_workgroup_memory_write: bool = False
@@ -134,13 +145,46 @@ class TileLangConversionContext(SourceImportSession):
         view_type = self.type_converter.view_type(buffer)
         if view_type.encoding is not None:
             return view_type
-        self.address_layout_for_buffer(buffer)
+        self.storage_encoding_for_buffer(buffer)
         return ShapedType(
             view_type.type_kind,
             view_type.element_type,
             view_type.dims,
             encoding=DynamicEncoding(),
         )
+
+    def storage_encoding_for_buffer(self, buffer: object | None) -> ValueRef:
+        schema = (
+            self.type_converter.buffer_storage_schema(buffer)
+            if buffer is not None
+            else None
+        )
+        if schema is None:
+            return self.address_layout_for_buffer(buffer)
+        layout = self.address_layout_for_buffer(buffer)
+        key = (layout.id, schema)
+        storage = self.physical_storage_values.get(key)
+        if storage is None:
+            schema_value = self.storage_schema_value(schema)
+            storage = self.builder.encoding.define(
+                spec=EncodingInstance(name="physical_storage"),
+                params={"layout": layout, "schema": schema_value},
+                results=[ENCODING_STORAGE_TYPE],
+                name=self.reserve_name(_storage_encoding_name(buffer)),
+            )
+            self.physical_storage_values[key] = storage
+        return storage
+
+    def storage_schema_value(self, schema: EncodingInstance) -> ValueRef:
+        schema_value = self.storage_schema_values.get(schema)
+        if schema_value is None:
+            schema_value = self.builder.encoding.define(
+                spec=schema,
+                results=[ENCODING_SCHEMA_TYPE],
+                name=self.reserve_name(f"{schema.name}_schema"),
+            )
+            self.storage_schema_values[schema] = schema_value
+        return schema_value
 
     def address_layout_for_buffer(self, buffer: object | None) -> ValueRef:
         preference = self.address_layout_preference(buffer)
@@ -181,7 +225,7 @@ class TileLangConversionContext(SourceImportSession):
         if isinstance(view_type, ShapedType) and isinstance(
             view_type.encoding, DynamicEncoding
         ):
-            view_value.encoding_binding = self.address_layout_for_buffer(buffer).id
+            view_value.encoding_binding = self.storage_encoding_for_buffer(buffer).id
 
     def float_operation_kwargs(self) -> dict[str, str]:
         if self.float_fastmath_flags is None:
@@ -401,6 +445,30 @@ class TileLangConversionContext(SourceImportSession):
     ) -> None:
         self.buffer_access_values[key] = ref
 
+    def map_named_buffer(
+        self,
+        buffer: object,
+        ref: ValueRef,
+    ) -> None:
+        name = source_name(buffer, fallback="")
+        if not name:
+            return
+        self.named_buffer_values[name] = ref
+        self.named_buffer_sources[name] = buffer
+
+    def mapped_named_buffer(
+        self,
+        source: object,
+    ) -> tuple[ValueRef, object] | None:
+        name = source_name(source, fallback="")
+        if not name:
+            return None
+        ref = self.named_buffer_values.get(name)
+        source_buffer = self.named_buffer_sources.get(name)
+        if ref is None or source_buffer is None:
+            return None
+        return ref, source_buffer
+
     def buffer_access_source_key(
         self,
         source: object,
@@ -584,6 +652,10 @@ class TileLangConversionContext(SourceImportSession):
             buffer_access_source_keys=dict(self.buffer_access_source_keys),
             address_layout_preferences=dict(self.address_layout_preferences),
             address_layout_values=dict(self.address_layout_values),
+            storage_schema_values=dict(self.storage_schema_values),
+            physical_storage_values=dict(self.physical_storage_values),
+            named_buffer_values=dict(self.named_buffer_values),
+            named_buffer_sources=dict(self.named_buffer_sources),
             kernel_body_block=self.kernel_body_block,
             dense_layout=self.dense_layout,
             pending_workgroup_memory_write=self.pending_workgroup_memory_write,
@@ -592,6 +664,8 @@ class TileLangConversionContext(SourceImportSession):
     def merge_child_records(self, child: SourceImportSession) -> None:
         SourceImportSession.merge_child_records(self, child)
         if isinstance(child, TileLangConversionContext):
+            self.storage_schema_values.update(child.storage_schema_values)
+            self.physical_storage_values.update(child.physical_storage_values)
             self.pending_workgroup_memory_write = (
                 self.pending_workgroup_memory_write
                 or child.pending_workgroup_memory_write
@@ -657,6 +731,12 @@ def address_layout_keys(buffer: object) -> tuple[object, ...]:
     if semantic_key is not None:
         return (semantic_key, source_key(buffer))
     return (source_key(buffer),)
+
+
+def _storage_encoding_name(buffer: object | None) -> str:
+    if buffer is None:
+        return "storage"
+    return f"{source_name(buffer, fallback='buffer')}_storage"
 
 
 def _semantic_sequence(value: object) -> tuple[object, ...]:

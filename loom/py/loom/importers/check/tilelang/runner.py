@@ -30,6 +30,13 @@ from loom.importers.check.tilelang.cases import (
 )
 from loom.importers.check.tilelang.harness import TileLangHarness
 from loom.importers.core import kernel_module_ops, print_loom_module
+from loom.importers.tilelang.differential import (
+    AmdgpuDifferentialArtifact,
+    LoomAmdgpuArtifactUnavailable,
+    LoomAmdgpuToolchain,
+    capture_loom_amdgpu_artifact,
+    compare_amdgpu_artifacts,
+)
 from loom.importers.tilelang.importer import TileLangImportOptions, import_tilelang
 from loom.importers.tilelang.model import TileLangImportInput
 from loom.importers.tilelang.oracle import (
@@ -45,7 +52,13 @@ from loom.importers.tilelang.oracle import (
 _ORACLE_OFF = "off"
 _ORACLE_SOURCE = "source"
 _ORACLE_CODE_OBJECT = "code-object"
-TILELANG_ORACLE_MODES = (_ORACLE_OFF, _ORACLE_SOURCE, _ORACLE_CODE_OBJECT)
+_ORACLE_DIFFERENTIAL = "differential"
+TILELANG_ORACLE_MODES = (
+    _ORACLE_OFF,
+    _ORACLE_SOURCE,
+    _ORACLE_CODE_OBJECT,
+    _ORACLE_DIFFERENTIAL,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +67,8 @@ class TileLangOracleCheckOptions:
 
     mode: str = _ORACLE_OFF
     output_directory: Path | None = None
+    loom_compile: Path | None = None
+    llvm_objdump: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +127,7 @@ def _invoke_tilelang_case(
     oracle_metadata = _capture_oracle_metadata(
         case,
         value,
+        loom_module_text=stdout,
         target_preset=target_preset,
         options=options.oracle,
     )
@@ -161,6 +177,7 @@ def _capture_oracle_metadata(
     case: PythonCheckCase,
     import_input: TileLangImportInput,
     *,
+    loom_module_text: str,
     target_preset: str,
     options: TileLangOracleCheckOptions,
 ) -> dict[str, object]:
@@ -197,6 +214,13 @@ def _capture_oracle_metadata(
             import_input,
             target_text=target_text,
         )
+        if options.mode == _ORACLE_DIFFERENTIAL:
+            return _capture_case_differential(
+                case,
+                generated_source,
+                loom_module_text=loom_module_text,
+                options=options,
+            )
         if options.mode == _ORACLE_CODE_OBJECT:
             oracle = _compile_case_code_object(case, generated_source, options)
             return dict(oracle.metadata())
@@ -206,6 +230,59 @@ def _capture_oracle_metadata(
             exc.reason,
             metadata={"tilelang_oracle": exc.metadata()},
         ) from exc
+    except LoomAmdgpuArtifactUnavailable as exc:
+        raise PythonCheckSkip(
+            exc.reason,
+            metadata={"tilelang_oracle": exc.metadata()},
+        ) from exc
+
+
+def _capture_case_differential(
+    case: PythonCheckCase,
+    generated_source: TileLangGeneratedSource,
+    *,
+    loom_module_text: str,
+    options: TileLangOracleCheckOptions,
+) -> dict[str, object]:
+    oracle = _compile_case_code_object(case, generated_source, options)
+    case_directory = _oracle_case_directory(
+        case,
+        _require_oracle_output_directory(options),
+    )
+    stem = _oracle_case_stem(case)
+    tilelang_artifact = AmdgpuDifferentialArtifact(
+        producer="tilelang",
+        summary=oracle.disassembly_summary,
+        code_object_path=oracle.code_object_path,
+        disassembly_path=case_directory / f"{stem}.{generated_source.arch}.disasm",
+        metadata=dict(oracle.metadata()),
+    )
+    loom_artifact = capture_loom_amdgpu_artifact(
+        loom_module_text,
+        target_text=generated_source.arch,
+        output_directory=case_directory,
+        stem=f"{stem}.loom",
+        toolchain=LoomAmdgpuToolchain.probe(
+            loom_compile=options.loom_compile,
+            llvm_objdump=options.llvm_objdump,
+        ),
+    )
+    report = compare_amdgpu_artifacts(
+        target_text=generated_source.target_text,
+        tilelang=tilelang_artifact,
+        loom=loom_artifact,
+    )
+    report_metadata = dict(report.metadata())
+    report_path = case_directory / f"{stem}.{generated_source.arch}.differential.json"
+    report_path.write_text(
+        json.dumps(report_metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "mode": _ORACLE_DIFFERENTIAL,
+        "report_path": str(report_path),
+        "report": report_metadata,
+    }
 
 
 def _compile_case_code_object(
@@ -213,14 +290,12 @@ def _compile_case_code_object(
     generated_source: TileLangGeneratedSource,
     options: TileLangOracleCheckOptions,
 ) -> TileLangCodeObjectOracle:
-    if options.output_directory is None:
-        raise ValueError(
-            "TileLang code-object oracle capture requires --oracle-output-dir "
-            "or --dump-temp-dir"
-        )
     return compile_hip_code_object(
         generated_source,
-        output_directory=_oracle_case_directory(case, options.output_directory),
+        output_directory=_oracle_case_directory(
+            case,
+            _require_oracle_output_directory(options),
+        ),
         stem=_oracle_case_stem(case),
     )
 
@@ -245,6 +320,17 @@ def _capture_case_source(
         encoding="utf-8",
     )
     return metadata
+
+
+def _require_oracle_output_directory(
+    options: TileLangOracleCheckOptions,
+) -> Path:
+    if options.output_directory is None:
+        raise ValueError(
+            "TileLang code-object and differential oracle capture require "
+            "--oracle-output-dir or --dump-temp-dir"
+        )
+    return options.output_directory
 
 
 def _oracle_case_directory(case: PythonCheckCase, output_directory: Path) -> Path:

@@ -291,7 +291,16 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
       %const_3 = scalar.constant 1 : i64
       %const_4 = scalar.constant 64 : i64
       %remsi = scalar.remsi %group_idx_assumed, %const_4 : i64
-      %shli = scalar.shli %const_3, %remsi : i64
+      %divisor_nonnegative = scalar.cmpi sge, %const_4, %const_2 : i64
+      %remainder_nonnegative = scalar.cmpi sge, %remsi, %const_2 : i64
+      %positive_floor_mod = scalar.andi %divisor_nonnegative, %remainder_nonnegative : i1
+      %divisor_negative = scalar.cmpi slt, %const_4, %const_2 : i64
+      %remainder_nonpositive = scalar.cmpi sle, %remsi, %const_2 : i64
+      %negative_floor_mod = scalar.andi %divisor_negative, %remainder_nonpositive : i1
+      %floor_mod_keep_remainder = scalar.ori %positive_floor_mod, %negative_floor_mod : i1
+      %floor_mod_adjusted = scalar.addi %remsi, %const_4 : i64
+      %floor_mod = scf.select %floor_mod_keep_remainder, %remsi, %floor_mod_adjusted : i64
+      %shli = scalar.shli %const_3, %floor_mod : i64
       %select = scf.select %cmp, %shli, %const_2 : i64
       %cmp_2 = scalar.cmpi slt, %group_idx_assumed, %const_4 : i64
       %select_2 = scf.select %cmp_2, %select, %const_2 : i64

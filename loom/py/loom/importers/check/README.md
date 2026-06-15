@@ -53,22 +53,25 @@ can be large, platform-specific, and faster-moving than the base developer
 toolchain, but Bazel and CMake still consume the same checked-in lock and the
 same `--importer-env <name>` selection.
 
-To accept updated inline Loom output for checked-in importer fixtures, pass the
-runner update flag through Bazel with the same importer config used for
+To accept updated inline Loom output for checked-in importer fixtures, run the
+checker binary from the worktree with the same importer environment used for
 verification:
 
 ```bash
-iree-bazel-test --config=asan --config=<importer-config> \
-    <import-check-test-target> --test_arg=--update
+iree-bazel-build //loom/src/loom/tools/loom-opt
+iree-bazel-run --importer-env <name> \
+    //loom/py/loom/importers/check:loom_import_check -- \
+    <name> --update \
+    --loom-opt=bazel-bin/loom/src/loom/tools/loom-opt/loom-opt \
+    <fixture.py> [<fixture.py> ...]
 ```
 
-The `iree-bazel-test` wrapper detects `--test_arg=--update` and uses Bazel's
-standalone TestRunner strategy so update-capable tests can rewrite checked-in
-fixture files. The `--update` flag is consumed by the tiny pytest-style runner
-so it is not treated as another module name. Fixture tests that support update
-mode then rewrite their inline `# ----` expected-output blocks and still fail
-if the importer crashes, reports a failed case, or emits Loom IR rejected by
-the production verifier.
+`iree-bazel-test` remains the verification path. Bazel test runfiles are
+read-only, so source mutation belongs in `iree-bazel-run`, which still uses the
+checked-in checker binary and the wrapper-selected importer environment.
+Fixture tests that support update mode rewrite their inline `# ----`
+expected-output blocks and still fail if the importer crashes, reports a failed
+case, or emits Loom IR rejected by the production verifier.
 
 Python fixture files keep shared imports at the top, split cases with
 `# ====`, and compare imported Loom IR against the inline `# ----` block.
@@ -116,6 +119,6 @@ payload; message substrings are for human-facing prose checks.
 Agent-oriented usage is available from:
 
 ```bash
-iree-bazel-run --config=loom-importers \
+iree-bazel-run --importer-env mlir --importer-env tilelang \
     //loom/py/loom/importers/check:loom_import_check -- --agents_md
 ```

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import ClassVar
 
 from loom.importers.tilelang.model import (
@@ -13,11 +15,15 @@ from loom.importers.tilelang.model import (
     resolve_tilelang_input,
 )
 from loom.importers.tilelang.oracle import (
+    TileLangCodeObjectOracle,
+    TileLangGeneratedSource,
     TileLangOracleError,
     summarize_disassembly,
     summarize_source,
     target_arch,
+    tilelang_target_config,
 )
+from loom.tools.amdgpu_asm import summarize_amdgpu_disassembly
 
 
 class _JitSource:
@@ -54,6 +60,19 @@ def test_target_arch_requires_explicit_mcpu() -> None:
         raise AssertionError("expected missing -mcpu target to fail")
 
 
+def test_tilelang_target_config_uses_dict_form_for_hip_arch() -> None:
+    assert tilelang_target_config("hip -mcpu=gfx1100") == {
+        "kind": "hip",
+        "mcpu": "gfx1100",
+    }
+    assert tilelang_target_config("hip --offload-arch=gfx942") == {
+        "kind": "hip",
+        "mcpu": "gfx942",
+    }
+    assert tilelang_target_config("hip") == "hip"
+    assert tilelang_target_config("cuda -arch=sm_90") == "cuda -arch=sm_90"
+
+
 def test_summarize_source_reports_kernel_markers() -> None:
     summary = summarize_source(
         'extern "C" __global__ void kernel() {\n'
@@ -82,3 +101,25 @@ def test_summarize_disassembly_counts_instruction_families() -> None:
         "global_store": 1,
         "s_waitcnt": 2,
     }
+
+
+def test_code_object_oracle_metadata_is_json_serializable() -> None:
+    generated_source = TileLangGeneratedSource(
+        target_text="hip -mcpu=gfx942",
+        arch="gfx942",
+        source='extern "C" __global__ void kernel() {}\n',
+        source_summary=("source_lines=1",),
+        tilelang_version="0.1",
+        tvm_version="0.25",
+        pass_config_keys=("tl.disable_warp_specialized",),
+        loaded_rocm_libraries=(Path("/opt/rocm/lib/libamdhip64.so"),),
+    )
+    oracle = TileLangCodeObjectOracle(
+        generated_source=generated_source,
+        bundled_object_path=Path("kernel.hsaco"),
+        code_object_path=Path("kernel.co"),
+        disassembly="s_endpgm\n",
+        disassembly_summary=summarize_amdgpu_disassembly("s_endpgm\n"),
+    )
+
+    json.dumps(dict(oracle.metadata()), sort_keys=True)
