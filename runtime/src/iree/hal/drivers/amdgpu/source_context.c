@@ -27,6 +27,7 @@ enum iree_hal_amdgpu_loom_site_table_header_offset_e {
 
 enum iree_hal_amdgpu_loom_site_table_record_offset_e {
   IREE_HAL_AMDGPU_LOOM_SITE_TABLE_RECORD_SITE_ID_OFFSET = 0,
+  IREE_HAL_AMDGPU_LOOM_SITE_TABLE_RECORD_OP_KIND_OFFSET = 4,
   IREE_HAL_AMDGPU_LOOM_SITE_TABLE_RECORD_FLAGS_OFFSET = 8,
   IREE_HAL_AMDGPU_LOOM_SITE_TABLE_RECORD_PAYLOAD_OFFSET_OFFSET = 12,
   IREE_HAL_AMDGPU_LOOM_SITE_TABLE_RECORD_PAYLOAD_LENGTH_OFFSET = 16,
@@ -48,6 +49,29 @@ enum iree_hal_amdgpu_loom_site_table_source_kind_e {
   IREE_HAL_AMDGPU_LOOM_SITE_TABLE_SOURCE_KIND_NONE = 0,
   IREE_HAL_AMDGPU_LOOM_SITE_TABLE_SOURCE_KIND_FILE = 1,
 };
+
+enum iree_hal_amdgpu_loom_op_kind_e {
+  IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_ACCESS = (0x1Du << 8) | 0u,
+  IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_VALUE = (0x1Du << 8) | 1u,
+  IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_OP = (0x1Du << 8) | 2u,
+  IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_LAYOUT = (0x1Du << 8) | 3u,
+};
+
+static iree_string_view_t iree_hal_amdgpu_source_context_loom_op_kind_name(
+    uint32_t op_kind) {
+  switch (op_kind) {
+    case IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_ACCESS:
+      return IREE_SV("sanitizer.assert.access");
+    case IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_VALUE:
+      return IREE_SV("sanitizer.assert.value");
+    case IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_OP:
+      return IREE_SV("sanitizer.assert.op");
+    case IREE_HAL_AMDGPU_LOOM_OP_SANITIZER_ASSERT_LAYOUT:
+      return IREE_SV("sanitizer.assert.layout");
+    default:
+      return iree_string_view_empty();
+  }
+}
 
 static uint8_t iree_hal_amdgpu_source_context_load_u8(const uint8_t* data,
                                                       iree_host_size_t offset) {
@@ -342,6 +366,9 @@ bool iree_hal_amdgpu_source_context_try_resolve_sanitizer_site(
 
   iree_hal_device_event_site_t site = iree_hal_device_event_site_default();
   site.site_id = site_id;
+  site.operation_name = iree_hal_amdgpu_source_context_loom_op_kind_name(
+      iree_hal_amdgpu_source_context_load_u32(
+          record, IREE_HAL_AMDGPU_LOOM_SITE_TABLE_RECORD_OP_KIND_OFFSET));
   if (iree_any_bit_set(
           flags, IREE_HAL_AMDGPU_LOOM_SITE_TABLE_RECORD_HAS_SOURCE_LOCATION)) {
     const uint32_t source_name_offset = iree_hal_amdgpu_source_context_load_u32(

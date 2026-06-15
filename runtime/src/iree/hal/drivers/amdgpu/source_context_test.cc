@@ -52,6 +52,7 @@ constexpr uint16_t kSiteTableRecordLength = 48u;
 constexpr uint32_t kRecordHasPayload = 1u << 0;
 constexpr uint32_t kRecordHasSourceLocation = 1u << 1;
 constexpr uint16_t kSourceKindFile = 1u;
+constexpr uint32_t kLoomOpSanitizerAssertAccess = (0x1Du << 8) | 0u;
 
 static void StoreU8(std::vector<uint8_t>* data, size_t offset, uint8_t value) {
   (*data)[offset] = value;
@@ -92,7 +93,8 @@ static std::vector<uint8_t> MakeSingleSiteTable() {
 
   const uint32_t record_offset = kSiteTableHeaderLength;
   StoreU32(&table, record_offset + kRecordSiteIdOffset, 0);
-  StoreU32(&table, record_offset + kRecordOpKindOffset, 42);
+  StoreU32(&table, record_offset + kRecordOpKindOffset,
+           kLoomOpSanitizerAssertAccess);
   StoreU32(&table, record_offset + kRecordFlagsOffset,
            kRecordHasPayload | kRecordHasSourceLocation);
   StoreU32(&table, record_offset + kRecordPayloadOffsetOffset, 0);
@@ -167,6 +169,8 @@ TEST(SourceContextTest, ResolvesSanitizerSiteTableRecord) {
   EXPECT_EQ(site.start_column, 3u);
   EXPECT_EQ(site.end_line, 7u);
   EXPECT_EQ(site.end_column, 9u);
+  EXPECT_TRUE(iree_string_view_equal(site.operation_name,
+                                     IREE_SV("sanitizer.assert.access")));
   ASSERT_EQ(site.producer_payload.data_length, 2u);
   EXPECT_EQ(site.producer_payload.data[0], 0xA5u);
   EXPECT_EQ(site.producer_payload.data[1], 0x5Au);
