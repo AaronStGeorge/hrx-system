@@ -15,6 +15,23 @@ package(
 
 _CHECKED_BENCHMARK_CASES = [
     {
+        "name": "rope_pair_rotate_tile_f32",
+        "rows": [
+            {
+                "benchmark": "@rope_pair_rotate_tile_identity_smoke",
+                "target_name": "rope_pair_rotate_tile_identity",
+            },
+            {
+                "benchmark": "@rope_pair_rotate_tile_quarter_turn_smoke",
+                "target_name": "rope_pair_rotate_tile_quarter_turn",
+            },
+        ],
+        "source": "rope_pair_rotate_tile_f32.loom",
+        "targets": [
+            "amdgpu",
+        ],
+    },
+    {
         "name": "online_softmax_tail_attention_tile_f32",
         "rows": [
             {

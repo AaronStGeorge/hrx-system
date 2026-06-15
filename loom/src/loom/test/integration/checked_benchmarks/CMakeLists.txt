@@ -12,6 +12,38 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 iree_native_test(
   NAME
+    "rope_pair_rotate_tile_identity_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/rope_pair_rotate_tile_f32.loom}}"
+    "--benchmark=@rope_pair_rotate_tile_identity_smoke"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
+    "rope_pair_rotate_tile_quarter_turn_plan_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/rope_pair_rotate_tile_f32.loom}}"
+    "--benchmark=@rope_pair_rotate_tile_quarter_turn_smoke"
+    "--dry-run"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
+iree_native_test(
+  NAME
     "online_softmax_tail_attention_tile_f32_plan_test"
   ARGS
     "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/online_softmax_tail_attention_tile_f32.loom}}"
@@ -70,6 +102,58 @@ iree_native_test(
     loom::tools::iree-benchmark-loom
   LABELS
     "hostonly"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "rope_pair_rotate_tile_identity_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/rope_pair_rotate_tile_f32.loom}}"
+    "--benchmark=@rope_pair_rotate_tile_identity_smoke"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
+iree_native_test(
+  NAME
+    "rope_pair_rotate_tile_quarter_turn_amdgpu_test"
+  ARGS
+    "{{${PROJECT_SOURCE_DIR}/loom/src/loom/test/integration/checked_benchmarks/rope_pair_rotate_tile_f32.loom}}"
+    "--benchmark=@rope_pair_rotate_tile_quarter_turn_smoke"
+    "--device=amdgpu"
+    "--measure=dispatch_complete"
+    "--iterations=1"
+    "--warmup-iterations=0"
+    "--batch-size=1"
+    "--min-time-ms=0"
+    "--max-batches=1"
+    "--input-ring-count=1"
+    "--output-format=jsonl"
+  SRC
+    loom::tools::iree-benchmark-loom
+  LABELS
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "manual"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 endif()
 
