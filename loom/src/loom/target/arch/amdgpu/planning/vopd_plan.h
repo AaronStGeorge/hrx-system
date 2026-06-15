@@ -81,6 +81,8 @@ typedef enum loom_amdgpu_vopd_pair_reason_e {
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MAX_F32 = 8,
   // Two independent v_min_f32 packets were fused into v_dual_min_f32.
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_MIN_F32 = 9,
+  // Two different component opcodes were fused into one legal VOPD packet.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_MIXED_COMPONENTS = 10,
 } loom_amdgpu_vopd_pair_reason_t;
 
 typedef enum loom_amdgpu_vopd_component_form_e {
@@ -110,6 +112,19 @@ typedef enum loom_amdgpu_vopd_component_source_bits_e {
 } loom_amdgpu_vopd_component_source_bits_t;
 typedef uint8_t loom_amdgpu_vopd_component_source_mask_t;
 
+typedef enum loom_amdgpu_vopd_component_lane_bits_e {
+  // Component may not occupy either VOPD lane.
+  LOOM_AMDGPU_VOPD_COMPONENT_LANE_NONE = 0u,
+  // Component may occupy the X lane.
+  LOOM_AMDGPU_VOPD_COMPONENT_LANE_X = 1u << 0,
+  // Component may occupy the Y lane.
+  LOOM_AMDGPU_VOPD_COMPONENT_LANE_Y = 1u << 1,
+  // Component may occupy either VOPD lane.
+  LOOM_AMDGPU_VOPD_COMPONENT_LANE_XY =
+      LOOM_AMDGPU_VOPD_COMPONENT_LANE_X | LOOM_AMDGPU_VOPD_COMPONENT_LANE_Y,
+} loom_amdgpu_vopd_component_lane_bits_t;
+typedef uint8_t loom_amdgpu_vopd_component_lane_mask_t;
+
 // Descriptor-independent facts for one native VOPD component opcode.
 typedef struct loom_amdgpu_vopd_component_info_t {
   // VOPD operation id encoded in this component slot.
@@ -126,6 +141,8 @@ typedef struct loom_amdgpu_vopd_component_info_t {
   iree_string_view_t rdna4_assembly_mnemonic;
   // Operand/register form shared by planning, assembly, and encoding.
   loom_amdgpu_vopd_component_form_t form;
+  // VOPD lanes this component opcode may occupy.
+  loom_amdgpu_vopd_component_lane_mask_t lane_mask;
   // Source operand slots that contain real VGPRs.
   loom_amdgpu_vopd_component_source_mask_t source_register_mask;
 } loom_amdgpu_vopd_component_info_t;
