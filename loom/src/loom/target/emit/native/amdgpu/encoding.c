@@ -1299,11 +1299,9 @@ static iree_status_t loom_amdgpu_encode_wait_state_action(
                                             wait_state->delay_alu_immediate);
     case LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN:
     default: {
-      iree_string_view_t action_name =
-          loom_amdgpu_wait_state_action_name(wait_state->action);
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "unsupported AMDGPU wait-state action '%.*s'",
-                              (int)action_name.size, action_name.data);
+      IREE_ASSERT_UNREACHABLE(
+          "verified AMDGPU wait-state plans must use known actions");
+      IREE_BUILTIN_UNREACHABLE();
     }
   }
 }
@@ -1361,13 +1359,10 @@ static iree_status_t loom_amdgpu_encode_movable_vopd_second_wait_states(
       return iree_ok_status();
     }
     if (!loom_amdgpu_wait_state_is_movable_vopd_second_delay(wait_state)) {
-      iree_string_view_t action_name =
-          loom_amdgpu_wait_state_action_name(wait_state->action);
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU native encoding VOPD plan cannot move wait-state action "
-          "'%.*s' before a fused second component",
-          (int)action_name.size, action_name.data);
+      IREE_ASSERT_UNREACHABLE(
+          "verified AMDGPU VOPD plans only move delay waits before a fused "
+          "second component");
+      IREE_BUILTIN_UNREACHABLE();
     }
     if (!loom_amdgpu_current_packet_has_same_delay_alu(state, wait_state)) {
       IREE_RETURN_IF_ERROR(
@@ -1781,10 +1776,9 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
   const loom_amdgpu_vopd_component_info_t* info =
       loom_amdgpu_vopd_component_info_for_op(vopd_op);
   if (info == NULL) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU native encoding VOPD component op "
-                            "%" PRIu16 " is not supported",
-                            vopd_op);
+    IREE_ASSERT_UNREACHABLE(
+        "verified AMDGPU VOPD plans must reference supported component ops");
+    IREE_BUILTIN_UNREACHABLE();
   }
   switch (info->form) {
     case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_ACCUMULATE:
@@ -1801,9 +1795,9 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
       return loom_amdgpu_encode_vopd_mov_component(
           state, packet, fields, out_flags, out_literal_u32, slot);
     default:
-      return iree_make_status(IREE_STATUS_INTERNAL,
-                              "AMDGPU native encoding VOPD component has "
-                              "unknown form");
+      IREE_ASSERT_UNREACHABLE(
+          "AMDGPU VOPD component metadata must use a known form");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -1869,25 +1863,12 @@ static iree_status_t loom_amdgpu_try_encode_vopd_packet(
   if (vopd_packet == NULL) {
     return iree_ok_status();
   }
-  if (vopd_packet->pair_index >= state->vopd_plan->pair_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU native encoding VOPD packet references "
-                            "pair %" PRIu32 " but plan has %" PRIhsz " pair(s)",
-                            vopd_packet->pair_index,
-                            state->vopd_plan->pair_count);
-  }
+  IREE_ASSERT(vopd_packet->pair_index < state->vopd_plan->pair_count);
   *out_handled = true;
   if (vopd_packet->role == LOOM_AMDGPU_VOPD_PACKET_ROLE_SECOND) {
     return iree_ok_status();
   }
-  if (vopd_packet->role != LOOM_AMDGPU_VOPD_PACKET_ROLE_FIRST) {
-    iree_string_view_t role =
-        loom_amdgpu_vopd_packet_role_name(vopd_packet->role);
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU native encoding VOPD packet has "
-                            "unsupported role '%.*s'",
-                            (int)role.size, role.data);
-  }
+  IREE_ASSERT(vopd_packet->role == LOOM_AMDGPU_VOPD_PACKET_ROLE_FIRST);
   const loom_amdgpu_vopd_pair_t* pair =
       &state->vopd_plan->pairs[vopd_packet->pair_index];
   loom_low_packet_view_t second_packet = {0};

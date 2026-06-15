@@ -712,11 +712,35 @@ static iree_status_t loom_amdgpu_vopd_verify_wait_state_plan(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_wait_state_plan_t* wait_states) {
-  if (wait_states != NULL && (wait_states->schedule != schedule ||
-                              wait_states->allocation != allocation)) {
+  if (wait_states == NULL) {
+    return iree_ok_status();
+  }
+  if (wait_states->schedule != schedule ||
+      wait_states->allocation != allocation) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU VOPD wait states must be derived from the "
                             "planned schedule and allocation");
+  }
+  if (wait_states->state_count != 0 && wait_states->states == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU VOPD wait-state records are incomplete");
+  }
+  for (iree_host_size_t i = 0; i < wait_states->state_count; ++i) {
+    const loom_amdgpu_wait_state_t* wait_state = &wait_states->states[i];
+    switch (wait_state->action) {
+      case LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP:
+      case LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU:
+        break;
+      case LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN:
+      default: {
+        iree_string_view_t action_name =
+            loom_amdgpu_wait_state_action_name(wait_state->action);
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "AMDGPU VOPD wait state %" PRIhsz
+                                " has unsupported action '%.*s'",
+                                i, (int)action_name.size, action_name.data);
+      }
+    }
   }
   return iree_ok_status();
 }
@@ -1548,6 +1572,93 @@ iree_status_t loom_amdgpu_vopd_plan_verify(
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU VOPD plan rejection records are incomplete");
+  }
+  if (plan->packet_count != 0 && plan->packets == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU VOPD plan packet records are incomplete");
+  }
+  for (iree_host_size_t packet_index = 0; packet_index < plan->packet_count;
+       ++packet_index) {
+    const loom_amdgpu_vopd_packet_t* packet = &plan->packets[packet_index];
+    switch (packet->role) {
+      case LOOM_AMDGPU_VOPD_PACKET_ROLE_NONE:
+        if (packet->pair_index != LOOM_AMDGPU_VOPD_PAIR_NONE) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "AMDGPU VOPD packet %" PRIhsz
+                                  " has no role but references pair %" PRIu32,
+                                  packet_index, packet->pair_index);
+        }
+        break;
+      case LOOM_AMDGPU_VOPD_PACKET_ROLE_FIRST:
+      case LOOM_AMDGPU_VOPD_PACKET_ROLE_SECOND:
+        if (packet->pair_index >= plan->pair_count) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "AMDGPU VOPD packet %" PRIhsz " references pair %" PRIu32
+              " but plan has %" PRIhsz " pair(s)",
+              packet_index, packet->pair_index, plan->pair_count);
+        }
+        break;
+      default: {
+        iree_string_view_t role =
+            loom_amdgpu_vopd_packet_role_name(packet->role);
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "AMDGPU VOPD packet %" PRIhsz
+                                " has unsupported role '%.*s'",
+                                packet_index, (int)role.size, role.data);
+      }
+    }
+  }
+  for (iree_host_size_t pair_index = 0; pair_index < plan->pair_count;
+       ++pair_index) {
+    const loom_amdgpu_vopd_pair_t* pair = &plan->pairs[pair_index];
+    if (pair->first_packet_index >= plan->packet_count ||
+        pair->second_packet_index >= plan->packet_count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU VOPD pair %" PRIhsz
+                              " references packets %" PRIu32 " and %" PRIu32
+                              " but plan has %" PRIhsz " packet(s)",
+                              pair_index, pair->first_packet_index,
+                              pair->second_packet_index, plan->packet_count);
+    }
+    if (pair->first_node_index >= schedule->node_count ||
+        pair->second_node_index >= schedule->node_count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU VOPD pair %" PRIhsz
+                              " references nodes %" PRIu32 " and %" PRIu32
+                              " but schedule has %" PRIhsz " node(s)",
+                              pair_index, pair->first_node_index,
+                              pair->second_node_index, schedule->node_count);
+    }
+    const loom_amdgpu_vopd_packet_t* first_packet =
+        &plan->packets[pair->first_packet_index];
+    const loom_amdgpu_vopd_packet_t* second_packet =
+        &plan->packets[pair->second_packet_index];
+    if (first_packet->role != LOOM_AMDGPU_VOPD_PACKET_ROLE_FIRST ||
+        first_packet->pair_index != pair_index ||
+        second_packet->role != LOOM_AMDGPU_VOPD_PACKET_ROLE_SECOND ||
+        second_packet->pair_index != pair_index) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU VOPD pair %" PRIhsz
+          " is not matched by first/second packet membership records",
+          pair_index);
+    }
+    if (loom_amdgpu_vopd_component_info_for_op(pair->op_x) == NULL ||
+        loom_amdgpu_vopd_component_info_for_op(pair->op_y) == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU VOPD pair %" PRIhsz
+                              " references unsupported component op(s)",
+                              pair_index);
+    }
+    const loom_amdgpu_vopd_pair_flags_t supported_flags =
+        LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL;
+    if (iree_any_bit_set(pair->flags, ~supported_flags)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU VOPD pair %" PRIhsz
+                              " has unsupported flags %" PRIu32,
+                              pair_index, pair->flags);
+    }
   }
   return iree_ok_status();
 }

@@ -192,6 +192,16 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "vopd_plan_test",
+    srcs = ["vopd_plan_test.cc"],
+    deps = [
+        ":vopd_plan",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "packet_plan",
     srcs = ["packet_plan.c"],
