@@ -25,6 +25,39 @@ endif()
 if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_library(
   NAME
+    device_spec
+  HDRS
+    "device_spec.h"
+  SRCS
+    "device_spec.c"
+  DEPS
+    ::api
+    iree::base
+    iree::hal
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN)
+iree_cc_library(
+  NAME
+    device_spec_builder
+  HDRS
+    "device_spec_builder.h"
+  SRCS
+    "device_spec_builder.c"
+  DEPS
+    ::device_spec
+    iree::base
+    iree::hal
+    iree::hal::utils::device_spec_builder
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN)
+iree_cc_library(
+  NAME
     headers
   HDRS
     "api.h"
@@ -43,6 +76,26 @@ iree_cc_library(
     iree::hal::drivers::vulkan::util::libvulkan
     iree::third_party::vulkan_headers
   PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_VULKAN)
+iree_cc_test(
+  NAME
+    device_spec_test
+  SRCS
+    "device_spec_test.cc"
+  DEPS
+    ::device_spec
+    ::device_spec_builder
+    iree::base
+    iree::hal
+    iree::hal::utils::device_spec_builder
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::third_party::vulkan_headers
+  LABELS
+    "iree-build-requirement=runtime.hal.vulkan"
 )
 endif()
 

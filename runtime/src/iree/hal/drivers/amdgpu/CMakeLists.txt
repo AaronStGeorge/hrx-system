@@ -12,6 +12,22 @@ iree_add_all_subdirs()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    device_spec_builder
+  HDRS
+    "device_spec_builder.h"
+  SRCS
+    "device_spec_builder.c"
+  DEPS
+    iree::base
+    iree::hal
+    iree::hal::utils::device_spec_builder
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     queue_affinity
   HDRS
     "queue_affinity.h"
@@ -356,6 +372,28 @@ iree_cc_library(
     iree::hal::memory::slab_provider
     iree::hal::memory::tracing
   PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    device_spec_test
+  SRCS
+    "device_spec_test.cc"
+  DEPS
+    ::device_spec_builder
+    iree::base
+    iree::hal
+    iree::hal::utils::device_spec_builder
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 endif()
 

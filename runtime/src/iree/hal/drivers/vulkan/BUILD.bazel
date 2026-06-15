@@ -24,6 +24,29 @@ iree_runtime_cc_library(
     ],
 )
 
+iree_runtime_cc_library(
+    name = "device_spec",
+    srcs = ["device_spec.c"],
+    hdrs = ["device_spec.h"],
+    deps = [
+        ":api",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "device_spec_builder",
+    srcs = ["device_spec_builder.c"],
+    hdrs = ["device_spec_builder.h"],
+    deps = [
+        ":device_spec",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/utils:device_spec_builder",
+    ],
+)
+
 # Provided for tests and tools that may reach in.
 # These headers are not part of the public API and should not be depended on.
 iree_runtime_cc_library(
@@ -44,6 +67,21 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/vulkan/util:libvulkan",
+        "//third_party:vulkan_headers",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "device_spec_test",
+    srcs = ["device_spec_test.cc"],
+    deps = [
+        ":device_spec",
+        ":device_spec_builder",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/utils:device_spec_builder",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
         "//third_party:vulkan_headers",
     ],
 )
