@@ -147,7 +147,7 @@ TEST_P(AsanExecutableTest, PublishesFeedbackConfigGlobal) {
   EXPECT_NE(config.flags & IREE_HAL_AMDGPU_FEEDBACK_CONFIG_FLAG_ENABLED, 0u);
   EXPECT_NE(config.channel_base, 0u);
   EXPECT_NE(config.notify_signal.handle, 0u);
-  EXPECT_NE(config.executable_id, 0u);
+  EXPECT_NE(config.source_context, 0u);
 
   Ref<iree_hal_buffer_t> output_buffer;
   IREE_ASSERT_OK(
@@ -190,7 +190,7 @@ TEST_P(AsanExecutableTest, PublishesFeedbackConfigGlobal) {
   EXPECT_EQ(output_data[1], config.flags);
   EXPECT_EQ(output_data[2], config.channel_base);
   EXPECT_EQ(output_data[3], config.notify_signal.handle);
-  EXPECT_EQ(output_data[4], config.executable_id);
+  EXPECT_EQ(output_data[4], config.source_context);
 }
 
 TEST_P(AsanExecutableTest, ReportsAsanPacketThroughFeedback) {

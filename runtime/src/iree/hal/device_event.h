@@ -26,6 +26,9 @@ typedef struct iree_hal_device_t iree_hal_device_t;
 // ABI version for |iree_hal_device_event_t|.
 #define IREE_HAL_DEVICE_EVENT_ABI_VERSION_0 0u
 
+// ABI version for |iree_hal_device_event_site_t|.
+#define IREE_HAL_DEVICE_EVENT_SITE_ABI_VERSION_0 0u
+
 // ABI version for |iree_hal_device_asan_report_t|.
 #define IREE_HAL_DEVICE_ASAN_REPORT_ABI_VERSION_0 0u
 
@@ -101,6 +104,59 @@ iree_hal_device_event_source_default(void) {
   return source;
 }
 
+// Bitfield specifying resolved event-site properties.
+typedef uint64_t iree_hal_device_event_site_flags_t;
+enum iree_hal_device_event_site_flag_bits_t {
+  IREE_HAL_DEVICE_EVENT_SITE_FLAG_NONE = 0u,
+};
+
+// Optional resolved source-site metadata for a device event.
+//
+// Site records provide a target-neutral carrier for compiler, runtime, or
+// executable metadata associated with an event payload. Events may still carry
+// family-specific site ids in their payload; this record is the resolved view
+// suitable for diagnostics.
+typedef struct iree_hal_device_event_site_t {
+  // Size of this record in bytes.
+  uint32_t record_length;
+  // ABI version of this site record.
+  uint32_t abi_version;
+  // Site-record flags.
+  iree_hal_device_event_site_flags_t flags;
+  // Producer-assigned site identifier.
+  uint64_t site_id;
+  // Borrowed source file path or name when available.
+  iree_string_view_t source_file;
+  // One-based start line when available, or 0.
+  uint32_t start_line;
+  // One-based start column when available, or 0.
+  uint32_t start_column;
+  // One-based end line when available, or 0.
+  uint32_t end_line;
+  // One-based end column when available, or 0.
+  uint32_t end_column;
+  // Borrowed function name when available.
+  iree_string_view_t function_name;
+  // Borrowed compiler operation name when available.
+  iree_string_view_t operation_name;
+  // Borrowed producer-specific site payload bytes when available.
+  iree_const_byte_span_t producer_payload;
+} iree_hal_device_event_site_t;
+
+// Returns default event site values.
+static inline iree_hal_device_event_site_t iree_hal_device_event_site_default(
+    void) {
+  iree_hal_device_event_site_t site;
+  memset(&site, 0, sizeof(site));
+  site.record_length = sizeof(site);
+  site.abi_version = IREE_HAL_DEVICE_EVENT_SITE_ABI_VERSION_0;
+  site.source_file = iree_string_view_empty();
+  site.function_name = iree_string_view_empty();
+  site.operation_name = iree_string_view_empty();
+  site.producer_payload = iree_const_byte_span_empty();
+  return site;
+}
+
 // HAL device event envelope passed to iree_hal_device_event_sink_t.
 //
 // Events and all referenced payload storage are borrowed and valid only for the
@@ -123,6 +179,8 @@ typedef struct iree_hal_device_event_t {
   uint64_t host_time_ns;
   // Source attribution for the event producer.
   iree_hal_device_event_source_t source;
+  // Optional resolved event-site metadata.
+  const iree_hal_device_event_site_t* site;
   // Event-family payload selected by |type|.
   iree_const_byte_span_t payload;
   // Optional backend-native payload for advanced tools.
@@ -136,6 +194,7 @@ static inline iree_hal_device_event_t iree_hal_device_event_default(void) {
   event.record_length = sizeof(event);
   event.abi_version = IREE_HAL_DEVICE_EVENT_ABI_VERSION_0;
   event.source = iree_hal_device_event_source_default();
+  event.site = NULL;
   event.payload = iree_const_byte_span_empty();
   event.implementation_payload = iree_const_byte_span_empty();
   return event;

@@ -33,7 +33,7 @@ iree_hal_amdgpu_asan_report_access(
   feedback_config_snapshot.reserved0 = feedback_config->reserved0;
   feedback_config_snapshot.channel_base = feedback_config->channel_base;
   feedback_config_snapshot.notify_signal = feedback_config->notify_signal;
-  feedback_config_snapshot.executable_id = feedback_config->executable_id;
+  feedback_config_snapshot.source_context = feedback_config->source_context;
   feedback_config_snapshot.reserved[0] = feedback_config->reserved[0];
   feedback_config_snapshot.reserved[1] = feedback_config->reserved[1];
   feedback_config_snapshot.reserved[2] = feedback_config->reserved[2];

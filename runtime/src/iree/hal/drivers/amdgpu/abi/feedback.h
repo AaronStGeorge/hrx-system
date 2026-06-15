@@ -85,17 +85,21 @@ typedef struct IREE_AMDGPU_ALIGNAS(8) iree_hal_amdgpu_feedback_config_t {
   uint64_t channel_base;
   // Host interrupt signal used by device producers after publishing packets.
   iree_hsa_signal_t notify_signal;
-  // Logical-device-local executable id assigned by the runtime.
-  uint64_t executable_id;
+  // Opaque host source-context value copied into feedback packets.
+  //
+  // Device producers must treat this as an uninterpreted value. Host feedback
+  // handling resolves it back to executable-owned source metadata while the
+  // submitting executable is still retained by the retiring work.
+  uint64_t source_context;
   // Reserved for future feedback configuration state. Must be zero.
   uint64_t reserved[3];
 } iree_hal_amdgpu_feedback_config_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_feedback_config_t) == 64,
                           "feedback config size is part of the device ABI");
 IREE_AMDGPU_STATIC_ASSERT(
-    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_feedback_config_t, executable_id) ==
+    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_feedback_config_t, source_context) ==
         32,
-    "feedback config executable id offset is part of the device ABI");
+    "feedback config source context offset is part of the device ABI");
 
 // Device-visible control block for one feedback ring.
 typedef struct IREE_AMDGPU_ALIGNAS(64)
@@ -145,17 +149,17 @@ typedef struct IREE_AMDGPU_ALIGNAS(64) iree_hal_amdgpu_feedback_packet_t {
   uint32_t source_workgroup_id_x;
   // X dimension workitem id captured at reservation time.
   uint32_t source_workitem_id_x;
-  // Logical-device-local executable id copied from the feedback config.
-  uint64_t source_executable_id;
+  // Opaque host source-context value copied from the feedback config.
+  uint64_t source_context;
   // Reserved for future packet fields. Must be zero.
   uint64_t reserved[2];
 } iree_hal_amdgpu_feedback_packet_t;
 IREE_AMDGPU_STATIC_ASSERT(sizeof(iree_hal_amdgpu_feedback_packet_t) == 64,
                           "feedback packet header size is part of the ABI");
 IREE_AMDGPU_STATIC_ASSERT(
-    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_feedback_packet_t,
-                         source_executable_id) == 40,
-    "feedback packet executable id offset is part of the device ABI");
+    IREE_AMDGPU_OFFSETOF(iree_hal_amdgpu_feedback_packet_t, source_context) ==
+        40,
+    "feedback packet source context offset is part of the device ABI");
 
 // Rounds |value| up to the required feedback packet alignment.
 static inline size_t iree_hal_amdgpu_feedback_align_packet_length(

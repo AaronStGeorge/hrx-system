@@ -101,6 +101,35 @@ static void iree_hal_device_event_sink_stderr_print_source(
           source->executable_id, source->export_ordinal);
 }
 
+static void iree_hal_device_event_sink_stderr_print_site(
+    const iree_hal_device_event_site_t* site) {
+  if (!site) return;
+  fprintf(stderr, " site=0x%016" PRIx64, site->site_id);
+  if (!iree_string_view_is_empty(site->source_file)) {
+    const char* source_file_data =
+        site->source_file.data ? site->source_file.data : "";
+    fprintf(stderr, " source=\"%.*s:%u:%u-%u:%u\"", (int)site->source_file.size,
+            source_file_data, site->start_line, site->start_column,
+            site->end_line, site->end_column);
+  }
+  if (!iree_string_view_is_empty(site->function_name)) {
+    const char* function_name_data =
+        site->function_name.data ? site->function_name.data : "";
+    fprintf(stderr, " function=\"%.*s\"", (int)site->function_name.size,
+            function_name_data);
+  }
+  if (!iree_string_view_is_empty(site->operation_name)) {
+    const char* operation_name_data =
+        site->operation_name.data ? site->operation_name.data : "";
+    fprintf(stderr, " operation=\"%.*s\"", (int)site->operation_name.size,
+            operation_name_data);
+  }
+  if (!iree_const_byte_span_is_empty(site->producer_payload)) {
+    fprintf(stderr, " site_payload_bytes=%" PRIhsz,
+            site->producer_payload.data_length);
+  }
+}
+
 static void iree_hal_device_event_sink_stderr_print_asan(
     const iree_hal_device_asan_report_t* report) {
   fprintf(stderr,
@@ -163,6 +192,7 @@ static void iree_hal_device_event_sink_stderr_callback(
       iree_hal_device_event_type_string(event->type),
       iree_hal_device_event_severity_string(event->severity), event->sequence);
   iree_hal_device_event_sink_stderr_print_source(&event->source);
+  iree_hal_device_event_sink_stderr_print_site(event->site);
 
   switch (event->type) {
     case IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT:

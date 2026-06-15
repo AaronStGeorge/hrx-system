@@ -148,6 +148,22 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
+    source_context
+  HDRS
+    "source_context.h"
+  SRCS
+    "source_context.c"
+  DEPS
+    iree::base
+    iree::hal
+    iree::hal::drivers::amdgpu::util::loaded_code_object
+  PUBLIC
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_library(
+  NAME
     amdgpu
   HDRS
     "api.h"
@@ -258,6 +274,7 @@ iree_cc_library(
     ::kernarg_layout
     ::profile_events
     ::queue_affinity
+    ::source_context
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -674,6 +691,27 @@ iree_cc_test(
     iree::base::core_headers
     iree::hal
     iree::hal::drivers::amdgpu::util::hsaco_metadata
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
+)
+endif()
+
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    source_context_test
+  SRCS
+    "source_context_test.cc"
+  DEPS
+    ::source_context
+    iree::base
+    iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

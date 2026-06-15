@@ -68,6 +68,10 @@ uint32_t LoadLeU32(const uint8_t* data, iree_host_size_t offset) {
          ((uint32_t)data[offset + 3] << 24);
 }
 
+uint16_t LoadLeU16(const uint8_t* data, iree_host_size_t offset) {
+  return ((uint16_t)data[offset]) | ((uint16_t)data[offset + 1] << 8);
+}
+
 uint64_t LoadLeU64(const uint8_t* data, iree_host_size_t offset) {
   return ((uint64_t)LoadLeU32(data, offset)) |
          ((uint64_t)LoadLeU32(data, offset + 4) << 32);
@@ -289,6 +293,12 @@ class AmdgpuAsanDeviceEventRecorder {
     std::lock_guard<std::mutex> lock(mutex_);
     asan_report_count_ = 0;
     last_source_ = iree_hal_device_event_source_default();
+    last_site_available_ = false;
+    last_site_ = iree_hal_device_event_site_default();
+    last_site_source_file_.clear();
+    last_site_function_name_.clear();
+    last_site_operation_name_.clear();
+    last_site_producer_payload_.clear();
     last_report_ = {};
   }
 
@@ -312,7 +322,64 @@ class AmdgpuAsanDeviceEventRecorder {
     return last_report_;
   }
 
+  bool last_site_available() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_site_available_;
+  }
+
+  iree_hal_device_event_site_t last_site() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_site_;
+  }
+
  private:
+  static iree_string_view_t StringViewFromStorage(const std::string& storage) {
+    return iree_make_string_view(storage.data(), storage.size());
+  }
+
+  static void CaptureStringView(iree_string_view_t view,
+                                std::string* out_storage,
+                                iree_string_view_t* out_view) {
+    if (!iree_string_view_is_empty(view)) {
+      out_storage->assign(view.data, view.size);
+      *out_view = StringViewFromStorage(*out_storage);
+    } else {
+      out_storage->clear();
+      *out_view = iree_string_view_empty();
+    }
+  }
+
+  static void CaptureByteSpan(iree_const_byte_span_t span,
+                              std::vector<uint8_t>* out_storage,
+                              iree_const_byte_span_t* out_span) {
+    if (!iree_const_byte_span_is_empty(span)) {
+      out_storage->assign(span.data, span.data + span.data_length);
+      *out_span =
+          iree_make_const_byte_span(out_storage->data(), out_storage->size());
+    } else {
+      out_storage->clear();
+      *out_span = iree_const_byte_span_empty();
+    }
+  }
+
+  static void CaptureSite(AmdgpuAsanDeviceEventRecorder* recorder,
+                          const iree_hal_device_event_site_t* site) {
+    recorder->last_site_available_ = site != nullptr;
+    recorder->last_site_ = iree_hal_device_event_site_default();
+    if (!site) return;
+    recorder->last_site_ = *site;
+    CaptureStringView(site->source_file, &recorder->last_site_source_file_,
+                      &recorder->last_site_.source_file);
+    CaptureStringView(site->function_name, &recorder->last_site_function_name_,
+                      &recorder->last_site_.function_name);
+    CaptureStringView(site->operation_name,
+                      &recorder->last_site_operation_name_,
+                      &recorder->last_site_.operation_name);
+    CaptureByteSpan(site->producer_payload,
+                    &recorder->last_site_producer_payload_,
+                    &recorder->last_site_.producer_payload);
+  }
+
   static void Capture(void* user_data, const iree_hal_device_event_t* event) {
     auto* recorder = static_cast<AmdgpuAsanDeviceEventRecorder*>(user_data);
     if (event->type != IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT ||
@@ -322,17 +389,36 @@ class AmdgpuAsanDeviceEventRecorder {
     }
     std::lock_guard<std::mutex> lock(recorder->mutex_);
     recorder->last_source_ = event->source;
+    CaptureSite(recorder, event->site);
     std::memcpy(&recorder->last_report_, event->payload.data,
                 sizeof(recorder->last_report_));
     ++recorder->asan_report_count_;
     recorder->condition_.notify_all();
   }
 
+  // Protects captured report state.
   mutable std::mutex mutex_;
+  // Notifies tests waiting for captured ASAN reports.
   std::condition_variable condition_;
+  // Count of ASAN reports captured since the last reset.
   iree_host_size_t asan_report_count_ = 0;
+  // Source attribution from the last captured ASAN report.
   iree_hal_device_event_source_t last_source_ =
       iree_hal_device_event_source_default();
+  // True when the last captured ASAN report carried resolved site metadata.
+  bool last_site_available_ = false;
+  // Resolved site metadata from the last captured ASAN report.
+  iree_hal_device_event_site_t last_site_ =
+      iree_hal_device_event_site_default();
+  // Owned source file storage referenced by |last_site_|.
+  std::string last_site_source_file_;
+  // Owned function name storage referenced by |last_site_|.
+  std::string last_site_function_name_;
+  // Owned operation name storage referenced by |last_site_|.
+  std::string last_site_operation_name_;
+  // Owned producer payload storage referenced by |last_site_|.
+  std::vector<uint8_t> last_site_producer_payload_;
+  // Payload from the last captured ASAN report.
   iree_hal_device_asan_report_t last_report_ = {};
 };
 
@@ -522,12 +608,23 @@ iree_status_t BuildU32Attr(loom_builder_t* builder, iree_string_view_t name,
 }
 
 iree_status_t AppendSingleSanitizerSiteTable(loom_module_t* module) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_register_source(
+      module, IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom"), &source_id));
+  loom_location_entry_t source_entry =
+      loom_location_file_range(source_id, /*start_line=*/13,
+                               /*start_col=*/3, /*end_line=*/13,
+                               /*end_col=*/11);
+  loom_location_id_t source_location = LOOM_LOCATION_UNKNOWN;
+  IREE_RETURN_IF_ERROR(
+      loom_module_add_location(module, source_entry, &source_location));
+
   loom_sanitizer_site_row_t row = {};
   row.site_id = kReportSiteId;
   row.op_kind = LOOM_OP_SANITIZER_ASSERT_ACCESS;
-  row.location = LOOM_LOCATION_UNKNOWN;
+  row.location = source_location;
   row.payload_location = LOOM_LOCATION_UNKNOWN;
-  row.source_location = LOOM_LOCATION_UNKNOWN;
+  row.source_location = source_location;
 
   loom_sanitizer_site_collection_t collection = {};
   collection.rows = &row;
@@ -586,7 +683,14 @@ void ExpectSingleSanitizerSiteTable(loom_module_t* module) {
   EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_OP_KIND_OFFSET),
             LOOM_OP_SANITIZER_ASSERT_ACCESS);
   EXPECT_EQ(LoadLeU32(record, LOOM_SANITIZER_SITE_TABLE_RECORD_FLAGS_OFFSET),
-            0u);
+            LOOM_SANITIZER_SITE_TABLE_RECORD_HAS_SOURCE_LOCATION);
+  EXPECT_NE(
+      LoadLeU32(record,
+                LOOM_SANITIZER_SITE_TABLE_RECORD_SOURCE_NAME_LENGTH_OFFSET),
+      0u);
+  EXPECT_EQ(
+      LoadLeU16(record, LOOM_SANITIZER_SITE_TABLE_RECORD_SOURCE_KIND_OFFSET),
+      LOOM_SANITIZER_SITE_TABLE_SOURCE_KIND_FILE);
 }
 
 iree_status_t BuildConstU32(loom_builder_t* builder,
@@ -819,7 +923,7 @@ iree_status_t BuildAsanReportPublishAndReturn(
       /*.source_dispatch_ptr=*/source->dispatch_ptr,
       /*.source_workgroup_id_x=*/source->workgroup_id_x,
       /*.source_workitem_id_x=*/source->workitem_id_x,
-      /*.source_executable_id=*/config_values.executable_id,
+      /*.source_context=*/config_values.source_context,
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_packet_header(
       builder, descriptor_set, &reservation.packet_address, &header, location));
@@ -1260,7 +1364,7 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
       0u);
   EXPECT_NE(feedback_configs[0].channel_base, 0u);
   EXPECT_NE(feedback_configs[0].notify_signal.handle, 0u);
-  EXPECT_NE(feedback_configs[0].executable_id, 0u);
+  EXPECT_NE(feedback_configs[0].source_context, 0u);
 }
 
 TEST_F(AmdgpuHalSanitizerFeedbackTest, ProbesAsanShadowLoadThroughHalShadow) {
@@ -1491,6 +1595,16 @@ TEST_F(AmdgpuHalSanitizerFeedbackTest,
   EXPECT_TRUE(iree_string_view_equal(source.driver_id, IREE_SV("amdgpu")));
   EXPECT_NE(source.executable_id, 0u);
   EXPECT_NE(source.physical_device_ordinal, UINT32_MAX);
+
+  ASSERT_TRUE(recorder.last_site_available());
+  iree_hal_device_event_site_t site = recorder.last_site();
+  EXPECT_EQ(site.site_id, (uint64_t)kReportSiteId);
+  EXPECT_TRUE(iree_string_view_equal(
+      site.source_file, IREE_SV("amdgpu_hal_sanitizer_feedback_test.loom")));
+  EXPECT_EQ(site.start_line, 13u);
+  EXPECT_EQ(site.start_column, 3u);
+  EXPECT_EQ(site.end_line, 13u);
+  EXPECT_EQ(site.end_column, 11u);
   IREE_EXPECT_OK(iree_hal_device_queue_flush(runtime.runtime()->device,
                                              IREE_HAL_QUEUE_AFFINITY_ANY));
 }

@@ -353,7 +353,7 @@ TEST_F(FeedbackChannelLiveTest, DeviceProducerSignalsHost) {
                                                   /*num_agents=*/1, &gpu_agent,
                                                   /*flags=*/nullptr, memory));
   memory->config = channel.config;
-  memory->config.executable_id = kExecutableId;
+  memory->config.source_context = kExecutableId;
   memory->kernargs.config = &memory->config;
   memory->kernargs.magic = kMagic;
 
@@ -415,7 +415,7 @@ TEST_F(FeedbackChannelLiveTest, DeviceProducerSignalsHost) {
     EXPECT_EQ(packet.source_workgroup_id_x, 0u);
     EXPECT_LT(packet.source_workitem_id_x, kWorkgroupSize[0]);
     EXPECT_NE(packet.source_dispatch_ptr, 0u);
-    EXPECT_EQ(packet.source_executable_id, kExecutableId);
+    EXPECT_EQ(packet.source_context, kExecutableId);
     EXPECT_EQ(payload.magic, kMagic);
     EXPECT_EQ(payload.workgroup_id_x, packet.source_workgroup_id_x);
     EXPECT_EQ(payload.workitem_id_x, packet.source_workitem_id_x);

@@ -374,7 +374,7 @@ TEST_F(AmdgpuSanitizerReportTest, EmitsAccessReportPayloadStores) {
       /*.source_dispatch_ptr=*/config_values.notify_signal,
       /*.source_workgroup_id_x=*/config_values.flags,
       /*.source_workitem_id_x=*/channel_values.flags,
-      /*.source_executable_id=*/config_values.executable_id,
+      /*.source_context=*/config_values.source_context,
   };
   IREE_ASSERT_OK(loom_amdgpu_build_feedback_packet_header(
       &builder_, descriptor_set_, &packet_address, &header,

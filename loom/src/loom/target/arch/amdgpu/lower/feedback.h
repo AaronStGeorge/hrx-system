@@ -38,8 +38,8 @@ typedef struct loom_amdgpu_feedback_config_values_t {
   loom_value_id_t channel_base;
   // Runtime-published host notification signal loaded from the config.
   loom_value_id_t notify_signal;
-  // Runtime-assigned executable id loaded from the config.
-  loom_value_id_t executable_id;
+  // Runtime-published opaque host source context loaded from the config.
+  loom_value_id_t source_context;
 } loom_amdgpu_feedback_config_values_t;
 
 typedef struct loom_amdgpu_feedback_channel_header_values_t {
@@ -80,8 +80,8 @@ typedef struct loom_amdgpu_feedback_packet_header_t {
   loom_value_id_t source_workgroup_id_x;
   // X dimension workitem id captured by the producer.
   loom_value_id_t source_workitem_id_x;
-  // Runtime-assigned executable id copied from the feedback config.
-  loom_value_id_t source_executable_id;
+  // Runtime-published opaque host source context copied from the config.
+  loom_value_id_t source_context;
 } loom_amdgpu_feedback_packet_header_t;
 
 typedef struct loom_amdgpu_feedback_reservation_attempt_t {

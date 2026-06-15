@@ -254,7 +254,7 @@ loom_amdgpu_sanitizer_build_access_report_trap_from_current_block(
       .source_dispatch_ptr = source->dispatch_ptr,
       .source_workgroup_id_x = source->workgroup_id_x,
       .source_workitem_id_x = source->workitem_id_x,
-      .source_executable_id = config_values.executable_id,
+      .source_context = config_values.source_context,
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_build_feedback_packet_header(
       builder, descriptor_set, &reservation.packet_address, &header, location));

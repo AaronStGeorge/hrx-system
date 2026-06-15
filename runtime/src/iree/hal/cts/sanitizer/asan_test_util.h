@@ -39,6 +39,12 @@ class AsanDeviceEventRecorder {
     std::lock_guard<std::mutex> lock(mutex_);
     asan_report_count_ = 0;
     last_source_ = iree_hal_device_event_source_default();
+    last_site_available_ = false;
+    last_site_ = iree_hal_device_event_site_default();
+    last_site_source_file_.clear();
+    last_site_function_name_.clear();
+    last_site_operation_name_.clear();
+    last_site_producer_payload_.clear();
     std::memset(&last_report_, 0, sizeof(last_report_));
   }
 
@@ -62,7 +68,64 @@ class AsanDeviceEventRecorder {
     return last_report_;
   }
 
+  bool last_site_available() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_site_available_;
+  }
+
+  iree_hal_device_event_site_t last_site() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_site_;
+  }
+
  private:
+  static iree_string_view_t StringViewFromStorage(const std::string& storage) {
+    return iree_make_string_view(storage.data(), storage.size());
+  }
+
+  static void CaptureStringView(iree_string_view_t view,
+                                std::string* out_storage,
+                                iree_string_view_t* out_view) {
+    if (!iree_string_view_is_empty(view)) {
+      out_storage->assign(view.data, view.size);
+      *out_view = StringViewFromStorage(*out_storage);
+    } else {
+      out_storage->clear();
+      *out_view = iree_string_view_empty();
+    }
+  }
+
+  static void CaptureByteSpan(iree_const_byte_span_t span,
+                              std::vector<uint8_t>* out_storage,
+                              iree_const_byte_span_t* out_span) {
+    if (!iree_const_byte_span_is_empty(span)) {
+      out_storage->assign(span.data, span.data + span.data_length);
+      *out_span =
+          iree_make_const_byte_span(out_storage->data(), out_storage->size());
+    } else {
+      out_storage->clear();
+      *out_span = iree_const_byte_span_empty();
+    }
+  }
+
+  static void CaptureSite(AsanDeviceEventRecorder* recorder,
+                          const iree_hal_device_event_site_t* site) {
+    recorder->last_site_available_ = site != nullptr;
+    recorder->last_site_ = iree_hal_device_event_site_default();
+    if (!site) return;
+    recorder->last_site_ = *site;
+    CaptureStringView(site->source_file, &recorder->last_site_source_file_,
+                      &recorder->last_site_.source_file);
+    CaptureStringView(site->function_name, &recorder->last_site_function_name_,
+                      &recorder->last_site_.function_name);
+    CaptureStringView(site->operation_name,
+                      &recorder->last_site_operation_name_,
+                      &recorder->last_site_.operation_name);
+    CaptureByteSpan(site->producer_payload,
+                    &recorder->last_site_producer_payload_,
+                    &recorder->last_site_.producer_payload);
+  }
+
   static void Capture(void* user_data, const iree_hal_device_event_t* event) {
     auto* recorder = static_cast<AsanDeviceEventRecorder*>(user_data);
     if (event->type != IREE_HAL_DEVICE_EVENT_TYPE_ASAN_REPORT ||
@@ -72,6 +135,7 @@ class AsanDeviceEventRecorder {
     }
     std::lock_guard<std::mutex> lock(recorder->mutex_);
     recorder->last_source_ = event->source;
+    CaptureSite(recorder, event->site);
     std::memcpy(&recorder->last_report_, event->payload.data,
                 sizeof(recorder->last_report_));
     ++recorder->asan_report_count_;
@@ -87,6 +151,19 @@ class AsanDeviceEventRecorder {
   // Source attribution from the last captured ASAN report.
   iree_hal_device_event_source_t last_source_ =
       iree_hal_device_event_source_default();
+  // True when the last captured ASAN report carried resolved site metadata.
+  bool last_site_available_ = false;
+  // Resolved site metadata from the last captured ASAN report.
+  iree_hal_device_event_site_t last_site_ =
+      iree_hal_device_event_site_default();
+  // Owned source file storage referenced by |last_site_|.
+  std::string last_site_source_file_;
+  // Owned function name storage referenced by |last_site_|.
+  std::string last_site_function_name_;
+  // Owned operation name storage referenced by |last_site_|.
+  std::string last_site_operation_name_;
+  // Owned producer payload storage referenced by |last_site_|.
+  std::vector<uint8_t> last_site_producer_payload_;
   // Payload from the last captured ASAN report.
   iree_hal_device_asan_report_t last_report_ = {0};
 };

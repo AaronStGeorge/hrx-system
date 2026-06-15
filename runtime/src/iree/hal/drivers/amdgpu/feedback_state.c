@@ -13,6 +13,7 @@
 #include "iree/hal/drivers/amdgpu/abi/asan.h"
 #include "iree/hal/drivers/amdgpu/api.h"
 #include "iree/hal/drivers/amdgpu/physical_device.h"
+#include "iree/hal/drivers/amdgpu/source_context.h"
 #include "iree/hal/drivers/amdgpu/system.h"
 
 static const char* iree_hal_amdgpu_feedback_state_asan_access_kind_string(
@@ -53,11 +54,21 @@ static uint32_t iree_hal_amdgpu_feedback_state_physical_device_ordinal(
              : UINT32_MAX;
 }
 
+static const iree_hal_amdgpu_source_context_t*
+iree_hal_amdgpu_feedback_state_source_context(
+    const iree_hal_amdgpu_feedback_packet_t* packet) {
+  return (const iree_hal_amdgpu_source_context_t*)(uintptr_t)
+      packet->source_context;
+}
+
 static void iree_hal_amdgpu_feedback_state_publish_asan_event(
     iree_hal_amdgpu_feedback_state_t* state,
     iree_host_size_t physical_device_ordinal,
     const iree_hal_amdgpu_feedback_packet_t* packet,
     const iree_hal_amdgpu_asan_report_t* report) {
+  const iree_hal_amdgpu_source_context_t* source_context =
+      iree_hal_amdgpu_feedback_state_source_context(packet);
+
   iree_hal_device_asan_report_t asan_event;
   memset(&asan_event, 0, sizeof(asan_event));
   asan_event.record_length = sizeof(asan_event);
@@ -81,10 +92,16 @@ static void iree_hal_amdgpu_feedback_state_publish_asan_event(
   event.source.device = state->device;
   event.source.device_id = state->device_id;
   event.source.driver_id = IREE_SV("amdgpu");
-  event.source.executable_id = packet->source_executable_id;
+  event.source.executable_id =
+      iree_hal_amdgpu_source_context_executable_id(source_context);
   event.source.physical_device_ordinal =
       iree_hal_amdgpu_feedback_state_physical_device_ordinal(
           physical_device_ordinal);
+  iree_hal_device_event_site_t site;
+  if (iree_hal_amdgpu_source_context_try_resolve_sanitizer_site(
+          source_context, report->site_id, &site)) {
+    event.site = &site;
+  }
   event.payload = iree_make_const_byte_span(&asan_event, sizeof(asan_event));
   event.implementation_payload =
       iree_make_const_byte_span(packet, packet->record_length);
@@ -138,6 +155,8 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
     return iree_ok_status();
   }
 
+  const uint64_t executable_id = iree_hal_amdgpu_source_context_executable_id(
+      iree_hal_amdgpu_feedback_state_source_context(packet));
   return iree_make_status(
       IREE_STATUS_ABORTED,
       "AMDGPU ASAN %s access violation on physical device %" PRIhsz
@@ -151,7 +170,7 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_asan_packet(
       physical_device_ordinal, report->site_id, report->fault_address,
       report->access_size, report->shadow_address, report->shadow_value,
       packet->source_workgroup_id_x, packet->source_workitem_id_x,
-      packet->source_executable_id, packet->source_dispatch_ptr);
+      executable_id, packet->source_dispatch_ptr);
 }
 
 static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
@@ -162,7 +181,10 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
     case IREE_HAL_AMDGPU_FEEDBACK_PACKET_KIND_ASAN:
       return iree_hal_amdgpu_feedback_state_handle_asan_packet(
           state, physical_device_ordinal, packet);
-    default:
+    default: {
+      const uint64_t executable_id =
+          iree_hal_amdgpu_source_context_executable_id(
+              iree_hal_amdgpu_feedback_state_source_context(packet));
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
           "unhandled AMDGPU feedback packet kind %u on physical device %" PRIhsz
@@ -170,7 +192,8 @@ static iree_status_t iree_hal_amdgpu_feedback_state_handle_packet(
           " dispatch=0x%016" PRIx64,
           (uint32_t)packet->kind, physical_device_ordinal,
           packet->source_workgroup_id_x, packet->source_workitem_id_x,
-          packet->source_executable_id, packet->source_dispatch_ptr);
+          executable_id, packet->source_dispatch_ptr);
+    }
   }
 }
 

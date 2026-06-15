@@ -26,7 +26,7 @@ loom_amdgpu_feedback_config_values_empty(void) {
       .flags = LOOM_VALUE_ID_INVALID,
       .channel_base = LOOM_VALUE_ID_INVALID,
       .notify_signal = LOOM_VALUE_ID_INVALID,
-      .executable_id = LOOM_VALUE_ID_INVALID,
+      .source_context = LOOM_VALUE_ID_INVALID,
   };
 }
 
@@ -1085,9 +1085,9 @@ iree_status_t loom_amdgpu_build_feedback_config_values(
       &values.notify_signal));
   IREE_RETURN_IF_ERROR(loom_amdgpu_system_memory_build_uniform_load_b64(
       builder, descriptor_set, values.address,
-      LOOM_AMDGPU_FEEDBACK_CONFIG_EXECUTABLE_ID_OFFSET,
+      LOOM_AMDGPU_FEEDBACK_CONFIG_SOURCE_CONTEXT_OFFSET,
       LOOM_AMDGPU_SYSTEM_MEMORY_LOAD_FLAG_NONE, location,
-      &values.executable_id));
+      &values.source_context));
 
   *out_values = values;
   return iree_ok_status();
@@ -1593,8 +1593,8 @@ iree_status_t loom_amdgpu_build_feedback_packet_header(
       header->source_workitem_id_x, location));
   IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b64(
       builder, descriptor_set, packet_address,
-      LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_EXECUTABLE_ID_OFFSET,
-      header->source_executable_id, location));
+      LOOM_AMDGPU_FEEDBACK_PACKET_SOURCE_CONTEXT_OFFSET, header->source_context,
+      location));
   IREE_RETURN_IF_ERROR(loom_amdgpu_feedback_build_global_store_b64(
       builder, descriptor_set, packet_address,
       LOOM_AMDGPU_FEEDBACK_PACKET_RESERVED_ARRAY_0_OFFSET, zero64, location));

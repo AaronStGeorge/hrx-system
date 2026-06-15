@@ -122,7 +122,7 @@ iree_status_t iree_hal_amdgpu_feedback_channel_initialize(
         .reserved0 = 0,
         .channel_base = (uint64_t)(uintptr_t)out_channel->control,
         .notify_signal = out_channel->notify_signal,
-        .executable_id = 0,
+        .source_context = 0,
         .reserved = {0},
     };
   } else {

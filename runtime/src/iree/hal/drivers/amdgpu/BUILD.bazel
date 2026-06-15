@@ -118,6 +118,17 @@ iree_runtime_cc_library(
 )
 
 iree_runtime_cc_library(
+    name = "source_context",
+    srcs = ["source_context.c"],
+    hdrs = ["source_context.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:loaded_code_object",
+    ],
+)
+
+iree_runtime_cc_library(
     name = "amdgpu",
     srcs = [
         "allocator.c",
@@ -230,6 +241,7 @@ iree_runtime_cc_library(
         ":kernarg_layout",
         ":profile_events",
         ":queue_affinity",
+        ":source_context",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
@@ -534,6 +546,18 @@ iree_runtime_cc_test(
         "//runtime/src/iree/base:core_headers",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amdgpu/util:hsaco_metadata",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "source_context_test",
+    srcs = ["source_context_test.cc"],
+    deps = [
+        ":source_context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
