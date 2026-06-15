@@ -243,8 +243,8 @@ typedef struct iree_hal_memory_type_spec_t {
 
 // Structured external buffer handle support.
 typedef struct iree_hal_external_buffer_handle_spec_t {
-  // External handle type class.
-  iree_hal_topology_handle_type_t handle_type;
+  // External handle type mask.
+  iree_hal_topology_handle_type_t handle_type_mask;
   // Supported import/export directions.
   iree_hal_external_handle_direction_flags_t direction_flags;
   // Buffer usage bits accepted with this handle type.
@@ -256,6 +256,25 @@ typedef struct iree_hal_external_buffer_handle_spec_t {
   // Additional external-handle capabilities.
   iree_hal_external_handle_capability_flags_t flags;
 } iree_hal_external_buffer_handle_spec_t;
+
+// External buffer handle selection request.
+//
+// Zero-valued fields are wildcards. Memory and handle type masks match when
+// they overlap; other bitfields must have all requested bits present.
+typedef struct iree_hal_external_buffer_handle_selection_t {
+  // External handle type mask that must overlap.
+  iree_hal_topology_handle_type_t handle_type_mask;
+  // Import/export direction bits that must be supported.
+  iree_hal_external_handle_direction_flags_t direction_flags;
+  // Buffer usage bits that must be supported.
+  iree_hal_buffer_usage_t buffer_usage;
+  // Memory access bits that must be supported.
+  iree_hal_memory_access_t memory_access;
+  // Compatible memory type index mask that must overlap.
+  uint32_t compatible_memory_type_mask;
+  // External-handle capability bits that must be supported.
+  iree_hal_external_handle_capability_flags_t capability_flags;
+} iree_hal_external_buffer_handle_selection_t;
 
 // Stable memory capability flags for the device.
 typedef uint32_t iree_hal_device_memory_spec_flags_t;
@@ -338,6 +357,25 @@ typedef struct iree_hal_virtual_memory_class_spec_t {
   iree_hal_virtual_memory_class_spec_flags_t flags;
 } iree_hal_virtual_memory_class_spec_t;
 
+// Virtual memory class selection request.
+//
+// Zero-valued fields are wildcards. Memory type masks match when they overlap;
+// other bitfields must have all requested bits present.
+typedef struct iree_hal_virtual_memory_class_selection_t {
+  // Compatible memory type index mask that must overlap.
+  uint32_t compatible_memory_type_mask;
+  // Buffer usage bits that must be supported.
+  iree_hal_buffer_usage_t buffer_usage;
+  // Memory access bits that must be supported.
+  iree_hal_memory_access_t memory_access;
+  // Virtual memory operation bits that must be supported.
+  iree_hal_virtual_memory_operation_flags_t operation_flags;
+  // Virtual memory protection bits that must be supported.
+  iree_hal_memory_protection_t protection_flags;
+  // Virtual memory advice bits that must be supported.
+  iree_hal_memory_advice_t advice_flags;
+} iree_hal_virtual_memory_class_selection_t;
+
 // Stable virtual memory capability flags for the device.
 typedef uint32_t iree_hal_device_virtual_memory_spec_flags_t;
 typedef enum iree_hal_device_virtual_memory_spec_flag_bits_e {
@@ -414,6 +452,21 @@ typedef struct iree_hal_external_timepoint_handle_spec_t {
   // Additional external-handle capabilities.
   iree_hal_external_handle_capability_flags_t flags;
 } iree_hal_external_timepoint_handle_spec_t;
+
+// External timepoint handle selection request.
+//
+// Zero-valued fields are wildcards. Bitfields must have all requested bits
+// present.
+typedef struct iree_hal_external_timepoint_handle_selection_t {
+  // External timepoint handle type that must match.
+  iree_hal_external_timepoint_type_t handle_type;
+  // Import/export direction bits that must be supported.
+  iree_hal_external_handle_direction_flags_t direction_flags;
+  // Semaphore compatibility bits that must be supported.
+  iree_hal_semaphore_compatibility_t compatibility;
+  // External-handle capability bits that must be supported.
+  iree_hal_external_handle_capability_flags_t capability_flags;
+} iree_hal_external_timepoint_handle_selection_t;
 
 // Stable queue capability flags for the device.
 typedef uint32_t iree_hal_device_queue_spec_flags_t;
@@ -775,13 +828,31 @@ iree_hal_device_spec_topology(const iree_hal_device_spec_t* spec);
 IREE_API_EXPORT const iree_hal_device_memory_spec_t*
 iree_hal_device_spec_memory(const iree_hal_device_spec_t* spec);
 
+// Finds the external buffer handle record matching |selection| or NULL.
+IREE_API_EXPORT const iree_hal_external_buffer_handle_spec_t*
+iree_hal_device_spec_find_external_buffer_handle(
+    const iree_hal_device_spec_t* spec,
+    const iree_hal_external_buffer_handle_selection_t* selection);
+
 // Returns the virtual memory capability facet.
 IREE_API_EXPORT const iree_hal_device_virtual_memory_spec_t*
 iree_hal_device_spec_virtual_memory(const iree_hal_device_spec_t* spec);
 
+// Finds the virtual memory class record matching |selection| or NULL.
+IREE_API_EXPORT const iree_hal_virtual_memory_class_spec_t*
+iree_hal_device_spec_find_virtual_memory_class(
+    const iree_hal_device_spec_t* spec,
+    const iree_hal_virtual_memory_class_selection_t* selection);
+
 // Returns the queue capability facet.
 IREE_API_EXPORT const iree_hal_device_queue_spec_t* iree_hal_device_spec_queues(
     const iree_hal_device_spec_t* spec);
+
+// Finds the external timepoint handle record matching |selection| or NULL.
+IREE_API_EXPORT const iree_hal_external_timepoint_handle_spec_t*
+iree_hal_device_spec_find_external_timepoint_handle(
+    const iree_hal_device_spec_t* spec,
+    const iree_hal_external_timepoint_handle_selection_t* selection);
 
 // Returns the dispatch capability facet.
 IREE_API_EXPORT const iree_hal_device_dispatch_spec_t*

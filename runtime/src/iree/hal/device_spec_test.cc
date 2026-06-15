@@ -14,8 +14,6 @@
 namespace iree::hal {
 namespace {
 
-using ::iree::testing::status::IsOk;
-
 static void ExpectStringViewEq(iree_string_view_t actual,
                                const char* expected) {
   EXPECT_TRUE(iree_string_view_equal(actual, iree_make_cstring_view(expected)));
@@ -304,6 +302,229 @@ TEST(DeviceSpecTest, CreateSerializeParseAndSelect) {
 
   iree_hal_device_spec_release(parsed_spec);
   iree_allocator_free(iree_allocator_system(), serialized_bytes.data);
+  iree_hal_device_spec_release(spec);
+}
+
+TEST(DeviceSpecTest, FindsVirtualMemoryAndExternalHandleRecords) {
+  iree_hal_memory_heap_spec_t memory_heaps[1] = {
+      {
+          /*.name=*/iree_make_cstring_view("device-local"),
+          /*.capacity_bytes=*/1024ull * 1024ull * 1024ull,
+          /*.allocation_granularity=*/4096,
+          /*.allocation_alignment=*/256,
+          /*.maximum_allocation_size=*/512ull * 1024ull * 1024ull,
+          /*.physical_device_affinity=*/1,
+          /*.flags=*/IREE_HAL_MEMORY_HEAP_SPEC_FLAG_NONE,
+      },
+  };
+  iree_hal_memory_type_spec_t memory_types[2] = {
+      {
+          /*.heap_index=*/0,
+          /*.memory_type=*/IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+          /*.allowed_buffer_usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT,
+          /*.allowed_memory_access=*/IREE_HAL_MEMORY_ACCESS_ALL,
+          /*.minimum_alignment=*/256,
+          /*.optimal_transfer_granularity=*/4096,
+          /*.flags=*/IREE_HAL_MEMORY_TYPE_SPEC_FLAG_NONE,
+      },
+      {
+          /*.heap_index=*/0,
+          /*.memory_type=*/IREE_HAL_MEMORY_TYPE_HOST_LOCAL,
+          /*.allowed_buffer_usage=*/IREE_HAL_BUFFER_USAGE_TRANSFER,
+          /*.allowed_memory_access=*/IREE_HAL_MEMORY_ACCESS_READ,
+          /*.minimum_alignment=*/64,
+          /*.optimal_transfer_granularity=*/4096,
+          /*.flags=*/IREE_HAL_MEMORY_TYPE_SPEC_FLAG_NONE,
+      },
+  };
+  iree_hal_external_buffer_handle_spec_t external_buffer_handles[2] = {
+      {
+          /*.handle_type_mask=*/IREE_HAL_TOPOLOGY_HANDLE_TYPE_OPAQUE_FD |
+              IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF,
+          /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT |
+              IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT,
+          /*.allowed_buffer_usage=*/IREE_HAL_BUFFER_USAGE_TRANSFER |
+              IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE_READ,
+          /*.allowed_memory_access=*/IREE_HAL_MEMORY_ACCESS_READ |
+              IREE_HAL_MEMORY_ACCESS_WRITE,
+          /*.compatible_memory_type_mask=*/1u << 0,
+          /*.flags=*/IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_CROSS_PROCESS |
+              IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_OWNING,
+      },
+      {
+          /*.handle_type_mask=*/IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM,
+          /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT,
+          /*.allowed_buffer_usage=*/IREE_HAL_BUFFER_USAGE_TRANSFER_SOURCE,
+          /*.allowed_memory_access=*/IREE_HAL_MEMORY_ACCESS_READ,
+          /*.compatible_memory_type_mask=*/1u << 1,
+          /*.flags=*/IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_BORROWED,
+      },
+  };
+  iree_hal_device_memory_spec_t memory = {
+      /*.heap_count=*/1,
+      /*.heaps=*/memory_heaps,
+      /*.memory_type_count=*/2,
+      /*.memory_types=*/memory_types,
+      /*.external_buffer_handle_count=*/2,
+      /*.external_buffer_handles=*/external_buffer_handles,
+      /*.flags=*/IREE_HAL_DEVICE_MEMORY_SPEC_FLAG_NONE,
+  };
+
+  iree_hal_virtual_memory_class_spec_t virtual_memory_classes[2] = {
+      {
+          /*.compatible_memory_type_mask=*/1u << 0,
+          /*.allowed_buffer_usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT,
+          /*.allowed_memory_access=*/IREE_HAL_MEMORY_ACCESS_ALL,
+          /*.minimum_page_size=*/4096,
+          /*.recommended_page_size=*/65536,
+          /*.maximum_reservation_size=*/1ull << 32,
+          /*.maximum_physical_allocation_size=*/1ull << 30,
+          /*.operation_flags=*/IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_RESERVE |
+              IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_RELEASE |
+              IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_MAP |
+              IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_UNMAP |
+              IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_PROTECT |
+              IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_ADVISE,
+          /*.protection_flags=*/IREE_HAL_MEMORY_PROTECTION_READ_WRITE,
+          /*.advice_flags=*/IREE_HAL_MEMORY_ADVICE_WILL_NEED,
+          /*.flags=*/IREE_HAL_VIRTUAL_MEMORY_CLASS_SPEC_FLAG_NONE,
+      },
+      {
+          /*.compatible_memory_type_mask=*/1u << 1,
+          /*.allowed_buffer_usage=*/IREE_HAL_BUFFER_USAGE_TRANSFER,
+          /*.allowed_memory_access=*/IREE_HAL_MEMORY_ACCESS_READ,
+          /*.minimum_page_size=*/4096,
+          /*.recommended_page_size=*/4096,
+          /*.maximum_reservation_size=*/1ull << 20,
+          /*.maximum_physical_allocation_size=*/1ull << 20,
+          /*.operation_flags=*/IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_RESERVE |
+              IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_RELEASE,
+          /*.protection_flags=*/IREE_HAL_MEMORY_PROTECTION_READ,
+          /*.advice_flags=*/IREE_HAL_MEMORY_ADVICE_NORMAL,
+          /*.flags=*/IREE_HAL_VIRTUAL_MEMORY_CLASS_SPEC_FLAG_NONE,
+      },
+  };
+  iree_hal_device_virtual_memory_spec_t virtual_memory = {
+      /*.class_count=*/2,
+      /*.classes=*/virtual_memory_classes,
+      /*.flags=*/IREE_HAL_DEVICE_VIRTUAL_MEMORY_SPEC_FLAG_NONE,
+  };
+
+  iree_hal_external_timepoint_handle_spec_t external_timepoint_handles[2] = {
+      {
+          /*.handle_type=*/IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT,
+          /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT |
+              IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT,
+          /*.compatibility=*/IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT |
+              IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT,
+          /*.flags=*/IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_CROSS_PROCESS,
+      },
+      {
+          /*.handle_type=*/IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_ASYNC_PRIMITIVE,
+          /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT,
+          /*.compatibility=*/IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT,
+          /*.flags=*/IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_NONE,
+      },
+  };
+  iree_hal_device_queue_spec_t queues = {
+      /*.family_count=*/0,
+      /*.families=*/NULL,
+      /*.external_timepoint_handle_count=*/2,
+      /*.external_timepoint_handles=*/external_timepoint_handles,
+      /*.flags=*/IREE_HAL_DEVICE_QUEUE_SPEC_FLAG_NONE,
+  };
+
+  iree_hal_device_spec_params_t params = {
+      /*.identity=*/NULL,
+      /*.topology=*/NULL,
+      /*.memory=*/&memory,
+      /*.virtual_memory=*/&virtual_memory,
+      /*.queues=*/&queues,
+      /*.dispatch=*/NULL,
+      /*.timing=*/NULL,
+      /*.executables=*/NULL,
+      /*.facet_count=*/0,
+      /*.facets=*/NULL,
+  };
+  iree_hal_device_spec_t* spec = NULL;
+  IREE_ASSERT_OK(
+      iree_hal_device_spec_create(&params, iree_allocator_system(), &spec));
+
+  iree_hal_virtual_memory_class_selection_t virtual_memory_selection = {
+      /*.compatible_memory_type_mask=*/1u << 0,
+      /*.buffer_usage=*/IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE_READ,
+      /*.memory_access=*/IREE_HAL_MEMORY_ACCESS_READ,
+      /*.operation_flags=*/IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_MAP |
+          IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_UNMAP,
+      /*.protection_flags=*/IREE_HAL_MEMORY_PROTECTION_READ,
+      /*.advice_flags=*/IREE_HAL_MEMORY_ADVICE_WILL_NEED,
+  };
+  const iree_hal_virtual_memory_class_spec_t* virtual_memory_class =
+      iree_hal_device_spec_find_virtual_memory_class(spec,
+                                                     &virtual_memory_selection);
+  ASSERT_NE(virtual_memory_class, nullptr);
+  EXPECT_EQ(virtual_memory_class->recommended_page_size, 65536);
+
+  virtual_memory_selection.operation_flags =
+      IREE_HAL_VIRTUAL_MEMORY_OPERATION_FLAG_PHYSICAL_ALLOCATE;
+  EXPECT_EQ(iree_hal_device_spec_find_virtual_memory_class(
+                spec, &virtual_memory_selection),
+            nullptr);
+  iree_hal_virtual_memory_class_selection_t wildcard_virtual_memory_selection =
+      {};
+  ASSERT_NE(iree_hal_device_spec_find_virtual_memory_class(
+                spec, &wildcard_virtual_memory_selection),
+            nullptr);
+
+  iree_hal_external_buffer_handle_selection_t buffer_handle_selection = {
+      /*.handle_type_mask=*/IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF,
+      /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT,
+      /*.buffer_usage=*/IREE_HAL_BUFFER_USAGE_TRANSFER_SOURCE,
+      /*.memory_access=*/IREE_HAL_MEMORY_ACCESS_READ,
+      /*.compatible_memory_type_mask=*/1u << 0,
+      /*.capability_flags=*/
+      IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_CROSS_PROCESS,
+  };
+  const iree_hal_external_buffer_handle_spec_t* buffer_handle =
+      iree_hal_device_spec_find_external_buffer_handle(
+          spec, &buffer_handle_selection);
+  ASSERT_NE(buffer_handle, nullptr);
+  EXPECT_EQ(buffer_handle->compatible_memory_type_mask, 1u << 0);
+
+  buffer_handle_selection.handle_type_mask = IREE_HAL_TOPOLOGY_HANDLE_TYPE_SHM;
+  EXPECT_EQ(iree_hal_device_spec_find_external_buffer_handle(
+                spec, &buffer_handle_selection),
+            nullptr);
+  iree_hal_external_buffer_handle_selection_t wildcard_buffer_selection = {};
+  ASSERT_NE(iree_hal_device_spec_find_external_buffer_handle(
+                spec, &wildcard_buffer_selection),
+            nullptr);
+
+  iree_hal_external_timepoint_handle_selection_t timepoint_selection = {
+      /*.handle_type=*/IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT,
+      /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT,
+      /*.compatibility=*/IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT,
+      /*.capability_flags=*/
+      IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_CROSS_PROCESS,
+  };
+  const iree_hal_external_timepoint_handle_spec_t* timepoint_handle =
+      iree_hal_device_spec_find_external_timepoint_handle(spec,
+                                                          &timepoint_selection);
+  ASSERT_NE(timepoint_handle, nullptr);
+  EXPECT_EQ(timepoint_handle->handle_type,
+            IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_HIP_EVENT);
+
+  timepoint_selection.compatibility =
+      IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_SIGNAL;
+  EXPECT_EQ(iree_hal_device_spec_find_external_timepoint_handle(
+                spec, &timepoint_selection),
+            nullptr);
+  iree_hal_external_timepoint_handle_selection_t wildcard_timepoint_selection =
+      {};
+  ASSERT_NE(iree_hal_device_spec_find_external_timepoint_handle(
+                spec, &wildcard_timepoint_selection),
+            nullptr);
+
   iree_hal_device_spec_release(spec);
 }
 

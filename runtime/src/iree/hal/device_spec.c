@@ -1967,6 +1967,17 @@ IREE_API_EXPORT iree_status_t iree_hal_device_spec_parse(
   return status;
 }
 
+static bool iree_hal_device_spec_mask_overlaps(uint64_t available_mask,
+                                               uint64_t requested_mask) {
+  return requested_mask == 0 || (available_mask & requested_mask) != 0;
+}
+
+static bool iree_hal_device_spec_all_bits_available(uint64_t available_bits,
+                                                    uint64_t requested_bits) {
+  return requested_bits == 0 ||
+         (available_bits & requested_bits) == requested_bits;
+}
+
 IREE_API_EXPORT const iree_hal_device_identity_spec_t*
 iree_hal_device_spec_identity(const iree_hal_device_spec_t* spec) {
   IREE_ASSERT_ARGUMENT(spec);
@@ -1985,16 +1996,126 @@ iree_hal_device_spec_memory(const iree_hal_device_spec_t* spec) {
   return &spec->memory;
 }
 
+IREE_API_EXPORT const iree_hal_external_buffer_handle_spec_t*
+iree_hal_device_spec_find_external_buffer_handle(
+    const iree_hal_device_spec_t* spec,
+    const iree_hal_external_buffer_handle_selection_t* selection) {
+  IREE_ASSERT_ARGUMENT(spec);
+  IREE_ASSERT_ARGUMENT(selection);
+  for (iree_host_size_t i = 0; i < spec->memory.external_buffer_handle_count;
+       ++i) {
+    const iree_hal_external_buffer_handle_spec_t* handle =
+        &spec->memory.external_buffer_handles[i];
+    if (!iree_hal_device_spec_mask_overlaps(handle->handle_type_mask,
+                                            selection->handle_type_mask)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(handle->direction_flags,
+                                                 selection->direction_flags)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(handle->allowed_buffer_usage,
+                                                 selection->buffer_usage)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(handle->allowed_memory_access,
+                                                 selection->memory_access)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_mask_overlaps(
+            handle->compatible_memory_type_mask,
+            selection->compatible_memory_type_mask)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(handle->flags,
+                                                 selection->capability_flags)) {
+      continue;
+    }
+    return handle;
+  }
+  return NULL;
+}
+
 IREE_API_EXPORT const iree_hal_device_virtual_memory_spec_t*
 iree_hal_device_spec_virtual_memory(const iree_hal_device_spec_t* spec) {
   IREE_ASSERT_ARGUMENT(spec);
   return &spec->virtual_memory;
 }
 
+IREE_API_EXPORT const iree_hal_virtual_memory_class_spec_t*
+iree_hal_device_spec_find_virtual_memory_class(
+    const iree_hal_device_spec_t* spec,
+    const iree_hal_virtual_memory_class_selection_t* selection) {
+  IREE_ASSERT_ARGUMENT(spec);
+  IREE_ASSERT_ARGUMENT(selection);
+  for (iree_host_size_t i = 0; i < spec->virtual_memory.class_count; ++i) {
+    const iree_hal_virtual_memory_class_spec_t* memory_class =
+        &spec->virtual_memory.classes[i];
+    if (!iree_hal_device_spec_mask_overlaps(
+            memory_class->compatible_memory_type_mask,
+            selection->compatible_memory_type_mask)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(
+            memory_class->allowed_buffer_usage, selection->buffer_usage)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(
+            memory_class->allowed_memory_access, selection->memory_access)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(memory_class->operation_flags,
+                                                 selection->operation_flags)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(memory_class->protection_flags,
+                                                 selection->protection_flags)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(memory_class->advice_flags,
+                                                 selection->advice_flags)) {
+      continue;
+    }
+    return memory_class;
+  }
+  return NULL;
+}
+
 IREE_API_EXPORT const iree_hal_device_queue_spec_t* iree_hal_device_spec_queues(
     const iree_hal_device_spec_t* spec) {
   IREE_ASSERT_ARGUMENT(spec);
   return &spec->queues;
+}
+
+IREE_API_EXPORT const iree_hal_external_timepoint_handle_spec_t*
+iree_hal_device_spec_find_external_timepoint_handle(
+    const iree_hal_device_spec_t* spec,
+    const iree_hal_external_timepoint_handle_selection_t* selection) {
+  IREE_ASSERT_ARGUMENT(spec);
+  IREE_ASSERT_ARGUMENT(selection);
+  for (iree_host_size_t i = 0; i < spec->queues.external_timepoint_handle_count;
+       ++i) {
+    const iree_hal_external_timepoint_handle_spec_t* handle =
+        &spec->queues.external_timepoint_handles[i];
+    if (selection->handle_type != IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_NONE &&
+        handle->handle_type != selection->handle_type) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(handle->direction_flags,
+                                                 selection->direction_flags)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(handle->compatibility,
+                                                 selection->compatibility)) {
+      continue;
+    }
+    if (!iree_hal_device_spec_all_bits_available(handle->flags,
+                                                 selection->capability_flags)) {
+      continue;
+    }
+    return handle;
+  }
+  return NULL;
 }
 
 IREE_API_EXPORT const iree_hal_device_dispatch_spec_t*
