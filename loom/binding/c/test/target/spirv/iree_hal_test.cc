@@ -63,19 +63,6 @@ static const iree_hal_device_spec_t* FakeHalDeviceSpec(
   return device->device_spec;
 }
 
-static iree_status_t FakeHalDeviceQueryI64(iree_hal_device_t* base_device,
-                                           iree_string_view_t category,
-                                           iree_string_view_t key,
-                                           int64_t* out_value) {
-  (void)base_device;
-  (void)category;
-  (void)key;
-  (void)out_value;
-  return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
-      "test fake does not expose scalar HAL device queries");
-}
-
 static bool FakeExecutableCacheCanPrepareFormat(
     iree_hal_executable_cache_t* base_executable_cache,
     iree_hal_executable_caching_mode_t caching_mode,
@@ -87,18 +74,14 @@ static bool FakeExecutableCacheCanPrepareFormat(
          iree_string_view_equal(executable_format, IREE_SV("vulkan-spirv-bda"));
 }
 
-static const iree_hal_device_vtable_t kFakeHalDeviceVtable = {
-    /*.destroy=*/nullptr,
-    /*.id=*/nullptr,
-    /*.host_allocator=*/nullptr,
-    /*.device_allocator=*/nullptr,
-    /*.replace_device_allocator=*/nullptr,
-    /*.replace_channel_provider=*/nullptr,
-    /*.trim=*/nullptr,
-    /*.query_i64=*/FakeHalDeviceQueryI64,
-    /*.query_capabilities=*/nullptr,
-    /*.device_spec=*/FakeHalDeviceSpec,
-};
+static iree_hal_device_vtable_t MakeFakeHalDeviceVtable() {
+  iree_hal_device_vtable_t vtable = {};
+  vtable.device_spec = FakeHalDeviceSpec;
+  return vtable;
+}
+
+static const iree_hal_device_vtable_t kFakeHalDeviceVtable =
+    MakeFakeHalDeviceVtable();
 
 static const iree_hal_executable_cache_vtable_t kFakeExecutableCacheVtable = {
     /*.destroy=*/nullptr,

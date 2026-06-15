@@ -579,29 +579,6 @@ IREE_API_EXPORT void iree_hal_device_replace_channel_provider(
 IREE_API_EXPORT
 iree_status_t iree_hal_device_trim(iree_hal_device_t* device);
 
-// Queries a configuration value as an int64_t.
-// The |category| and |key| will be provided to the device driver to interpret
-// in a device-specific way and if recognized the value will be converted to an
-// int64_t and returned in |out_value|. Fails if the value represented by the
-// key is not convertible.
-//
-// This is roughly equivalent to the `sysconf` linux syscall
-// (https://man7.org/linux/man-pages/man3/sysconf.3.html) in that the exact
-// set of categories and keys available and their interpretation is
-// target-dependent.
-//
-// Well-known queries (category :: key):
-//   hal.device.id :: some-pattern-*
-//   hal.device.feature :: some-pattern-*
-//   hal.device.architecture :: some-pattern-*
-//   hal.executable.format :: some-pattern-*
-//
-// Returned values must remain the same for the lifetime of the device as
-// callers may cache them to avoid redundant calls.
-IREE_API_EXPORT iree_status_t iree_hal_device_query_i64(
-    iree_hal_device_t* device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value);
-
 // Queries device capabilities for topology construction.
 // Returns all information needed for cross-driver edge building.
 // If the device doesn't support topology queries, returns OK with zeroed
@@ -1095,11 +1072,6 @@ typedef struct iree_hal_device_vtable_t {
       iree_hal_device_t* device, iree_hal_channel_provider_t* new_provider);
 
   iree_status_t(IREE_API_PTR* trim)(iree_hal_device_t* device);
-
-  iree_status_t(IREE_API_PTR* query_i64)(iree_hal_device_t* device,
-                                         iree_string_view_t category,
-                                         iree_string_view_t key,
-                                         int64_t* out_value);
 
   iree_status_t(IREE_API_PTR* query_capabilities)(
       iree_hal_device_t* device,

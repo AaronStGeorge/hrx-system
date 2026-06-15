@@ -939,54 +939,6 @@ static iree_status_t iree_hal_hip_device_trim(iree_hal_device_t* base_device) {
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_hip_device_query_attribute(
-    iree_hal_hip_device_t* device, hipDeviceAttribute_t attribute,
-    int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
-
-  *out_value = 0;
-  int value = 0;
-  IREE_HIP_RETURN_IF_ERROR(
-      device->hip_symbols,
-      hipDeviceGetAttribute(&value, attribute, device->devices[0].hip_device),
-      "hipDeviceGetAttribute");
-  *out_value = value;
-  return iree_ok_status();
-}
-
-static iree_status_t iree_hal_hip_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
-  *out_value = 0;
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.executable.format"))) {
-    *out_value = (iree_string_view_equal(key, IREE_SV("rocm-hsaco-fb")) ||
-                  iree_string_view_equal(key, IREE_SV("rocm-spirv-fb")))
-                     ? 1
-                     : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = device->device_count;
-      return iree_ok_status();
-    }
-  }
-
-  return iree_make_status(
-      IREE_STATUS_NOT_FOUND,
-      "unknown device configuration key value '%.*s :: %.*s'",
-      (int)category.size, category.data, (int)key.size, key.data);
-}
-
 static iree_status_t iree_hal_hip_device_query_capabilities(
     iree_hal_device_t* base_device,
     iree_hal_device_capabilities_t* out_capabilities) {
@@ -3138,7 +3090,6 @@ static const iree_hal_device_vtable_t iree_hal_hip_device_vtable = {
     .replace_device_allocator = iree_hal_hip_replace_device_allocator,
     .replace_channel_provider = iree_hal_hip_replace_channel_provider,
     .trim = iree_hal_hip_device_trim,
-    .query_i64 = iree_hal_hip_device_query_i64,
     .query_capabilities = iree_hal_hip_device_query_capabilities,
     .device_spec = iree_hal_hip_device_spec,
     .sample_observation = iree_hal_hip_device_sample_observation,

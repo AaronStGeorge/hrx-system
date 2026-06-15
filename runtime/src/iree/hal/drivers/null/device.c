@@ -228,53 +228,6 @@ static iree_status_t iree_hal_null_device_trim(iree_hal_device_t* base_device) {
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_null_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  iree_hal_null_device_t* device = iree_hal_null_device_cast(base_device);
-  *out_value = 0;
-
-  // TODO(null): implement additional queries. These are stubs for common ones
-  // as used by the compiler. Targets may have their own, though, and connect
-  // with them by emitting `hal.device.query` ops in programs or calling the
-  // query method at runtime via the HAL API.
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    // NOTE: this is a fuzzy match and can allow a program to work with multiple
-    // device implementations.
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.executable.format"))) {
-    // NOTE: this is a fuzzy match and can allow multiple formats to be used
-    // (this should return 1 for any format supported).
-    // TODO(null): match a format and return true.
-    *out_value = 0;
-    return iree_ok_status();
-  }
-
-  // TODO(null): return basic queries for concurrency to allow programs to
-  // estimate potential utilization.
-  if (iree_string_view_equal(category, IREE_SV("hal.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = 1;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.dispatch"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = 1;
-      return iree_ok_status();
-    }
-  }
-
-  return iree_make_status(
-      IREE_STATUS_NOT_FOUND,
-      "unknown device configuration key value '%.*s :: %.*s'",
-      (int)category.size, category.data, (int)key.size, key.data);
-}
-
 static iree_status_t iree_hal_null_device_query_capabilities(
     iree_hal_device_t* base_device,
     iree_hal_device_capabilities_t* out_capabilities) {
@@ -746,7 +699,6 @@ static const iree_hal_device_vtable_t iree_hal_null_device_vtable = {
     .replace_device_allocator = iree_hal_null_replace_device_allocator,
     .replace_channel_provider = iree_hal_null_replace_channel_provider,
     .trim = iree_hal_null_device_trim,
-    .query_i64 = iree_hal_null_device_query_i64,
     .query_capabilities = iree_hal_null_device_query_capabilities,
     .device_spec = iree_hal_null_device_spec,
     .sample_observation = iree_hal_null_device_sample_observation,

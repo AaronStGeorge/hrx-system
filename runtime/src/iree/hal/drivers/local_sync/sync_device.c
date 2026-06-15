@@ -15,7 +15,6 @@
 #include "iree/async/notification.h"
 #include "iree/async/util/proactor_pool.h"
 #include "iree/base/internal/arena.h"
-#include "iree/base/internal/cpu.h"
 #include "iree/hal/drivers/local_sync/sync_event.h"
 #include "iree/hal/drivers/local_sync/sync_semaphore.h"
 #include "iree/hal/local/device_spec_builder.h"
@@ -330,47 +329,6 @@ static iree_status_t iree_hal_sync_device_trim(iree_hal_device_t* base_device) {
   iree_hal_sync_device_t* device = iree_hal_sync_device_cast(base_device);
   IREE_RETURN_IF_ERROR(iree_hal_pool_trim(device->default_pool));
   return iree_hal_allocator_trim(device->device_allocator);
-}
-
-static iree_status_t iree_hal_sync_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  iree_hal_sync_device_t* device = iree_hal_sync_device_cast(base_device);
-  *out_value = 0;
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.executable.format"))) {
-    *out_value =
-        iree_hal_query_any_executable_loader_support(
-            device->loader_count, device->loaders, /*caching_mode=*/0, key)
-            ? 1
-            : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = 1;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.dispatch"))) {
-    if (iree_string_view_equal(key, IREE_SV("concurrency"))) {
-      *out_value = 1;
-      return iree_ok_status();
-    }
-  } else if (iree_string_view_equal(category, IREE_SV("hal.cpu"))) {
-    return iree_cpu_lookup_data_by_key(key, out_value);
-  }
-
-  return iree_make_status(
-      IREE_STATUS_NOT_FOUND,
-      "unknown device configuration key value '%.*s :: %.*s'",
-      (int)category.size, category.data, (int)key.size, key.data);
 }
 
 static iree_status_t iree_hal_sync_device_query_capabilities(
@@ -1772,7 +1730,6 @@ static const iree_hal_device_vtable_t iree_hal_sync_device_vtable = {
     .replace_device_allocator = iree_hal_sync_replace_device_allocator,
     .replace_channel_provider = iree_hal_sync_replace_channel_provider,
     .trim = iree_hal_sync_device_trim,
-    .query_i64 = iree_hal_sync_device_query_i64,
     .query_capabilities = iree_hal_sync_device_query_capabilities,
     .device_spec = iree_hal_sync_device_spec,
     .sample_observation = iree_hal_sync_device_sample_observation,

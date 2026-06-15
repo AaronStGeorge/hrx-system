@@ -63,14 +63,6 @@ iree_status_t iree_hal_device_trim(iree_hal_device_t* device) {
   return status;
 }
 
-IREE_API_EXPORT iree_status_t iree_hal_device_query_i64(
-    iree_hal_device_t* device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(device);
-  IREE_ASSERT_ARGUMENT(out_value);
-  return _VTABLE_DISPATCH(device, query_i64)(device, category, key, out_value);
-}
-
 IREE_API_EXPORT iree_status_t iree_hal_device_query_capabilities(
     iree_hal_device_t* device,
     iree_hal_device_capabilities_t* out_capabilities) {

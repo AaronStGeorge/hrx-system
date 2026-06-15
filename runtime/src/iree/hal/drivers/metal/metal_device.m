@@ -281,27 +281,6 @@ static iree_status_t iree_hal_metal_device_trim(iree_hal_device_t* base_device) 
   return iree_hal_allocator_trim(device->device_allocator);
 }
 
-static iree_status_t iree_hal_metal_device_query_i64(iree_hal_device_t* base_device,
-                                                     iree_string_view_t category,
-                                                     iree_string_view_t key, int64_t* out_value) {
-  iree_hal_metal_device_t* device = iree_hal_metal_device_cast(base_device);
-  *out_value = 0;
-
-  if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value = iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
-    return iree_ok_status();
-  }
-
-  if (iree_string_view_equal(category, iree_make_cstring_view("hal.executable.format"))) {
-    *out_value = iree_string_view_equal(key, iree_make_cstring_view("metal-msl-fb")) ? 1 : 0;
-    return iree_ok_status();
-  }
-
-  return iree_make_status(IREE_STATUS_NOT_FOUND,
-                          "unknown device configuration key value '%.*s :: %.*s'",
-                          (int)category.size, category.data, (int)key.size, key.data);
-}
-
 static iree_status_t iree_hal_metal_device_query_capabilities(
     iree_hal_device_t* base_device, iree_hal_device_capabilities_t* out_capabilities) {
   memset(out_capabilities, 0, sizeof(*out_capabilities));
@@ -782,7 +761,6 @@ static const iree_hal_device_vtable_t iree_hal_metal_device_vtable = {
     .replace_device_allocator = iree_hal_metal_replace_device_allocator,
     .replace_channel_provider = iree_hal_metal_replace_channel_provider,
     .trim = iree_hal_metal_device_trim,
-    .query_i64 = iree_hal_metal_device_query_i64,
     .query_capabilities = iree_hal_metal_device_query_capabilities,
     .topology_info = iree_hal_metal_device_topology_info,
     .refine_topology_edge = iree_hal_metal_device_refine_topology_edge,

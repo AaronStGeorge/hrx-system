@@ -519,12 +519,6 @@ static iree_status_t iree_hal_mock_device_trim(iree_hal_device_t* base_device) {
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED);
 }
 
-static iree_status_t iree_hal_mock_device_query_i64(
-    iree_hal_device_t* base_device, iree_string_view_t category,
-    iree_string_view_t key, int64_t* out_value) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED);
-}
-
 static iree_status_t iree_hal_mock_device_create_channel(
     iree_hal_device_t* base_device, iree_hal_queue_affinity_t queue_affinity,
     iree_hal_channel_params_t params, iree_hal_channel_t** out_channel) {
@@ -728,7 +722,6 @@ static const iree_hal_device_vtable_t iree_hal_mock_device_vtable = {
     .replace_device_allocator = iree_hal_mock_device_replace_device_allocator,
     .replace_channel_provider = iree_hal_mock_device_replace_channel_provider,
     .trim = iree_hal_mock_device_trim,
-    .query_i64 = iree_hal_mock_device_query_i64,
     .query_capabilities = iree_hal_mock_device_query_capabilities,
     .device_spec = iree_hal_mock_device_spec,
     .sample_observation = iree_hal_mock_device_sample_observation,

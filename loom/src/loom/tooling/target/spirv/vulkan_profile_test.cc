@@ -37,19 +37,6 @@ static const iree_hal_device_spec_t* fake_hal_device_spec(
   return device->device_spec;
 }
 
-static iree_status_t fake_hal_device_query_i64(iree_hal_device_t* base_device,
-                                               iree_string_view_t category,
-                                               iree_string_view_t key,
-                                               int64_t* out_value) {
-  (void)base_device;
-  (void)category;
-  (void)key;
-  (void)out_value;
-  return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
-      "test fake does not expose scalar HAL device queries");
-}
-
 static bool fake_executable_cache_can_prepare_format(
     iree_hal_executable_cache_t* base_executable_cache,
     iree_hal_executable_caching_mode_t caching_mode,
@@ -63,7 +50,6 @@ static bool fake_executable_cache_can_prepare_format(
 
 static iree_hal_device_vtable_t MakeFakeHalDeviceVtable() {
   iree_hal_device_vtable_t vtable = {};
-  vtable.query_i64 = fake_hal_device_query_i64;
   vtable.device_spec = fake_hal_device_spec;
   return vtable;
 }
