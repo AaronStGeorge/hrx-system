@@ -211,10 +211,11 @@ loom_cc_library(
     loom::ops::view
     loom::sanitizer::site_collection
     loom::sanitizer::site_table
-    loom::target::arch::amdgpu::asan_abi
+    loom::target::arch::amdgpu::abi::asan
+    loom::target::arch::amdgpu::abi::feedback
+    loom::target::arch::amdgpu::abi::signal
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs
-    loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::hal::kernel_abi
     loom::target::arch::amdgpu::lower::candidates::arithmetic_candidates
     loom::target::arch::amdgpu::lower::candidates::async_gather_candidates
@@ -225,7 +226,6 @@ loom_cc_library(
     loom::target::arch::amdgpu::planning::wait_packets
     loom::target::arch::amdgpu::planning::wait_plan
     loom::target::arch::amdgpu::refs::target_refs
-    loom::target::arch::amdgpu::signal_abi
     loom::target::arch::amdgpu::target_id
     loom::target::arch::amdgpu::target_info
     loom::target::arch::amdgpu::target_info_defs
@@ -300,10 +300,10 @@ loom_cc_test(
     loom::ops::op_defs
     loom::ops::op_registry
     loom::ops::target
+    loom::target::arch::amdgpu::abi::feedback
+    loom::target::arch::amdgpu::abi::signal
     loom::target::arch::amdgpu::descriptors::low_registry
-    loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::refs::target_refs
-    loom::target::arch::amdgpu::signal_abi
     loom::target::registers
     loom::verify
   LABELS
@@ -330,9 +330,9 @@ loom_cc_test(
     loom::ops::op_defs
     loom::ops::op_registry
     loom::ops::target
-    loom::target::arch::amdgpu::asan_abi
+    loom::target::arch::amdgpu::abi::asan
+    loom::target::arch::amdgpu::abi::feedback
     loom::target::arch::amdgpu::descriptors::low_registry
-    loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify
@@ -360,8 +360,8 @@ loom_cc_test(
     loom::ops::op_defs
     loom::ops::op_registry
     loom::ops::target
+    loom::target::arch::amdgpu::abi::feedback
     loom::target::arch::amdgpu::descriptors::low_registry
-    loom::target::arch::amdgpu::feedback_abi
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
     loom::verify
@@ -385,9 +385,9 @@ loom_cc_test(
     loom::ops::cache
     loom::ops::low
     loom::ops::op_defs
+    loom::target::arch::amdgpu::abi::signal
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::refs::target_refs
-    loom::target::arch::amdgpu::signal_abi
     loom::target::registers
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"

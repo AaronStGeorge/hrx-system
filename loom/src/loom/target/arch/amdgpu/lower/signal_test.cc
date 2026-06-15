@@ -19,10 +19,10 @@
 #include "loom/ops/cache.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/arch/amdgpu/abi/signal.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/lower/data_symbol.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
-#include "loom/target/arch/amdgpu/signal_abi.h"
 #include "loom/target/registers.h"
 
 namespace {

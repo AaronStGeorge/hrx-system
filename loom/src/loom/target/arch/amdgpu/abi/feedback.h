@@ -11,8 +11,8 @@
 // headers because their host side includes HSA headers, while the Loom compiler
 // should stay independent from HSA except in execution/tooling code.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_FEEDBACK_ABI_H_
-#define LOOM_TARGET_ARCH_AMDGPU_FEEDBACK_ABI_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_ABI_FEEDBACK_H_
+#define LOOM_TARGET_ARCH_AMDGPU_ABI_FEEDBACK_H_
 
 #include <stdint.h>
 
@@ -128,4 +128,4 @@ static inline uint64_t loom_amdgpu_feedback_packet_length(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_FEEDBACK_ABI_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_ABI_FEEDBACK_H_

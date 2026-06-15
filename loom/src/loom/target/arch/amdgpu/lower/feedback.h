@@ -21,7 +21,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
-#include "loom/target/arch/amdgpu/feedback_abi.h"
+#include "loom/target/arch/amdgpu/abi/feedback.h"
 
 #ifdef __cplusplus
 extern "C" {

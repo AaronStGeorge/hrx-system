@@ -11,8 +11,8 @@
 // headers because their host side includes HSA headers, while the Loom compiler
 // should stay independent from HSA except in execution/tooling code.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_ASAN_ABI_H_
-#define LOOM_TARGET_ARCH_AMDGPU_ASAN_ABI_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_ABI_ASAN_H_
+#define LOOM_TARGET_ARCH_AMDGPU_ABI_ASAN_H_
 
 #include <stdint.h>
 
@@ -58,4 +58,4 @@ enum loom_amdgpu_asan_config_layout_e {
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_ASAN_ABI_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_ABI_ASAN_H_

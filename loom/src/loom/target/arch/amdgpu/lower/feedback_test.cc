@@ -24,10 +24,10 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/op_registry.h"
 #include "loom/ops/target/ops.h"
+#include "loom/target/arch/amdgpu/abi/feedback.h"
+#include "loom/target/arch/amdgpu/abi/signal.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
-#include "loom/target/arch/amdgpu/feedback_abi.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
-#include "loom/target/arch/amdgpu/signal_abi.h"
 #include "loom/target/registers.h"
 #include "loom/verify/verify.h"
 

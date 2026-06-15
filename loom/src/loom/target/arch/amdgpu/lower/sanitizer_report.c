@@ -9,7 +9,7 @@
 #include "loom/codegen/low/builder.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/feedback_abi.h"
+#include "loom/target/arch/amdgpu/abi/feedback.h"
 #include "loom/target/arch/amdgpu/lower/control_packet.h"
 #include "loom/target/arch/amdgpu/lower/descriptor_ref.h"
 #include "loom/target/arch/amdgpu/lower/feedback.h"

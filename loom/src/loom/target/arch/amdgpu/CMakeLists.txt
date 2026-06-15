@@ -135,87 +135,6 @@ endif()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
-    asan_abi
-  HDRS
-    "asan_abi.h"
-  DEPS
-
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
-    asan_abi_test
-  SRCS
-    "asan_abi_test.cc"
-  DEPS
-    ::asan_abi
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    feedback_abi
-  HDRS
-    "feedback_abi.h"
-  DEPS
-
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
-    feedback_abi_test
-  SRCS
-    "feedback_abi_test.cc"
-  DEPS
-    ::feedback_abi
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
-    signal_abi
-  HDRS
-    "signal_abi.h"
-  DEPS
-
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_test(
-  NAME
-    signal_abi_test
-  SRCS
-    "signal_abi_test.cc"
-  DEPS
-    ::signal_abi
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=loom.target.arch.amdgpu"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU)
-loom_cc_library(
-  NAME
     math_policy
   HDRS
     "math_policy.h"
@@ -433,7 +352,13 @@ loom_cc_test(
     loom::tooling::execution::hal::invocation
     loom::tooling::target::amdgpu::artifact_provider
   LABELS
+    "driver=amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
     "iree-build-requirement=loom.target.arch.amdgpu"
+  RESOURCE_GROUP
+    loom-amdgpu-tests
 )
 endif()
 

@@ -24,7 +24,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/op_registry.h"
 #include "loom/ops/target/ops.h"
-#include "loom/target/arch/amdgpu/asan_abi.h"
+#include "loom/target/arch/amdgpu/abi/asan.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
 #include "loom/target/arch/amdgpu/lower/data_symbol.h"
 #include "loom/target/arch/amdgpu/lower/sanitizer_report.h"
