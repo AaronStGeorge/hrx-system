@@ -27,6 +27,7 @@ from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
     AmdgpuOccupancyModelInfo,
+    AmdgpuOccupancyRegisterClassInfo,
     amdgpu_descriptor_set_ordinal,
     sorted_descriptor_set_infos,
     sorted_occupancy_model_infos,
@@ -76,6 +77,52 @@ def _u16_expr(value: int) -> str:
 
 def _u32_expr(value: int) -> str:
     return f"UINT32_C({value})"
+
+
+def _round_up(value: int, multiple: int) -> int:
+    if value == 0 or multiple <= 1:
+        return value
+    return ((value + multiple - 1) // multiple) * multiple
+
+
+def _wave_limit(
+    pool_units: int,
+    allocation_granularity: int,
+    max_waves_per_simd: int,
+    allocated_units: int,
+) -> int:
+    if allocated_units == 0:
+        return max_waves_per_simd
+    rounded_units = _round_up(allocated_units, allocation_granularity)
+    if rounded_units == 0:
+        return 0
+    return min(pool_units // rounded_units, max_waves_per_simd)
+
+
+def _pressure_cliffs(
+    register_class: AmdgpuOccupancyRegisterClassInfo,
+    max_waves_per_simd: int,
+) -> tuple[tuple[int, int, int], ...]:
+    previous_wave_limit = max_waves_per_simd
+    cliffs: list[tuple[int, int, int]] = []
+    stop_candidate = min(
+        register_class.pool_units + register_class.allocation_granularity,
+        0xFFFFFFFF,
+    )
+    for candidate in range(1, stop_candidate + 1):
+        candidate_wave_limit = _wave_limit(
+            register_class.pool_units,
+            register_class.allocation_granularity,
+            max_waves_per_simd,
+            candidate,
+        )
+        if candidate_wave_limit >= previous_wave_limit:
+            continue
+        cliffs.append((candidate, previous_wave_limit, candidate_wave_limit))
+        previous_wave_limit = candidate_wave_limit
+        if candidate_wave_limit == 0:
+            break
+    return tuple(cliffs)
 
 
 def _validate_models(models: Sequence[AmdgpuOccupancyModelInfo]) -> None:
@@ -139,6 +186,30 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
     for model in models:
         suffix = _model_c_suffix(model.descriptor_set_key)
         register_class_indices = {row.register_class: index for index, row in enumerate(model.register_classes)}
+        pressure_cliffs_by_register_class = {row.register_class: _pressure_cliffs(row, model.max_waves_per_simd) for row in model.register_classes}
+        pressure_cliff_count = sum(len(cliffs) for cliffs in pressure_cliffs_by_register_class.values())
+        for row in model.register_classes:
+            cliffs = pressure_cliffs_by_register_class[row.register_class]
+            register_class_suffix = _resource_c_suffix(row.register_class)
+            if not cliffs:
+                continue
+            lines.extend(
+                [
+                    "",
+                    f"static const loom_amdgpu_occupancy_pressure_cliff_model_t kAmdgpu{suffix}{register_class_suffix}PressureCliffs[] = {{",
+                ]
+            )
+            for cliff_units, tier_before, tier_after in cliffs:
+                lines.extend(
+                    [
+                        "  {",
+                        f"    .cliff_units = {_u32_expr(cliff_units)},",
+                        f"    .tier_before = {_u32_expr(tier_before)},",
+                        f"    .tier_after = {_u32_expr(tier_after)},",
+                        "  },",
+                    ]
+                )
+            lines.append("};")
         lines.extend(
             [
                 "",
@@ -146,12 +217,22 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
             ]
         )
         for row in model.register_classes:
+            cliffs = pressure_cliffs_by_register_class[row.register_class]
+            register_class_suffix = _resource_c_suffix(row.register_class)
+            if cliffs:
+                pressure_cliffs_initializer = f"kAmdgpu{suffix}{register_class_suffix}PressureCliffs"
+                pressure_cliff_count_initializer = f"IREE_ARRAYSIZE(kAmdgpu{suffix}{register_class_suffix}PressureCliffs)"
+            else:
+                pressure_cliffs_initializer = "NULL"
+                pressure_cliff_count_initializer = "0"
             lines.extend(
                 [
                     "  {",
                     f'    .register_class = IREE_SVL("{_c_string_literal(row.register_class)}"),',
                     f"    .pool_units = {_u32_expr(row.pool_units)},",
                     f"    .allocation_granularity = {_u32_expr(row.allocation_granularity)},",
+                    f"    .pressure_cliffs = {pressure_cliffs_initializer},",
+                    f"    .pressure_cliff_count = {pressure_cliff_count_initializer},",
                     "  },",
                 ]
             )
@@ -207,6 +288,7 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
                 f"  .descriptor_set_ordinal = {_u16_expr(amdgpu_descriptor_set_ordinal(model.descriptor_set_key))},",
                 f"  .wave_size = {_u32_expr(model.wave_size)},",
                 f"  .max_waves_per_simd = {_u32_expr(model.max_waves_per_simd)},",
+                f"  .pressure_cliff_count = {pressure_cliff_count},",
                 f"  .register_classes = kAmdgpu{suffix}RegisterClasses,",
                 f"  .register_class_count = IREE_ARRAYSIZE(kAmdgpu{suffix}RegisterClasses),",
                 f"  .resources = {resource_initializer},",

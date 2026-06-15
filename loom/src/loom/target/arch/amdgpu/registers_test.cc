@@ -143,7 +143,8 @@ void ExpectOccupancyRegisterClass(const loom_amdgpu_occupancy_model_t* model,
                                   iree_host_size_t index,
                                   iree_string_view_t expected_name,
                                   uint32_t expected_pool_units,
-                                  uint32_t expected_allocation_granularity) {
+                                  uint32_t expected_allocation_granularity,
+                                  iree_host_size_t expected_cliff_count) {
   ASSERT_LT(index, model->register_class_count) << ToString(expected_name);
   const loom_amdgpu_occupancy_register_class_model_t* reg_class =
       &model->register_classes[index];
@@ -151,6 +152,27 @@ void ExpectOccupancyRegisterClass(const loom_amdgpu_occupancy_model_t* model,
   EXPECT_EQ(reg_class->pool_units, expected_pool_units)
       << ToString(expected_name);
   EXPECT_EQ(reg_class->allocation_granularity, expected_allocation_granularity)
+      << ToString(expected_name);
+  ASSERT_EQ(reg_class->pressure_cliff_count, expected_cliff_count)
+      << ToString(expected_name);
+  ASSERT_NE(reg_class->pressure_cliffs, nullptr) << ToString(expected_name);
+  for (iree_host_size_t i = 0; i < reg_class->pressure_cliff_count; ++i) {
+    const loom_amdgpu_occupancy_pressure_cliff_model_t* cliff =
+        &reg_class->pressure_cliffs[i];
+    EXPECT_GT(cliff->tier_before, cliff->tier_after)
+        << ToString(expected_name) << " cliff " << i;
+    if (i > 0) {
+      const loom_amdgpu_occupancy_pressure_cliff_model_t* previous =
+          &reg_class->pressure_cliffs[i - 1];
+      EXPECT_GT(cliff->cliff_units, previous->cliff_units)
+          << ToString(expected_name) << " cliff " << i;
+      EXPECT_EQ(cliff->tier_before, previous->tier_after)
+          << ToString(expected_name) << " cliff " << i;
+    }
+  }
+  EXPECT_EQ(reg_class->pressure_cliffs[reg_class->pressure_cliff_count - 1]
+                .tier_after,
+            0u)
       << ToString(expected_name);
 }
 
@@ -322,10 +344,16 @@ TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
     uint32_t vgpr_pool_units;
     // VGPR allocation granularity used by occupancy calculations.
     uint32_t vgpr_allocation_granularity;
+    // Number of scheduler pressure cliffs for SGPR allocation.
+    iree_host_size_t sgpr_pressure_cliff_count;
+    // Number of scheduler pressure cliffs for VGPR allocation.
+    iree_host_size_t vgpr_pressure_cliff_count;
     // AGPR register-file pool available to resident waves, or zero when absent.
     uint32_t agpr_pool_units;
     // AGPR allocation granularity used by occupancy calculations.
     uint32_t agpr_allocation_granularity;
+    // Number of scheduler pressure cliffs for AGPR allocation.
+    iree_host_size_t agpr_pressure_cliff_count;
     // Combined VGPR+AGPR resource pool, or zero when absent.
     uint32_t combined_pool_units;
     // Combined VGPR+AGPR allocation granularity.
@@ -338,8 +366,11 @@ TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           16,
           512,
           8,
+          11,
+          12,
           256,
           4,
+          12,
           512,
           8,
       },
@@ -349,8 +380,11 @@ TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           16,
           1024,
           4,
+          11,
+          16,
           256,
           4,
+          12,
           512,
           8,
       },
@@ -360,6 +394,9 @@ TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           16,
           1024,
           4,
+          11,
+          16,
+          0,
           0,
           0,
           0,
@@ -371,6 +408,9 @@ TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           16,
           1024,
           4,
+          11,
+          16,
+          0,
           0,
           0,
           0,
@@ -382,6 +422,9 @@ TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           16,
           1024,
           4,
+          11,
+          16,
+          0,
           0,
           0,
           0,
@@ -395,20 +438,23 @@ TEST_F(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
             c.descriptor_set_ordinal);
     ASSERT_NE(model, nullptr);
     EXPECT_EQ(model->descriptor_set_ordinal, c.descriptor_set_ordinal);
-    ExpectOccupancyRegisterClass(model, 0, IREE_SV("amdgpu.sgpr"),
-                                 c.sgpr_pool_units,
-                                 c.sgpr_allocation_granularity);
-    ExpectOccupancyRegisterClass(model, 1, IREE_SV("amdgpu.vgpr"),
-                                 c.vgpr_pool_units,
-                                 c.vgpr_allocation_granularity);
+    EXPECT_EQ(model->pressure_cliff_count, c.sgpr_pressure_cliff_count +
+                                               c.vgpr_pressure_cliff_count +
+                                               c.agpr_pressure_cliff_count);
+    ExpectOccupancyRegisterClass(
+        model, 0, IREE_SV("amdgpu.sgpr"), c.sgpr_pool_units,
+        c.sgpr_allocation_granularity, c.sgpr_pressure_cliff_count);
+    ExpectOccupancyRegisterClass(
+        model, 1, IREE_SV("amdgpu.vgpr"), c.vgpr_pool_units,
+        c.vgpr_allocation_granularity, c.vgpr_pressure_cliff_count);
     if (c.agpr_pool_units == 0) {
       EXPECT_EQ(model->register_class_count, 2u);
       EXPECT_EQ(model->resource_count, 0u);
     } else {
       ASSERT_EQ(model->register_class_count, 3u);
-      ExpectOccupancyRegisterClass(model, 2, IREE_SV("amdgpu.agpr"),
-                                   c.agpr_pool_units,
-                                   c.agpr_allocation_granularity);
+      ExpectOccupancyRegisterClass(
+          model, 2, IREE_SV("amdgpu.agpr"), c.agpr_pool_units,
+          c.agpr_allocation_granularity, c.agpr_pressure_cliff_count);
       ASSERT_EQ(model->resource_count, 1u);
       ExpectOccupancyPressureResource(
           model, 0, IREE_SV("amdgpu.vgpr_agpr"), c.combined_pool_units,

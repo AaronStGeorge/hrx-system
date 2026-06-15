@@ -18,6 +18,15 @@
 extern "C" {
 #endif
 
+typedef struct loom_amdgpu_occupancy_pressure_cliff_model_t {
+  // Live allocation units at which this cliff is crossed.
+  uint32_t cliff_units;
+  // Occupancy tier before crossing the cliff.
+  uint32_t tier_before;
+  // Occupancy tier after crossing the cliff.
+  uint32_t tier_after;
+} loom_amdgpu_occupancy_pressure_cliff_model_t;
+
 typedef struct loom_amdgpu_occupancy_register_class_model_t {
   // Stable target-low register-class name.
   iree_string_view_t register_class;
@@ -25,6 +34,10 @@ typedef struct loom_amdgpu_occupancy_register_class_model_t {
   uint32_t pool_units;
   // Allocation granularity used by occupancy calculations.
   uint32_t allocation_granularity;
+  // Scheduler pressure cliffs in ascending unit order.
+  const loom_amdgpu_occupancy_pressure_cliff_model_t* pressure_cliffs;
+  // Number of entries in |pressure_cliffs|.
+  iree_host_size_t pressure_cliff_count;
 } loom_amdgpu_occupancy_register_class_model_t;
 
 typedef struct loom_amdgpu_occupancy_resource_member_model_t {
@@ -54,6 +67,8 @@ typedef struct loom_amdgpu_occupancy_model_t {
   uint32_t wave_size;
   // Maximum resident waves per SIMD.
   uint32_t max_waves_per_simd;
+  // Total scheduler pressure-cliff rows across all register classes.
+  iree_host_size_t pressure_cliff_count;
   // Register-class occupancy models in diagnostic order.
   const loom_amdgpu_occupancy_register_class_model_t* register_classes;
   // Number of entries in register_classes.

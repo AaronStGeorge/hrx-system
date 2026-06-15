@@ -21,4 +21,7 @@ def test_occupancy_generator_emits_data_source_only() -> None:
     assert "\nif " not in source
     assert "\nreturn " not in source
     assert "loom_amdgpu_occupancy_model_for_descriptor_set_ordinal" not in source
+    assert "loom_amdgpu_occupancy_pressure_cliff_model_t" in source
+    assert ".pressure_cliffs =" in source
+    assert ".pressure_cliff_count =" in source
     assert "kLoomAmdgpuOccupancyModels[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT]" in source
