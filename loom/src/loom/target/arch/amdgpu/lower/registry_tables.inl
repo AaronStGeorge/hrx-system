@@ -4,78 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU source-to-low callback dispatch rows. This file is included by
-// registry.c after the target-specific callback shims are declared.
-
-#define LOOM_AMDGPU_OP_INDEX(op_kind) ((uint8_t)((op_kind) & 0xFFu))
-
-#define LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type) \
-  ((uint16_t)(sizeof(plan_type) +             \
-              0u * sizeof(char[(sizeof(plan_type) <= UINT16_MAX) ? 1 : -1])))
-
-#define LOOM_AMDGPU_ROW(op_kind, storage_policy_value, preselect_policy_value, \
-                        plan_data_size_value, select_fn, emit_fn, verify_fn)   \
-  {                                                                            \
-      .source_op_kind = (op_kind),                                             \
-      .storage_policy = (storage_policy_value),                                \
-      .preselect_policy = (preselect_policy_value),                            \
-      .plan_data_size = (plan_data_size_value),                                \
-      .select = (select_fn),                                                   \
-      .emit = (emit_fn),                                                       \
-      .verify = (verify_fn),                                                   \
-  }
-
-#define LOOM_AMDGPU_DIRECT_POLICY_ROW(op_kind, select_fn, emit_fn, verify_fn, \
-                                      storage_policy_value,                   \
-                                      preselect_policy_value)                 \
-  LOOM_AMDGPU_ROW(op_kind, storage_policy_value, preselect_policy_value, 0,   \
-                  select_fn, emit_fn, verify_fn)
-
-#define LOOM_AMDGPU_DIRECT_ROW(op_kind, select_fn, emit_fn, verify_fn)  \
-  LOOM_AMDGPU_DIRECT_POLICY_ROW(op_kind, select_fn, emit_fn, verify_fn, \
-                                LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS,    \
-                                LOOM_AMDGPU_PRESELECT_NONE)
-
-#define LOOM_AMDGPU_DIRECT_STORAGE_ROW(op_kind, select_fn, emit_fn, verify_fn, \
-                                       storage_policy_value)                   \
-  LOOM_AMDGPU_DIRECT_POLICY_ROW(op_kind, select_fn, emit_fn, verify_fn,        \
-                                storage_policy_value,                          \
-                                LOOM_AMDGPU_PRESELECT_NONE)
-
-#define LOOM_AMDGPU_DIRECT_PRESELECT_ROW(op_kind, select_fn, emit_fn,       \
-                                         verify_fn, preselect_policy_value) \
-  LOOM_AMDGPU_DIRECT_POLICY_ROW(op_kind, select_fn, emit_fn, verify_fn,     \
-                                LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS,        \
-                                preselect_policy_value)
-
-#define LOOM_AMDGPU_DATA_POLICY_ROW(op_kind, plan_type, select_fn, emit_fn,  \
-                                    verify_fn, storage_policy_value,         \
-                                    preselect_policy_value)                  \
-  LOOM_AMDGPU_ROW(op_kind, storage_policy_value, preselect_policy_value,     \
-                  LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type), select_fn, emit_fn, \
-                  verify_fn)
-
-#define LOOM_AMDGPU_DATA_ROW(op_kind, plan_type, select_fn, emit_fn,          \
-                             verify_fn)                                       \
-  LOOM_AMDGPU_DATA_POLICY_ROW(op_kind, plan_type, select_fn, emit_fn,         \
-                              verify_fn, LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS, \
-                              LOOM_AMDGPU_PRESELECT_NONE)
-
-#define LOOM_AMDGPU_DATA_STORAGE_ROW(op_kind, plan_type, select_fn, emit_fn, \
-                                     verify_fn, storage_policy_value)        \
-  LOOM_AMDGPU_DATA_POLICY_ROW(op_kind, plan_type, select_fn, emit_fn,        \
-                              verify_fn, storage_policy_value,               \
-                              LOOM_AMDGPU_PRESELECT_NONE)
-
-#define LOOM_AMDGPU_DATA_PRESELECT_ROW(op_kind, plan_type, select_fn, emit_fn, \
-                                       verify_fn, preselect_policy_value)      \
-  LOOM_AMDGPU_DATA_POLICY_ROW(op_kind, plan_type, select_fn, emit_fn,          \
-                              verify_fn, LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS,  \
-                              preselect_policy_value)
-
-#define LOOM_AMDGPU_LEGALITY_ROW(op_kind, verify_fn)            \
-  LOOM_AMDGPU_ROW(op_kind, LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS, \
-                  LOOM_AMDGPU_PRESELECT_NONE, 0, NULL, NULL, verify_fn)
+// AMDGPU source-to-low callback dispatch rows.
 
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuIndexDispatchRows[LOOM_OP_INDEX_COUNT_] = {
@@ -608,8 +537,3 @@ static const loom_amdgpu_lower_dispatch_row_t
                                  loom_amdgpu_emit_kernel_async_wait_dispatch,
                                  loom_amdgpu_low_legality_verify_kernel_async),
 };
-
-#undef LOOM_AMDGPU_DIRECT_ROW
-#undef LOOM_AMDGPU_DATA_ROW
-#undef LOOM_AMDGPU_LEGALITY_ROW
-#undef LOOM_AMDGPU_OP_INDEX
