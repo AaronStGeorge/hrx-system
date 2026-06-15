@@ -89,6 +89,9 @@ typedef struct loom_amdgpu_vopd_plan_builder_t {
   const loom_amdgpu_wait_state_plan_t* wait_states;
   // Arena owning all output and scratch arrays.
   iree_arena_allocator_t* arena;
+  // Descriptor-ordinal-indexed component rows for the selected descriptor set.
+  const loom_amdgpu_vopd_component_rule_t**
+      component_rules_by_descriptor_ordinal;
   // Scheduled packets with wait insertions before them.
   bool* insertion_blocked_packets;
   // Output VOPD pair records.
@@ -651,28 +654,41 @@ iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
     return iree_ok_status();
   }
 
+  const loom_amdgpu_vopd_component_rule_t*
+      component_rules[IREE_ARRAYSIZE(kVopdComponentRules)] = {0};
+  iree_host_size_t component_rule_count = 0;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kVopdComponentRules); ++i) {
+    const loom_amdgpu_vopd_component_rule_t* rule = &kVopdComponentRules[i];
+    if (!loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
+            rule, descriptor_set)) {
+      continue;
+    }
+    const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+        descriptor_set, rule->descriptor_ref);
+    if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+      continue;
+    }
+    IREE_ASSERT(descriptor_ordinal < descriptor_set->descriptor_count);
+    component_rules[component_rule_count++] = rule;
+  }
+  if (component_rule_count == 0) {
+    return iree_ok_status();
+  }
+
   const iree_host_size_t max_affinity_count =
-      IREE_ARRAYSIZE(kVopdComponentRules) * IREE_ARRAYSIZE(kVopdComponentRules);
+      component_rule_count * component_rule_count;
   loom_low_schedule_pair_affinity_t* affinities = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, max_affinity_count, sizeof(*affinities), (void**)&affinities));
   iree_host_size_t affinity_count = 0;
-  for (iree_host_size_t first_index = 0;
-       first_index < IREE_ARRAYSIZE(kVopdComponentRules); ++first_index) {
+  for (iree_host_size_t first_index = 0; first_index < component_rule_count;
+       ++first_index) {
     const loom_amdgpu_vopd_component_rule_t* first_rule =
-        &kVopdComponentRules[first_index];
-    if (!loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
-            first_rule, descriptor_set)) {
-      continue;
-    }
-    for (iree_host_size_t second_index = 0;
-         second_index < IREE_ARRAYSIZE(kVopdComponentRules); ++second_index) {
+        component_rules[first_index];
+    for (iree_host_size_t second_index = 0; second_index < component_rule_count;
+         ++second_index) {
       const loom_amdgpu_vopd_component_rule_t* second_rule =
-          &kVopdComponentRules[second_index];
-      if (!loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
-              second_rule, descriptor_set)) {
-        continue;
-      }
+          component_rules[second_index];
       loom_amdgpu_vopd_pair_reason_t reason =
           LOOM_AMDGPU_VOPD_PAIR_REASON_UNKNOWN;
       if (!loom_amdgpu_vopd_component_infos_pair_reason(
@@ -690,6 +706,40 @@ iree_status_t loom_amdgpu_vopd_build_schedule_pair_affinities(
       .values = affinities,
       .count = affinity_count,
   };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_vopd_plan_build_component_lookup(
+    loom_amdgpu_vopd_plan_builder_t* builder) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      builder->schedule->target.descriptor_set;
+  if (descriptor_set->descriptor_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      builder->arena, descriptor_set->descriptor_count,
+      sizeof(*builder->component_rules_by_descriptor_ordinal),
+      (void**)&builder->component_rules_by_descriptor_ordinal));
+  memset(builder->component_rules_by_descriptor_ordinal, 0,
+         descriptor_set->descriptor_count *
+             sizeof(*builder->component_rules_by_descriptor_ordinal));
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kVopdComponentRules); ++i) {
+    const loom_amdgpu_vopd_component_rule_t* rule = &kVopdComponentRules[i];
+    if (!loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
+            rule, descriptor_set)) {
+      continue;
+    }
+    const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+        descriptor_set, rule->descriptor_ref);
+    if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+      continue;
+    }
+    IREE_ASSERT(descriptor_ordinal < descriptor_set->descriptor_count);
+    const loom_amdgpu_vopd_component_rule_t** slot =
+        &builder->component_rules_by_descriptor_ordinal[descriptor_ordinal];
+    IREE_ASSERT(*slot == NULL);
+    *slot = rule;
+  }
   return iree_ok_status();
 }
 
@@ -819,6 +869,7 @@ static iree_status_t loom_amdgpu_vopd_mark_wait_state_insertions(
 static iree_status_t loom_amdgpu_vopd_plan_allocate(
     loom_amdgpu_vopd_plan_builder_t* builder) {
   const iree_host_size_t packet_count = builder->schedule->scheduled_node_count;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_plan_build_component_lookup(builder));
   builder->pair_capacity = packet_count / 2;
   builder->rejection_capacity = packet_count == 0 ? 0 : packet_count - 1;
   if (packet_count != 0) {
@@ -1205,49 +1256,47 @@ static iree_status_t loom_amdgpu_vopd_read_component(
 
   const loom_low_descriptor_set_t* descriptor_set =
       builder->schedule->target.descriptor_set;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kVopdComponentRules); ++i) {
-    const loom_amdgpu_vopd_component_rule_t* rule = &kVopdComponentRules[i];
-    if (!loom_amdgpu_vopd_component_rule_applies_to_descriptor_set(
-            rule, descriptor_set)) {
-      continue;
-    }
-    const loom_low_descriptor_t* descriptor =
-        loom_amdgpu_descriptor_ref_descriptor(descriptor_set,
-                                              rule->descriptor_ref);
-    if (descriptor == NULL || packet->descriptor != descriptor) {
-      continue;
-    }
-    iree_status_t status = iree_ok_status();
-    switch (rule->info.form) {
-      case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_ACCUMULATE:
-        status = loom_amdgpu_vopd_read_tied_accumulate_component(
-            builder, packet, &rule->info, out_component, out_eligible);
-        break;
-      case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAAK_LITERAL:
-      case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAMK_LITERAL:
-        status = loom_amdgpu_vopd_read_literal_fma_component(
-            builder, packet, out_component, out_eligible);
-        break;
-      case LOOM_AMDGPU_VOPD_COMPONENT_FORM_BINARY_VGPR:
-        status = loom_amdgpu_vopd_read_binary_vgpr_component(
-            builder, packet, out_component, out_eligible);
-        break;
-      case LOOM_AMDGPU_VOPD_COMPONENT_FORM_INLINE_MOV:
-        status = loom_amdgpu_vopd_read_mov_component(
-            builder, packet, out_component, out_eligible);
-        break;
-      default:
-        return iree_make_status(IREE_STATUS_INTERNAL,
-                                "AMDGPU VOPD component rule has unknown form");
-    }
-    if (iree_status_is_ok(status) && *out_eligible) {
-      out_component->info = &rule->info;
-      out_component->op = rule->info.op;
-      out_component->source_register_mask = rule->info.source_register_mask;
-    }
-    return status;
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_descriptor_ordinal(descriptor_set,
+                                                 packet->descriptor);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE ||
+      builder->component_rules_by_descriptor_ordinal == NULL) {
+    return iree_ok_status();
   }
-  return iree_ok_status();
+  const loom_amdgpu_vopd_component_rule_t* rule =
+      builder->component_rules_by_descriptor_ordinal[descriptor_ordinal];
+  if (rule == NULL) {
+    return iree_ok_status();
+  }
+  iree_status_t status = iree_ok_status();
+  switch (rule->info.form) {
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_TIED_ACCUMULATE:
+      status = loom_amdgpu_vopd_read_tied_accumulate_component(
+          builder, packet, &rule->info, out_component, out_eligible);
+      break;
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAAK_LITERAL:
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_FMAMK_LITERAL:
+      status = loom_amdgpu_vopd_read_literal_fma_component(
+          builder, packet, out_component, out_eligible);
+      break;
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_BINARY_VGPR:
+      status = loom_amdgpu_vopd_read_binary_vgpr_component(
+          builder, packet, out_component, out_eligible);
+      break;
+    case LOOM_AMDGPU_VOPD_COMPONENT_FORM_INLINE_MOV:
+      status = loom_amdgpu_vopd_read_mov_component(builder, packet,
+                                                   out_component, out_eligible);
+      break;
+    default:
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "AMDGPU VOPD component rule has unknown form");
+  }
+  if (iree_status_is_ok(status) && *out_eligible) {
+    out_component->info = &rule->info;
+    out_component->op = rule->info.op;
+    out_component->source_register_mask = rule->info.source_register_mask;
+  }
+  return status;
 }
 
 static bool loom_amdgpu_vopd_pair_reason_for_components(
