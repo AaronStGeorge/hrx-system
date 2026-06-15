@@ -25,6 +25,7 @@
 #include "iree/hal/drivers/vulkan/debug_utils.h"
 #include "iree/hal/drivers/vulkan/device_options.h"
 #include "iree/hal/drivers/vulkan/device_plan.h"
+#include "iree/hal/drivers/vulkan/device_spec_builder.h"
 #include "iree/hal/drivers/vulkan/executable.h"
 #include "iree/hal/drivers/vulkan/executable_cache.h"
 #include "iree/hal/drivers/vulkan/physical_device.h"
@@ -33,7 +34,6 @@
 #include "iree/hal/drivers/vulkan/semaphore.h"
 #include "iree/hal/drivers/vulkan/syms.h"
 #include "iree/hal/local/profile.h"
-#include "iree/hal/utils/device_spec_builder.h"
 #include "iree/hal/utils/file_registry.h"
 
 //===----------------------------------------------------------------------===//
@@ -1706,12 +1706,8 @@ static iree_status_t iree_hal_vulkan_logical_device_create(
   iree_string_view_append_to_buffer(identifier, &device->identifier,
                                     (char*)device + sizeof(*device));
 
-  iree_status_t status = iree_hal_device_spec_create_minimal(
-      identifier, identifier, IREE_SV("vulkan"), IREE_SV("vulkan"),
-      host_allocator, &device->device_spec);
-  if (iree_status_is_ok(status)) {
-    status = iree_hal_vulkan_libvulkan_copy(libvulkan, &device->libvulkan);
-  }
+  iree_status_t status =
+      iree_hal_vulkan_libvulkan_copy(libvulkan, &device->libvulkan);
   if (iree_status_is_ok(status)) {
     iree_slim_mutex_initialize(&device->queues.handle_mutexes.compute);
     iree_slim_mutex_initialize(&device->queues.handle_mutexes.transfer);
@@ -1749,6 +1745,24 @@ static iree_status_t iree_hal_vulkan_logical_device_initialize_allocator(
       device->enabled_extensions, device->queues.affinity_mask,
       device->queues.sparse_binding_lane, device->proactor,
       device->host_allocator, &device->device_allocator);
+}
+
+static iree_status_t iree_hal_vulkan_logical_device_initialize_device_spec(
+    iree_hal_vulkan_logical_device_t* device,
+    const iree_hal_vulkan_device_plan_t* device_plan) {
+  IREE_ASSERT_ARGUMENT(device);
+  IREE_ASSERT_ARGUMENT(device_plan);
+  IREE_ASSERT_ARGUMENT(device->device_allocator);
+
+  iree_hal_vulkan_device_spec_params_t spec_params = {
+      .logical_device_id = device->identifier,
+      .display_name = device->identifier,
+      .physical_device = &device->physical_device,
+      .device_plan = device_plan,
+      .device_allocator = device->device_allocator,
+  };
+  return iree_hal_vulkan_device_spec_create(
+      &spec_params, device->host_allocator, &device->device_spec);
 }
 
 static void iree_hal_vulkan_logical_device_resolve_queue_assignment(
@@ -2016,6 +2030,10 @@ static iree_status_t iree_hal_vulkan_logical_device_initialize_from_plan(
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_vulkan_logical_device_initialize_queue_staging(device);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_vulkan_logical_device_initialize_device_spec(device,
+                                                                   device_plan);
   }
   return status;
 }

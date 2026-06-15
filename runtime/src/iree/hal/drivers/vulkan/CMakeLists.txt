@@ -48,6 +48,7 @@ iree_cc_library(
     "device_spec_builder.c"
   DEPS
     ::device_spec
+    ::headers
     iree::base
     iree::hal
     iree::hal::utils::device_spec_builder
@@ -283,6 +284,7 @@ iree_cc_library(
     "syms.h"
   DEPS
     ::api
+    ::device_spec_builder
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -299,7 +301,6 @@ iree_cc_library(
     iree::hal::memory::slab_provider
     iree::hal::memory::tlsf_pool
     iree::hal::memory::tracing
-    iree::hal::utils::device_spec_builder
     iree::hal::utils::files
     iree::hal::utils::resource_set
     iree::third_party::vulkan_headers
