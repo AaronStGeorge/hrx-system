@@ -838,6 +838,20 @@ low.func.def target(@gfx11_target) @gfx11_vopd_and_b32_y_only_pair_native(%a0: r
 
 // ====
 
+// RUN: emit amdgpu-native @gfx11_vopd_delay_alu_binary_pairs_native strategy=source fixed=%sum0:physical_register:4:1 fixed=%sum1:physical_register:5:1 fixed=%product0:physical_register:4:1 fixed=%product1:physical_register:5:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_delay_alu_binary_pairs_native(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %sum0 = v_add_f32 %a0, %b0
+  %sum1 = v_add_f32 %a1, %b1
+  %product0 = v_mul_f32 %sum0, %b0
+  %product1 = v_mul_f32 %sum1, %b1
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-native @gfx1250_vopd_y_only_integer_pairs_native strategy=source fixed=%a0:physical_register:0:1 fixed=%b0:physical_register:1:1 fixed=%i0:physical_register:2:1 fixed=%i1:physical_register:3:1 fixed=%scale0:physical_register:4:1 fixed=%max_value:physical_register:5:1 fixed=%scale1:physical_register:6:1 fixed=%min_value:physical_register:7:1 fixed=%scale2:physical_register:8:1 fixed=%difference:physical_register:9:1 fixed=%scale3:physical_register:10:1 fixed=%logical_shift:physical_register:11:1 fixed=%scale4:physical_register:12:1 fixed=%arithmetic_shift:physical_register:13:1
 amdgpu.target<gfx1250> @gfx1250_target
 low.func.def target(@gfx1250_target) @gfx1250_vopd_y_only_integer_pairs_native(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %i0: reg<amdgpu.vgpr>, %i1: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.gfx125x.core> {
@@ -871,9 +885,7 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_chain_pair_exposure(%acc0: r
 // ----
   v_dual_fmac_f32 v0, v1, v2 :: v_dual_fmac_f32 v3, v4, v5
   s_delay_alu instid0(VALU_DEP_2)
-  v_fmac_f32 v0, v6, v7
-  s_delay_alu instid0(VALU_DEP_2)
-  v_fmac_f32 v3, v8, v9
+  v_dual_fmac_f32 v0, v6, v7 :: v_dual_fmac_f32 v3, v8, v9
   s_endpgm
 
 // ====
@@ -899,9 +911,25 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_chain_pair_exposure_through_
 // ----
   v_dual_fmac_f32 v0, v4, v8 :: v_dual_fmac_f32 v1, v6, v10
   s_delay_alu instid0(VALU_DEP_2)
-  v_fmac_f32 v0, v5, v9
+  v_dual_fmac_f32 v0, v5, v9 :: v_dual_fmac_f32 v1, v7, v11
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_vopd_delay_alu_binary_pairs strategy=source fixed=%sum0:physical_register:4:1 fixed=%sum1:physical_register:5:1 fixed=%product0:physical_register:4:1 fixed=%product1:physical_register:5:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_delay_alu_binary_pairs(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %sum0 = v_add_f32 %a0, %b0
+  %sum1 = v_add_f32 %a1, %b1
+  %product0 = v_mul_f32 %sum0, %b0
+  %product1 = v_mul_f32 %sum1, %b1
+  return
+}
+
+// ----
+  v_dual_add_f32 v4, v0, v2 :: v_dual_add_f32 v5, v1, v3
   s_delay_alu instid0(VALU_DEP_2)
-  v_fmac_f32 v1, v7, v11
+  v_dual_mul_f32 v4, v4, v2 :: v_dual_mul_f32 v5, v5, v3
   s_endpgm
 
 // ====

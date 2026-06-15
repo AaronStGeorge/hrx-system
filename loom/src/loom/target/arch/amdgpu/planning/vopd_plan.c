@@ -778,6 +778,11 @@ static iree_status_t loom_amdgpu_vopd_mark_wait_state_insertions(
   for (iree_host_size_t i = 0; i < builder->wait_states->state_count; ++i) {
     const loom_amdgpu_wait_state_t* wait_state =
         &builder->wait_states->states[i];
+    if (wait_state->action == LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU) {
+      // Native emitters can move S_DELAY_ALU before the fused VOPD packet and
+      // consume the wait state attached to the second component.
+      continue;
+    }
     uint32_t packet_index = LOOM_LOW_PACKET_INDEX_NONE;
     IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_packet_index_for_insertion(
         builder->schedule, wait_state->block_index, wait_state->node_index,
@@ -1550,7 +1555,7 @@ iree_status_t loom_amdgpu_vopd_plan_verify(
 static iree_status_t loom_amdgpu_vopd_verify_insertion_packet(
     const loom_amdgpu_vopd_plan_t* plan, uint32_t block_index,
     uint32_t node_index, uint32_t scheduled_ordinal,
-    iree_string_view_t insertion_kind) {
+    iree_string_view_t insertion_kind, bool allow_second_component) {
   if (plan == NULL || plan->packet_count == 0) {
     return iree_ok_status();
   }
@@ -1560,7 +1565,8 @@ static iree_status_t loom_amdgpu_vopd_verify_insertion_packet(
       &packet_index));
   const loom_amdgpu_vopd_packet_t* packet =
       loom_amdgpu_vopd_plan_packet_at(plan, packet_index);
-  if (packet != NULL && packet->role == LOOM_AMDGPU_VOPD_PACKET_ROLE_SECOND) {
+  if (packet != NULL && packet->role == LOOM_AMDGPU_VOPD_PACKET_ROLE_SECOND &&
+      !allow_second_component) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU VOPD plan cannot preserve %.*s insertion before fused second "
@@ -1586,7 +1592,8 @@ iree_status_t loom_amdgpu_vopd_plan_verify_wait_insertions(
       const loom_amdgpu_wait_packet_t* wait_packet = &wait_packets->packets[i];
       IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_verify_insertion_packet(
           plan, wait_packet->block_index, wait_packet->node_index,
-          wait_packet->scheduled_ordinal, IREE_SV("wait-packet")));
+          wait_packet->scheduled_ordinal, IREE_SV("wait-packet"),
+          /*allow_second_component=*/false));
     }
   }
   if (wait_states != NULL) {
@@ -1594,7 +1601,8 @@ iree_status_t loom_amdgpu_vopd_plan_verify_wait_insertions(
       const loom_amdgpu_wait_state_t* wait_state = &wait_states->states[i];
       IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_verify_insertion_packet(
           plan, wait_state->block_index, wait_state->node_index,
-          wait_state->scheduled_ordinal, IREE_SV("wait-state")));
+          wait_state->scheduled_ordinal, IREE_SV("wait-state"),
+          wait_state->action == LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU));
     }
   }
   return iree_ok_status();

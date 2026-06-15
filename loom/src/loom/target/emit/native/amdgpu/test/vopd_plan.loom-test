@@ -56,6 +56,21 @@ low.func.def target(@gfx11_target) @gfx11_vopd_plan_binary_f32_pairs(%a0: reg<am
 
 // ====
 
+// RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_delay_alu_binary_pairs strategy=source fixed=%sum0:physical_register:4:1 fixed=%sum1:physical_register:5:1 fixed=%product0:physical_register:4:1 fixed=%product1:physical_register:5:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_plan_delay_alu_binary_pairs(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %sum0 = v_add_f32 %a0, %b0
+  %sum1 = v_add_f32 %a1, %b1
+  %product0 = v_mul_f32 %sum0, %b0
+  %product1 = v_mul_f32 %sum1, %b1
+  return
+}
+
+// ----
+{"format":"loom.amdgpu.vopd_plan.v0","function":"gfx11_vopd_plan_delay_alu_binary_pairs","target":"gfx11_target","descriptor_set":"amdgpu.rdna3.core","pair_count":2,"rejection_count":0,"packet_count":5,"pairs":[{"index":0,"reason":"dual_add_f32","block":0,"flags":0,"literal_u32":null,"x":{"packet":0,"node":0,"descriptor":"amdgpu.v_add_f32","op_id":4,"op":"add_f32","vdst":4,"src0":0,"vsrc1":2},"y":{"packet":1,"node":1,"descriptor":"amdgpu.v_add_f32","op_id":4,"op":"add_f32","vdst":5,"src0":1,"vsrc1":3}},{"index":1,"reason":"dual_mul_f32","block":0,"flags":0,"literal_u32":null,"x":{"packet":2,"node":2,"descriptor":"amdgpu.v_mul_f32","op_id":3,"op":"mul_f32","vdst":4,"src0":4,"vsrc1":2},"y":{"packet":3,"node":3,"descriptor":"amdgpu.v_mul_f32","op_id":3,"op":"mul_f32","vdst":5,"src0":5,"vsrc1":3}}],"rejections":[],"packets":[{"index":0,"role":"first","pair":0},{"index":1,"role":"second","pair":0},{"index":2,"role":"first","pair":1},{"index":3,"role":"second","pair":1},{"index":4,"role":"none","pair":null}]}
+
+// ====
+
 // RUN: emit amdgpu-vopd-plan-json @gfx11_vopd_plan_minmax_f32_pairs fixed=%a0:physical_register:0:1 fixed=%b0:physical_register:1:1 fixed=%a1:physical_register:2:1 fixed=%b1:physical_register:3:1 fixed=%min0:physical_register:4:1 fixed=%min1:physical_register:5:1 fixed=%max0:physical_register:6:1 fixed=%max1:physical_register:7:1
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_plan_minmax_f32_pairs(%a0: reg<amdgpu.vgpr>, %b0: reg<amdgpu.vgpr>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

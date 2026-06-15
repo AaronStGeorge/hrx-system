@@ -76,6 +76,10 @@ typedef struct loom_amdgpu_encode_state_t {
   iree_host_size_t next_wait_packet_index;
   // Next wait-state row to compare with the current scheduled packet.
   iree_host_size_t next_wait_state_index;
+  // True when the current packet already encoded an S_DELAY_ALU wait state.
+  bool packet_emitted_delay_alu;
+  // S_DELAY_ALU immediate encoded for the current packet.
+  uint16_t packet_delay_alu_immediate;
   // Planned byte offset for each scheduled block.
   iree_host_size_t* block_offsets;
 } loom_amdgpu_encode_state_t;
@@ -1304,6 +1308,77 @@ static iree_status_t loom_amdgpu_encode_wait_state_action(
   }
 }
 
+static void loom_amdgpu_note_encoded_wait_state(
+    loom_amdgpu_encode_state_t* state,
+    const loom_amdgpu_wait_state_t* wait_state) {
+  if (wait_state->action != LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU) {
+    return;
+  }
+  state->packet_emitted_delay_alu = true;
+  state->packet_delay_alu_immediate = wait_state->delay_alu_immediate;
+}
+
+static bool loom_amdgpu_wait_state_is_movable_vopd_second_delay(
+    const loom_amdgpu_wait_state_t* wait_state) {
+  return wait_state->action == LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU;
+}
+
+static bool loom_amdgpu_current_packet_has_same_delay_alu(
+    const loom_amdgpu_encode_state_t* state,
+    const loom_amdgpu_wait_state_t* wait_state) {
+  return state->packet_emitted_delay_alu &&
+         wait_state->action == LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU &&
+         state->packet_delay_alu_immediate == wait_state->delay_alu_immediate;
+}
+
+static bool loom_amdgpu_wait_state_is_before_node(
+    const loom_amdgpu_wait_state_t* wait_state,
+    const loom_low_schedule_node_t* node) {
+  return wait_state->block_index < node->block_index ||
+         (wait_state->block_index == node->block_index &&
+          wait_state->scheduled_ordinal < node->scheduled_ordinal);
+}
+
+static bool loom_amdgpu_wait_state_matches_packet(
+    const loom_amdgpu_wait_state_t* wait_state,
+    const loom_low_packet_view_t* packet) {
+  const loom_low_schedule_node_t* node = packet->node;
+  return wait_state->block_index == node->block_index &&
+         wait_state->scheduled_ordinal == node->scheduled_ordinal &&
+         wait_state->node_index == packet->node_index;
+}
+
+static iree_status_t loom_amdgpu_encode_movable_vopd_second_wait_states(
+    loom_amdgpu_encode_state_t* state,
+    const loom_low_packet_view_t* second_packet) {
+  if (state->wait_states == NULL) {
+    return iree_ok_status();
+  }
+  while (state->next_wait_state_index < state->wait_states->state_count) {
+    const loom_amdgpu_wait_state_t* wait_state =
+        &state->wait_states->states[state->next_wait_state_index];
+    if (!loom_amdgpu_wait_state_matches_packet(wait_state, second_packet)) {
+      return iree_ok_status();
+    }
+    if (!loom_amdgpu_wait_state_is_movable_vopd_second_delay(wait_state)) {
+      iree_string_view_t action_name =
+          loom_amdgpu_wait_state_action_name(wait_state->action);
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU native encoding VOPD plan cannot move wait-state action "
+          "'%.*s' before a fused second component",
+          (int)action_name.size, action_name.data);
+    }
+    if (!loom_amdgpu_current_packet_has_same_delay_alu(state, wait_state)) {
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_encode_wait_state_action(state, wait_state));
+      loom_amdgpu_note_encoded_wait_state(state, wait_state);
+    }
+    ++state->next_wait_state_index;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_push_immediate_encoding_field_values(
     loom_amdgpu_encode_state_t* state, const loom_low_immediate_t* immediate,
     uint64_t value, loom_amdgpu_encoding_field_value_t* field_values,
@@ -1734,10 +1809,7 @@ static iree_status_t loom_amdgpu_encode_vopd_component(
 
 static iree_status_t loom_amdgpu_encode_vopd_pair(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* first,
-    const loom_amdgpu_vopd_pair_t* pair) {
-  loom_low_packet_view_t second = {0};
-  IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
-      state->schedule, state->allocation, pair->second_packet_index, &second));
+    const loom_low_packet_view_t* second, const loom_amdgpu_vopd_pair_t* pair) {
   loom_amdgpu_encoding_vopdxy_fields_t fields = {
       .op_x = pair->op_x,
       .op_y = pair->op_y,
@@ -1750,7 +1822,7 @@ static iree_status_t loom_amdgpu_encode_vopd_pair(
   loom_amdgpu_vopd_pair_flags_t second_flags = 0;
   uint32_t second_literal_u32 = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_encode_vopd_component(
-      state, &second, pair->op_y, &fields, &second_flags, &second_literal_u32,
+      state, second, pair->op_y, &fields, &second_flags, &second_literal_u32,
       LOOM_AMDGPU_VOPD_COMPONENT_SLOT_Y));
   const loom_amdgpu_vopd_pair_flags_t component_flags =
       first_flags | second_flags;
@@ -1818,7 +1890,13 @@ static iree_status_t loom_amdgpu_try_encode_vopd_packet(
   }
   const loom_amdgpu_vopd_pair_t* pair =
       &state->vopd_plan->pairs[vopd_packet->pair_index];
-  return loom_amdgpu_encode_vopd_pair(state, packet, pair);
+  loom_low_packet_view_t second_packet = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_packet_view_at(state->schedule, state->allocation,
+                              pair->second_packet_index, &second_packet));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encode_movable_vopd_second_wait_states(
+      state, &second_packet));
+  return loom_amdgpu_encode_vopd_pair(state, packet, &second_packet, pair);
 }
 
 static iree_status_t loom_amdgpu_encode_descriptor_packet(
@@ -2234,23 +2312,6 @@ static iree_status_t loom_amdgpu_encode_wait_packets_before_packet(
   return iree_ok_status();
 }
 
-static bool loom_amdgpu_wait_state_is_before_node(
-    const loom_amdgpu_wait_state_t* wait_state,
-    const loom_low_schedule_node_t* node) {
-  return wait_state->block_index < node->block_index ||
-         (wait_state->block_index == node->block_index &&
-          wait_state->scheduled_ordinal < node->scheduled_ordinal);
-}
-
-static bool loom_amdgpu_wait_state_matches_packet(
-    const loom_amdgpu_wait_state_t* wait_state,
-    const loom_low_packet_view_t* packet) {
-  const loom_low_schedule_node_t* node = packet->node;
-  return wait_state->block_index == node->block_index &&
-         wait_state->scheduled_ordinal == node->scheduled_ordinal &&
-         wait_state->node_index == packet->node_index;
-}
-
 static iree_status_t loom_amdgpu_encode_wait_states_before_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   if (state->wait_states == NULL) {
@@ -2271,6 +2332,7 @@ static iree_status_t loom_amdgpu_encode_wait_states_before_packet(
     }
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_encode_wait_state_action(state, wait_state));
+    loom_amdgpu_note_encoded_wait_state(state, wait_state);
     ++state->next_wait_state_index;
   }
   return iree_ok_status();
@@ -2304,6 +2366,8 @@ static const loom_amdgpu_encode_structural_dispatch_t
 
 static iree_status_t loom_amdgpu_encode_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
+  state->packet_emitted_delay_alu = false;
+  state->packet_delay_alu_immediate = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_encode_wait_packets_before_packet(state, packet));
   IREE_RETURN_IF_ERROR(
