@@ -8,6 +8,7 @@
 #define IREE_HAL_DRIVERS_AMDGPU_FEEDBACK_STATE_H_
 
 #include "iree/base/api.h"
+#include "iree/base/threading/mutex.h"
 #include "iree/hal/device_event.h"
 #include "iree/hal/drivers/amdgpu/abi/feedback.h"
 #include "iree/hal/drivers/amdgpu/api.h"
@@ -39,6 +40,9 @@ typedef struct iree_hal_amdgpu_feedback_device_state_t {
 
   // Physical device ordinal associated with this feedback channel.
   iree_host_size_t physical_device_ordinal;
+
+  // Serializes drains between the feedback service thread and queue retirement.
+  iree_slim_mutex_t drain_mutex;
 
   // Host-owned channel shared with device producers.
   iree_hal_amdgpu_feedback_channel_t channel;
@@ -109,6 +113,16 @@ void iree_hal_amdgpu_feedback_state_deinitialize(
 // Returns true when |state| owns enabled feedback resources.
 bool iree_hal_amdgpu_feedback_state_is_enabled(
     const iree_hal_amdgpu_feedback_state_t* state);
+
+// Drains ready packets from the channel for |physical_device_ordinal|.
+//
+// This reports channel or packet handling errors through the state error
+// handler. It may be called by the feedback service thread after a device
+// notification or by host queue retirement before queue-owned resources and
+// signal semaphores are released.
+void iree_hal_amdgpu_feedback_state_drain_physical_device(
+    iree_hal_amdgpu_feedback_state_t* state,
+    iree_host_size_t physical_device_ordinal);
 
 // Populates |out_config| with the device-visible feedback configuration.
 //

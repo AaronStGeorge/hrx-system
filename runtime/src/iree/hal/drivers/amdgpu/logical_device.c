@@ -2302,7 +2302,7 @@ static iree_status_t iree_hal_amdgpu_logical_device_assign_topology_info(
     status = iree_hal_amdgpu_physical_device_assign_frontier(
         base_device, system, logical_device->proactor,
         topology_info->frontier.tracker, topology_info->frontier.base_axis,
-        logical_device->host_queue_epoch_table,
+        logical_device->host_queue_epoch_table, &logical_device->feedback,
         &system->host_memory_pools[host_ordinal],
         logical_device->host_allocator,
         logical_device->physical_devices[device_ordinal]);

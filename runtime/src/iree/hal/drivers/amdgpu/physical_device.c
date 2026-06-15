@@ -1147,6 +1147,7 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
     iree_async_frontier_tracker_t* frontier_tracker,
     iree_async_axis_t base_axis,
     iree_hal_amdgpu_epoch_signal_table_t* epoch_signal_table,
+    iree_hal_amdgpu_feedback_state_t* feedback_state,
     const iree_hal_amdgpu_host_memory_pools_t* host_memory_pools,
     iree_allocator_t host_allocator,
     iree_hal_amdgpu_physical_device_t* physical_device) {
@@ -1215,8 +1216,8 @@ iree_status_t iree_hal_amdgpu_physical_device_assign_frontier(
         completion_thread_affinity, physical_device->wait_barrier_strategy,
         physical_device->vendor_packet_capabilities,
         physical_device->pm4_timestamp_strategy, epoch_signal_table,
-        &physical_device->fine_host_block_pool, profiling_memory,
-        &physical_device->buffer_transfer_context,
+        feedback_state, &physical_device->fine_host_block_pool,
+        profiling_memory, &physical_device->buffer_transfer_context,
         &physical_device->default_pool_set, physical_device->default_pool,
         &physical_device->transient_buffer_pool,
         &physical_device->file_staging_pool, physical_device->device_ordinal,

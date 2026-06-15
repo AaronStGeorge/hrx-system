@@ -48,6 +48,8 @@ typedef struct iree_hal_amdgpu_profile_trace_session_t
     iree_hal_amdgpu_profile_trace_session_t;
 typedef struct iree_hal_amdgpu_profile_trace_slot_t
     iree_hal_amdgpu_profile_trace_slot_t;
+typedef struct iree_hal_amdgpu_feedback_state_t
+    iree_hal_amdgpu_feedback_state_t;
 typedef struct iree_hal_amdgpu_staging_pool_t iree_hal_amdgpu_staging_pool_t;
 typedef struct iree_hal_amdgpu_transient_buffer_pool_t
     iree_hal_amdgpu_transient_buffer_pool_t;
@@ -495,6 +497,10 @@ typedef struct iree_hal_amdgpu_host_queue_t {
   // the physical device and immutable for the queue's lifetime.
   const iree_hal_amdgpu_device_buffer_transfer_context_t* transfer_context;
 
+  // Borrowed logical-device feedback state drained during queue retirement.
+  // NULL when feedback is disabled.
+  iree_hal_amdgpu_feedback_state_t* feedback_state;
+
   // Borrowed default pool set for this queue's physical device.
   const iree_hal_pool_set_t* default_pool_set;
 
@@ -592,6 +598,10 @@ void iree_hal_amdgpu_host_queue_enqueue_post_drain_action(
 // emission. This queue registers its epoch signal in the table at init and
 // deregisters at deinit. The table must outlive the queue.
 //
+// |feedback_state| is borrowed from the logical device. When enabled, queue
+// retirement drains the physical-device feedback channel before releasing
+// queue-owned resources or publishing signal semaphores.
+//
 // |completion_thread_affinity| pins the completion thread near the host CPU
 // agent associated with the GPU. The platform may ignore the request, but on
 // NUMA-aware systems this keeps blocked-wait wakeups and notification-ring
@@ -635,6 +645,7 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
     iree_hal_amdgpu_vendor_packet_capability_flags_t vendor_packet_capabilities,
     iree_hal_amdgpu_pm4_timestamp_strategy_t pm4_timestamp_strategy,
     iree_hal_amdgpu_epoch_signal_table_t* epoch_table,
+    iree_hal_amdgpu_feedback_state_t* feedback_state,
     iree_arena_block_pool_t* block_pool,
     iree_hal_amdgpu_host_queue_profiling_memory_t profiling_memory,
     const iree_hal_amdgpu_device_buffer_transfer_context_t* transfer_context,

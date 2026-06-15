@@ -191,12 +191,35 @@ static iree_status_t iree_hal_amdgpu_feedback_state_drain_packet(
   return iree_ok_status();
 }
 
-static iree_status_t iree_hal_amdgpu_feedback_state_drain_device(
+static iree_status_t iree_hal_amdgpu_feedback_state_drain_device_locked(
     iree_hal_amdgpu_feedback_device_state_t* device_state) {
   iree_host_size_t packet_count = 0;
   return iree_hal_amdgpu_feedback_channel_drain(
       &device_state->channel, IREE_HOST_SIZE_MAX,
       iree_hal_amdgpu_feedback_state_drain_packet, device_state, &packet_count);
+}
+
+void iree_hal_amdgpu_feedback_state_drain_physical_device(
+    iree_hal_amdgpu_feedback_state_t* state,
+    iree_host_size_t physical_device_ordinal) {
+  if (!iree_hal_amdgpu_feedback_state_is_enabled(state)) return;
+  if (IREE_UNLIKELY(physical_device_ordinal >= state->device_state_count)) {
+    iree_status_t status =
+        iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                         "AMDGPU feedback physical device ordinal %" PRIhsz
+                         " exceeds device count %" PRIhsz,
+                         physical_device_ordinal, state->device_state_count);
+    iree_hal_amdgpu_feedback_state_report_error(state, status);
+    return;
+  }
+
+  iree_hal_amdgpu_feedback_device_state_t* device_state =
+      &state->device_states[physical_device_ordinal];
+  iree_slim_mutex_lock(&device_state->drain_mutex);
+  iree_status_t status =
+      iree_hal_amdgpu_feedback_state_drain_device_locked(device_state);
+  iree_slim_mutex_unlock(&device_state->drain_mutex);
+  iree_hal_amdgpu_feedback_state_report_error(state, status);
 }
 
 static void iree_hal_amdgpu_feedback_state_request_device_stop(
@@ -253,9 +276,8 @@ static int iree_hal_amdgpu_feedback_state_service_thread_main(void* entry_arg) {
       if (signal_index == IREE_HAL_AMDGPU_FEEDBACK_WAIT_NOTIFY_SIGNAL) {
         (void)iree_hsa_signal_exchange_scacquire(
             IREE_LIBHSA(libhsa), device_state->channel.notify_signal, 0);
-        iree_status_t status =
-            iree_hal_amdgpu_feedback_state_drain_device(device_state);
-        iree_hal_amdgpu_feedback_state_report_error(state, status);
+        iree_hal_amdgpu_feedback_state_drain_physical_device(
+            state, device_state->physical_device_ordinal);
       }
 
       if (signal_index == IREE_HAL_AMDGPU_FEEDBACK_WAIT_STOP_SIGNAL) {
@@ -275,9 +297,8 @@ static int iree_hal_amdgpu_feedback_state_service_thread_main(void* entry_arg) {
     }
   }
 
-  iree_status_t status =
-      iree_hal_amdgpu_feedback_state_drain_device(device_state);
-  iree_hal_amdgpu_feedback_state_report_error(state, status);
+  iree_hal_amdgpu_feedback_state_drain_physical_device(
+      state, device_state->physical_device_ordinal);
 
   {
     IREE_TRACE_ZONE_BEGIN_NAMED(
@@ -291,6 +312,8 @@ static iree_status_t iree_hal_amdgpu_feedback_state_initialize_device(
     iree_hal_amdgpu_feedback_state_t* state, iree_hal_amdgpu_system_t* system,
     iree_hal_amdgpu_physical_device_t* physical_device,
     iree_hal_amdgpu_feedback_device_state_t* out_device_state) {
+  memset(out_device_state, 0, sizeof(*out_device_state));
+
   if (IREE_UNLIKELY(!physical_device)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -315,6 +338,7 @@ static iree_status_t iree_hal_amdgpu_feedback_state_initialize_device(
 
   out_device_state->parent = state;
   out_device_state->physical_device_ordinal = physical_device->device_ordinal;
+  iree_slim_mutex_initialize(&out_device_state->drain_mutex);
 
   const iree_hal_amdgpu_feedback_channel_params_t channel_params = {
       .libhsa = state->libhsa,
@@ -356,6 +380,7 @@ static iree_status_t iree_hal_amdgpu_feedback_state_initialize_device(
           state->libhsa, out_device_state->stop_signal));
     }
     iree_hal_amdgpu_feedback_channel_deinitialize(&out_device_state->channel);
+    iree_slim_mutex_deinitialize(&out_device_state->drain_mutex);
     memset(out_device_state, 0, sizeof(*out_device_state));
   }
   return status;
@@ -440,6 +465,7 @@ void iree_hal_amdgpu_feedback_state_deinitialize(
       device_state->stop_signal = iree_hsa_signal_null();
     }
     iree_hal_amdgpu_feedback_channel_deinitialize(&device_state->channel);
+    iree_slim_mutex_deinitialize(&device_state->drain_mutex);
   }
   iree_allocator_free(state->host_allocator, state->device_states);
   memset(state, 0, sizeof(*state));
