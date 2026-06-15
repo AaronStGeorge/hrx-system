@@ -706,8 +706,10 @@ low.func.def target(@gfx11_target) @gfx11_vopd_rope_pair_rotate_motif(%even: reg
 
 // ----
   v_dual_mul_f32 v4, v0, v3 :: v_dual_mul_f32 v5, v1, v2
+  s_delay_alu instid0(VALU_DEP_1)
   v_sub_f32 v6, v4, v5
   v_dual_mul_f32 v7, v0, v2 :: v_dual_mul_f32 v8, v1, v3
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v9, v7, v8
   s_endpgm
 
@@ -868,7 +870,10 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_chain_pair_exposure(%acc0: r
 
 // ----
   v_dual_fmac_f32 v0, v1, v2 :: v_dual_fmac_f32 v3, v4, v5
-  v_dual_fmac_f32 v0, v6, v7 :: v_dual_fmac_f32 v3, v8, v9
+  s_delay_alu instid0(VALU_DEP_2)
+  v_fmac_f32 v0, v6, v7
+  s_delay_alu instid0(VALU_DEP_2)
+  v_fmac_f32 v3, v8, v9
   s_endpgm
 
 // ====
@@ -893,7 +898,10 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_chain_pair_exposure_through_
 
 // ----
   v_dual_fmac_f32 v0, v4, v8 :: v_dual_fmac_f32 v1, v6, v10
-  v_dual_fmac_f32 v0, v5, v9 :: v_dual_fmac_f32 v1, v7, v11
+  s_delay_alu instid0(VALU_DEP_2)
+  v_fmac_f32 v0, v5, v9
+  s_delay_alu instid0(VALU_DEP_2)
+  v_fmac_f32 v1, v7, v11
   s_endpgm
 
 // ====
@@ -2522,6 +2530,7 @@ low.func.def target(@gfx12_target) @gfx12_valu_sgpr_read_depctr(%resource: reg<a
   v_add_u32 v0, s0, v0
   s_add_u32 s0, s0, s0
   s_wait_alu depctr(0)
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_u32 v0, s0, v0
   buffer_store_dword v0, v1, s[4:7], s0 offen offset:0
   s_endpgm
@@ -2564,11 +2573,17 @@ low.func.def target(@gfx11_target) @gfx11_trans_result_expired_by_valu_distance(
 // ----
   v_rsq_f32 v0, v0
   v_add_f32 v3, v1, v1
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v3, v3, v1
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v3, v3, v1
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v3, v3, v1
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v3, v3, v1
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v1, v3, v1
+  s_delay_alu instid0(VALU_DEP_1)
   v_mul_f32 v0, v0, v1
   buffer_store_dword v0, v2, s[0:3], s4 offen offset:0
   s_endpgm
@@ -2793,9 +2808,11 @@ low.func.def target(@gfx11_target) @gfx11_convergent_exec_state_fence(%lhs: reg<
 
 // ----
   v_add_f32 v0, v0, v1
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v1, v0, v1
   ds_bpermute_b32 v0, v2, v0 offset:0
   s_waitcnt vmcnt(63) lgkmcnt(0)
+  s_delay_alu instid0(VALU_DEP_1)
   v_add_f32 v1, v0, v1
   s_endpgm
 

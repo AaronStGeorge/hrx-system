@@ -65,6 +65,38 @@ amdgpu.wait_state_plan states=0 progress=3 hazards=0
 
 // ====
 
+// RUN: emit amdgpu-wait-state-plan @gfx11_valu_dependency_delay_alu strategy=source
+
+amdgpu.target<gfx1100> @gfx11_target
+
+low.func.def target(@gfx11_target) @gfx11_valu_dependency_delay_alu(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %sum = v_add_f32 %lhs, %rhs
+  %product = v_mul_f32 %sum, %rhs
+  return %product
+}
+
+// ----
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n1/o1 producer=n0 consumer=n1 required=4 observed=1 residual=3 delay_alu=0x0001
+
+// ====
+
+// RUN: emit amdgpu-wait-state-plan @gfx1200_trans_dependency_delay_alu strategy=source
+
+amdgpu.target<gfx1200> @gfx1200_target
+
+low.func.def target(@gfx1200_target) @gfx1200_trans_dependency_delay_alu(%source: reg<amdgpu.vgpr>, %scale: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna4.core> {
+  %reciprocal = v_rsq_f32 %source
+  %product = v_mul_f32 %reciprocal, %scale
+  return %product
+}
+
+// ----
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n1/o1 producer=n0 consumer=n1 required=8 observed=1 residual=7 delay_alu=0x0005
+
+// ====
+
 // RUN: emit amdgpu-wait-state-plan @gfx942_mfma_result_to_smfmac_srcc_exact_no_wait_state
 
 amdgpu.target<gfx942> @gfx942_target
@@ -192,7 +224,7 @@ low.func.def target(@gfx11_target) @gfx11_dpp_vgpr_read_wait_state(%lhs: reg<amd
 
 // ----
 amdgpu.wait_state_plan states=1 progress=3 hazards=1
-state[0] reason=dpp_vgpr_read action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=2 observed=0 residual=2
+state[0] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n1/o1 producer=n0 consumer=n1 required=4 observed=1 residual=3 delay_alu=0x0001
 
 // ====
 
@@ -209,8 +241,9 @@ low.func.def target(@gfx11_target) @gfx11_dpp_vgpr_read_wait_state_observed_prog
 }
 
 // ----
-amdgpu.wait_state_plan states=1 progress=5 hazards=1
-state[0] reason=dpp_vgpr_read action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=2 observed=1 residual=1
+amdgpu.wait_state_plan states=2 progress=5 hazards=2
+state[0] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n2/o2 producer=n0 consumer=n2 required=4 observed=2 residual=2 delay_alu=0x0002
+state[1] reason=delay_alu_dependency action=amdgpu.s_delay_alu at=b0:n3/o3 producer=n2 consumer=n3 required=4 observed=1 residual=3 delay_alu=0x0001
 
 // ====
 

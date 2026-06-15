@@ -1274,12 +1274,25 @@ static iree_status_t loom_amdgpu_encode_s_nop_cycles(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_encode_s_delay_alu(
+    loom_amdgpu_encode_state_t* state, uint16_t delay_alu_immediate) {
+  if (state->target->sopp.delay_alu == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU target does not support S_DELAY_ALU");
+  }
+  return loom_amdgpu_encode_sopp_simm16(state, state->target->sopp.delay_alu,
+                                        delay_alu_immediate);
+}
+
 static iree_status_t loom_amdgpu_encode_wait_state_action(
     loom_amdgpu_encode_state_t* state,
     const loom_amdgpu_wait_state_t* wait_state) {
   switch (wait_state->action) {
     case LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP:
       return loom_amdgpu_encode_s_nop_cycles(state, wait_state->cycle_count);
+    case LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU:
+      return loom_amdgpu_encode_s_delay_alu(state,
+                                            wait_state->delay_alu_immediate);
     case LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN:
     default: {
       iree_string_view_t action_name =

@@ -47,12 +47,14 @@ AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES = 1 << 1
 AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES = 1 << 2
 AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES = 1 << 3
 AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR = 1 << 4
+AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU = 1 << 5
 AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS = (
     AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR
     | AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES
     | AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES
     | AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES
     | AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR
+    | AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU
 )
 AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES = (
     AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES
@@ -315,7 +317,7 @@ def rdna3_processor_info(
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA3_GFX11,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
-        scheduling_bits=scheduling_bits,
+        scheduling_bits=scheduling_bits | AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
     )
 
 
@@ -344,7 +346,10 @@ def gfx117x_processor_info(
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA3_GFX11,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
-        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
+        scheduling_bits=(
+            AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR
+            | AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU
+        ),
     )
 
 
@@ -522,7 +527,10 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
-        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+        scheduling_bits=(
+            AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR
+            | AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU
+        ),
     ),
     processor_info(
         "gfx1201",
@@ -531,7 +539,10 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
-        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+        scheduling_bits=(
+            AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR
+            | AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU
+        ),
     ),
     processor_info(
         "gfx1250",
@@ -541,6 +552,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX125,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
     ),
     processor_info(
         "gfx1251",
@@ -550,6 +562,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX125,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
     ),
     processor_info(
         "gfx1310",
@@ -590,7 +603,10 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
-        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+        scheduling_bits=(
+            AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR
+            | AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU
+        ),
     ),
     processor_info(
         "gfx9-4-generic",
@@ -608,6 +624,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor=AMDGPU_KERNEL_DESCRIPTOR_INFO_RDNA4_GFX125,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
     ),
 )
 
