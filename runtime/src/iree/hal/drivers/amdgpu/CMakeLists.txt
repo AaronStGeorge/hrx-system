@@ -453,6 +453,7 @@ iree_cc_test(
     iree::base
     iree::hal
     iree::hal::cts::util::test_base
+    iree::hal::drivers::amdgpu::util::info
     iree::hal::drivers::amdgpu::util::topology
     iree::hal::drivers::amdgpu::util::vmem
     iree::testing::gtest

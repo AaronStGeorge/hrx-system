@@ -9,6 +9,7 @@
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/amdgpu/logical_device.h"
+#include "iree/hal/drivers/amdgpu/util/info.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/hal/drivers/amdgpu/util/vmem.h"
 #include "iree/testing/gtest.h"
@@ -77,6 +78,7 @@ class AllocatorTest : public ::testing::Test {
       iree_status_free(status);
       GTEST_SKIP() << "HSA not available, skipping tests";
     }
+    IREE_ASSERT_OK(iree_hal_amdgpu_system_info_query(&libhsa_, &system_info_));
     IREE_ASSERT_OK(iree_hal_amdgpu_topology_initialize_with_defaults(
         &libhsa_, &topology_));
     if (topology_.gpu_agent_count == 0) {
@@ -137,11 +139,13 @@ class AllocatorTest : public ::testing::Test {
 
   static iree_allocator_t host_allocator_;
   static iree_hal_amdgpu_libhsa_t libhsa_;
+  static iree_hal_amdgpu_system_info_t system_info_;
   static iree_hal_amdgpu_topology_t topology_;
 };
 
 iree_allocator_t AllocatorTest::host_allocator_;
 iree_hal_amdgpu_libhsa_t AllocatorTest::libhsa_;
+iree_hal_amdgpu_system_info_t AllocatorTest::system_info_;
 iree_hal_amdgpu_topology_t AllocatorTest::topology_;
 
 TEST_F(AllocatorTest, QueryMemoryHeapsReportsHsaLimits) {
@@ -381,48 +385,71 @@ TEST_F(AllocatorTest, UnsupportedExternalBufferImportsFailLoud) {
   }
 }
 
-TEST_F(AllocatorTest, AmdgpuDeviceQueriesExposeRepresentativePhysicalFacts) {
+TEST_F(AllocatorTest, AmdgpuDeviceSpecExposesRepresentativePhysicalFacts) {
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.Initialize(&libhsa_, &topology_, host_allocator_));
 
-  int64_t value = 0;
-  IREE_ASSERT_OK(
-      iree_hal_device_query_i64(test_device.device(), IREE_SV("amdgpu.device"),
-                                IREE_SV("physical_device.count"), &value));
-  EXPECT_EQ(value, (int64_t)topology_.gpu_agent_count);
+  const iree_hal_device_spec_t* device_spec =
+      iree_hal_device_spec(test_device.device());
+  ASSERT_NE(device_spec, nullptr);
 
-  IREE_ASSERT_OK(
-      iree_hal_device_query_i64(test_device.device(), IREE_SV("amdgpu.device"),
-                                IREE_SV("dmabuf.supported"), &value));
-  EXPECT_TRUE(value == 0 || value == 1);
+  const iree_hal_device_identity_spec_t* identity =
+      iree_hal_device_spec_identity(device_spec);
+  ASSERT_NE(identity, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(identity->driver_id, IREE_SV("amdgpu")));
+  EXPECT_TRUE(iree_string_view_equal(identity->backend_id, IREE_SV("hsa")));
+  ASSERT_EQ(identity->physical_device_count, topology_.gpu_agent_count);
+  ASSERT_GT(identity->physical_device_count, 0u);
+  EXPECT_TRUE(
+      iree_all_bits_set(identity->physical_devices[0].identity.flags,
+                        IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_PCI_ADDRESS |
+                            IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE));
 
-  IREE_ASSERT_OK(
-      iree_hal_device_query_i64(test_device.device(), IREE_SV("amdgpu.device"),
-                                IREE_SV("compute_unit_count"), &value));
-  EXPECT_GT(value, 0);
+  const iree_hal_device_memory_spec_t* memory =
+      iree_hal_device_spec_memory(device_spec);
+  ASSERT_NE(memory, nullptr);
+  if (system_info_.dmabuf_supported) {
+    iree_hal_external_buffer_handle_selection_t selection = {
+        /*.handle_type_mask=*/IREE_HAL_TOPOLOGY_HANDLE_TYPE_DMA_BUF,
+        /*.direction_flags=*/IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_IMPORT |
+            IREE_HAL_EXTERNAL_HANDLE_DIRECTION_FLAG_EXPORT,
+        /*.buffer_usage=*/
+        IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_DISPATCH,
+        /*.memory_access=*/IREE_HAL_MEMORY_ACCESS_NONE,
+        /*.compatible_memory_type_mask=*/UINT32_MAX,
+        /*.capability_flags=*/
+        IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_CROSS_PROCESS |
+            IREE_HAL_EXTERNAL_HANDLE_CAPABILITY_FLAG_OWNING,
+    };
+    EXPECT_NE(iree_hal_device_spec_find_external_buffer_handle(device_spec,
+                                                               &selection),
+              nullptr);
+  } else {
+    EXPECT_EQ(memory->external_buffer_handle_count, 0u);
+  }
 
-  IREE_ASSERT_OK(iree_hal_device_query_i64(test_device.device(),
-                                           IREE_SV("amdgpu.device"),
-                                           IREE_SV("wavefront_size"), &value));
-  EXPECT_TRUE(value == 32 || value == 64);
+  const iree_hal_device_dispatch_spec_t* dispatch =
+      iree_hal_device_spec_dispatch(device_spec);
+  ASSERT_NE(dispatch, nullptr);
+  EXPECT_GT(dispatch->execution.unit_count, 0u);
+  EXPECT_EQ(dispatch->execution.group_count, topology_.gpu_agent_count);
+  EXPECT_TRUE(dispatch->subgroup.default_size == 32 ||
+              dispatch->subgroup.default_size == 64);
+  EXPECT_EQ(dispatch->subgroup.default_size, dispatch->subgroup.minimum_size);
+  EXPECT_EQ(dispatch->subgroup.default_size, dispatch->subgroup.maximum_size);
 
-  IREE_ASSERT_OK(iree_hal_device_query_i64(test_device.device(),
-                                           IREE_SV("amdgpu.device"),
-                                           IREE_SV("pci.bdfid"), &value));
-  EXPECT_GE(value, 0);
-
-  IREE_ASSERT_OK(
-      iree_hal_device_query_i64(test_device.device(), IREE_SV("amdgpu.device"),
-                                IREE_SV("target.gfxip.major"), &value));
-  EXPECT_GT(value, 0);
-
-  IREE_ASSERT_OK(
-      iree_hal_device_query_i64(test_device.device(), IREE_SV("amdgpu.device"),
-                                IREE_SV("svm.direct_host_access"), &value));
-  EXPECT_TRUE(value == 0 || value == 1);
+  const iree_hal_device_executable_spec_t* executables =
+      iree_hal_device_spec_executables(device_spec);
+  ASSERT_NE(executables, nullptr);
+  ASSERT_GT(executables->target_count, 0u);
+  EXPECT_TRUE(iree_string_view_equal(executables->targets[0].family,
+                                     IREE_SV("amdgpu")));
+  EXPECT_FALSE(iree_string_view_is_empty(executables->targets[0].processor));
+  EXPECT_FALSE(
+      iree_string_view_is_empty(executables->targets[0].loader_target));
 }
 
-TEST_F(AllocatorTest, AmdgpuDeviceQueriesAllowCompositeDevices) {
+TEST_F(AllocatorTest, AmdgpuDeviceSpecAllowsCompositeDevices) {
   if (topology_.gpu_agent_count < 2) {
     GTEST_SKIP() << "requires a composite logical device";
   }
@@ -430,21 +457,30 @@ TEST_F(AllocatorTest, AmdgpuDeviceQueriesAllowCompositeDevices) {
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.Initialize(&libhsa_, &topology_, host_allocator_));
 
-  int64_t value = 0;
-  IREE_ASSERT_OK(
-      iree_hal_device_query_i64(test_device.device(), IREE_SV("amdgpu.device"),
-                                IREE_SV("physical_device.count"), &value));
-  EXPECT_EQ(value, (int64_t)topology_.gpu_agent_count);
+  const iree_hal_device_spec_t* device_spec =
+      iree_hal_device_spec(test_device.device());
+  ASSERT_NE(device_spec, nullptr);
 
-  IREE_ASSERT_OK(iree_hal_device_query_i64(test_device.device(),
-                                           IREE_SV("amdgpu.device"),
-                                           IREE_SV("pci.bdfid"), &value));
-  EXPECT_GE(value, 0);
+  const iree_hal_device_identity_spec_t* identity =
+      iree_hal_device_spec_identity(device_spec);
+  ASSERT_NE(identity, nullptr);
+  ASSERT_EQ(identity->physical_device_count, topology_.gpu_agent_count);
+  for (iree_host_size_t i = 0; i < identity->physical_device_count; ++i) {
+    const iree_hal_physical_device_spec_t* physical_device =
+        &identity->physical_devices[i];
+    EXPECT_EQ(physical_device->physical_ordinal, i);
+    EXPECT_EQ(physical_device->partition_count, 1u);
+    EXPECT_EQ(physical_device->physical_device_affinity, 1ull << i);
+    EXPECT_TRUE(iree_all_bits_set(
+        physical_device->identity.flags,
+        IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_PCI_ADDRESS |
+            IREE_HAL_PHYSICAL_DEVICE_IDENTITY_FLAG_NUMA_NODE));
+  }
 
-  IREE_ASSERT_OK(
-      iree_hal_device_query_i64(test_device.device(), IREE_SV("amdgpu.device"),
-                                IREE_SV("hsa.agent.handle"), &value));
-  EXPECT_NE(value, 0);
+  const iree_hal_device_dispatch_spec_t* dispatch =
+      iree_hal_device_spec_dispatch(device_spec);
+  ASSERT_NE(dispatch, nullptr);
+  EXPECT_EQ(dispatch->execution.group_count, topology_.gpu_agent_count);
 }
 
 TEST_F(AllocatorTest, DeviceAllocationImportRejectsUnknownPointer) {
