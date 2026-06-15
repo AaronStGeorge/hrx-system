@@ -35,8 +35,14 @@ def test_compare_generator_emits_data_source_only() -> None:
     assert "#ifndef " not in source
     assert "\nif " not in source
     assert "\nreturn " not in source
-    assert "kLoomAmdgpuCompareDescriptorCandidates[]" in source
-    assert "kLoomAmdgpuCompareDescriptorCandidateCount" in source
+    assert "kLoomAmdgpuVectorCmpiCompareDescriptorCandidates" in source
+    assert "kLoomAmdgpuScalarCmpfCompareDescriptorCandidates" in source
+    assert "kLoomAmdgpuVectorCmpfCompareDescriptorCandidates" in source
+    assert ".op_kind" not in source
+    assert ".predicate" not in source
+    assert "[LOOM_VECTOR_CMPI_PREDICATE_EQ]" in source
+    assert "[LOOM_SCALAR_CMPF_PREDICATE_OLT]" in source
+    assert "[LOOM_VECTOR_CMPF_PREDICATE_OLT]" in source
 
 
 def test_compare_generator_covers_predicate_rows() -> None:

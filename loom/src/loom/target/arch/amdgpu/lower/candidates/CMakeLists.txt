@@ -35,8 +35,6 @@ loom_generated_cc_library(
   HDRS
     "compare_candidates.h"
   DEPS
-    iree::base
-    loom::ir
     loom::ops::scalar
     loom::ops::vector
     loom::target::arch::amdgpu::refs::target_refs

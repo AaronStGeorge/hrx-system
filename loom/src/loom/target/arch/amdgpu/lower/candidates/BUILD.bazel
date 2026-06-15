@@ -37,10 +37,8 @@ loom_generated_cc_library(
     generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:compare_candidates",
     visibility = _AMDGPU_LOWER_VISIBILITY,
     deps = [
-        "//loom/src/loom/ir",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
-        "//runtime/src/iree/base",
     ],
 )

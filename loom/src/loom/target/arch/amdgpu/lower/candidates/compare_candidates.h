@@ -9,10 +9,8 @@
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_CANDIDATES_COMPARE_CANDIDATES_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_CANDIDATES_COMPARE_CANDIDATES_H_
 
-#include <stdint.h>
-
-#include "iree/base/api.h"
-#include "loom/ir/ir.h"
+#include "loom/ops/scalar/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 #ifdef __cplusplus
@@ -20,10 +18,6 @@ extern "C" {
 #endif
 
 typedef struct loom_amdgpu_compare_descriptor_candidate_t {
-  // Source compare op kind handled by this row.
-  loom_op_kind_t op_kind;
-  // Source compare predicate value matched by this row.
-  uint8_t predicate;
   // Dense AMDGPU descriptor ref selected when present in the descriptor set.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
   // Dense AMDGPU descriptor ref selected when the left-hand source is inline.
@@ -33,8 +27,14 @@ typedef struct loom_amdgpu_compare_descriptor_candidate_t {
 } loom_amdgpu_compare_descriptor_candidate_t;
 
 extern const loom_amdgpu_compare_descriptor_candidate_t
-    kLoomAmdgpuCompareDescriptorCandidates[];
-extern const iree_host_size_t kLoomAmdgpuCompareDescriptorCandidateCount;
+    kLoomAmdgpuVectorCmpiCompareDescriptorCandidates
+        [LOOM_VECTOR_CMPI_PREDICATE_COUNT_];
+extern const loom_amdgpu_compare_descriptor_candidate_t
+    kLoomAmdgpuScalarCmpfCompareDescriptorCandidates
+        [LOOM_SCALAR_CMPF_PREDICATE_COUNT_];
+extern const loom_amdgpu_compare_descriptor_candidate_t
+    kLoomAmdgpuVectorCmpfCompareDescriptorCandidates
+        [LOOM_VECTOR_CMPF_PREDICATE_COUNT_];
 
 #ifdef __cplusplus
 }  // extern "C"

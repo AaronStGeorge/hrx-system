@@ -35,6 +35,8 @@ from loom.target.low_descriptors import target_relative_name  # noqa: E402
 class _CompareFamily:
     source_op_name: str
     predicate_c_prefix: str
+    predicate_count_constant: str
+    candidate_array_name: str
     descriptor_element_type: str
     predicates: tuple[str, ...]
 
@@ -46,18 +48,24 @@ _COMPARE_FAMILIES = (
     _CompareFamily(
         source_op_name="vector.cmpi",
         predicate_c_prefix="LOOM_VECTOR_CMPI_PREDICATE",
+        predicate_count_constant="LOOM_VECTOR_CMPI_PREDICATE_COUNT_",
+        candidate_array_name="kLoomAmdgpuVectorCmpiCompareDescriptorCandidates",
         descriptor_element_type="i32",
         predicates=_I32_PREDICATES,
     ),
     _CompareFamily(
         source_op_name="scalar.cmpf",
         predicate_c_prefix="LOOM_SCALAR_CMPF_PREDICATE",
+        predicate_count_constant="LOOM_SCALAR_CMPF_PREDICATE_COUNT_",
+        candidate_array_name="kLoomAmdgpuScalarCmpfCompareDescriptorCandidates",
         descriptor_element_type="f32",
         predicates=_F32_PREDICATES,
     ),
     _CompareFamily(
         source_op_name="vector.cmpf",
         predicate_c_prefix="LOOM_VECTOR_CMPF_PREDICATE",
+        predicate_count_constant="LOOM_VECTOR_CMPF_PREDICATE_COUNT_",
+        candidate_array_name="kLoomAmdgpuVectorCmpfCompareDescriptorCandidates",
         descriptor_element_type="f32",
         predicates=_F32_PREDICATES,
     ),
@@ -71,10 +79,6 @@ def _c_identifier(value: str) -> str:
     if identifier[0].isdigit():
         identifier = "_" + identifier
     return identifier.upper()
-
-
-def _op_kind_constant_name(op_name: str) -> str:
-    return f"LOOM_OP_{_c_identifier(op_name)}"
 
 
 def _descriptor_ref_constant_name(key: str) -> str:
@@ -114,25 +118,46 @@ def _compare_candidates() -> tuple[tuple[_CompareFamily, str, str], ...]:
     return tuple(candidates)
 
 
-def _candidate_initializers(
+def _candidate_initializer(
+    family: _CompareFamily,
+    predicate: str,
+    descriptor_key: str,
+    descriptor_ref_key_set: set[str],
+) -> str:
+    return "\n".join(
+        [
+            f"    [{_predicate_constant(family, predicate)}] = {{",
+            f"        .descriptor_ref = {_descriptor_ref_constant_name(descriptor_key)},",
+            f"        .src0_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src0_inline', descriptor_ref_key_set)},",
+            f"        .src1_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src1_inline', descriptor_ref_key_set)},",
+            "    },",
+        ]
+    )
+
+
+def _family_array(
+    family: _CompareFamily,
     candidates: Iterable[tuple[_CompareFamily, str, str]],
+    descriptor_ref_key_set: set[str],
 ) -> Iterable[str]:
-    descriptor_ref_key_set = set(amdgpu_descriptor_ref_keys())
+    candidates = [candidate for candidate in candidates if candidate[0] == family]
+    if len(candidates) != len(family.predicates):
+        raise ValueError(f"compare family {family.source_op_name} generated {len(candidates)} rows for {len(family.predicates)} predicates")
+    yield "const loom_amdgpu_compare_descriptor_candidate_t"
+    yield f"    {family.candidate_array_name}[{family.predicate_count_constant}] = {{"
     for family, predicate, descriptor_key in candidates:
-        yield "\n".join(
-            [
-                "    {",
-                f"        .op_kind = {_op_kind_constant_name(family.source_op_name)},",
-                f"        .predicate = {_predicate_constant(family, predicate)},",
-                f"        .descriptor_ref = {_descriptor_ref_constant_name(descriptor_key)},",
-                f"        .src0_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src0_inline', descriptor_ref_key_set)},",
-                f"        .src1_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src1_inline', descriptor_ref_key_set)},",
-                "    },",
-            ]
-        )
+        yield _candidate_initializer(family, predicate, descriptor_key, descriptor_ref_key_set)
+    yield "};"
 
 
 def _emit_source(*, public_header: str) -> str:
+    candidates = _compare_candidates()
+    descriptor_ref_key_set = set(amdgpu_descriptor_ref_keys())
+    array_lines: list[str] = []
+    for family in _COMPARE_FAMILIES:
+        array_lines.extend(_family_array(family, candidates, descriptor_ref_key_set))
+        array_lines.append("")
+
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -148,13 +173,7 @@ def _emit_source(*, public_header: str) -> str:
         '#include "loom/ops/vector/ops.h"',
         '#include "loom/target/arch/amdgpu/refs/target_refs.h"',
         "",
-        "const loom_amdgpu_compare_descriptor_candidate_t",
-        "    kLoomAmdgpuCompareDescriptorCandidates[] = {",
-        *_candidate_initializers(_compare_candidates()),
-        "};",
-        "",
-        "const iree_host_size_t kLoomAmdgpuCompareDescriptorCandidateCount =",
-        "    IREE_ARRAYSIZE(kLoomAmdgpuCompareDescriptorCandidates);",
+        *array_lines,
     ]
     return "\n".join(lines) + "\n"
 

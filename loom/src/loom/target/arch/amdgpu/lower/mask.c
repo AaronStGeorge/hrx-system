@@ -26,15 +26,25 @@
 static const loom_amdgpu_compare_descriptor_candidate_t*
 loom_amdgpu_find_compare_descriptor_candidate(loom_op_kind_t op_kind,
                                               uint8_t predicate) {
-  for (iree_host_size_t i = 0; i < kLoomAmdgpuCompareDescriptorCandidateCount;
-       ++i) {
-    const loom_amdgpu_compare_descriptor_candidate_t* row =
-        &kLoomAmdgpuCompareDescriptorCandidates[i];
-    if (row->op_kind == op_kind && row->predicate == predicate) {
-      return row;
-    }
+  switch (op_kind) {
+    case LOOM_OP_VECTOR_CMPI:
+      if (predicate < LOOM_VECTOR_CMPI_PREDICATE_COUNT_) {
+        return &kLoomAmdgpuVectorCmpiCompareDescriptorCandidates[predicate];
+      }
+      return NULL;
+    case LOOM_OP_SCALAR_CMPF:
+      if (predicate < LOOM_SCALAR_CMPF_PREDICATE_COUNT_) {
+        return &kLoomAmdgpuScalarCmpfCompareDescriptorCandidates[predicate];
+      }
+      return NULL;
+    case LOOM_OP_VECTOR_CMPF:
+      if (predicate < LOOM_VECTOR_CMPF_PREDICATE_COUNT_) {
+        return &kLoomAmdgpuVectorCmpfCompareDescriptorCandidates[predicate];
+      }
+      return NULL;
+    default:
+      return NULL;
   }
-  return NULL;
 }
 
 static iree_status_t loom_amdgpu_resolve_optional_descriptor_ref(
