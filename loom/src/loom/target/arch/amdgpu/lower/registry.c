@@ -72,12 +72,31 @@ typedef iree_status_t (*loom_amdgpu_lower_verify_fn_t)(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+typedef uint8_t loom_amdgpu_storage_policy_t;
+
+enum loom_amdgpu_storage_policy_e {
+  // Conservative callback-plan behavior: keep every source operand available.
+  LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS = 0,
+  // Value lowering owns its source operand demand policy.
+  LOOM_AMDGPU_STORAGE_VALUE_PLAN = 1,
+  // Mixed scalar fma plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_FMA_MIX = 2,
+  // Packed ternary fma/mad plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_PACKED_TERNARY = 3,
+  // Mixed multiply plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_MULF_MIX = 4,
+  // Atomic plans own their source operand demand policy.
+  LOOM_AMDGPU_STORAGE_ATOMIC = 5,
+};
+
 typedef struct loom_amdgpu_lower_dispatch_row_t {
   // Source op kind covered by this AMDGPU lowering row.
   loom_op_kind_t source_op_kind;
+  // Callback-plan source storage policy used during demand analysis.
+  loom_amdgpu_storage_policy_t storage_policy;
   // Bytes of plan data allocated by typed data selectors. Direct selector
   // hooks keep this zero and own any mixed plan allocation themselves.
-  iree_host_size_t plan_data_size;
+  uint16_t plan_data_size;
   // Optional source-to-low plan selection hook.
   loom_amdgpu_lower_select_fn_t select;
   // Optional source-to-low plan emission hook.
@@ -85,6 +104,8 @@ typedef struct loom_amdgpu_lower_dispatch_row_t {
   // Optional target-low legality verifier hook.
   loom_amdgpu_lower_verify_fn_t verify;
 } loom_amdgpu_lower_dispatch_row_t;
+static_assert(sizeof(loom_amdgpu_lower_dispatch_row_t) == 32,
+              "AMDGPU lower dispatch rows must stay cache dense");
 
 #define LOOM_AMDGPU_DEFINE_DATA_SELECT(name, plan_type, select_fn)             \
   static iree_status_t name(loom_low_lower_context_t* context,                 \
@@ -644,40 +665,38 @@ static void loom_amdgpu_mark_plan_storage_demands(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_low_lower_plan_t plan) {
   (void)user_data;
-  if (plan.id == LOOM_OP_SCALAR_FMAF) {
-    loom_amdgpu_mark_fma_mix_plan_storage_demands(
-        context, source_op,
-        (const loom_amdgpu_fma_mix_plan_t*)plan.target_data);
-    return;
+  const loom_amdgpu_lower_dispatch_row_t* row =
+      loom_amdgpu_find_lower_dispatch_row(plan.id);
+  const loom_amdgpu_storage_policy_t storage_policy =
+      row != NULL ? row->storage_policy : LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS;
+  switch (storage_policy) {
+    case LOOM_AMDGPU_STORAGE_FMA_MIX:
+      loom_amdgpu_mark_fma_mix_plan_storage_demands(
+          context, source_op,
+          (const loom_amdgpu_fma_mix_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_PACKED_TERNARY:
+      loom_amdgpu_mark_packed_ternary_plan_storage_demands(
+          context, source_op,
+          (const loom_amdgpu_packed_ternary_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_MULF_MIX:
+      loom_amdgpu_mark_mulf_mix_plan_storage_demands(
+          context, source_op,
+          (const loom_amdgpu_mulf_mix_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_ATOMIC:
+      loom_amdgpu_mark_atomic_plan_storage_demands(
+          context, source_op,
+          (const loom_amdgpu_atomic_plan_t*)plan.target_data);
+      return;
+    case LOOM_AMDGPU_STORAGE_VALUE_PLAN:
+      loom_amdgpu_mark_value_plan_storage_demands(context, source_op, plan);
+      return;
+    default:
+      loom_low_lower_require_source_operands_storage(context, source_op);
+      return;
   }
-  if (plan.id == LOOM_OP_VECTOR_FMAF || plan.id == LOOM_OP_VECTOR_FMAI) {
-    loom_amdgpu_mark_packed_ternary_plan_storage_demands(
-        context, source_op,
-        (const loom_amdgpu_packed_ternary_plan_t*)plan.target_data);
-    return;
-  }
-  if (plan.id == LOOM_OP_SCALAR_MULF || plan.id == LOOM_OP_VECTOR_MULF) {
-    loom_amdgpu_mark_mulf_mix_plan_storage_demands(
-        context, source_op,
-        (const loom_amdgpu_mulf_mix_plan_t*)plan.target_data);
-    return;
-  }
-  if (loom_view_atomic_reduce_isa(source_op) ||
-      loom_view_atomic_rmw_isa(source_op) ||
-      loom_view_atomic_cmpxchg_isa(source_op) ||
-      loom_vector_atomic_reduce_isa(source_op) ||
-      loom_vector_atomic_rmw_isa(source_op)) {
-    loom_amdgpu_mark_atomic_plan_storage_demands(
-        context, source_op, (const loom_amdgpu_atomic_plan_t*)plan.target_data);
-    return;
-  }
-  if (plan.id == LOOM_OP_VECTOR_IOTA ||
-      plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS ||
-      plan.id == LOOM_OP_VECTOR_SPLAT || plan.id == LOOM_OP_VECTOR_INSERT) {
-    loom_amdgpu_mark_value_plan_storage_demands(context, source_op, plan);
-    return;
-  }
-  loom_low_lower_require_source_operands_storage(context, source_op);
 }
 
 static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_detail(
