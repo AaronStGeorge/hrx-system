@@ -42,6 +42,10 @@ enum loom_amdgpu_wait_counter_e {
   LOOM_AMDGPU_WAIT_COUNTER_ALU = 5,
 };
 
+// Number of concrete AMDGPU wait-counter slots. Counter ids are one-based, so
+// slot ids map to counter ids by adding one.
+#define LOOM_AMDGPU_WAIT_COUNTER_SLOT_COUNT LOOM_AMDGPU_WAIT_COUNTER_ALU
+
 // Bit masks for AMDGPU wait counters. These are descriptor-overlay ids, not
 // native instruction bit encodings.
 #define LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD ((uint32_t)1u << 0)

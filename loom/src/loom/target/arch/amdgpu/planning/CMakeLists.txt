@@ -152,6 +152,7 @@ loom_cc_library(
   DEPS
     ::wait_plan
     iree::base
+    iree::base::internal
     iree::base::internal::arena
     loom::codegen::low::descriptors
     loom::codegen::low::function
