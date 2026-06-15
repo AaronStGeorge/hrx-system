@@ -304,7 +304,7 @@ iree_status_t loom_amdgpu_matrix_feature_bits_from_processor(
     return iree_ok_status();
   }
   return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
+      IREE_STATUS_FAILED_PRECONDITION,
       "AMDGPU processor '%.*s' has no matrix feature profile",
       (int)processor.size, processor.data);
 }

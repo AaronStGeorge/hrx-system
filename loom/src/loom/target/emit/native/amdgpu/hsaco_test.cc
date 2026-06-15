@@ -628,7 +628,7 @@ TEST(AmdgpuHsacoTest, RejectsTargetFeatureSuffixesUntilFlagsAreEncoded) {
   StreamPtr stream = CreateStream();
   TestArena arena;
   IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_UNIMPLEMENTED,
+      IREE_STATUS_FAILED_PRECONDITION,
       loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
 }
 

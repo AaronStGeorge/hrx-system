@@ -550,7 +550,7 @@ iree_status_t loom_amdgpu_wait_packet_select_counter_mask(
       descriptor_set, counter_mask, target_count, out_selection, &selected));
   if (!selected) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU target cannot materialize wait packet for counter mask 0x%x",
         counter_mask);
   }
@@ -576,7 +576,7 @@ static iree_status_t loom_amdgpu_wait_packet_materialize_group(
             builder, remaining_counter_mask, &covered_counter_mask);
     if (descriptor == NULL) {
       return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
+          IREE_STATUS_FAILED_PRECONDITION,
           "AMDGPU target cannot materialize wait packet for counter mask 0x%x",
           remaining_counter_mask);
     }

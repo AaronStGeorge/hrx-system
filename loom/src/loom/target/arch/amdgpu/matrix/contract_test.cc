@@ -1418,9 +1418,16 @@ TEST(MatrixContractTest, ScaleFeatureDoesNotGateUnscaledDescriptors) {
 
 TEST(MatrixContractTest, ProcessorFeatureBitsRejectUnknownProcessor) {
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_amdgpu_matrix_feature_bits_from_processor(
                             IREE_SV("gfx9999"), &feature_bits));
+}
+
+TEST(MatrixContractTest, ProcessorFeatureBitsRejectMissingMatrixProfile) {
+  loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_amdgpu_matrix_feature_bits_from_processor(
+                            IREE_SV("gfx900"), &feature_bits));
 }
 
 TEST(MatrixContractTest, ProcessorFeatureBitsUseTargetInfoAliases) {

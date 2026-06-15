@@ -286,7 +286,7 @@ static iree_status_t loom_amdgpu_hsaco_validate_target_id(
       loom_amdgpu_target_info_parse_amdhsa_target_id(target, &target_id));
   if (!iree_string_view_is_empty(target_id.feature_suffix)) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU HSACO target-feature suffixes are not supported yet: '%.*s'",
         (int)target_id.feature_suffix.size, target_id.feature_suffix.data);
   }
@@ -1020,7 +1020,7 @@ iree_status_t loom_amdgpu_hsaco_write_file(
       loom_amdgpu_target_info_lookup_processor(file->processor, &processor));
   if (processor->elf.machine_flags == 0) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU HSACO processor '%.*s' has no ELF e_flags mapping",
         (int)file->processor.size, file->processor.data);
   }

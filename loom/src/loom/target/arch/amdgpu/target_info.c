@@ -99,7 +99,7 @@ iree_status_t loom_amdgpu_target_info_lookup_processor(
     *out_processor = processor;
     return iree_ok_status();
   }
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "AMDGPU processor '%.*s' is not supported",
                           (int)processor_name.size, processor_name.data);
 }
@@ -132,7 +132,7 @@ iree_status_t loom_amdgpu_target_info_lookup_descriptor_set(
     }
   }
   return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
+      IREE_STATUS_FAILED_PRECONDITION,
       "AMDGPU descriptor set '%.*s' is not supported by native emission",
       (int)descriptor_set_key.size, descriptor_set_key.data);
 }
@@ -152,7 +152,7 @@ iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
     *out_descriptor_set = descriptor_set;
     return iree_ok_status();
   }
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                           "AMDGPU descriptor set ordinal %" PRIu16
                           " is not supported by native emission",
                           descriptor_set_ordinal);

@@ -133,6 +133,24 @@ TEST(AmdgpuTargetInfoTest, DescriptorSetAtReturnsNullForUnknownOrdinal) {
   EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_at(UINT16_MAX - 1), nullptr);
 }
 
+TEST(AmdgpuTargetInfoTest, RejectsUnsupportedDescriptorSetKey) {
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_amdgpu_target_info_lookup_descriptor_set(
+          IREE_SV("amdgpu.unsupported.core"), &descriptor_set));
+  EXPECT_EQ(descriptor_set, nullptr);
+}
+
+TEST(AmdgpuTargetInfoTest, RejectsUnsupportedDescriptorSetOrdinal) {
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+          UINT16_MAX - 1, &descriptor_set));
+  EXPECT_EQ(descriptor_set, nullptr);
+}
+
 TEST(AmdgpuTargetInfoTest, DescriptorSetDelayAluOpcodesMatchRdnaFamilies) {
   const struct {
     uint16_t descriptor_set_ordinal;
@@ -360,7 +378,7 @@ TEST(AmdgpuTargetInfoTest, ParsesAmdhsaTargetIdWithFeatureSuffix) {
 TEST(AmdgpuTargetInfoTest, RejectsUnknownProcessor) {
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_UNIMPLEMENTED,
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx9999"), &processor));
   EXPECT_EQ(processor, nullptr);
 }
