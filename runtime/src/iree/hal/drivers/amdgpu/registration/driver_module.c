@@ -93,6 +93,12 @@ IREE_FLAG(string, amdgpu_asan_shadow_mode, "sparse",
           "full shadow reservation so arbitrary covered shadow reads report "
           "instead of faulting.");
 IREE_FLAG(
+    string, amdgpu_asan_shadow_backing, "device-local",
+    "AMDGPU ASAN physical shadow slab backing: 'device-local' backs shadow "
+    "slabs with GPU VRAM; 'host-local' backs shadow slabs with nearest-CPU "
+    "fine-grained host memory and relies on queue dependency edges for "
+    "dispatch-boundary shadow visibility.");
+IREE_FLAG(
     int64_t, amdgpu_asan_quarantine_size,
     IREE_HAL_AMDGPU_ASAN_DEFAULT_QUARANTINE_SIZE,
     "Freed ASAN allocation mapping budget in bytes kept resident and poisoned "
@@ -306,6 +312,17 @@ static iree_status_t iree_hal_amdgpu_driver_factory_try_create(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unrecognized ASAN shadow mode: '%s'",
                             FLAG_amdgpu_asan_shadow_mode);
+  }
+  if (strcmp(FLAG_amdgpu_asan_shadow_backing, "device-local") == 0) {
+    device_options->asan.shadow_backing =
+        IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL;
+  } else if (strcmp(FLAG_amdgpu_asan_shadow_backing, "host-local") == 0) {
+    device_options->asan.shadow_backing =
+        IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unrecognized ASAN shadow backing: '%s'",
+                            FLAG_amdgpu_asan_shadow_backing);
   }
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_flag_int64_to_device_size(
       "amdgpu_asan_quarantine_size", FLAG_amdgpu_asan_quarantine_size,

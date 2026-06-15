@@ -99,9 +99,8 @@ typedef struct iree_hal_amdgpu_asan_state_t {
 // When ASAN is disabled this leaves |out_state| zeroed and returns OK. When
 // enabled the state reserves a device-visible application virtual address
 // window for HAL-owned allocations, reserves the configured shadow virtual
-// address coverage, and configures later physical shadow slab mappings to use
-// the first physical device's coarse-grained VRAM pool with shared topology
-// access.
+// address coverage, and configures later physical shadow slab mappings from
+// the selected shadow backing policy with shared topology access.
 iree_status_t iree_hal_amdgpu_asan_state_initialize(
     const iree_hal_amdgpu_logical_device_options_t* options,
     iree_hal_amdgpu_system_t* system, iree_host_size_t physical_device_count,

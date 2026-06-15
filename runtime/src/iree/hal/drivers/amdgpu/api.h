@@ -112,6 +112,19 @@ typedef enum iree_hal_amdgpu_asan_shadow_mode_e {
   IREE_HAL_AMDGPU_ASAN_SHADOW_MODE_PREMAPPED = 1,
 } iree_hal_amdgpu_asan_shadow_mode_t;
 
+// Selects the physical memory backing ASAN shadow slabs.
+typedef enum iree_hal_amdgpu_asan_shadow_backing_e {
+  // Back shadow slabs with device-local VRAM from the representative physical
+  // device. This keeps instrumented shadow reads local to the GPU and is the
+  // default production policy.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL = 0,
+  // Back shadow slabs with nearest-CPU fine-grained host memory mapped for the
+  // logical-device topology. Host-local shadow updates must happen before
+  // queue submissions whose dispatches read them, or after waited work retires
+  // before release poisoning mutates them.
+  IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL = 1,
+} iree_hal_amdgpu_asan_shadow_backing_t;
+
 // Parameters configuring an iree_hal_amdgpu_logical_device_t.
 // Must be initialized with iree_hal_amdgpu_logical_device_options_initialize
 // prior to use.
@@ -208,6 +221,9 @@ typedef struct iree_hal_amdgpu_logical_device_options_t {
 
     // Shadow mapping policy used for the reserved shadow address space.
     iree_hal_amdgpu_asan_shadow_mode_t shadow_mode;
+
+    // Physical memory placement policy used for shadow slabs.
+    iree_hal_amdgpu_asan_shadow_backing_t shadow_backing;
 
     // Log2 application bytes represented by one shadow byte.
     uint32_t shadow_scale_shift;

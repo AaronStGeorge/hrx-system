@@ -181,6 +181,53 @@ static void iree_hal_amdgpu_asan_state_flush_quarantine(
   iree_hal_amdgpu_asan_quarantine_release_list(entry);
 }
 
+typedef struct iree_hal_amdgpu_asan_shadow_backing_selection_t {
+  // HSA memory pool used for physical shadow slabs.
+  hsa_amd_memory_pool_t memory_pool;
+
+  // HSA VMM memory type used for physical shadow slabs.
+  iree_hal_amdgpu_vmem_memory_type_t memory_type;
+
+  // Human-readable policy name used in diagnostics.
+  const char* name;
+} iree_hal_amdgpu_asan_shadow_backing_selection_t;
+
+static iree_status_t iree_hal_amdgpu_asan_state_select_shadow_backing(
+    const iree_hal_amdgpu_logical_device_options_t* options,
+    iree_hal_amdgpu_physical_device_t* physical_device,
+    iree_hal_amdgpu_asan_shadow_backing_selection_t* out_selection) {
+  memset(out_selection, 0, sizeof(*out_selection));
+  switch (options->asan.shadow_backing) {
+    case IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_DEVICE_LOCAL:
+      out_selection->memory_pool =
+          physical_device->coarse_block_pools.large.memory_pool;
+      out_selection->memory_type = IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_DEFAULT;
+      out_selection->name = "device-local";
+      if (IREE_UNLIKELY(!out_selection->memory_pool.handle)) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU ASAN device-local shadow backing requires a "
+            "coarse-grained device-local memory pool");
+      }
+      return iree_ok_status();
+    case IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL:
+      out_selection->memory_pool = physical_device->host_memory_pools.fine_pool;
+      out_selection->memory_type = IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_PINNED_HOST;
+      out_selection->name = "host-local";
+      if (IREE_UNLIKELY(!out_selection->memory_pool.handle)) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU ASAN host-local shadow backing requires a fine-grained "
+            "host memory pool");
+      }
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "invalid AMDGPU ASAN shadow backing value %u",
+                              (uint32_t)options->asan.shadow_backing);
+  }
+}
+
 static iree_status_t iree_hal_amdgpu_asan_state_initialize_shadow_map(
     const iree_hal_amdgpu_logical_device_options_t* options,
     iree_hal_amdgpu_system_t* system, iree_host_size_t physical_device_count,
@@ -195,13 +242,9 @@ static iree_status_t iree_hal_amdgpu_asan_state_initialize_shadow_map(
   }
 
   iree_hal_amdgpu_physical_device_t* physical_device = physical_devices[0];
-  hsa_amd_memory_pool_t shadow_memory_pool =
-      physical_device->coarse_block_pools.large.memory_pool;
-  if (IREE_UNLIKELY(!shadow_memory_pool.handle)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU ASAN requires a coarse-grained device-local memory pool");
-  }
+  iree_hal_amdgpu_asan_shadow_backing_selection_t shadow_backing = {0};
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_asan_state_select_shadow_backing(
+      options, physical_device, &shadow_backing));
 
   hsa_amd_memory_access_desc_t access_descs[IREE_HAL_AMDGPU_MAX_CPU_AGENT +
                                             IREE_HAL_AMDGPU_MAX_GPU_AGENT];
@@ -214,8 +257,8 @@ static iree_status_t iree_hal_amdgpu_asan_state_initialize_shadow_map(
   iree_hal_amdgpu_shadow_map_hsa_params_t shadow_map_params = {
       .host_allocator = host_allocator,
       .libhsa = &system->libhsa,
-      .memory_pool = shadow_memory_pool,
-      .memory_type = IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_DEFAULT,
+      .memory_pool = shadow_backing.memory_pool,
+      .memory_type = shadow_backing.memory_type,
       .shadow_scale_shift = options->asan.shadow_scale_shift,
       .application_window_base = application_coverage_base,
       .shadow_size = options->asan.shadow_size,
@@ -228,8 +271,14 @@ static iree_status_t iree_hal_amdgpu_asan_state_initialize_shadow_map(
       .access_desc_count = access_desc_count,
       .access_descs = access_descs,
   };
-  return iree_hal_amdgpu_shadow_map_initialize_hsa(&shadow_map_params,
-                                                   out_shadow_map);
+  iree_status_t status = iree_hal_amdgpu_shadow_map_initialize_hsa(
+      &shadow_map_params, out_shadow_map);
+  if (!iree_status_is_ok(status)) {
+    return iree_status_annotate_f(status,
+                                  "initializing AMDGPU ASAN %s shadow backing",
+                                  shadow_backing.name);
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_amdgpu_asan_state_calculate_application_coverage(

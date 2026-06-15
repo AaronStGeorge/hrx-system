@@ -10,6 +10,7 @@
 #include "iree/hal/api.h"
 #include "iree/hal/cts/util/test_base.h"
 #include "iree/hal/drivers/amdgpu/logical_device.h"
+#include "iree/hal/drivers/amdgpu/physical_device.h"
 #include "iree/hal/drivers/amdgpu/util/info.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/hal/drivers/amdgpu/util/vmem.h"
@@ -203,6 +204,8 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   EXPECT_TRUE(iree_device_size_is_power_of_two(shadow_map->slab_size));
   EXPECT_EQ(shadow_map->mapping_mode,
             IREE_HAL_AMDGPU_SHADOW_MAP_MAPPING_MODE_SPARSE);
+  EXPECT_EQ(shadow_map->hsa.memory_type,
+            IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_DEFAULT);
   EXPECT_EQ(shadow_map->initial_slab_value, 0xFAu);
   EXPECT_LE(shadow_map->slab_count,
             shadow_map->reservation_size / shadow_map->slab_size);
@@ -251,6 +254,42 @@ TEST_F(AllocatorTest, AsanStateReservesDefaultShadowMapWhenEnabled) {
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(config.reserved); ++i) {
     EXPECT_EQ(config.reserved[i], 0u);
   }
+}
+
+TEST_F(AllocatorTest, AsanHostLocalShadowBackingMapsPinnedHostSlabs) {
+  iree_hal_amdgpu_logical_device_options_t options;
+  iree_hal_amdgpu_logical_device_options_initialize(&options);
+  options.asan.enabled = 1;
+  options.asan.shadow_backing = IREE_HAL_AMDGPU_ASAN_SHADOW_BACKING_HOST_LOCAL;
+  options.asan.shadow_slab_size = 2 * 1024 * 1024;
+  options.asan.quarantine_size = 0;
+
+  TestLogicalDevice test_device;
+  IREE_ASSERT_OK(test_device.InitializeWithOptions(
+      &options, &libhsa_, &topology_, host_allocator_));
+
+  iree_hal_amdgpu_asan_state_t* asan_state =
+      &test_device.logical_device()->asan;
+  iree_hal_amdgpu_shadow_map_t* shadow_map =
+      iree_hal_amdgpu_asan_state_shadow_map(asan_state);
+  ASSERT_NE(shadow_map, nullptr);
+  EXPECT_EQ(shadow_map->hsa.memory_type,
+            IREE_HAL_AMDGPU_VMEM_MEMORY_TYPE_PINNED_HOST);
+  EXPECT_EQ(shadow_map->hsa.memory_pool.handle,
+            test_device.logical_device()
+                ->physical_devices[0]
+                ->host_memory_pools.fine_pool.handle);
+
+  IREE_ASSERT_OK(iree_hal_amdgpu_shadow_map_map_slab(shadow_map, 0));
+  ASSERT_EQ(shadow_map->slab_count, 1u);
+  EXPECT_EQ(shadow_map->slabs[0].index, 0u);
+
+  constexpr uint8_t kHeapRedzoneShadowValue = 0xFAu;
+  uint8_t shadow_byte = 0;
+  IREE_ASSERT_OK(iree_hsa_memory_copy(IREE_LIBHSA(&libhsa_), &shadow_byte,
+                                      shadow_map->slabs[0].base_ptr,
+                                      sizeof(shadow_byte)));
+  EXPECT_EQ(shadow_byte, kHeapRedzoneShadowValue);
 }
 
 TEST_F(AllocatorTest,
