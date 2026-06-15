@@ -597,12 +597,38 @@ iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,
                                           loom_value_id_t source_value_id,
                                           loom_value_id_t* out_low_value_id) {
   *out_low_value_id = LOOM_VALUE_ID_INVALID;
+  if (source_value_id == LOOM_VALUE_ID_INVALID ||
+      source_value_id >= context->module->values.count) {
+    const iree_string_view_t function_name =
+        loom_low_lower_context_function_name(context);
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "source-to-low lookup for invalid source value %" PRIu32
+        " in function '%.*s'",
+        (uint32_t)source_value_id, (int)function_name.size, function_name.data);
+  }
   const loom_value_ordinal_t source_ordinal =
       loom_low_lowering_frame_value_ordinal(&context->lowering,
                                             source_value_id);
   loom_value_id_t low_value_id = context->lowering.value_map[source_ordinal];
-  IREE_ASSERT(low_value_id != LOOM_VALUE_ID_INVALID);
-  IREE_ASSERT(low_value_id != LOOM_LOW_LOWER_VALUE_ID_ELIDED);
+  if (low_value_id == LOOM_VALUE_ID_INVALID) {
+    const iree_string_view_t function_name =
+        loom_low_lower_context_function_name(context);
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "source-to-low missing target value binding for source value %" PRIu32
+        " in function '%.*s'",
+        (uint32_t)source_value_id, (int)function_name.size, function_name.data);
+  }
+  if (low_value_id == LOOM_LOW_LOWER_VALUE_ID_ELIDED) {
+    const iree_string_view_t function_name =
+        loom_low_lower_context_function_name(context);
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "source-to-low requested elided source value %" PRIu32
+        " in function '%.*s'",
+        (uint32_t)source_value_id, (int)function_name.size, function_name.data);
+  }
   *out_low_value_id = low_value_id;
   return iree_ok_status();
 }

@@ -92,3 +92,41 @@ func.def @layout_guard_pruned_by_symbolic_address_order(%row: index, %lane: inde
   %lane_bounded = index.assume %lane [range(%lane, 0, 15)] : index
   func.return %lane_bounded : index
 }
+
+// ====
+
+// Edge-local facts for values derived inside a branch must be materialized
+// after the derived value's defining op. Inserting the index.assume at the
+// branch entry would create a use-before-def when source-to-low binds aliases.
+func.def @guarded_i32_cast_inside_branch_keeps_assume_after_cast(%row: i32, %row_count: i32) -> (index) {
+  %zero_i32 = scalar.constant 0 : i32
+  %zero_idx = index.constant 0 : index
+  %nonnegative = scalar.cmpi sge, %row, %zero_i32 : i32
+  %below = scalar.cmpi slt, %row, %row_count : i32
+  %guard = scalar.andi %nonnegative, %below : i1
+  %result = scf.if %guard -> (index) {
+    %row_idx = index.cast %row : i32 to index
+    scf.yield %row_idx : index
+  } else {
+    scf.yield %zero_idx : index
+  }
+  func.return %result : index
+}
+
+// ----
+func.def @guarded_i32_cast_inside_branch_keeps_assume_after_cast(%row: i32, %row_count: i32) -> (index) {
+  %zero_i32 = scalar.constant 0 : i32
+  %zero_idx = index.constant 0 : index
+  %nonnegative = scalar.cmpi sge, %row, %zero_i32 : i32
+  %below = scalar.cmpi slt, %row, %row_count : i32
+  %guard = scalar.andi %nonnegative, %below : i1
+  %result = scf.if %guard -> (index) {
+    %10 = scalar.assume %row [ge(%row, 0), lt(%row, %row_count)] : i32
+    %row_idx = index.cast %10 : i32 to index
+    %11 = index.assume %row_idx [ge(%row_idx, 0), lt(%row_idx, %row_count)] : index
+    scf.yield %11 : index
+  } else {
+    scf.yield %zero_idx : index
+  }
+  func.return %result : index
+}
