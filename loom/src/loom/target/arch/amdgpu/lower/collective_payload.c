@@ -70,8 +70,8 @@ iree_status_t loom_amdgpu_collective_lookup_payload(
     case LOOM_AMDGPU_SUBGROUP_PAYLOAD_NONE:
       break;
   }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "AMDGPU collective lowering has no payload kind");
+  IREE_ASSERT_UNREACHABLE("AMDGPU collective lowering requires a payload kind");
+  IREE_BUILTIN_UNREACHABLE();
 }
 
 iree_status_t loom_amdgpu_collective_payload_register(

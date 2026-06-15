@@ -287,10 +287,7 @@ static iree_status_t loom_amdgpu_bind_subgroup_lane_mask_result(
     }
     return loom_low_lower_bind_value(context, source_mask, low_mask);
   }
-  if (mask_bit_count != 32) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU subgroup mask has invalid bit width");
-  }
+  IREE_ASSERT_EQ(mask_bit_count, 32);
 
   loom_type_t low_mask_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &low_mask_type));
