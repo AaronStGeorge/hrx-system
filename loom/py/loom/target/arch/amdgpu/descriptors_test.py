@@ -553,7 +553,7 @@ def test_amdgpu_descriptor_category_groups_preserve_category_and_descriptor_orde
 def test_atomic_descriptor_candidates_are_derived_from_overlay_metadata() -> None:
     candidates = amdgpu_atomic_descriptor_candidates()
 
-    assert len(candidates) == 104
+    assert len(candidates) == 120
     assert candidates[0].descriptor_key == "amdgpu.ds_add_u32"
     assert candidates[0].memory_space == AmdgpuAtomicMemorySpace.WORKGROUP
     assert candidates[0].address_form == AmdgpuMemoryAddressForm.DEFAULT
@@ -579,14 +579,24 @@ def test_atomic_descriptor_candidates_are_derived_from_overlay_metadata() -> Non
     assert flat_cmpxchg.atomic_kind == AmdgpuAtomicKind.NONE
 
 
-def test_atomic_descriptor_candidates_exclude_unsupported_packed_half_rows() -> None:
-    keys = {
-        candidate.descriptor_key for candidate in amdgpu_atomic_descriptor_candidates()
+def test_atomic_descriptor_candidates_model_packed_half_rows() -> None:
+    candidates = {
+        candidate.descriptor_key: candidate
+        for candidate in amdgpu_atomic_descriptor_candidates()
     }
 
-    assert "amdgpu.buffer_atomic_pk_add_f16" not in keys
-    assert "amdgpu.flat_atomic_pk_add_bf16_rtn" not in keys
-    assert "amdgpu.ds_pk_add_rtn_f16" not in keys
+    assert (
+        candidates["amdgpu.buffer_atomic_pk_add_f16"].value_kind
+        == AmdgpuAtomicValueKind.PACKED_F16
+    )
+    assert (
+        candidates["amdgpu.flat_atomic_pk_add_bf16_rtn"].value_kind
+        == AmdgpuAtomicValueKind.PACKED_BF16
+    )
+    assert (
+        candidates["amdgpu.ds_pk_add_rtn_f16"].value_kind
+        == AmdgpuAtomicValueKind.PACKED_F16
+    )
 
 
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:

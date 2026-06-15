@@ -557,6 +557,8 @@ class AmdgpuAtomicKind(CEnum):
 class AmdgpuAtomicValueKind(CEnum):
     I32 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32"
     F32 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32"
+    PACKED_F16 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_PACKED_F16"
+    PACKED_BF16 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_PACKED_BF16"
 
 
 @dataclass(frozen=True, slots=True)

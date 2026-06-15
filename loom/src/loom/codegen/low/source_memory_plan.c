@@ -72,6 +72,59 @@ static bool loom_low_source_memory_access_exact_i64(loom_value_facts_t facts,
   return true;
 }
 
+static bool loom_low_source_memory_access_exact_i64_at(
+    const loom_value_facts_t* facts, iree_host_size_t count,
+    iree_host_size_t ordinal, int64_t* out_value) {
+  *out_value = 0;
+  if (ordinal >= count) {
+    return false;
+  }
+  return loom_low_source_memory_access_exact_i64(facts[ordinal], out_value);
+}
+
+static bool loom_low_source_memory_access_offset_facts_are_identity_iota(
+    const loom_fact_context_t* context, loom_value_facts_t facts) {
+  loom_value_fact_vector_iota_t iota = {0};
+  if (loom_value_facts_query_vector_iota(context, facts, &iota)) {
+    int64_t base = 0;
+    int64_t step = 0;
+    return loom_low_source_memory_access_exact_i64(iota.base, &base) &&
+           loom_low_source_memory_access_exact_i64(iota.step, &step) &&
+           base == 0 && step == 1;
+  }
+
+  loom_value_fact_small_static_lanes_t lanes = {0};
+  if (!loom_value_facts_query_small_static_lanes(context, facts, &lanes)) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < lanes.count; ++i) {
+    int64_t lane_offset = 0;
+    if (!loom_low_source_memory_access_exact_i64_at(lanes.lanes, lanes.count, i,
+                                                    &lane_offset) ||
+        lane_offset != (int64_t)i) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static loom_low_source_memory_vector_offset_kind_t
+loom_low_source_memory_access_vector_offset_kind(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t offset_value) {
+  if (offset_value == LOOM_VALUE_ID_INVALID) {
+    return LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_NONE;
+  }
+  if (!fact_table) {
+    return LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_OTHER;
+  }
+  const loom_value_facts_t facts =
+      loom_value_fact_table_lookup(fact_table, offset_value);
+  return loom_low_source_memory_access_offset_facts_are_identity_iota(
+             &fact_table->context, facts)
+             ? LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_IDENTITY_IOTA
+             : LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_OTHER;
+}
+
 static uint32_t loom_low_source_memory_clamp_alignment(uint64_t alignment) {
   if (alignment == 0) return 1;
   return alignment > UINT32_MAX ? UINT32_MAX : (uint32_t)alignment;
@@ -1334,12 +1387,17 @@ static bool loom_low_source_memory_operation_kind_from_op(
       *out_operation_kind = LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE;
       return true;
     case LOOM_OP_VIEW_ATOMIC_REDUCE:
+    case LOOM_OP_VECTOR_ATOMIC_REDUCE:
+    case LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK:
       *out_operation_kind = LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_REDUCE;
       return true;
     case LOOM_OP_VIEW_ATOMIC_RMW:
+    case LOOM_OP_VECTOR_ATOMIC_RMW:
+    case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
       *out_operation_kind = LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_RMW;
       return true;
     case LOOM_OP_VIEW_ATOMIC_CMPXCHG:
+    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
       *out_operation_kind = LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_CMPXCHG;
       return true;
     case LOOM_OP_VIEW_PREFETCH:
@@ -1654,11 +1712,17 @@ bool loom_low_source_memory_access_plan_build(
   const loom_type_t vector_type =
       loom_low_source_memory_access_payload_vector_type(module, source_op,
                                                         access, view_type);
-  return loom_low_source_memory_access_plan_from_components(
+  const bool built = loom_low_source_memory_access_plan_from_components(
       module, fact_table, operation_kind, view_value_id,
       loom_memory_access_dynamic_indices(access),
       loom_memory_access_static_indices(access), view_type, vector_type,
       cache_policy, out_plan, out_diagnostic);
+  if (built) {
+    out_plan->vector_offset_kind =
+        loom_low_source_memory_access_vector_offset_kind(
+            fact_table, loom_memory_access_offsets(access));
+  }
+  return built;
 }
 
 bool loom_low_source_memory_access_plan_build_view(

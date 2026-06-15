@@ -11,6 +11,7 @@
 #include "iree/base/api.h"
 #include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/lower/candidates/atomic_candidates.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
@@ -219,16 +220,31 @@ static const loom_amdgpu_atomic_wait_packet_template_t
         .immediate_count = 1,
 };
 
-static bool loom_amdgpu_view_atomic_isa(const loom_op_t* op) {
+static bool loom_amdgpu_vector_atomic_isa(const loom_op_t* op) {
+  return loom_vector_atomic_reduce_isa(op) || loom_vector_atomic_rmw_isa(op);
+}
+
+static bool loom_amdgpu_atomic_isa(const loom_op_t* op) {
   return loom_view_atomic_reduce_isa(op) || loom_view_atomic_rmw_isa(op) ||
-         loom_view_atomic_cmpxchg_isa(op);
+         loom_view_atomic_cmpxchg_isa(op) || loom_amdgpu_vector_atomic_isa(op);
 }
 
 static loom_value_id_t loom_amdgpu_atomic_value(const loom_op_t* op) {
   if (loom_view_atomic_reduce_isa(op)) {
     return loom_view_atomic_reduce_value(op);
   }
+  if (loom_vector_atomic_reduce_isa(op)) {
+    return loom_vector_atomic_reduce_value(op);
+  }
+  if (loom_vector_atomic_rmw_isa(op)) {
+    return loom_vector_atomic_rmw_value(op);
+  }
   return loom_view_atomic_rmw_value(op);
+}
+
+static loom_value_id_t loom_amdgpu_atomic_rmw_result(const loom_op_t* op) {
+  return loom_vector_atomic_rmw_isa(op) ? loom_vector_atomic_rmw_result(op)
+                                        : loom_view_atomic_rmw_result(op);
 }
 
 static uint8_t loom_amdgpu_atomic_kind(const loom_op_t* op) {
@@ -237,6 +253,12 @@ static uint8_t loom_amdgpu_atomic_kind(const loom_op_t* op) {
   }
   if (loom_view_atomic_reduce_isa(op)) {
     return loom_view_atomic_reduce_kind(op);
+  }
+  if (loom_vector_atomic_reduce_isa(op)) {
+    return loom_vector_atomic_reduce_kind(op);
+  }
+  if (loom_vector_atomic_rmw_isa(op)) {
+    return loom_vector_atomic_rmw_kind(op);
   }
   return loom_view_atomic_rmw_kind(op);
 }
@@ -247,6 +269,12 @@ static uint8_t loom_amdgpu_atomic_ordering(const loom_op_t* op) {
   }
   if (loom_view_atomic_reduce_isa(op)) {
     return loom_view_atomic_reduce_ordering(op);
+  }
+  if (loom_vector_atomic_reduce_isa(op)) {
+    return loom_vector_atomic_reduce_ordering(op);
+  }
+  if (loom_vector_atomic_rmw_isa(op)) {
+    return loom_vector_atomic_rmw_ordering(op);
   }
   return loom_view_atomic_rmw_ordering(op);
 }
@@ -264,6 +292,12 @@ static uint8_t loom_amdgpu_atomic_scope(const loom_op_t* op) {
   }
   if (loom_view_atomic_reduce_isa(op)) {
     return loom_view_atomic_reduce_scope(op);
+  }
+  if (loom_vector_atomic_reduce_isa(op)) {
+    return loom_vector_atomic_reduce_scope(op);
+  }
+  if (loom_vector_atomic_rmw_isa(op)) {
+    return loom_vector_atomic_rmw_scope(op);
   }
   return loom_view_atomic_rmw_scope(op);
 }
@@ -379,8 +413,56 @@ static bool loom_amdgpu_atomic_value_kind_matches(
       return loom_amdgpu_type_is_i32(value_type);
     case LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32:
       return loom_amdgpu_type_is_f32(value_type);
+    case LOOM_AMDGPU_ATOMIC_VALUE_KIND_PACKED_F16:
+      return loom_type_is_vector(value_type) &&
+             loom_type_rank(value_type) == 1 &&
+             !loom_type_dim_is_dynamic_at(value_type, 0) &&
+             loom_type_dim_static_size_at(value_type, 0) == 2 &&
+             loom_type_element_type(value_type) == LOOM_SCALAR_TYPE_F16;
+    case LOOM_AMDGPU_ATOMIC_VALUE_KIND_PACKED_BF16:
+      return loom_type_is_vector(value_type) &&
+             loom_type_rank(value_type) == 1 &&
+             !loom_type_dim_is_dynamic_at(value_type, 0) &&
+             loom_type_dim_static_size_at(value_type, 0) == 2 &&
+             loom_type_element_type(value_type) == LOOM_SCALAR_TYPE_BF16;
   }
   return false;
+}
+
+static bool loom_amdgpu_atomic_scalar_32bit_source_shape(
+    const loom_low_source_memory_access_plan_t* source) {
+  return source->element_byte_count == 4 && source->vector_lane_count == 1 &&
+         source->vector_lane_byte_stride == 4;
+}
+
+static bool loom_amdgpu_atomic_packed_half_value_type(loom_type_t value_type) {
+  return loom_type_is_vector(value_type) && loom_type_rank(value_type) == 1 &&
+         !loom_type_dim_is_dynamic_at(value_type, 0) &&
+         loom_type_dim_static_size_at(value_type, 0) == 2 &&
+         (loom_type_element_type(value_type) == LOOM_SCALAR_TYPE_F16 ||
+          loom_type_element_type(value_type) == LOOM_SCALAR_TYPE_BF16);
+}
+
+static bool loom_amdgpu_atomic_packed_half_source_shape(
+    const loom_op_t* source_op,
+    const loom_low_source_memory_access_plan_t* source,
+    loom_type_t value_type) {
+  return loom_amdgpu_vector_atomic_isa(source_op) &&
+         source->element_byte_count == 2 && source->vector_lane_count == 2 &&
+         source->vector_lane_byte_stride == 2 &&
+         source->vector_offset_kind ==
+             LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_IDENTITY_IOTA &&
+         source->minimum_alignment >= 4 &&
+         loom_amdgpu_atomic_packed_half_value_type(value_type);
+}
+
+static bool loom_amdgpu_atomic_source_shape_supported(
+    const loom_op_t* source_op,
+    const loom_low_source_memory_access_plan_t* source,
+    loom_type_t value_type) {
+  return loom_amdgpu_atomic_scalar_32bit_source_shape(source) ||
+         loom_amdgpu_atomic_packed_half_source_shape(source_op, source,
+                                                     value_type);
 }
 
 static bool loom_amdgpu_atomic_value_as_i32_constant(
@@ -888,7 +970,7 @@ static bool loom_amdgpu_atomic_select(
   *source_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};
   *memory_diagnostic = (loom_amdgpu_memory_access_diagnostic_t){0};
   *diagnostic = (loom_amdgpu_atomic_diagnostic_t){0};
-  if (!loom_amdgpu_view_atomic_isa(source_op)) {
+  if (!loom_amdgpu_atomic_isa(source_op)) {
     diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_SOURCE_OP;
     return false;
   }
@@ -937,9 +1019,13 @@ static bool loom_amdgpu_atomic_select(
       diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_MEMORY_SPACE;
       return false;
   }
-  if (out_selection->source.element_byte_count != 4 ||
-      out_selection->source.vector_lane_count != 1 ||
-      out_selection->source.vector_lane_byte_stride != 4) {
+  const loom_type_t value_type =
+      out_selection->operation_kind == LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG
+          ? loom_module_value_type(module,
+                                   loom_view_atomic_cmpxchg_old(source_op))
+          : loom_module_value_type(module, loom_amdgpu_atomic_value(source_op));
+  if (!loom_amdgpu_atomic_source_shape_supported(
+          source_op, &out_selection->source, value_type)) {
     diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_SHAPE;
     return false;
   }
@@ -976,11 +1062,6 @@ static bool loom_amdgpu_atomic_select(
     out_selection->dynamic_term_kinds[i] = memory_access.dynamic_term_kinds[i];
   }
 
-  const loom_type_t value_type =
-      out_selection->operation_kind == LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG
-          ? loom_module_value_type(module,
-                                   loom_view_atomic_cmpxchg_old(source_op))
-          : loom_module_value_type(module, loom_amdgpu_atomic_value(source_op));
   if (!loom_amdgpu_atomic_select_descriptor(module, fact_table, descriptor_set,
                                             source_op, out_selection,
                                             value_type, diagnostic)) {
@@ -1080,7 +1161,7 @@ static iree_string_view_t loom_amdgpu_atomic_rejection_key(
   return IREE_SV("atomic.representability");
 }
 
-iree_status_t loom_amdgpu_select_view_atomic_plan(
+iree_status_t loom_amdgpu_select_atomic_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_atomic_plan_t* out_plan, bool* out_selected) {
   *out_plan = (loom_amdgpu_atomic_plan_t){0};
@@ -1252,9 +1333,9 @@ static iree_status_t loom_amdgpu_emit_atomic_post_ordering(
       ordering->post_atomic_cache_control_descriptor_count);
 }
 
-iree_status_t loom_amdgpu_lower_view_atomic(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_atomic_plan_t* plan) {
+iree_status_t loom_amdgpu_lower_atomic(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op,
+                                       const loom_amdgpu_atomic_plan_t* plan) {
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, plan->source.view_value_id, &low_resource));
@@ -1386,7 +1467,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   if (plan->operation_kind == LOOM_AMDGPU_ATOMIC_OPERATION_RMW) {
     loom_type_t result_type = loom_type_none();
     IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-        context, source_op, loom_view_atomic_rmw_result(source_op),
+        context, source_op, loom_amdgpu_atomic_rmw_result(source_op),
         &result_type));
     if (loom_amdgpu_atomic_uses_buffer_resource(plan)) {
       loom_value_id_t low_fresh_value = LOOM_VALUE_ID_INVALID;
@@ -1406,7 +1487,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_atomic_post_ordering(
           context, source_op, &plan->ordering));
       return loom_low_lower_bind_value(
-          context, loom_view_atomic_rmw_result(source_op),
+          context, loom_amdgpu_atomic_rmw_result(source_op),
           loom_value_slice_get(loom_low_op_results(low_op), 0));
     }
 
@@ -1425,7 +1506,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_atomic_post_ordering(
         context, source_op, &plan->ordering));
     return loom_low_lower_bind_value(
-        context, loom_view_atomic_rmw_result(source_op),
+        context, loom_amdgpu_atomic_rmw_result(source_op),
         loom_value_slice_get(loom_low_op_results(low_op), 0));
   }
 
@@ -1458,7 +1539,7 @@ iree_status_t loom_amdgpu_lower_view_atomic(
                                                &plan->ordering);
 }
 
-iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
+iree_status_t loom_amdgpu_low_legality_verify_atomic(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
@@ -1466,7 +1547,7 @@ iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
   if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
     return iree_ok_status();
   }
-  if (!loom_amdgpu_view_atomic_isa(op)) {
+  if (!loom_amdgpu_atomic_isa(op)) {
     return iree_ok_status();
   }
   *out_handled = true;
@@ -1501,4 +1582,35 @@ iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
         loom_amdgpu_atomic_rejection_key(diagnostic.rejection_bits);
   }
   return loom_amdgpu_low_legality_reject(context, op, constraint_key);
+}
+
+static void loom_amdgpu_require_atomic_payload_storage(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  if (loom_view_atomic_cmpxchg_isa(source_op)) {
+    loom_low_lower_require_source_value_storage(
+        context, loom_view_atomic_cmpxchg_expected(source_op));
+    loom_low_lower_require_source_value_storage(
+        context, loom_view_atomic_cmpxchg_replacement(source_op));
+    return;
+  }
+  loom_low_lower_require_source_value_storage(
+      context, loom_amdgpu_atomic_value(source_op));
+}
+
+void loom_amdgpu_mark_atomic_plan_storage_demands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_atomic_plan_t* plan) {
+  loom_low_lower_require_source_value_storage(context,
+                                              plan->source.view_value_id);
+  loom_amdgpu_require_atomic_payload_storage(context, source_op);
+
+  for (uint8_t i = 0; i < plan->source.dynamic_term_count; ++i) {
+    const loom_low_source_memory_dynamic_term_t* term =
+        &plan->source.dynamic_terms[i];
+    loom_low_lower_require_source_value_storage(context, term->index);
+    for (uint8_t j = 0; j < term->stride_value_count; ++j) {
+      loom_low_lower_require_source_value_storage(context,
+                                                  term->stride_values[j]);
+    }
+  }
 }
