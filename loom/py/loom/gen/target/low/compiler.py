@@ -450,6 +450,7 @@ def _compile_native_asm_value(
     if kind in (
         NativeAsmValueKind.IMMEDIATE_I64,
         NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX,
+        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
     ):
         if literal is not None:
             raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native immediate value {value_ordinal} unexpectedly specifies a literal")
@@ -460,8 +461,11 @@ def _compile_native_asm_value(
         if kind is NativeAsmValueKind.IMMEDIATE_I64:
             if bit_width != 0:
                 raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native i64 immediate '{name}' unexpectedly specifies a bit width")
-        elif bit_width <= 0 or bit_width > 32:
-            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native unsigned-hex immediate '{name}' bit width must be in [1, 32]")
+        elif kind is NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX:
+            if bit_width <= 0 or bit_width > 32:
+                raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native unsigned-hex immediate '{name}' bit width must be in [1, 32]")
+        elif bit_width != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native AMDGPU delay-ALU immediate '{name}' unexpectedly specifies a bit width")
         return CompiledNativeAsmValue(
             kind=kind,
             index=immediate_index,

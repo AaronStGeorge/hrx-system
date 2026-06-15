@@ -17,6 +17,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DS16_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
+    _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS,
     _AMDGPU_TRANS_DESCRIPTOR_KEYS,
     _AMDGPU_TRANS_PROXY_LATENCY_CYCLES,
     _COUNTER_VMEM_LOAD,
@@ -32,6 +33,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _SCHEDULE_SMEM_STORE,
     _SCHEDULE_VALU,
     _SCHEDULE_VMEM_LOAD_LDS,
+    _SCHEDULE_WAIT_ALU,
     _SOURCE_INLINE_F32_ENCODING_ID,
     _SOURCE_INLINE_U32_ENCODING_ID,
     _VBUFFER_SOFFSET_NULL,
@@ -68,9 +70,13 @@ from loom.target.arch.amdgpu.descriptors import (
     _with_mode_state_read,
     amdgpu_atomic_descriptor_candidates,
     amdgpu_descriptor_category_groups,
+    amdgpu_descriptor_ref_keys,
     amdgpu_encoding_field_id,
 )
-from loom.target.arch.amdgpu.descriptors.control import _s_set_vgpr_msb_descriptor
+from loom.target.arch.amdgpu.descriptors.control import (
+    _s_delay_alu_descriptor,
+    _s_set_vgpr_msb_descriptor,
+)
 from loom.target.arch.amdgpu.descriptors.memory import (
     _s_buffer_load_64_overlay,
     _s_buffer_load_dword_overlay,
@@ -81,6 +87,7 @@ from loom.target.arch.amdgpu.descriptors.memory import (
 from loom.target.low_descriptors import (
     ConstraintKind,
     Descriptor,
+    DescriptorFlag,
     DescriptorSet,
     Effect,
     EffectFlag,
@@ -315,6 +322,48 @@ def test_s_set_vgpr_msb_writes_mode_state() -> None:
     )
     assert OperandFlag.IMPLICIT in mode_operand.flags
     assert OperandFlag.STATE_WRITE in mode_operand.flags
+
+
+def test_s_delay_alu_descriptor_uses_native_packed_immediate() -> None:
+    descriptor = _s_delay_alu_descriptor()
+
+    assert descriptor.key == "amdgpu.s_delay_alu"
+    assert descriptor.mnemonic == "s_delay_alu"
+    assert descriptor.schedule_class == _SCHEDULE_WAIT_ALU
+    assert descriptor.effects == ()
+    assert DescriptorFlag.SIDE_EFFECTING in descriptor.flags
+    assert tuple(immediate.field_name for immediate in descriptor.immediates) == (
+        "delay",
+    )
+    delay = descriptor.immediates[0]
+    assert delay.kind is ImmediateKind.UNSIGNED
+    assert delay.bit_width == 16
+    assert delay.unsigned_max == 0x07FF
+    assert descriptor.asm_forms[0].native_assembly_values == (
+        NativeAsmValue(
+            NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+            field_name="delay",
+        ),
+    )
+
+
+def test_s_delay_alu_descriptor_is_exposed_on_rdna_families() -> None:
+    targets_with_delay_alu = {
+        target
+        for target, builder in _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS.items()
+        if any(
+            descriptor.key == "amdgpu.s_delay_alu"
+            for descriptor in builder.extra_descriptors
+        )
+    }
+
+    assert targets_with_delay_alu == {
+        "rdna3",
+        "rdna3_5",
+        "rdna4",
+        "rdna4_gfx125x",
+    }
+    assert "amdgpu.s_delay_alu" in amdgpu_descriptor_ref_keys()
 
 
 def test_gfx125x_vop_operands_use_mode_address_state() -> None:

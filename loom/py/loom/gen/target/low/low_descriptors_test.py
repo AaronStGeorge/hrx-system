@@ -767,6 +767,68 @@ def test_generator_emits_asm_form_native_assembly_values() -> None:
     assert '"literal"' in generated.source
 
 
+def test_generator_emits_target_native_asm_immediate_values() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        immediates=(
+            Immediate(
+                "delay",
+                ImmediateKind.UNSIGNED,
+                bit_width=16,
+                unsigned_max=0x07FF,
+            ),
+        ),
+        asm_forms=(
+            AsmForm(
+                native_assembly_values=(
+                    NativeAsmValue(
+                        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+                        field_name="delay",
+                    ),
+                ),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert "LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE" in generated.source
+    assert ".index = 0," in generated.source
+
+
+def test_generator_rejects_target_native_asm_immediate_bit_width() -> None:
+    descriptor = replace(
+        TEST_LOW_ADD_I32_DESCRIPTOR,
+        immediates=(
+            Immediate(
+                "delay",
+                ImmediateKind.UNSIGNED,
+                bit_width=16,
+                unsigned_max=0x07FF,
+            ),
+        ),
+        asm_forms=(
+            AsmForm(
+                native_assembly_values=(
+                    NativeAsmValue(
+                        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+                        field_name="delay",
+                        bit_width=16,
+                    ),
+                ),
+            ),
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape("descriptor 'test.add.i32' asm form 'test.add.i32' native AMDGPU delay-ALU immediate 'delay' unexpectedly specifies a bit width"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
 def test_generator_rejects_native_asm_form_unknown_operand_field() -> None:
     descriptor = replace(
         TEST_LOW_ADD_I32_DESCRIPTOR,

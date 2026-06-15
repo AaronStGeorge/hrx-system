@@ -767,6 +767,8 @@ typedef enum loom_low_native_asm_value_kind_e {
   LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64 = 4,
   // Descriptor-local immediate printed as zero-padded unsigned hex.
   LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX = 5,
+  // Descriptor-local immediate printed as AMDGPU s_delay_alu operands.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE = 6,
 } loom_low_native_asm_value_kind_t;
 
 typedef struct loom_low_native_asm_value_t {

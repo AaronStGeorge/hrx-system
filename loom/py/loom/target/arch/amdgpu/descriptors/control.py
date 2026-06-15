@@ -162,6 +162,31 @@ def _s_wait_idle_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_delay_alu_descriptor() -> Descriptor:
+    return Descriptor(
+        key="amdgpu.s_delay_alu",
+        mnemonic="s_delay_alu",
+        semantic_tag="control.delay.alu",
+        schedule_class=_SCHEDULE_WAIT_ALU,
+        operands=(),
+        immediates=(
+            Immediate(
+                "delay",
+                ImmediateKind.UNSIGNED,
+                bit_width=16,
+                encoding_field_id=amdgpu_encoding_field_id("SIMM16"),
+                unsigned_max=0x07FF,
+            ),
+        ),
+        asm_forms=_asm(
+            native_assembly_values=(_native_amdgpu_delay_alu_immediate("delay"),)
+        ),
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_SOPP,
+        encoding_id=0x007,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _s_set_vgpr_msb_descriptor() -> Descriptor:
     return Descriptor(
         key="amdgpu.s_set_vgpr_msb",
@@ -495,6 +520,7 @@ __all__ = (
     "_gfx12_prefetch_overlays",
     "_gfx950_cache_control_overlays",
     "_s_barrier_overlay",
+    "_s_delay_alu_descriptor",
     "_s_dcache_discard_overlay",
     "_s_prefetch_overlay",
     "_s_set_inst_prefetch_distance_overlay",

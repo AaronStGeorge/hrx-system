@@ -425,6 +425,7 @@ static bool loom_low_native_asm_value_kind_is_valid(
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_OPERAND:
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64:
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE:
       return true;
     default:
       return false;
@@ -551,6 +552,23 @@ static iree_status_t loom_low_verify_native_asm_values(
                                   "low asm form for descriptor %" PRIu32
                                   " native unsigned-hex bit width is invalid",
                                   descriptor_index);
+        }
+        break;
+      case LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE:
+        if (value->index >= descriptor->immediate_count) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low asm form for descriptor %" PRIu32
+              " native immediate references immediate %" PRIu16
+              " but descriptor has only %" PRIu16 " immediates",
+              descriptor_index, value->index, descriptor->immediate_count);
+        }
+        if (value->bit_width != 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low asm form for descriptor %" PRIu32
+              " native AMDGPU delay-ALU immediate must not set bit width",
+              descriptor_index);
         }
         break;
       default:

@@ -821,6 +821,13 @@ def _native_unsigned_hex_immediate(field_name: str, bit_width: int) -> NativeAsm
     )
 
 
+def _native_amdgpu_delay_alu_immediate(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(
+        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+        field_name=field_name,
+    )
+
+
 def _global_vaddr_asm(
     *,
     mnemonic: str,
@@ -2783,6 +2790,7 @@ __all__ = (
     "_memory_asm_immediate_names",
     "_mubuf_vaddr_operand",
     "_native_i64_immediate",
+    "_native_amdgpu_delay_alu_immediate",
     "_native_literal",
     "_native_operand",
     "_native_result",

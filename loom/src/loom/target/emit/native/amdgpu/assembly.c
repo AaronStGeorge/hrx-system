@@ -419,6 +419,85 @@ static iree_status_t loom_amdgpu_append_packet_immediate_i64(
   return iree_string_builder_append_format(context->builder, "%" PRId64, value);
 }
 
+static iree_status_t loom_amdgpu_append_delay_alu_dependency(
+    const loom_native_assembly_packet_context_t* context, uint8_t value) {
+  if (value == 0) {
+    return iree_string_builder_append_cstring(context->builder, "NO_DEP");
+  } else if (value <= 4) {
+    return iree_string_builder_append_format(context->builder,
+                                             "VALU_DEP_%" PRIu8, value);
+  } else if (value >= 5 && value <= 7) {
+    return iree_string_builder_append_format(
+        context->builder, "TRANS32_DEP_%" PRIu8, (uint8_t)(value - 4));
+  } else if (value >= 9 && value <= 11) {
+    return iree_string_builder_append_format(
+        context->builder, "SALU_CYCLE_%" PRIu8, (uint8_t)(value - 8));
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "AMDGPU s_delay_alu dependency code %" PRIu8 " is reserved", value);
+}
+
+static iree_status_t loom_amdgpu_append_delay_alu_skip(
+    const loom_native_assembly_packet_context_t* context, uint8_t value) {
+  static const char* const kDelayAluSkipNames[] = {
+      "SAME", "NEXT", "SKIP_1", "SKIP_2", "SKIP_3", "SKIP_4",
+  };
+  if (value >= IREE_ARRAYSIZE(kDelayAluSkipNames)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU s_delay_alu skip code %" PRIu8 " is reserved", value);
+  }
+  return iree_string_builder_append_cstring(context->builder,
+                                            kDelayAluSkipNames[value]);
+}
+
+static iree_status_t loom_amdgpu_append_packet_immediate_delay_alu(
+    const loom_native_assembly_packet_context_t* context,
+    uint16_t descriptor_immediate_index) {
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_read_packet_immediate_by_index_i64(
+      context, descriptor_immediate_index, &value));
+  if (value < 0 || value > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU s_delay_alu immediate value %" PRId64 " is not a u16", value);
+  }
+  if (((uint16_t)value >> 11) != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU s_delay_alu immediate value 0x%04" PRIx16
+                            " sets reserved high bits",
+                            (uint16_t)value);
+  }
+
+  const uint8_t instid0 = (uint8_t)(value & 0xF);
+  const uint8_t instskip = (uint8_t)((value >> 4) & 0x7);
+  const uint8_t instid1 = (uint8_t)((value >> 7) & 0xF);
+
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "instid0("));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_delay_alu_dependency(context, instid0));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ")"));
+  if (instskip != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, " | instskip("));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_delay_alu_skip(context, instskip));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, ")"));
+  }
+  if (instid1 != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, " | instid1("));
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_append_delay_alu_dependency(context, instid1));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, ")"));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_find_packet_immediate(
     const loom_native_assembly_packet_context_t* context,
     iree_string_view_t field_name, const loom_low_immediate_t** out_immediate) {
@@ -880,6 +959,9 @@ static iree_status_t loom_amdgpu_append_native_asm_form_value(
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
       return loom_amdgpu_append_packet_immediate_unsigned_hex(
           context, value->index, value->bit_width);
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE:
+      return loom_amdgpu_append_packet_immediate_delay_alu(context,
+                                                           value->index);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "AMDGPU native asm value kind %u is unsupported",
