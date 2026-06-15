@@ -101,7 +101,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND IREE_HAL_DRIVER_VULKAN)
 loom_cc_binary(
   NAME
     emit_spirv_iree_hal
