@@ -522,13 +522,13 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_memory_store_dispatch,
                              loom_amdgpu_memory_access_plan_t,
                              loom_amdgpu_lower_memory_store)
 
-LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_view_atomic_dispatch,
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_atomic_dispatch,
                                loom_amdgpu_atomic_plan_t,
-                               loom_amdgpu_select_view_atomic_plan)
+                               loom_amdgpu_select_atomic_plan)
 
-LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_atomic_dispatch,
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_atomic_dispatch,
                              loom_amdgpu_atomic_plan_t,
-                             loom_amdgpu_lower_view_atomic)
+                             loom_amdgpu_lower_atomic)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_view_prefetch_dispatch,
                                loom_amdgpu_prefetch_plan_t,
@@ -662,7 +662,17 @@ static void loom_amdgpu_mark_plan_storage_demands(
         (const loom_amdgpu_mulf_mix_plan_t*)plan.target_data);
     return;
   }
-  if (plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS ||
+  if (loom_view_atomic_reduce_isa(source_op) ||
+      loom_view_atomic_rmw_isa(source_op) ||
+      loom_view_atomic_cmpxchg_isa(source_op) ||
+      loom_vector_atomic_reduce_isa(source_op) ||
+      loom_vector_atomic_rmw_isa(source_op)) {
+    loom_amdgpu_mark_atomic_plan_storage_demands(
+        context, source_op, (const loom_amdgpu_atomic_plan_t*)plan.target_data);
+    return;
+  }
+  if (plan.id == LOOM_OP_VECTOR_IOTA ||
+      plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS ||
       plan.id == LOOM_OP_VECTOR_SPLAT || plan.id == LOOM_OP_VECTOR_INSERT) {
     loom_amdgpu_mark_value_plan_storage_demands(context, source_op, plan);
     return;

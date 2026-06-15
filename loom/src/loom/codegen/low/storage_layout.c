@@ -10,6 +10,30 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 
+iree_host_size_t loom_low_storage_space_set_names(
+    loom_low_storage_space_set_t set, iree_host_size_t capacity,
+    iree_string_view_t* out_names) {
+  static const loom_storage_space_t kStorageSpaceOrder[] = {
+      LOOM_STORAGE_SPACE_STACK,
+      LOOM_STORAGE_SPACE_SCRATCH,
+      LOOM_STORAGE_SPACE_PRIVATE,
+      LOOM_STORAGE_SPACE_WORKGROUP,
+  };
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kStorageSpaceOrder); ++i) {
+    const loom_storage_space_t storage_space = kStorageSpaceOrder[i];
+    if (!loom_low_storage_space_set_contains(set, storage_space)) {
+      continue;
+    }
+    if (count < capacity) {
+      out_names[count] =
+          iree_make_cstring_view(loom_storage_space_name(storage_space));
+    }
+    ++count;
+  }
+  return count;
+}
+
 typedef struct loom_low_storage_layout_scan_state_t {
   // Packed byte sizes accumulated for each storage space.
   loom_low_storage_layout_space_sizes_t space_sizes;

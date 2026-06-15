@@ -29,6 +29,7 @@ from loom.gen.support.c import c_string_literal as _c_string_literal  # noqa: E4
 from loom.gen.support.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     AmdgpuIsaFactSource,
+    AmdgpuIsaXmlError,
     parse_amdgpu_isa_xml_path,
 )
 from loom.target.arch.amdgpu.names import (  # noqa: E402
@@ -74,6 +75,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
 @dataclass(frozen=True, slots=True)
 class _AmdgpuSoppOpcodeRow:
     nop: int
+    delay_alu: int
     endpgm: int
     branch: int
     conditional_branch_scc0: int
@@ -206,6 +208,23 @@ def _sopp_opcode(spec: AmdgpuIsaFactSource, instruction_name: str) -> int:
     return summaries[0].opcode
 
 
+def _sopp_opcode_or_zero(spec: AmdgpuIsaFactSource, instruction_name: str) -> int:
+    try:
+        summaries = tuple(
+            summary for summary in spec.instruction_encoding_summaries((instruction_name,), include_aliases=False) if summary.encoding_name == "ENC_SOPP" and summary.condition_name == "default"
+        )
+    except AmdgpuIsaXmlError as exc:
+        message = str(exc)
+        if "unknown AMDGPU ISA instruction(s)" not in message or instruction_name not in message:
+            raise
+        return 0
+    if not summaries:
+        return 0
+    if len(summaries) != 1:
+        raise ValueError(f"{spec.source_name}: expected at most one default ENC_SOPP encoding for {instruction_name}, found {len(summaries)}")
+    return summaries[0].opcode
+
+
 def _materialize_descriptor_set_rows(
     descriptor_sets: Sequence[AmdgpuDescriptorSetInfo],
     isa_specs: Mapping[str, AmdgpuIsaFactSource],
@@ -221,6 +240,7 @@ def _materialize_descriptor_set_rows(
                 info=info,
                 sopp=_AmdgpuSoppOpcodeRow(
                     nop=_sopp_opcode(spec, "S_NOP"),
+                    delay_alu=_sopp_opcode_or_zero(spec, "S_DELAY_ALU"),
                     endpgm=_sopp_opcode(spec, "S_ENDPGM"),
                     branch=_sopp_opcode(spec, "S_BRANCH"),
                     conditional_branch_scc0=_sopp_opcode(spec, "S_CBRANCH_SCC0"),
@@ -416,12 +436,13 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
     flags_width = max(len(_descriptor_set_info_flags_expr(row.info.flags)) for row in rows)
     cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(ordinal_, key_, sopp_nop_, sopp_endpgm_, sopp_branch_, sopp_cbranch_scc0_, sopp_cbranch_scc1_, flags_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(ordinal_, key_, sopp_nop_, sopp_delay_alu_, sopp_endpgm_, sopp_branch_, sopp_cbranch_scc0_, sopp_cbranch_scc1_, flags_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
         "  { \\",
         "    .key = IREE_SVL(key_), \\",
         "    .ordinal = ordinal_, \\",
         "    .sopp = { \\",
         "      .nop = UINT16_C(sopp_nop_), \\",
+        "      .delay_alu = UINT16_C(sopp_delay_alu_), \\",
         "      .endpgm = UINT16_C(sopp_endpgm_), \\",
         "      .branch = UINT16_C(sopp_branch_), \\",
         "      .conditional_branch_scc0 = UINT16_C(sopp_cbranch_scc0_), \\",
@@ -437,7 +458,7 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
         "  }",
         "",
         "const loom_amdgpu_descriptor_set_info_t loom_amdgpu_target_info_descriptor_set_infos[] = {",
-        "  // ordinal         key                    s_nop s_endpgm s_branch s_cbranch_scc0 s_cbranch_scc1 flags cache_swizzle cache_policy",
+        "  // ordinal         key                    s_nop s_delay_alu s_endpgm s_branch s_cbranch_scc0 s_cbranch_scc1 flags cache_swizzle cache_policy",
     ]
     lines.extend(
         (
@@ -445,6 +466,7 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
             f"{_padded_arg(_u16_expr(amdgpu_descriptor_set_ordinal(info.key)), ordinal_width)}"
             f"{_padded_arg(_c_string_arg(info.key), key_width)}"
             f"{_padded_arg(f'0x{row.sopp.nop:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{row.sopp.delay_alu:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.sopp.endpgm:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.sopp.branch:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.sopp.conditional_branch_scc0:03x}', opcode_width)}"

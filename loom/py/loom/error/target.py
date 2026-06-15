@@ -974,6 +974,32 @@ ERR_TARGET_056 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_057: Low type-changing tied result requires materialization.
+ERR_TARGET_057 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=57,
+    severity=Severity.ERROR,
+    summary="Low type-changing tied result requires materialization.",
+    message=(
+        "low function '@{function_name}' op '{op_name}' ties result "
+        "{result_index} with type {result_type} to operand {operand_index} "
+        "with type {operand_type}, requiring explicit materialization before "
+        "target-low allocation"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("result_index", ParamKind.U32),
+        ErrorParam("result_type", ParamKind.TYPE),
+        ErrorParam("operand_index", ParamKind.U32),
+        ErrorParam("operand_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Insert explicit low operations that materialize the representation "
+        "change instead of relying on tied-result storage reuse."
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1023,4 +1049,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_054,
     ERR_TARGET_055,
     ERR_TARGET_056,
+    ERR_TARGET_057,
 )

@@ -72,7 +72,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   ExpectKernelDescriptor(processor, LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
                          8, 4, kRdna3DescriptorFlags);
   ExpectSchedulingBits(processor,
-                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR);
+                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR |
+                           LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1150Processor) {
@@ -89,7 +90,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1150Processor) {
   EXPECT_EQ(processor->features.matrix,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12);
   ExpectSchedulingBits(processor,
-                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR);
+                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR |
+                           LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU);
 }
 
 TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
@@ -121,6 +123,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
             LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE);
   EXPECT_EQ(descriptor_set->vector_memory.cache_policy_encoding,
             LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1);
+  EXPECT_EQ(descriptor_set->sopp.delay_alu, 0u);
 }
 
 TEST(AmdgpuTargetInfoTest, DescriptorSetAtReturnsNullForUnknownOrdinal) {
@@ -128,6 +131,43 @@ TEST(AmdgpuTargetInfoTest, DescriptorSetAtReturnsNullForUnknownOrdinal) {
                 LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE),
             nullptr);
   EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_at(UINT16_MAX - 1), nullptr);
+}
+
+TEST(AmdgpuTargetInfoTest, RejectsUnsupportedDescriptorSetKey) {
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_amdgpu_target_info_lookup_descriptor_set(
+          IREE_SV("amdgpu.unsupported.core"), &descriptor_set));
+  EXPECT_EQ(descriptor_set, nullptr);
+}
+
+TEST(AmdgpuTargetInfoTest, RejectsUnsupportedDescriptorSetOrdinal) {
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_amdgpu_target_info_lookup_descriptor_set_by_ordinal(
+          UINT16_MAX - 1, &descriptor_set));
+  EXPECT_EQ(descriptor_set, nullptr);
+}
+
+TEST(AmdgpuTargetInfoTest, DescriptorSetDelayAluOpcodesMatchRdnaFamilies) {
+  const struct {
+    uint16_t descriptor_set_ordinal;
+    uint16_t expected_delay_alu_opcode;
+  } cases[] = {
+      {LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA3, 0x000u},
+      {LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3, 0x007u},
+      {LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3_5, 0x007u},
+      {LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4, 0x007u},
+      {LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X, 0x007u},
+  };
+  for (const auto& c : cases) {
+    const loom_amdgpu_descriptor_set_info_t* descriptor_set =
+        loom_amdgpu_target_info_descriptor_set_at(c.descriptor_set_ordinal);
+    ASSERT_NE(descriptor_set, nullptr);
+    EXPECT_EQ(descriptor_set->sopp.delay_alu, c.expected_delay_alu_opcode);
+  }
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx942Processor) {
@@ -207,7 +247,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {
   EXPECT_EQ(processor->features.matrix,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12);
   ExpectSchedulingBits(processor,
-                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR);
+                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR |
+                           LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {
@@ -222,7 +263,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {
                          kRdna4DescriptorFlags);
   EXPECT_EQ(processor->features.matrix,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250);
-  ExpectSchedulingBits(processor, 0);
+  ExpectSchedulingBits(processor, LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU);
 }
 
 TEST(AmdgpuTargetInfoTest, MatchesAmdhsaGfx9PlusProcessorElfFlags) {
@@ -302,7 +343,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1170Processor) {
   EXPECT_EQ(processor->features.matrix,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12);
   ExpectSchedulingBits(processor,
-                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR);
+                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR |
+                           LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx94GenericSchedulingFacts) {
@@ -336,7 +378,7 @@ TEST(AmdgpuTargetInfoTest, ParsesAmdhsaTargetIdWithFeatureSuffix) {
 TEST(AmdgpuTargetInfoTest, RejectsUnknownProcessor) {
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_UNIMPLEMENTED,
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx9999"), &processor));
   EXPECT_EQ(processor, nullptr);
 }

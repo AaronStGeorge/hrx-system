@@ -285,13 +285,18 @@ iree_status_t loom_amdgpu_lower_memory_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan);
 
-// Selects an AMDGPU LDS atomic packet plan.
-iree_status_t loom_amdgpu_select_view_atomic_plan(
+// Selects an AMDGPU atomic packet plan.
+iree_status_t loom_amdgpu_select_atomic_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_atomic_plan_t* out_plan, bool* out_selected);
 
-// Lowers a source view.atomic.* op to an AMDGPU LDS atomic packet.
-iree_status_t loom_amdgpu_lower_view_atomic(
+// Lowers a source atomic op to an AMDGPU atomic packet.
+iree_status_t loom_amdgpu_lower_atomic(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op,
+                                       const loom_amdgpu_atomic_plan_t* plan);
+
+// Marks the physical source values needed by a selected AMDGPU atomic plan.
+void loom_amdgpu_mark_atomic_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_atomic_plan_t* plan);
 
@@ -317,8 +322,8 @@ iree_status_t loom_amdgpu_low_legality_verify_memory(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Verifies source view atomic legality for AMDGPU target-low selection.
-iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
+// Verifies source atomic legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_atomic(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

@@ -235,10 +235,13 @@ loom_cc_library(
     iree::base::internal::arena
     loom::codegen::low::builder
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
     loom::codegen::low::function
+    loom::error::emitter
     loom::ir
     loom::ops::low
     loom::rewrite::rewriter
+    loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::refs::target_refs
     loom::target::registers
   PUBLIC
@@ -260,7 +263,9 @@ loom_cc_test(
     loom::ir
     loom::ops::low
     loom::target::arch::amdgpu::descriptors::low_registry
+    loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::refs::target_refs
+    loom::testing::diagnostic_matchers
   LABELS
     "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
@@ -339,6 +344,7 @@ loom_cc_library(
     loom::codegen::low::allocation
     loom::codegen::low::diagnostics
     loom::codegen::low::schedule
+    loom::codegen::low::storage_layout
     loom::error::emitter
     loom::error::error_defs
     loom::target::arch::amdgpu::error_defs
@@ -356,9 +362,13 @@ loom_cc_test(
     "preflight_test.cc"
   DEPS
     ::preflight
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
     loom::codegen::low::descriptors
+    loom::codegen::low::diagnostics
+    loom::ir
+    loom::ops::low
     loom::target::arch::amdgpu::descriptors::low_registry
     loom::target::arch::amdgpu::error_defs
     loom::testing::diagnostic_matchers
@@ -472,7 +482,6 @@ loom_cc_library(
     loom::target::compile_report_low
     loom::target::entry_selection
     loom::target::function_contract
-    loom::target::launch
     loom::target::provider
     loom::target::types
     loom::verify

@@ -68,8 +68,6 @@ typedef struct loom_low_packet_hazard_plan_event_t {
   uint32_t observed_progress;
   // Remaining progress in target-defined units.
   uint32_t residual_progress;
-  // Borrowed target detail string for diagnostics. Empty for ordinary actions.
-  iree_string_view_t target_detail;
 } loom_low_packet_hazard_plan_event_t;
 
 // Emits one target hazard-plan event for the packet currently being queried.
@@ -135,8 +133,6 @@ typedef struct loom_low_packet_hazard_plan_record_t {
   uint32_t observed_progress;
   // Remaining progress in target-defined units.
   uint32_t residual_progress;
-  // Borrowed target detail string for diagnostics.
-  iree_string_view_t target_detail;
 } loom_low_packet_hazard_plan_record_t;
 
 // Ordered target hazard-plan sidecar for one scheduled low function.

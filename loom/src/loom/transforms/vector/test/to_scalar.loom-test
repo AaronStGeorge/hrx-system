@@ -19,6 +19,67 @@ func.def @zero_extent_vector_memory_erases(%features: index, %buffer: buffer, %b
 
 // ====
 
+func.def @scalarizes_fragment_store_splat_source(%buffer: buffer, %base: offset, %row: index, %column: index, %m: index, %n: index, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%base] : buffer -> view<[%m]x[%n]xf32, %layout>
+  %fragment = vector.splat %value : vector<[%m]x[%n]xf32>
+  vector.fragment.store<result> %fragment, %view[%row, %column] shape [%m, %n] : vector<[%m]x[%n]xf32>, view<[%m]x[%n]xf32, %layout>
+  func.return
+}
+
+// ----
+func.def @scalarizes_fragment_store_splat_source(%buffer: buffer, %base: offset, %row: index, %column: index, %m: index, %n: index, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%base] : buffer -> view<[%m]x[%n]xf32, %layout>
+  %10 = index.constant 0 : index
+  %11 = index.constant 1 : index
+  scf.for %12 = [%10 to %m step %11] {
+    %13 = index.constant 0 : index
+    %14 = index.constant 1 : index
+    scf.for %15 = [%13 to %n step %14] {
+      %16 = index.add %row, %12 : index
+      %17 = index.add %column, %15 : index
+      view.store %value, %view[%16, %17] : f32, view<[%m]x[%n]xf32, %layout>
+    }
+  }
+  func.return
+}
+
+// ====
+
+func.def @scalarizes_fragment_store_loaded_source(%source_buffer: buffer, %target_buffer: buffer, %source_base: offset, %target_base: offset, %row: index, %column: index, %m: index, %n: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %source = buffer.view %source_buffer[%source_base] : buffer -> view<[%m]x[%n]xf32, %layout>
+  %target = buffer.view %target_buffer[%target_base] : buffer -> view<[%m]x[%n]xf32, %layout>
+  %loaded = vector.fragment.load<result> %source[%row, %column] shape [%m, %n] : view<[%m]x[%n]xf32, %layout> -> vector<[%m]x[%n]xf32>
+  vector.fragment.store<result> %loaded, %target[%row, %column] shape [%m, %n] : vector<[%m]x[%n]xf32>, view<[%m]x[%n]xf32, %layout>
+  func.return
+}
+
+// ----
+func.def @scalarizes_fragment_store_loaded_source(%source_buffer: buffer, %target_buffer: buffer, %source_base: offset, %target_base: offset, %row: index, %column: index, %m: index, %n: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %source = buffer.view %source_buffer[%source_base] : buffer -> view<[%m]x[%n]xf32, %layout>
+  %target = buffer.view %target_buffer[%target_base] : buffer -> view<[%m]x[%n]xf32, %layout>
+  %12 = index.constant 0 : index
+  %13 = index.constant 1 : index
+  scf.for %14 = [%12 to %m step %13] {
+    %15 = index.constant 0 : index
+    %16 = index.constant 1 : index
+    scf.for %17 = [%15 to %n step %16] {
+      %18 = index.add %row, %14 : index
+      %19 = index.add %column, %17 : index
+      %20 = view.load %source[%18, %19] : view<[%m]x[%n]xf32, %layout> -> f32
+      %21 = index.add %row, %14 : index
+      %22 = index.add %column, %17 : index
+      view.store %20, %target[%21, %22] : f32, view<[%m]x[%n]xf32, %layout>
+    }
+  }
+  func.return
+}
+
+// ====
+
 func.def @scalarizes_dense_f16_f32_mma(%lhs_data: vector<4xf16>, %rhs_data: vector<4xf16>, %init_data: vector<4xf32>) -> (vector<4xf32>) {
   %m = index.constant 2 : index
   %n = index.constant 2 : index

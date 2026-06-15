@@ -19,10 +19,10 @@ kernel.def target(@target) @global_atomic_add_f32() {
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_add_f32() asm<amdgpu.cdna3.core> {
   %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %one = v_mov_b32 1065353216
-  %12 = v_mov_b32 0
-  %13 = s_mov_b32_m0_imm 0
-  global_atomic_add_f32_saddr %12, %one, %view, %13
-  %old = global_atomic_add_f32_rtn_saddr %12, %one, %view, %13
+  %11 = v_mov_b32 0
+  %12 = s_mov_b32_m0_imm 0
+  global_atomic_add_f32_saddr %11, %one, %view, %12
+  %old = global_atomic_add_f32_rtn_saddr %11, %one, %view, %12
   return
 }
 

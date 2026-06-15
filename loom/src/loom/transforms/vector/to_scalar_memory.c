@@ -783,11 +783,9 @@ static iree_status_t loom_vector_to_scalar_materialize_fragment_store_lane(
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_try_materialize_def_lane(
       state, loom_vector_to_scalar_store_value(state), state->vector_type,
       indices, &materialized, out_lane));
-  if (!materialized) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "supported vector.fragment.store source failed lane materialization");
-  }
+  IREE_ASSERT(materialized,
+              "vector.fragment.store reference support must match lane "
+              "materialization");
   return iree_ok_status();
 }
 

@@ -18,9 +18,9 @@ kernel.def target(@target) @global_atomic_release_reduce_i32() {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_release_reduce_i32() asm<amdgpu.rdna4.core> {
   %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %11 = v_mov_b32 0
-  %12 = v_mov_b32 1
-  global_atomic_add_u32_saddr %11, %12, %view {scope = 2}
+  %10 = v_mov_b32 0
+  %11 = v_mov_b32 1
+  global_atomic_add_u32_saddr %10, %11, %view {scope = 2}
   return
 }
 
@@ -43,9 +43,9 @@ kernel.def target(@target) @global_atomic_acquire_rmw_i32() {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acquire_rmw_i32() asm<amdgpu.rdna4.core> {
   %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %12 = v_mov_b32 0
-  %13 = v_mov_b32 1
-  %old = global_atomic_add_u32_rtn_saddr %12, %13, %view {scope = 2}
+  %11 = v_mov_b32 0
+  %12 = v_mov_b32 1
+  %old = global_atomic_add_u32_rtn_saddr %11, %12, %view {scope = 2}
   s_wait_loadcnt {loadcnt = 0}
   global_inv {scope = 2}
   return
@@ -70,9 +70,9 @@ kernel.def target(@target) @global_atomic_acq_rel_rmw_i32() {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_rmw_i32() asm<amdgpu.rdna4.core> {
   %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %12 = v_mov_b32 0
-  %13 = v_mov_b32 1
-  %old = global_atomic_add_u32_rtn_saddr %12, %13, %view {scope = 2}
+  %11 = v_mov_b32 0
+  %12 = v_mov_b32 1
+  %old = global_atomic_add_u32_rtn_saddr %11, %12, %view {scope = 2}
   s_wait_loadcnt {loadcnt = 0}
   global_inv {scope = 2}
   return
@@ -98,11 +98,11 @@ kernel.def target(@target) @global_atomic_acq_rel_cmpxchg_i32() {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_cmpxchg_i32() asm<amdgpu.rdna4.core> {
   %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %14 = v_mov_b32 0
-  %15 = v_mov_b32 7
-  %16 = v_mov_b32 9
-  %17 = concat(%15, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %old = global_atomic_cmpswap_b32_rtn_saddr %14, %17, %view {scope = 2}
+  %13 = v_mov_b32 0
+  %14 = v_mov_b32 7
+  %15 = v_mov_b32 9
+  %16 = concat(%14, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %old = global_atomic_cmpswap_b32_rtn_saddr %13, %16, %view {scope = 2}
   s_wait_loadcnt {loadcnt = 0}
   global_inv {scope = 2}
   return
@@ -127,9 +127,9 @@ kernel.def target(@target) @global_atomic_seq_cst_reduce_i32() {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_seq_cst_reduce_i32() asm<amdgpu.rdna4.core> {
   %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %11 = v_mov_b32 0
-  %12 = v_mov_b32 1
-  global_atomic_add_u32_saddr %11, %12, %view {scope = 2}
+  %10 = v_mov_b32 0
+  %11 = v_mov_b32 1
+  global_atomic_add_u32_saddr %10, %11, %view {scope = 2}
   s_wait_storecnt {storecnt = 0}
   global_inv {scope = 2}
   return

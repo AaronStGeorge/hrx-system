@@ -26,6 +26,8 @@ struct CapturedDiagnosticEmission {
   const loom_op_t* op = nullptr;
   // String parameters copied in parameter order.
   std::vector<std::string> string_params;
+  // String-list parameters copied in parameter order.
+  std::vector<std::vector<std::string>> string_list_params;
   // Type parameters copied in parameter order.
   std::vector<loom_type_t> type_params;
   // I64 parameters copied in parameter order.
@@ -40,6 +42,8 @@ struct CapturedDiagnosticEmission {
   iree_host_size_t related_count = 0;
   // Deep-copied parameters in full parameter order.
   std::vector<loom_diagnostic_param_t> params;
+  // Storage backing deep-copied string-list parameters in |params|.
+  std::vector<std::vector<iree_string_view_t>> string_list_param_views;
 };
 
 struct DiagnosticEmissionCapture {
@@ -73,6 +77,8 @@ struct DiagnosticEmissionCapture {
     entry.related_count = emission->related_op_count;
     entry.params.reserve(emission->param_count);
     entry.string_params.reserve(emission->param_count);
+    entry.string_list_params.reserve(emission->param_count);
+    entry.string_list_param_views.reserve(emission->param_count);
     for (iree_host_size_t i = 0; i < emission->param_count; ++i) {
       loom_diagnostic_param_t param = emission->params[i];
       entry.field_refs.push_back(param.field_ref);
@@ -88,6 +94,26 @@ struct DiagnosticEmissionCapture {
         entry.u32_params.push_back(param.u32);
       } else if (param.kind == LOOM_PARAM_U64) {
         entry.u64_params.push_back(param.u64);
+      } else if (param.kind == LOOM_PARAM_STRING_LIST) {
+        std::vector<std::string> string_list;
+        string_list.reserve(param.string_list.count);
+        for (iree_host_size_t j = 0; j < param.string_list.count; ++j) {
+          string_list.emplace_back(CopyStringView(param.string_list.values[j]));
+        }
+        entry.string_list_params.push_back(std::move(string_list));
+        const std::vector<std::string>& copy = entry.string_list_params.back();
+        std::vector<iree_string_view_t> views;
+        views.reserve(copy.size());
+        for (const std::string& value : copy) {
+          views.push_back(iree_make_string_view(value.data(), value.size()));
+        }
+        entry.string_list_param_views.push_back(std::move(views));
+        const std::vector<iree_string_view_t>& param_views =
+            entry.string_list_param_views.back();
+        param.string_list = loom_diagnostic_string_list_t{
+            /*.values=*/param_views.data(),
+            /*.count=*/param_views.size(),
+        };
       }
       entry.params.push_back(param);
     }

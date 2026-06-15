@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include "iree/base/api.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
@@ -409,8 +410,8 @@ static iree_status_t loom_amdgpu_memory_access_descriptor_key(
     iree_string_view_t* out_packet_key) {
   *out_packet_key = IREE_SV("<missing>");
   if (access->descriptor == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU memory access has no selected descriptor");
+    IREE_ASSERT_UNREACHABLE("selected AMDGPU memory access descriptor");
+    IREE_BUILTIN_UNREACHABLE();
   }
   *out_packet_key = loom_low_descriptor_set_string(
       descriptor_set, access->descriptor->key_string_offset);

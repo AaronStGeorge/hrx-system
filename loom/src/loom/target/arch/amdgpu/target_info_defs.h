@@ -81,13 +81,16 @@ typedef enum loom_amdgpu_processor_scheduling_bit_e {
   LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES = 1u << 3,
   // Nearby VALU reads of SGPRs written by VALU require depctr drains.
   LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR = 1u << 4,
+  // GFX11+ processors support s_delay_alu for short ALU dependency delays.
+  LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU = 1u << 5,
   // Processor scheduling bits known by the AMDGPU target package.
   LOOM_AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS =
       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR |
       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES |
       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES |
       LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES |
-      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR |
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_DELAY_ALU,
 } loom_amdgpu_processor_scheduling_bit_t;
 
 // Bitset of loom_amdgpu_processor_scheduling_bit_t values.
@@ -151,6 +154,8 @@ typedef enum loom_amdgpu_vector_memory_cache_policy_encoding_e {
 typedef struct loom_amdgpu_descriptor_set_sopp_opcodes_t {
   // Opcode for S_NOP.
   uint16_t nop;
+  // Opcode for S_DELAY_ALU, or 0 when the descriptor set has no packet.
+  uint16_t delay_alu;
   // Opcode for S_ENDPGM.
   uint16_t endpgm;
   // Opcode for S_BRANCH.

@@ -12,10 +12,10 @@
 // DPP, or readfirstlane reads. GFX940-family transcendental VALU results and
 // sub-DWORD SDWA destination writes also need fixed waits before dependent
 // VALU consumers, and nearby VALU or VMEM reads of VALU-written SGPRs need
-// fixed waits because the hardware does not interlock those dependencies. This
-// table records
-// target-owned insertion points after scheduling and allocation, where physical
-// register identity is known.
+// fixed waits because the hardware does not interlock those dependencies.
+// RDNA3+ processors can use `s_delay_alu` for short ALU dependency windows.
+// This table records target-owned insertion points after scheduling and
+// allocation, where physical register identity is known.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_STATES_H_
 #define LOOM_TARGET_ARCH_AMDGPU_PLANNING_WAIT_STATES_H_
@@ -57,6 +57,8 @@ typedef enum loom_amdgpu_wait_state_reason_e {
   // A VALU packet consumes VGPR storage written by a recent destination
   // selector forwarding producer.
   LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE = 7,
+  // An RDNA3+ ALU packet consumes storage written by a recent ALU packet.
+  LOOM_AMDGPU_WAIT_STATE_REASON_DELAY_ALU_DEPENDENCY = 8,
 } loom_amdgpu_wait_state_reason_t;
 
 typedef enum loom_amdgpu_wait_state_action_e {
@@ -64,6 +66,8 @@ typedef enum loom_amdgpu_wait_state_action_e {
   LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN = 0,
   // Scalar no-op packet that waits one or more cycles.
   LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP = 1,
+  // Scalar delay packet with a packed S_DELAY_ALU dependency immediate.
+  LOOM_AMDGPU_WAIT_STATE_ACTION_S_DELAY_ALU = 2,
 } loom_amdgpu_wait_state_action_t;
 
 // One fixed wait-state action in scheduled packet order.
@@ -88,6 +92,8 @@ typedef struct loom_amdgpu_wait_state_t {
   uint16_t observed_cycle_count;
   // Residual cycles to wait before |consumer_node|.
   uint16_t cycle_count;
+  // Packed S_DELAY_ALU SIMM16 operand for S_DELAY_ALU actions.
+  uint16_t delay_alu_immediate;
   // Matrix result wait table profile, or UNKNOWN for non-matrix reasons.
   loom_amdgpu_matrix_wait_profile_t matrix_wait_profile;
   // Matrix result use table key, or UNKNOWN for non-matrix reasons.

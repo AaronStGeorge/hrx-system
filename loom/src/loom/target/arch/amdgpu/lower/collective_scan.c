@@ -513,8 +513,9 @@ static iree_status_t loom_amdgpu_emit_subgroup_scan_source(
       break;
     }
     case LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU subgroup scan has invalid direction");
+      IREE_ASSERT_UNREACHABLE(
+          "AMDGPU subgroup scan lowering requires a supported direction");
+      IREE_BUILTIN_UNREACHABLE();
   }
 
   return loom_amdgpu_emit_subgroup_lane_byte_offset(
@@ -618,9 +619,9 @@ static iree_status_t loom_amdgpu_emit_subgroup_scan_tree(
     loom_value_id_t* inout_registers) {
   if (plan->active_lane_count == 0 ||
       plan->active_lane_count > plan->wavefront_size) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU subgroup scan has invalid active lane count");
+    IREE_ASSERT_UNREACHABLE(
+        "AMDGPU subgroup scan lowering requires a valid active lane count");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   loom_value_id_t active_lane_count = dynamic_active_lane_count;
@@ -649,17 +650,16 @@ static iree_status_t loom_amdgpu_emit_subgroup_scan_tree(
   const bool is_exclusive =
       plan->mode == LOOM_KERNEL_SUBGROUP_SCAN_MODE_EXCLUSIVE;
   if (is_exclusive) {
-    if (!loom_amdgpu_collective_combine_identity_bits(plan->kind,
-                                                      &identity_bits)) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU subgroup scan has no identity for combining kind");
-    }
+    const bool has_identity = loom_amdgpu_collective_combine_identity_bits(
+        plan->kind, &identity_bits);
+    IREE_ASSERT(has_identity,
+                "AMDGPU exclusive subgroup scan requires identity bits");
     exclusive_byte_offset = source_byte_offsets[0];
     exclusive_guard = guards[0];
   } else if (plan->mode != LOOM_KERNEL_SUBGROUP_SCAN_MODE_INCLUSIVE) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU subgroup scan has invalid mode");
+    IREE_ASSERT_UNREACHABLE(
+        "AMDGPU subgroup scan lowering requires a supported mode");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   for (uint32_t i = 0; i < plan->register_count; ++i) {
@@ -770,9 +770,9 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_scan(
       has_partial_tail ? plan->flat_workgroup_size % plan->wavefront_size
                        : plan->wavefront_size;
   if (wave_count > plan->wavefront_size) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU workgroup scan wave count exceeds one wave");
+    IREE_ASSERT_UNREACHABLE(
+        "AMDGPU workgroup scan lowering requires a valid wave count");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   loom_type_t lane_type = loom_type_none();
@@ -945,12 +945,10 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_scan(
     }
 
     uint32_t identity_bits = 0;
-    if (!loom_amdgpu_collective_combine_identity_bits(plan->kind,
-                                                      &identity_bits)) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU workgroup scan has no identity for combining kind");
-    }
+    const bool has_identity = loom_amdgpu_collective_combine_identity_bits(
+        plan->kind, &identity_bits);
+    IREE_ASSERT(has_identity,
+                "AMDGPU workgroup scan prefix requires identity bits");
     loom_value_id_t identity = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, identity_bits,

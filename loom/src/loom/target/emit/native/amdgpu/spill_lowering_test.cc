@@ -14,10 +14,15 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptors/low_registry.h"
+#include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
+#include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
 namespace {
+
+using ::loom::testing::CapturedDiagnosticEmission;
+using ::loom::testing::DiagnosticEmissionCapture;
 
 struct LoweredSpillTraffic {
   // Number of low.storage.address ops materialized by spill lowering.
@@ -104,6 +109,12 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
     };
   }
 
+  void NameValue(loom_value_id_t value_id, iree_string_view_t name) {
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_module_intern_string(module_, name, &name_id));
+    IREE_CHECK_OK(loom_module_set_value_name(module_, value_id, name_id));
+  }
+
   loom_type_t RegisterType(SpillRegisterClass register_class,
                            uint32_t unit_count) {
     loom_type_t type = loom_type_none();
@@ -118,16 +129,16 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
     return interned_type;
   }
 
-  loom_op_t* BuildFunction(
-      iree_string_view_t name, int64_t byte_offset, SpillTrafficOp traffic_op,
-      SpillRegisterClass register_class = SpillRegisterClass::kVgpr,
-      uint32_t unit_count = 1) {
+  loom_op_t* BuildFunctionWithType(iree_string_view_t name,
+                                   loom_type_t arg_type, int64_t byte_offset,
+                                   SpillTrafficOp traffic_op,
+                                   loom_storage_space_t storage_space,
+                                   uint64_t storage_byte_length = 8192) {
     loom_builder_t module_builder;
     loom_builder_initialize(module_, &module_->arena,
                             loom_module_block(module_), &module_builder);
     const loom_symbol_ref_t target_ref = AddSymbol(IREE_SV("target"));
     const loom_symbol_ref_t function_ref = AddSymbol(name);
-    const loom_type_t arg_type = RegisterType(register_class, unit_count);
     loom_op_t* function_op = nullptr;
     IREE_CHECK_OK(loom_low_func_def_build(
         &module_builder, 0, /*visibility=*/0, /*cc=*/0, /*purity=*/0,
@@ -140,16 +151,17 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
         /*predicates=*/nullptr, /*predicates_count=*/0, LOOM_LOCATION_UNKNOWN,
         &function_op));
     loom_region_t* body = loom_low_func_def_body(function_op);
+    NameValue(loom_region_entry_arg_id(body, 0), IREE_SV("spill_value"));
     loom_builder_t body_builder;
     loom_builder_initialize(module_, &module_->arena,
                             loom_region_entry_block(body), &body_builder);
     loom_op_t* storage_op = nullptr;
     IREE_CHECK_OK(loom_low_storage_reserve_build(
-        &body_builder, /*byte_length=*/8192, /*byte_alignment=*/4,
-        loom_type_storage(LOOM_STORAGE_SPACE_PRIVATE), LOOM_LOCATION_UNKNOWN,
-        &storage_op));
+        &body_builder, storage_byte_length, /*byte_alignment=*/4,
+        loom_type_storage(storage_space), LOOM_LOCATION_UNKNOWN, &storage_op));
     const loom_value_id_t storage =
         loom_low_storage_reserve_storage(storage_op);
+    NameValue(storage, IREE_SV("spill_storage"));
     if (traffic_op == SpillTrafficOp::kSpill) {
       loom_op_t* spill_op = nullptr;
       IREE_CHECK_OK(loom_low_spill_build(
@@ -162,6 +174,25 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
                                           &reload_op));
     }
     return function_op;
+  }
+
+  loom_op_t* BuildFunction(
+      iree_string_view_t name, int64_t byte_offset, SpillTrafficOp traffic_op,
+      SpillRegisterClass register_class = SpillRegisterClass::kVgpr,
+      uint32_t unit_count = 1,
+      loom_storage_space_t storage_space = LOOM_STORAGE_SPACE_PRIVATE,
+      uint64_t storage_byte_length = 8192) {
+    const loom_type_t arg_type = RegisterType(register_class, unit_count);
+    return BuildFunctionWithType(name, arg_type, byte_offset, traffic_op,
+                                 storage_space, storage_byte_length);
+  }
+
+  void LowerSpillTraffic(loom_op_t* function_op) {
+    loom_amdgpu_spill_lowering_result_t result = {};
+    IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
+        module_, function_op, descriptor_set_, (iree_diagnostic_emitter_t){0},
+        &result, &scratch_arena_));
+    EXPECT_EQ(result.error_count, 0u);
   }
 
   static int64_t PacketOffset(const loom_op_t* op) {
@@ -239,8 +270,7 @@ TEST_F(AmdgpuSpillLoweringTest, KeepsOffsetOnlyStoreWhenOffsetFits) {
   loom_op_t* function_op =
       BuildFunction(IREE_SV("small_spill"), 4092, SpillTrafficOp::kSpill);
 
-  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
-      module_, function_op, descriptor_set_, &scratch_arena_));
+  LowerSpillTraffic(function_op);
 
   LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
       function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_STORE_B32_OFFSET_ONLY,
@@ -259,8 +289,7 @@ TEST_F(AmdgpuSpillLoweringTest, UsesVaddrStoreWhenOffsetExceedsImmediate) {
   loom_op_t* function_op =
       BuildFunction(IREE_SV("large_spill"), 4104, SpillTrafficOp::kSpill);
 
-  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
-      module_, function_op, descriptor_set_, &scratch_arena_));
+  LowerSpillTraffic(function_op);
 
   LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
       function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_STORE_B32_OFFSET_ONLY,
@@ -277,8 +306,7 @@ TEST_F(AmdgpuSpillLoweringTest, KeepsOffsetOnlyReloadWhenOffsetFits) {
   loom_op_t* function_op =
       BuildFunction(IREE_SV("small_reload"), 4092, SpillTrafficOp::kReload);
 
-  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
-      module_, function_op, descriptor_set_, &scratch_arena_));
+  LowerSpillTraffic(function_op);
 
   LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
       function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_LOAD_B32_OFFSET_ONLY,
@@ -294,8 +322,7 @@ TEST_F(AmdgpuSpillLoweringTest, UsesVaddrReloadWhenOffsetExceedsImmediate) {
   loom_op_t* function_op =
       BuildFunction(IREE_SV("large_reload"), 4104, SpillTrafficOp::kReload);
 
-  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
-      module_, function_op, descriptor_set_, &scratch_arena_));
+  LowerSpillTraffic(function_op);
 
   LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
       function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_LOAD_B32_OFFSET_ONLY,
@@ -313,8 +340,7 @@ TEST_F(AmdgpuSpillLoweringTest, LowersSgprSpillThroughVgprScratchValue) {
       BuildFunction(IREE_SV("sgpr_spill"), 0, SpillTrafficOp::kSpill,
                     SpillRegisterClass::kSgpr, 2);
 
-  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
-      module_, function_op, descriptor_set_, &scratch_arena_));
+  LowerSpillTraffic(function_op);
 
   LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
       function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_STORE_B32_OFFSET_ONLY,
@@ -336,8 +362,7 @@ TEST_F(AmdgpuSpillLoweringTest, LowersSgprReloadThroughReadfirstlane) {
       BuildFunction(IREE_SV("sgpr_reload"), 0, SpillTrafficOp::kReload,
                     SpillRegisterClass::kSgpr, 2);
 
-  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
-      module_, function_op, descriptor_set_, &scratch_arena_));
+  LowerSpillTraffic(function_op);
 
   LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
       function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_LOAD_B32_OFFSET_ONLY,
@@ -352,6 +377,108 @@ TEST_F(AmdgpuSpillLoweringTest, LowersSgprReloadThroughReadfirstlane) {
   EXPECT_EQ(traffic.exec_restore_count, 1);
   EXPECT_EQ(traffic.packet_offset, 4);
   EXPECT_EQ(traffic.packet_operand_count, 0);
+}
+
+TEST_F(AmdgpuSpillLoweringTest, UnsupportedStorageEmitsDiagnostic) {
+  loom_op_t* function_op =
+      BuildFunction(IREE_SV("workgroup_spill"), 0, SpillTrafficOp::kSpill,
+                    SpillRegisterClass::kVgpr, 1, LOOM_STORAGE_SPACE_WORKGROUP);
+
+  DiagnosticEmissionCapture capture;
+  loom_amdgpu_spill_lowering_result_t result = {};
+  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
+      module_, function_op, descriptor_set_, capture.emitter(), &result,
+      &scratch_arena_));
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_AMDGPU_037);
+  ASSERT_EQ(emission.string_params.size(), 4u);
+  EXPECT_EQ(emission.string_params[0], "workgroup_spill");
+  EXPECT_EQ(emission.string_params[1], "low.spill");
+  EXPECT_EQ(emission.string_params[2], "spill_storage");
+  EXPECT_EQ(emission.string_params[3], "workgroup");
+  ASSERT_EQ(emission.string_list_params.size(), 1u);
+  EXPECT_THAT(emission.string_list_params[0],
+              ::testing::ElementsAre("scratch", "private"));
+}
+
+TEST_F(AmdgpuSpillLoweringTest, UnsupportedRegisterTypeEmitsDiagnostic) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  IREE_ASSERT_OK(loom_module_intern_type(module_, i32_type, &i32_type));
+  loom_op_t* function_op =
+      BuildFunctionWithType(IREE_SV("i32_spill"), i32_type, 0,
+                            SpillTrafficOp::kSpill, LOOM_STORAGE_SPACE_PRIVATE);
+
+  DiagnosticEmissionCapture capture;
+  loom_amdgpu_spill_lowering_result_t result = {};
+  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
+      module_, function_op, descriptor_set_, capture.emitter(), &result,
+      &scratch_arena_));
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_AMDGPU_038);
+  ASSERT_EQ(emission.string_params.size(), 3u);
+  EXPECT_EQ(emission.string_params[0], "i32_spill");
+  EXPECT_EQ(emission.string_params[1], "low.spill");
+  EXPECT_EQ(emission.string_params[2], "spill_value");
+  ASSERT_EQ(emission.type_params.size(), 1u);
+  EXPECT_TRUE(loom_type_equal(emission.type_params[0], i32_type));
+}
+
+TEST_F(AmdgpuSpillLoweringTest, NegativeSpillOffsetEmitsDiagnostic) {
+  loom_op_t* function_op =
+      BuildFunction(IREE_SV("negative_spill"), -4, SpillTrafficOp::kSpill);
+
+  DiagnosticEmissionCapture capture;
+  loom_amdgpu_spill_lowering_result_t result = {};
+  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
+      module_, function_op, descriptor_set_, capture.emitter(), &result,
+      &scratch_arena_));
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_AMDGPU_039);
+  ASSERT_EQ(emission.string_params.size(), 3u);
+  EXPECT_EQ(emission.string_params[0], "negative_spill");
+  EXPECT_EQ(emission.string_params[1], "low.spill");
+  EXPECT_EQ(emission.string_params[2], "spill_storage");
+  ASSERT_EQ(emission.i64_params.size(), 1u);
+  EXPECT_EQ(emission.i64_params[0], -4);
+  ASSERT_EQ(emission.u64_params.size(), 2u);
+  EXPECT_EQ(emission.u64_params[0], 4u);
+  EXPECT_EQ(emission.u64_params[1], 8192u);
+}
+
+TEST_F(AmdgpuSpillLoweringTest, ReloadRangeExceedingStorageEmitsDiagnostic) {
+  loom_op_t* function_op =
+      BuildFunction(IREE_SV("short_reload"), 4, SpillTrafficOp::kReload,
+                    SpillRegisterClass::kVgpr, /*unit_count=*/2,
+                    LOOM_STORAGE_SPACE_PRIVATE, /*storage_byte_length=*/8);
+
+  DiagnosticEmissionCapture capture;
+  loom_amdgpu_spill_lowering_result_t result = {};
+  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
+      module_, function_op, descriptor_set_, capture.emitter(), &result,
+      &scratch_arena_));
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(capture.emissions.size(), 1u);
+  const CapturedDiagnosticEmission& emission = capture.emissions[0];
+  EXPECT_EQ(emission.error, LOOM_ERR_AMDGPU_039);
+  ASSERT_EQ(emission.string_params.size(), 3u);
+  EXPECT_EQ(emission.string_params[0], "short_reload");
+  EXPECT_EQ(emission.string_params[1], "low.reload");
+  EXPECT_EQ(emission.string_params[2], "spill_storage");
+  ASSERT_EQ(emission.i64_params.size(), 1u);
+  EXPECT_EQ(emission.i64_params[0], 4);
+  ASSERT_EQ(emission.u64_params.size(), 2u);
+  EXPECT_EQ(emission.u64_params[0], 8u);
+  EXPECT_EQ(emission.u64_params[1], 8u);
 }
 
 }  // namespace

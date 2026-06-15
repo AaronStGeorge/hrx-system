@@ -127,18 +127,6 @@ static iree_status_t loom_low_packet_hazard_plan_validate_event(
         IREE_STATUS_INVALID_ARGUMENT,
         "hazard plan diagnostic event cannot have a target action");
   }
-  if (loom_low_packet_hazard_plan_record_kind_is_diagnostic(event->kind) &&
-      iree_string_view_is_empty(event->target_detail)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "hazard plan diagnostic event must have target detail");
-  }
-  if (event->kind == LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION &&
-      !iree_string_view_is_empty(event->target_detail)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "hazard plan action event cannot have target detail");
-  }
   if (!loom_low_packet_hazard_plan_record_kind_has_residual_progress(
           event->kind)) {
     if (event->producer_node_index != LOOM_LOW_SCHEDULE_NODE_NONE ||
@@ -232,7 +220,6 @@ static iree_status_t loom_low_packet_hazard_plan_append_event(
           .required_progress = event->required_progress,
           .observed_progress = event->observed_progress,
           .residual_progress = event->residual_progress,
-          .target_detail = event->target_detail,
       };
   return iree_ok_status();
 }

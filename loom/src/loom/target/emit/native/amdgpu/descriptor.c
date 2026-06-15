@@ -94,7 +94,7 @@ static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
       break;
   }
   return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
+      IREE_STATUS_FAILED_PRECONDITION,
       "AMDGPU kernel descriptor processor '%.*s' is not supported yet",
       (int)processor_name.size, processor_name.data);
 }

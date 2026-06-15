@@ -463,7 +463,7 @@ TEST(AmdgpuDescriptorTest, RejectsLegacyFlatScratchUserSgprsOnGfx1100) {
 TEST(AmdgpuDescriptorTest, RejectsUnsupportedTarget) {
   loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
   loom_amdgpu_kernel_descriptor_t descriptor = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         loom_amdgpu_kernel_descriptor_initialize_from_metadata(
                             IREE_SV("gfx900"), &metadata, 0, &descriptor));
 }

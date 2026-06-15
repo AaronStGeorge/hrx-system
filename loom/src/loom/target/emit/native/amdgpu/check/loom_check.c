@@ -272,18 +272,22 @@ static iree_status_t loom_amdgpu_loom_check_materialize_address_state(
 
 static iree_status_t loom_amdgpu_loom_check_lower_spill_traffic(
     void* user_data, loom_module_t* module, loom_op_t* low_function_op,
-    iree_arena_allocator_t* arena) {
+    iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* arena,
+    loom_low_emission_frame_lower_spill_traffic_result_t* out_result) {
   const loom_amdgpu_loom_check_spill_lowering_context_t* context =
       (const loom_amdgpu_loom_check_spill_lowering_context_t*)user_data;
   loom_low_resolved_target_t target = {0};
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
       module, low_function_op, context->descriptor_registry,
-      (loom_target_selection_t){0}, (iree_diagnostic_emitter_t){0}, &target));
+      (loom_target_selection_t){0}, emitter, &target));
   if (target.descriptor_set == NULL) {
     return iree_ok_status();
   }
-  return loom_amdgpu_lower_spill_traffic(module, low_function_op,
-                                         target.descriptor_set, arena);
+  loom_amdgpu_spill_lowering_result_t result = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lower_spill_traffic(
+      module, low_function_op, target.descriptor_set, emitter, &result, arena));
+  out_result->error_count = result.error_count;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_loom_check_build_schedule_pair_affinities(

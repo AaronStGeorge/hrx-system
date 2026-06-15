@@ -58,8 +58,8 @@ static iree_status_t loom_amdgpu_storage_layout_segment_size_ptr(
       return iree_ok_status();
     case LOOM_STORAGE_SPACE_STACK:
       return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU native emission does not lower stack storage yet");
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU stack storage must be rejected before native storage layout");
     default:
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,

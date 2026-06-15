@@ -557,6 +557,8 @@ class AmdgpuAtomicKind(CEnum):
 class AmdgpuAtomicValueKind(CEnum):
     I32 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32"
     F32 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32"
+    PACKED_F16 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_PACKED_F16"
+    PACKED_BF16 = "LOOM_AMDGPU_ATOMIC_VALUE_KIND_PACKED_BF16"
 
 
 @dataclass(frozen=True, slots=True)
@@ -818,6 +820,13 @@ def _native_unsigned_hex_immediate(field_name: str, bit_width: int) -> NativeAsm
         NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX,
         field_name=field_name,
         bit_width=bit_width,
+    )
+
+
+def _native_amdgpu_delay_alu_immediate(field_name: str) -> NativeAsmValue:
+    return NativeAsmValue(
+        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+        field_name=field_name,
     )
 
 
@@ -2783,6 +2792,7 @@ __all__ = (
     "_memory_asm_immediate_names",
     "_mubuf_vaddr_operand",
     "_native_i64_immediate",
+    "_native_amdgpu_delay_alu_immediate",
     "_native_literal",
     "_native_operand",
     "_native_result",

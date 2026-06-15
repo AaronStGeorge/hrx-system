@@ -221,8 +221,9 @@ static iree_status_t loom_amdgpu_emit_subgroup_shuffle_source_byte_offset(
     }
     case LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_INDEX:
     case LOOM_KERNEL_SUBGROUP_SHUFFLE_MODE_COUNT_:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU subgroup shuffle has invalid mode");
+      IREE_ASSERT_UNREACHABLE(
+          "AMDGPU subgroup shuffle lowering requires a supported mode");
+      IREE_BUILTIN_UNREACHABLE();
   }
 
   return loom_amdgpu_emit_subgroup_lane_byte_offset(

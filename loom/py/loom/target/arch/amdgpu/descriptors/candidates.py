@@ -34,6 +34,11 @@ _ATOMIC_KIND = {
     "add.f32": (AmdgpuAtomicKind.ADDF, AmdgpuAtomicValueKind.F32),
     "minnum.f32": (AmdgpuAtomicKind.MINNUMF, AmdgpuAtomicValueKind.F32),
     "maxnum.f32": (AmdgpuAtomicKind.MAXNUMF, AmdgpuAtomicValueKind.F32),
+    "add.pk2.f16": (AmdgpuAtomicKind.ADDF, AmdgpuAtomicValueKind.PACKED_F16),
+    "add.pk2.bf16": (
+        AmdgpuAtomicKind.ADDF,
+        AmdgpuAtomicValueKind.PACKED_BF16,
+    ),
 }
 
 _ATOMIC_ADDRESS_FORM = (

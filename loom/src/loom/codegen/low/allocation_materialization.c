@@ -82,32 +82,6 @@ static iree_status_t loom_low_allocation_map_slot_space(
   }
 }
 
-static loom_diagnostic_string_list_t
-loom_low_allocation_supported_storage_space_names(
-    loom_low_storage_space_set_t supported_storage_spaces,
-    iree_string_view_t* storage_space_names) {
-  static const loom_storage_space_t kStorageSpaceOrder[] = {
-      LOOM_STORAGE_SPACE_STACK,
-      LOOM_STORAGE_SPACE_SCRATCH,
-      LOOM_STORAGE_SPACE_PRIVATE,
-      LOOM_STORAGE_SPACE_WORKGROUP,
-  };
-  iree_host_size_t count = 0;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kStorageSpaceOrder); ++i) {
-    const loom_storage_space_t storage_space = kStorageSpaceOrder[i];
-    if (!loom_low_storage_space_set_contains(supported_storage_spaces,
-                                             storage_space)) {
-      continue;
-    }
-    storage_space_names[count++] =
-        iree_make_cstring_view(loom_storage_space_name(storage_space));
-  }
-  return (loom_diagnostic_string_list_t){
-      .values = storage_space_names,
-      .count = count,
-  };
-}
-
 static iree_status_t loom_low_allocation_emit_unsupported_spill_storage_space(
     const loom_low_allocation_table_t* table,
     const loom_low_allocation_spill_plan_t* plan,
@@ -122,9 +96,11 @@ static iree_status_t loom_low_allocation_emit_unsupported_spill_storage_space(
   const loom_low_allocation_assignment_t* assignment =
       &table->assignments[plan->assignment_index];
   iree_string_view_t supported_storage_space_names[LOOM_STORAGE_SPACE_COUNT_];
-  const loom_diagnostic_string_list_t supported_storage_space_list =
-      loom_low_allocation_supported_storage_space_names(
-          supported_storage_spaces, supported_storage_space_names);
+  const iree_host_size_t supported_storage_space_count =
+      loom_low_storage_space_set_names(
+          supported_storage_spaces,
+          IREE_ARRAYSIZE(supported_storage_space_names),
+          supported_storage_space_names);
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_diagnostic_target_key(&table->target)),
       loom_param_string(loom_low_diagnostic_export_name(&table->target)),
@@ -138,8 +114,8 @@ static iree_status_t loom_low_allocation_emit_unsupported_spill_storage_space(
       loom_param_string(loom_low_spill_slot_space_name(plan->slot_space)),
       loom_param_string(
           iree_make_cstring_view(loom_storage_space_name(storage_space))),
-      loom_param_string_list(supported_storage_space_list.values,
-                             supported_storage_space_list.count),
+      loom_param_string_list(supported_storage_space_names,
+                             supported_storage_space_count),
   };
   loom_diagnostic_emission_t emission = {
       .op = loom_low_diagnostic_value_origin_op(table->module, plan->value_id,

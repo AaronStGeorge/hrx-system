@@ -480,13 +480,9 @@ iree_status_t loom_low_lower_resolve_descriptor_row(
       .descriptor = NULL,
       .opcode_id = LOOM_STRING_ID_INVALID,
   };
-  if (loom_low_descriptor_set_descriptor_ordinal(context->descriptor_set,
-                                                 descriptor) ==
-      LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "generated target-low policy references a "
-                            "descriptor row outside the active descriptor set");
-  }
+  IREE_ASSERT_NE(loom_low_descriptor_set_descriptor_ordinal(
+                     context->descriptor_set, descriptor),
+                 LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 
   iree_string_view_t key = loom_low_descriptor_set_string(
       context->descriptor_set, descriptor->key_string_offset);

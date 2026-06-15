@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from .categories import *
 from .common import *
+from .control import _s_delay_alu_descriptor
 from .sets import *
 
 
@@ -72,7 +73,10 @@ def _validate_address_immediate_units(descriptor_set: DescriptorSet) -> None:
 def amdgpu_descriptor_ref_keys() -> tuple[str, ...]:
     """Returns descriptor keys known to the AMDGPU target family."""
 
-    return tuple(sorted(_amdgpu_descriptor_ref_key_set()))
+    keys = _amdgpu_descriptor_ref_key_set()
+    for builder in _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS.values():
+        keys.update(descriptor.key for descriptor in builder.extra_descriptors)
+    return tuple(sorted(keys))
 
 
 def amdgpu_descriptor_id_keys() -> tuple[str, ...]:
@@ -134,6 +138,7 @@ def _with_overlay_descriptors(
     base: DescriptorSet,
     spec: AmdgpuIsaFactSource,
     overlay_descriptors: tuple[Descriptor, ...],
+    extra_descriptors: tuple[Descriptor, ...] = (),
 ) -> DescriptorSet:
     manual_descriptors = _manual_scalar_descriptors(spec)
     descriptor_set = replace(
@@ -142,6 +147,7 @@ def _with_overlay_descriptors(
             (
                 manual_descriptors[0],
                 *overlay_descriptors,
+                *extra_descriptors,
                 *manual_descriptors[1:],
                 *_hal_buffer_descriptor_pseudos(),
                 *base.descriptors,
@@ -572,6 +578,7 @@ def _with_storage_lease_rows(descriptor_set: DescriptorSet) -> DescriptorSet:
 class _AmdgpuCoreDescriptorSetBuilder:
     base: DescriptorSet
     overlay_descriptors: Callable[[AmdgpuIsaFactSource], tuple[Descriptor, ...]]
+    extra_descriptors: tuple[Descriptor, ...] = ()
 
 
 _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS = {
@@ -586,18 +593,22 @@ _AMDGPU_CORE_DESCRIPTOR_SET_BUILDERS = {
     "rdna3": _AmdgpuCoreDescriptorSetBuilder(
         base=_AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE,
         overlay_descriptors=_gfx11_core_overlay_descriptors,
+        extra_descriptors=(_s_delay_alu_descriptor(),),
     ),
     "rdna3_5": _AmdgpuCoreDescriptorSetBuilder(
         base=_AMDGPU_RDNA3_5_CORE_DESCRIPTOR_SET_BASE,
         overlay_descriptors=_gfx117x_core_overlay_descriptors,
+        extra_descriptors=(_s_delay_alu_descriptor(),),
     ),
     "rdna4": _AmdgpuCoreDescriptorSetBuilder(
         base=_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE,
         overlay_descriptors=_gfx12_core_overlay_descriptors,
+        extra_descriptors=(_s_delay_alu_descriptor(),),
     ),
     "rdna4_gfx125x": _AmdgpuCoreDescriptorSetBuilder(
         base=_AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE,
         overlay_descriptors=_gfx1250_core_overlay_descriptors,
+        extra_descriptors=(_s_delay_alu_descriptor(),),
     ),
 }
 
@@ -625,6 +636,7 @@ def build_amdgpu_core_descriptor_set_from_spec(
         builder.base,
         spec,
         builder.overlay_descriptors(spec),
+        builder.extra_descriptors,
     )
     if target == "rdna4_gfx125x":
         descriptor_set = _with_gfx125x_vgpr_msb_address_states(descriptor_set)

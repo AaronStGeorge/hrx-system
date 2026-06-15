@@ -63,6 +63,12 @@ static inline bool loom_low_storage_space_set_contains(
          iree_all_bits_set(set, singleton);
 }
 
+// Writes the canonical storage-space names in |set| into |out_names| in stable
+// declaration order and returns the number of names written.
+iree_host_size_t loom_low_storage_space_set_names(
+    loom_low_storage_space_set_t set, iree_host_size_t capacity,
+    iree_string_view_t* out_names);
+
 typedef struct loom_low_storage_layout_space_sizes_t {
   // Bytes reserved in function stack-frame storage.
   uint64_t stack_bytes;

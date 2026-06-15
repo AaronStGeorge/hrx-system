@@ -38,7 +38,6 @@
 #include "loom/target/emit/native/amdgpu/spill_lowering.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/function_contract.h"
-#include "loom/target/launch.h"
 #include "loom/target/provider.h"
 
 #define LOOM_AMDGPU_HAL_KERNEL_LIBRARY_DEFAULT_MAX_ERRORS 20u
@@ -415,11 +414,16 @@ typedef struct loom_amdgpu_hal_kernel_library_spill_lowering_context_t {
 
 static iree_status_t loom_amdgpu_hal_kernel_library_lower_spill_traffic(
     void* user_data, loom_module_t* module, loom_op_t* low_function_op,
-    iree_arena_allocator_t* table_arena) {
+    iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* table_arena,
+    loom_low_emission_frame_lower_spill_traffic_result_t* out_result) {
   const loom_amdgpu_hal_kernel_library_spill_lowering_context_t* context =
       (const loom_amdgpu_hal_kernel_library_spill_lowering_context_t*)user_data;
-  return loom_amdgpu_lower_spill_traffic(module, low_function_op,
-                                         context->descriptor_set, table_arena);
+  loom_amdgpu_spill_lowering_result_t result = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lower_spill_traffic(
+      module, low_function_op, context->descriptor_set, emitter, &result,
+      table_arena));
+  out_result->error_count = result.error_count;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_library_materialize_address_state(
@@ -525,11 +529,6 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
         report, out_contribution->summary.private_segment_fixed_size,
         out_contribution->summary.group_segment_fixed_size);
   }
-
-  const loom_target_hal_kernel_abi_t* hal_kernel =
-      &plan->entry->bundle_storage.bundle.export_plan->hal_kernel;
-  IREE_RETURN_IF_ERROR(loom_target_require_concrete_hal_kernel_launch(
-      hal_kernel, IREE_SV("AMDGPU HAL kernel-library entry")));
   return iree_ok_status();
 }
 

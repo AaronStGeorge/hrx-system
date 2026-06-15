@@ -51,6 +51,16 @@ typedef enum loom_low_source_memory_dynamic_index_source_e {
   LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID = 3,
 } loom_low_source_memory_dynamic_index_source_t;
 
+typedef enum loom_low_source_memory_vector_offset_kind_e {
+  // The source memory op has no per-lane offset vector.
+  LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_NONE = 0,
+  // The source memory op's per-lane offset vector is proven to be lane ordinal
+  // i, matching the ordinary contiguous vector footprint.
+  LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_IDENTITY_IOTA = 1,
+  // The source memory op has per-lane offsets that are not proven contiguous.
+  LOOM_LOW_SOURCE_MEMORY_VECTOR_OFFSET_OTHER = 2,
+} loom_low_source_memory_vector_offset_kind_t;
+
 typedef uint32_t loom_low_source_memory_access_rejection_flags_t;
 
 #define LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_UNSUPPORTED_OP \
@@ -133,6 +143,8 @@ typedef struct loom_low_source_memory_access_plan_t {
   uint32_t vector_lane_count;
   // Byte stride between adjacent vector lanes along the vector axis.
   int64_t vector_lane_byte_stride;
+  // Classification of any per-lane offset vector carried by the source op.
+  loom_low_source_memory_vector_offset_kind_t vector_offset_kind;
   // Total static byte offset selected from the source view access.
   int64_t static_byte_offset;
   // Static byte offset contributed by the source view base.

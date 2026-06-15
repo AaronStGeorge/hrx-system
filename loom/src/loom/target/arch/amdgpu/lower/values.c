@@ -339,6 +339,64 @@ static const loom_amdgpu_descriptor_requirement_t
         },
 };
 
+static bool loom_amdgpu_value_use_is_vector_atomic_offset(
+    const loom_op_t* user_op, loom_value_id_t value_id) {
+  if (loom_vector_atomic_reduce_isa(user_op)) {
+    return loom_vector_atomic_reduce_offsets(user_op) == value_id;
+  }
+  if (loom_vector_atomic_reduce_mask_isa(user_op)) {
+    return loom_vector_atomic_reduce_mask_offsets(user_op) == value_id;
+  }
+  if (loom_vector_atomic_rmw_isa(user_op)) {
+    return loom_vector_atomic_rmw_offsets(user_op) == value_id;
+  }
+  if (loom_vector_atomic_rmw_mask_isa(user_op)) {
+    return loom_vector_atomic_rmw_mask_offsets(user_op) == value_id;
+  }
+  if (loom_vector_atomic_cmpxchg_isa(user_op)) {
+    return loom_vector_atomic_cmpxchg_offsets(user_op) == value_id;
+  }
+  return false;
+}
+
+static bool loom_amdgpu_value_only_feeds_vector_atomic_offsets(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_has_no_uses(value)) {
+    return false;
+  }
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(value, use) {
+    if (!loom_amdgpu_value_use_is_vector_atomic_offset(loom_use_user_op(*use),
+                                                       value_id)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_amdgpu_select_fact_only_vector_atomic_offset_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t* out_plan) {
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  loom_value_id_t result = LOOM_VALUE_ID_INVALID;
+  if (loom_vector_iota_isa(source_op)) {
+    result = loom_vector_iota_result(source_op);
+  } else if (loom_vector_from_elements_isa(source_op)) {
+    result = loom_vector_from_elements_result(source_op);
+  } else {
+    return false;
+  }
+  if (!loom_amdgpu_value_only_feeds_vector_atomic_offsets(module, result)) {
+    return false;
+  }
+  *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
+  return true;
+}
+
 static bool loom_amdgpu_is_scalar_conversion_op_kind(loom_op_kind_t op_kind) {
   switch (op_kind) {
     case LOOM_OP_SCALAR_EXTSI:
@@ -1249,6 +1307,7 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_iota(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
+  (void)provider;
   const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
   if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
     return iree_ok_status();
@@ -1256,6 +1315,11 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_iota(
   *out_handled = true;
 
   const loom_module_t* module = loom_target_low_legality_module(context);
+  if (loom_amdgpu_value_only_feeds_vector_atomic_offsets(
+          module, loom_vector_iota_result(op))) {
+    return iree_ok_status();
+  }
+
   iree_string_view_t constraint_key = iree_string_view_empty();
   if (loom_amdgpu_vector_iota_source_supported(
           module, loom_target_low_legality_fact_table(context),
@@ -1264,6 +1328,25 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_iota(
     return iree_ok_status();
   }
   return loom_amdgpu_low_legality_reject(context, op, constraint_key);
+}
+
+iree_status_t loom_amdgpu_low_legality_verify_vector_from_elements(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  (void)provider;
+  *out_handled = false;
+  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
+  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
+    return iree_ok_status();
+  }
+  const loom_module_t* module = loom_target_low_legality_module(context);
+  if (!loom_amdgpu_value_only_feeds_vector_atomic_offsets(
+          module, loom_vector_from_elements_result(op))) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_low_legality_verify_offset_add(
@@ -2620,6 +2703,10 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
       return loom_amdgpu_select_scalar_conversion_lower_plan(context, source_op,
                                                              out_plan);
     case LOOM_OP_VECTOR_IOTA: {
+      if (loom_amdgpu_select_fact_only_vector_atomic_offset_plan(
+              context, source_op, out_plan)) {
+        return iree_ok_status();
+      }
       loom_amdgpu_vector_iota_plan_t* plan_data = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
           context, sizeof(*plan_data), (void**)&plan_data));
@@ -2642,6 +2729,10 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
       return iree_ok_status();
     }
     case LOOM_OP_VECTOR_FROM_ELEMENTS: {
+      if (loom_amdgpu_select_fact_only_vector_atomic_offset_plan(
+              context, source_op, out_plan)) {
+        return iree_ok_status();
+      }
       loom_amdgpu_vector_from_elements_plan_t* plan_data = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
           context, sizeof(*plan_data), (void**)&plan_data));
@@ -3866,6 +3957,17 @@ iree_status_t loom_amdgpu_emit_f32_pair_to_packed_bf16(
 void loom_amdgpu_mark_value_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t plan) {
+  if ((plan.id == LOOM_OP_VECTOR_IOTA ||
+       plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS) &&
+      plan.target_data == NULL) {
+    return;
+  }
+
+  if (plan.id == LOOM_OP_VECTOR_IOTA) {
+    loom_low_lower_require_source_operands_storage(context, source_op);
+    return;
+  }
+
   if (plan.id == LOOM_OP_VECTOR_FROM_ELEMENTS ||
       plan.id == LOOM_OP_VECTOR_SPLAT) {
     const loom_amdgpu_vector_from_elements_plan_t* vector_plan =
@@ -4644,6 +4746,13 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
           context, source_op,
           (const loom_amdgpu_scalar_conversion_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_IOTA:
+      if (plan.target_data == NULL) {
+        IREE_ASSERT_UNREACHABLE(
+            "AMDGPU fact-only vector atomic offset reached emission");
+        return iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "AMDGPU fact-only vector atomic offset reached emission");
+      }
       return loom_amdgpu_lower_vector_iota(
           context, source_op,
           (const loom_amdgpu_vector_iota_plan_t*)plan.target_data);
@@ -4653,6 +4762,13 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
           (const loom_amdgpu_vector_extract_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
     case LOOM_OP_VECTOR_SPLAT:
+      if (plan.target_data == NULL) {
+        IREE_ASSERT_UNREACHABLE(
+            "AMDGPU fact-only vector atomic offset reached emission");
+        return iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "AMDGPU fact-only vector atomic offset reached emission");
+      }
       return loom_amdgpu_lower_vector_from_elements(
           context, source_op,
           (const loom_amdgpu_vector_from_elements_plan_t*)plan.target_data);

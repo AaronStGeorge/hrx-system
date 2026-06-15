@@ -48,6 +48,12 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_iota(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+// Verifies AMDGPU low legality for vector aggregate construction source ops.
+iree_status_t loom_amdgpu_low_legality_verify_vector_from_elements(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Verifies AMDGPU low legality for full-width offset arithmetic source ops.
 iree_status_t loom_amdgpu_low_legality_verify_offset_add(
     const loom_target_low_legality_provider_t* provider,
