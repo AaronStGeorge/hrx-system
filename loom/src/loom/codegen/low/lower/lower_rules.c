@@ -847,6 +847,73 @@ static void loom_low_lower_rule_set_projected_bits_attr(
   attr->value = loom_attr_i64((int64_t)bit_pattern);
 }
 
+static int64_t loom_low_lower_rule_i64_source_attr(
+    const loom_op_t* source_op, const loom_attribute_t* source_attrs,
+    uint16_t source_attr_index) {
+  IREE_ASSERT_LT(source_attr_index, source_op->attribute_count);
+  loom_attribute_t source_attr = source_attrs[source_attr_index];
+  IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_I64);
+  return source_attr.i64;
+}
+
+static uint32_t loom_low_lower_rule_u32_low_bit_mask(uint32_t width) {
+  IREE_ASSERT_GT(width, 0u);
+  IREE_ASSERT_LE(width, 32u);
+  return width == 32u ? UINT32_MAX : (UINT32_C(1) << width) - 1u;
+}
+
+static uint32_t loom_low_lower_rule_attr_copy_u32_bit_mask(
+    const loom_op_t* source_op, const loom_attribute_t* source_attrs,
+    const loom_low_lower_attr_copy_t* attr_copy) {
+  const int64_t width_i64 = loom_low_lower_rule_i64_source_attr(
+      source_op, source_attrs, attr_copy->source_attr_index);
+  IREE_ASSERT_GE(width_i64, 1);
+  IREE_ASSERT_LE(width_i64, 32);
+  uint32_t mask = loom_low_lower_rule_u32_low_bit_mask((uint32_t)width_i64);
+  switch (attr_copy->kind) {
+    case LOOM_LOW_LOWER_ATTR_COPY_I64_LOW_BIT_MASK:
+      return mask;
+    case LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_MASK:
+    case LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_CLEAR_MASK: {
+      const int64_t offset_i64 = loom_low_lower_rule_i64_source_attr(
+          source_op, source_attrs, attr_copy->other_source_attr_index);
+      IREE_ASSERT_GE(offset_i64, 0);
+      IREE_ASSERT_LE(offset_i64, 31);
+      IREE_ASSERT_LE(offset_i64 + width_i64, 32);
+      mask <<= (uint32_t)offset_i64;
+      return attr_copy->kind ==
+                     LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_CLEAR_MASK
+                 ? ~mask
+                 : mask;
+    }
+    default:
+      IREE_ASSERT_UNREACHABLE("unknown generated bit-mask attr copy kind");
+      IREE_BUILTIN_UNREACHABLE();
+  }
+}
+
+static int64_t loom_low_lower_rule_attr_copy_literal_minus_i64_attrs(
+    const loom_op_t* source_op, const loom_attribute_t* source_attrs,
+    const loom_low_lower_attr_copy_t* attr_copy) {
+  int64_t projected_value = attr_copy->literal_i64;
+  const int64_t source_value = loom_low_lower_rule_i64_source_attr(
+      source_op, source_attrs, attr_copy->source_attr_index);
+  IREE_ASSERT_GE(source_value, 0);
+  IREE_ASSERT_LE(source_value, projected_value);
+  projected_value -= source_value;
+  if (attr_copy->kind == LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTRS) {
+    const int64_t other_source_value = loom_low_lower_rule_i64_source_attr(
+        source_op, source_attrs, attr_copy->other_source_attr_index);
+    IREE_ASSERT_GE(other_source_value, 0);
+    IREE_ASSERT_LE(other_source_value, projected_value);
+    projected_value -= other_source_value;
+  } else {
+    IREE_ASSERT_EQ(attr_copy->kind,
+                   LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTR);
+  }
+  return projected_value;
+}
+
 static bool loom_low_lower_rule_value_facts_fit_bit_count(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -2039,6 +2106,21 @@ static iree_status_t loom_low_lower_rule_build_attrs(
         attrs[i].value = loom_attr_i64(byte_lane);
         break;
       }
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_LOW_BIT_MASK:
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_MASK:
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_CLEAR_MASK:
+        IREE_ASSERT_EQ(attr_copy->target_bit_offset, 0);
+        attrs[i].value =
+            loom_attr_i64(loom_low_lower_rule_attr_copy_u32_bit_mask(
+                source_op, source_attrs, attr_copy));
+        break;
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTR:
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTRS:
+        IREE_ASSERT_EQ(attr_copy->target_bit_offset, 0);
+        attrs[i].value =
+            loom_attr_i64(loom_low_lower_rule_attr_copy_literal_minus_i64_attrs(
+                source_op, source_attrs, attr_copy));
+        break;
       case LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL:
         attrs[i].value = loom_attr_i64(attr_copy->literal_i64);
         break;

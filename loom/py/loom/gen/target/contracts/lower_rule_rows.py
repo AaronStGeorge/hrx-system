@@ -349,8 +349,24 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
         LowerAttrCopyKind.I64_ATTRS_PACK_CONSECUTIVE,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
+        LowerAttrCopyKind.I64_LOW_BIT_MASK,
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_MASK,
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTR,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS,
     ):
         _append_field(fields, "source_attr_index", row.source_attr_index, always=True)
+    if row.kind in (
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_MASK,
+        LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS,
+    ):
+        _append_field(
+            fields,
+            "other_source_attr_index",
+            row.other_source_attr_index,
+            always=True,
+        )
     if row.kind in (
         LowerAttrCopyKind.I64_ARRAY_ELEMENT,
         LowerAttrCopyKind.I64_ARRAY_PACK_ELEMENTS,
@@ -401,6 +417,8 @@ def attr_copy_row(row: LowerAttrCopy) -> list[str]:
     if row.kind in (
         LowerAttrCopyKind.I64_LITERAL,
         LowerAttrCopyKind.I64_ARRAY_LANE_BYTE,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTR,
+        LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS,
     ):
         _append_field(fields, "literal_i64", row.literal_i64, always=True)
     if row.kind == LowerAttrCopyKind.SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE:

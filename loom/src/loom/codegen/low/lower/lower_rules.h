@@ -237,6 +237,16 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Packs contiguous i64 source op attributes into an i64 attribute, with the
   // first source attribute occupying the least-significant bitfield.
   LOOM_LOW_LOWER_ATTR_COPY_I64_ATTRS_PACK_CONSECUTIVE = 20,
+  // Emits a u32 low-bit mask with width read from one i64 source attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_LOW_BIT_MASK = 21,
+  // Emits a u32 low-bit mask shifted by another i64 source attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_MASK = 22,
+  // Emits the u32 inverse of a shifted low-bit mask.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_SHIFTED_LOW_BIT_CLEAR_MASK = 23,
+  // Emits literal_i64 minus one i64 source attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTR = 24,
+  // Emits literal_i64 minus two i64 source attributes.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL_MINUS_ATTRS = 25,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -244,8 +254,10 @@ typedef struct loom_low_lower_attr_copy_t {
   loom_low_lower_attr_copy_kind_t kind;
   // Target low packet attribute name to emit.
   iree_string_view_t target_name;
-  // Source op attribute ordinal copied into the emitted low packet.
+  // Primary source op attribute ordinal consumed by projection rows.
   uint16_t source_attr_index;
+  // Second source op attribute ordinal consumed by two-attr projections.
+  uint16_t other_source_attr_index;
   // First source i64_array element ordinal consumed by array projection rows.
   uint16_t source_element_index;
   // Number of source elements consumed by PACK_ELEMENTS rows or byte stride
@@ -263,6 +275,8 @@ typedef struct loom_low_lower_attr_copy_t {
   // I64_ARRAY_LANE_BYTE rows.
   int64_t literal_i64;
 } loom_low_lower_attr_copy_t;
+static_assert(sizeof(loom_low_lower_attr_copy_t) == 48,
+              "loom_low_lower_attr_copy_t must be 48 bytes");
 
 typedef uint8_t loom_low_lower_diagnostic_param_kind_t;
 

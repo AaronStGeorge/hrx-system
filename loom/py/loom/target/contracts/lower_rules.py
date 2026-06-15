@@ -99,6 +99,11 @@ class LowerAttrCopyKind(Enum):
     SOURCE_MEMORY_STATIC_BYTE_OFFSET = "source_memory_static_byte_offset"
     SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = "source_memory_dynamic_byte_stride"
     SOURCE_OP_INSTANCE_FLAGS = "source_op_instance_flags"
+    I64_LOW_BIT_MASK = "i64_low_bit_mask"
+    I64_SHIFTED_LOW_BIT_MASK = "i64_shifted_low_bit_mask"
+    I64_SHIFTED_LOW_BIT_CLEAR_MASK = "i64_shifted_low_bit_clear_mask"
+    I64_LITERAL_MINUS_ATTR = "i64_literal_minus_attr"
+    I64_LITERAL_MINUS_ATTRS = "i64_literal_minus_attrs"
 
 
 LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 = 1 << 0
@@ -184,6 +189,7 @@ class LowerAttrCopy:
     kind: LowerAttrCopyKind
     target_name: str
     source_attr_index: int = 0
+    other_source_attr_index: int = 0
     source_element_index: int = 0
     source_element_count: int = 0
     source_element_bit_width: int = 0
@@ -1398,6 +1404,50 @@ class _LowerRuleSetCompiler:
                 source_element_count=project.count,
                 source_element_bit_width=project.bit_width,
                 target_bit_offset=project.target_bit_offset,
+            )
+        if project.kind == AttrProjectKind.I64_LOW_BIT_MASK:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_LOW_BIT_MASK,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+            )
+        if project.kind == AttrProjectKind.I64_SHIFTED_LOW_BIT_MASK:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_MASK,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+                other_source_attr_index=_source_attr_index(
+                    source_op,
+                    project.other_source_attr,
+                ),
+            )
+        if project.kind == AttrProjectKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+                other_source_attr_index=_source_attr_index(
+                    source_op,
+                    project.other_source_attr,
+                ),
+            )
+        if project.kind == AttrProjectKind.I64_LITERAL_MINUS_ATTR:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_LITERAL_MINUS_ATTR,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+                literal_i64=project.literal_i64,
+            )
+        if project.kind == AttrProjectKind.I64_LITERAL_MINUS_ATTRS:
+            return LowerAttrCopy(
+                kind=LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS,
+                target_name=target_name,
+                source_attr_index=source_attr_index,
+                other_source_attr_index=_source_attr_index(
+                    source_op,
+                    project.other_source_attr,
+                ),
+                literal_i64=project.literal_i64,
             )
         raise ValueError(
             f"{source_op.name}: immediate projection '{project.kind.value}' is "

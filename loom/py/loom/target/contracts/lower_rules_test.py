@@ -431,6 +431,105 @@ def test_compile_lower_rule_set_compiles_consecutive_i64_attr_pack() -> None:
     )
 
 
+def test_compile_lower_rule_set_compiles_i64_bit_mask_attr_projection() -> None:
+    descriptor = replace(
+        TEST_LOW_CONST_I32_DESCRIPTOR,
+        key="test.const.u32-mask",
+        immediates=(
+            Immediate("low", ImmediateKind.UNSIGNED, bit_width=32),
+            Immediate("target", ImmediateKind.UNSIGNED, bit_width=32),
+            Immediate("clear", ImmediateKind.UNSIGNED, bit_width=32),
+            Immediate("shift", ImmediateKind.UNSIGNED, bit_width=8),
+            Immediate("align", ImmediateKind.UNSIGNED, bit_width=8),
+        ),
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(*TEST_LOW_CORE_DESCRIPTOR_SET.descriptors, descriptor),
+    )
+    table = ContractFragment(
+        name="test.attr-bitmask",
+        descriptor_set=descriptor_set,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_bitwise.scalar_bitfield_extractu,
+                descriptor=descriptor,
+                guards=(Guard.value_type("result", Scalar("i32")),),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=descriptor,
+                        results={"dst": ValueRef.result("result")},
+                        immediates={
+                            "low": AttrProject.i64_low_bit_mask("width"),
+                            "target": AttrProject.i64_shifted_low_bit_mask(
+                                "width",
+                                offset_attr="offset",
+                            ),
+                            "clear": AttrProject.i64_shifted_low_bit_clear_mask(
+                                "width",
+                                offset_attr="offset",
+                            ),
+                            "shift": AttrProject.i64_literal_minus_attr(
+                                "width",
+                                literal=32,
+                            ),
+                            "align": AttrProject.i64_literal_minus_attrs(
+                                "offset",
+                                other_source_attr="width",
+                                literal=32,
+                            ),
+                        },
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert len(compiled.attr_copies) == 5
+    low, target, clear, shift, align = compiled.attr_copies
+    assert low.kind == LowerAttrCopyKind.I64_LOW_BIT_MASK
+    assert low.source_attr_index == 1
+    assert target.kind == LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_MASK
+    assert target.source_attr_index == 1
+    assert target.other_source_attr_index == 0
+    assert clear.kind == LowerAttrCopyKind.I64_SHIFTED_LOW_BIT_CLEAR_MASK
+    assert clear.source_attr_index == 1
+    assert clear.other_source_attr_index == 0
+    assert shift.kind == LowerAttrCopyKind.I64_LITERAL_MINUS_ATTR
+    assert shift.source_attr_index == 1
+    assert shift.literal_i64 == 32
+    assert align.kind == LowerAttrCopyKind.I64_LITERAL_MINUS_ATTRS
+    assert align.source_attr_index == 0
+    assert align.other_source_attr_index == 1
+    assert align.literal_i64 == 32
+
+    _expect_value_error(
+        lambda: ContractFragment(
+            name="test.bad-attr-bitmask",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=scalar_bitwise.scalar_bitfield_extractu,
+                    descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                    guards=(Guard.value_type("result", Scalar("i32")),),
+                    emit=(
+                        EmitDescriptorOp(
+                            descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                            results={"dst": ValueRef.result("result")},
+                            immediates={
+                                "i32_value": AttrProject.i64_low_bit_mask("width")
+                            },
+                        ),
+                    ),
+                )
+            ],
+        ),
+        "descriptor immediate 'i32_value' must be an unsigned immediate",
+    )
+
+
 def test_compile_lower_rule_set_validates_enum_immediate_literal() -> None:
     immediate = Immediate(
         "mode",
