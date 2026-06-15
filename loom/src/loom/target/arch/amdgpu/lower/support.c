@@ -2187,6 +2187,18 @@ bool loom_amdgpu_value_facts_as_exact_i32(loom_value_facts_t facts,
   return true;
 }
 
+bool loom_amdgpu_value_as_exact_i32(const loom_module_t* module,
+                                    const loom_value_fact_table_t* fact_table,
+                                    loom_value_id_t value_id,
+                                    int64_t* out_value) {
+  *out_value = 0;
+  if (loom_amdgpu_value_facts_as_exact_i32(
+          loom_value_fact_table_lookup(fact_table, value_id), out_value)) {
+    return true;
+  }
+  return loom_amdgpu_module_value_as_i32_constant(module, value_id, out_value);
+}
+
 bool loom_amdgpu_value_facts_as_f32_bit_pattern(loom_value_facts_t facts,
                                                 uint32_t* out_bit_pattern) {
   *out_bit_pattern = 0;
