@@ -187,6 +187,17 @@ iree_native_test(
 
 iree_native_test(
   NAME
+    "ml_attention"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ml_attention.loom-test"
+  SRC
+    loom::tools::loom-check::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_native_test(
+  NAME
     "ml_contraction"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/ml_contraction.loom-test"
