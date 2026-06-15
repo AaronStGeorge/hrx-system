@@ -118,7 +118,7 @@ iree_status_t EmitHazardEvent(
     iree_string_view_t reason_name, uint32_t producer_node_index,
     uint16_t progress_class_id, iree_string_view_t progress_class_name,
     uint32_t required_progress, uint32_t observed_progress,
-    uint32_t residual_progress, iree_string_view_t target_detail) {
+    uint32_t residual_progress) {
   const uint16_t action_id =
       kind == LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION
           ? static_cast<uint16_t>(kSyntheticHazardActionPadding)
@@ -139,7 +139,6 @@ iree_status_t EmitHazardEvent(
       /*.required_progress=*/required_progress,
       /*.observed_progress=*/observed_progress,
       /*.residual_progress=*/residual_progress,
-      /*.target_detail=*/target_detail,
   };
   return emit(emit_user_data, &event);
 }
@@ -213,7 +212,7 @@ iree_status_t SyntheticResidualHazardQuery(
       kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
       /*producer_node_index=*/0, kSyntheticProgressPipe,
       IREE_SV("synthetic.pipe"), required_progress, observed_progress,
-      required_progress - observed_progress, iree_string_view_empty());
+      required_progress - observed_progress);
 }
 
 TEST_F(LowPacketHazardPlanTest, RecordsResidualActionsWithPacketIdentity) {
@@ -373,7 +372,7 @@ iree_status_t SyntheticAggregateResidualHazardQuery(
       kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
       LOOM_LOW_SCHEDULE_NODE_NONE, kSyntheticProgressPipe,
       IREE_SV("synthetic.pipe"), required_progress, observed_progress,
-      required_progress - observed_progress, iree_string_view_empty());
+      required_progress - observed_progress);
 }
 
 TEST_F(LowPacketHazardPlanTest,
@@ -430,7 +429,7 @@ iree_status_t SyntheticScheduleOnlyDiagnosticQuery(
         LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA,
         kSyntheticHazardMissingData, IREE_SV("synthetic.missing-data"),
         LOOM_LOW_SCHEDULE_NODE_NONE, LOOM_LOW_PACKET_PROGRESS_CLASS_NONE,
-        iree_string_view_empty(), 0, 0, 0, IREE_SV("semantic tag unavailable"));
+        iree_string_view_empty(), 0, 0, 0);
   }
   if (packet->node_index == 1 && allocation == NULL) {
     return EmitHazardEvent(
@@ -438,8 +437,7 @@ iree_status_t SyntheticScheduleOnlyDiagnosticQuery(
         LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_UNSUPPORTED_PRE_ALLOCATION,
         kSyntheticHazardRequiresAllocation,
         IREE_SV("synthetic.requires-allocation"), LOOM_LOW_SCHEDULE_NODE_NONE,
-        LOOM_LOW_PACKET_PROGRESS_CLASS_NONE, iree_string_view_empty(), 0, 0, 0,
-        IREE_SV("physical assignment required"));
+        LOOM_LOW_PACKET_PROGRESS_CLASS_NONE, iree_string_view_empty(), 0, 0, 0);
   }
   if (packet->node_index == 2) {
     return EmitHazardEvent(
@@ -447,8 +445,7 @@ iree_status_t SyntheticScheduleOnlyDiagnosticQuery(
         LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_IMPOSSIBLE_SATISFACTION,
         kSyntheticHazardImpossible, IREE_SV("synthetic.impossible"),
         /*producer_node_index=*/0, kSyntheticProgressPipe,
-        IREE_SV("synthetic.pipe"), 4, 1, 3,
-        IREE_SV("target reports no legal padding packet"));
+        IREE_SV("synthetic.pipe"), 4, 1, 3);
   }
   return iree_ok_status();
 }
@@ -467,14 +464,19 @@ TEST_F(LowPacketHazardPlanTest, SupportsScheduleOnlyDiagnostics) {
   ASSERT_EQ(plan.record_count, 3u);
   EXPECT_EQ(plan.records[0].kind,
             LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA);
-  EXPECT_TRUE(iree_string_view_equal(plan.records[0].target_detail,
-                                     IREE_SV("semantic tag unavailable")));
+  EXPECT_EQ(plan.records[0].reason_id, kSyntheticHazardMissingData);
+  EXPECT_TRUE(iree_string_view_equal(plan.records[0].reason_name,
+                                     IREE_SV("synthetic.missing-data")));
   EXPECT_EQ(plan.records[1].kind,
             LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_UNSUPPORTED_PRE_ALLOCATION);
-  EXPECT_TRUE(iree_string_view_equal(plan.records[1].target_detail,
-                                     IREE_SV("physical assignment required")));
+  EXPECT_EQ(plan.records[1].reason_id, kSyntheticHazardRequiresAllocation);
+  EXPECT_TRUE(iree_string_view_equal(plan.records[1].reason_name,
+                                     IREE_SV("synthetic.requires-allocation")));
   EXPECT_EQ(plan.records[2].kind,
             LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_IMPOSSIBLE_SATISFACTION);
+  EXPECT_EQ(plan.records[2].reason_id, kSyntheticHazardImpossible);
+  EXPECT_TRUE(iree_string_view_equal(plan.records[2].reason_name,
+                                     IREE_SV("synthetic.impossible")));
   EXPECT_EQ(plan.records[2].producer_packet_index, 0u);
   EXPECT_EQ(plan.records[2].residual_progress, 3u);
 }
@@ -490,11 +492,11 @@ iree_status_t InvalidResidualHazardQuery(
   (void)allocation;
   (void)progress;
   (void)packet;
-  return EmitHazardEvent(
-      emit, emit_user_data, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
-      kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
-      /*producer_node_index=*/0, kSyntheticProgressPipe,
-      IREE_SV("synthetic.pipe"), 3, 1, 1, iree_string_view_empty());
+  return EmitHazardEvent(emit, emit_user_data,
+                         LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+                         kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
+                         /*producer_node_index=*/0, kSyntheticProgressPipe,
+                         IREE_SV("synthetic.pipe"), 3, 1, 1);
 }
 
 TEST_F(LowPacketHazardPlanTest, RejectsInvalidResidualProgress) {
@@ -521,49 +523,18 @@ iree_status_t InvalidDiagnosticResidualHazardQuery(
   (void)allocation;
   (void)progress;
   (void)packet;
-  return EmitHazardEvent(
-      emit, emit_user_data,
-      LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA,
-      kSyntheticHazardMissingData, IREE_SV("synthetic.missing-data"),
-      /*producer_node_index=*/0, kSyntheticProgressPipe,
-      IREE_SV("synthetic.pipe"), 3, 1, 2, IREE_SV("missing tag"));
+  return EmitHazardEvent(emit, emit_user_data,
+                         LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA,
+                         kSyntheticHazardMissingData,
+                         IREE_SV("synthetic.missing-data"),
+                         /*producer_node_index=*/0, kSyntheticProgressPipe,
+                         IREE_SV("synthetic.pipe"), 3, 1, 2);
 }
 
 TEST_F(LowPacketHazardPlanTest, RejectsDiagnosticResidualFields) {
   const loom_low_packet_hazard_plan_provider_t hazard_provider = {
       /*.user_data=*/{},
       /*.query=*/InvalidDiagnosticResidualHazardQuery,
-  };
-  loom_low_packet_hazard_plan_t plan = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_low_packet_hazard_plan_build(&state_.schedule, &state_.allocation,
-                                        /*progress=*/nullptr, &hazard_provider,
-                                        &arena_, &plan));
-}
-
-iree_status_t InvalidActionDetailHazardQuery(
-    void* user_data, const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation,
-    const loom_low_packet_progress_table_t* progress,
-    const loom_low_packet_view_t* packet,
-    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
-  (void)user_data;
-  (void)schedule;
-  (void)allocation;
-  (void)progress;
-  (void)packet;
-  return EmitHazardEvent(
-      emit, emit_user_data, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
-      kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
-      /*producer_node_index=*/0, kSyntheticProgressPipe,
-      IREE_SV("synthetic.pipe"), 3, 1, 2, IREE_SV("ordinary action detail"));
-}
-
-TEST_F(LowPacketHazardPlanTest, RejectsActionDetail) {
-  const loom_low_packet_hazard_plan_provider_t hazard_provider = {
-      /*.user_data=*/{},
-      /*.query=*/InvalidActionDetailHazardQuery,
   };
   loom_low_packet_hazard_plan_t plan = {};
   IREE_EXPECT_STATUS_IS(
@@ -636,7 +607,6 @@ iree_status_t InvalidDiagnosticActionHazardQuery(
       /*.required_progress=*/{},
       /*.observed_progress=*/{},
       /*.residual_progress=*/{},
-      /*.target_detail=*/IREE_SV("missing tag"),
   };
   return emit(emit_user_data, &event);
 }
@@ -667,11 +637,11 @@ iree_status_t InvalidProducerOrderHazardQuery(
   if (packet->node_index != 1) {
     return iree_ok_status();
   }
-  return EmitHazardEvent(
-      emit, emit_user_data, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
-      kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
-      /*producer_node_index=*/2, kSyntheticProgressPipe,
-      IREE_SV("synthetic.pipe"), 3, 1, 2, iree_string_view_empty());
+  return EmitHazardEvent(emit, emit_user_data,
+                         LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+                         kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
+                         /*producer_node_index=*/2, kSyntheticProgressPipe,
+                         IREE_SV("synthetic.pipe"), 3, 1, 2);
 }
 
 TEST_F(LowPacketHazardPlanTest, RejectsProducerAfterInsertion) {

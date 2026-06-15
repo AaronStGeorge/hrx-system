@@ -1750,7 +1750,6 @@ static iree_status_t loom_amdgpu_wait_plan_emit_hazard_action(
       .required_progress = required_progress,
       .observed_progress = observed_progress,
       .residual_progress = residual_progress,
-      .target_detail = iree_string_view_empty(),
   };
   return emit(emit_user_data, &event);
 }

@@ -211,7 +211,6 @@ static iree_status_t loom_check_test_synthetic_hazard_emit_missing(
       .reason_name = IREE_SV("synthetic.missing-target-data"),
       .producer_node_index = LOOM_LOW_SCHEDULE_NODE_NONE,
       .progress_class_id = LOOM_LOW_PACKET_PROGRESS_CLASS_NONE,
-      .target_detail = IREE_SV("synthetic semantic tag unavailable"),
   };
   return emit(emit_user_data, &event);
 }

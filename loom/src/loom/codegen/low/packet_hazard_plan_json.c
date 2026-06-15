@@ -228,12 +228,6 @@ iree_status_t loom_low_packet_hazard_plan_write_json_array(
           record->required_progress, record->observed_progress,
           record->residual_progress));
     }
-    if (!iree_string_view_is_empty(record->target_detail)) {
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(stream, ",\"target_detail\":"));
-      IREE_RETURN_IF_ERROR(
-          loom_json_write_escaped_string(stream, record->target_detail));
-    }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '}'));
   }
   return loom_output_stream_write_char(stream, ']');
