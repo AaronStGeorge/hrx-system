@@ -1339,6 +1339,30 @@ iree_status_t loom_amdgpu_emit_vgpr64_mul_lo(loom_low_lower_context_t* context,
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_emit_vgpr64_shl(loom_low_lower_context_t* context,
+                                          const loom_op_t* source_op,
+                                          loom_value_id_t low_value,
+                                          loom_value_id_t low_shift,
+                                          loom_value_id_t* out_low_shifted) {
+  *out_low_shifted = LOOM_VALUE_ID_INVALID;
+
+  loom_type_t vgpr_x2_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_make_vgpr_range_type(context, 2, &vgpr_x2_type));
+
+  loom_value_id_t operands[] = {
+      low_shift,
+      low_value,
+  };
+  loom_op_t* low_shift_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B64, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0),
+      &vgpr_x2_type, 1, &low_shift_op));
+  *out_low_shifted = loom_value_slice_get(loom_low_op_results(low_shift_op), 0);
+  return iree_ok_status();
+}
+
 typedef enum loom_amdgpu_sdwa_selector_e {
   LOOM_AMDGPU_SDWA_SELECTOR_BYTE_0 = 0,
   LOOM_AMDGPU_SDWA_SELECTOR_BYTE_1 = 1,

@@ -774,6 +774,10 @@ static bool loom_amdgpu_scalar_i64_binary_result_follows_operand_vgpr(
       *out_lhs = loom_scalar_muli_lhs(defining_op);
       *out_rhs = loom_scalar_muli_rhs(defining_op);
       return true;
+    case LOOM_OP_SCALAR_SHLI:
+      *out_lhs = loom_scalar_shli_lhs(defining_op);
+      *out_rhs = loom_scalar_shli_rhs(defining_op);
+      return true;
     case LOOM_OP_SCALAR_ANDI:
       *out_lhs = loom_scalar_andi_lhs(defining_op);
       *out_rhs = loom_scalar_andi_rhs(defining_op);

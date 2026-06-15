@@ -27,6 +27,15 @@ func.def @scalar_i64_subi_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2
 
 // ====
 
+func.def @scalar_i64_shli_vgpr(%value_values: vector<2xi64>, %shift_values: vector<2xi64>) -> (i64) {
+  %value = vector.extract %value_values[0] : vector<2xi64> -> i64
+  %shift = vector.extract %shift_values[0] : vector<2xi64> -> i64
+  %shifted = scalar.shli %value, %shift : i64
+  func.return %shifted : i64
+}
+
+// ====
+
 func.def @scalar_i64_muli_bitwise_vgpr(%lhs_values: vector<2xi64>, %rhs_values: vector<2xi64>, %mask_values: vector<2xi64>) -> (i64) {
   %lhs = vector.extract %lhs_values[0] : vector<2xi64> -> i64
   %rhs = vector.extract %rhs_values[0] : vector<2xi64> -> i64
