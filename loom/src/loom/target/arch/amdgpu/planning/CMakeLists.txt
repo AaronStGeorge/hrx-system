@@ -270,11 +270,17 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
-loom_target_table_cc_library(
+loom_generated_cc_library(
   NAME
     occupancy_tables
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::planning::occupancy_tables
+  SOURCE
+    "occupancy_tables_data.c"
+  SRCS
+    "occupancy_tables.c"
+  HDRS
+    "occupancy_tables.h"
   DEPS
     iree::base
     loom::target::arch::amdgpu::target_info

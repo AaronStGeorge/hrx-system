@@ -16,7 +16,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_target_table_cc_library",
+    "loom_generated_cc_library",
 )
 
 package(
@@ -249,9 +249,12 @@ loom_cc_test(
     ],
 )
 
-loom_target_table_cc_library(
+loom_generated_cc_library(
     name = "occupancy_tables",
+    srcs = ["occupancy_tables.c"],
+    hdrs = ["occupancy_tables.h"],
     generator = _AMDGPU_OCCUPANCY_TABLE_GENERATOR,
+    source = "occupancy_tables_data.c",
     visibility = _AMDGPU_ROOT_VISIBILITY,
     deps = [
         "//loom/src/loom/target/arch/amdgpu:target_info",

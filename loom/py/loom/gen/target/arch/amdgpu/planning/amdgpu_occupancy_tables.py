@@ -122,89 +122,6 @@ def _validate_models(models: Sequence[AmdgpuOccupancyModelInfo]) -> None:
                     raise ValueError(f"AMDGPU occupancy resource {resource.resource} member {member.register_class} granularity must be positive")
 
 
-def _emit_header() -> str:
-    guard = "LOOM_TARGET_ARCH_AMDGPU_PLANNING_OCCUPANCY_TABLES_H_"
-    lines = [
-        "// Copyright 2026 The IREE Authors",
-        "//",
-        "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
-        "// See https://llvm.org/LICENSE.txt for license information.",
-        "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
-        "",
-        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.planning.amdgpu_occupancy_tables"),
-        "",
-        f"#ifndef {guard}",
-        f"#define {guard}",
-        "",
-        "#include <stdint.h>",
-        "",
-        '#include "iree/base/api.h"',
-        '#include "loom/target/arch/amdgpu/target_info.h"',
-        "",
-        "#ifdef __cplusplus",
-        'extern "C" {',
-        "#endif",
-        "",
-        "typedef struct loom_amdgpu_occupancy_register_class_model_t {",
-        "  // Stable target-low register-class name.",
-        "  iree_string_view_t register_class;",
-        "  // Occupancy register-file pool shared by resident waves.",
-        "  uint32_t pool_units;",
-        "  // Allocation granularity used by occupancy calculations.",
-        "  uint32_t allocation_granularity;",
-        "} loom_amdgpu_occupancy_register_class_model_t;",
-        "",
-        "typedef struct loom_amdgpu_occupancy_resource_member_model_t {",
-        "  // Index into loom_amdgpu_occupancy_model_t::register_classes.",
-        "  uint16_t register_class_index;",
-        "  // Member contribution granularity applied before summing pressure.",
-        "  uint32_t contribution_granularity;",
-        "} loom_amdgpu_occupancy_resource_member_model_t;",
-        "",
-        "typedef struct loom_amdgpu_occupancy_resource_model_t {",
-        "  // Stable target-low resource name.",
-        "  iree_string_view_t resource;",
-        "  // Occupancy resource pool shared by resident waves.",
-        "  uint32_t pool_units;",
-        "  // Allocation granularity used by occupancy calculations.",
-        "  uint32_t allocation_granularity;",
-        "  // Register-class members contributing to this resource.",
-        "  const loom_amdgpu_occupancy_resource_member_model_t* members;",
-        "  // Number of entries in members.",
-        "  iree_host_size_t member_count;",
-        "} loom_amdgpu_occupancy_resource_model_t;",
-        "",
-        "typedef struct loom_amdgpu_occupancy_model_t {",
-        "  // Dense generated AMDGPU descriptor-set ordinal.",
-        "  uint16_t descriptor_set_ordinal;",
-        "  // AMDGPU wave size used by this model.",
-        "  uint32_t wave_size;",
-        "  // Maximum resident waves per SIMD.",
-        "  uint32_t max_waves_per_simd;",
-        "  // Register-class occupancy models in diagnostic order.",
-        "  const loom_amdgpu_occupancy_register_class_model_t* register_classes;",
-        "  // Number of entries in register_classes.",
-        "  iree_host_size_t register_class_count;",
-        "  // Derived occupancy resources in diagnostic order.",
-        "  const loom_amdgpu_occupancy_resource_model_t* resources;",
-        "  // Number of entries in resources.",
-        "  iree_host_size_t resource_count;",
-        "} loom_amdgpu_occupancy_model_t;",
-        "",
-        "// Returns the generated occupancy model for descriptor_set_ordinal.",
-        "const loom_amdgpu_occupancy_model_t*",
-        "loom_amdgpu_occupancy_model_for_descriptor_set_ordinal(",
-        "    uint16_t descriptor_set_ordinal);",
-        "",
-        "#ifdef __cplusplus",
-        '}  // extern "C"',
-        "#endif",
-        "",
-        f"#endif  // {guard}",
-    ]
-    return "\n".join(lines) + "\n"
-
-
 def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -300,7 +217,7 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
     lines.extend(
         [
             "",
-            "static const loom_amdgpu_occupancy_model_t* const kAmdgpuOccupancyModels[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {",
+            "const loom_amdgpu_occupancy_model_t* const kLoomAmdgpuOccupancyModels[LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_COUNT] = {",
         ]
     )
     for model in models:
@@ -315,35 +232,23 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
             "};",
             "",
             "// clang-format on",
-            "",
-            "const loom_amdgpu_occupancy_model_t*",
-            "loom_amdgpu_occupancy_model_for_descriptor_set_ordinal(",
-            "    uint16_t descriptor_set_ordinal) {",
-            "  if (descriptor_set_ordinal >= IREE_ARRAYSIZE(kAmdgpuOccupancyModels)) {",
-            "    return NULL;",
-            "  }",
-            "  return kAmdgpuOccupancyModels[descriptor_set_ordinal];",
-            "}",
         ]
     )
     return "\n".join(lines) + "\n"
 
 
-def write_occupancy_tables_to_paths(header_path: Path, source_path: Path) -> None:
+def write_occupancy_tables_to_path(source_path: Path) -> None:
     models = sorted_occupancy_model_infos()
     _validate_models(models)
-    header_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.parent.mkdir(parents=True, exist_ok=True)
-    header_path.write_text(_emit_header(), encoding="utf-8")
     source_path.write_text(_emit_source(models), encoding="utf-8")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate AMDGPU occupancy model C tables.")
-    parser.add_argument("--header", required=True, type=Path)
     parser.add_argument("--source", required=True, type=Path)
     args = parser.parse_args(argv)
-    write_occupancy_tables_to_paths(args.header, args.source)
+    write_occupancy_tables_to_path(args.source)
     return 0
 
 
