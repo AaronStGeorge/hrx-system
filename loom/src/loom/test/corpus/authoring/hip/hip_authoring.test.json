@@ -321,6 +321,87 @@
       ]
     },
     {
+      "name": "plans shared memory vector tile recipe",
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/shared_memory_vector_tile.loom",
+          "--dry-run"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "bench_shared_memory_vector_tile_roundtrip",
+          "case_shared_memory_vector_tile_roundtrip"
+        ]
+      }
+    },
+    {
+      "name": "preserves shared memory vector tile source shape",
+      "run": {
+        "tool": "loom-opt",
+        "args": [
+          "{srcdir}/shared_memory_vector_tile.loom",
+          "--pass=canonicalize",
+          "--output={tmp}/shared_memory_vector_tile.loom"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/shared_memory_vector_tile.loom",
+          "contains": [
+            "buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup}",
+            "vector.load %input_view[%lane, 0] : view<64x4xi32, #dense> -> vector<4xi32>",
+            "vector.store %loaded, %scratch_view[%lane, 0] : vector<4xi32>, view<64x4xi32, #dense>",
+            "kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}",
+            "vector.load %scratch_view[%lane, 0] : view<64x4xi32, #dense> -> vector<4xi32>",
+            "vector.store %roundtrip, %output_view[%lane, 0] : vector<4xi32>, view<64x4xi32, #dense>"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "compiles shared memory vector tile to AMDGPU HAL artifact",
+      "run": {
+        "tool": "loom-compile",
+        "args": [
+          "{srcdir}/shared_memory_vector_tile.loom",
+          "--backend=amdgpu-hal",
+          "--target=gfx11-generic",
+          "--output={tmp}/shared_memory_vector_tile.vmfb",
+          "--emit-target-artifact={tmp}/shared_memory_vector_tile.hsaco",
+          "--artifact-manifest=summary",
+          "--compile-report=summary"
+        ]
+      },
+      "stderr": {
+        "contains": {
+          "unordered": [
+            "\"target_key\":\"gfx11-generic\"",
+            "\"executable_format\":\"amdgcn-amd-amdhsa--gfx11-generic\"",
+            "\"status\":\"OK\"",
+            "\"local_memory_bytes\":1024",
+            "\"local_memory_count\":2",
+            "\"barrier_count\":1"
+          ]
+        }
+      },
+      "files": [
+        {
+          "path": "{tmp}/shared_memory_vector_tile.vmfb",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/shared_memory_vector_tile.hsaco",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/shared_memory_vector_tile.hsaco.manifest.json",
+          "non_empty": true
+        }
+      ]
+    },
+    {
       "name": "plans packed field contracts recipe",
       "run": {
         "tool": "iree-benchmark-loom",

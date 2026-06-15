@@ -35,6 +35,7 @@ belong to `iree-benchmark-loom` flags or embedding APIs.
 | Packed field contracts | `hip/packed_field_contracts.loom` shows q2/q3/q4/q5/q6-style fields as explicit storage/decode/repack contracts instead of fake scalar element types. |
 | HIP shared memory tile | `hip/shared_memory_tile.loom` stages a 64-lane i32 tile through workgroup memory, synchronizes, and reads a reversed lane so correctness depends on LDS traffic. |
 | HIP shared memory transpose | `hip/shared_memory_transpose.loom` stages an 8x8 i32 tile through two workgroup allocations, synchronizes twice, and validates x/y cross-axis LDS traffic. |
+| HIP vector-width shared memory | `hip/shared_memory_vector_tile.loom` stages one `vector<4xi32>` row per work item through workgroup memory and proves the 128-bit LDS path with compile evidence. |
 
 ## FFN q6/q8 Gate-Up SwiGLU
 

@@ -40,6 +40,7 @@ python dev.py bazel run //loom/src/loom/tools/loom-opt:loom-opt -- \
 | `global_load_b32`, `global_load_b128`, `uint4`, adjacent scalar loads, coalescing | `vector.load -> vector<1xi32>` versus `vector.load -> vector<4xi32>` | `q8_load_width.loom` |
 | `__shared__`, `__syncthreads`, LDS, tile staging, cross-lane exchange | `buffer.alloca ... memory_space = workgroup`, `buffer.view`, `kernel.barrier<workgroup>` | `shared_memory_tile.loom` |
 | `__shared__`, `__syncthreads`, LDS, 2D tile, transpose, double buffering | two workgroup `buffer.alloca` tiles, x/y workitem ids, repeated `kernel.barrier<workgroup>` | `shared_memory_transpose.loom` |
+| `__shared__`, `__syncthreads`, LDS, `uint4`, `int4`, `ds_store_b128`, `ds_load_b128` | `vector.load -> vector<4xi32>` staged through workgroup memory | `shared_memory_vector_tile.loom` |
 | `q8`, `q4`, `u8`, `s8`, `u4`, `s4`, `v_dot4_i32_iu8`, `dp4a` | `vector.bitunpacku`, `vector.bitunpacks`, `vector.dot4i<u8s8>` | `q8_q4_signedness.loom` |
 | `q2`, `q3`, `q4`, `q5`, `q6`, split high bits, lookup tables, offset-binary, packed-dot repack | `vector.bitunpacku`, `vector.bitfield.extractu`, `vector.bitfield.insert`, `vector.table.lookup`, `vector.dot8i4` | `packed_field_contracts.loom` |
 | dynamic lower-bound unroll, missing facts | structured diagnostic, exact/range facts | `q8_hip_shaped_unroll_unresolved.loom` |
@@ -398,6 +399,76 @@ Expected signal: the dry run lists
 `local_memory_bytes` as `512` for the two 8x8 i32 tiles, four local memory
 instructions, and two barriers. AMDGPU object disassembly should show two LDS
 stores, two LDS reads, and two workgroup barriers.
+
+## Shared Memory Vector Tile
+
+Tags: `__shared__`, `__syncthreads`, `LDS`, `workgroup memory`, `uint4`,
+`int4`, `vectorized-load`, `ds_store_b128`, `ds_load_b128`.
+
+HIP habit:
+
+```c++
+__shared__ int4 scratch[64];
+int lane = threadIdx.x;
+
+scratch[lane] = reinterpret_cast<const int4 *>(input)[lane];
+__syncthreads();
+reinterpret_cast<int4 *>(output)[lane] = scratch[lane];
+```
+
+Loom spelling:
+
+```loom
+%scratch = buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+%scratch_view = buffer.view %scratch[%base] : buffer -> view<64x4xi32, #dense>
+
+%loaded = vector.load %input_view[%lane, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+vector.store %loaded, %scratch_view[%lane, 0] : vector<4xi32>, view<64x4xi32, #dense>
+kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+%roundtrip = vector.load %scratch_view[%lane, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+vector.store %roundtrip, %output_view[%lane, 0] : vector<4xi32>, view<64x4xi32, #dense>
+```
+
+This recipe covers the wide-row shared-memory path that HIP code often spells
+with `uint4`, `int4`, or a reinterpret-cast vector load. The source contract is
+the vector width and 16-byte alignment, not a target opcode request; AMDGPU
+lowering is responsible for selecting the matching 128-bit LDS access when the
+target supports it.
+
+Proof command:
+
+```bash
+iree-benchmark-loom shared_memory_vector_tile.loom --dry-run
+```
+
+Target compile evidence:
+
+```bash
+loom-compile shared_memory_vector_tile.loom \
+  --backend=amdgpu-hal \
+  --target=gfx11-generic \
+  --output=/tmp/shared-memory-vector-tile.vmfb \
+  --emit-target-artifact=/tmp/shared-memory-vector-tile.hsaco \
+  --artifact-manifest=summary \
+  --compile-report=summary \
+  --compile-report-output=/tmp/shared-memory-vector-tile.compile-report.json
+```
+
+Useful queries:
+
+```bash
+jq '{status, target_key, local:.entries.rows[0].local_memory_bytes, lds_ops:.static_instruction_mix.local_memory_count, barriers:.static_instruction_mix.barrier_count}' \
+  /tmp/shared-memory-vector-tile.compile-report.json
+
+llvm-objdump -d --mcpu=gfx1100 /tmp/shared-memory-vector-tile.hsaco | rg 'global_(load|store)_b128|ds_(store|load)_b128|s_barrier'
+```
+
+Expected signal: the dry run lists `case_shared_memory_vector_tile_roundtrip`
+and `bench_shared_memory_vector_tile_roundtrip`; the compile report records
+`local_memory_bytes` as `1024` for the 64 row by 4 i32 tile, two local memory
+instructions, and one barrier. AMDGPU object disassembly should show a
+`global_load_b128`, `ds_store_b128`, `s_barrier`, `ds_load_b128`, and
+`global_store_b128`.
 
 ## Packed Signedness
 
