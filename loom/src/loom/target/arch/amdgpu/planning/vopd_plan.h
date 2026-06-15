@@ -55,6 +55,18 @@ extern "C" {
 #define LOOM_AMDGPU_VOPD_OP_ADD_U32 UINT16_C(16)
 // Component opcode for v_lshlrev_b32 in a VOPD Y slot.
 #define LOOM_AMDGPU_VOPD_OP_LSHLREV_B32 UINT16_C(17)
+// Component opcode for v_and_b32 in a VOPD Y slot.
+#define LOOM_AMDGPU_VOPD_OP_AND_B32 UINT16_C(18)
+// Component opcode for v_sub_nc_u32 in a VOPD Y slot.
+#define LOOM_AMDGPU_VOPD_OP_SUB_U32 UINT16_C(20)
+// Component opcode for v_lshrrev_b32 in a VOPD Y slot.
+#define LOOM_AMDGPU_VOPD_OP_LSHRREV_B32 UINT16_C(21)
+// Component opcode for v_ashrrev_i32 in a VOPD Y slot.
+#define LOOM_AMDGPU_VOPD_OP_ASHRREV_I32 UINT16_C(22)
+// Component opcode for v_max_i32 in a VOPD Y slot.
+#define LOOM_AMDGPU_VOPD_OP_MAX_I32 UINT16_C(23)
+// Component opcode for v_min_i32 in a VOPD Y slot.
+#define LOOM_AMDGPU_VOPD_OP_MIN_I32 UINT16_C(24)
 
 typedef enum loom_amdgpu_vopd_packet_role_e {
   // Packet is not part of a VOPD pair.
