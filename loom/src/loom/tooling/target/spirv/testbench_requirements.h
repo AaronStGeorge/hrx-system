@@ -18,8 +18,13 @@ extern "C" {
 typedef struct loom_run_hal_testbench_context_t
     loom_run_hal_testbench_context_t;
 
+// Initializes the hal.vulkan.feature requirement provider.
+void loom_spirv_vulkan_feature_testbench_requirement_provider_initialize(
+    loom_run_hal_testbench_context_t* context,
+    loom_testbench_requirement_provider_t* out_provider);
+
 // Initializes the hal.spirv.cooperative_matrix row requirement provider.
-void loom_spirv_vulkan_hal_testbench_requirement_provider_initialize(
+void loom_spirv_vulkan_cooperative_matrix_testbench_requirement_provider_initialize(
     loom_run_hal_testbench_context_t* context,
     loom_testbench_requirement_provider_t* out_provider);
 

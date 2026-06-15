@@ -47,6 +47,7 @@ loom_cc_library(
   DEPS
     ::vulkan_profile
     iree::base
+    iree::hal::drivers::vulkan::device_spec
     loom::tooling::execution::hal::testbench_actual
     loom::tooling::testbench::requirements
   PUBLIC

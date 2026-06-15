@@ -37,7 +37,7 @@ IREE_FLAG(string, pipeline, "default",
           "'none', '@symbol', or a comma-separated pass list.");
 
 enum {
-  // Generic HAL requirements plus target-linked requirement providers.
+  // Target-linked requirement providers.
   IREE_TEST_LOOM_MAX_REQUIREMENT_PROVIDERS = 8,
 };
 
@@ -194,8 +194,6 @@ static iree_status_t iree_test_loom_run_case_samples(
   loom_testbench_requirement_provider_t
       requirement_providers[IREE_TEST_LOOM_MAX_REQUIREMENT_PROVIDERS] = {0};
   iree_host_size_t requirement_provider_count = 0;
-  loom_run_hal_testbench_requirement_provider_initialize(
-      hal_context, &requirement_providers[requirement_provider_count++]);
   if (configuration->populate_requirement_providers.fn != NULL) {
     IREE_RETURN_IF_ERROR(configuration->populate_requirement_providers.fn(
         configuration->populate_requirement_providers.user_data, hal_context,

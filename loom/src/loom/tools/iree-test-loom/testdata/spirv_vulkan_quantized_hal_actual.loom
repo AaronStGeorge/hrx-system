@@ -46,8 +46,8 @@ kernel.def target(@target) @quantized_projection_u8_scalar_128() {
 }
 
 check.case @quantized_projection_u8_scalar_128_case {
-  check.requires<hal.device.i64> {category = "vulkan.feature", key = "shader_int8", equals = 1}
-  check.requires<hal.device.i64> {category = "vulkan.feature", key = "storage_buffer_8bit_access", equals = 1}
+  check.requires<hal.vulkan.feature> {feature = "shader_int8"}
+  check.requires<hal.vulkan.feature> {feature = "storage_buffer_8bit_access"}
   %lhs = check.generate.fill value(1) : tensor<128x128xi8>
   %rhs = check.generate.fill value(2) : tensor<128x128xi8>
   %init = check.generate.fill value(5.0) : tensor<128x128xf32>

@@ -60,11 +60,6 @@ void loom_run_hal_testbench_context_deinitialize(
 iree_status_t loom_run_hal_testbench_context_ensure_runtime(
     loom_run_hal_testbench_context_t* context);
 
-// Initializes a requirement provider for HAL device integer queries.
-void loom_run_hal_testbench_requirement_provider_initialize(
-    loom_run_hal_testbench_context_t* context,
-    loom_testbench_requirement_provider_t* out_provider);
-
 // Returns the driver component of an IREE --device= URI.
 iree_string_view_t loom_run_hal_testbench_device_uri_driver_name(
     iree_string_view_t device_uri);

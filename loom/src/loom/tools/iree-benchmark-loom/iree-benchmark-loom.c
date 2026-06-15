@@ -136,11 +136,18 @@ static iree_status_t iree_benchmark_loom_populate_requirement_providers(
       provider_capacity, providers, inout_provider_count, amdgpu_provider));
 #endif  // IREE_BENCHMARK_LOOM_HAVE_AMDGPU
 #if IREE_BENCHMARK_LOOM_HAVE_SPIRV
-  loom_testbench_requirement_provider_t spirv_provider = {0};
-  loom_spirv_vulkan_hal_testbench_requirement_provider_initialize(
-      hal_context, &spirv_provider);
+  loom_testbench_requirement_provider_t vulkan_feature_provider = {0};
+  loom_spirv_vulkan_feature_testbench_requirement_provider_initialize(
+      hal_context, &vulkan_feature_provider);
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_append_requirement_provider(
-      provider_capacity, providers, inout_provider_count, spirv_provider));
+      provider_capacity, providers, inout_provider_count,
+      vulkan_feature_provider));
+  loom_testbench_requirement_provider_t cooperative_matrix_provider = {0};
+  loom_spirv_vulkan_cooperative_matrix_testbench_requirement_provider_initialize(
+      hal_context, &cooperative_matrix_provider);
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_append_requirement_provider(
+      provider_capacity, providers, inout_provider_count,
+      cooperative_matrix_provider));
 #endif  // IREE_BENCHMARK_LOOM_HAVE_SPIRV
 #if !IREE_BENCHMARK_LOOM_HAVE_AMDGPU && !IREE_BENCHMARK_LOOM_HAVE_SPIRV
   (void)hal_context;
