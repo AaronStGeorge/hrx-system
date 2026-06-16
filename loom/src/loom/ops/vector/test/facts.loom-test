@@ -1172,7 +1172,8 @@ func.def @dot4f8_uniform_dynamic_extract(%n: index) -> (f32) {
 // allocating unbounded per-lane analysis payloads.
 func.def @oversized_from_elements_degrades_to_unknown() -> (i64) {
   %zero = scalar.constant 0 : i32
-  %v = vector.from_elements %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero : vector<17xi32>
+  %one = scalar.constant 1 : i32
+  %v = vector.from_elements %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %one : vector<17xi32>
   %r = vector.reduce<addi> %v, %zero : vector<17xi32>, i32
   %lo = test.fact_range_lo %r : i32 -> i64
   func.return %lo : i64
@@ -1180,6 +1181,23 @@ func.def @oversized_from_elements_degrades_to_unknown() -> (i64) {
 // ----
 func.def @oversized_from_elements_degrades_to_unknown() -> (i64) {
   %lo = scalar.constant -9223372036854775808 : i64
+  func.return %lo : i64
+}
+
+// ====
+
+// Oversized repeated-element vectors keep bounded uniform-element facts instead
+// of requiring per-lane payloads.
+func.def @oversized_repeated_from_elements_preserves_uniform_fact() -> (i64) {
+  %zero = scalar.constant 0 : i32
+  %v = vector.from_elements %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero, %zero : vector<17xi32>
+  %r = vector.reduce<addi> %v, %zero : vector<17xi32>, i32
+  %lo = test.fact_range_lo %r : i32 -> i64
+  func.return %lo : i64
+}
+// ----
+func.def @oversized_repeated_from_elements_preserves_uniform_fact() -> (i64) {
+  %lo = scalar.constant 0 : i64
   func.return %lo : i64
 }
 

@@ -84,6 +84,23 @@ static iree_status_t loom_value_fact_table_ensure_capacity(
   return iree_ok_status();
 }
 
+static iree_status_t loom_value_fact_table_ensure_uniform_origin_capacity(
+    loom_value_fact_table_t* table, iree_host_size_t capacity) {
+  if (capacity <= table->uniform_element_origins.capacity) {
+    return iree_ok_status();
+  }
+  const iree_host_size_t old_capacity = table->uniform_element_origins.capacity;
+  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+      table->arena, old_capacity, capacity, sizeof(loom_value_id_t),
+      &table->uniform_element_origins.capacity,
+      (void**)&table->uniform_element_origins.entries));
+  for (iree_host_size_t i = old_capacity;
+       i < table->uniform_element_origins.capacity; ++i) {
+    table->uniform_element_origins.entries[i] = LOOM_VALUE_ID_INVALID;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_value_fact_table_allocate_initial_capacity(
     loom_value_fact_table_t* table, iree_host_size_t capacity) {
   return loom_value_fact_table_ensure_capacity(table, capacity);
@@ -98,6 +115,23 @@ static iree_status_t loom_value_fact_table_append_touched_value(
         (void**)&table->touched_values));
   }
   table->touched_values[table->touched_count++] = value_id;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_value_fact_table_append_touched_uniform_origin(
+    loom_value_fact_table_t* table, loom_value_id_t value_id) {
+  if (table->uniform_element_origins.touched_count >=
+      table->uniform_element_origins.touched_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        table->arena, table->uniform_element_origins.touched_count,
+        table->uniform_element_origins.touched_count + 1,
+        sizeof(*table->uniform_element_origins.touched_values),
+        &table->uniform_element_origins.touched_capacity,
+        (void**)&table->uniform_element_origins.touched_values));
+  }
+  table->uniform_element_origins
+      .touched_values[table->uniform_element_origins.touched_count++] =
+      value_id;
   return iree_ok_status();
 }
 
@@ -1098,6 +1132,12 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
   for (iree_host_size_t i = 0; i < table->touched_count; ++i) {
     table->entries[table->touched_values[i]] = (loom_value_facts_t){0};
   }
+  for (iree_host_size_t i = 0; i < table->uniform_element_origins.touched_count;
+       ++i) {
+    table->uniform_element_origins
+        .entries[table->uniform_element_origins.touched_values[i]] =
+        LOOM_VALUE_ID_INVALID;
+  }
   table->touched_count = 0;
   table->count = 0;
   table->extensions.entries = NULL;
@@ -1105,6 +1145,7 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
   table->extensions.count = 0;
   table->extensions.buckets = NULL;
   table->extensions.bucket_count = 0;
+  table->uniform_element_origins.touched_count = 0;
   table->scratch.facts.values = NULL;
   table->scratch.facts.capacity = 0;
   table->scratch.value_ids.values = NULL;
@@ -1129,6 +1170,78 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
     table->count = (iree_host_size_t)value_id + 1;
   }
   return iree_ok_status();
+}
+
+static bool loom_value_fact_table_lookup_uniform_element_origin(
+    const loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_id_t* out_scalar_value_id) {
+  if (out_scalar_value_id) {
+    *out_scalar_value_id = LOOM_VALUE_ID_INVALID;
+  }
+  if (value_id >= table->uniform_element_origins.capacity ||
+      table->uniform_element_origins.entries == NULL) {
+    return false;
+  }
+  const loom_value_id_t scalar_value_id =
+      table->uniform_element_origins.entries[value_id];
+  if (scalar_value_id == LOOM_VALUE_ID_INVALID) {
+    return false;
+  }
+  if (out_scalar_value_id) {
+    *out_scalar_value_id = scalar_value_id;
+  }
+  return true;
+}
+
+iree_status_t loom_value_fact_table_define_uniform_element_origin(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_id_t scalar_value_id) {
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      scalar_value_id == LOOM_VALUE_ID_INVALID) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_uniform_origin_capacity(
+      table, (iree_host_size_t)value_id + 1));
+  if (table->uniform_element_origins.entries[value_id] ==
+      LOOM_VALUE_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(
+        loom_value_fact_table_append_touched_uniform_origin(table, value_id));
+  }
+  table->uniform_element_origins.entries[value_id] = scalar_value_id;
+  return iree_ok_status();
+}
+
+bool loom_value_fact_table_query_uniform_element_origin(
+    const loom_value_fact_table_t* table, const loom_module_t* module,
+    loom_value_id_t value_id, loom_value_id_t* out_scalar_value_id) {
+  if (out_scalar_value_id) {
+    *out_scalar_value_id = LOOM_VALUE_ID_INVALID;
+  }
+  if (table == NULL || module == NULL || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_type_t value_type = loom_module_value_type(module, value_id);
+  if (!loom_type_is_shaped(value_type)) {
+    return false;
+  }
+
+  loom_value_id_t scalar_value_id = LOOM_VALUE_ID_INVALID;
+  if (!loom_value_fact_table_lookup_uniform_element_origin(table, value_id,
+                                                           &scalar_value_id) ||
+      scalar_value_id >= module->values.count) {
+    return false;
+  }
+  const loom_type_t scalar_type =
+      loom_module_value_type(module, scalar_value_id);
+  if (!loom_type_is_scalar(scalar_type) ||
+      loom_type_element_type(scalar_type) !=
+          loom_type_element_type(value_type)) {
+    return false;
+  }
+  if (out_scalar_value_id) {
+    *out_scalar_value_id = scalar_value_id;
+  }
+  return true;
 }
 
 static iree_status_t loom_value_fact_table_clone_fact_array_between_tables(
@@ -1400,6 +1513,12 @@ iree_status_t loom_value_fact_table_clone_defined_facts(
     }
     IREE_RETURN_IF_ERROR(
         loom_value_fact_table_define(target, value_id, cloned_facts));
+    loom_value_id_t scalar_origin = LOOM_VALUE_ID_INVALID;
+    if (loom_value_fact_table_lookup_uniform_element_origin(source, value_id,
+                                                            &scalar_origin)) {
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_uniform_element_origin(
+          target, value_id, scalar_origin));
+    }
   }
   return iree_ok_status();
 }
@@ -1618,6 +1737,46 @@ static void loom_value_fact_table_apply_operand_distribution(
   } else if (all_operands_uniform) {
     loom_value_facts_mark_uniform(result_facts);
   }
+}
+
+static iree_status_t loom_value_fact_table_forward_uniform_origin(
+    loom_value_fact_table_t* table, loom_value_id_t source_value_id,
+    loom_value_id_t result_value_id) {
+  loom_value_id_t existing_origin = LOOM_VALUE_ID_INVALID;
+  if (loom_value_fact_table_lookup_uniform_element_origin(
+          table, result_value_id, &existing_origin)) {
+    return iree_ok_status();
+  }
+  loom_value_id_t scalar_origin = LOOM_VALUE_ID_INVALID;
+  if (!loom_value_fact_table_lookup_uniform_element_origin(
+          table, source_value_id, &scalar_origin)) {
+    return iree_ok_status();
+  }
+  return loom_value_fact_table_define_uniform_element_origin(
+      table, result_value_id, scalar_origin);
+}
+
+static iree_status_t loom_value_fact_table_propagate_uniform_origins(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_op_t* op) {
+  const loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  const loom_value_id_t* results = loom_op_const_results(op);
+  if (loom_traits_are_value_alias(traits) && op->operand_count >= 1 &&
+      op->result_count >= 1) {
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_uniform_origin(
+        table, operands[0], results[0]));
+  }
+  if (loom_traits_are_fact_identity(traits)) {
+    const uint16_t pair_count = op->operand_count < op->result_count
+                                    ? op->operand_count
+                                    : op->result_count;
+    for (uint16_t i = 0; i < pair_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_forward_uniform_origin(
+          table, operands[i], results[i]));
+    }
+  }
+  return iree_ok_status();
 }
 
 static int64_t loom_value_fact_loop_iv_base_divisor(loom_value_facts_t facts) {
@@ -2602,7 +2761,7 @@ iree_status_t loom_value_fact_table_compute_op_and_report(
           /*result_ids=*/NULL, /*result_count=*/0, /*result_facts=*/NULL,
           out_changed));
     }
-    return iree_ok_status();
+    return loom_value_fact_table_propagate_uniform_origins(table, module, op);
   }
 
   // Get scratch for operand + result facts.
@@ -2658,7 +2817,7 @@ iree_status_t loom_value_fact_table_compute_op_and_report(
     }
   }
 
-  return iree_ok_status();
+  return loom_value_fact_table_propagate_uniform_origins(table, module, op);
 }
 
 iree_status_t loom_value_fact_table_compute_region(

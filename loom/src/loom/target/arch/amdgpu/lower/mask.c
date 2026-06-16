@@ -200,27 +200,19 @@ static bool loom_amdgpu_select_vector_storage(
 }
 
 static bool loom_amdgpu_select_scalar_splat_condition(
-    const loom_module_t* module, loom_value_id_t condition,
-    uint32_t expected_lane_count, loom_value_id_t* out_scalar_condition) {
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t condition, uint32_t expected_lane_count,
+    loom_value_id_t* out_scalar_condition) {
   *out_scalar_condition = LOOM_VALUE_ID_INVALID;
-  if (condition >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* condition_value = loom_module_value(module, condition);
-  if (loom_value_is_block_arg(condition_value) ||
-      loom_value_def_index(condition_value) != 0) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(condition_value);
-  if (defining_op == NULL || !loom_vector_splat_isa(defining_op) ||
-      loom_vector_splat_result(defining_op) != condition) {
-    return false;
-  }
   if (loom_amdgpu_vector_i1_lane_count(
           loom_module_value_type(module, condition)) != expected_lane_count) {
     return false;
   }
-  const loom_value_id_t scalar = loom_vector_splat_scalar(defining_op);
+  loom_value_id_t scalar = LOOM_VALUE_ID_INVALID;
+  if (!loom_value_fact_table_query_uniform_element_origin(fact_table, module,
+                                                          condition, &scalar)) {
+    return false;
+  }
   if (!loom_amdgpu_type_is_i1(loom_module_value_type(module, scalar))) {
     return false;
   }
@@ -247,6 +239,8 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
   const loom_value_id_t condition = loom_vector_select_condition(source_op);
   const loom_value_id_t true_value = loom_vector_select_true_value(source_op);
   const loom_value_id_t false_value = loom_vector_select_false_value(source_op);
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
   if (!loom_type_equal(loom_module_value_type(module, true_value),
                        result_type) ||
       !loom_type_equal(loom_module_value_type(module, false_value),
@@ -263,9 +257,9 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
   if (allows_vector_mask && condition_lane_count == storage.element_count) {
     condition_kind = LOOM_AMDGPU_SELECT_CONDITION_KIND_VECTOR_MASK;
     registers_per_condition_lane = storage.element_register_count;
-  } else if (loom_amdgpu_select_scalar_splat_condition(module, condition,
-                                                       storage.element_count,
-                                                       &selected_condition)) {
+  } else if (loom_amdgpu_select_scalar_splat_condition(
+                 module, fact_table, condition, storage.element_count,
+                 &selected_condition)) {
     condition_kind = LOOM_AMDGPU_SELECT_CONDITION_KIND_SCALAR_MASK;
   } else {
     return iree_ok_status();
@@ -337,8 +331,11 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_select(
   const uint32_t condition_lane_count = loom_amdgpu_vector_i1_lane_count(
       loom_module_value_type(module, condition));
   loom_value_id_t unused_scalar_condition = LOOM_VALUE_ID_INVALID;
+  const loom_value_fact_table_t* fact_table =
+      loom_target_low_legality_fact_table(context);
   const bool scalar_splat_condition = loom_amdgpu_select_scalar_splat_condition(
-      module, condition, storage.element_count, &unused_scalar_condition);
+      module, fact_table, condition, storage.element_count,
+      &unused_scalar_condition);
   if (scalar_splat_condition) {
     return iree_ok_status();
   }

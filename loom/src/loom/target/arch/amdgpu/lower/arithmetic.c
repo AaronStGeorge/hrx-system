@@ -849,28 +849,28 @@ iree_status_t loom_amdgpu_select_scalar_mulf_mix_plan(
 }
 
 static bool loom_amdgpu_select_vector_splatted_f16_mix_source(
-    const loom_module_t* module, loom_value_id_t value_id,
-    uint32_t expected_lane_count, loom_value_id_t* out_source,
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, uint32_t expected_lane_count,
+    loom_value_id_t* out_source,
     loom_amdgpu_fma_mix_source_kind_t* out_source_kind,
     uint32_t* out_source_register_offset) {
   *out_source = LOOM_VALUE_ID_INVALID;
   *out_source_kind = LOOM_AMDGPU_FMA_MIX_SOURCE_F32;
   *out_source_register_offset = 0;
 
-  const loom_op_t* defining_op =
-      loom_amdgpu_source_defining_op(module, value_id);
-  if (defining_op == NULL || !loom_vector_splat_isa(defining_op) ||
-      loom_vector_splat_result(defining_op) != value_id) {
-    return false;
-  }
   const loom_type_t value_type = loom_module_value_type(module, value_id);
   if (loom_amdgpu_vector_f32_lane_count(value_type) != expected_lane_count) {
     return false;
   }
 
-  if (!loom_amdgpu_select_fma_mix_source(
-          module, loom_vector_splat_scalar(defining_op), out_source,
-          out_source_kind, out_source_register_offset)) {
+  loom_value_id_t scalar_source = LOOM_VALUE_ID_INVALID;
+  if (!loom_value_fact_table_query_uniform_element_origin(
+          fact_table, module, value_id, &scalar_source)) {
+    return false;
+  }
+  if (!loom_amdgpu_select_fma_mix_source(module, scalar_source, out_source,
+                                         out_source_kind,
+                                         out_source_register_offset)) {
     return false;
   }
   return loom_amdgpu_fma_mix_source_is_f16(*out_source_kind);
@@ -907,14 +907,16 @@ iree_status_t loom_amdgpu_select_vector_mulf_mix_plan(
   const bool rhs_is_vector =
       loom_amdgpu_vector_f32_lane_count(loom_module_value_type(module, rhs)) ==
       lane_count;
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
   if (lhs_is_vector && loom_amdgpu_select_vector_splatted_f16_mix_source(
-                           module, rhs, lane_count, &splat_source,
+                           module, fact_table, rhs, lane_count, &splat_source,
                            &splat_source_kind, &splat_source_register_offset)) {
     vector_source = lhs;
   } else if (rhs_is_vector &&
              loom_amdgpu_select_vector_splatted_f16_mix_source(
-                 module, lhs, lane_count, &splat_source, &splat_source_kind,
-                 &splat_source_register_offset)) {
+                 module, fact_table, lhs, lane_count, &splat_source,
+                 &splat_source_kind, &splat_source_register_offset)) {
     vector_source = rhs;
   } else {
     return iree_ok_status();

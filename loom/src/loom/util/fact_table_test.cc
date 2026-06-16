@@ -243,6 +243,39 @@ TEST_F(FactTableTest, ClearScopeClearsOnlyTouchedEntriesAndKeepsStorage) {
   iree_arena_deinitialize(&transient_arena);
 }
 
+TEST_F(FactTableTest, UniformElementOriginsClearOnlyTouchedEntries) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define_uniform_element_origin(&table, 5, 2));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define_uniform_element_origin(&table, 8, 3));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define_uniform_element_origin(&table, 8, 4));
+
+  EXPECT_GE(table.uniform_element_origins.capacity, (iree_host_size_t)9);
+  EXPECT_EQ(table.uniform_element_origins.touched_count, 2u);
+  EXPECT_EQ(table.uniform_element_origins.entries[5], 2u);
+  EXPECT_EQ(table.uniform_element_origins.entries[8], 4u);
+
+  loom_value_id_t* const entries = table.uniform_element_origins.entries;
+  loom_value_id_t* const touched_values =
+      table.uniform_element_origins.touched_values;
+  loom_value_fact_table_clear_scope(&table);
+
+  EXPECT_EQ(table.uniform_element_origins.entries, entries);
+  EXPECT_EQ(table.uniform_element_origins.touched_values, touched_values);
+  EXPECT_EQ(table.uniform_element_origins.touched_count, 0u);
+  EXPECT_EQ(table.uniform_element_origins.entries[5], LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(table.uniform_element_origins.entries[8], LOOM_VALUE_ID_INVALID);
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define_uniform_element_origin(&table, 5, 7));
+  EXPECT_EQ(table.uniform_element_origins.touched_count, 1u);
+  EXPECT_EQ(table.uniform_element_origins.entries[5], 7u);
+}
+
 //===----------------------------------------------------------------------===//
 // Capacity
 //===----------------------------------------------------------------------===//
@@ -558,6 +591,32 @@ TEST_F(FactTableTest, CloneDefinedFactsReinternsExtensions) {
   EXPECT_EQ(summary.address_layout.strides[0].range_lo, 16);
   EXPECT_EQ(summary.address_layout.strides[0].range_hi, 64);
   EXPECT_EQ(summary.address_layout.strides[1].range_lo, 1);
+
+  iree_arena_deinitialize(&target_arena);
+}
+
+TEST_F(FactTableTest, CloneDefinedFactsCopiesUniformElementOrigins) {
+  loom_value_fact_table_t source = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 8));
+
+  loom_value_facts_t source_facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &source.context, loom_value_facts_exact_i64(42), &source_facts));
+  IREE_ASSERT_OK(loom_value_fact_table_define(&source, 7, source_facts));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define_uniform_element_origin(&source, 7, 2));
+
+  iree_arena_allocator_t target_arena;
+  iree_arena_initialize(&block_pool_, &target_arena);
+  loom_value_fact_table_t target = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 8));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_clone_defined_facts(&target, &source, nullptr));
+
+  EXPECT_TRUE(loom_value_facts_query_uniform_element(
+      &target.context, loom_value_fact_table_lookup(&target, 7), nullptr));
+  ASSERT_GE(target.uniform_element_origins.capacity, (iree_host_size_t)8);
+  EXPECT_EQ(target.uniform_element_origins.entries[7], 2u);
 
   iree_arena_deinitialize(&target_arena);
 }

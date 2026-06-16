@@ -617,6 +617,21 @@ struct loom_value_fact_table_t {
     iree_host_size_t bucket_count;
   } extensions;
 
+  // Uniform-element materialization origins keyed by aggregate value ID. An
+  // entry is LOOM_VALUE_ID_INVALID when no scalar SSA origin is known.
+  struct {
+    // Dense origin entries indexed by aggregate value ID.
+    loom_value_id_t* entries;
+    // Allocated origin entry count.
+    iree_host_size_t capacity;
+    // Aggregate value IDs with origins defined in the current populated scope.
+    loom_value_id_t* touched_values;
+    // Number of populated entries in touched_values.
+    iree_host_size_t touched_count;
+    // Allocated touched_values entry count.
+    iree_host_size_t touched_capacity;
+  } uniform_element_origins;
+
   // Reusable scratch buffers for fact inference calls. Allocated on first use,
   // grown only when an op needs more slots. Never shrinks. Old buffers are
   // abandoned in the arena and freed in bulk with the arena.
@@ -681,6 +696,21 @@ static inline loom_value_facts_t loom_value_fact_table_lookup(
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts);
+
+// Defines |scalar_value_id| as the SSA value that can materialize every element
+// of aggregate |value_id|. The relation itself is the materialization proof:
+// some values also carry loom_value_fact_uniform_element_t, while others need
+// the fact extension slot for a type-owned domain such as fragment metadata.
+iree_status_t loom_value_fact_table_define_uniform_element_origin(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_value_id_t scalar_value_id);
+
+// Returns true when |value_id| has a known scalar SSA origin that materializes
+// every element. The query validates that |value_id| is shaped, the origin is
+// scalar, and both have matching element types.
+bool loom_value_fact_table_query_uniform_element_origin(
+    const loom_value_fact_table_t* table, const loom_module_t* module,
+    loom_value_id_t value_id, loom_value_id_t* out_scalar_value_id);
 
 // Clones |facts| from |source| into |target|, re-interning any context-local
 // extension payloads in the target table. The returned facts are valid for
