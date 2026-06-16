@@ -9,9 +9,10 @@
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuIndexDispatchRows[LOOM_OP_INDEX_COUNT_] = {
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_INDEX_CONSTANT)] =
-            LOOM_AMDGPU_VALUE_DIRECT_ROW(LOOM_OP_INDEX_CONSTANT,
-                                         loom_amdgpu_select_value_dispatch,
-                                         loom_amdgpu_emit_value_dispatch, NULL),
+            LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
+                LOOM_OP_INDEX_CONSTANT, loom_amdgpu_select_value_dispatch,
+                loom_amdgpu_emit_value_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_NONE),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_INDEX_CAST)] =
             LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
                 LOOM_OP_INDEX_CAST, loom_amdgpu_select_value_dispatch,
@@ -34,9 +35,10 @@ static const loom_amdgpu_lower_dispatch_row_t
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuScalarDispatchRows[LOOM_OP_SCALAR_COUNT_] = {
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_CONSTANT)] =
-            LOOM_AMDGPU_VALUE_DIRECT_ROW(LOOM_OP_SCALAR_CONSTANT,
-                                         loom_amdgpu_select_value_dispatch,
-                                         loom_amdgpu_emit_value_dispatch, NULL),
+            LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
+                LOOM_OP_SCALAR_CONSTANT, loom_amdgpu_select_value_dispatch,
+                loom_amdgpu_emit_value_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_NONE),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_CMPI)] =
             LOOM_AMDGPU_GENERATED_PRESELECT_DIRECT_POLICY_ROW(
                 LOOM_OP_SCALAR_CMPI, loom_amdgpu_select_value_dispatch,
@@ -177,9 +179,10 @@ static const loom_amdgpu_lower_dispatch_row_t
 static const loom_amdgpu_lower_dispatch_row_t
     kAmdgpuVectorDispatchRows[LOOM_OP_VECTOR_COUNT_] = {
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CONSTANT)] =
-            LOOM_AMDGPU_VALUE_DIRECT_ROW(LOOM_OP_VECTOR_CONSTANT,
-                                         loom_amdgpu_select_value_dispatch,
-                                         loom_amdgpu_emit_value_dispatch, NULL),
+            LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
+                LOOM_OP_VECTOR_CONSTANT, loom_amdgpu_select_value_dispatch,
+                loom_amdgpu_emit_value_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_NONE),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_IOTA)] =
             LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
                 LOOM_OP_VECTOR_IOTA, loom_amdgpu_select_value_dispatch,
