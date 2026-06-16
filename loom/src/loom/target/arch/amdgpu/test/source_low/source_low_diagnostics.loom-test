@@ -27,10 +27,10 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b32_diagnostics() a
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %13 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
   %one = v_mov_b32 1
-  %17 = v_lshlrev_b32_src0_inline %tid, 2
-  ds_write_b32 %17, %one
-  %loaded = ds_read_b32 %17
-  global_store_b32_saddr %17, %loaded, %output_view
+  %16 = v_lshlrev_b32_src0_inline %tid, 2
+  ds_write_b32 %16, %one
+  %loaded = ds_read_b32 %16
+  global_store_b32_saddr %16, %loaded, %output_view
   return
 }
 

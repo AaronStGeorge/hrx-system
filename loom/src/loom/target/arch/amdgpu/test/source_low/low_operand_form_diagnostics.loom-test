@@ -45,8 +45,8 @@ low.func.def target(@target) @sopk_immediate_mul_rejected_loop_reused_lhs(%posit
   %scale = low.const<amdgpu.s_mov_b32> {imm32 = 12} : reg<amdgpu.sgpr>
   low.br ^loop
 ^loop:
-  // REMARK@+2: BACKEND/042 {source_descriptor_key="amdgpu.s_mul_i32", replacement_descriptor_key="amdgpu.s_mulk_i32", decision="rejected", reason="destructive_operand_reused_after_consume", immediate_name="imm16", immediate_value="12", tied_operand_name="lhs", tied_value_name="position"}
-  // REMARK@+1: BACKEND/042 {source_descriptor_key="amdgpu.s_mul_i32", replacement_descriptor_key="amdgpu.s_mul_i32.rhs_inline", decision="selected", reason="selected", immediate_name="imm32", immediate_value="12", tied_operand_name="<none>", tied_value_name="<none>"}
+  // REMARK@+2: BACKEND/042 {source_descriptor_key="amdgpu.s_mul_i32", replacement_descriptor_key="amdgpu.s_mulk_i32", decision="rejected", reason_key="destructive_operand_reused_after_consume", immediate_name="imm16", immediate_value="12", tied_operand_name="lhs", tied_value_name="position"}
+  // REMARK@+1: BACKEND/042 {source_descriptor_key="amdgpu.s_mul_i32", replacement_descriptor_key="amdgpu.s_mul_i32.rhs_inline", decision="selected", reason_key="selected", immediate_name="imm32", immediate_value="12", tied_operand_name="<none>", tied_value_name="<none>"}
   %result = low.op<amdgpu.s_mul_i32>(%position, %scale) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
   low.cond_br %again, ^loop, ^exit : reg<amdgpu.scc>
 ^exit:

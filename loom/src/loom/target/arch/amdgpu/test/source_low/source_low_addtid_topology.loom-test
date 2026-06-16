@@ -20,12 +20,12 @@ kernel.def target(@target) @wave64_workgroup_memory_workitem_x_b32() {
 
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @wave64_workgroup_memory_workitem_x_b32() asm<amdgpu.cdna3.core> {
-  %11 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %10 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
   %one = v_mov_b32 1
-  %14 = s_mov_b32_m0_imm 0
-  ds_write_addtid_b32 %one, %14
-  %loaded = ds_read_addtid_b32 %14
-  ds_write_addtid_b32 %loaded, %14
+  %13 = s_mov_b32_m0_imm 0
+  ds_write_addtid_b32 %one, %13
+  %loaded = ds_read_addtid_b32 %13
+  ds_write_addtid_b32 %loaded, %13
   return
 }
 
@@ -56,14 +56,14 @@ low.kernel.def target(@target) workgroup_size(8, 8, 1) @multidim_workgroup_memor
   %column = v_and_b32_lit %packed_tid, 1023
   %20 = v_lshrrev_b32_src0_inline %packed_tid, 10
   %row = v_and_b32_lit %20, 1023
-  %23 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
+  %22 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
   %one = v_mov_b32 1
-  %26 = v_lshl_add_u32_shift_imm %row, %column, 3
-  %27 = v_lshlrev_b32_src0_inline %26, 2
-  ds_write_b32 %27, %one
-  %28 = v_lshl_add_u32_shift_imm %column, %row, 3
-  %29 = v_lshlrev_b32_src0_inline %28, 2
-  %loaded = ds_read_b32 %29
-  ds_write_b32 %27, %loaded
+  %25 = v_lshl_add_u32_shift_imm %row, %column, 3
+  %26 = v_lshlrev_b32_src0_inline %25, 2
+  ds_write_b32 %26, %one
+  %27 = v_lshl_add_u32_shift_imm %column, %row, 3
+  %28 = v_lshlrev_b32_src0_inline %27, 2
+  %loaded = ds_read_b32 %28
+  ds_write_b32 %26, %loaded
   return
 }
