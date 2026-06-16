@@ -295,6 +295,7 @@ def _vector_store_rule(
 TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="test.low.core",
     descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+    public_header="loom/target/test/contracts/core.h",
     cases=[
         ValueAliasRule(
             source_op=buffer.buffer_view,

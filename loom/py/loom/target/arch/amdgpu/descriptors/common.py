@@ -116,6 +116,8 @@ from loom.target.low_descriptors import (
     StorageLeaseReleaseScope,
 )
 
+AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU = 1
+
 _REG_SGPR = "amdgpu.sgpr"
 _REG_VGPR = "amdgpu.vgpr"
 _REG_AGPR = "amdgpu.agpr"
@@ -527,8 +529,36 @@ class AmdgpuAtomicMemorySpace(CEnum):
 
 class AmdgpuMemoryAddressForm(CEnum):
     DEFAULT = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT"
+    BUFFER_OFF_ZERO = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO"
+    DS_2ADDR = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR"
     GLOBAL_SADDR = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR"
+    DS_ADDTID = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID"
     FLAT = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT"
+    GLOBAL_SMEM = "LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SMEM"
+
+
+class AmdgpuMemoryDescriptorDomain(CEnum):
+    BUFFER_RESOURCE = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE"
+    GLOBAL_SADDR = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR"
+    LDS = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS"
+    GLOBAL_FLAT = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT"
+    GLOBAL_SMEM = "LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SMEM"
+
+
+class AmdgpuMemoryOperationKind(CEnum):
+    LOAD = "LOOM_AMDGPU_MEMORY_OPERATION_LOAD"
+    STORE = "LOOM_AMDGPU_MEMORY_OPERATION_STORE"
+
+
+class AmdgpuMemoryPayloadRegisterClass(CEnum):
+    VGPR = "LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_VGPR"
+    SGPR = "LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_SGPR"
+
+
+class AmdgpuMemoryPayloadFormat(CEnum):
+    GENERIC = "LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_GENERIC"
+    LOW_16BIT_FLOAT = "LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_LOW_16BIT_FLOAT"
+    SIGNED_16BIT_INTEGER = "LOOM_AMDGPU_MEMORY_PAYLOAD_FORMAT_SIGNED_16BIT_INTEGER"
 
 
 class AmdgpuAtomicOperationKind(CEnum):
@@ -568,6 +598,24 @@ class AmdgpuAtomicDescriptorCandidate:
     operation_kind: AmdgpuAtomicOperationKind
     atomic_kind: AmdgpuAtomicKind
     value_kind: AmdgpuAtomicValueKind
+    descriptor_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuMemoryDescriptorCandidate:
+    domain: AmdgpuMemoryDescriptorDomain
+    address_form: AmdgpuMemoryAddressForm
+    operation_kind: AmdgpuMemoryOperationKind
+    packet_byte_count: int
+    payload_register_class: AmdgpuMemoryPayloadRegisterClass
+    payload_format: AmdgpuMemoryPayloadFormat
+    payload_register_count: int
+    descriptor_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuAsyncGatherDescriptorCandidate:
+    packet_byte_count: int
     descriptor_key: str
 
 
@@ -825,8 +873,9 @@ def _native_unsigned_hex_immediate(field_name: str, bit_width: int) -> NativeAsm
 
 def _native_amdgpu_delay_alu_immediate(field_name: str) -> NativeAsmValue:
     return NativeAsmValue(
-        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+        NativeAsmValueKind.IMMEDIATE_TARGET_FORMAT,
         field_name=field_name,
+        target_format_id=AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU,
     )
 
 
@@ -2463,6 +2512,7 @@ __all__ = (
     "AMDGPU_MATRIX_DESCRIPTOR_CATEGORY",
     "AMDGPU_MEMORY_DESCRIPTOR_CATEGORY",
     "AMDGPU_MISC_DESCRIPTOR_CATEGORY",
+    "AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU",
     "AMDGPU_SCALAR_DESCRIPTOR_CATEGORY",
     "AMDGPU_VECTOR_DESCRIPTOR_CATEGORY",
     "AmdgpuAtomicDescriptorCandidate",
@@ -2470,6 +2520,9 @@ __all__ = (
     "AmdgpuAtomicMemorySpace",
     "AmdgpuAtomicOperationKind",
     "AmdgpuAtomicValueKind",
+    "AmdgpuAsyncGatherDescriptorCandidate",
+    "AmdgpuMemoryDescriptorCandidate",
+    "AmdgpuMemoryDescriptorDomain",
     "AmdgpuDescriptorOverlay",
     "AmdgpuEncodingFieldAllOnes",
     "AmdgpuFixedEncodingValue",
@@ -2477,6 +2530,9 @@ __all__ = (
     "AmdgpuImplicitOperandOverlay",
     "AmdgpuIsaFactSource",
     "AmdgpuMemoryAddressForm",
+    "AmdgpuMemoryOperationKind",
+    "AmdgpuMemoryPayloadFormat",
+    "AmdgpuMemoryPayloadRegisterClass",
     "AmdgpuOperandOverlay",
     "AmdgpuOperandPredefinedValueRef",
     "AsmForm",

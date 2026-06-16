@@ -50,6 +50,10 @@ typedef uint16_t loom_low_lower_type_pattern_flags_t;
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE ((uint16_t)1u << 4)
 // Second shaped dimension must be statically equal to static_dim1.
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1 ((uint16_t)1u << 5)
+// Total static shaped element count must be inside
+// [static_element_count_min, static_element_count_max].
+#define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_ELEMENT_COUNT_RANGE \
+  ((uint16_t)1u << 6)
 
 typedef struct loom_low_lower_type_pattern_t {
   // Type fields this pattern checks.
@@ -68,6 +72,12 @@ typedef struct loom_low_lower_type_pattern_t {
   int64_t static_dim0_max;
   // Required static dimension 1 when the STATIC_DIM1 flag is set.
   int64_t static_dim1;
+  // Inclusive minimum total static element count when
+  // STATIC_ELEMENT_COUNT_RANGE is set.
+  uint64_t static_element_count_min;
+  // Inclusive maximum total static element count when
+  // STATIC_ELEMENT_COUNT_RANGE is set.
+  uint64_t static_element_count_max;
 } loom_low_lower_type_pattern_t;
 
 typedef enum loom_low_lower_value_ref_kind_e {
@@ -500,15 +510,20 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE = 24,
   // Source value type storage schema element format must match u64.
   LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT = 25,
+  // Packed integer storage payload bits must equal source lane count times a
+  // source i64 width attribute.
+  LOOM_LOW_LOWER_GUARD_VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES = 26,
+  // Packed integer storage payload bits divided by a source i64 width
+  // attribute must equal the result lane count.
+  LOOM_LOW_LOWER_GUARD_VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD = 27,
   // Source value must have no ordinary operand uses. Type uses are ignored.
-  LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 26,
+  LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 28,
   // Source value ref must map to a low register with exactly |u64| units.
-  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 27,
-  // Bitpack source/result storage must match the width attr and target policy.
-  LOOM_LOW_LOWER_GUARD_BITPACK_STORAGE = 28,
-  // Bitunpack source/result storage must match the width attr and target
-  // policy.
-  LOOM_LOW_LOWER_GUARD_BITUNPACK_STORAGE = 29,
+  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 29,
+  // Source vector.extract op must have a supported source/result/index shape.
+  LOOM_LOW_LOWER_GUARD_VECTOR_EXTRACT_SHAPE = 30,
+  // Source value refs must have equal static shaped element counts.
+  LOOM_LOW_LOWER_GUARD_VALUE_STATIC_ELEMENT_COUNT_EQ = 31,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -518,8 +533,9 @@ typedef struct loom_low_lower_guard_t {
   uint16_t value_ref_index;
   // Second source value-ref table index used by pairwise value guards.
   uint16_t other_value_ref_index;
-  // Source attribute ordinal used by attribute guards or source operand ordinal
-  // used by operand-segment guards.
+  // Source attribute ordinal used by attribute guards, source operand ordinal
+  // used by operand-segment guards, or op-specific attribute ordinal used by
+  // semantic guards.
   uint16_t attr_index;
   // Type-pattern table index used by VALUE_TYPE guards.
   uint16_t type_pattern_index;
@@ -527,19 +543,19 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value, divisor, count, element index, bit-count payload,
-  // register unit count, exact f64 bit pattern, result payload multiple, or
-  // maximum source register count.
+  // Required enum value, divisor adjustment, expected count, element index,
+  // bit-count limit, register unit count, exact f64 bit pattern, flag mask,
+  // storage element format, storage unit cap, or storage payload multiple.
   uint64_t u64;
   // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
   uint16_t register_class_id;
   // Rule-set-local descriptor ref used by DESCRIPTOR_AVAILABLE guards.
   loom_low_lower_descriptor_ref_t descriptor_ref;
-  // Inclusive lower i64 bound for range guards or register bit width for
-  // bitstream storage guards.
+  // Inclusive lower i64 bound for range guards or storage unit bit count for
+  // packed integer storage guards.
   int64_t minimum_i64;
-  // Inclusive upper i64 bound for range guards or maximum result lanes for
-  // bitunpack storage guards.
+  // Inclusive upper i64 bound for range guards or maximum lane count for
+  // packed integer storage guards.
   int64_t maximum_i64;
 } loom_low_lower_guard_t;
 
@@ -761,6 +777,15 @@ typedef struct loom_low_lower_rule_selection_t {
 // diagnostics. Callers that compose rule tables with custom target callbacks
 // can use the recorded failure detail if every lowering path rejects the op.
 iree_status_t loom_low_lower_rule_set_select(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection);
+
+// Selects the exact target contract rule for |source_op| using the mutable
+// lowering context. Unlike loom_low_lower_rule_set_select this includes
+// contract-only rows and is intended for target recipe selectors that consume
+// generated contracts but still need target-owned emit code.
+iree_status_t loom_low_lower_rule_set_select_contract(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     loom_low_lower_rule_selection_t* out_selection);

@@ -623,10 +623,6 @@ class _LowerRuleSetCompiler:
             self._append_low_value_guard(source_op, guard)
             return
 
-        if guard.kind in (GuardKind.BITPACK_STORAGE, GuardKind.BITUNPACK_STORAGE):
-            self._append_bitstream_storage_guard(source_op, guard)
-            return
-
         if guard.kind == GuardKind.OPERAND_SEGMENT_COUNT:
             if guard.count is None:
                 raise ValueError(
@@ -736,6 +732,9 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+            GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+            GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
         ):
             self._append_value_fact_guard(source_op, guard)
             return
@@ -753,6 +752,39 @@ class _LowerRuleSetCompiler:
                         _guard_diagnostic(
                             guard,
                             _value_no_uses_diagnostic(guard.field),
+                        ),
+                    ),
+                )
+            )
+            return
+
+        if guard.kind == GuardKind.VECTOR_EXTRACT_SHAPE:
+            if guard.other_field is None or guard.attr_field is None:
+                raise ValueError(
+                    f"{source_op.name}: vector-extract-shape guard needs source, "
+                    "result, and static_indices fields"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.field),
+                    ),
+                    other_value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.other_field),
+                    ),
+                    attr_index=_source_attr_index(source_op, guard.attr_field),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _named_constraint_diagnostic(
+                                "shape",
+                                source_op.name,
+                                guard.kind.value,
+                            ),
                         ),
                     ),
                 )
@@ -899,51 +931,6 @@ class _LowerRuleSetCompiler:
             )
         )
 
-    def _append_bitstream_storage_guard(self, source_op: Op, guard: Guard) -> None:
-        if guard.other_field is None or guard.attr_field is None:
-            raise ValueError(
-                f"{source_op.name}: {guard.kind.value} guard needs source, "
-                "result, and attr fields"
-            )
-        if guard.count is None or guard.minimum is None:
-            raise ValueError(
-                f"{source_op.name}: {guard.kind.value} guard needs "
-                "storage policy parameters"
-            )
-        if guard.kind == GuardKind.BITUNPACK_STORAGE and guard.maximum is None:
-            raise ValueError(
-                f"{source_op.name}: {guard.kind.value} guard needs a "
-                "maximum result lane count"
-            )
-        self._guards.append(
-            LowerGuard(
-                kind=guard.kind,
-                value_ref_index=self._append_value_ref(
-                    source_op,
-                    _value_ref_for_source_field(source_op, guard.field),
-                ),
-                other_value_ref_index=self._append_value_ref(
-                    source_op,
-                    _value_ref_for_source_field(source_op, guard.other_field),
-                ),
-                attr_index=_source_attr_index(source_op, guard.attr_field),
-                diagnostic_index=self._append_diagnostic_ref(
-                    source_op,
-                    _guard_diagnostic(
-                        guard,
-                        _named_constraint_diagnostic(
-                            "value",
-                            guard.field,
-                            guard.kind.value,
-                        ),
-                    ),
-                ),
-                u64=guard.count,
-                minimum_i64=guard.minimum,
-                maximum_i64=guard.maximum or 0,
-            )
-        )
-
     def _append_value_fact_guard(self, source_op: Op, guard: Guard) -> None:
         value_ref_index = self._append_value_ref(
             source_op,
@@ -1064,16 +1051,33 @@ class _LowerRuleSetCompiler:
         if guard.kind in (
             GuardKind.VALUE_I64_RANGE_LE,
             GuardKind.VALUE_I64_RANGE_GE,
+            GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
         ):
             if guard.other_field is None:
+                relation_name = (
+                    "static-element-count relation"
+                    if guard.kind == GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ
+                    else "value range relation"
+                )
                 raise ValueError(
-                    f"{source_op.name}: value range relation guard needs another value"
+                    f"{source_op.name}: {relation_name} guard needs another value"
                 )
             other_value_ref_index = self._append_value_ref(
                 source_op,
                 _value_ref_for_source_field(source_op, guard.other_field),
             )
-            relation = "le" if guard.kind == GuardKind.VALUE_I64_RANGE_LE else "ge"
+            if guard.kind == GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ:
+                diagnostic = _static_element_count_relation_diagnostic(
+                    guard.field,
+                    guard.other_field,
+                )
+            else:
+                relation = "le" if guard.kind == GuardKind.VALUE_I64_RANGE_LE else "ge"
+                diagnostic = _integer_range_relation_diagnostic(
+                    guard.field,
+                    guard.other_field,
+                    relation,
+                )
             self._guards.append(
                 LowerGuard(
                     kind=guard.kind,
@@ -1083,11 +1087,7 @@ class _LowerRuleSetCompiler:
                         source_op,
                         _guard_diagnostic(
                             guard,
-                            _integer_range_relation_diagnostic(
-                                guard.field,
-                                guard.other_field,
-                                relation,
-                            ),
+                            diagnostic,
                         ),
                     ),
                 )
@@ -1129,6 +1129,58 @@ class _LowerRuleSetCompiler:
                         ),
                     ),
                     u64_c_expression=guard.numeric_format_c_expression,
+                )
+            )
+            return
+        if guard.kind in (
+            GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+        ):
+            if guard.other_field is None or guard.attr_field is None:
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "two values and one attr field"
+                )
+            if guard.minimum is None or guard.minimum <= 0:
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "a positive storage unit bit count"
+                )
+            if guard.count is None or guard.count <= 0:
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "a positive storage payload value"
+                )
+            if guard.kind == GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD and (
+                guard.maximum is None or guard.maximum <= 0
+            ):
+                raise ValueError(
+                    f"{source_op.name}: {guard.kind.value} guard needs "
+                    "a positive maximum lane count"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    other_value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.other_field),
+                    ),
+                    attr_index=_source_attr_index(source_op, guard.attr_field),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _named_constraint_diagnostic(
+                                "value",
+                                guard.field,
+                                guard.kind.value,
+                            ),
+                        ),
+                    ),
+                    u64=guard.count,
+                    minimum_i64=guard.minimum,
+                    maximum_i64=guard.maximum or 0,
                 )
             )
             return
@@ -1995,6 +2047,18 @@ def _register_unit_count_diagnostic(
         field,
         other_field,
         "low_register_unit_count_eq",
+    )
+
+
+def _static_element_count_relation_diagnostic(
+    field: str,
+    other_field: str,
+) -> DiagnosticRef:
+    return _relation_constraint_diagnostic(
+        "field",
+        field,
+        other_field,
+        "static_element_count_eq",
     )
 
 

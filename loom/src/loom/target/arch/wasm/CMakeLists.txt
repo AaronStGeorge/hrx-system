@@ -84,62 +84,18 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_ARCH_WASM)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
+    loom_check_file_test
+  SRCS
+    "test/source_low/source_low.loom-test"
+    "test/source_low/source_low_diagnostics.loom-test"
+    "test/source_low/structured_allocation.loom-test"
+    "test/source_low/structured_control.loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM)
-iree_native_test(
-  NAME
-    "source_low_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM)
-iree_native_test(
-  NAME
-    "structured_allocation"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_allocation.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_WASM)
-iree_native_test(
-  NAME
-    "structured_control"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_control.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
+  TEST_NAME_PREFIX_TO_STRIP
+    "test/source_low/"
 )
 endif()
 

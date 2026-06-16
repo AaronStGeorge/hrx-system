@@ -35,6 +35,58 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_descriptor_candidate_ranges_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::memory_candidates
+  OUTPUT
+    "memory_descriptor_candidate_ranges.inl"
+  OUTPUT_FLAG
+    "--candidate-ranges"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_descriptor_candidates_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::memory_candidates
+  OUTPUT
+    "memory_descriptor_candidates.inl"
+  OUTPUT_FLAG
+    "--candidate-rows"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_cache_policy_encoding_rows_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::target_info
+  OUTPUT
+    "memory_cache_policy_encoding_rows.inl"
+  OUTPUT_FLAG
+    "--cache-policy-encoding-rows"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_cache_policy_temporal_th_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::target_info
+  OUTPUT
+    "memory_cache_policy_temporal_th.inl"
+  OUTPUT_FLAG
+    "--cache-policy-temporal-th"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     lower
@@ -67,6 +119,10 @@ loom_cc_library(
     "values.h"
     "workgroup.h"
   TEXTUAL_HDRS
+    "memory_cache_policy_encoding_rows.inl"
+    "memory_cache_policy_temporal_th.inl"
+    "memory_descriptor_candidate_ranges.inl"
+    "memory_descriptor_candidates.inl"
     "registry_tables.inl"
   SRCS
     "abi.c"
@@ -132,6 +188,8 @@ loom_cc_library(
     loom::target::arch::amdgpu::contracts
     loom::target::arch::amdgpu::error_defs
     loom::target::arch::amdgpu::hal::kernel_abi
+    loom::target::arch::amdgpu::lower::candidates::arithmetic_candidates
+    loom::target::arch::amdgpu::lower::candidates::async_gather_candidates
     loom::target::arch::amdgpu::lower::candidates::atomic_candidates
     loom::target::arch::amdgpu::lower::candidates::compare_candidates
     loom::target::arch::amdgpu::matrix::contract

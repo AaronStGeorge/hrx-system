@@ -78,80 +78,16 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "test_assembly"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "test_assembly_q8"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly_q8.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "test_assembly_wmma"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly_wmma.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "test_vopd_plan"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/vopd_plan.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "test_wait_plan"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_plan.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
-iree_native_test(
-  NAME
-    "test_wait_states"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_states.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    loom_check_file_test
+  SRCS
+    "test/assembly.loom-test"
+    "test/assembly_q8.loom-test"
+    "test/assembly_wmma.loom-test"
+    "test/vopd_plan.loom-test"
+    "test/wait_plan.loom-test"
+    "test/wait_states.loom-test"
 )
 endif()
 

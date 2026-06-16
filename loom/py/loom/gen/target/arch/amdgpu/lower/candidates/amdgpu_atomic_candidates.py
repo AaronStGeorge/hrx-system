@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -25,6 +24,11 @@ def _ensure_runtime_py_on_path() -> None:
 _ensure_runtime_py_on_path()
 
 from loom.gen.support.generated_file import line_comment_header  # noqa: E402
+from loom.gen.target.arch.amdgpu.lower.candidates.validation import (  # noqa: E402
+    dense_candidate_ranges,
+    descriptor_ref_constant_name,
+    require_descriptor_refs,
+)
 from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
     AmdgpuAtomicDescriptorCandidate,
     AmdgpuAtomicKind,
@@ -32,7 +36,6 @@ from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
     AmdgpuMemoryAddressForm,
     amdgpu_atomic_descriptor_candidates,
 )
-from loom.target.low_descriptors import target_relative_name  # noqa: E402
 
 _ATOMIC_MEMORY_SPACE_INDEX = {
     AmdgpuAtomicMemorySpace.WORKGROUP: 0,
@@ -47,25 +50,13 @@ _ATOMIC_ADDRESS_FORM_INDEX = {
 }
 
 
-def _c_identifier(value: str) -> str:
-    identifier = re.sub(r"[^0-9A-Za-z_]", "_", value).strip("_")
-    if not identifier:
-        return "EMPTY"
-    if identifier[0].isdigit():
-        identifier = "_" + identifier
-    return identifier.upper()
-
-
-def _descriptor_ref_constant_name(key: str) -> str:
-    return f"LOOM_AMDGPU_DESCRIPTOR_REF_{_c_identifier(target_relative_name('amdgpu', key))}"
-
-
 def _candidate_initializer(candidate: AmdgpuAtomicDescriptorCandidate) -> str:
+    descriptor_ref = descriptor_ref_constant_name(candidate.descriptor_key)
     return "\n".join(
         [
             "    {",
             f"        .value_kind = {candidate.value_kind.c_name},",
-            f"        .descriptor_ref = {_descriptor_ref_constant_name(candidate.descriptor_key)},",
+            f"        .descriptor_ref = {descriptor_ref},",
             "    },",
         ]
     )
@@ -96,21 +87,22 @@ def _candidate_range_index_expression(key: tuple[int, int, str, str]) -> str:
 def _candidate_ranges(
     candidates: Sequence[AmdgpuAtomicDescriptorCandidate],
 ) -> tuple[tuple[tuple[int, int, str, str], int, int], ...]:
-    ranges: dict[tuple[int, int, str, str], tuple[int, int]] = {}
-    for candidate_index, candidate in enumerate(candidates):
-        key = _candidate_range_key(candidate)
-        previous_range = ranges.get(key)
-        if previous_range is None:
-            ranges[key] = (candidate_index, 1)
-            continue
-        first_candidate, candidate_count = previous_range
-        if first_candidate + candidate_count != candidate_index:
-            raise ValueError(f"AMDGPU atomic descriptor candidates must be contiguous by range key {key}")
-        ranges[key] = (first_candidate, candidate_count + 1)
-    return tuple((key, first_candidate, candidate_count) for key, (first_candidate, candidate_count) in sorted(ranges.items()))
+    require_descriptor_refs(
+        "AMDGPU atomic descriptor candidate table",
+        (candidate.descriptor_key for candidate in candidates),
+    )
+    return dense_candidate_ranges(
+        candidates,
+        _candidate_range_key,
+        owner="AMDGPU atomic descriptor candidate table",
+    )
 
 
-def _range_initializer(key: tuple[int, int, str, str], first_candidate: int, candidate_count: int) -> str:
+def _range_initializer(
+    key: tuple[int, int, str, str],
+    first_candidate: int,
+    candidate_count: int,
+) -> str:
     return "\n".join(
         [
             f"    [{_candidate_range_index_expression(key)}] = {{",

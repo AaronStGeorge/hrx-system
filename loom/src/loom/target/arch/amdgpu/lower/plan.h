@@ -94,26 +94,6 @@ typedef struct loom_amdgpu_dotf_plan_t {
   loom_amdgpu_descriptor_ref_t tied_accumulate_descriptor_ref;
 } loom_amdgpu_dotf_plan_t;
 
-typedef enum loom_amdgpu_fma_mix_source_kind_e {
-  // Source operand is interpreted as an f32 lane.
-  LOOM_AMDGPU_FMA_MIX_SOURCE_F32 = 0,
-  // Source operand is interpreted as the low f16 lane in a 32-bit register.
-  LOOM_AMDGPU_FMA_MIX_SOURCE_F16LO = 1,
-  // Source operand is interpreted as the high f16 lane in a 32-bit register.
-  LOOM_AMDGPU_FMA_MIX_SOURCE_F16HI = 2,
-  // Number of FMA-mix source interpretation kinds.
-  LOOM_AMDGPU_FMA_MIX_SOURCE_KIND_COUNT_ = 3,
-} loom_amdgpu_fma_mix_source_kind_t;
-
-enum {
-  // Number of source operands in mixed-FMA packet order.
-  LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT = 3,
-  // Number of multiplicand operands in mixed-multiply source order.
-  LOOM_AMDGPU_MULF_MIX_SOURCE_COUNT = 2,
-  // Number of source operands in packed ternary packet order.
-  LOOM_AMDGPU_PACKED_TERNARY_SOURCE_COUNT = 3,
-};
-
 typedef struct loom_amdgpu_fma_mix_plan_t {
   // Source values consumed by the selected descriptor in a, b, c order.
   loom_value_id_t sources[LOOM_AMDGPU_FMA_MIX_SOURCE_COUNT];
@@ -135,6 +115,8 @@ typedef struct loom_amdgpu_packed_ternary_plan_t {
   loom_value_id_t result;
   // Descriptor row selected for each packed ternary packet.
   loom_amdgpu_descriptor_ref_t descriptor_ref;
+  // Flags describing selected descriptor packet semantics.
+  loom_amdgpu_packed_ternary_flags_t flags;
   // Number of 32-bit register units in each source and result vector.
   uint32_t register_count;
   // Number of 32-bit register units consumed and produced by each packet.
@@ -235,6 +217,8 @@ typedef struct loom_amdgpu_vector_extract_plan_t {
   uint32_t element_register_count;
   // Number of payload bits occupied by each logical source lane.
   uint32_t lane_bit_count;
+  // True when packed integer extraction must produce scalar sign-extension.
+  bool sign_extend_packed_lane;
   // True when extraction uses |dynamic_index| instead of |lane_offset|.
   bool is_dynamic;
 } loom_amdgpu_vector_extract_plan_t;

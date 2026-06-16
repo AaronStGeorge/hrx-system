@@ -9,48 +9,14 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "gather_to_scalar"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/gather_to_scalar.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "memory_footprint"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/memory_footprint.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "reduce_axes_to_scalar"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/reduce_axes_to_scalar.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "to_scalar"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/to_scalar.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "gather_to_scalar.loom-test"
+    "memory_footprint.loom-test"
+    "reduce_axes_to_scalar.loom-test"
+    "to_scalar.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

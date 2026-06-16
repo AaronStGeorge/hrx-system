@@ -106,290 +106,33 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "allocation"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/allocation.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
+    loom_check_file_test
+  SRCS
+    "test/source_low/allocation.loom-test"
+    "test/source_low/source_low.loom-test"
+    "test/source_low/source_low_avx2.loom-test"
+    "test/source_low/source_low_avx512_packed_dot.loom-test"
+    "test/source_low/source_low_avx_vnni.loom-test"
+    "test/source_low/source_low_packed_dot.loom-test"
+    "test/source_low/source_low_scalar_addressing.loom-test"
+    "test/source_low/source_low_scalar_arithmetic.loom-test"
+    "test/source_low/source_low_scalar_bitwise.loom-test"
+    "test/source_low/source_low_scalar_compare.loom-test"
+    "test/source_low/source_low_scalar_control.loom-test"
+    "test/source_low/source_low_scalar_diagnostics.loom-test"
+    "test/source_low/source_low_scalar_f32.loom-test"
+    "test/source_low/source_low_scalar_i64.loom-test"
+    "test/source_low/source_low_scalar_memory.loom-test"
+    "test/source_low/source_low_v4.loom-test"
   DATA
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_avx2"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx2.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_avx512_packed_dot"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx512_packed_dot.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_avx_vnni"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx_vnni.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_packed_dot"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_addressing"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_addressing.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_arithmetic"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_arithmetic.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_bitwise"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_bitwise.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_compare"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_compare.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_control"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_control.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_f32"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_f32.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_i64"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_i64.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_scalar_memory"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_memory.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_X86)
-iree_native_test(
-  NAME
-    "source_low_v4"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_v4.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  DATA
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/numeric_scalar_f32.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v16.loom-test"
-    "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/source_low/vector_v4.loom-test"
-  LABELS
-    "loom-check"
+  TEST_NAME_PREFIX_TO_STRIP
+    "test/source_low/"
 )
 endif()
 

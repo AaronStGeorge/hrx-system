@@ -39,6 +39,8 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_AMDHSA_TARGET_TRIPLE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE,
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
+    AMDGPU_CACHE_SCOPE_KEYWORDS,
+    AMDGPU_CACHE_TEMPORAL_KEYWORDS,
     AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
     AMDGPU_DESCRIPTOR_SET_INFO_KNOWN_FLAGS,
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
@@ -58,14 +60,15 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
     AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS,
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTRS,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_INFOS,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_TEMPORAL_TH,
     AMDGPU_WAVEFRONT_SIZE_FLAG_32,
     AMDGPU_WAVEFRONT_SIZE_FLAG_64,
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
+    AmdgpuVectorMemoryCachePolicyEncodingInfo,
     amdgpu_descriptor_set_ordinal,
     kernel_descriptor_profile_supports_wavefront_size,
     sorted_descriptor_set_infos,
@@ -98,6 +101,18 @@ def _padded_arg(value: str, width: int) -> str:
     return f"{value},{' ' * (width - len(value) + 1)}"
 
 
+def _c_ident(value: str) -> str:
+    return value.upper().replace(".", "_").replace("-", "_")
+
+
+def _cache_temporal_c_name(keyword: str) -> str:
+    return f"LOOM_CACHE_TEMPORAL_{_c_ident(keyword)}"
+
+
+def _cache_policy_attr_flag_c_name(attr: str) -> str:
+    return f"LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_{_c_ident(attr)}"
+
+
 _KERNEL_DESCRIPTOR_PROFILE_EXPRS = {
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE: "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE",
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9: "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9",
@@ -122,12 +137,7 @@ _BUFFER_RESOURCE_CACHE_SWIZZLE_EXPRS = {
     AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT: "LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT",
 }
 
-_VECTOR_MEMORY_CACHE_POLICY_ENCODING_EXPRS = {
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE: "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE",
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC: "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC",
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH: "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH",
-    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1: "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1",
-}
+_VECTOR_MEMORY_CACHE_POLICY_ENCODING_EXPRS = {encoding: f"LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_{_c_ident(encoding)}" for encoding in AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS}
 
 _DESCRIPTOR_SET_INFO_FLAG_EXPRS = (
     (
@@ -176,6 +186,161 @@ def _vector_memory_cache_policy_encoding_expr(kind: str) -> str:
         kind,
         _VECTOR_MEMORY_CACHE_POLICY_ENCODING_EXPRS,
         "vector-memory cache-policy encoding",
+    )
+
+
+def _ordinal_bit_expr(owner: str, values: Sequence[str], vocabulary: Sequence[str]) -> str:
+    if not values:
+        raise ValueError(f"{owner} must have at least one accepted value")
+    missing = tuple(value for value in values if value not in vocabulary)
+    if missing:
+        raise ValueError(f"{owner} references unknown values: {', '.join(missing)}")
+    bits = 0
+    for value in values:
+        ordinal = vocabulary.index(value)
+        if ordinal >= 32:
+            raise ValueError(f"{owner} value '{value}' has ordinal {ordinal}, expected 0..31")
+        bits |= 1 << ordinal
+    return f"UINT32_C(0x{bits:08x})"
+
+
+def _memory_cache_policy_attr_flags_expr(owner: str, attrs: Sequence[str]) -> str:
+    missing = tuple(attr for attr in attrs if attr not in AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTRS)
+    if missing:
+        raise ValueError(f"{owner} references unknown attrs: {', '.join(missing)}")
+    if not attrs:
+        return "0"
+    return " | ".join(_cache_policy_attr_flag_c_name(attr) for attr in attrs)
+
+
+def _validate_memory_cache_policy_encoding_infos(
+    rows: Sequence[AmdgpuVectorMemoryCachePolicyEncodingInfo],
+    descriptor_sets: Sequence[AmdgpuDescriptorSetInfo],
+) -> None:
+    expected_encodings = set(AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS)
+    row_encodings = {row.encoding for row in rows}
+    expected_row_encodings = expected_encodings - {"none"}
+    if row_encodings != expected_row_encodings:
+        missing = sorted(expected_row_encodings - row_encodings)
+        extra = sorted(row_encodings - expected_row_encodings)
+        details: list[str] = []
+        if missing:
+            details.append(f"missing rows for {', '.join(missing)}")
+        if extra:
+            details.append(f"unexpected rows for {', '.join(extra)}")
+        raise ValueError(f"AMDGPU memory cache-policy encoding table must cover every non-none encoding: {'; '.join(details)}")
+
+    selected_keys: set[str] = set()
+    for row in rows:
+        owner = f"AMDGPU memory cache-policy encoding '{row.encoding}'"
+        _vector_memory_cache_policy_encoding_expr(row.encoding)
+        _ordinal_bit_expr(owner, row.cache_scopes, AMDGPU_CACHE_SCOPE_KEYWORDS)
+        _ordinal_bit_expr(owner, row.cache_temporals, AMDGPU_CACHE_TEMPORAL_KEYWORDS)
+        _memory_cache_policy_attr_flags_expr(owner, row.attrs)
+        if row.selected_key in selected_keys:
+            raise ValueError(f"{owner} has duplicate selected key '{row.selected_key}'")
+        selected_keys.add(row.selected_key)
+
+    descriptor_set_encodings = {descriptor_set.vector_memory.cache_policy_encoding for descriptor_set in descriptor_sets}
+    unknown_descriptor_set_encodings = sorted(descriptor_set_encodings - expected_encodings)
+    if unknown_descriptor_set_encodings:
+        raise ValueError(f"AMDGPU descriptor sets reference unknown memory cache-policy encodings: {', '.join(unknown_descriptor_set_encodings)}")
+
+
+def _ordered_memory_cache_policy_encoding_infos(
+    rows: Sequence[AmdgpuVectorMemoryCachePolicyEncodingInfo] = (AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_INFOS),
+    descriptor_sets: Sequence[AmdgpuDescriptorSetInfo] | None = None,
+) -> tuple[AmdgpuVectorMemoryCachePolicyEncodingInfo, ...]:
+    descriptor_sets = sorted_descriptor_set_infos() if descriptor_sets is None else descriptor_sets
+    _validate_memory_cache_policy_encoding_infos(rows, descriptor_sets)
+    return tuple(
+        sorted(
+            rows,
+            key=lambda row: AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS.index(row.encoding),
+        )
+    )
+
+
+def _ordered_memory_cache_policy_temporal_th(
+    rows: Sequence[tuple[str, int]] = AMDGPU_VECTOR_MEMORY_CACHE_POLICY_TEMPORAL_TH,
+) -> tuple[tuple[str, int], ...]:
+    expected_temporals = set(AMDGPU_CACHE_TEMPORAL_KEYWORDS)
+    row_temporals = {keyword for keyword, _ in rows}
+    if row_temporals != expected_temporals:
+        missing = sorted(expected_temporals - row_temporals)
+        extra = sorted(row_temporals - expected_temporals)
+        details: list[str] = []
+        if missing:
+            details.append(f"missing rows for {', '.join(missing)}")
+        if extra:
+            details.append(f"unexpected rows for {', '.join(extra)}")
+        raise ValueError(f"AMDGPU memory cache-policy temporal TH table must cover every cache temporal: {'; '.join(details)}")
+    for keyword, th_value in rows:
+        if th_value < 0 or th_value > 7:
+            raise ValueError(f"AMDGPU memory cache-policy temporal '{keyword}' has TH value {th_value}, expected 0..7")
+    return tuple(sorted(rows, key=lambda row: AMDGPU_CACHE_TEMPORAL_KEYWORDS.index(row[0])))
+
+
+def _memory_cache_policy_fragment_header() -> list[str]:
+    return [
+        "// Copyright 2026 The IREE Authors",
+        "//",
+        "// Licensed under the Apache License v2.0 with LLVM Exceptions.",
+        "// See https://llvm.org/LICENSE.txt for license information.",
+        "// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
+        "",
+        *line_comment_header("//", generator="loom.gen.target.arch.amdgpu.amdgpu_target_info"),
+        "",
+    ]
+
+
+def _memory_cache_policy_encoding_info_initializer(
+    row: AmdgpuVectorMemoryCachePolicyEncodingInfo,
+) -> str:
+    owner = f"AMDGPU memory cache-policy encoding '{row.encoding}'"
+    scope_bits = _ordinal_bit_expr(owner, row.cache_scopes, AMDGPU_CACHE_SCOPE_KEYWORDS)
+    temporal_bits = _ordinal_bit_expr(owner, row.cache_temporals, AMDGPU_CACHE_TEMPORAL_KEYWORDS)
+    attr_flags = _memory_cache_policy_attr_flags_expr(owner, row.attrs)
+    return "\n".join(
+        [
+            "{",
+            f"    .encoding = {_vector_memory_cache_policy_encoding_expr(row.encoding)},",
+            f'    .encoding_key = IREE_SVL("{row.encoding}"),',
+            f'    .selected_key = IREE_SVL("{row.selected_key}"),',
+            f"    .scope_bits = {scope_bits},",
+            f"    .temporal_bits = {temporal_bits},",
+            f"    .attr_flags = {attr_flags},",
+            "},",
+        ]
+    )
+
+
+def _memory_cache_policy_temporal_th_initializer(row: tuple[str, int]) -> str:
+    keyword, th_value = row
+    return f"[{_cache_temporal_c_name(keyword)}] = {th_value},"
+
+
+def _emit_memory_cache_policy_encoding_rows() -> str:
+    return (
+        "\n".join(
+            [
+                *_memory_cache_policy_fragment_header(),
+                *(_memory_cache_policy_encoding_info_initializer(row) for row in _ordered_memory_cache_policy_encoding_infos()),
+            ]
+        )
+        + "\n"
+    )
+
+
+def _emit_memory_cache_policy_temporal_th() -> str:
+    return (
+        "\n".join(
+            [
+                *_memory_cache_policy_fragment_header(),
+                *(_memory_cache_policy_temporal_th_initializer(row) for row in _ordered_memory_cache_policy_temporal_th()),
+            ]
+        )
+        + "\n"
     )
 
 
@@ -658,21 +823,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate AMDGPU target-info C tables from Loom overlay data.")
     parser.add_argument(
         "--header",
-        required=True,
         type=Path,
         help="Generated target-info header path.",
     )
     parser.add_argument(
         "--source",
-        required=True,
         type=Path,
         help="Generated target-info source path.",
     )
     parser.add_argument(
         "--tables-header",
-        required=True,
         type=Path,
         help="Generated target-info private table header path.",
+    )
+    parser.add_argument(
+        "--cache-policy-encoding-rows",
+        type=Path,
+        help="Generated memory cache-policy encoding row fragment path.",
+    )
+    parser.add_argument(
+        "--cache-policy-temporal-th",
+        type=Path,
+        help="Generated memory cache-policy temporal TH fragment path.",
     )
     parser.add_argument(
         "--isa-xml",
@@ -682,12 +854,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    write_target_info_to_paths(
-        header_path=args.header,
-        source_path=args.source,
-        tables_header_path=args.tables_header,
-        isa_xml_arguments=args.isa_xml,
-    )
+    wrote_output = False
+    target_info_paths = (args.header, args.source, args.tables_header)
+    if any(path is not None for path in target_info_paths):
+        if not all(path is not None for path in target_info_paths):
+            parser.error("--header, --source, and --tables-header must be provided together")
+        write_target_info_to_paths(
+            header_path=args.header,
+            source_path=args.source,
+            tables_header_path=args.tables_header,
+            isa_xml_arguments=args.isa_xml,
+        )
+        wrote_output = True
+    if args.cache_policy_encoding_rows is not None:
+        args.cache_policy_encoding_rows.parent.mkdir(parents=True, exist_ok=True)
+        args.cache_policy_encoding_rows.write_text(_emit_memory_cache_policy_encoding_rows(), encoding="utf-8")
+        wrote_output = True
+    if args.cache_policy_temporal_th is not None:
+        args.cache_policy_temporal_th.parent.mkdir(parents=True, exist_ok=True)
+        args.cache_policy_temporal_th.write_text(_emit_memory_cache_policy_temporal_th(), encoding="utf-8")
+        wrote_output = True
+    if not wrote_output:
+        parser.error("at least one output path is required")
     return 0
 
 

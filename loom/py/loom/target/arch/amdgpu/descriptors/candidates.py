@@ -91,6 +91,195 @@ _ATOMIC_CANDIDATE_KIND_ORDER = {
     AmdgpuAtomicKind.NONE: 13,
 }
 
+_B = AmdgpuMemoryDescriptorDomain.BUFFER_RESOURCE
+_GS = AmdgpuMemoryDescriptorDomain.GLOBAL_SADDR
+_L = AmdgpuMemoryDescriptorDomain.LDS
+_GF = AmdgpuMemoryDescriptorDomain.GLOBAL_FLAT
+_SM = AmdgpuMemoryDescriptorDomain.GLOBAL_SMEM
+
+_AD = AmdgpuMemoryAddressForm.DEFAULT
+_BOZ = AmdgpuMemoryAddressForm.BUFFER_OFF_ZERO
+_DS2 = AmdgpuMemoryAddressForm.DS_2ADDR
+_SA = AmdgpuMemoryAddressForm.GLOBAL_SADDR
+_ADT = AmdgpuMemoryAddressForm.DS_ADDTID
+_FL = AmdgpuMemoryAddressForm.FLAT
+_SMEM = AmdgpuMemoryAddressForm.GLOBAL_SMEM
+
+_LD = AmdgpuMemoryOperationKind.LOAD
+_ST = AmdgpuMemoryOperationKind.STORE
+
+_V = AmdgpuMemoryPayloadRegisterClass.VGPR
+_S = AmdgpuMemoryPayloadRegisterClass.SGPR
+
+_G = AmdgpuMemoryPayloadFormat.GENERIC
+_F16 = AmdgpuMemoryPayloadFormat.LOW_16BIT_FLOAT
+_I16 = AmdgpuMemoryPayloadFormat.SIGNED_16BIT_INTEGER
+
+
+def _memory_candidate(
+    domain: AmdgpuMemoryDescriptorDomain,
+    address_form: AmdgpuMemoryAddressForm,
+    operation_kind: AmdgpuMemoryOperationKind,
+    packet_byte_count: int,
+    payload_register_class: AmdgpuMemoryPayloadRegisterClass,
+    payload_format: AmdgpuMemoryPayloadFormat,
+    payload_register_count: int,
+    descriptor_ref_name: str,
+) -> AmdgpuMemoryDescriptorCandidate:
+    return AmdgpuMemoryDescriptorCandidate(
+        domain=domain,
+        address_form=address_form,
+        operation_kind=operation_kind,
+        packet_byte_count=packet_byte_count,
+        payload_register_class=payload_register_class,
+        payload_format=payload_format,
+        payload_register_count=payload_register_count,
+        descriptor_key=f"amdgpu.{descriptor_ref_name.lower()}",
+    )
+
+
+# Columns: domain, address form, operation, packet bytes, payload register class,
+# payload format, payload register count, descriptor ref suffix.
+_MEMORY_DESCRIPTOR_CANDIDATE_ROWS = (
+    (_B, _AD, _LD, 1, _V, _G, 1, "BUFFER_LOAD_I8"),
+    (_B, _AD, _ST, 1, _V, _G, 1, "BUFFER_STORE_B8"),
+    (_B, _AD, _LD, 2, _V, _F16, 1, "BUFFER_LOAD_B16_D16"),
+    (_B, _AD, _LD, 2, _V, _I16, 1, "BUFFER_LOAD_I16"),
+    (_B, _BOZ, _LD, 2, _V, _I16, 1, "BUFFER_LOAD_I16_OFF_ZERO"),
+    (_B, _AD, _LD, 2, _V, _G, 1, "BUFFER_LOAD_U16"),
+    (_B, _BOZ, _LD, 2, _V, _G, 1, "BUFFER_LOAD_U16_OFF_ZERO"),
+    (_B, _AD, _ST, 2, _V, _G, 1, "BUFFER_STORE_B16"),
+    (_B, _AD, _LD, 4, _V, _G, 1, "BUFFER_LOAD_DWORD"),
+    (_B, _BOZ, _LD, 4, _V, _G, 1, "BUFFER_LOAD_DWORD_OFF_ZERO"),
+    (_B, _AD, _LD, 8, _V, _G, 2, "BUFFER_LOAD_B64"),
+    (_B, _BOZ, _LD, 8, _V, _G, 2, "BUFFER_LOAD_B64_OFF_ZERO"),
+    (_B, _AD, _LD, 8, _V, _G, 2, "BUFFER_LOAD_DWORDX2"),
+    (_B, _BOZ, _LD, 8, _V, _G, 2, "BUFFER_LOAD_DWORDX2_OFF_ZERO"),
+    (_B, _AD, _LD, 16, _V, _G, 4, "BUFFER_LOAD_B128"),
+    (_B, _BOZ, _LD, 16, _V, _G, 4, "BUFFER_LOAD_B128_OFF_ZERO"),
+    (_B, _AD, _LD, 16, _V, _G, 4, "BUFFER_LOAD_DWORDX4"),
+    (_B, _BOZ, _LD, 16, _V, _G, 4, "BUFFER_LOAD_DWORDX4_OFF_ZERO"),
+    (_B, _AD, _ST, 4, _V, _G, 1, "BUFFER_STORE_DWORD"),
+    (_B, _BOZ, _ST, 4, _V, _G, 1, "BUFFER_STORE_DWORD_OFF_ZERO"),
+    (_B, _AD, _ST, 8, _V, _G, 2, "BUFFER_STORE_B64"),
+    (_B, _BOZ, _ST, 8, _V, _G, 2, "BUFFER_STORE_B64_OFF_ZERO"),
+    (_B, _AD, _ST, 8, _V, _G, 2, "BUFFER_STORE_DWORDX2"),
+    (_B, _BOZ, _ST, 8, _V, _G, 2, "BUFFER_STORE_DWORDX2_OFF_ZERO"),
+    (_B, _AD, _ST, 16, _V, _G, 4, "BUFFER_STORE_B128"),
+    (_B, _BOZ, _ST, 16, _V, _G, 4, "BUFFER_STORE_B128_OFF_ZERO"),
+    (_B, _AD, _ST, 16, _V, _G, 4, "BUFFER_STORE_DWORDX4"),
+    (_B, _BOZ, _ST, 16, _V, _G, 4, "BUFFER_STORE_DWORDX4_OFF_ZERO"),
+    (_SM, _SMEM, _LD, 4, _S, _G, 1, "S_LOAD_DWORD"),
+    (_SM, _SMEM, _LD, 8, _S, _G, 2, "S_LOAD_DWORDX2"),
+    (_SM, _SMEM, _LD, 16, _S, _G, 4, "S_LOAD_DWORDX4"),
+    (_GS, _SA, _LD, 1, _V, _G, 1, "GLOBAL_LOAD_I8_SADDR"),
+    (_GS, _SA, _ST, 1, _V, _G, 1, "GLOBAL_STORE_B8_SADDR"),
+    (_GS, _SA, _LD, 2, _V, _F16, 1, "GLOBAL_LOAD_B16_D16_SADDR"),
+    (_GS, _SA, _LD, 2, _V, _I16, 1, "GLOBAL_LOAD_I16_SADDR"),
+    (_GS, _SA, _LD, 2, _V, _G, 1, "GLOBAL_LOAD_U16_SADDR"),
+    (_GS, _SA, _ST, 2, _V, _G, 1, "GLOBAL_STORE_B16_SADDR"),
+    (_GS, _SA, _LD, 4, _V, _G, 1, "GLOBAL_LOAD_B32_SADDR"),
+    (_GS, _SA, _LD, 8, _V, _G, 2, "GLOBAL_LOAD_B64_SADDR"),
+    (_GS, _SA, _LD, 16, _V, _G, 4, "GLOBAL_LOAD_B128_SADDR"),
+    (_GS, _SA, _ST, 4, _V, _G, 1, "GLOBAL_STORE_B32_SADDR"),
+    (_GS, _SA, _ST, 8, _V, _G, 2, "GLOBAL_STORE_B64_SADDR"),
+    (_GS, _SA, _ST, 16, _V, _G, 4, "GLOBAL_STORE_B128_SADDR"),
+    (_GF, _FL, _LD, 1, _V, _G, 1, "GLOBAL_LOAD_I8"),
+    (_GF, _FL, _ST, 1, _V, _G, 1, "GLOBAL_STORE_B8"),
+    (_GF, _FL, _LD, 2, _V, _F16, 1, "GLOBAL_LOAD_B16_D16"),
+    (_GF, _FL, _LD, 2, _V, _I16, 1, "GLOBAL_LOAD_I16"),
+    (_GF, _FL, _LD, 2, _V, _G, 1, "GLOBAL_LOAD_U16"),
+    (_GF, _FL, _ST, 2, _V, _G, 1, "GLOBAL_STORE_B16"),
+    (_GF, _FL, _LD, 4, _V, _G, 1, "GLOBAL_LOAD_B32"),
+    (_GF, _FL, _LD, 8, _V, _G, 2, "GLOBAL_LOAD_B64"),
+    (_GF, _FL, _LD, 16, _V, _G, 4, "GLOBAL_LOAD_B128"),
+    (_GF, _FL, _ST, 4, _V, _G, 1, "GLOBAL_STORE_B32"),
+    (_GF, _FL, _ST, 8, _V, _G, 2, "GLOBAL_STORE_B64"),
+    (_GF, _FL, _ST, 16, _V, _G, 4, "GLOBAL_STORE_B128"),
+    (_L, _AD, _LD, 2, _V, _I16, 1, "DS_READ_U16"),
+    (_L, _AD, _LD, 2, _V, _G, 1, "DS_READ_U16"),
+    (_L, _AD, _LD, 4, _V, _G, 1, "DS_READ_B32"),
+    (_L, _AD, _LD, 8, _V, _G, 2, "DS_READ_B64"),
+    (_L, _AD, _LD, 12, _V, _G, 3, "DS_READ_B96"),
+    (_L, _AD, _LD, 16, _V, _G, 4, "DS_READ_B128"),
+    (_L, _AD, _ST, 2, _V, _G, 1, "DS_WRITE_B16"),
+    (_L, _AD, _ST, 4, _V, _G, 1, "DS_WRITE_B32"),
+    (_L, _AD, _ST, 8, _V, _G, 2, "DS_WRITE_B64"),
+    (_L, _AD, _ST, 12, _V, _G, 3, "DS_WRITE_B96"),
+    (_L, _AD, _ST, 16, _V, _G, 4, "DS_WRITE_B128"),
+    (_L, _DS2, _LD, 8, _V, _G, 2, "DS_READ2_B32"),
+    (_L, _DS2, _ST, 8, _V, _G, 2, "DS_WRITE2_B32"),
+    (_L, _DS2, _LD, 8, _V, _G, 2, "DS_READ2ST64_B32"),
+    (_L, _DS2, _ST, 8, _V, _G, 2, "DS_WRITE2ST64_B32"),
+    (_L, _ADT, _LD, 4, _V, _G, 1, "DS_READ_ADDTID_B32"),
+    (_L, _ADT, _ST, 4, _V, _G, 1, "DS_WRITE_ADDTID_B32"),
+)
+
+_MEMORY_DESCRIPTOR_CANDIDATES = tuple(
+    _memory_candidate(*row) for row in _MEMORY_DESCRIPTOR_CANDIDATE_ROWS
+)
+
+
+def _global_to_workgroup_widths(
+    overlay: AmdgpuDescriptorOverlay,
+) -> tuple[int, int] | None:
+    if not overlay.semantic_tag.startswith("memory.global_to_workgroup."):
+        return None
+    global_width_bits: int | None = None
+    workgroup_width_bits: int | None = None
+    for effect in overlay.effects:
+        if effect.kind is EffectKind.READ and effect.memory_space is MemorySpace.GLOBAL:
+            global_width_bits = effect.width_bits
+        elif (
+            effect.kind is EffectKind.WRITE
+            and effect.memory_space is MemorySpace.WORKGROUP
+        ):
+            workgroup_width_bits = effect.width_bits
+    if global_width_bits is None or workgroup_width_bits is None:
+        return None
+    return (global_width_bits, workgroup_width_bits)
+
+
+def _amdgpu_async_gather_candidate_from_overlay(
+    overlay: AmdgpuDescriptorOverlay,
+) -> AmdgpuAsyncGatherDescriptorCandidate | None:
+    if not overlay.descriptor_key.startswith("amdgpu.global_load_lds_"):
+        return None
+    if not overlay.descriptor_key.endswith("_saddr"):
+        return None
+    widths = _global_to_workgroup_widths(overlay)
+    if widths is None:
+        return None
+    global_width_bits, workgroup_width_bits = widths
+    if global_width_bits != workgroup_width_bits:
+        return None
+    if global_width_bits % 8 != 0:
+        raise ValueError(
+            "AMDGPU async gather candidate "
+            f"'{overlay.descriptor_key}' has non-byte global width "
+            f"{global_width_bits}"
+        )
+    return AmdgpuAsyncGatherDescriptorCandidate(
+        packet_byte_count=global_width_bits // 8,
+        descriptor_key=overlay.descriptor_key,
+    )
+
+
+def _record_amdgpu_async_gather_candidate(
+    candidates_by_packet_byte_count: dict[int, AmdgpuAsyncGatherDescriptorCandidate],
+    candidate: AmdgpuAsyncGatherDescriptorCandidate,
+) -> None:
+    existing = candidates_by_packet_byte_count.get(candidate.packet_byte_count)
+    if existing is None:
+        candidates_by_packet_byte_count[candidate.packet_byte_count] = candidate
+        return
+    if existing != candidate:
+        raise ValueError(
+            "AMDGPU async gather descriptor candidate for packet byte count "
+            f"{candidate.packet_byte_count} has conflicting metadata: "
+            f"{existing.descriptor_key}, {candidate.descriptor_key}"
+        )
+
 
 def _atomic_address_form(descriptor_key: str) -> AmdgpuMemoryAddressForm | None:
     for prefix, address_form in _ATOMIC_ADDRESS_FORM:
@@ -212,6 +401,66 @@ def amdgpu_atomic_descriptor_candidates() -> tuple[
     )
 
 
+def amdgpu_async_gather_descriptor_candidates() -> tuple[
+    AmdgpuAsyncGatherDescriptorCandidate, ...
+]:
+    """Returns source-to-low async gather descriptor candidates from metadata."""
+
+    candidates_by_packet_byte_count: dict[
+        int, AmdgpuAsyncGatherDescriptorCandidate
+    ] = {}
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        for overlay in overlays:
+            candidate = _amdgpu_async_gather_candidate_from_overlay(overlay)
+            if candidate is None:
+                continue
+            _record_amdgpu_async_gather_candidate(
+                candidates_by_packet_byte_count, candidate
+            )
+    descriptor_ref_keys = set(amdgpu_descriptor_ref_keys())
+    missing_descriptor_refs = sorted(
+        candidate.descriptor_key
+        for candidate in candidates_by_packet_byte_count.values()
+        if candidate.descriptor_key not in descriptor_ref_keys
+    )
+    if missing_descriptor_refs:
+        raise ValueError(
+            "AMDGPU async gather descriptor candidates require missing "
+            f"descriptor refs: {', '.join(missing_descriptor_refs)}"
+        )
+    return tuple(
+        sorted(
+            candidates_by_packet_byte_count.values(),
+            key=lambda candidate: candidate.packet_byte_count,
+        )
+    )
+
+
+def amdgpu_memory_descriptor_candidates() -> tuple[
+    AmdgpuMemoryDescriptorCandidate, ...
+]:
+    """Returns source-to-low memory descriptor candidates from AMDGPU metadata."""
+
+    descriptor_ref_keys = set(amdgpu_descriptor_ref_keys())
+    missing_descriptor_refs = sorted(
+        candidate.descriptor_key
+        for candidate in _MEMORY_DESCRIPTOR_CANDIDATES
+        if candidate.descriptor_key not in descriptor_ref_keys
+    )
+    if missing_descriptor_refs:
+        raise ValueError(
+            "AMDGPU memory descriptor candidates require missing descriptor "
+            f"refs: {', '.join(missing_descriptor_refs)}"
+        )
+    return _MEMORY_DESCRIPTOR_CANDIDATES
+
+
 __all__ = (
     "_ATOMIC_ADDRESS_FORM",
     "_ATOMIC_CANDIDATE_KIND_ORDER",
@@ -219,9 +468,16 @@ __all__ = (
     "_ATOMIC_CANDIDATE_OPERATION_ORDER",
     "_ATOMIC_KIND",
     "_ATOMIC_MEMORY_SPACE",
+    "_MEMORY_DESCRIPTOR_CANDIDATES",
+    "_amdgpu_async_gather_candidate_from_overlay",
     "_amdgpu_atomic_candidate_from_overlay",
     "_amdgpu_atomic_candidate_sort_key",
     "_atomic_address_form",
+    "_global_to_workgroup_widths",
+    "_memory_candidate",
+    "_record_amdgpu_async_gather_candidate",
     "_record_amdgpu_atomic_candidate",
+    "amdgpu_async_gather_descriptor_candidates",
     "amdgpu_atomic_descriptor_candidates",
+    "amdgpu_memory_descriptor_candidates",
 )

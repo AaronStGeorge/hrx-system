@@ -1080,5 +1080,6 @@ X86_SCALAR_CONTRACT_DIALECT_OPS = {
 X86_SCALAR_CONTRACT_FRAGMENT = ContractFragment(
     name="x86.scalar",
     descriptor_set=X86_SCALAR_DESCRIPTOR_SET,
+    public_header="loom/target/arch/x86/contracts/scalar.h",
     cases=x86_scalar_core_cases(_descriptor),
 )

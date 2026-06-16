@@ -132,10 +132,45 @@ _VEC_F32 = Vector(
     minimum_lanes=1,
     maximum_lanes="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
 )
+_VEC_I32_STATIC = Vector(
+    "i32",
+    minimum_static_elements=1,
+    maximum_static_elements="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
+)
+_VEC_F32_STATIC = Vector(
+    "f32",
+    minimum_static_elements=1,
+    maximum_static_elements="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
+)
+_VEC_I64_STATIC = Vector(
+    "i64",
+    minimum_static_elements=1,
+    maximum_static_elements="(LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES / 2u)",
+)
+_VEC_F64_STATIC = Vector(
+    "f64",
+    minimum_static_elements=1,
+    maximum_static_elements="(LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES / 2u)",
+)
+_VEC_F16_PACKED_STORAGE = Vector(
+    "f16",
+    minimum_lanes=1,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES",
+)
 _VEC_F16_PACKED = Vector(
     "f16",
     minimum_lanes=2,
     maximum_lanes="LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES",
+)
+_VEC_BF16_PACKED_STORAGE = Vector(
+    "bf16",
+    minimum_lanes=1,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES",
+)
+_VEC_I16_PACKED_STORAGE = Vector(
+    "i16",
+    minimum_lanes=1,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I16_LANES",
 )
 _VEC_I16_PACKED = Vector(
     "i16",
@@ -181,10 +216,25 @@ _VEC_F32_DIAGNOSTIC = GuardDiagnostic(
     subject_name="vector<f32>",
     constraint_key="amdgpu.arithmetic.vector_f32",
 )
+_VEC_I64_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="vector<i64>",
+    constraint_key="amdgpu.arithmetic.vector_i64",
+)
+_VEC_F64_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="vector<f64>",
+    constraint_key="amdgpu.arithmetic.vector_f64",
+)
 _VEC_F16_PACKED_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
     subject_name="vector<f16>",
     constraint_key="amdgpu.arithmetic.vector_f16_packed",
+)
+_VEC_BF16_PACKED_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="vector<bf16>",
+    constraint_key="amdgpu.arithmetic.vector_bf16_packed",
 )
 _VEC_I16_PACKED_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
@@ -316,25 +366,30 @@ _BITFIELD_WIDTH_DIAGNOSTIC = GuardDiagnostic(
     subject_name="i32",
     constraint_key="amdgpu.bitfield.width_i32",
 )
-_BITSTREAM_WIDTH_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-width",
+_PACKED_INTEGER_WIDTH_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="field-width",
     subject_name="i32",
-    constraint_key="amdgpu.bitstream.width_i32",
+    constraint_key="amdgpu.packed_integer.width_i32",
 )
-_BITSTREAM_BITPACK_STORAGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-storage",
+_PACKED_INTEGER_PAYLOAD_FROM_LANES_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="packed-integer-storage",
     subject_name="vector.bitpack",
-    constraint_key="amdgpu.bitstream.bitpack_i32_to_i8",
+    constraint_key="amdgpu.packed_integer.payload_from_lanes",
 )
-_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-storage",
+_PACKED_INTEGER_LANES_FROM_PAYLOAD_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="packed-integer-storage",
     subject_name="vector.bitunpack",
-    constraint_key="amdgpu.bitstream.bitunpack_i32_lanes",
+    constraint_key="amdgpu.packed_integer.lanes_from_payload",
 )
-_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC = GuardDiagnostic(
-    subject_role="bitstream-storage",
-    subject_name="vector.bitunpack",
-    constraint_key="amdgpu.bitstream.bitunpack_i8_lanes",
+_VECTOR_EXTRACT_SHAPE_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="shape",
+    subject_name="vector.extract",
+    constraint_key="amdgpu.arithmetic.vector_extract_shape",
+)
+_VECTOR_BF16_CONVERSION_SHAPE_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="shape",
+    subject_name="vector.bf16_conversion",
+    constraint_key="amdgpu.arithmetic.vector_bf16_conversion_shape",
 )
 
 
@@ -343,13 +398,19 @@ def _descriptor(key: str) -> Descriptor:
 
 
 def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
-    if type_pattern == _VEC_I32:
+    if type_pattern in (_VEC_I32, _VEC_I32_STATIC):
         return _VEC_I32_DIAGNOSTIC
-    if type_pattern == _VEC_F32:
+    if type_pattern in (_VEC_F32, _VEC_F32_STATIC):
         return _VEC_F32_DIAGNOSTIC
-    if type_pattern == _VEC_F16_PACKED:
+    if type_pattern == _VEC_I64_STATIC:
+        return _VEC_I64_DIAGNOSTIC
+    if type_pattern == _VEC_F64_STATIC:
+        return _VEC_F64_DIAGNOSTIC
+    if type_pattern in (_VEC_F16_PACKED, _VEC_F16_PACKED_STORAGE):
         return _VEC_F16_PACKED_DIAGNOSTIC
-    if type_pattern == _VEC_I16_PACKED:
+    if type_pattern == _VEC_BF16_PACKED_STORAGE:
+        return _VEC_BF16_PACKED_DIAGNOSTIC
+    if type_pattern in (_VEC_I16_PACKED, _VEC_I16_PACKED_STORAGE):
         return _VEC_I16_PACKED_DIAGNOSTIC
     if type_pattern == _VEC_I8_PACKED:
         return _VEC_I8_PACKED_DIAGNOSTIC
@@ -575,12 +636,12 @@ def _bitfield_attr_guards(
     )
 
 
-def _bitstream_width_guard(maximum: int) -> Guard:
+def _packed_integer_width_guard(maximum_width: int) -> Guard:
     return Guard.i64_range(
         "width",
         1,
-        maximum,
-        diagnostic=_BITSTREAM_WIDTH_DIAGNOSTIC,
+        maximum_width,
+        diagnostic=_PACKED_INTEGER_WIDTH_DIAGNOSTIC,
     )
 
 
@@ -590,14 +651,14 @@ def _vector_bitpack_recipe_rule() -> RecipeRule:
         guards=(
             _value_type("source", _VEC_I32),
             _value_type("result", _VEC_I8_PACKED),
-            _bitstream_width_guard(8),
-            Guard.bitpack_storage(
+            _packed_integer_width_guard(8),
+            Guard.value_packed_integer_payload_from_lanes(
                 "source",
                 "result",
                 "width",
-                register_bit_width=32,
-                result_payload_multiple=32,
-                diagnostic=_BITSTREAM_BITPACK_STORAGE_DIAGNOSTIC,
+                storage_unit_bit_count=32,
+                storage_payload_multiple=32,
+                diagnostic=_PACKED_INTEGER_PAYLOAD_FROM_LANES_DIAGNOSTIC,
             ),
         ),
     )
@@ -608,52 +669,123 @@ def _vector_bitunpack_recipe_rule(
     result_type: TypePattern,
     *,
     maximum_width: int,
-    diagnostic: GuardDiagnostic,
 ) -> RecipeRule:
     return RecipeRule(
         source_op=source_op,
         guards=(
-            _value_type("result", result_type),
-            _bitstream_width_guard(maximum_width),
-            Guard.bitunpack_storage(
+            _packed_integer_width_guard(maximum_width),
+            Guard.value_packed_integer_lanes_from_payload(
                 "source",
                 "result",
                 "width",
-                register_bit_width=32,
-                maximum_source_registers=16,
-                maximum_result_lanes=32,
-                diagnostic=diagnostic,
+                storage_unit_bit_count=32,
+                maximum_storage_unit_count=16,
+                maximum_lane_count=32,
+                diagnostic=_PACKED_INTEGER_LANES_FROM_PAYLOAD_DIAGNOSTIC,
             ),
+            _value_type("result", result_type),
         ),
     )
 
 
-def _vector_bitstream_recipe_rules() -> tuple[RecipeRule, ...]:
+def _vector_packed_integer_recipe_rules() -> tuple[RecipeRule, ...]:
     return (
         _vector_bitpack_recipe_rule(),
         _vector_bitunpack_recipe_rule(
             vector.vector_bitunpacku,
             _VEC_I32,
             maximum_width=32,
-            diagnostic=_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC,
         ),
         _vector_bitunpack_recipe_rule(
             vector.vector_bitunpacku,
             _VEC_I8_PACKED,
             maximum_width=8,
-            diagnostic=_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC,
         ),
         _vector_bitunpack_recipe_rule(
             vector.vector_bitunpacks,
             _VEC_I32,
             maximum_width=32,
-            diagnostic=_BITSTREAM_BITUNPACK_I32_STORAGE_DIAGNOSTIC,
         ),
         _vector_bitunpack_recipe_rule(
             vector.vector_bitunpacks,
             _VEC_I8_PACKED,
             maximum_width=8,
-            diagnostic=_BITSTREAM_BITUNPACK_I8_STORAGE_DIAGNOSTIC,
+        ),
+    )
+
+
+def _vector_extract_recipe_rule(
+    source_type: TypePattern,
+    result_type: TypePattern,
+) -> RecipeRule:
+    return RecipeRule(
+        source_op=vector.vector_extract,
+        guards=(
+            _value_type("source", source_type),
+            _value_type("result", result_type),
+            Guard.vector_extract_shape(
+                "source",
+                "result",
+                "static_indices",
+                diagnostic=_VECTOR_EXTRACT_SHAPE_DIAGNOSTIC,
+            ),
+        ),
+    )
+
+
+def _vector_extract_recipe_rules() -> tuple[RecipeRule, ...]:
+    full_width_pairs = (
+        (_VEC_I32_STATIC, _I32),
+        (_VEC_F32_STATIC, _F32),
+        (_VEC_I64_STATIC, _I64),
+        (_VEC_F64_STATIC, _F64),
+        (_VEC_I32_STATIC, _VEC_I32_STATIC),
+        (_VEC_F32_STATIC, _VEC_F32_STATIC),
+        (_VEC_I64_STATIC, _VEC_I64_STATIC),
+        (_VEC_F64_STATIC, _VEC_F64_STATIC),
+    )
+    packed_scalar_pairs = (
+        (_VEC_F16_PACKED_STORAGE, _F16),
+        (_VEC_BF16_PACKED_STORAGE, _BF16),
+        (_VEC_I16_PACKED_STORAGE, _I16),
+        (_VEC_I8_PACKED, _I8),
+    )
+    return tuple(
+        _vector_extract_recipe_rule(source_type, result_type)
+        for source_type, result_type in (*full_width_pairs, *packed_scalar_pairs)
+    )
+
+
+def _vector_bf16_conversion_recipe_rule(
+    source_op: Op,
+    input_type: TypePattern,
+    result_type: TypePattern,
+) -> RecipeRule:
+    return RecipeRule(
+        source_op=source_op,
+        guards=(
+            _value_type("input", input_type),
+            _value_type("result", result_type),
+            Guard.value_static_element_count_eq(
+                "input",
+                "result",
+                diagnostic=_VECTOR_BF16_CONVERSION_SHAPE_DIAGNOSTIC,
+            ),
+        ),
+    )
+
+
+def _vector_bf16_conversion_recipe_rules() -> tuple[RecipeRule, ...]:
+    return (
+        _vector_bf16_conversion_recipe_rule(
+            vector.vector_extf,
+            _VEC_BF16_PACKED_STORAGE,
+            _VEC_F32_STATIC,
+        ),
+        _vector_bf16_conversion_recipe_rule(
+            vector.vector_fptrunc,
+            _VEC_F32_STATIC,
+            _VEC_BF16_PACKED_STORAGE,
         ),
     )
 
@@ -2441,6 +2573,8 @@ def _rules() -> tuple[ContractCase, ...]:
             _packed_f32_vector_fma_rule(),
             *_packed_f16_vector_fma_rules(),
             *_packed_i16_vector_fmai_rules(),
+            *_vector_extract_recipe_rules(),
+            *_vector_bf16_conversion_recipe_rules(),
             *_f32_fma_rules(vector.vector_fmaf, _VEC_F32),
             _unary_rule(vector.vector_exp2f, _VEC_F32, "amdgpu.v_exp_f32"),
             _unary_rule(vector.vector_log2f, _VEC_F32, "amdgpu.v_log_f32"),
@@ -2525,7 +2659,7 @@ def _rules() -> tuple[ContractCase, ...]:
             )
         )
     rules.extend(_vector_bitfield_rules())
-    rules.extend(_vector_bitstream_recipe_rules())
+    rules.extend(_vector_packed_integer_recipe_rules())
     for source_op, descriptor_key in (
         (scalar_arithmetic.scalar_addf, "amdgpu.v_add_f32.lit"),
         (scalar_arithmetic.scalar_mulf, "amdgpu.v_mul_f32.lit"),
@@ -2831,6 +2965,7 @@ AMDGPU_ARITHMETIC_CONTRACT_DIALECT_OPS = {
 AMDGPU_ARITHMETIC_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.arithmetic",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/arithmetic.h",
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     materializers=(ADDRESS_VGPR_MATERIALIZER, F32_VGPR_MATERIALIZER),
     cases=_rules(),

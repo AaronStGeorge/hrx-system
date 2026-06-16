@@ -412,7 +412,7 @@ typedef struct loom_low_schedule_resource_use_t {
 
 // Descriptor effect row recorded in scheduled order. Effects describe memory,
 // counter, call, barrier, and control visibility used by dependency
-// construction and target-owned policies such as AMDGPU waitcnt planning.
+// construction and target-owned visibility planning.
 typedef struct loom_low_schedule_effect_use_t {
   // Scheduled node carrying the effect row.
   uint32_t node_index;

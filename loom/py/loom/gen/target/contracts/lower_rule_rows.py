@@ -55,9 +55,10 @@ _GUARD_VALUE_REF_KINDS = frozenset(
         GuardKind.VALUE_I64_RANGE_GE,
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
         GuardKind.VALUE_NO_USES,
-        GuardKind.BITPACK_STORAGE,
-        GuardKind.BITUNPACK_STORAGE,
+        GuardKind.VECTOR_EXTRACT_SHAPE,
     )
 )
 
@@ -66,8 +67,9 @@ _GUARD_OTHER_VALUE_REF_KINDS = frozenset(
         GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
         GuardKind.VALUE_I64_RANGE_LE,
         GuardKind.VALUE_I64_RANGE_GE,
-        GuardKind.BITPACK_STORAGE,
-        GuardKind.BITUNPACK_STORAGE,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+        GuardKind.VECTOR_EXTRACT_SHAPE,
     )
 )
 
@@ -328,8 +330,9 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.I64_ARRAY_COUNT,
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
-        GuardKind.BITPACK_STORAGE,
-        GuardKind.BITUNPACK_STORAGE,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+        GuardKind.VECTOR_EXTRACT_SHAPE,
     ):
         _append_field(fields, "attr_index", row.attr_index, always=True)
 
@@ -356,8 +359,8 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.INSTANCE_FLAGS_HAS_ALL,
-        GuardKind.BITPACK_STORAGE,
-        GuardKind.BITUNPACK_STORAGE,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
     ):
         _append_field(fields, "u64", lower_rule_spelling.u64_c_literal(row.u64), always=True)
     if row.kind == GuardKind.VALUE_STORAGE_ELEMENT_FORMAT:
@@ -378,10 +381,17 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.I64_ARRAY_ELEMENT_RANGE,
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
         GuardKind.VALUE_I64_RANGE,
-        GuardKind.BITPACK_STORAGE,
-        GuardKind.BITUNPACK_STORAGE,
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
     ):
         _append_field(fields, "minimum_i64", row.minimum_i64, always=True)
+    if row.kind in (
+        GuardKind.I64_RANGE,
+        GuardKind.I64_ARRAY_ELEMENT_RANGE,
+        GuardKind.I64_ARRAY_ELEMENTS_RANGE,
+        GuardKind.VALUE_I64_RANGE,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+    ):
         _append_field(fields, "maximum_i64", row.maximum_i64, always=True)
     return fields
 
@@ -696,8 +706,8 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
         f".element_type_mask = {lower_rule_spelling.scalar_type_mask_c_expr(type_pattern.elements)}",
     ]
     if type_pattern.kind == "vector":
-        row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
         if type_pattern.dims:
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
             row.extend(
                 [
                     f".rank = {len(type_pattern.dims)}",
@@ -710,15 +720,23 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
                 row.append(f".static_dim1 = {lower_rule_spelling.c_expression(type_pattern.dims[1])}")
         elif type_pattern.lanes is not None:
             row.append(".rank = 1")
-            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
             row.append(f".static_dim0 = {lower_rule_spelling.c_expression(type_pattern.lanes)}")
         elif type_pattern.minimum_lanes is not None and type_pattern.maximum_lanes is not None:
             row.append(".rank = 1")
-            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE"
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE"
             row.extend(
                 [
                     f".static_dim0_min = {lower_rule_spelling.c_expression(type_pattern.minimum_lanes)}",
                     f".static_dim0_max = {lower_rule_spelling.c_expression(type_pattern.maximum_lanes)}",
+                ]
+            )
+        elif type_pattern.minimum_static_elements is not None and type_pattern.maximum_static_elements is not None:
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_ELEMENT_COUNT_RANGE"
+            row.extend(
+                [
+                    f".static_element_count_min = {lower_rule_spelling.c_expression(type_pattern.minimum_static_elements)}",
+                    f".static_element_count_max = {lower_rule_spelling.c_expression(type_pattern.maximum_static_elements)}",
                 ]
             )
         else:

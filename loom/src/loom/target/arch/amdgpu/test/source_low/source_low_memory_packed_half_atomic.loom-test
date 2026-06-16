@@ -19,8 +19,8 @@ kernel.def target(@target) @lds_packed_f16_atomic_add() {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_packed_f16_atomic_add(%value: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
-  %15 = storage {byte_alignment = 4, byte_length = 64} : low.storage<workgroup>
-  %scratch_view = storage_address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %14 = storage {byte_alignment = 4, byte_length = 64} : low.storage<workgroup>
+  %scratch_view = storage_address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   ds_pk_add_f16 %scratch_view, %value
   %old = ds_pk_add_rtn_f16 %scratch_view, %value
   return
@@ -47,8 +47,8 @@ kernel.def target(@target) @lds_packed_f16_atomic_add_from_elements_offsets() {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_packed_f16_atomic_add_from_elements_offsets(%value: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
-  %12 = storage {byte_alignment = 4, byte_length = 64} : low.storage<workgroup>
-  %scratch_view = storage_address %12 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %11 = storage {byte_alignment = 4, byte_length = 64} : low.storage<workgroup>
+  %scratch_view = storage_address %11 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   ds_pk_add_f16 %scratch_view, %value
   %old = ds_pk_add_rtn_f16 %scratch_view, %value
   return
@@ -75,8 +75,8 @@ kernel.def target(@target) @lds_packed_bf16_atomic_add() {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_packed_bf16_atomic_add(%value: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
-  %15 = storage {byte_alignment = 4, byte_length = 64} : low.storage<workgroup>
-  %scratch_view = storage_address %15 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %14 = storage {byte_alignment = 4, byte_length = 64} : low.storage<workgroup>
+  %scratch_view = storage_address %14 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   ds_pk_add_bf16 %scratch_view, %value
   %old = ds_pk_add_rtn_bf16 %scratch_view, %value
   return

@@ -7,6 +7,7 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
+    "loom_generated_textual_header",
 )
 
 package(
@@ -28,6 +29,10 @@ _AMDGPU_LOWER_TABLE_VISIBILITY = (
     _AMDGPU_ROOT_VISIBILITY +
     _AMDGPU_CONTRACT_VISIBILITY
 )
+
+_AMDGPU_MEMORY_CANDIDATE_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:memory_candidates"
+
+_AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu:target_info"
 
 loom_cc_library(
     name = "kinds",
@@ -51,6 +56,34 @@ exports_files(
         "registry_tables.inl",
     ],
     visibility = ["//loom/py/loom/target/arch/amdgpu/contracts:__pkg__"],
+)
+
+loom_generated_textual_header(
+    name = "memory_descriptor_candidate_ranges_gen",
+    generator = _AMDGPU_MEMORY_CANDIDATE_GENERATOR,
+    output = "memory_descriptor_candidate_ranges.inl",
+    output_flag = "--candidate-ranges",
+)
+
+loom_generated_textual_header(
+    name = "memory_descriptor_candidates_gen",
+    generator = _AMDGPU_MEMORY_CANDIDATE_GENERATOR,
+    output = "memory_descriptor_candidates.inl",
+    output_flag = "--candidate-rows",
+)
+
+loom_generated_textual_header(
+    name = "memory_cache_policy_encoding_rows_gen",
+    generator = _AMDGPU_TARGET_INFO_GENERATOR,
+    output = "memory_cache_policy_encoding_rows.inl",
+    output_flag = "--cache-policy-encoding-rows",
+)
+
+loom_generated_textual_header(
+    name = "memory_cache_policy_temporal_th_gen",
+    generator = _AMDGPU_TARGET_INFO_GENERATOR,
+    output = "memory_cache_policy_temporal_th.inl",
+    output_flag = "--cache-policy-temporal-th",
 )
 
 loom_cc_library(
@@ -120,6 +153,10 @@ loom_cc_library(
         "workgroup.h",
     ],
     textual_hdrs = [
+        ":memory_cache_policy_encoding_rows.inl",
+        ":memory_cache_policy_temporal_th.inl",
+        ":memory_descriptor_candidate_ranges.inl",
+        ":memory_descriptor_candidates.inl",
         "registry_tables.inl",
     ],
     visibility = _AMDGPU_ROOT_VISIBILITY,
@@ -156,6 +193,8 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//loom/src/loom/target/arch/amdgpu/contracts",
         "//loom/src/loom/target/arch/amdgpu/hal:kernel_abi",
+        "//loom/src/loom/target/arch/amdgpu/lower/candidates:arithmetic_candidates",
+        "//loom/src/loom/target/arch/amdgpu/lower/candidates:async_gather_candidates",
         "//loom/src/loom/target/arch/amdgpu/lower/candidates:atomic_candidates",
         "//loom/src/loom/target/arch/amdgpu/lower/candidates:compare_candidates",
         "//loom/src/loom/target/arch/amdgpu/matrix:contract",

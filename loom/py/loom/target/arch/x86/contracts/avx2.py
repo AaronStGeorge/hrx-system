@@ -617,5 +617,6 @@ X86_AVX2_CONTRACT_DIALECT_OPS = {
 X86_AVX2_CONTRACT_FRAGMENT = ContractFragment(
     name="x86.avx2",
     descriptor_set=X86_AVX2_DESCRIPTOR_SET,
+    public_header="loom/target/arch/x86/contracts/avx2.h",
     cases=x86_avx2_core_cases(_descriptor),
 )

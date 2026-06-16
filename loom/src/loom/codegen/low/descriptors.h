@@ -767,8 +767,8 @@ typedef enum loom_low_native_asm_value_kind_e {
   LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_I64 = 4,
   // Descriptor-local immediate printed as zero-padded unsigned hex.
   LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX = 5,
-  // Descriptor-local immediate printed as AMDGPU s_delay_alu operands.
-  LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE = 6,
+  // Descriptor-local immediate printed by a target-owned native format.
+  LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_TARGET_FORMAT = 6,
 } loom_low_native_asm_value_kind_t;
 
 typedef struct loom_low_native_asm_value_t {
@@ -778,6 +778,8 @@ typedef struct loom_low_native_asm_value_t {
   uint16_t index;
   // Immediate bit width for width-sensitive native spellings.
   uint8_t bit_width;
+  // Target-owned format ID for IMMEDIATE_TARGET_FORMAT values.
+  uint8_t target_format_id;
   // String-table offset for literal native assembly tokens.
   loom_bstring_table_offset_t literal_string_offset;
 } loom_low_native_asm_value_t;

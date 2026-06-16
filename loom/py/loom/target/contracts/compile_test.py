@@ -168,11 +168,11 @@ def test_compile_contract_fragment_records_recipe_cases() -> None:
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
             RecipeRule(
-                source_op=vector.vector_bitpack,
+                source_op=vector.vector_addi,
                 guards=(
-                    Guard.value_type("source", Vector("i32", lanes=4)),
-                    Guard.value_type("result", Vector("i8", lanes=4)),
-                    Guard.i64_range("width", 8, 8),
+                    Guard.value_type("lhs", Vector("i32", lanes=4)),
+                    Guard.value_type("rhs", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
                 ),
             ),
         ],
@@ -185,11 +185,11 @@ def test_compile_contract_fragment_records_recipe_cases() -> None:
         lower_rule_indices={0: 11},
     )
 
-    bitpack_entry = compiled.dialects[0].op_entries[
-        ALL_VECTOR_OPS.index(vector.vector_bitpack)
+    addi_entry = compiled.dialects[0].op_entries[
+        ALL_VECTOR_OPS.index(vector.vector_addi)
     ]
-    assert bitpack_entry.case_start == 0
-    assert bitpack_entry.case_count == 1
+    assert addi_entry.case_start == 0
+    assert addi_entry.case_count == 1
     assert compiled.cases[0].system == ContractSystem.RECIPE_RULE
     assert compiled.cases[0].row_index == 11
 

@@ -38,6 +38,7 @@ from loom.target.contracts import (
     LowerSourceMemory,
     LowerTypePattern,
     LowerValueRef,
+    RecipeRule,
     Scalar,
     SourceMemoryConstraint,
     SourceMemoryDynamicIndexSource,
@@ -54,6 +55,8 @@ from loom.target.test.descriptors import (
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
 )
+
+_TEST_PUBLIC_HEADER = "loom/target/test/contracts/generated.h"
 
 
 def _expect_value_error(callable_obj: Callable[[], object], message: str) -> None:
@@ -97,6 +100,7 @@ def _c_shape_contract() -> ContractFragment:
     return ContractFragment(
         name="test.low.generated_c_shape",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
     )
 
 
@@ -321,6 +325,7 @@ def test_generate_lower_rule_set_emits_value_ref_for_f64_equals_guard() -> None:
     table = ContractFragment(
         name="test.low.f64_equals",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=scalar_arithmetic.scalar_mulf,
@@ -358,6 +363,7 @@ def test_generate_lower_rule_set_emits_storage_element_format_guard() -> None:
     table = ContractFragment(
         name="test.low.storage_schema",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=vector.vector_fragment_load,
@@ -392,11 +398,87 @@ def test_generate_lower_rule_set_emits_storage_element_format_guard() -> None:
     assert ".u64 = LOOM_VALUE_FACT_NUMERIC_FORMAT_U8," in guard_text
 
 
+def test_generate_lower_rule_set_emits_packed_integer_storage_guard() -> None:
+    table = ContractFragment(
+        name="test.low.packed_integer_storage",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitunpacku,
+                guards=(
+                    Guard.value_packed_integer_lanes_from_payload(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        maximum_storage_unit_count=16,
+                        maximum_lane_count=32,
+                    ),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    guard_start = generated.source.index("LOOM_LOW_LOWER_GUARD_VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD")
+    guard_end = generated.source.index("},", guard_start)
+    guard_text = generated.source[guard_start:guard_end]
+    assert ".value_ref_index = 0," in guard_text
+    assert ".other_value_ref_index = 1," in guard_text
+    assert ".attr_index = 0," in guard_text
+    assert ".u64 = UINT64_C(16)," in guard_text
+    assert ".minimum_i64 = 32," in guard_text
+    assert ".maximum_i64 = 32," in guard_text
+
+
+def test_generate_lower_rule_set_emits_static_element_count_type_pattern() -> None:
+    table = ContractFragment(
+        name="test.low.vector_extract_shape",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_extract,
+                guards=(
+                    Guard.value_type(
+                        "source",
+                        Vector(
+                            "f32",
+                            minimum_static_elements=1,
+                            maximum_static_elements=8,
+                        ),
+                    ),
+                    Guard.value_type("result", Scalar("f32")),
+                    Guard.vector_extract_shape("source", "result", "static_indices"),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    type_pattern_start = generated.source.index("LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_ELEMENT_COUNT_RANGE")
+    type_pattern_end = generated.source.index("},", type_pattern_start)
+    type_pattern_text = generated.source[type_pattern_start:type_pattern_end]
+    assert ".static_element_count_min = 1," in type_pattern_text
+    assert ".static_element_count_max = 8," in type_pattern_text
+
+    guard_start = generated.source.index("LOOM_LOW_LOWER_GUARD_VECTOR_EXTRACT_SHAPE")
+    guard_end = generated.source.index("},", guard_start)
+    guard_text = generated.source[guard_start:guard_end]
+    assert ".value_ref_index = 0," in guard_text
+    assert ".other_value_ref_index = 1," in guard_text
+    assert ".attr_index = 0," in guard_text
+
+
 def test_generate_lower_rule_set_emits_source_instance_flags_projection() -> None:
     descriptor, descriptor_set = _add_f32_flags_descriptor_set()
     table = ContractFragment(
         name="test.low.flags",
         descriptor_set=descriptor_set,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=scalar_arithmetic.scalar_divf,
@@ -431,6 +513,7 @@ def test_generate_lower_rule_set_emits_balanced_accumulator_flag() -> None:
     table = ContractFragment(
         name="test.low.accumulate_tree",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=vector.vector_reduce,
@@ -469,6 +552,7 @@ def test_generate_lower_rule_set_emits_balanced_operand_seed() -> None:
     table = ContractFragment(
         name="test.low.accumulate_operand_tree",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=vector.vector_reduce,
@@ -506,6 +590,7 @@ def test_generate_lower_rule_set_emits_divisor_magic_projection() -> None:
     table = ContractFragment(
         name="test.low.divisor_magic",
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
         cases=[
             DescriptorRule(
                 source_op=scalar_arithmetic.scalar_addi,

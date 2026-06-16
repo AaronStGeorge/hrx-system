@@ -71,6 +71,15 @@ func.def @i8_scalar_mask_select(%lhs: i32, %rhs: i32, %true_value: vector<4xi8>,
 
 // ====
 
+func.def @i8_repeated_element_scalar_mask_select(%lhs: i32, %rhs: i32, %true_value: vector<4xi8>, %false_value: vector<4xi8>) -> (vector<4xi8>) {
+  %condition = scalar.cmpi slt, %lhs, %rhs : i32
+  %mask = vector.from_elements %condition, %condition, %condition, %condition : vector<4xi1>
+  %selected = vector.select %mask, %true_value, %false_value : vector<4xi8>
+  func.return %selected : vector<4xi8>
+}
+
+// ====
+
 func.def @i16_scalar_mask_select(%lhs: i32, %rhs: i32, %true_value: vector<2xi16>, %false_value: vector<2xi16>) -> (vector<2xi16>) {
   %condition = scalar.cmpi slt, %lhs, %rhs : i32
   %mask = vector.splat %condition : vector<2xi1>

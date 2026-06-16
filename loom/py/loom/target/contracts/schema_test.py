@@ -24,6 +24,7 @@ from loom.target.contracts import (
     ValueElideRule,
     ValueRef,
     Vector,
+    contract_fragment_public_header,
     descriptor_by_semantic_tag,
 )
 from loom.target.test.descriptors import (
@@ -36,6 +37,44 @@ from loom.target.test.descriptors import (
     TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
     TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR,
 )
+
+
+def test_contract_fragment_uses_explicit_public_header() -> None:
+    table = ContractFragment(
+        name="test-low.binary",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header="loom/target/test/contracts/binary.h",
+    )
+
+    assert (
+        contract_fragment_public_header(table) == "loom/target/test/contracts/binary.h"
+    )
+
+
+def test_contract_fragment_requires_explicit_public_header() -> None:
+    table = ContractFragment(
+        name="test-low.binary",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"contract fragment 'test-low\.binary' requires public_header",
+    ):
+        contract_fragment_public_header(table)
+
+
+def test_vector_lane_range_requires_ordered_bounds() -> None:
+    with pytest.raises(ValueError, match="vector lane range minimum exceeds maximum"):
+        Vector("i32", minimum_lanes=8, maximum_lanes=4)
+
+
+def test_vector_static_element_range_requires_ordered_bounds() -> None:
+    with pytest.raises(
+        ValueError,
+        match="vector static element range minimum exceeds maximum",
+    ):
+        Vector("i32", minimum_static_elements=8, maximum_static_elements=4)
 
 
 def test_alias_rule_validates_source_and_result() -> None:
@@ -91,68 +130,17 @@ def test_recipe_rule_validates_guards() -> None:
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
             RecipeRule(
-                source_op=vector.vector_bitpack,
+                source_op=vector.vector_addi,
                 guards=(
-                    Guard.value_type("source", Vector("i32", lanes=4)),
-                    Guard.value_type("result", Vector("i8", lanes=4)),
-                    Guard.i64_range("width", 8, 8),
+                    Guard.value_type("lhs", Vector("i32", lanes=4)),
+                    Guard.value_type("rhs", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
                 ),
             )
         ],
     )
 
-    assert table.cases[0].source_op == vector.vector_bitpack
-
-
-def test_recipe_rule_validates_bitstream_storage_guard() -> None:
-    table = ContractFragment(
-        name="test.recipe.bitstream",
-        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-        cases=[
-            RecipeRule(
-                source_op=vector.vector_bitunpacku,
-                guards=(
-                    Guard.bitunpack_storage(
-                        "source",
-                        "result",
-                        "width",
-                        register_bit_width=32,
-                        maximum_source_registers=16,
-                        maximum_result_lanes=32,
-                    ),
-                ),
-            )
-        ],
-    )
-
-    assert table.cases[0].source_op == vector.vector_bitunpacku
-
-
-def test_recipe_rule_rejects_oversized_bitstream_storage_policy() -> None:
-    with pytest.raises(
-        ValueError,
-        match=r"vector.bitunpacku: guard bitunpack_storage maximum result "
-        r"lane count must fit in u32",
-    ):
-        ContractFragment(
-            name="test.recipe.bitstream",
-            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-            cases=[
-                RecipeRule(
-                    source_op=vector.vector_bitunpacku,
-                    guards=(
-                        Guard.bitunpack_storage(
-                            "source",
-                            "result",
-                            "width",
-                            register_bit_width=32,
-                            maximum_source_registers=16,
-                            maximum_result_lanes=0x100000000,
-                        ),
-                    ),
-                )
-            ],
-        )
+    assert table.cases[0].source_op == vector.vector_addi
 
 
 def test_elide_rule_rejects_operands() -> None:
@@ -364,6 +352,31 @@ def test_descriptor_rule_validates_f64_equals_guard() -> None:
     case = table.cases[0]
     assert isinstance(case, DescriptorRule)
     assert case.guards[0].f64_value == 1.0
+
+
+def test_recipe_rule_validates_packed_integer_storage_guard() -> None:
+    table = ContractFragment(
+        name="test-low.packed-integer-storage",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitpack,
+                guards=[
+                    Guard.value_packed_integer_payload_from_lanes(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        storage_payload_multiple=32,
+                    ),
+                ],
+            )
+        ],
+    )
+
+    case = table.cases[0]
+    assert isinstance(case, RecipeRule)
+    assert case.guards[0].attr_field == "width"
 
 
 def test_descriptor_rule_rejects_unknown_instance_flag() -> None:

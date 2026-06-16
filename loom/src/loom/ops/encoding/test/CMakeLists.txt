@@ -9,37 +9,13 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "facts"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/facts.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "roundtrip"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "verify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "facts.loom-test"
+    "roundtrip.loom-test"
+    "verify.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

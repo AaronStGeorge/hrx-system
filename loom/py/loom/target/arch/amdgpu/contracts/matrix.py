@@ -21,6 +21,7 @@ _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
 AMDGPU_MATRIX_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.matrix",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/matrix.h",
     cases=[
         DescriptorMatrixRule(
             source_op=vector.vector_mma,

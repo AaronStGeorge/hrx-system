@@ -632,6 +632,7 @@ AMDGPU_DOT_CONTRACT_DIALECT_OPS = {
 AMDGPU_DOT_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.dot",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/dot.h",
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     cases=(
         _dotf_zero_init_rule(),

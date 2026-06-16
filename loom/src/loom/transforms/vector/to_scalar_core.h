@@ -46,6 +46,8 @@ loom_vector_to_scalar_statistics_if_available(loom_pass_t* pass) {
 
 typedef struct loom_vector_to_scalar_descriptor_t
     loom_vector_to_scalar_descriptor_t;
+typedef struct loom_vector_to_scalar_lane_cache_entry_t
+    loom_vector_to_scalar_lane_cache_entry_t;
 
 typedef struct loom_vector_to_scalar_state_t {
   // Current pass instance owning statistics and transient arena state.
@@ -73,6 +75,8 @@ typedef struct loom_vector_to_scalar_state_t {
   loom_vector_to_scalar_flags_t flags;
   // Target-selected matrix fragment layout available to MMA fallback lowering.
   const loom_matrix_fragment_layout_t* matrix_fragment_layout;
+  // Cached static lane materializations owned by the rewriter arena.
+  loom_vector_to_scalar_lane_cache_entry_t* lane_cache;
   // Source location assigned to replacement ops.
   loom_location_id_t location;
 } loom_vector_to_scalar_state_t;

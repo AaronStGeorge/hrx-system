@@ -65,6 +65,19 @@ iree_status_t loom_vector_to_scalar_cast_integer_lane(
     loom_type_t input_type, loom_type_t result_type, bool signed_extend,
     loom_value_id_t* out_result);
 
+typedef enum loom_vector_to_scalar_integer_extension_e {
+  LOOM_VECTOR_TO_SCALAR_INTEGER_EXTENSION_ZERO = 0,
+  LOOM_VECTOR_TO_SCALAR_INTEGER_EXTENSION_SIGN = 1,
+} loom_vector_to_scalar_integer_extension_t;
+
+// Materializes and integer-casts a static linear vector lane, reusing an
+// existing materialization from the current scalarization state when available.
+iree_status_t loom_vector_to_scalar_materialize_cached_static_integer_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
+    loom_type_t vector_type, int64_t ordinal, loom_type_t result_type,
+    loom_vector_to_scalar_integer_extension_t extension,
+    loom_value_id_t* out_lane);
+
 iree_status_t loom_vector_to_scalar_build_scalar_shift(
     loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
     loom_value_id_t input, loom_type_t type, int64_t amount,

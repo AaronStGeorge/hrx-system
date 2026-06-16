@@ -183,5 +183,6 @@ X86_PACKED_DOT_CONTRACT_DIALECT_OPS = {
 X86_PACKED_DOT_CONTRACT_FRAGMENT = ContractFragment(
     name="x86.packed_dot",
     descriptor_set=X86_PACKED_DOT_DESCRIPTOR_SET,
+    public_header="loom/target/arch/x86/contracts/packed_dot.h",
     cases=_packed_dot_rules(),
 )

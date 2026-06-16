@@ -1890,18 +1890,21 @@ func.def @static_bitpack_q4_pair(%codes: vector<2xi8>) -> (vector<1xi8>) {
 
 // ----
 func.def @static_bitpack_q4_pair(%codes: vector<2xi8>) -> (vector<1xi8>) {
-  %3 = scalar.constant 0 : i8
+  %3 = scalar.constant 0 : i32
   %4 = vector.extract %codes[0] : vector<2xi8> -> i8
-  %5 = scalar.constant 15 : i8
-  %6 = scalar.andi %4, %5 : i8
-  %7 = scalar.ori %3, %6 : i8
-  %8 = vector.extract %codes[1] : vector<2xi8> -> i8
-  %9 = scalar.constant 15 : i8
-  %10 = scalar.andi %8, %9 : i8
-  %11 = scalar.constant 4 : i8
-  %12 = scalar.shli %10, %11 : i8
-  %13 = scalar.ori %7, %12 : i8
-  %r = vector.from_elements %13 : vector<1xi8>
+  %5 = scalar.extui %4 : i8 to i32
+  %6 = scalar.constant 15 : i32
+  %7 = scalar.andi %5, %6 : i32
+  %8 = scalar.ori %3, %7 : i32
+  %9 = vector.extract %codes[1] : vector<2xi8> -> i8
+  %10 = scalar.extui %9 : i8 to i32
+  %11 = scalar.constant 15 : i32
+  %12 = scalar.andi %10, %11 : i32
+  %13 = scalar.constant 4 : i32
+  %14 = scalar.shli %12, %13 : i32
+  %15 = scalar.ori %8, %14 : i32
+  %16 = scalar.trunci %15 : i32 to i8
+  %r = vector.from_elements %16 : vector<1xi8>
   func.return %r : vector<1xi8>
 }
 
@@ -1915,19 +1918,21 @@ func.def @static_bitunpacku_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
 
 // ----
 func.def @static_bitunpacku_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
-  %3 = scalar.constant 0 : i8
+  %3 = scalar.constant 0 : i32
   %4 = vector.extract %packed[0] : vector<1xi8> -> i8
-  %5 = scalar.constant 15 : i8
-  %6 = scalar.andi %4, %5 : i8
-  %7 = scalar.ori %3, %6 : i8
-  %8 = scalar.constant 0 : i8
-  %9 = vector.extract %packed[0] : vector<1xi8> -> i8
-  %10 = scalar.constant 4 : i8
-  %11 = scalar.shrui %9, %10 : i8
-  %12 = scalar.constant 15 : i8
-  %13 = scalar.andi %11, %12 : i8
-  %14 = scalar.ori %8, %13 : i8
-  %r = vector.from_elements %7, %14 : vector<2xi8>
+  %5 = scalar.extui %4 : i8 to i32
+  %6 = scalar.constant 15 : i32
+  %7 = scalar.andi %5, %6 : i32
+  %8 = scalar.ori %3, %7 : i32
+  %9 = scalar.trunci %8 : i32 to i8
+  %10 = scalar.constant 0 : i32
+  %11 = scalar.constant 4 : i32
+  %12 = scalar.shrui %5, %11 : i32
+  %13 = scalar.constant 15 : i32
+  %14 = scalar.andi %12, %13 : i32
+  %15 = scalar.ori %10, %14 : i32
+  %16 = scalar.trunci %15 : i32 to i8
+  %r = vector.from_elements %9, %16 : vector<2xi8>
   func.return %r : vector<2xi8>
 }
 
@@ -1941,27 +1946,29 @@ func.def @static_bitunpacks_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
 
 // ----
 func.def @static_bitunpacks_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
-  %3 = scalar.constant 0 : i8
+  %3 = scalar.constant 0 : i32
   %4 = vector.extract %packed[0] : vector<1xi8> -> i8
-  %5 = scalar.constant 15 : i8
-  %6 = scalar.andi %4, %5 : i8
-  %7 = scalar.ori %3, %6 : i8
-  %8 = scalar.constant 4 : i8
-  %9 = scalar.shli %7, %8 : i8
-  %10 = scalar.constant 4 : i8
-  %11 = scalar.shrsi %9, %10 : i8
-  %12 = scalar.constant 0 : i8
-  %13 = vector.extract %packed[0] : vector<1xi8> -> i8
-  %14 = scalar.constant 4 : i8
-  %15 = scalar.shrui %13, %14 : i8
-  %16 = scalar.constant 15 : i8
-  %17 = scalar.andi %15, %16 : i8
-  %18 = scalar.ori %12, %17 : i8
-  %19 = scalar.constant 4 : i8
-  %20 = scalar.shli %18, %19 : i8
-  %21 = scalar.constant 4 : i8
-  %22 = scalar.shrsi %20, %21 : i8
-  %r = vector.from_elements %11, %22 : vector<2xi8>
+  %5 = scalar.extui %4 : i8 to i32
+  %6 = scalar.constant 15 : i32
+  %7 = scalar.andi %5, %6 : i32
+  %8 = scalar.ori %3, %7 : i32
+  %9 = scalar.constant 28 : i32
+  %10 = scalar.shli %8, %9 : i32
+  %11 = scalar.constant 28 : i32
+  %12 = scalar.shrsi %10, %11 : i32
+  %13 = scalar.trunci %12 : i32 to i8
+  %14 = scalar.constant 0 : i32
+  %15 = scalar.constant 4 : i32
+  %16 = scalar.shrui %5, %15 : i32
+  %17 = scalar.constant 15 : i32
+  %18 = scalar.andi %16, %17 : i32
+  %19 = scalar.ori %14, %18 : i32
+  %20 = scalar.constant 28 : i32
+  %21 = scalar.shli %19, %20 : i32
+  %22 = scalar.constant 28 : i32
+  %23 = scalar.shrsi %21, %22 : i32
+  %24 = scalar.trunci %23 : i32 to i8
+  %r = vector.from_elements %13, %24 : vector<2xi8>
   func.return %r : vector<2xi8>
 }
 
@@ -1976,68 +1983,77 @@ func.def @static_bitpack_q3(%codes: vector<8xi8>) -> (vector<3xi8>) {
 
 // ----
 func.def @static_bitpack_q3(%codes: vector<8xi8>) -> (vector<3xi8>) {
-  %3 = scalar.constant 0 : i8
+  %3 = scalar.constant 0 : i32
   %4 = vector.extract %codes[0] : vector<8xi8> -> i8
-  %5 = scalar.constant 7 : i8
-  %6 = scalar.andi %4, %5 : i8
-  %7 = scalar.ori %3, %6 : i8
-  %8 = vector.extract %codes[1] : vector<8xi8> -> i8
-  %9 = scalar.constant 7 : i8
-  %10 = scalar.andi %8, %9 : i8
-  %11 = scalar.constant 3 : i8
-  %12 = scalar.shli %10, %11 : i8
-  %13 = scalar.ori %7, %12 : i8
-  %14 = vector.extract %codes[2] : vector<8xi8> -> i8
-  %15 = scalar.constant 3 : i8
-  %16 = scalar.andi %14, %15 : i8
-  %17 = scalar.constant 6 : i8
-  %18 = scalar.shli %16, %17 : i8
-  %19 = scalar.ori %13, %18 : i8
-  %20 = scalar.constant 0 : i8
-  %21 = vector.extract %codes[2] : vector<8xi8> -> i8
-  %22 = scalar.constant 2 : i8
-  %23 = scalar.shrui %21, %22 : i8
-  %24 = scalar.constant 1 : i8
-  %25 = scalar.andi %23, %24 : i8
-  %26 = scalar.ori %20, %25 : i8
-  %27 = vector.extract %codes[3] : vector<8xi8> -> i8
-  %28 = scalar.constant 7 : i8
-  %29 = scalar.andi %27, %28 : i8
-  %30 = scalar.constant 1 : i8
-  %31 = scalar.shli %29, %30 : i8
-  %32 = scalar.ori %26, %31 : i8
-  %33 = vector.extract %codes[4] : vector<8xi8> -> i8
-  %34 = scalar.constant 7 : i8
-  %35 = scalar.andi %33, %34 : i8
-  %36 = scalar.constant 4 : i8
-  %37 = scalar.shli %35, %36 : i8
-  %38 = scalar.ori %32, %37 : i8
-  %39 = vector.extract %codes[5] : vector<8xi8> -> i8
-  %40 = scalar.constant 1 : i8
-  %41 = scalar.andi %39, %40 : i8
-  %42 = scalar.constant 7 : i8
-  %43 = scalar.shli %41, %42 : i8
-  %44 = scalar.ori %38, %43 : i8
-  %45 = scalar.constant 0 : i8
-  %46 = vector.extract %codes[5] : vector<8xi8> -> i8
-  %47 = scalar.constant 1 : i8
-  %48 = scalar.shrui %46, %47 : i8
-  %49 = scalar.constant 3 : i8
-  %50 = scalar.andi %48, %49 : i8
-  %51 = scalar.ori %45, %50 : i8
-  %52 = vector.extract %codes[6] : vector<8xi8> -> i8
-  %53 = scalar.constant 7 : i8
-  %54 = scalar.andi %52, %53 : i8
-  %55 = scalar.constant 2 : i8
-  %56 = scalar.shli %54, %55 : i8
-  %57 = scalar.ori %51, %56 : i8
-  %58 = vector.extract %codes[7] : vector<8xi8> -> i8
-  %59 = scalar.constant 7 : i8
-  %60 = scalar.andi %58, %59 : i8
-  %61 = scalar.constant 5 : i8
-  %62 = scalar.shli %60, %61 : i8
-  %63 = scalar.ori %57, %62 : i8
-  %r = vector.from_elements %19, %44, %63 : vector<3xi8>
+  %5 = scalar.extui %4 : i8 to i32
+  %6 = scalar.constant 7 : i32
+  %7 = scalar.andi %5, %6 : i32
+  %8 = scalar.ori %3, %7 : i32
+  %9 = vector.extract %codes[1] : vector<8xi8> -> i8
+  %10 = scalar.extui %9 : i8 to i32
+  %11 = scalar.constant 7 : i32
+  %12 = scalar.andi %10, %11 : i32
+  %13 = scalar.constant 3 : i32
+  %14 = scalar.shli %12, %13 : i32
+  %15 = scalar.ori %8, %14 : i32
+  %16 = vector.extract %codes[2] : vector<8xi8> -> i8
+  %17 = scalar.extui %16 : i8 to i32
+  %18 = scalar.constant 3 : i32
+  %19 = scalar.andi %17, %18 : i32
+  %20 = scalar.constant 6 : i32
+  %21 = scalar.shli %19, %20 : i32
+  %22 = scalar.ori %15, %21 : i32
+  %23 = scalar.trunci %22 : i32 to i8
+  %24 = scalar.constant 0 : i32
+  %25 = scalar.constant 2 : i32
+  %26 = scalar.shrui %17, %25 : i32
+  %27 = scalar.constant 1 : i32
+  %28 = scalar.andi %26, %27 : i32
+  %29 = scalar.ori %24, %28 : i32
+  %30 = vector.extract %codes[3] : vector<8xi8> -> i8
+  %31 = scalar.extui %30 : i8 to i32
+  %32 = scalar.constant 7 : i32
+  %33 = scalar.andi %31, %32 : i32
+  %34 = scalar.constant 1 : i32
+  %35 = scalar.shli %33, %34 : i32
+  %36 = scalar.ori %29, %35 : i32
+  %37 = vector.extract %codes[4] : vector<8xi8> -> i8
+  %38 = scalar.extui %37 : i8 to i32
+  %39 = scalar.constant 7 : i32
+  %40 = scalar.andi %38, %39 : i32
+  %41 = scalar.constant 4 : i32
+  %42 = scalar.shli %40, %41 : i32
+  %43 = scalar.ori %36, %42 : i32
+  %44 = vector.extract %codes[5] : vector<8xi8> -> i8
+  %45 = scalar.extui %44 : i8 to i32
+  %46 = scalar.constant 1 : i32
+  %47 = scalar.andi %45, %46 : i32
+  %48 = scalar.constant 7 : i32
+  %49 = scalar.shli %47, %48 : i32
+  %50 = scalar.ori %43, %49 : i32
+  %51 = scalar.trunci %50 : i32 to i8
+  %52 = scalar.constant 0 : i32
+  %53 = scalar.constant 1 : i32
+  %54 = scalar.shrui %45, %53 : i32
+  %55 = scalar.constant 3 : i32
+  %56 = scalar.andi %54, %55 : i32
+  %57 = scalar.ori %52, %56 : i32
+  %58 = vector.extract %codes[6] : vector<8xi8> -> i8
+  %59 = scalar.extui %58 : i8 to i32
+  %60 = scalar.constant 7 : i32
+  %61 = scalar.andi %59, %60 : i32
+  %62 = scalar.constant 2 : i32
+  %63 = scalar.shli %61, %62 : i32
+  %64 = scalar.ori %57, %63 : i32
+  %65 = vector.extract %codes[7] : vector<8xi8> -> i8
+  %66 = scalar.extui %65 : i8 to i32
+  %67 = scalar.constant 7 : i32
+  %68 = scalar.andi %66, %67 : i32
+  %69 = scalar.constant 5 : i32
+  %70 = scalar.shli %68, %69 : i32
+  %71 = scalar.ori %64, %70 : i32
+  %72 = scalar.trunci %71 : i32 to i8
+  %r = vector.from_elements %23, %51, %72 : vector<3xi8>
   func.return %r : vector<3xi8>
 }
 
@@ -2052,105 +2068,109 @@ func.def @static_bitunpacks_q3(%packed: vector<3xi8>) -> (vector<8xi8>) {
 
 // ----
 func.def @static_bitunpacks_q3(%packed: vector<3xi8>) -> (vector<8xi8>) {
-  %3 = scalar.constant 0 : i8
+  %3 = scalar.constant 0 : i32
   %4 = vector.extract %packed[0] : vector<3xi8> -> i8
-  %5 = scalar.constant 7 : i8
-  %6 = scalar.andi %4, %5 : i8
-  %7 = scalar.ori %3, %6 : i8
-  %8 = scalar.constant 5 : i8
-  %9 = scalar.shli %7, %8 : i8
-  %10 = scalar.constant 5 : i8
-  %11 = scalar.shrsi %9, %10 : i8
-  %12 = scalar.constant 0 : i8
-  %13 = vector.extract %packed[0] : vector<3xi8> -> i8
-  %14 = scalar.constant 3 : i8
-  %15 = scalar.shrui %13, %14 : i8
-  %16 = scalar.constant 7 : i8
-  %17 = scalar.andi %15, %16 : i8
-  %18 = scalar.ori %12, %17 : i8
-  %19 = scalar.constant 5 : i8
-  %20 = scalar.shli %18, %19 : i8
-  %21 = scalar.constant 5 : i8
-  %22 = scalar.shrsi %20, %21 : i8
-  %23 = scalar.constant 0 : i8
-  %24 = vector.extract %packed[0] : vector<3xi8> -> i8
-  %25 = scalar.constant 6 : i8
-  %26 = scalar.shrui %24, %25 : i8
-  %27 = scalar.constant 3 : i8
-  %28 = scalar.andi %26, %27 : i8
-  %29 = scalar.ori %23, %28 : i8
-  %30 = vector.extract %packed[1] : vector<3xi8> -> i8
-  %31 = scalar.constant 1 : i8
-  %32 = scalar.andi %30, %31 : i8
-  %33 = scalar.constant 2 : i8
-  %34 = scalar.shli %32, %33 : i8
-  %35 = scalar.ori %29, %34 : i8
-  %36 = scalar.constant 5 : i8
-  %37 = scalar.shli %35, %36 : i8
-  %38 = scalar.constant 5 : i8
-  %39 = scalar.shrsi %37, %38 : i8
-  %40 = scalar.constant 0 : i8
-  %41 = vector.extract %packed[1] : vector<3xi8> -> i8
-  %42 = scalar.constant 1 : i8
-  %43 = scalar.shrui %41, %42 : i8
-  %44 = scalar.constant 7 : i8
-  %45 = scalar.andi %43, %44 : i8
-  %46 = scalar.ori %40, %45 : i8
-  %47 = scalar.constant 5 : i8
-  %48 = scalar.shli %46, %47 : i8
-  %49 = scalar.constant 5 : i8
-  %50 = scalar.shrsi %48, %49 : i8
-  %51 = scalar.constant 0 : i8
-  %52 = vector.extract %packed[1] : vector<3xi8> -> i8
-  %53 = scalar.constant 4 : i8
-  %54 = scalar.shrui %52, %53 : i8
-  %55 = scalar.constant 7 : i8
-  %56 = scalar.andi %54, %55 : i8
-  %57 = scalar.ori %51, %56 : i8
-  %58 = scalar.constant 5 : i8
-  %59 = scalar.shli %57, %58 : i8
-  %60 = scalar.constant 5 : i8
-  %61 = scalar.shrsi %59, %60 : i8
-  %62 = scalar.constant 0 : i8
-  %63 = vector.extract %packed[1] : vector<3xi8> -> i8
-  %64 = scalar.constant 7 : i8
-  %65 = scalar.shrui %63, %64 : i8
-  %66 = scalar.constant 1 : i8
-  %67 = scalar.andi %65, %66 : i8
-  %68 = scalar.ori %62, %67 : i8
-  %69 = vector.extract %packed[2] : vector<3xi8> -> i8
-  %70 = scalar.constant 3 : i8
-  %71 = scalar.andi %69, %70 : i8
-  %72 = scalar.constant 1 : i8
-  %73 = scalar.shli %71, %72 : i8
-  %74 = scalar.ori %68, %73 : i8
-  %75 = scalar.constant 5 : i8
-  %76 = scalar.shli %74, %75 : i8
-  %77 = scalar.constant 5 : i8
-  %78 = scalar.shrsi %76, %77 : i8
-  %79 = scalar.constant 0 : i8
-  %80 = vector.extract %packed[2] : vector<3xi8> -> i8
-  %81 = scalar.constant 2 : i8
-  %82 = scalar.shrui %80, %81 : i8
-  %83 = scalar.constant 7 : i8
-  %84 = scalar.andi %82, %83 : i8
-  %85 = scalar.ori %79, %84 : i8
-  %86 = scalar.constant 5 : i8
-  %87 = scalar.shli %85, %86 : i8
-  %88 = scalar.constant 5 : i8
-  %89 = scalar.shrsi %87, %88 : i8
-  %90 = scalar.constant 0 : i8
-  %91 = vector.extract %packed[2] : vector<3xi8> -> i8
-  %92 = scalar.constant 5 : i8
-  %93 = scalar.shrui %91, %92 : i8
-  %94 = scalar.constant 7 : i8
-  %95 = scalar.andi %93, %94 : i8
-  %96 = scalar.ori %90, %95 : i8
-  %97 = scalar.constant 5 : i8
-  %98 = scalar.shli %96, %97 : i8
-  %99 = scalar.constant 5 : i8
-  %100 = scalar.shrsi %98, %99 : i8
-  %r = vector.from_elements %11, %22, %39, %50, %61, %78, %89, %100 : vector<8xi8>
+  %5 = scalar.extui %4 : i8 to i32
+  %6 = scalar.constant 7 : i32
+  %7 = scalar.andi %5, %6 : i32
+  %8 = scalar.ori %3, %7 : i32
+  %9 = scalar.constant 29 : i32
+  %10 = scalar.shli %8, %9 : i32
+  %11 = scalar.constant 29 : i32
+  %12 = scalar.shrsi %10, %11 : i32
+  %13 = scalar.trunci %12 : i32 to i8
+  %14 = scalar.constant 0 : i32
+  %15 = scalar.constant 3 : i32
+  %16 = scalar.shrui %5, %15 : i32
+  %17 = scalar.constant 7 : i32
+  %18 = scalar.andi %16, %17 : i32
+  %19 = scalar.ori %14, %18 : i32
+  %20 = scalar.constant 29 : i32
+  %21 = scalar.shli %19, %20 : i32
+  %22 = scalar.constant 29 : i32
+  %23 = scalar.shrsi %21, %22 : i32
+  %24 = scalar.trunci %23 : i32 to i8
+  %25 = scalar.constant 0 : i32
+  %26 = scalar.constant 6 : i32
+  %27 = scalar.shrui %5, %26 : i32
+  %28 = scalar.constant 3 : i32
+  %29 = scalar.andi %27, %28 : i32
+  %30 = scalar.ori %25, %29 : i32
+  %31 = vector.extract %packed[1] : vector<3xi8> -> i8
+  %32 = scalar.extui %31 : i8 to i32
+  %33 = scalar.constant 1 : i32
+  %34 = scalar.andi %32, %33 : i32
+  %35 = scalar.constant 2 : i32
+  %36 = scalar.shli %34, %35 : i32
+  %37 = scalar.ori %30, %36 : i32
+  %38 = scalar.constant 29 : i32
+  %39 = scalar.shli %37, %38 : i32
+  %40 = scalar.constant 29 : i32
+  %41 = scalar.shrsi %39, %40 : i32
+  %42 = scalar.trunci %41 : i32 to i8
+  %43 = scalar.constant 0 : i32
+  %44 = scalar.constant 1 : i32
+  %45 = scalar.shrui %32, %44 : i32
+  %46 = scalar.constant 7 : i32
+  %47 = scalar.andi %45, %46 : i32
+  %48 = scalar.ori %43, %47 : i32
+  %49 = scalar.constant 29 : i32
+  %50 = scalar.shli %48, %49 : i32
+  %51 = scalar.constant 29 : i32
+  %52 = scalar.shrsi %50, %51 : i32
+  %53 = scalar.trunci %52 : i32 to i8
+  %54 = scalar.constant 0 : i32
+  %55 = scalar.constant 4 : i32
+  %56 = scalar.shrui %32, %55 : i32
+  %57 = scalar.constant 7 : i32
+  %58 = scalar.andi %56, %57 : i32
+  %59 = scalar.ori %54, %58 : i32
+  %60 = scalar.constant 29 : i32
+  %61 = scalar.shli %59, %60 : i32
+  %62 = scalar.constant 29 : i32
+  %63 = scalar.shrsi %61, %62 : i32
+  %64 = scalar.trunci %63 : i32 to i8
+  %65 = scalar.constant 0 : i32
+  %66 = scalar.constant 7 : i32
+  %67 = scalar.shrui %32, %66 : i32
+  %68 = scalar.constant 1 : i32
+  %69 = scalar.andi %67, %68 : i32
+  %70 = scalar.ori %65, %69 : i32
+  %71 = vector.extract %packed[2] : vector<3xi8> -> i8
+  %72 = scalar.extui %71 : i8 to i32
+  %73 = scalar.constant 3 : i32
+  %74 = scalar.andi %72, %73 : i32
+  %75 = scalar.constant 1 : i32
+  %76 = scalar.shli %74, %75 : i32
+  %77 = scalar.ori %70, %76 : i32
+  %78 = scalar.constant 29 : i32
+  %79 = scalar.shli %77, %78 : i32
+  %80 = scalar.constant 29 : i32
+  %81 = scalar.shrsi %79, %80 : i32
+  %82 = scalar.trunci %81 : i32 to i8
+  %83 = scalar.constant 0 : i32
+  %84 = scalar.constant 2 : i32
+  %85 = scalar.shrui %72, %84 : i32
+  %86 = scalar.constant 7 : i32
+  %87 = scalar.andi %85, %86 : i32
+  %88 = scalar.ori %83, %87 : i32
+  %89 = scalar.constant 29 : i32
+  %90 = scalar.shli %88, %89 : i32
+  %91 = scalar.constant 29 : i32
+  %92 = scalar.shrsi %90, %91 : i32
+  %93 = scalar.trunci %92 : i32 to i8
+  %94 = scalar.constant 0 : i32
+  %95 = scalar.constant 5 : i32
+  %96 = scalar.shrui %72, %95 : i32
+  %97 = scalar.constant 7 : i32
+  %98 = scalar.andi %96, %97 : i32
+  %99 = scalar.ori %94, %98 : i32
+  %100 = scalar.constant 29 : i32
+  %101 = scalar.shli %99, %100 : i32
+  %102 = scalar.constant 29 : i32
+  %103 = scalar.shrsi %101, %102 : i32
+  %104 = scalar.trunci %103 : i32 to i8
+  %r = vector.from_elements %13, %24, %42, %53, %64, %82, %93, %104 : vector<8xi8>
   func.return %r : vector<8xi8>
 }
 
@@ -2166,27 +2186,30 @@ func.def @dynamic_bitpack_q4(%n: index, %m: index, %codes: vector<[%n]xi8>, %pac
 
 // ----
 func.def @dynamic_bitpack_q4(%n: index, %m: index, %codes: vector<[%n]xi8>, %packed: vector<[%m]xi8>) -> (vector<[%m]xi8>, vector<[%n]xi8>) {
-  %26 = vector.constant 0 : vector<[%m]xi8>
-  %27 = index.constant 0 : index
-  %28 = index.constant 1 : index
-  %stream = scf.for %29 = [%27 to %m step %28](%30 = %26 : vector<[%m]xi8>) -> (vector<[%m]xi8>) {
-    %32 = index.constant 2 : index
-    %33 = index.mul %29, %32 : index
-    %34 = scalar.constant 0 : i8
-    %35 = vector.extract %codes[%33] : vector<[%n]xi8> -> i8
-    %36 = scalar.constant 15 : i8
-    %37 = scalar.andi %35, %36 : i8
-    %38 = scalar.ori %34, %37 : i8
-    %39 = index.constant 1 : index
-    %40 = index.add %33, %39 : index
-    %41 = vector.extract %codes[%40] : vector<[%n]xi8> -> i8
-    %42 = scalar.constant 15 : i8
-    %43 = scalar.andi %41, %42 : i8
-    %44 = scalar.constant 4 : i8
-    %45 = scalar.shli %43, %44 : i8
-    %46 = scalar.ori %38, %45 : i8
-    %47 = vector.insert %46 into %30[%29] : i8, vector<[%m]xi8>
-    scf.yield %47 : vector<[%m]xi8>
+  %28 = vector.constant 0 : vector<[%m]xi8>
+  %29 = index.constant 0 : index
+  %30 = index.constant 1 : index
+  %stream = scf.for %31 = [%29 to %m step %30](%32 = %28 : vector<[%m]xi8>) -> (vector<[%m]xi8>) {
+    %34 = index.constant 2 : index
+    %35 = index.mul %31, %34 : index
+    %36 = scalar.constant 0 : i32
+    %37 = vector.extract %codes[%35] : vector<[%n]xi8> -> i8
+    %38 = scalar.extui %37 : i8 to i32
+    %39 = scalar.constant 15 : i32
+    %40 = scalar.andi %38, %39 : i32
+    %41 = scalar.ori %36, %40 : i32
+    %42 = index.constant 1 : index
+    %43 = index.add %35, %42 : index
+    %44 = vector.extract %codes[%43] : vector<[%n]xi8> -> i8
+    %45 = scalar.extui %44 : i8 to i32
+    %46 = scalar.constant 15 : i32
+    %47 = scalar.andi %45, %46 : i32
+    %48 = scalar.constant 4 : i32
+    %49 = scalar.shli %47, %48 : i32
+    %50 = scalar.ori %41, %49 : i32
+    %51 = scalar.trunci %50 : i32 to i8
+    %52 = vector.insert %51 into %32[%31] : i8, vector<[%m]xi8>
+    scf.yield %52 : vector<[%m]xi8>
   }
   %8 = vector.constant 0 : vector<[%n]xi8>
   %9 = index.constant 0 : index
@@ -2197,14 +2220,16 @@ func.def @dynamic_bitpack_q4(%n: index, %m: index, %codes: vector<[%n]xi8>, %pac
     %16 = index.constant 2 : index
     %17 = index.rem %11, %16 : index
     %18 = vector.extract %packed[%15] : vector<[%m]xi8> -> i8
-    %19 = index.constant 4 : index
-    %20 = index.mul %17, %19 : index
-    %21 = index.cast %20 : index to i8
-    %22 = scalar.shrui %18, %21 : i8
-    %23 = scalar.constant 15 : i8
-    %24 = scalar.andi %22, %23 : i8
-    %25 = vector.insert %24 into %12[%11] : i8, vector<[%n]xi8>
-    scf.yield %25 : vector<[%n]xi8>
+    %19 = scalar.extui %18 : i8 to i32
+    %20 = index.constant 4 : index
+    %21 = index.mul %17, %20 : index
+    %22 = index.cast %21 : index to i32
+    %23 = scalar.shrui %19, %22 : i32
+    %24 = scalar.constant 15 : i32
+    %25 = scalar.andi %23, %24 : i32
+    %26 = scalar.trunci %25 : i32 to i8
+    %27 = vector.insert %26 into %12[%11] : i8, vector<[%n]xi8>
+    scf.yield %27 : vector<[%n]xi8>
   }
   func.return %stream, %unpacked : vector<[%m]xi8>, vector<[%n]xi8>
 }
@@ -2222,63 +2247,67 @@ func.def @dynamic_bitpack_q3(%n: index, %m: index, %codes: vector<[%n]xi8>, %pac
 
 // ----
 func.def @dynamic_bitpack_q3(%n: index, %m: index, %codes: vector<[%n]xi8>, %packed: vector<[%m]xi8>) -> (vector<[%m]xi8>, vector<[%n]xi8>, vector<[%n]xi8>) {
-  %72 = vector.constant 0 : vector<[%m]xi8>
-  %73 = index.constant 0 : index
-  %74 = index.constant 1 : index
-  %stream = scf.for %75 = [%73 to %m step %74](%76 = %72 : vector<[%m]xi8>) -> (vector<[%m]xi8>) {
-    %78 = index.constant 8 : index
-    %79 = index.mul %75, %78 : index
-    %80 = index.constant 0 : index
-    %81 = index.constant 8 : index
-    %82 = index.constant 1 : index
-    %83 = scalar.constant 1 : i8
-    %84 = scalar.constant 0 : i8
-    %87 = scf.for %85 = [%80 to %81 step %82](%86 = %84 : i8) -> (i8) {
-      %88 = index.add %79, %85 : index
-      %89 = index.constant 3 : index
-      %90 = index.div %88, %89 : index
-      %91 = index.constant 3 : index
-      %92 = index.rem %88, %91 : index
-      %93 = vector.extract %codes[%90] : vector<[%n]xi8> -> i8
-      %94 = index.cast %92 : index to i8
-      %95 = scalar.shrui %93, %94 : i8
-      %96 = scalar.andi %95, %83 : i8
-      %97 = index.cast %85 : index to i8
-      %98 = scalar.shli %96, %97 : i8
-      %99 = scalar.ori %86, %98 : i8
-      scf.yield %99 : i8
+  %76 = vector.constant 0 : vector<[%m]xi8>
+  %77 = index.constant 0 : index
+  %78 = index.constant 1 : index
+  %stream = scf.for %79 = [%77 to %m step %78](%80 = %76 : vector<[%m]xi8>) -> (vector<[%m]xi8>) {
+    %82 = index.constant 8 : index
+    %83 = index.mul %79, %82 : index
+    %84 = index.constant 0 : index
+    %85 = index.constant 8 : index
+    %86 = index.constant 1 : index
+    %87 = scalar.constant 1 : i32
+    %88 = scalar.constant 0 : i32
+    %91 = scf.for %89 = [%84 to %85 step %86](%90 = %88 : i32) -> (i32) {
+      %92 = index.add %83, %89 : index
+      %93 = index.constant 3 : index
+      %94 = index.div %92, %93 : index
+      %95 = index.constant 3 : index
+      %96 = index.rem %92, %95 : index
+      %97 = vector.extract %codes[%94] : vector<[%n]xi8> -> i8
+      %98 = scalar.extui %97 : i8 to i32
+      %99 = index.cast %96 : index to i32
+      %100 = scalar.shrui %98, %99 : i32
+      %101 = scalar.andi %100, %87 : i32
+      %102 = index.cast %89 : index to i32
+      %103 = scalar.shli %101, %102 : i32
+      %104 = scalar.ori %90, %103 : i32
+      scf.yield %104 : i32
     }
-    %100 = vector.insert %87 into %76[%75] : i8, vector<[%m]xi8>
-    scf.yield %100 : vector<[%m]xi8>
+    %105 = scalar.trunci %91 : i32 to i8
+    %106 = vector.insert %105 into %80[%79] : i8, vector<[%m]xi8>
+    scf.yield %106 : vector<[%m]xi8>
   }
-  %43 = vector.constant 0 : vector<[%n]xi8>
-  %44 = index.constant 0 : index
-  %45 = index.constant 1 : index
-  %unpacked_u = scf.for %46 = [%44 to %n step %45](%47 = %43 : vector<[%n]xi8>) -> (vector<[%n]xi8>) {
-    %49 = index.constant 3 : index
-    %50 = index.mul %46, %49 : index
-    %51 = index.constant 0 : index
-    %52 = index.constant 3 : index
-    %53 = index.constant 1 : index
-    %54 = scalar.constant 1 : i8
-    %55 = scalar.constant 0 : i8
-    %58 = scf.for %56 = [%51 to %52 step %53](%57 = %55 : i8) -> (i8) {
-      %59 = index.add %50, %56 : index
-      %60 = index.constant 8 : index
-      %61 = index.div %59, %60 : index
+  %45 = vector.constant 0 : vector<[%n]xi8>
+  %46 = index.constant 0 : index
+  %47 = index.constant 1 : index
+  %unpacked_u = scf.for %48 = [%46 to %n step %47](%49 = %45 : vector<[%n]xi8>) -> (vector<[%n]xi8>) {
+    %51 = index.constant 3 : index
+    %52 = index.mul %48, %51 : index
+    %53 = index.constant 0 : index
+    %54 = index.constant 3 : index
+    %55 = index.constant 1 : index
+    %56 = scalar.constant 1 : i32
+    %57 = scalar.constant 0 : i32
+    %60 = scf.for %58 = [%53 to %54 step %55](%59 = %57 : i32) -> (i32) {
+      %61 = index.add %52, %58 : index
       %62 = index.constant 8 : index
-      %63 = index.rem %59, %62 : index
-      %64 = vector.extract %packed[%61] : vector<[%m]xi8> -> i8
-      %65 = index.cast %63 : index to i8
-      %66 = scalar.shrui %64, %65 : i8
-      %67 = scalar.andi %66, %54 : i8
-      %68 = index.cast %56 : index to i8
-      %69 = scalar.shli %67, %68 : i8
-      %70 = scalar.ori %57, %69 : i8
-      scf.yield %70 : i8
+      %63 = index.div %61, %62 : index
+      %64 = index.constant 8 : index
+      %65 = index.rem %61, %64 : index
+      %66 = vector.extract %packed[%63] : vector<[%m]xi8> -> i8
+      %67 = scalar.extui %66 : i8 to i32
+      %68 = index.cast %65 : index to i32
+      %69 = scalar.shrui %67, %68 : i32
+      %70 = scalar.andi %69, %56 : i32
+      %71 = index.cast %58 : index to i32
+      %72 = scalar.shli %70, %71 : i32
+      %73 = scalar.ori %59, %72 : i32
+      scf.yield %73 : i32
     }
-    %71 = vector.insert %58 into %47[%46] : i8, vector<[%n]xi8>
-    scf.yield %71 : vector<[%n]xi8>
+    %74 = scalar.trunci %60 : i32 to i8
+    %75 = vector.insert %74 into %49[%48] : i8, vector<[%n]xi8>
+    scf.yield %75 : vector<[%n]xi8>
   }
   %10 = vector.constant 0 : vector<[%n]xi8>
   %11 = index.constant 0 : index
@@ -2289,29 +2318,31 @@ func.def @dynamic_bitpack_q3(%n: index, %m: index, %codes: vector<[%n]xi8>, %pac
     %18 = index.constant 0 : index
     %19 = index.constant 3 : index
     %20 = index.constant 1 : index
-    %21 = scalar.constant 1 : i8
-    %22 = scalar.constant 0 : i8
-    %25 = scf.for %23 = [%18 to %19 step %20](%24 = %22 : i8) -> (i8) {
+    %21 = scalar.constant 1 : i32
+    %22 = scalar.constant 0 : i32
+    %25 = scf.for %23 = [%18 to %19 step %20](%24 = %22 : i32) -> (i32) {
       %26 = index.add %17, %23 : index
       %27 = index.constant 8 : index
       %28 = index.div %26, %27 : index
       %29 = index.constant 8 : index
       %30 = index.rem %26, %29 : index
       %31 = vector.extract %packed[%28] : vector<[%m]xi8> -> i8
-      %32 = index.cast %30 : index to i8
-      %33 = scalar.shrui %31, %32 : i8
-      %34 = scalar.andi %33, %21 : i8
-      %35 = index.cast %23 : index to i8
-      %36 = scalar.shli %34, %35 : i8
-      %37 = scalar.ori %24, %36 : i8
-      scf.yield %37 : i8
+      %32 = scalar.extui %31 : i8 to i32
+      %33 = index.cast %30 : index to i32
+      %34 = scalar.shrui %32, %33 : i32
+      %35 = scalar.andi %34, %21 : i32
+      %36 = index.cast %23 : index to i32
+      %37 = scalar.shli %35, %36 : i32
+      %38 = scalar.ori %24, %37 : i32
+      scf.yield %38 : i32
     }
-    %38 = scalar.constant 5 : i8
-    %39 = scalar.shli %25, %38 : i8
-    %40 = scalar.constant 5 : i8
-    %41 = scalar.shrsi %39, %40 : i8
-    %42 = vector.insert %41 into %14[%13] : i8, vector<[%n]xi8>
-    scf.yield %42 : vector<[%n]xi8>
+    %39 = scalar.constant 29 : i32
+    %40 = scalar.shli %25, %39 : i32
+    %41 = scalar.constant 29 : i32
+    %42 = scalar.shrsi %40, %41 : i32
+    %43 = scalar.trunci %42 : i32 to i8
+    %44 = vector.insert %43 into %14[%13] : i8, vector<[%n]xi8>
+    scf.yield %44 : vector<[%n]xi8>
   }
   func.return %stream, %unpacked_u, %unpacked_s : vector<[%m]xi8>, vector<[%n]xi8>, vector<[%n]xi8>
 }

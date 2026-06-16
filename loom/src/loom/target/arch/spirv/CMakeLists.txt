@@ -368,106 +368,20 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "barrier"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/barrier.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
-  NAME
-    "baseline"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/baseline.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
-  NAME
-    "low_verify_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_verify_diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
-  NAME
-    "source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
-  NAME
-    "source_low_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
-  NAME
-    "structured_control"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_control.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
-  NAME
-    "target_legalize"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_legalize.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-endif()
-
-if(LOOM_TARGET_ARCH_SPIRV)
-iree_native_test(
-  NAME
-    "workgroup_storage"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/workgroup_storage.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    loom_check_file_test
+  SRCS
+    "test/source_low/barrier.loom-test"
+    "test/source_low/baseline.loom-test"
+    "test/source_low/low_verify_diagnostics.loom-test"
+    "test/source_low/source_low.loom-test"
+    "test/source_low/source_low_diagnostics.loom-test"
+    "test/source_low/structured_control.loom-test"
+    "test/source_low/target_legalize.loom-test"
+    "test/source_low/workgroup_storage.loom-test"
+  TEST_NAME_PREFIX_TO_STRIP
+    "test/source_low/"
 )
 endif()
 

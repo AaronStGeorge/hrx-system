@@ -29,7 +29,7 @@ extern "C" {
 // overlays. A missing budget uses the descriptor set's allocatable unit count;
 // a descriptor class with allocatable_count == 0 is treated as unbounded.
 typedef struct loom_low_allocation_budget_t {
-  // Stable register-class name such as "vm.i32" or "amdgpu.vgpr".
+  // Stable register-class name.
   iree_string_view_t register_class;
   // Maximum allocation units available for |register_class|.
   uint32_t max_units;
@@ -58,7 +58,7 @@ typedef struct loom_low_allocation_fixed_value_t {
 // permanently reserved target IDs. Use fixed values instead for ABI live-ins
 // whose registers can be reused after their last use.
 typedef struct loom_low_allocation_reserved_range_t {
-  // Stable register-class name such as "amdgpu.sgpr" or "x86.gpr".
+  // Stable register-class name.
   iree_string_view_t register_class;
   // Target-visible reserved location kind.
   loom_low_allocation_location_kind_t location_kind;

@@ -20,6 +20,11 @@
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/emit/native/assembly.h"
 
+typedef enum loom_amdgpu_native_asm_immediate_format_e {
+  // Target-format ID for S_DELAY_ALU's packed SIMM16 dependency immediate.
+  LOOM_AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU = 1,
+} loom_amdgpu_native_asm_immediate_format_t;
+
 typedef struct loom_amdgpu_assembly_emit_state_t {
   // Wait-packet plan consumed in scheduled insertion order.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
@@ -968,9 +973,17 @@ static iree_status_t loom_amdgpu_append_native_asm_form_value(
     case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_UNSIGNED_HEX:
       return loom_amdgpu_append_packet_immediate_unsigned_hex(
           context, value->index, value->bit_width);
-    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_AMDGPU_DELAY_ALU_IMMEDIATE:
-      return loom_amdgpu_append_packet_immediate_delay_alu(context,
-                                                           value->index);
+    case LOOM_LOW_NATIVE_ASM_VALUE_KIND_IMMEDIATE_TARGET_FORMAT:
+      switch (value->target_format_id) {
+        case LOOM_AMDGPU_NATIVE_ASM_IMMEDIATE_FORMAT_DELAY_ALU:
+          return loom_amdgpu_append_packet_immediate_delay_alu(context,
+                                                               value->index);
+        default:
+          return iree_make_status(
+              IREE_STATUS_FAILED_PRECONDITION,
+              "AMDGPU native asm target immediate format id %u is unsupported",
+              (unsigned)value->target_format_id);
+      }
     default:
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                               "AMDGPU native asm value kind %u is unsupported",

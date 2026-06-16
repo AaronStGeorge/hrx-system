@@ -67,10 +67,12 @@ class GuardKind(Enum):
     VALUE_I64_RANGE_GE = "value_i64_range_ge"
     VALUE_F64_EQUALS = "value_f64_equals"
     VALUE_STORAGE_ELEMENT_FORMAT = "value_storage_element_format"
+    VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES = "value_packed_integer_payload_from_lanes"
+    VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD = "value_packed_integer_lanes_from_payload"
     VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
-    BITPACK_STORAGE = "bitpack_storage"
-    BITUNPACK_STORAGE = "bitunpack_storage"
+    VECTOR_EXTRACT_SHAPE = "vector_extract_shape"
+    VALUE_STATIC_ELEMENT_COUNT_EQ = "value_static_element_count_eq"
 
 
 _LOW_VALUE_GUARD_KINDS = (
@@ -286,6 +288,21 @@ class Guard:
         )
 
     @classmethod
+    def value_static_element_count_eq(
+        cls,
+        field: str,
+        other_field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
+            field=field,
+            other_field=other_field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def operand_segment_count(cls, field: str, count: int) -> Self:
         return cls(kind=GuardKind.OPERAND_SEGMENT_COUNT, field=field, count=count)
 
@@ -485,6 +502,50 @@ class Guard:
         )
 
     @classmethod
+    def value_packed_integer_payload_from_lanes(
+        cls,
+        lane_field: str,
+        storage_field: str,
+        width_attr: str,
+        *,
+        storage_unit_bit_count: int,
+        storage_payload_multiple: int,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            field=lane_field,
+            other_field=storage_field,
+            attr_field=width_attr,
+            count=storage_payload_multiple,
+            minimum=storage_unit_bit_count,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def value_packed_integer_lanes_from_payload(
+        cls,
+        storage_field: str,
+        lane_field: str,
+        width_attr: str,
+        *,
+        storage_unit_bit_count: int,
+        maximum_storage_unit_count: int,
+        maximum_lane_count: int,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+            field=storage_field,
+            other_field=lane_field,
+            attr_field=width_attr,
+            count=maximum_storage_unit_count,
+            minimum=storage_unit_bit_count,
+            maximum=maximum_lane_count,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def value_no_uses(
         cls,
         field: str,
@@ -494,6 +555,23 @@ class Guard:
         return cls(
             kind=GuardKind.VALUE_NO_USES,
             field=field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def vector_extract_shape(
+        cls,
+        source_field: str,
+        result_field: str,
+        static_indices_attr: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VECTOR_EXTRACT_SHAPE,
+            field=source_field,
+            other_field=result_field,
+            attr_field=static_indices_attr,
             diagnostic=diagnostic,
         )
 
@@ -510,50 +588,6 @@ class Guard:
             kind=GuardKind.INSTANCE_FLAGS_HAS_ALL,
             field=field,
             enum_keyword=keyword,
-            diagnostic=diagnostic,
-        )
-
-    @classmethod
-    def bitpack_storage(
-        cls,
-        source_field: str,
-        result_field: str,
-        width_attr: str,
-        *,
-        register_bit_width: int,
-        result_payload_multiple: int,
-        diagnostic: GuardDiagnostic | None = None,
-    ) -> Self:
-        return cls(
-            kind=GuardKind.BITPACK_STORAGE,
-            field=source_field,
-            other_field=result_field,
-            attr_field=width_attr,
-            minimum=register_bit_width,
-            count=result_payload_multiple,
-            diagnostic=diagnostic,
-        )
-
-    @classmethod
-    def bitunpack_storage(
-        cls,
-        source_field: str,
-        result_field: str,
-        width_attr: str,
-        *,
-        register_bit_width: int,
-        maximum_source_registers: int,
-        maximum_result_lanes: int,
-        diagnostic: GuardDiagnostic | None = None,
-    ) -> Self:
-        return cls(
-            kind=GuardKind.BITUNPACK_STORAGE,
-            field=source_field,
-            other_field=result_field,
-            attr_field=width_attr,
-            count=maximum_source_registers,
-            minimum=register_bit_width,
-            maximum=maximum_result_lanes,
             diagnostic=diagnostic,
         )
 
@@ -575,6 +609,7 @@ class Guard:
         if (
             self.minimum is not None
             and self.maximum is not None
+            and self.kind not in (GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,)
             and self.minimum > self.maximum
         ):
             raise ValueError(f"{self.kind.value} range minimum exceeds maximum")
@@ -669,11 +704,33 @@ class Guard:
             GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
             GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+            GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+            GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+            GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
         ):
             _validate_value_fact_guard(self, source_op, subject)
             return
         if self.kind == GuardKind.VALUE_NO_USES:
             _require_value(source_op, self.field, subject)
+            return
+        if self.kind == GuardKind.VECTOR_EXTRACT_SHAPE:
+            _require_operand(source_op, self.field, subject)
+            if self.other_field is None or self.attr_field is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} needs source, result, and "
+                    "static_indices fields"
+                )
+            _require_value(source_op, self.other_field, subject)
+            attr = _require_attr(source_op, self.attr_field, subject)
+            if attr.attr_type != ATTR_TYPE_I64_ARRAY:
+                raise ValueError(
+                    f"{source_op.name}: {subject} field '{self.attr_field}' "
+                    "must be an i64_array attr"
+                )
+            if source_op.name != "vector.extract":
+                raise ValueError(
+                    f"{source_op.name}: {subject} is only valid for vector.extract"
+                )
             return
         if self.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
             attr = _require_attr(source_op, self.field, subject)
@@ -695,9 +752,6 @@ class Guard:
                     f"{source_op.name}: {subject} field '{self.field}' "
                     f"has no enum case '{self.enum_keyword}'"
                 )
-            return
-        if self.kind in (GuardKind.BITPACK_STORAGE, GuardKind.BITUNPACK_STORAGE):
-            _validate_bitstream_storage_guard(self, source_op, subject)
             return
         _validate_i64_array_guard(self, source_op, subject)
 
@@ -725,53 +779,6 @@ def _validate_low_value_guard(
     _require_value(source_op, guard.other_field, subject)
 
 
-def _validate_bitstream_storage_guard(
-    guard: Guard,
-    source_op: Op,
-    subject: str,
-) -> None:
-    _require_value(source_op, guard.field, subject)
-    if guard.other_field is None:
-        raise ValueError(f"{source_op.name}: {subject} needs another value field")
-    _require_value(source_op, guard.other_field, subject)
-    if guard.attr_field is None:
-        raise ValueError(f"{source_op.name}: {subject} needs an attr field")
-    attr = _require_attr(source_op, guard.attr_field, subject)
-    if attr.attr_type != ATTR_TYPE_I64:
-        raise ValueError(
-            f"{source_op.name}: {subject} attr field "
-            f"'{guard.attr_field}' must be an i64 attr"
-        )
-
-    _require_positive_u32(
-        guard.minimum,
-        source_op,
-        subject,
-        "register bit width",
-    )
-    if guard.kind == GuardKind.BITPACK_STORAGE:
-        _require_positive_u32(
-            guard.count,
-            source_op,
-            subject,
-            "result payload multiple",
-        )
-        return
-
-    _require_positive_u32(
-        guard.count,
-        source_op,
-        subject,
-        "maximum source register count",
-    )
-    _require_positive_u32(
-        guard.maximum,
-        source_op,
-        subject,
-        "maximum result lane count",
-    )
-
-
 def _require_positive_u32(
     value: int | None,
     source_op: Op,
@@ -793,6 +800,7 @@ def _validate_value_fact_guard(
     if guard.kind in (
         GuardKind.VALUE_I64_RANGE_LE,
         GuardKind.VALUE_I64_RANGE_GE,
+        GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ,
     ):
         if guard.other_field is None:
             raise ValueError(f"{source_op.name}: {subject} needs another value")
@@ -817,6 +825,44 @@ def _validate_value_fact_guard(
         raise ValueError(f"{source_op.name}: {subject} needs minimum/maximum")
     if guard.kind == GuardKind.VALUE_F64_EQUALS and guard.f64_value is None:
         raise ValueError(f"{source_op.name}: {subject} needs an f64 value")
+    if guard.kind in (
+        GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
+        GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+    ):
+        if guard.other_field is None:
+            raise ValueError(f"{source_op.name}: {subject} needs another value")
+        _require_value(source_op, guard.other_field, subject)
+        if guard.attr_field is None:
+            raise ValueError(f"{source_op.name}: {subject} needs an attr field")
+        attr = _require_attr(source_op, guard.attr_field, subject)
+        if attr.attr_type != ATTR_TYPE_I64:
+            raise ValueError(
+                f"{source_op.name}: {subject} attr field "
+                f"'{guard.attr_field}' must be an i64 attr"
+            )
+        _require_positive_u32(
+            guard.minimum,
+            source_op,
+            subject,
+            "storage unit bit count",
+        )
+        _require_positive_u32(
+            guard.count,
+            source_op,
+            subject,
+            (
+                "storage payload multiple"
+                if guard.kind == GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES
+                else "maximum storage unit count"
+            ),
+        )
+        if guard.kind == GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD:
+            _require_positive_u32(
+                guard.maximum,
+                source_op,
+                subject,
+                "maximum lane count",
+            )
 
 
 def _validate_i64_array_guard(

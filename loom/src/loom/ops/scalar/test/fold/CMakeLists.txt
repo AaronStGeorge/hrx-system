@@ -9,125 +9,21 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "arithmeticf_structural"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/arithmeticf_structural.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "arithmetici"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "arithmetici_structural"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici_structural.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "bitwisei"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "bitwisei_structural"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei_structural.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "comparison_structural"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/comparison_structural.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "comparisoni"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/comparisoni.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "conversion_structural"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/conversion_structural.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "conversioni"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/conversioni.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "mathf_structural"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/mathf_structural.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "poison"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/poison.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    fold
+  SRCS
+    "arithmeticf_structural.loom-test"
+    "arithmetici.loom-test"
+    "arithmetici_structural.loom-test"
+    "bitwisei.loom-test"
+    "bitwisei_structural.loom-test"
+    "comparison_structural.loom-test"
+    "comparisoni.loom-test"
+    "conversion_structural.loom-test"
+    "conversioni.loom-test"
+    "mathf_structural.loom-test"
+    "poison.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

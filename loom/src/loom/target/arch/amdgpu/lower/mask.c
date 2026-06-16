@@ -200,27 +200,19 @@ static bool loom_amdgpu_select_vector_storage(
 }
 
 static bool loom_amdgpu_select_scalar_splat_condition(
-    const loom_module_t* module, loom_value_id_t condition,
-    uint32_t expected_lane_count, loom_value_id_t* out_scalar_condition) {
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t condition, uint32_t expected_lane_count,
+    loom_value_id_t* out_scalar_condition) {
   *out_scalar_condition = LOOM_VALUE_ID_INVALID;
-  if (condition >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* condition_value = loom_module_value(module, condition);
-  if (loom_value_is_block_arg(condition_value) ||
-      loom_value_def_index(condition_value) != 0) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(condition_value);
-  if (defining_op == NULL || !loom_vector_splat_isa(defining_op) ||
-      loom_vector_splat_result(defining_op) != condition) {
-    return false;
-  }
   if (loom_amdgpu_vector_i1_lane_count(
           loom_module_value_type(module, condition)) != expected_lane_count) {
     return false;
   }
-  const loom_value_id_t scalar = loom_vector_splat_scalar(defining_op);
+  loom_value_id_t scalar = LOOM_VALUE_ID_INVALID;
+  if (!loom_value_fact_table_query_uniform_element_origin(fact_table, module,
+                                                          condition, &scalar)) {
+    return false;
+  }
   if (!loom_amdgpu_type_is_i1(loom_module_value_type(module, scalar))) {
     return false;
   }
@@ -247,6 +239,8 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
   const loom_value_id_t condition = loom_vector_select_condition(source_op);
   const loom_value_id_t true_value = loom_vector_select_true_value(source_op);
   const loom_value_id_t false_value = loom_vector_select_false_value(source_op);
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
   if (!loom_type_equal(loom_module_value_type(module, true_value),
                        result_type) ||
       !loom_type_equal(loom_module_value_type(module, false_value),
@@ -263,9 +257,9 @@ iree_status_t loom_amdgpu_select_vector_select_plan(
   if (allows_vector_mask && condition_lane_count == storage.element_count) {
     condition_kind = LOOM_AMDGPU_SELECT_CONDITION_KIND_VECTOR_MASK;
     registers_per_condition_lane = storage.element_register_count;
-  } else if (loom_amdgpu_select_scalar_splat_condition(module, condition,
-                                                       storage.element_count,
-                                                       &selected_condition)) {
+  } else if (loom_amdgpu_select_scalar_splat_condition(
+                 module, fact_table, condition, storage.element_count,
+                 &selected_condition)) {
     condition_kind = LOOM_AMDGPU_SELECT_CONDITION_KIND_SCALAR_MASK;
   } else {
     return iree_ok_status();
@@ -337,8 +331,11 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_select(
   const uint32_t condition_lane_count = loom_amdgpu_vector_i1_lane_count(
       loom_module_value_type(module, condition));
   loom_value_id_t unused_scalar_condition = LOOM_VALUE_ID_INVALID;
+  const loom_value_fact_table_t* fact_table =
+      loom_target_low_legality_fact_table(context);
   const bool scalar_splat_condition = loom_amdgpu_select_scalar_splat_condition(
-      module, condition, storage.element_count, &unused_scalar_condition);
+      module, fact_table, condition, storage.element_count,
+      &unused_scalar_condition);
   if (scalar_splat_condition) {
     return iree_ok_status();
   }
@@ -683,20 +680,55 @@ iree_status_t loom_amdgpu_select_scf_select_plan(
   return iree_ok_status();
 }
 
+typedef struct loom_amdgpu_clampf_ordered_predicates_t {
+  // Predicate used to detect values below the lower clamp bound.
+  uint8_t lower;
+  // Predicate used to detect values above the upper clamp bound.
+  uint8_t upper;
+} loom_amdgpu_clampf_ordered_predicates_t;
+
+static bool loom_amdgpu_clampf_ordered_predicates(
+    loom_op_kind_t compare_op_kind,
+    loom_amdgpu_clampf_ordered_predicates_t* out_predicates) {
+  *out_predicates = (loom_amdgpu_clampf_ordered_predicates_t){0};
+  switch (compare_op_kind) {
+    case LOOM_OP_SCALAR_CMPF:
+      *out_predicates = (loom_amdgpu_clampf_ordered_predicates_t){
+          .lower = LOOM_SCALAR_CMPF_PREDICATE_OLT,
+          .upper = LOOM_SCALAR_CMPF_PREDICATE_OGT,
+      };
+      return true;
+    case LOOM_OP_VECTOR_CMPF:
+      *out_predicates = (loom_amdgpu_clampf_ordered_predicates_t){
+          .lower = LOOM_VECTOR_CMPF_PREDICATE_OLT,
+          .upper = LOOM_VECTOR_CMPF_PREDICATE_OGT,
+      };
+      return true;
+    default:
+      IREE_ASSERT_UNREACHABLE("unsupported AMDGPU ordered clamp compare op");
+      return false;
+  }
+}
+
 static iree_status_t loom_amdgpu_select_clampf_ordered_descriptors(
     loom_low_lower_context_t* context, loom_op_kind_t compare_op_kind,
     loom_amdgpu_clampf_plan_t* out_plan, bool* out_present) {
   *out_present = false;
+  loom_amdgpu_clampf_ordered_predicates_t predicates = {0};
+  if (!loom_amdgpu_clampf_ordered_predicates(compare_op_kind, &predicates)) {
+    return iree_ok_status();
+  }
+
   bool lower_compare_present = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_compare_descriptor_if_present(
-      context, compare_op_kind, LOOM_SCALAR_CMPF_PREDICATE_OLT,
+      context, compare_op_kind, predicates.lower,
       &out_plan->lower_compare_descriptor, &lower_compare_present));
   if (!lower_compare_present) {
     return iree_ok_status();
   }
   bool upper_compare_present = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_compare_descriptor_if_present(
-      context, compare_op_kind, LOOM_SCALAR_CMPF_PREDICATE_OGT,
+      context, compare_op_kind, predicates.upper,
       &out_plan->upper_compare_descriptor, &upper_compare_present));
   if (!upper_compare_present) {
     return iree_ok_status();
@@ -726,16 +758,12 @@ static iree_status_t loom_amdgpu_select_clampf_number_descriptors(
     return iree_ok_status();
   }
 
-  bool lower_literal_present = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
       context, LOOM_AMDGPU_DESCRIPTOR_REF_V_MAX_F32_LIT,
-      &out_plan->lower_bound_literal_descriptor, &lower_literal_present));
-  bool upper_literal_present = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      &out_plan->lower_bound_literal_descriptor));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_optional_descriptor_ref(
       context, LOOM_AMDGPU_DESCRIPTOR_REF_V_MIN_F32_LIT,
-      &out_plan->upper_bound_literal_descriptor, &upper_literal_present));
-  (void)lower_literal_present;
-  (void)upper_literal_present;
+      &out_plan->upper_bound_literal_descriptor));
 
   *out_present = true;
   return iree_ok_status();

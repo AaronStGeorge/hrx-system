@@ -17,8 +17,8 @@ from loom.target.arch.amdgpu.contracts.callback_ownership import (
     CallbackDispatchRole,
     CallbackDispatchRow,
     amdgpu_generated_lower_rule_op_kinds,
-    callback_dispatch_policy_names_by_kind,
     callback_dispatch_row_macro_names,
+    callback_dispatch_row_tag_names_by_kind,
     parse_callback_dispatch_rows,
     validate_callback_dispatch_rows,
 )
@@ -28,20 +28,33 @@ _REGISTRY_TABLE_PATH = Path(
     "loom/src/loom/target/arch/amdgpu/lower/registry_tables.inl"
 )
 
-_POLICY_ENUM_RE = re.compile(
-    r"enum loom_amdgpu_(storage|preselect|report)_policy_e\s*\{(?P<body>.*?)\};",
-    re.DOTALL,
-)
-_POLICY_NAME_RE = re.compile(
-    r"\b(LOOM_AMDGPU_(?:STORAGE|PRESELECT|REPORT)_[A-Z0-9_]+)\b"
+_ROW_TAG_ENUMS_BY_KIND = {
+    "storage": re.compile(
+        r"enum loom_amdgpu_storage_policy_e\s*\{(?P<body>.*?)\};", re.DOTALL
+    ),
+    "preselect": re.compile(
+        r"enum loom_amdgpu_preselect_policy_e\s*\{(?P<body>.*?)\};", re.DOTALL
+    ),
+    "report_key": re.compile(
+        r"enum loom_amdgpu_report_key_kind_e\s*\{(?P<body>.*?)\};", re.DOTALL
+    ),
+}
+_ROW_TAG_NAME_RE = re.compile(
+    r"\b(LOOM_AMDGPU_(?:STORAGE|PRESELECT|REPORT_KEY)_[A-Z0-9_]+)\b"
 )
 _PUBLIC_ROW_MACRO_RE = re.compile(r"#define LOOM_AMDGPU_([A-Z0-9_]+ROW)\b")
-_POLICY_SENTINELS_BY_KIND = {
+_ROW_TAG_SENTINELS_BY_KIND = {
     "storage": frozenset(
-        {"LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS", "LOOM_AMDGPU_STORAGE_MAX"}
+        {
+            "LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS",
+            "LOOM_AMDGPU_STORAGE_PLAN_LEADING_SOURCES",
+            "LOOM_AMDGPU_STORAGE_MAX",
+        }
     ),
     "preselect": frozenset({"LOOM_AMDGPU_PRESELECT_NONE", "LOOM_AMDGPU_PRESELECT_MAX"}),
-    "report": frozenset({"LOOM_AMDGPU_REPORT_NONE", "LOOM_AMDGPU_REPORT_MAX"}),
+    "report_key": frozenset(
+        {"LOOM_AMDGPU_REPORT_KEY_NONE", "LOOM_AMDGPU_REPORT_KEY_MAX"}
+    ),
 }
 
 
@@ -58,11 +71,11 @@ def test_parse_callback_dispatch_rows_requires_role_prefix() -> None:
 def test_parse_callback_dispatch_rows_captures_arguments() -> None:
     source = """
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FMAF)] =
-            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW(
+            LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW(
                 LOOM_OP_VECTOR_FMAF, loom_amdgpu_packed_ternary_plan_t,
                 loom_amdgpu_select_vector_packed_fmaf_dispatch,
                 loom_amdgpu_emit_vector_packed_ternary_dispatch, NULL,
-                LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3,
+                3,
                 LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC),
     """
 
@@ -72,14 +85,14 @@ def test_parse_callback_dispatch_rows_captures_arguments() -> None:
         CallbackDispatchRow(
             op_kind="LOOM_OP_VECTOR_FMAF",
             role=CallbackDispatchRole.GENERATED_PRESELECT,
-            macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
+            macro_name="GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_FMAF",
                 "loom_amdgpu_packed_ternary_plan_t",
                 "loom_amdgpu_select_vector_packed_fmaf_dispatch",
                 "loom_amdgpu_emit_vector_packed_ternary_dispatch",
                 "NULL",
-                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
+                "3",
                 "LOOM_AMDGPU_PRESELECT_PLAN_ID_FMA_DIAGNOSTIC",
             ),
         ),
@@ -144,44 +157,42 @@ def test_validate_callback_dispatch_rows_rejects_wrong_policy_namespace() -> Non
         )
 
 
-def test_validate_callback_dispatch_rows_rejects_wrong_report_policy_namespace() -> (
-    None
-):
+def test_validate_callback_dispatch_rows_rejects_wrong_report_key_namespace() -> None:
     rows = (
         CallbackDispatchRow(
             op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
             role=CallbackDispatchRole.RECIPE,
-            macro_name="RECIPE_DATA_STORAGE_REPORT_ROW",
+            macro_name="RECIPE_DATA_SOURCE_REPORT_KEY_ROW",
             arguments=(
                 "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
                 "loom_amdgpu_workgroup_reduce_plan_t",
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1",
-                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2",
+                "1",
+                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
             ),
         ),
     )
 
-    with pytest.raises(ValueError, match="expects a report policy"):
+    with pytest.raises(ValueError, match="expects a report key"):
         validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_validate_callback_dispatch_rows_accepts_report_policy() -> None:
+def test_validate_callback_dispatch_rows_accepts_report_key() -> None:
     rows = (
         CallbackDispatchRow(
             op_kind="LOOM_OP_KERNEL_WORKGROUP_REDUCE",
             role=CallbackDispatchRole.RECIPE,
-            macro_name="RECIPE_DATA_STORAGE_REPORT_ROW",
+            macro_name="RECIPE_DATA_SOURCE_REPORT_KEY_ROW",
             arguments=(
                 "LOOM_OP_KERNEL_WORKGROUP_REDUCE",
                 "loom_amdgpu_workgroup_reduce_plan_t",
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1",
-                "LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION",
+                "1",
+                "LOOM_AMDGPU_REPORT_KEY_WORKGROUP_REDUCE_PUBLICATION",
             ),
         ),
     )
@@ -189,10 +200,31 @@ def test_validate_callback_dispatch_rows_accepts_report_policy() -> None:
     validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
-def test_callback_policy_names_match_registry_enums() -> None:
+def test_validate_callback_dispatch_rows_rejects_bad_source_count() -> None:
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_BITPACK",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DATA_SOURCE_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_BITPACK",
+                "loom_amdgpu_bitpack_plan_t",
+                "select",
+                "emit",
+                "verify",
+                "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="expects a leading source count"):
+        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
+def test_callback_row_tag_names_match_registry_enums() -> None:
     registry_source = _read_repo_file(_REGISTRY_SOURCE_PATH)
 
-    assert callback_dispatch_policy_names_by_kind() == _parse_registry_policy_enums(
+    assert callback_dispatch_row_tag_names_by_kind() == _parse_registry_row_tag_enums(
         registry_source
     )
 
@@ -208,19 +240,52 @@ def test_callback_row_macro_schemas_match_registry_macros() -> None:
 def test_validate_callback_dispatch_rows_rejects_policy_in_non_policy_slot() -> None:
     rows = (
         CallbackDispatchRow(
-            op_kind="LOOM_OP_VECTOR_CONSTANT",
-            role=CallbackDispatchRole.VALUE,
-            macro_name="VALUE_DIRECT_ROW",
+            op_kind="LOOM_OP_VECTOR_CONCAT",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DATA_ROW",
             arguments=(
-                "LOOM_OP_VECTOR_CONSTANT",
+                "LOOM_OP_VECTOR_CONCAT",
                 "LOOM_AMDGPU_STORAGE_VALUE_PLAN",
+                "select",
                 "emit",
                 "verify",
             ),
         ),
     )
 
-    with pytest.raises(ValueError, match=r"policy token .* in non-policy argument"):
+    with pytest.raises(ValueError, match=r"row tag token .* in non-tag argument"):
+        validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
+
+
+def test_validate_callback_dispatch_rows_rejects_removed_direct_default_macros() -> (
+    None
+):
+    rows = (
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_VECTOR_CONSTANT",
+            role=CallbackDispatchRole.VALUE,
+            macro_name="VALUE_DIRECT_ROW",
+            arguments=(
+                "LOOM_OP_VECTOR_CONSTANT",
+                "select",
+                "emit",
+                "verify",
+            ),
+        ),
+        CallbackDispatchRow(
+            op_kind="LOOM_OP_KERNEL_BARRIER",
+            role=CallbackDispatchRole.RECIPE,
+            macro_name="RECIPE_DIRECT_ROW",
+            arguments=(
+                "LOOM_OP_KERNEL_BARRIER",
+                "select",
+                "emit",
+                "verify",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="no registered dispatch-row schema"):
         validate_callback_dispatch_rows(rows, generated_lower_rule_op_kinds=())
 
 
@@ -252,14 +317,14 @@ def test_validate_callback_dispatch_rows_accepts_generated_preselect() -> None:
         CallbackDispatchRow(
             op_kind="LOOM_OP_VECTOR_FMAF",
             role=CallbackDispatchRole.GENERATED_PRESELECT,
-            macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
+            macro_name="GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_FMAF",
                 "loom_amdgpu_packed_ternary_plan_t",
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
+                "3",
                 "LOOM_AMDGPU_PRESELECT_PLAN_ID",
             ),
         ),
@@ -321,14 +386,14 @@ def test_validate_callback_dispatch_rows_rejects_unowned_preselect() -> None:
         CallbackDispatchRow(
             op_kind="LOOM_OP_VECTOR_BITPACK",
             role=CallbackDispatchRole.GENERATED_PRESELECT,
-            macro_name="GENERATED_PRESELECT_DATA_POLICY_ROW",
+            macro_name="GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW",
             arguments=(
                 "LOOM_OP_VECTOR_BITPACK",
                 "loom_amdgpu_bitpack_plan_t",
                 "select",
                 "emit",
                 "verify",
-                "LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3",
+                "3",
                 "LOOM_AMDGPU_PRESELECT_PLAN_ID",
             ),
         ),
@@ -365,14 +430,14 @@ def _read_repo_file(path: Path) -> str:
     raise FileNotFoundError(path)
 
 
-def _parse_registry_policy_enums(source: str) -> dict[str, frozenset[str]]:
-    policy_names_by_kind: dict[str, frozenset[str]] = {}
-    for match in _POLICY_ENUM_RE.finditer(source):
-        kind = match.group(1)
-        policy_names = frozenset(_POLICY_NAME_RE.findall(match.group("body")))
-        policy_names_by_kind[kind] = policy_names - _POLICY_SENTINELS_BY_KIND[kind]
-    assert policy_names_by_kind.keys() == _POLICY_SENTINELS_BY_KIND.keys()
-    return policy_names_by_kind
+def _parse_registry_row_tag_enums(source: str) -> dict[str, frozenset[str]]:
+    row_tag_names_by_kind: dict[str, frozenset[str]] = {}
+    for kind, enum_re in _ROW_TAG_ENUMS_BY_KIND.items():
+        match = enum_re.search(source)
+        assert match is not None
+        row_tag_names = frozenset(_ROW_TAG_NAME_RE.findall(match.group("body")))
+        row_tag_names_by_kind[kind] = row_tag_names - _ROW_TAG_SENTINELS_BY_KIND[kind]
+    return row_tag_names_by_kind
 
 
 def _parse_public_row_macros(source: str) -> frozenset[str]:

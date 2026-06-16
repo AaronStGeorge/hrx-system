@@ -25,6 +25,7 @@ AMDGPU_ASYNC_CONTRACT_DIALECT_OPS = {
 AMDGPU_ASYNC_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.async",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/async.h",
     target_contract_query=False,
     cases=(
         ValueElideRule(

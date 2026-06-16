@@ -174,6 +174,31 @@ class CliTest(unittest.TestCase):
             ],
         )
 
+    def test_bazel_test_update_uses_standalone_test_runner_strategy(self):
+        argv = self.planned_argv(
+            [
+                "bazel",
+                "test",
+                "//loom/src/loom/target/arch/amdgpu:source_low_bitstream_report",
+                "--test_arg=--update",
+            ]
+        )
+
+        self.assertIn("--strategy=TestRunner=standalone", argv)
+
+    def test_bazel_test_update_split_arg_uses_standalone_test_runner_strategy(self):
+        argv = self.planned_argv(
+            [
+                "bazel",
+                "test",
+                "--test_arg",
+                "--update",
+                "//loom/src/loom/target/arch/amdgpu:source_low_bitstream_report",
+            ]
+        )
+
+        self.assertIn("--strategy=TestRunner=standalone", argv)
+
     def test_bazel_query_preserves_negative_target_separator(self):
         argv = self.planned_argv(
             [

@@ -381,6 +381,7 @@ def _compile_native_asm_value(
     field_name = value.field_name
     literal = value.literal
     bit_width = value.bit_width
+    target_format_id = value.target_format_id
 
     def require_field_name() -> str:
         if field_name is None or field_name == "":
@@ -392,6 +393,8 @@ def _compile_native_asm_value(
             raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native value {value_ordinal} unexpectedly specifies a literal")
         if bit_width != 0:
             raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native value {value_ordinal} unexpectedly specifies a bit width")
+        if target_format_id != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native value {value_ordinal} unexpectedly specifies a target format")
 
     if kind is NativeAsmValueKind.LITERAL:
         if field_name is not None:
@@ -402,10 +405,13 @@ def _compile_native_asm_value(
             raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native literal value {value_ordinal} exceeds 255 bytes")
         if bit_width != 0:
             raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native literal value {value_ordinal} unexpectedly specifies a bit width")
+        if target_format_id != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native literal value {value_ordinal} unexpectedly specifies a target format")
         return CompiledNativeAsmValue(
             kind=kind,
             index=0,
             bit_width=0,
+            target_format_id=0,
             literal_label=string_pool.intern(
                 scoped_label("asm_native_value", str(value_ordinal)),
                 literal,
@@ -426,6 +432,7 @@ def _compile_native_asm_value(
             kind=kind,
             index=operand_index,
             bit_width=0,
+            target_format_id=0,
             literal_label=None,
             literal=None,
         )
@@ -443,6 +450,7 @@ def _compile_native_asm_value(
             kind=kind,
             index=operand_index,
             bit_width=0,
+            target_format_id=0,
             literal_label=None,
             literal=None,
         )
@@ -450,7 +458,7 @@ def _compile_native_asm_value(
     if kind in (
         NativeAsmValueKind.IMMEDIATE_I64,
         NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX,
-        NativeAsmValueKind.AMDGPU_DELAY_ALU_IMMEDIATE,
+        NativeAsmValueKind.IMMEDIATE_TARGET_FORMAT,
     ):
         if literal is not None:
             raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native immediate value {value_ordinal} unexpectedly specifies a literal")
@@ -464,12 +472,18 @@ def _compile_native_asm_value(
         elif kind is NativeAsmValueKind.IMMEDIATE_UNSIGNED_HEX:
             if bit_width <= 0 or bit_width > 32:
                 raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native unsigned-hex immediate '{name}' bit width must be in [1, 32]")
-        elif bit_width != 0:
-            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native AMDGPU delay-ALU immediate '{name}' unexpectedly specifies a bit width")
+        elif kind is NativeAsmValueKind.IMMEDIATE_TARGET_FORMAT:
+            if bit_width != 0:
+                raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native target-format immediate '{name}' unexpectedly specifies a bit width")
+            if target_format_id <= 0 or target_format_id > 0xFF:
+                raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native target-format immediate '{name}' target format must be in [1, 255]")
+        if kind is not NativeAsmValueKind.IMMEDIATE_TARGET_FORMAT and target_format_id != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' native immediate '{name}' unexpectedly specifies a target format")
         return CompiledNativeAsmValue(
             kind=kind,
             index=immediate_index,
             bit_width=bit_width,
+            target_format_id=target_format_id,
             literal_label=None,
             literal=None,
         )

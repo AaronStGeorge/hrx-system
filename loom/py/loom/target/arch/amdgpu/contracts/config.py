@@ -30,6 +30,7 @@ AMDGPU_CONFIG_CONTRACT_DIALECT_OPS = {
 AMDGPU_CONFIG_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.config",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/config.h",
     cases=(
         ValueElideRule(
             source_op=config.config_get,

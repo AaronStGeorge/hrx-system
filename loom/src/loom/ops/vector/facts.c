@@ -1518,6 +1518,9 @@ iree_status_t loom_vector_splat_facts(loom_fact_context_t* context,
                                       const loom_op_t* op,
                                       const loom_value_facts_t* operand_facts,
                                       loom_value_facts_t* result_facts) {
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_define_uniform_element_origin(
+      context->table, loom_vector_splat_result(op),
+      loom_vector_splat_scalar(op)));
   return loom_value_facts_make_uniform_element(context, operand_facts[0],
                                                &result_facts[0]);
 }
@@ -1575,6 +1578,23 @@ iree_status_t loom_vector_from_elements_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
+  loom_value_slice_t elements = loom_vector_from_elements_elements(op);
+  if (elements.count > 0) {
+    loom_value_id_t first_element = loom_value_slice_get(elements, 0);
+    bool all_same_element = true;
+    for (uint16_t i = 1; i < elements.count; ++i) {
+      if (loom_value_slice_get(elements, i) != first_element) {
+        all_same_element = false;
+        break;
+      }
+    }
+    if (all_same_element) {
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_define_uniform_element_origin(
+          context->table, loom_vector_from_elements_result(op), first_element));
+      return loom_value_facts_make_uniform_element(context, operand_facts[0],
+                                                   &result_facts[0]);
+    }
+  }
   loom_value_fact_small_static_lanes_t lanes = {
       .lanes = operand_facts,
       .count = op->operand_count,

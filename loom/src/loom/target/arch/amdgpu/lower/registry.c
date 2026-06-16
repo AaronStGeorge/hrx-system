@@ -74,7 +74,7 @@ typedef iree_status_t (*loom_amdgpu_lower_verify_fn_t)(
 
 typedef uint8_t loom_amdgpu_storage_policy_t;
 typedef uint8_t loom_amdgpu_preselect_policy_t;
-typedef uint8_t loom_amdgpu_report_policy_t;
+typedef uint8_t loom_amdgpu_report_key_kind_t;
 typedef uint8_t loom_amdgpu_lower_policy_bits_t;
 
 enum loom_amdgpu_storage_policy_e {
@@ -82,26 +82,22 @@ enum loom_amdgpu_storage_policy_e {
   LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS = 0,
   // Value lowering owns its source operand demand policy.
   LOOM_AMDGPU_STORAGE_VALUE_PLAN = 1,
-  // Target plan data starts with one source value.
-  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1 = 2,
-  // Target plan data starts with a 2-value source array.
-  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2 = 3,
-  // Target plan data starts with a 3-value source array.
-  LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3 = 4,
+  // Target plan data starts with row-declared source values.
+  LOOM_AMDGPU_STORAGE_PLAN_LEADING_SOURCES = 2,
   // Memory access plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_MEMORY_PLAN = 5,
+  LOOM_AMDGPU_STORAGE_MEMORY_PLAN = 3,
   // Atomic plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_ATOMIC = 6,
+  LOOM_AMDGPU_STORAGE_ATOMIC = 4,
   // Prefetch plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_PREFETCH = 7,
+  LOOM_AMDGPU_STORAGE_PREFETCH = 5,
   // Fragment memory plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY = 8,
+  LOOM_AMDGPU_STORAGE_FRAGMENT_MEMORY = 6,
   // Subgroup broadcast plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST = 9,
+  LOOM_AMDGPU_STORAGE_SUBGROUP_BROADCAST = 7,
   // Selected plans require no source operand storage.
-  LOOM_AMDGPU_STORAGE_NONE = 10,
+  LOOM_AMDGPU_STORAGE_NONE = 8,
   // Async gather plans own their source operand demand policy.
-  LOOM_AMDGPU_STORAGE_ASYNC_GATHER = 11,
+  LOOM_AMDGPU_STORAGE_ASYNC_GATHER = 9,
   // Maximum storage-policy value accepted by dispatch row policy bits.
   LOOM_AMDGPU_STORAGE_MAX = LOOM_AMDGPU_STORAGE_ASYNC_GATHER,
 };
@@ -120,21 +116,21 @@ enum loom_amdgpu_preselect_policy_e {
   LOOM_AMDGPU_PRESELECT_MAX = 3,
 };
 
-enum loom_amdgpu_report_policy_e {
+enum loom_amdgpu_report_key_kind_e {
   // The row has no target-owned compile-report plan key.
-  LOOM_AMDGPU_REPORT_NONE = 0,
+  LOOM_AMDGPU_REPORT_KEY_NONE = 0,
   // Report the workgroup-reduce publication strategy selected by the plan.
-  LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION = 1,
-  // Maximum report-policy value accepted by dispatch row policy bits.
-  LOOM_AMDGPU_REPORT_MAX = LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION,
+  LOOM_AMDGPU_REPORT_KEY_WORKGROUP_REDUCE_PUBLICATION = 1,
+  // Report the bounded table-lookup strategy selected by the plan.
+  LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY = 2,
+  // Maximum report-key kind accepted by dispatch rows.
+  LOOM_AMDGPU_REPORT_KEY_MAX = LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY,
 };
 
 enum loom_amdgpu_lower_policy_bits_e {
   LOOM_AMDGPU_LOWER_POLICY_STORAGE_MASK = 0x0Fu,
   LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT = 4u,
   LOOM_AMDGPU_LOWER_POLICY_PRESELECT_MASK = 0x30u,
-  LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT = 6u,
-  LOOM_AMDGPU_LOWER_POLICY_REPORT_MASK = 0xC0u,
 };
 
 static_assert((LOOM_AMDGPU_STORAGE_MAX &
@@ -144,19 +140,16 @@ static_assert(((LOOM_AMDGPU_PRESELECT_MAX
                 << LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT) &
                ~LOOM_AMDGPU_LOWER_POLICY_PRESELECT_MASK) == 0,
               "AMDGPU preselect policy values must fit dispatch row bits");
-static_assert(((LOOM_AMDGPU_REPORT_MAX
-                << LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT) &
-               ~LOOM_AMDGPU_LOWER_POLICY_REPORT_MASK) == 0,
-              "AMDGPU report policy values must fit dispatch row bits");
 
 typedef struct loom_amdgpu_lower_dispatch_row_t {
   // Source op kind covered by this AMDGPU lowering row.
   loom_op_kind_t source_op_kind;
-  // Packed storage, preselection, and compile-report policy bits.
+  // Packed storage and preselection policy bits.
   loom_amdgpu_lower_policy_bits_t policy_bits;
-  // Bytes of plan data allocated by typed data selectors. Direct selector
-  // hooks keep this zero and own any mixed plan allocation themselves.
-  uint16_t plan_data_size;
+  // Number of leading loom_value_id_t fields used by leading-source storage.
+  uint8_t leading_source_count;
+  // Compile-report plan-key family, or NONE when this row reports no plan key.
+  loom_amdgpu_report_key_kind_t report_key_kind;
   // Optional source-to-low plan selection hook.
   loom_amdgpu_lower_select_fn_t select;
   // Optional source-to-low plan emission hook.
@@ -176,20 +169,26 @@ typedef struct loom_amdgpu_lower_dispatch_table_t {
 static_assert(sizeof(loom_amdgpu_lower_dispatch_table_t) == 16,
               "AMDGPU dispatch table references must stay cache dense");
 
-#define LOOM_AMDGPU_DEFINE_DATA_SELECT(name, plan_type, select_fn)             \
-  static iree_status_t name(loom_low_lower_context_t* context,                 \
-                            const loom_op_t* source_op,                        \
-                            const loom_amdgpu_lower_dispatch_row_t* row,       \
-                            loom_low_lower_plan_t* out_plan) {                 \
-    plan_type* plan_data = NULL;                                               \
-    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(                    \
-        context, row->plan_data_size, (void**)&plan_data));                    \
-    bool selected = false;                                                     \
-    IREE_RETURN_IF_ERROR(select_fn(context, source_op, plan_data, &selected)); \
-    if (selected) {                                                            \
-      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);        \
-    }                                                                          \
-    return iree_ok_status();                                                   \
+#define LOOM_AMDGPU_DEFINE_DATA_SELECT(name, plan_type, select_fn)       \
+  static iree_status_t name(loom_low_lower_context_t* context,           \
+                            const loom_op_t* source_op,                  \
+                            const loom_amdgpu_lower_dispatch_row_t* row, \
+                            loom_low_lower_plan_t* out_plan) {           \
+    (void)row;                                                           \
+    static_assert(sizeof(plan_type) <= UINT16_MAX,                       \
+                  #plan_type " must fit low plan data allocation size"); \
+    plan_type local_plan = {0};                                          \
+    bool selected = false;                                               \
+    IREE_RETURN_IF_ERROR(                                                \
+        select_fn(context, source_op, &local_plan, &selected));          \
+    if (selected) {                                                      \
+      plan_type* plan_data = NULL;                                       \
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(            \
+          context, sizeof(*plan_data), (void**)&plan_data));             \
+      *plan_data = local_plan;                                           \
+      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);  \
+    }                                                                    \
+    return iree_ok_status();                                             \
   }
 
 #define LOOM_AMDGPU_DEFINE_DATA_EMIT(name, plan_type, emit_fn)              \
@@ -611,49 +610,50 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
 
 #define LOOM_AMDGPU_OP_INDEX(op_kind) ((uint8_t)((op_kind) & 0xFFu))
 
-#define LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type) \
-  ((uint16_t)(sizeof(plan_type) +             \
-              0u * sizeof(char[(sizeof(plan_type) <= UINT16_MAX) ? 1 : -1])))
-
 #define LOOM_AMDGPU_ENUM_MAX_CHECK(value, max_value) \
   (0u * sizeof(char[((value) <= (max_value)) ? 1 : -1]))
 
-#define LOOM_AMDGPU_POLICY_BITS(storage_policy_value, preselect_policy_value,         \
-                                report_policy_value)                                  \
-  ((loom_amdgpu_lower_policy_bits_t)(((storage_policy_value) |                        \
-                                      ((preselect_policy_value)                       \
-                                       << LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT) | \
-                                      ((report_policy_value)                          \
-                                       << LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT)) +   \
-                                     LOOM_AMDGPU_ENUM_MAX_CHECK(                      \
-                                         storage_policy_value,                        \
-                                         LOOM_AMDGPU_STORAGE_MAX) +                   \
-                                     LOOM_AMDGPU_ENUM_MAX_CHECK(                      \
-                                         preselect_policy_value,                      \
-                                         LOOM_AMDGPU_PRESELECT_MAX) +                 \
-                                     LOOM_AMDGPU_ENUM_MAX_CHECK(                      \
-                                         report_policy_value,                         \
-                                         LOOM_AMDGPU_REPORT_MAX)))
+#define LOOM_AMDGPU_SOURCE_COUNT(value) \
+  ((uint8_t)((value) + 0u * sizeof(char[((value) <= 3) ? 1 : -1])))
 
-#define LOOM_AMDGPU_INTERNAL_ROW(                                             \
-    op_kind, storage_policy_value, preselect_policy_value,                    \
-    report_policy_value, plan_data_size_value, select_fn, emit_fn, verify_fn) \
-  {                                                                           \
-      .source_op_kind = (op_kind),                                            \
-      .policy_bits = LOOM_AMDGPU_POLICY_BITS(                                 \
-          storage_policy_value, preselect_policy_value, report_policy_value), \
-      .plan_data_size = (plan_data_size_value),                               \
-      .select = (select_fn),                                                  \
-      .emit = (emit_fn),                                                      \
-      .verify = (verify_fn),                                                  \
+#define LOOM_AMDGPU_LEADING_SOURCE_COUNT(value) \
+  ((value) + 0u * sizeof(char[((value) > 0 && (value) <= 3) ? 1 : -1]))
+
+#define LOOM_AMDGPU_POLICY_BITS(storage_policy_value, preselect_policy_value)          \
+  ((loom_amdgpu_lower_policy_bits_t)(((storage_policy_value) |                         \
+                                      ((preselect_policy_value)                        \
+                                       << LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT)) + \
+                                     LOOM_AMDGPU_ENUM_MAX_CHECK(                       \
+                                         storage_policy_value,                         \
+                                         LOOM_AMDGPU_STORAGE_MAX) +                    \
+                                     LOOM_AMDGPU_ENUM_MAX_CHECK(                       \
+                                         preselect_policy_value,                       \
+                                         LOOM_AMDGPU_PRESELECT_MAX)))
+
+#define LOOM_AMDGPU_INTERNAL_ROW(                                              \
+    op_kind, storage_policy_value, preselect_policy_value, source_count_value, \
+    report_key_kind_value, select_fn, emit_fn, verify_fn)                      \
+  {                                                                            \
+      .source_op_kind = (op_kind),                                             \
+      .policy_bits = LOOM_AMDGPU_POLICY_BITS(storage_policy_value,             \
+                                             preselect_policy_value),          \
+      .leading_source_count = LOOM_AMDGPU_SOURCE_COUNT(source_count_value),    \
+      .report_key_kind =                                                       \
+          (loom_amdgpu_report_key_kind_t)((report_key_kind_value) +            \
+                                          LOOM_AMDGPU_ENUM_MAX_CHECK(          \
+                                              report_key_kind_value,           \
+                                              LOOM_AMDGPU_REPORT_KEY_MAX)),    \
+      .select = (select_fn),                                                   \
+      .emit = (emit_fn),                                                       \
+      .verify = (verify_fn),                                                   \
   }
 
-#define LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW(                                \
-    op_kind, select_fn, emit_fn, verify_fn, storage_policy_value,              \
-    preselect_policy_value)                                                    \
-  LOOM_AMDGPU_INTERNAL_ROW(op_kind, storage_policy_value,                      \
-                           preselect_policy_value, LOOM_AMDGPU_REPORT_NONE, 0, \
-                           select_fn, emit_fn, verify_fn)
+#define LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW(                   \
+    op_kind, select_fn, emit_fn, verify_fn, storage_policy_value, \
+    preselect_policy_value)                                       \
+  LOOM_AMDGPU_INTERNAL_ROW(                                       \
+      op_kind, storage_policy_value, preselect_policy_value, 0,   \
+      LOOM_AMDGPU_REPORT_KEY_NONE, select_fn, emit_fn, verify_fn)
 
 #define LOOM_AMDGPU_INTERNAL_DIRECT_ROW(op_kind, select_fn, emit_fn, \
                                         verify_fn)                   \
@@ -670,18 +670,40 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
 #define LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW(                                \
     op_kind, plan_type, select_fn, emit_fn, verify_fn, storage_policy_value, \
     preselect_policy_value)                                                  \
-  LOOM_AMDGPU_INTERNAL_ROW(op_kind, storage_policy_value,                    \
-                           preselect_policy_value, LOOM_AMDGPU_REPORT_NONE,  \
-                           LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type), select_fn, \
-                           emit_fn, verify_fn)
+  LOOM_AMDGPU_INTERNAL_ROW(                                                  \
+      op_kind, storage_policy_value, preselect_policy_value, 0,              \
+      LOOM_AMDGPU_REPORT_KEY_NONE, select_fn, emit_fn, verify_fn)
 
-#define LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW(                        \
+#define LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_KEY_ROW(                    \
     op_kind, plan_type, select_fn, emit_fn, verify_fn, storage_policy_value, \
-    report_policy_value)                                                     \
-  LOOM_AMDGPU_INTERNAL_ROW(op_kind, storage_policy_value,                    \
-                           LOOM_AMDGPU_PRESELECT_NONE, report_policy_value,  \
-                           LOOM_AMDGPU_PLAN_DATA_SIZE(plan_type), select_fn, \
-                           emit_fn, verify_fn)
+    report_key_kind_value)                                                   \
+  LOOM_AMDGPU_INTERNAL_ROW(                                                  \
+      op_kind, storage_policy_value, LOOM_AMDGPU_PRESELECT_NONE, 0,          \
+      report_key_kind_value, select_fn, emit_fn, verify_fn)
+
+#define LOOM_AMDGPU_INTERNAL_DATA_SOURCE_POLICY_ROW(                       \
+    op_kind, plan_type, select_fn, emit_fn, verify_fn, source_count_value, \
+    preselect_policy_value)                                                \
+  LOOM_AMDGPU_INTERNAL_ROW(                                                \
+      op_kind, LOOM_AMDGPU_STORAGE_PLAN_LEADING_SOURCES,                   \
+      preselect_policy_value,                                              \
+      LOOM_AMDGPU_LEADING_SOURCE_COUNT(source_count_value),                \
+      LOOM_AMDGPU_REPORT_KEY_NONE, select_fn, emit_fn, verify_fn)
+
+#define LOOM_AMDGPU_INTERNAL_DATA_SOURCE_REPORT_KEY_ROW(                   \
+    op_kind, plan_type, select_fn, emit_fn, verify_fn, source_count_value, \
+    report_key_kind_value)                                                 \
+  LOOM_AMDGPU_INTERNAL_ROW(                                                \
+      op_kind, LOOM_AMDGPU_STORAGE_PLAN_LEADING_SOURCES,                   \
+      LOOM_AMDGPU_PRESELECT_NONE,                                          \
+      LOOM_AMDGPU_LEADING_SOURCE_COUNT(source_count_value),                \
+      report_key_kind_value, select_fn, emit_fn, verify_fn)
+
+#define LOOM_AMDGPU_INTERNAL_DATA_SOURCE_ROW(                                \
+    op_kind, plan_type, select_fn, emit_fn, verify_fn, source_count_value)   \
+  LOOM_AMDGPU_INTERNAL_DATA_SOURCE_POLICY_ROW(                               \
+      op_kind, plan_type, select_fn, emit_fn, verify_fn, source_count_value, \
+      LOOM_AMDGPU_PRESELECT_NONE)
 
 #define LOOM_AMDGPU_INTERNAL_DATA_ROW(op_kind, plan_type, select_fn, emit_fn, \
                                       verify_fn)                              \
@@ -695,7 +717,6 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
                                        verify_fn, storage_policy_value,        \
                                        LOOM_AMDGPU_PRESELECT_NONE)
 
-#define LOOM_AMDGPU_VALUE_DIRECT_ROW LOOM_AMDGPU_INTERNAL_DIRECT_ROW
 #define LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DIRECT_STORAGE_ROW
 #define LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW \
@@ -704,22 +725,28 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_view_prefetch_dispatch,
 #define LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
 
-#define LOOM_AMDGPU_RECIPE_DIRECT_ROW LOOM_AMDGPU_INTERNAL_DIRECT_ROW
+#define LOOM_AMDGPU_RECIPE_DIRECT_STORAGE_ROW \
+  LOOM_AMDGPU_INTERNAL_DIRECT_STORAGE_ROW
 #define LOOM_AMDGPU_RECIPE_DATA_ROW LOOM_AMDGPU_INTERNAL_DATA_ROW
 #define LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
-#define LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_ROW \
-  LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW
+#define LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_KEY_ROW \
+  LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_KEY_ROW
+#define LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW LOOM_AMDGPU_INTERNAL_DATA_SOURCE_ROW
+#define LOOM_AMDGPU_RECIPE_DATA_SOURCE_REPORT_KEY_ROW \
+  LOOM_AMDGPU_INTERNAL_DATA_SOURCE_REPORT_KEY_ROW
 
 #define LOOM_AMDGPU_GENERATED_PRESELECT_DIRECT_POLICY_ROW \
   LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW
 #define LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW \
   LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW
+#define LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW \
+  LOOM_AMDGPU_INTERNAL_DATA_SOURCE_POLICY_ROW
 
 #define LOOM_AMDGPU_LEGALITY_ROW(op_kind, verify_fn)                     \
   LOOM_AMDGPU_INTERNAL_ROW(op_kind, LOOM_AMDGPU_STORAGE_SOURCE_OPERANDS, \
-                           LOOM_AMDGPU_PRESELECT_NONE,                   \
-                           LOOM_AMDGPU_REPORT_NONE, 0, NULL, NULL, verify_fn)
+                           LOOM_AMDGPU_PRESELECT_NONE, 0,                \
+                           LOOM_AMDGPU_REPORT_KEY_NONE, NULL, NULL, verify_fn)
 
 #include "loom/target/arch/amdgpu/lower/registry_tables.inl"  // IWYU pragma: keep
 
@@ -753,27 +780,33 @@ static const loom_amdgpu_lower_dispatch_table_t
 #undef LOOM_AMDGPU_DISPATCH_TABLE
 
 #undef LOOM_AMDGPU_GENERATED_PRESELECT_DATA_POLICY_ROW
+#undef LOOM_AMDGPU_GENERATED_PRESELECT_DATA_SOURCE_POLICY_ROW
 #undef LOOM_AMDGPU_GENERATED_PRESELECT_DIRECT_POLICY_ROW
 #undef LOOM_AMDGPU_LEGALITY_ROW
-#undef LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_ROW
+#undef LOOM_AMDGPU_RECIPE_DATA_SOURCE_REPORT_KEY_ROW
+#undef LOOM_AMDGPU_RECIPE_DATA_SOURCE_ROW
+#undef LOOM_AMDGPU_RECIPE_DATA_STORAGE_REPORT_KEY_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_RECIPE_DATA_ROW
-#undef LOOM_AMDGPU_RECIPE_DIRECT_ROW
+#undef LOOM_AMDGPU_RECIPE_DIRECT_STORAGE_ROW
 #undef LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_POLICY_ROW
 #undef LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW
-#undef LOOM_AMDGPU_VALUE_DIRECT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_ROW
-#undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_ROW
+#undef LOOM_AMDGPU_INTERNAL_DATA_SOURCE_ROW
+#undef LOOM_AMDGPU_INTERNAL_DATA_SOURCE_REPORT_KEY_ROW
+#undef LOOM_AMDGPU_INTERNAL_DATA_SOURCE_POLICY_ROW
+#undef LOOM_AMDGPU_INTERNAL_DATA_STORAGE_REPORT_KEY_ROW
 #undef LOOM_AMDGPU_INTERNAL_DATA_POLICY_ROW
 #undef LOOM_AMDGPU_INTERNAL_DIRECT_STORAGE_ROW
 #undef LOOM_AMDGPU_INTERNAL_DIRECT_ROW
 #undef LOOM_AMDGPU_INTERNAL_DIRECT_POLICY_ROW
 #undef LOOM_AMDGPU_INTERNAL_ROW
 #undef LOOM_AMDGPU_POLICY_BITS
+#undef LOOM_AMDGPU_LEADING_SOURCE_COUNT
+#undef LOOM_AMDGPU_SOURCE_COUNT
 #undef LOOM_AMDGPU_ENUM_MAX_CHECK
-#undef LOOM_AMDGPU_PLAN_DATA_SIZE
 #undef LOOM_AMDGPU_OP_INDEX
 
 static const loom_amdgpu_lower_dispatch_row_t*
@@ -824,13 +857,20 @@ static loom_amdgpu_preselect_policy_t loom_amdgpu_dispatch_row_preselect_policy(
          LOOM_AMDGPU_LOWER_POLICY_PRESELECT_SHIFT;
 }
 
-static loom_amdgpu_report_policy_t loom_amdgpu_dispatch_row_report_policy(
+static loom_amdgpu_report_key_kind_t loom_amdgpu_dispatch_row_report_key_kind(
     const loom_amdgpu_lower_dispatch_row_t* row) {
   if (row == NULL) {
-    return LOOM_AMDGPU_REPORT_NONE;
+    return LOOM_AMDGPU_REPORT_KEY_NONE;
   }
-  return (row->policy_bits & LOOM_AMDGPU_LOWER_POLICY_REPORT_MASK) >>
-         LOOM_AMDGPU_LOWER_POLICY_REPORT_SHIFT;
+  return row->report_key_kind;
+}
+
+static uint8_t loom_amdgpu_dispatch_row_leading_source_count(
+    const loom_amdgpu_lower_dispatch_row_t* row) {
+  if (row == NULL) {
+    return 0;
+  }
+  return row->leading_source_count;
 }
 
 static_assert(offsetof(loom_amdgpu_fma_mix_plan_t, sources) == 0,
@@ -977,14 +1017,10 @@ static void loom_amdgpu_mark_plan_storage_demands(
   const loom_amdgpu_storage_policy_t storage_policy =
       loom_amdgpu_dispatch_row_storage_policy(row);
   switch (storage_policy) {
-    case LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1:
-      loom_amdgpu_mark_plan_sources_storage(context, plan.target_data, 1);
-      return;
-    case LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_2:
-      loom_amdgpu_mark_plan_sources_storage(context, plan.target_data, 2);
-      return;
-    case LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_3:
-      loom_amdgpu_mark_plan_sources_storage(context, plan.target_data, 3);
+    case LOOM_AMDGPU_STORAGE_PLAN_LEADING_SOURCES:
+      loom_amdgpu_mark_plan_sources_storage(
+          context, plan.target_data,
+          loom_amdgpu_dispatch_row_leading_source_count(row));
       return;
     case LOOM_AMDGPU_STORAGE_ATOMIC:
       loom_amdgpu_mark_atomic_plan_storage_demands(
@@ -1045,6 +1081,20 @@ static iree_string_view_t loom_amdgpu_workgroup_reduce_plan_key(
   }
 }
 
+static iree_string_view_t loom_amdgpu_table_lookup_plan_key(
+    const loom_amdgpu_table_lookup_plan_t* plan) {
+  switch (plan->strategy) {
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_F32_LADDER:
+      return IREE_SV("amdgpu.table_lookup.strategy.f32_ladder");
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_PERMUTE:
+      return IREE_SV("amdgpu.table_lookup.strategy.packed_i8_permute");
+    case LOOM_AMDGPU_TABLE_LOOKUP_STRATEGY_PACKED_I8_U4_PERMUTE:
+      return IREE_SV("amdgpu.table_lookup.strategy.packed_i8_u4_permute");
+    default:
+      return iree_string_view_empty();
+  }
+}
+
 static iree_string_view_t loom_amdgpu_plan_key(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_low_lower_plan_t plan) {
@@ -1053,13 +1103,19 @@ static iree_string_view_t loom_amdgpu_plan_key(
   (void)source_op;
   const loom_amdgpu_lower_dispatch_row_t* row =
       loom_amdgpu_find_lower_dispatch_row(plan.id);
-  switch (loom_amdgpu_dispatch_row_report_policy(row)) {
-    case LOOM_AMDGPU_REPORT_WORKGROUP_REDUCE_PUBLICATION:
+  switch (loom_amdgpu_dispatch_row_report_key_kind(row)) {
+    case LOOM_AMDGPU_REPORT_KEY_WORKGROUP_REDUCE_PUBLICATION:
       if (plan.target_data == NULL) {
         return iree_string_view_empty();
       }
       return loom_amdgpu_workgroup_reduce_plan_key(
           (const loom_amdgpu_workgroup_reduce_plan_t*)plan.target_data);
+    case LOOM_AMDGPU_REPORT_KEY_TABLE_LOOKUP_STRATEGY:
+      if (plan.target_data == NULL) {
+        return iree_string_view_empty();
+      }
+      return loom_amdgpu_table_lookup_plan_key(
+          (const loom_amdgpu_table_lookup_plan_t*)plan.target_data);
     default:
       return iree_string_view_empty();
   }

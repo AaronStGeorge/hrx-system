@@ -9,103 +9,19 @@
 
 iree_add_all_subdirs()
 
-iree_native_test(
+loom_check_test_suite(
   NAME
-    "allocation_materialization"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/allocation_materialization.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "dce"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/dce.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "source_to_low_options"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_to_low_options.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "source_to_low_structured_control"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_to_low_structured_control.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "target_legalize"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "target_legalize_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_diagnostics.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "target_legalize_matrix"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_matrix.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "target_legalize_report"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_report.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_native_test(
-  NAME
-    "target_legalize_structure"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_structure.loom-test"
-  SRC
-    loom::tools::loom-check::loom-check
-  LABELS
-    "loom-check"
+    test
+  SRCS
+    "allocation_materialization.loom-test"
+    "dce.loom-test"
+    "source_to_low_options.loom-test"
+    "source_to_low_structured_control.loom-test"
+    "target_legalize.loom-test"
+    "target_legalize_diagnostics.loom-test"
+    "target_legalize_matrix.loom-test"
+    "target_legalize_report.loom-test"
+    "target_legalize_structure.loom-test"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

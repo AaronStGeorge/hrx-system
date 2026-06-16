@@ -317,6 +317,7 @@ AMDGPU_REDUCE_CONTRACT_DIALECT_OPS = {
 AMDGPU_REDUCE_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.reduce",
     descriptor_set=_DESCRIPTOR_SET,
+    public_header="loom/target/arch/amdgpu/contracts/reduce.h",
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
     materializers=(I32_VGPR_MATERIALIZER,),
     cases=[

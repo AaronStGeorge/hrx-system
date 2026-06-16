@@ -349,11 +349,11 @@ def test_compile_lower_rule_set_compiles_recipe_cases() -> None:
         descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
         cases=[
             RecipeRule(
-                source_op=vector.vector_bitpack,
+                source_op=vector.vector_addi,
                 guards=(
-                    Guard.value_type("source", Vector("i32", lanes=4)),
-                    Guard.value_type("result", Vector("i8", lanes=4)),
-                    Guard.i64_range("width", 8, 8),
+                    Guard.value_type("lhs", Vector("i32", lanes=4)),
+                    Guard.value_type("rhs", Vector("i32", lanes=4)),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
                 ),
             )
         ],
@@ -363,51 +363,13 @@ def test_compile_lower_rule_set_compiles_recipe_cases() -> None:
 
     assert compiled.authored_case_indices == (0,)
     assert len(compiled.rules) == 1
-    assert compiled.rules[0].source_op is vector.vector_bitpack
+    assert compiled.rules[0].source_op is vector.vector_addi
     assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
     assert compiled.rules[0].guard_count == 3
     assert compiled.rules[0].emit_count == 0
     assert compiled.rules[0].alias_ref_count == 0
     assert compiled.rules[0].elide_ref_count == 0
-    assert compiled.spans[0].source_op is vector.vector_bitpack
-
-
-def test_compile_lower_rule_set_compiles_bitstream_storage_guards() -> None:
-    table = ContractFragment(
-        name="test.recipe.bitstream",
-        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
-        cases=[
-            RecipeRule(
-                source_op=vector.vector_bitunpacku,
-                guards=(
-                    Guard.bitunpack_storage(
-                        "source",
-                        "result",
-                        "width",
-                        register_bit_width=32,
-                        maximum_source_registers=16,
-                        maximum_result_lanes=32,
-                    ),
-                ),
-            )
-        ],
-    )
-
-    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
-
-    assert len(compiled.rules) == 1
-    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
-    assert len(compiled.guards) == 1
-    guard = compiled.guards[0]
-    assert guard.kind == GuardKind.BITUNPACK_STORAGE
-    assert guard.value_ref_index == 0
-    assert guard.other_value_ref_index == 1
-    assert guard.attr_index == vector.vector_bitunpacku.attrs.index(
-        vector.vector_bitunpacku.attr("width")
-    )
-    assert guard.u64 == 16
-    assert guard.minimum_i64 == 32
-    assert guard.maximum_i64 == 32
+    assert compiled.spans[0].source_op is vector.vector_addi
 
 
 def test_compile_lower_rule_set_offsets_variadic_operand_elements() -> None:
@@ -927,6 +889,54 @@ def test_compile_lower_rule_set_compiles_storage_element_format_guard() -> None:
     assert compiled.guards[0].u64_c_expression == "LOOM_VALUE_FACT_NUMERIC_FORMAT_U8"
 
 
+def test_compile_lower_rule_set_compiles_packed_integer_storage_guards() -> None:
+    table = ContractFragment(
+        name="test.packed-integer-storage",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_bitpack,
+                guards=(
+                    Guard.value_packed_integer_payload_from_lanes(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        storage_payload_multiple=32,
+                    ),
+                ),
+            ),
+            RecipeRule(
+                source_op=vector.vector_bitunpacku,
+                guards=(
+                    Guard.value_packed_integer_lanes_from_payload(
+                        "source",
+                        "result",
+                        "width",
+                        storage_unit_bit_count=32,
+                        maximum_storage_unit_count=16,
+                        maximum_lane_count=32,
+                    ),
+                ),
+            ),
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.guards[0].kind == GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES
+    assert compiled.guards[0].attr_index == 0
+    assert compiled.guards[0].u64 == 32
+    assert compiled.guards[0].minimum_i64 == 32
+    assert compiled.rules[1].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.guards[1].kind == GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD
+    assert compiled.guards[1].attr_index == 0
+    assert compiled.guards[1].u64 == 16
+    assert compiled.guards[1].minimum_i64 == 32
+    assert compiled.guards[1].maximum_i64 == 32
+
+
 def test_compile_lower_rule_set_compiles_value_range_relation_guard() -> None:
     table = ContractFragment(
         name="test.value-range-relation",
@@ -959,6 +969,31 @@ def test_compile_lower_rule_set_compiles_value_range_relation_guard() -> None:
 
     assert compiled.rules[0].guard_count == 4
     assert compiled.guards[0].kind == GuardKind.VALUE_I64_RANGE_LE
+    assert compiled.guards[0].value_ref_index == 0
+    assert compiled.guards[0].other_value_ref_index == 1
+
+
+def test_compile_lower_rule_set_compiles_static_element_count_relation_guard() -> None:
+    table = ContractFragment(
+        name="test.static-element-count-relation",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_extf,
+                guards=(
+                    Guard.value_static_element_count_eq("input", "result"),
+                    Guard.value_type("input", Vector("f16", lanes=4)),
+                    Guard.value_type("result", Vector("f32", lanes=4)),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.rules[0].flags == LOWER_RULE_FLAG_CONTRACT_ONLY
+    assert compiled.rules[0].guard_count == 3
+    assert compiled.guards[0].kind == GuardKind.VALUE_STATIC_ELEMENT_COUNT_EQ
     assert compiled.guards[0].value_ref_index == 0
     assert compiled.guards[0].other_value_ref_index == 1
 
