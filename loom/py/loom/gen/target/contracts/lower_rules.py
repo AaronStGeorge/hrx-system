@@ -23,7 +23,6 @@ from loom.target.contracts import (
     CompiledLowerRuleSet,
     ContractFragment,
     GuardKind,
-    LowerAttrCopyKind,
     LowerDiagnosticParam,
     LowerEmitKind,
     TypePattern,
@@ -40,53 +39,6 @@ _U8_MAX = 0xFF
 _U16_MAX = 0xFFFF
 _U32_MAX = 0xFFFF_FFFF
 _U64_MAX = 0xFFFF_FFFF_FFFF_FFFF
-
-_VALUE_REF_GUARD_KINDS = frozenset(
-    (
-        GuardKind.VALUE_TYPE,
-        GuardKind.VALUE_MATERIALIZABLE,
-        GuardKind.LOW_VALUE_REGISTER_CLASS,
-        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT,
-        GuardKind.VALUE_STATIC_DIM0_MULTIPLE,
-        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
-        GuardKind.VALUE_SIGNED_BIT_COUNT,
-        GuardKind.VALUE_UNSIGNED_BIT_COUNT,
-        GuardKind.VALUE_EXACT_I64,
-        GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
-        GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
-        GuardKind.VALUE_EXACT_F64,
-        GuardKind.VALUE_I64_RANGE,
-        GuardKind.VALUE_I64_RANGE_LE,
-        GuardKind.VALUE_I64_RANGE_GE,
-        GuardKind.VALUE_F64_EQUALS,
-        GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
-        GuardKind.VALUE_NO_USES,
-    )
-)
-
-_OTHER_VALUE_REF_GUARD_KINDS = frozenset(
-    (
-        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
-        GuardKind.VALUE_I64_RANGE_LE,
-        GuardKind.VALUE_I64_RANGE_GE,
-    )
-)
-
-_VALUE_REF_ATTR_COPY_KINDS = frozenset(
-    (
-        LowerAttrCopyKind.VALUE_EXACT_I64,
-        LowerAttrCopyKind.VALUE_EXACT_I64_NEGATE,
-        LowerAttrCopyKind.VALUE_EXACT_I64_LOG2,
-        LowerAttrCopyKind.VALUE_EXACT_I64_MINUS_ONE,
-        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_MULTIPLIER,
-        LowerAttrCopyKind.VALUE_U32_DIVISOR_MAGIC_SHIFT,
-        LowerAttrCopyKind.VALUE_I32_AS_U32_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_F16_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_BF16_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_F32_BITS,
-        LowerAttrCopyKind.VALUE_F64_AS_F64_BITS,
-    )
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -516,14 +468,14 @@ def _validate_c_table_shape(
             row.other_value_ref_index,
             f"{row_subject} other value-ref index",
         )
-        if row.kind in _VALUE_REF_GUARD_KINDS:
+        if lower_rule_rows.guard_uses_value_ref(row.kind):
             _require_table_index(
                 row.value_ref_index,
                 len(table.value_refs),
                 f"{row_subject} value-ref index",
                 "value-ref",
             )
-        if row.kind in _OTHER_VALUE_REF_GUARD_KINDS:
+        if lower_rule_rows.guard_uses_other_value_ref(row.kind):
             _require_table_index(
                 row.other_value_ref_index,
                 len(table.value_refs),
@@ -572,7 +524,7 @@ def _validate_c_table_shape(
         )
         _require_u8(row.target_bit_offset, f"{row_subject} target bit offset")
         _require_u16(row.value_ref_index, f"{row_subject} value-ref index")
-        if row.kind in _VALUE_REF_ATTR_COPY_KINDS:
+        if lower_rule_rows.attr_copy_uses_value_ref(row.kind):
             _require_table_index(
                 row.value_ref_index,
                 len(table.value_refs),
