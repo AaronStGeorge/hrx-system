@@ -82,80 +82,13 @@ typedef struct loom_amdgpu_memory_cache_policy_encoding_row_t {
   loom_amdgpu_memory_cache_policy_attr_flags_t attr_flags;
 } loom_amdgpu_memory_cache_policy_encoding_row_t;
 
-#define LOOM_AMDGPU_CACHE_SCOPE_BIT(scope) \
-  ((uint32_t)1u << LOOM_CACHE_SCOPE_##scope)
-#define LOOM_AMDGPU_CACHE_TEMPORAL_BIT(temporal) \
-  ((uint32_t)1u << LOOM_CACHE_TEMPORAL_##temporal)
-
-#define LOOM_AMDGPU_ALL_CACHE_SCOPE_BITS                               \
-  (LOOM_AMDGPU_CACHE_SCOPE_BIT(CU) | LOOM_AMDGPU_CACHE_SCOPE_BIT(SE) | \
-   LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE) | LOOM_AMDGPU_CACHE_SCOPE_BIT(SYSTEM))
-
-#define LOOM_AMDGPU_ALL_CACHE_TEMPORAL_BITS                     \
-  (LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR) |                    \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL) |               \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(HIGH_TEMPORAL) |              \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(LAST_USE) |                   \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(WRITEBACK) |                  \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL_REGULAR) |       \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR_NON_TEMPORAL) |       \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL_HIGH_TEMPORAL) | \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL_WRITEBACK) |     \
-   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(BYPASS))
-
-static const int64_t kAmdgpuGfx12CacheTemporalTh[] = {
-    [LOOM_CACHE_TEMPORAL_REGULAR] = 0,
-    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL] = 1,
-    [LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL] = 2,
-    [LOOM_CACHE_TEMPORAL_LAST_USE] = 3,
-    [LOOM_CACHE_TEMPORAL_WRITEBACK] = 3,
-    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR] = 4,
-    [LOOM_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL] = 5,
-    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL] = 6,
-    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK] = 7,
-    [LOOM_CACHE_TEMPORAL_BYPASS] = 3,
+static const int64_t kAmdgpuGfx12CacheTemporalTh[LOOM_CACHE_TEMPORAL_COUNT_] = {
+#include "loom/target/arch/amdgpu/lower/memory_cache_policy_temporal_th.inl"
 };
 
 static const loom_amdgpu_memory_cache_policy_encoding_row_t
     kAmdgpuMemoryCachePolicyEncodingRows[] = {
-        {
-            .encoding =
-                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
-            .encoding_key = {.data = "gfx9_11_glc_slc_dlc",
-                             .size = sizeof("gfx9_11_glc_slc_dlc") - 1},
-            .selected_key =
-                {.data = "memory_cache_policy.gfx9_11_glc_slc_dlc",
-                 .size = sizeof("memory_cache_policy.gfx9_11_glc_slc_dlc") - 1},
-            .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
-            .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR),
-            .attr_flags = 0,
-        },
-        {
-            .encoding =
-                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
-            .encoding_key = {.data = "gfx12_nv_scope_th",
-                             .size = sizeof("gfx12_nv_scope_th") - 1},
-            .selected_key =
-                {.data = "memory_cache_policy.gfx12_nv_scope_th",
-                 .size = sizeof("memory_cache_policy.gfx12_nv_scope_th") - 1},
-            .scope_bits = LOOM_AMDGPU_ALL_CACHE_SCOPE_BITS,
-            .temporal_bits = LOOM_AMDGPU_ALL_CACHE_TEMPORAL_BITS,
-            .attr_flags = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE |
-                          LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH,
-        },
-        {
-            .encoding =
-                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
-            .encoding_key = {.data = "gfx950_nt_sc0_sc1",
-                             .size = sizeof("gfx950_nt_sc0_sc1") - 1},
-            .selected_key =
-                {.data = "memory_cache_policy.gfx950_nt_sc0_sc1",
-                 .size = sizeof("memory_cache_policy.gfx950_nt_sc0_sc1") - 1},
-            .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
-            .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR) |
-                             LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL),
-            .attr_flags = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT,
-        },
+#include "loom/target/arch/amdgpu/lower/memory_cache_policy_encoding_rows.inl"
 };
 
 static const loom_amdgpu_memory_cache_policy_encoding_row_t*

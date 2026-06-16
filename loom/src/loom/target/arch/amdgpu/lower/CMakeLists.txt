@@ -61,6 +61,32 @@ loom_generated_textual_header(
 endif()
 
 if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_cache_policy_encoding_rows_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::target_info
+  OUTPUT
+    "memory_cache_policy_encoding_rows.inl"
+  OUTPUT_FLAG
+    "--cache-policy-encoding-rows"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_textual_header(
+  NAME
+    memory_cache_policy_temporal_th_gen
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::target_info
+  OUTPUT
+    "memory_cache_policy_temporal_th.inl"
+  OUTPUT_FLAG
+    "--cache-policy-temporal-th"
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_cc_library(
   NAME
     lower
@@ -93,6 +119,8 @@ loom_cc_library(
     "values.h"
     "workgroup.h"
   TEXTUAL_HDRS
+    "memory_cache_policy_encoding_rows.inl"
+    "memory_cache_policy_temporal_th.inl"
     "memory_descriptor_candidate_ranges.inl"
     "memory_descriptor_candidates.inl"
     "registry_tables.inl"

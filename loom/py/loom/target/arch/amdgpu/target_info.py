@@ -16,6 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from loom.dialect.cache import CacheScope, CacheTemporal
+
 AMDGPU_AMDHSA_TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
@@ -41,6 +43,21 @@ AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE = "none"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC = "gfx9_11_glc_slc_dlc"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH = "gfx12_nv_scope_th"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = "gfx950_nt_sc0_sc1"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODINGS = (
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+)
+
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_SCOPE = "scope"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_TH = "th"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_NT = "nt"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTRS = (
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_SCOPE,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_TH,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_NT,
+)
 
 AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR = 1 << 0
 AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES = 1 << 1
@@ -138,6 +155,15 @@ class AmdgpuDescriptorSetBufferResourceInfo:
 @dataclass(frozen=True, slots=True)
 class AmdgpuDescriptorSetVectorMemoryInfo:
     cache_policy_encoding: str = AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuVectorMemoryCachePolicyEncodingInfo:
+    encoding: str
+    selected_key: str
+    cache_scopes: tuple[str, ...]
+    cache_temporals: tuple[str, ...]
+    attrs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +303,51 @@ class AmdgpuIsaArchitectureInfo(Protocol):
 
     @property
     def architecture_id(self) -> int: ...
+
+
+AMDGPU_CACHE_SCOPE_KEYWORDS = tuple(case.keyword for case in CacheScope.cases)
+AMDGPU_CACHE_TEMPORAL_KEYWORDS = tuple(case.keyword for case in CacheTemporal.cases)
+
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_INFOS: tuple[
+    AmdgpuVectorMemoryCachePolicyEncodingInfo, ...
+] = (
+    AmdgpuVectorMemoryCachePolicyEncodingInfo(
+        encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+        selected_key="memory_cache_policy.gfx9_11_glc_slc_dlc",
+        cache_scopes=("device",),
+        cache_temporals=("regular",),
+    ),
+    AmdgpuVectorMemoryCachePolicyEncodingInfo(
+        encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+        selected_key="memory_cache_policy.gfx12_nv_scope_th",
+        cache_scopes=AMDGPU_CACHE_SCOPE_KEYWORDS,
+        cache_temporals=AMDGPU_CACHE_TEMPORAL_KEYWORDS,
+        attrs=(
+            AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_SCOPE,
+            AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_TH,
+        ),
+    ),
+    AmdgpuVectorMemoryCachePolicyEncodingInfo(
+        encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+        selected_key="memory_cache_policy.gfx950_nt_sc0_sc1",
+        cache_scopes=("device",),
+        cache_temporals=("regular", "non_temporal"),
+        attrs=(AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ATTR_NT,),
+    ),
+)
+
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_TEMPORAL_TH: tuple[tuple[str, int], ...] = (
+    ("regular", 0),
+    ("non_temporal", 1),
+    ("high_temporal", 2),
+    ("last_use", 3),
+    ("writeback", 3),
+    ("non_temporal_regular", 4),
+    ("regular_non_temporal", 5),
+    ("non_temporal_high_temporal", 6),
+    ("non_temporal_writeback", 7),
+    ("bypass", 3),
+)
 
 
 def processor_info(

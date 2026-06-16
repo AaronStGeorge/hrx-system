@@ -32,6 +32,8 @@ _AMDGPU_LOWER_TABLE_VISIBILITY = (
 
 _AMDGPU_MEMORY_CANDIDATE_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:memory_candidates"
 
+_AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom/gen/target/arch/amdgpu:target_info"
+
 loom_cc_library(
     name = "kinds",
     hdrs = ["kinds.h"],
@@ -68,6 +70,20 @@ loom_generated_textual_header(
     generator = _AMDGPU_MEMORY_CANDIDATE_GENERATOR,
     output = "memory_descriptor_candidates.inl",
     output_flag = "--candidate-rows",
+)
+
+loom_generated_textual_header(
+    name = "memory_cache_policy_encoding_rows_gen",
+    generator = _AMDGPU_TARGET_INFO_GENERATOR,
+    output = "memory_cache_policy_encoding_rows.inl",
+    output_flag = "--cache-policy-encoding-rows",
+)
+
+loom_generated_textual_header(
+    name = "memory_cache_policy_temporal_th_gen",
+    generator = _AMDGPU_TARGET_INFO_GENERATOR,
+    output = "memory_cache_policy_temporal_th.inl",
+    output_flag = "--cache-policy-temporal-th",
 )
 
 loom_cc_library(
@@ -137,6 +153,8 @@ loom_cc_library(
         "workgroup.h",
     ],
     textual_hdrs = [
+        ":memory_cache_policy_encoding_rows.inl",
+        ":memory_cache_policy_temporal_th.inl",
         ":memory_descriptor_candidate_ranges.inl",
         ":memory_descriptor_candidates.inl",
         "registry_tables.inl",

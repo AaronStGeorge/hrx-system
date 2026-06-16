@@ -17,6 +17,7 @@ iree_py_library(
     "names.py"
     "target_info.py"
   DEPS
+    loom::py::loom::dialect::shared
     loom::py::loom::target::low_descriptors
     loom::py::loom::target::arch::package_init
 )

@@ -11,12 +11,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from loom.gen.target.arch.amdgpu import amdgpu_target_info
+from loom.target.arch.amdgpu import target_info as amdgpu_target_info_data
 from loom.target.arch.amdgpu.target_info import (
     AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
     AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_ARCHITECTED_FLAT_SCRATCH,
     AMDGPU_KERNEL_DESCRIPTOR_ABI_FLAG_PACKED_WORKITEM_ID,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
     AmdgpuDescriptorSetInfo,
+    AmdgpuDescriptorSetVectorMemoryInfo,
     AmdgpuKernelDescriptorVgprGranules,
     AmdgpuProcessorKernelDescriptorInfo,
     processor_info,
@@ -43,6 +45,53 @@ def _descriptor_set_info() -> AmdgpuDescriptorSetInfo:
         isa_architecture_id=1,
         flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
     )
+
+
+def test_memory_cache_policy_fragments_are_data_only() -> None:
+    policy_rows = amdgpu_target_info._emit_memory_cache_policy_encoding_rows()
+    temporal_th = amdgpu_target_info._emit_memory_cache_policy_temporal_th()
+
+    for source in (policy_rows, temporal_th):
+        assert "typedef " not in source
+        assert "#ifndef " not in source
+        assert "#include " not in source
+        assert "\nif " not in source
+        assert "\nreturn " not in source
+
+    assert "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH" in policy_rows
+    assert 'IREE_SVL("memory_cache_policy.gfx12_nv_scope_th")' in policy_rows
+    assert "UINT32_C(0x000003ff)" in policy_rows
+    assert "[LOOM_CACHE_TEMPORAL_BYPASS] = 3" in temporal_th
+
+
+def test_memory_cache_policy_rejects_missing_encoding_row() -> None:
+    rows = amdgpu_target_info_data.AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_INFOS[:-1]
+
+    with _raises_value_error("memory cache-policy encoding table must cover every non-none encoding"):
+        amdgpu_target_info._ordered_memory_cache_policy_encoding_infos(rows=rows)
+
+
+def test_memory_cache_policy_rejects_unknown_descriptor_encoding() -> None:
+    descriptor_set_info = AmdgpuDescriptorSetInfo(
+        generator_target="test",
+        key="amdgpu.test.core",
+        isa_xml_key="test",
+        isa_architecture_name="AMDGPU Test",
+        isa_architecture_id=1,
+        flags=AMDGPU_DESCRIPTOR_SET_INFO_FLAG_DESCRIPTOR_PACKET_ENCODING,
+        vector_memory=AmdgpuDescriptorSetVectorMemoryInfo(cache_policy_encoding="future_encoding"),
+    )
+
+    with _raises_value_error("descriptor sets reference unknown memory cache-policy encodings"):
+        amdgpu_target_info._ordered_memory_cache_policy_encoding_infos(descriptor_sets=(descriptor_set_info,))
+
+
+def test_memory_cache_policy_rejects_incomplete_temporal_th_table() -> None:
+    temporal_th = amdgpu_target_info_data.AMDGPU_VECTOR_MEMORY_CACHE_POLICY_TEMPORAL_TH
+    rows = tuple(row for row in temporal_th if row[0] != "bypass")
+
+    with _raises_value_error("temporal TH table must cover every cache temporal"):
+        amdgpu_target_info._ordered_memory_cache_policy_temporal_th(rows=rows)
 
 
 def test_profileless_kernel_descriptor_accepts_packed_workitem_id_fact() -> None:
