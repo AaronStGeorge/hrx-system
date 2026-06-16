@@ -4087,6 +4087,42 @@ void loom_amdgpu_mark_value_plan_storage_demands(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t plan) {
   switch (plan.id) {
+    case LOOM_OP_INDEX_CAST: {
+      const loom_amdgpu_index_cast_plan_t* index_cast_plan =
+          (const loom_amdgpu_index_cast_plan_t*)plan.target_data;
+      switch (index_cast_plan->kind) {
+        case LOOM_AMDGPU_INDEX_CAST_KIND_ALIAS:
+        case LOOM_AMDGPU_INDEX_CAST_KIND_PRESERVING_LOW_32:
+          loom_low_lower_require_source_value_storage(context,
+                                                      index_cast_plan->source);
+          return;
+        case LOOM_AMDGPU_INDEX_CAST_KIND_DIAGNOSTIC_REJECTED:
+          return;
+        case LOOM_AMDGPU_INDEX_CAST_KIND_NONE:
+          break;
+      }
+      IREE_ASSERT_UNREACHABLE("unknown AMDGPU index cast plan kind");
+      return;
+    }
+    case LOOM_OP_VECTOR_EXTRACT: {
+      const loom_amdgpu_vector_extract_plan_t* extract_plan =
+          (const loom_amdgpu_vector_extract_plan_t*)plan.target_data;
+      loom_low_lower_require_source_value_storage(context,
+                                                  extract_plan->source);
+      if (extract_plan->is_dynamic) {
+        loom_low_lower_require_source_value_storage(
+            context, extract_plan->dynamic_index);
+      }
+      return;
+    }
+    case LOOM_OP_VECTOR_EXTF:
+    case LOOM_OP_VECTOR_FPTRUNC: {
+      const loom_amdgpu_vector_bf16_conversion_plan_t* conversion_plan =
+          (const loom_amdgpu_vector_bf16_conversion_plan_t*)plan.target_data;
+      loom_low_lower_require_source_value_storage(context,
+                                                  conversion_plan->source);
+      return;
+    }
     case LOOM_OP_VECTOR_IOTA: {
       if (plan.target_data == NULL) {
         return;

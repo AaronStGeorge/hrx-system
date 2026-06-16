@@ -13,9 +13,10 @@ static const loom_amdgpu_lower_dispatch_row_t
                                          loom_amdgpu_select_value_dispatch,
                                          loom_amdgpu_emit_value_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_INDEX_CAST)] =
-            LOOM_AMDGPU_VALUE_DIRECT_ROW(LOOM_OP_INDEX_CAST,
-                                         loom_amdgpu_select_value_dispatch,
-                                         loom_amdgpu_emit_value_dispatch, NULL),
+            LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
+                LOOM_OP_INDEX_CAST, loom_amdgpu_select_value_dispatch,
+                loom_amdgpu_emit_value_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_INDEX_ADD)] =
             LOOM_AMDGPU_GENERATED_PRESELECT_DIRECT_ROW(
                 LOOM_OP_INDEX_ADD, loom_amdgpu_select_value_dispatch,
@@ -345,9 +346,10 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_low_legality_verify_vector_structural,
                 LOOM_AMDGPU_STORAGE_PLAN_SOURCE_ARRAY_1),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_EXTRACT)] =
-            LOOM_AMDGPU_VALUE_DIRECT_ROW(LOOM_OP_VECTOR_EXTRACT,
-                                         loom_amdgpu_select_value_dispatch,
-                                         loom_amdgpu_emit_value_dispatch, NULL),
+            LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
+                LOOM_OP_VECTOR_EXTRACT, loom_amdgpu_select_value_dispatch,
+                loom_amdgpu_emit_value_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FROM_ELEMENTS)] =
             LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
                 LOOM_OP_VECTOR_FROM_ELEMENTS, loom_amdgpu_select_value_dispatch,
@@ -361,13 +363,15 @@ static const loom_amdgpu_lower_dispatch_row_t
                 LOOM_AMDGPU_STORAGE_VALUE_PLAN,
                 LOOM_AMDGPU_PRESELECT_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_EXTF)] =
-            LOOM_AMDGPU_VALUE_DIRECT_ROW(LOOM_OP_VECTOR_EXTF,
-                                         loom_amdgpu_select_value_dispatch,
-                                         loom_amdgpu_emit_value_dispatch, NULL),
+            LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
+                LOOM_OP_VECTOR_EXTF, loom_amdgpu_select_value_dispatch,
+                loom_amdgpu_emit_value_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FPTRUNC)] =
-            LOOM_AMDGPU_VALUE_DIRECT_ROW(LOOM_OP_VECTOR_FPTRUNC,
-                                         loom_amdgpu_select_value_dispatch,
-                                         loom_amdgpu_emit_value_dispatch, NULL),
+            LOOM_AMDGPU_VALUE_DIRECT_STORAGE_ROW(
+                LOOM_OP_VECTOR_FPTRUNC, loom_amdgpu_select_value_dispatch,
+                loom_amdgpu_emit_value_dispatch, NULL,
+                LOOM_AMDGPU_STORAGE_VALUE_PLAN),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_LOAD)] =
             LOOM_AMDGPU_MEMORY_DATA_STORAGE_ROW(
                 LOOM_OP_VECTOR_LOAD, loom_amdgpu_memory_access_plan_t,
