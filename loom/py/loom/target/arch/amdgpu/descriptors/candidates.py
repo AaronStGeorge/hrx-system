@@ -220,6 +220,67 @@ _MEMORY_DESCRIPTOR_CANDIDATES = tuple(
 )
 
 
+def _global_to_workgroup_widths(
+    overlay: AmdgpuDescriptorOverlay,
+) -> tuple[int, int] | None:
+    if not overlay.semantic_tag.startswith("memory.global_to_workgroup."):
+        return None
+    global_width_bits: int | None = None
+    workgroup_width_bits: int | None = None
+    for effect in overlay.effects:
+        if effect.kind is EffectKind.READ and effect.memory_space is MemorySpace.GLOBAL:
+            global_width_bits = effect.width_bits
+        elif (
+            effect.kind is EffectKind.WRITE
+            and effect.memory_space is MemorySpace.WORKGROUP
+        ):
+            workgroup_width_bits = effect.width_bits
+    if global_width_bits is None or workgroup_width_bits is None:
+        return None
+    return (global_width_bits, workgroup_width_bits)
+
+
+def _amdgpu_async_gather_candidate_from_overlay(
+    overlay: AmdgpuDescriptorOverlay,
+) -> AmdgpuAsyncGatherDescriptorCandidate | None:
+    if not overlay.descriptor_key.startswith("amdgpu.global_load_lds_"):
+        return None
+    if not overlay.descriptor_key.endswith("_saddr"):
+        return None
+    widths = _global_to_workgroup_widths(overlay)
+    if widths is None:
+        return None
+    global_width_bits, workgroup_width_bits = widths
+    if global_width_bits != workgroup_width_bits:
+        return None
+    if global_width_bits % 8 != 0:
+        raise ValueError(
+            "AMDGPU async gather candidate "
+            f"'{overlay.descriptor_key}' has non-byte global width "
+            f"{global_width_bits}"
+        )
+    return AmdgpuAsyncGatherDescriptorCandidate(
+        packet_byte_count=global_width_bits // 8,
+        descriptor_key=overlay.descriptor_key,
+    )
+
+
+def _record_amdgpu_async_gather_candidate(
+    candidates_by_packet_byte_count: dict[int, AmdgpuAsyncGatherDescriptorCandidate],
+    candidate: AmdgpuAsyncGatherDescriptorCandidate,
+) -> None:
+    existing = candidates_by_packet_byte_count.get(candidate.packet_byte_count)
+    if existing is None:
+        candidates_by_packet_byte_count[candidate.packet_byte_count] = candidate
+        return
+    if existing != candidate:
+        raise ValueError(
+            "AMDGPU async gather descriptor candidate for packet byte count "
+            f"{candidate.packet_byte_count} has conflicting metadata: "
+            f"{existing.descriptor_key}, {candidate.descriptor_key}"
+        )
+
+
 def _atomic_address_form(descriptor_key: str) -> AmdgpuMemoryAddressForm | None:
     for prefix, address_form in _ATOMIC_ADDRESS_FORM:
         if descriptor_key.startswith(prefix):
@@ -340,6 +401,47 @@ def amdgpu_atomic_descriptor_candidates() -> tuple[
     )
 
 
+def amdgpu_async_gather_descriptor_candidates() -> tuple[
+    AmdgpuAsyncGatherDescriptorCandidate, ...
+]:
+    """Returns source-to-low async gather descriptor candidates from metadata."""
+
+    candidates_by_packet_byte_count: dict[
+        int, AmdgpuAsyncGatherDescriptorCandidate
+    ] = {}
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        for overlay in overlays:
+            candidate = _amdgpu_async_gather_candidate_from_overlay(overlay)
+            if candidate is None:
+                continue
+            _record_amdgpu_async_gather_candidate(
+                candidates_by_packet_byte_count, candidate
+            )
+    descriptor_ref_keys = set(amdgpu_descriptor_ref_keys())
+    missing_descriptor_refs = sorted(
+        candidate.descriptor_key
+        for candidate in candidates_by_packet_byte_count.values()
+        if candidate.descriptor_key not in descriptor_ref_keys
+    )
+    if missing_descriptor_refs:
+        raise ValueError(
+            "AMDGPU async gather descriptor candidates require missing "
+            f"descriptor refs: {', '.join(missing_descriptor_refs)}"
+        )
+    return tuple(
+        sorted(
+            candidates_by_packet_byte_count.values(),
+            key=lambda candidate: candidate.packet_byte_count,
+        )
+    )
+
+
 def amdgpu_memory_descriptor_candidates() -> tuple[
     AmdgpuMemoryDescriptorCandidate, ...
 ]:
@@ -367,11 +469,15 @@ __all__ = (
     "_ATOMIC_KIND",
     "_ATOMIC_MEMORY_SPACE",
     "_MEMORY_DESCRIPTOR_CANDIDATES",
+    "_amdgpu_async_gather_candidate_from_overlay",
     "_amdgpu_atomic_candidate_from_overlay",
     "_amdgpu_atomic_candidate_sort_key",
     "_atomic_address_form",
+    "_global_to_workgroup_widths",
     "_memory_candidate",
+    "_record_amdgpu_async_gather_candidate",
     "_record_amdgpu_atomic_candidate",
+    "amdgpu_async_gather_descriptor_candidates",
     "amdgpu_atomic_descriptor_candidates",
     "amdgpu_memory_descriptor_candidates",
 )

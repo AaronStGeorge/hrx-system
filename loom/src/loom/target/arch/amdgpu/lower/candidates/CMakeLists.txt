@@ -12,6 +12,20 @@ iree_add_all_subdirs()
 if(LOOM_TARGET_ARCH_AMDGPU)
 loom_generated_cc_library(
   NAME
+    async_gather_candidates
+  GENERATOR
+    loom::py::loom::gen::target::arch::amdgpu::lower::candidates::async_gather_candidates
+  HDRS
+    "async_gather_candidates.h"
+  DEPS
+    iree::base
+    loom::target::arch::amdgpu::refs::target_refs
+)
+endif()
+
+if(LOOM_TARGET_ARCH_AMDGPU)
+loom_generated_cc_library(
+  NAME
     atomic_candidates
   GENERATOR
     loom::py::loom::gen::target::arch::amdgpu::lower::candidates::atomic_candidates

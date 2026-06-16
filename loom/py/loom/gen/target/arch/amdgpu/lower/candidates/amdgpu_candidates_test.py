@@ -11,6 +11,7 @@ from dataclasses import replace
 import pytest
 
 from loom.gen.target.arch.amdgpu.lower.candidates import (
+    amdgpu_async_gather_candidates,
     amdgpu_atomic_candidates,
     amdgpu_compare_candidates,
     amdgpu_memory_candidates,
@@ -20,7 +21,65 @@ from loom.gen.target.arch.amdgpu.lower.candidates.validation import (
 )
 
 _ATOMIC_HEADER = "loom/target/arch/amdgpu/lower/candidates/atomic_candidates.h"
+_ASYNC_GATHER_HEADER = "loom/target/arch/amdgpu/lower/candidates/async_gather_candidates.h"
 _COMPARE_HEADER = "loom/target/arch/amdgpu/lower/candidates/compare_candidates.h"
+
+
+def test_async_gather_generator_emits_data_source_only() -> None:
+    source = amdgpu_async_gather_candidates._emit_source(public_header=_ASYNC_GATHER_HEADER)
+
+    assert f'#include "{_ASYNC_GATHER_HEADER}"' in source
+    assert "typedef " not in source
+    assert "#ifndef " not in source
+    assert "\nif " not in source
+    assert "\nreturn " not in source
+    assert "kLoomAmdgpuAsyncGatherDescriptorCandidates[]" in source
+    assert "kLoomAmdgpuAsyncGatherDescriptorCandidateCount" in source
+    assert ".packet_byte_count" in source
+    assert ".descriptor_ref" in source
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORD_SADDR" in source
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX3_SADDR" in source
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX4_SADDR" in source
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_UBYTE_SADDR" not in source
+    assert "LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_USHORT_SADDR" not in source
+
+
+def test_async_gather_generator_covers_packet_widths() -> None:
+    candidates = amdgpu_async_gather_candidates.amdgpu_async_gather_descriptor_candidates()
+
+    assert [(candidate.packet_byte_count, candidate.descriptor_key) for candidate in candidates] == [
+        (4, "amdgpu.global_load_lds_dword_saddr"),
+        (12, "amdgpu.global_load_lds_dwordx3_saddr"),
+        (16, "amdgpu.global_load_lds_dwordx4_saddr"),
+    ]
+
+
+def test_async_gather_generator_rejects_missing_descriptor_ref() -> None:
+    candidates = amdgpu_async_gather_candidates.amdgpu_async_gather_descriptor_candidates()
+    bad_candidate = replace(candidates[0], descriptor_key="amdgpu.missing")
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"AMDGPU async gather descriptor candidate table requires missing "
+            r"descriptor refs: amdgpu\.missing"
+        ),
+    ):
+        amdgpu_async_gather_candidates._ordered_candidates((bad_candidate,))
+
+
+def test_async_gather_generator_rejects_conflicting_packet_widths() -> None:
+    candidates = amdgpu_async_gather_candidates.amdgpu_async_gather_descriptor_candidates()
+    conflicting_candidate = replace(candidates[1], packet_byte_count=candidates[0].packet_byte_count)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"AMDGPU async gather descriptor candidate table has conflicting "
+            r"rows for packet byte count 4"
+        ),
+    ):
+        amdgpu_async_gather_candidates._ordered_candidates((candidates[0], conflicting_candidate))
 
 
 def test_atomic_generator_emits_data_source_only() -> None:

@@ -10,6 +10,7 @@
 
 #include "loom/ir/facts.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/target/arch/amdgpu/lower/candidates/async_gather_candidates.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/memory.h"
@@ -106,39 +107,32 @@ static bool loom_amdgpu_async_gather_source_memory_space_is_global_like(
   }
 }
 
-static loom_amdgpu_descriptor_ref_t loom_amdgpu_async_gather_descriptor_ref(
-    uint32_t packet_byte_count) {
-  switch (packet_byte_count) {
-    case 4:
-      return LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORD_SADDR;
-    case 12:
-      return LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX3_SADDR;
-    case 16:
-      return LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_LDS_DWORDX4_SADDR;
-    default:
-      return LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
-  }
-}
-
 static bool loom_amdgpu_async_gather_select_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, uint32_t packet_byte_count,
     loom_amdgpu_descriptor_ref_t* out_descriptor_ref,
     uint32_t* out_descriptor_ordinal) {
   *out_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   *out_descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  const loom_amdgpu_descriptor_ref_t descriptor_ref =
-      loom_amdgpu_async_gather_descriptor_ref(packet_byte_count);
-  if (descriptor_ref == LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
-    return false;
+  for (iree_host_size_t i = 0;
+       i < kLoomAmdgpuAsyncGatherDescriptorCandidateCount; ++i) {
+    const loom_amdgpu_async_gather_descriptor_candidate_t* candidate =
+        &kLoomAmdgpuAsyncGatherDescriptorCandidates[i];
+    if (candidate->packet_byte_count > packet_byte_count) {
+      break;
+    }
+    if (candidate->packet_byte_count != packet_byte_count) {
+      continue;
+    }
+    const uint32_t descriptor_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+        descriptor_set, candidate->descriptor_ref);
+    if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+      continue;
+    }
+    *out_descriptor_ref = candidate->descriptor_ref;
+    *out_descriptor_ordinal = descriptor_ordinal;
+    return true;
   }
-  const uint32_t descriptor_ordinal =
-      loom_amdgpu_descriptor_ref_ordinal(descriptor_set, descriptor_ref);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return false;
-  }
-  *out_descriptor_ref = descriptor_ref;
-  *out_descriptor_ordinal = descriptor_ordinal;
-  return true;
+  return false;
 }
 
 static bool loom_amdgpu_async_gather_select_source(

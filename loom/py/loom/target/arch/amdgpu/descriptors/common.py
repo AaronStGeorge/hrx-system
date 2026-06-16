@@ -613,6 +613,12 @@ class AmdgpuMemoryDescriptorCandidate:
     descriptor_key: str
 
 
+@dataclass(frozen=True, slots=True)
+class AmdgpuAsyncGatherDescriptorCandidate:
+    packet_byte_count: int
+    descriptor_key: str
+
+
 def _matrix_hazards(resource: str) -> tuple[Hazard, ...]:
     return (
         _ALU_COUNTER_HAZARD,
@@ -2514,6 +2520,7 @@ __all__ = (
     "AmdgpuAtomicMemorySpace",
     "AmdgpuAtomicOperationKind",
     "AmdgpuAtomicValueKind",
+    "AmdgpuAsyncGatherDescriptorCandidate",
     "AmdgpuMemoryDescriptorCandidate",
     "AmdgpuMemoryDescriptorDomain",
     "AmdgpuDescriptorOverlay",

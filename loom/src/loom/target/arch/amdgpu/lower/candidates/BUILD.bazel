@@ -18,6 +18,17 @@ package(
 _AMDGPU_LOWER_VISIBILITY = ["//loom/src/loom/target/arch/amdgpu/lower:__pkg__"]
 
 loom_generated_cc_library(
+    name = "async_gather_candidates",
+    hdrs = ["async_gather_candidates.h"],
+    generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:async_gather_candidates",
+    visibility = _AMDGPU_LOWER_VISIBILITY,
+    deps = [
+        "//loom/src/loom/target/arch/amdgpu/refs:target_refs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_generated_cc_library(
     name = "atomic_candidates",
     hdrs = ["atomic_candidates.h"],
     generator = "//loom/py/loom/gen/target/arch/amdgpu/lower/candidates:atomic_candidates",
