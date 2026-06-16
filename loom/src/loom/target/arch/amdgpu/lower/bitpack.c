@@ -17,24 +17,22 @@
 #include "loom/target/arch/amdgpu/refs/target_refs.h"
 
 typedef enum loom_amdgpu_bitstream_recipe_kind_e {
-  LOOM_AMDGPU_BITSTREAM_RECIPE_UNKNOWN = 0,
-  LOOM_AMDGPU_BITSTREAM_RECIPE_PACK_I8_FROM_I32 = 1,
-  LOOM_AMDGPU_BITSTREAM_RECIPE_UNPACKU = 2,
-  LOOM_AMDGPU_BITSTREAM_RECIPE_UNPACKS = 3,
+  LOOM_AMDGPU_BITSTREAM_RECIPE_PACK_I8_FROM_I32 = 0,
+  LOOM_AMDGPU_BITSTREAM_RECIPE_UNPACKU = 1,
+  LOOM_AMDGPU_BITSTREAM_RECIPE_UNPACKS = 2,
 } loom_amdgpu_bitstream_recipe_kind_t;
 
 typedef enum loom_amdgpu_bitstream_rejection_e {
   LOOM_AMDGPU_BITSTREAM_REJECTION_NONE = 0,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_OP = 1,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH = 2,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH_RANGE = 3,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH_DWORD_DIVISOR = 4,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_SOURCE_TYPE = 5,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_RESULT_TYPE = 6,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_LANE_COUNT = 7,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_LANE_GROUP = 8,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_SOURCE_STORAGE = 9,
-  LOOM_AMDGPU_BITSTREAM_REJECTION_PAYLOAD_DIVISIBILITY = 10,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH = 1,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH_RANGE = 2,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH_DWORD_DIVISOR = 3,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_SOURCE_TYPE = 4,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_RESULT_TYPE = 5,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_LANE_COUNT = 6,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_LANE_GROUP = 7,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_SOURCE_STORAGE = 8,
+  LOOM_AMDGPU_BITSTREAM_REJECTION_PAYLOAD_DIVISIBILITY = 9,
 } loom_amdgpu_bitstream_rejection_t;
 
 typedef struct loom_amdgpu_bitstream_diagnostic_t {
@@ -91,12 +89,7 @@ static bool loom_amdgpu_bitpack_plan_from_op(
     loom_amdgpu_bitpack_plan_t* out_plan,
     loom_amdgpu_bitstream_diagnostic_t* out_diagnostic) {
   *out_plan = (loom_amdgpu_bitpack_plan_t){0};
-  loom_amdgpu_bitstream_diagnostic_initialize(
-      out_diagnostic, LOOM_AMDGPU_BITSTREAM_RECIPE_UNKNOWN, 0);
-  if (!loom_vector_bitpack_isa(source_op)) {
-    return loom_amdgpu_bitstream_reject(out_diagnostic,
-                                        LOOM_AMDGPU_BITSTREAM_REJECTION_OP);
-  }
+  IREE_ASSERT(loom_vector_bitpack_isa(source_op));
   const int64_t width = loom_vector_bitpack_width(source_op);
   loom_amdgpu_bitstream_diagnostic_initialize(
       out_diagnostic, LOOM_AMDGPU_BITSTREAM_RECIPE_PACK_I8_FROM_I32, width);
@@ -151,8 +144,6 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
     loom_amdgpu_bitunpack_plan_t* out_plan,
     loom_amdgpu_bitstream_diagnostic_t* out_diagnostic) {
   *out_plan = (loom_amdgpu_bitunpack_plan_t){0};
-  loom_amdgpu_bitstream_diagnostic_initialize(
-      out_diagnostic, LOOM_AMDGPU_BITSTREAM_RECIPE_UNKNOWN, 0);
 
   int64_t width = 0;
   if (loom_vector_bitunpacku_isa(source_op)) {
@@ -170,8 +161,9 @@ static bool loom_amdgpu_bitunpack_plan_from_op(
     out_plan->result = loom_vector_bitunpacks_result(source_op);
     out_plan->is_signed = true;
   } else {
-    return loom_amdgpu_bitstream_reject(out_diagnostic,
-                                        LOOM_AMDGPU_BITSTREAM_REJECTION_OP);
+    IREE_ASSERT_UNREACHABLE(
+        "bitstream plan selector called for unsupported source op");
+    IREE_BUILTIN_UNREACHABLE();
   }
 
   const loom_type_t source_type =
@@ -602,17 +594,15 @@ static iree_string_view_t loom_amdgpu_bitstream_recipe_key(
       return IREE_SV("amdgpu.bitstream.unpacku");
     case LOOM_AMDGPU_BITSTREAM_RECIPE_UNPACKS:
       return IREE_SV("amdgpu.bitstream.unpacks");
-    case LOOM_AMDGPU_BITSTREAM_RECIPE_UNKNOWN:
     default:
-      return IREE_SV("amdgpu.bitstream.unknown");
+      IREE_ASSERT_UNREACHABLE("unsupported bitstream recipe kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
 static iree_string_view_t loom_amdgpu_bitstream_constraint_key(
     loom_amdgpu_bitstream_rejection_t rejection) {
   switch (rejection) {
-    case LOOM_AMDGPU_BITSTREAM_REJECTION_OP:
-      return IREE_SV("op");
     case LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH:
       return IREE_SV("width");
     case LOOM_AMDGPU_BITSTREAM_REJECTION_WIDTH_RANGE:
@@ -640,6 +630,7 @@ static iree_string_view_t loom_amdgpu_bitstream_constraint_key(
 static iree_status_t loom_amdgpu_emit_bitstream_rejection_diagnostic(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_amdgpu_bitstream_diagnostic_t* diagnostic) {
+  IREE_ASSERT_NE(diagnostic->rejection, LOOM_AMDGPU_BITSTREAM_REJECTION_NONE);
   loom_diagnostic_param_t
       params[LOOM_AMDGPU_LOW_LEGALITY_CONTEXT_PARAM_COUNT + 11];
   loom_amdgpu_low_legality_make_context_params(context, op, params);

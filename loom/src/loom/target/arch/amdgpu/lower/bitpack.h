@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-// Selects an AMDGPU vector.bitpack plan.
+// Selects an AMDGPU vector.bitpack plan for a dispatch-row-owned bitpack op.
 iree_status_t loom_amdgpu_select_vector_bitpack_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_bitpack_plan_t* out_plan, bool* out_selected);
@@ -27,7 +27,8 @@ iree_status_t loom_amdgpu_lower_vector_bitpack(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_bitpack_plan_t* plan);
 
-// Selects an AMDGPU vector.bitunpack plan.
+// Selects an AMDGPU vector.bitunpack plan for a dispatch-row-owned bitunpack
+// op.
 iree_status_t loom_amdgpu_select_vector_bitunpack_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_bitunpack_plan_t* out_plan, bool* out_selected);
