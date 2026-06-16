@@ -71,6 +71,7 @@ class GuardKind(Enum):
     VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD = "value_packed_integer_lanes_from_payload"
     VALUE_NO_USES = "value_no_uses"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
+    VECTOR_EXTRACT_SHAPE = "vector_extract_shape"
 
 
 _LOW_VALUE_GUARD_KINDS = (
@@ -542,6 +543,23 @@ class Guard:
         )
 
     @classmethod
+    def vector_extract_shape(
+        cls,
+        source_field: str,
+        result_field: str,
+        static_indices_attr: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VECTOR_EXTRACT_SHAPE,
+            field=source_field,
+            other_field=result_field,
+            attr_field=static_indices_attr,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def instance_flags_has_all(
         cls,
         field: str,
@@ -677,6 +695,25 @@ class Guard:
             return
         if self.kind == GuardKind.VALUE_NO_USES:
             _require_value(source_op, self.field, subject)
+            return
+        if self.kind == GuardKind.VECTOR_EXTRACT_SHAPE:
+            _require_operand(source_op, self.field, subject)
+            if self.other_field is None or self.attr_field is None:
+                raise ValueError(
+                    f"{source_op.name}: {subject} needs source, result, and "
+                    "static_indices fields"
+                )
+            _require_value(source_op, self.other_field, subject)
+            attr = _require_attr(source_op, self.attr_field, subject)
+            if attr.attr_type != ATTR_TYPE_I64_ARRAY:
+                raise ValueError(
+                    f"{source_op.name}: {subject} field '{self.attr_field}' "
+                    "must be an i64_array attr"
+                )
+            if source_op.name != "vector.extract":
+                raise ValueError(
+                    f"{source_op.name}: {subject} is only valid for vector.extract"
+                )
             return
         if self.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
             attr = _require_attr(source_op, self.field, subject)

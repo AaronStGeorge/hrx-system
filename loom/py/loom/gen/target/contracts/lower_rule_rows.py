@@ -58,6 +58,7 @@ _GUARD_VALUE_REF_KINDS = frozenset(
         GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
         GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
         GuardKind.VALUE_NO_USES,
+        GuardKind.VECTOR_EXTRACT_SHAPE,
     )
 )
 
@@ -68,6 +69,7 @@ _GUARD_OTHER_VALUE_REF_KINDS = frozenset(
         GuardKind.VALUE_I64_RANGE_GE,
         GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
         GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+        GuardKind.VECTOR_EXTRACT_SHAPE,
     )
 )
 
@@ -330,6 +332,7 @@ def guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]:
         GuardKind.I64_ARRAY_ELEMENTS_RANGE,
         GuardKind.VALUE_PACKED_INTEGER_PAYLOAD_FROM_LANES,
         GuardKind.VALUE_PACKED_INTEGER_LANES_FROM_PAYLOAD,
+        GuardKind.VECTOR_EXTRACT_SHAPE,
     ):
         _append_field(fields, "attr_index", row.attr_index, always=True)
 
@@ -703,8 +706,8 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
         f".element_type_mask = {lower_rule_spelling.scalar_type_mask_c_expr(type_pattern.elements)}",
     ]
     if type_pattern.kind == "vector":
-        row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
         if type_pattern.dims:
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK"
             row.extend(
                 [
                     f".rank = {len(type_pattern.dims)}",
@@ -717,15 +720,23 @@ def type_pattern_row(type_pattern: TypePattern) -> list[str]:
                 row.append(f".static_dim1 = {lower_rule_spelling.c_expression(type_pattern.dims[1])}")
         elif type_pattern.lanes is not None:
             row.append(".rank = 1")
-            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0"
             row.append(f".static_dim0 = {lower_rule_spelling.c_expression(type_pattern.lanes)}")
         elif type_pattern.minimum_lanes is not None and type_pattern.maximum_lanes is not None:
             row.append(".rank = 1")
-            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE"
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE"
             row.extend(
                 [
                     f".static_dim0_min = {lower_rule_spelling.c_expression(type_pattern.minimum_lanes)}",
                     f".static_dim0_max = {lower_rule_spelling.c_expression(type_pattern.maximum_lanes)}",
+                ]
+            )
+        elif type_pattern.minimum_static_elements is not None and type_pattern.maximum_static_elements is not None:
+            row[0] += " | LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_ELEMENT_COUNT_RANGE"
+            row.extend(
+                [
+                    f".static_element_count_min = {lower_rule_spelling.c_expression(type_pattern.minimum_static_elements)}",
+                    f".static_element_count_max = {lower_rule_spelling.c_expression(type_pattern.maximum_static_elements)}",
                 ]
             )
         else:

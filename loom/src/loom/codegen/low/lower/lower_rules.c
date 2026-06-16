@@ -16,6 +16,7 @@
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/ops/vector/storage.h"
 #include "loom/target/registers.h"
 #include "loom/util/math.h"
@@ -562,7 +563,86 @@ static bool loom_low_lower_rule_type_matches(
       return false;
     }
   }
+  if (iree_any_bit_set(
+          pattern->flags,
+          LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_ELEMENT_COUNT_RANGE)) {
+    uint64_t static_element_count = 0;
+    if (!loom_type_static_element_count(type, &static_element_count)) {
+      return false;
+    }
+    if (static_element_count < pattern->static_element_count_min ||
+        static_element_count > pattern->static_element_count_max) {
+      return false;
+    }
+  }
   return true;
+}
+
+static bool loom_low_lower_rule_vector_extract_tail_type_matches(
+    loom_type_t source_type, uint16_t consumed_rank, loom_type_t result_type) {
+  const uint8_t source_rank = loom_type_rank(source_type);
+  if (consumed_rank > source_rank) return false;
+  if (loom_type_element_type(source_type) !=
+      loom_type_element_type(result_type)) {
+    return false;
+  }
+  if (loom_type_is_scalar(result_type)) {
+    return consumed_rank == source_rank;
+  }
+  if (!loom_type_is_vector(result_type)) return false;
+  const uint8_t result_rank = loom_type_rank(result_type);
+  if (consumed_rank + result_rank != source_rank) return false;
+  for (uint8_t i = 0; i < result_rank; ++i) {
+    if (loom_type_dim(source_type, consumed_rank + i) !=
+        loom_type_dim(result_type, i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_low_lower_rule_vector_extract_shape_matches(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    const loom_low_lower_guard_t* guard) {
+  if (!loom_vector_extract_isa(source_op)) return false;
+  if (guard->attr_index >= source_op->attribute_count) return false;
+  loom_attribute_t static_indices =
+      loom_op_const_attrs(source_op)[guard->attr_index];
+  if (static_indices.kind != LOOM_ATTR_I64_ARRAY) return false;
+
+  const loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
+      rule_set, source_op, guard->value_ref_index);
+  const loom_value_id_t result_value_id = loom_low_lower_rule_source_value(
+      rule_set, source_op, guard->other_value_ref_index);
+  const loom_type_t source_type =
+      loom_module_value_type(match_context->module, source_value_id);
+  const loom_type_t result_type =
+      loom_module_value_type(match_context->module, result_value_id);
+  if (!loom_type_is_vector(source_type)) return false;
+
+  const loom_value_slice_t dynamic_indices =
+      loom_vector_extract_indices(source_op);
+  if (static_indices.count == 1 && static_indices.i64_array[0] == INT64_MIN) {
+    return dynamic_indices.count == 1 && loom_type_rank(source_type) == 1 &&
+           loom_type_element_type(source_type) ==
+               loom_type_element_type(result_type) &&
+           loom_type_is_scalar(result_type);
+  }
+
+  if (dynamic_indices.count != 0 ||
+      static_indices.count > loom_type_rank(source_type)) {
+    return false;
+  }
+  for (uint16_t i = 0; i < static_indices.count; ++i) {
+    const int64_t index = static_indices.i64_array[i];
+    if (index < 0 || loom_type_dim_is_dynamic_at(source_type, i) ||
+        index >= loom_type_dim_static_size_at(source_type, i)) {
+      return false;
+    }
+  }
+  return loom_low_lower_rule_vector_extract_tail_type_matches(
+      source_type, static_indices.count, result_type);
 }
 
 static loom_scalar_type_t loom_low_lower_rule_type_pattern_element(
@@ -1597,6 +1677,10 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           loom_module_value(match_context->module, value_id));
       return iree_ok_status();
     }
+    case LOOM_LOW_LOWER_GUARD_VECTOR_EXTRACT_SHAPE:
+      *out_matches = loom_low_lower_rule_vector_extract_shape_matches(
+          match_context, rule_set, source_op, guard);
+      return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL:
       *out_matches = iree_all_bits_set(source_op->instance_flags, guard->u64);
       return iree_ok_status();

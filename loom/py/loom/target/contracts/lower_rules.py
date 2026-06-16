@@ -757,6 +757,39 @@ class _LowerRuleSetCompiler:
             )
             return
 
+        if guard.kind == GuardKind.VECTOR_EXTRACT_SHAPE:
+            if guard.other_field is None or guard.attr_field is None:
+                raise ValueError(
+                    f"{source_op.name}: vector-extract-shape guard needs source, "
+                    "result, and static_indices fields"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.field),
+                    ),
+                    other_value_ref_index=self._append_value_ref(
+                        source_op,
+                        _value_ref_for_source_field(source_op, guard.other_field),
+                    ),
+                    attr_index=_source_attr_index(source_op, guard.attr_field),
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _named_constraint_diagnostic(
+                                "shape",
+                                source_op.name,
+                                guard.kind.value,
+                            ),
+                        ),
+                    ),
+                )
+            )
+            return
+
         if guard.kind == GuardKind.INSTANCE_FLAGS_HAS_ALL:
             attr_index = _source_attr_index(source_op, guard.field)
             attr = source_op.attrs[attr_index]

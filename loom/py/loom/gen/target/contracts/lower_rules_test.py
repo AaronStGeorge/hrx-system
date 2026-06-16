@@ -433,6 +433,46 @@ def test_generate_lower_rule_set_emits_packed_integer_storage_guard() -> None:
     assert ".maximum_i64 = 32," in guard_text
 
 
+def test_generate_lower_rule_set_emits_static_element_count_type_pattern() -> None:
+    table = ContractFragment(
+        name="test.low.vector_extract_shape",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        public_header=_TEST_PUBLIC_HEADER,
+        cases=[
+            RecipeRule(
+                source_op=vector.vector_extract,
+                guards=(
+                    Guard.value_type(
+                        "source",
+                        Vector(
+                            "f32",
+                            minimum_static_elements=1,
+                            maximum_static_elements=8,
+                        ),
+                    ),
+                    Guard.value_type("result", Scalar("f32")),
+                    Guard.vector_extract_shape("source", "result", "static_indices"),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    type_pattern_start = generated.source.index("LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_ELEMENT_COUNT_RANGE")
+    type_pattern_end = generated.source.index("},", type_pattern_start)
+    type_pattern_text = generated.source[type_pattern_start:type_pattern_end]
+    assert ".static_element_count_min = 1," in type_pattern_text
+    assert ".static_element_count_max = 8," in type_pattern_text
+
+    guard_start = generated.source.index("LOOM_LOW_LOWER_GUARD_VECTOR_EXTRACT_SHAPE")
+    guard_end = generated.source.index("},", guard_start)
+    guard_text = generated.source[guard_start:guard_end]
+    assert ".value_ref_index = 0," in guard_text
+    assert ".other_value_ref_index = 1," in guard_text
+    assert ".attr_index = 0," in guard_text
+
+
 def test_generate_lower_rule_set_emits_source_instance_flags_projection() -> None:
     descriptor, descriptor_set = _add_f32_flags_descriptor_set()
     table = ContractFragment(

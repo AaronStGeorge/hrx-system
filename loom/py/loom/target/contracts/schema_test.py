@@ -64,6 +64,19 @@ def test_contract_fragment_requires_explicit_public_header() -> None:
         contract_fragment_public_header(table)
 
 
+def test_vector_lane_range_requires_ordered_bounds() -> None:
+    with pytest.raises(ValueError, match="vector lane range minimum exceeds maximum"):
+        Vector("i32", minimum_lanes=8, maximum_lanes=4)
+
+
+def test_vector_static_element_range_requires_ordered_bounds() -> None:
+    with pytest.raises(
+        ValueError,
+        match="vector static element range minimum exceeds maximum",
+    ):
+        Vector("i32", minimum_static_elements=8, maximum_static_elements=4)
+
+
 def test_alias_rule_validates_source_and_result() -> None:
     table = ContractFragment(
         name="value.alias",

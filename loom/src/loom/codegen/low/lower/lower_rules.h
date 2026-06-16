@@ -50,6 +50,10 @@ typedef uint16_t loom_low_lower_type_pattern_flags_t;
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE ((uint16_t)1u << 4)
 // Second shaped dimension must be statically equal to static_dim1.
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM1 ((uint16_t)1u << 5)
+// Total static shaped element count must be inside
+// [static_element_count_min, static_element_count_max].
+#define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_ELEMENT_COUNT_RANGE \
+  ((uint16_t)1u << 6)
 
 typedef struct loom_low_lower_type_pattern_t {
   // Type fields this pattern checks.
@@ -68,6 +72,12 @@ typedef struct loom_low_lower_type_pattern_t {
   int64_t static_dim0_max;
   // Required static dimension 1 when the STATIC_DIM1 flag is set.
   int64_t static_dim1;
+  // Inclusive minimum total static element count when
+  // STATIC_ELEMENT_COUNT_RANGE is set.
+  uint64_t static_element_count_min;
+  // Inclusive maximum total static element count when
+  // STATIC_ELEMENT_COUNT_RANGE is set.
+  uint64_t static_element_count_max;
 } loom_low_lower_type_pattern_t;
 
 typedef enum loom_low_lower_value_ref_kind_e {
@@ -510,6 +520,8 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_NO_USES = 28,
   // Source value ref must map to a low register with exactly |u64| units.
   LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT = 29,
+  // Source vector.extract op must have a supported source/result/index shape.
+  LOOM_LOW_LOWER_GUARD_VECTOR_EXTRACT_SHAPE = 30,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -519,8 +531,9 @@ typedef struct loom_low_lower_guard_t {
   uint16_t value_ref_index;
   // Second source value-ref table index used by pairwise value guards.
   uint16_t other_value_ref_index;
-  // Source attribute ordinal used by attribute guards or source operand ordinal
-  // used by operand-segment guards.
+  // Source attribute ordinal used by attribute guards, source operand ordinal
+  // used by operand-segment guards, or op-specific attribute ordinal used by
+  // semantic guards.
   uint16_t attr_index;
   // Type-pattern table index used by VALUE_TYPE guards.
   uint16_t type_pattern_index;

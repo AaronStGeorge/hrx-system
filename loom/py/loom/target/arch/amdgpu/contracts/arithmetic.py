@@ -132,10 +132,45 @@ _VEC_F32 = Vector(
     minimum_lanes=1,
     maximum_lanes="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
 )
+_VEC_I32_STATIC = Vector(
+    "i32",
+    minimum_static_elements=1,
+    maximum_static_elements="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
+)
+_VEC_F32_STATIC = Vector(
+    "f32",
+    minimum_static_elements=1,
+    maximum_static_elements="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
+)
+_VEC_I64_STATIC = Vector(
+    "i64",
+    minimum_static_elements=1,
+    maximum_static_elements="(LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES / 2u)",
+)
+_VEC_F64_STATIC = Vector(
+    "f64",
+    minimum_static_elements=1,
+    maximum_static_elements="(LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES / 2u)",
+)
+_VEC_F16_PACKED_STORAGE = Vector(
+    "f16",
+    minimum_lanes=1,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES",
+)
 _VEC_F16_PACKED = Vector(
     "f16",
     minimum_lanes=2,
     maximum_lanes="LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES",
+)
+_VEC_BF16_PACKED_STORAGE = Vector(
+    "bf16",
+    minimum_lanes=1,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES",
+)
+_VEC_I16_PACKED_STORAGE = Vector(
+    "i16",
+    minimum_lanes=1,
+    maximum_lanes="LOOM_AMDGPU_MAX_PACKED_I16_LANES",
 )
 _VEC_I16_PACKED = Vector(
     "i16",
@@ -181,10 +216,25 @@ _VEC_F32_DIAGNOSTIC = GuardDiagnostic(
     subject_name="vector<f32>",
     constraint_key="amdgpu.arithmetic.vector_f32",
 )
+_VEC_I64_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="vector<i64>",
+    constraint_key="amdgpu.arithmetic.vector_i64",
+)
+_VEC_F64_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="vector<f64>",
+    constraint_key="amdgpu.arithmetic.vector_f64",
+)
 _VEC_F16_PACKED_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
     subject_name="vector<f16>",
     constraint_key="amdgpu.arithmetic.vector_f16_packed",
+)
+_VEC_BF16_PACKED_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="type",
+    subject_name="vector<bf16>",
+    constraint_key="amdgpu.arithmetic.vector_bf16_packed",
 )
 _VEC_I16_PACKED_DIAGNOSTIC = GuardDiagnostic(
     subject_role="type",
@@ -331,6 +381,11 @@ _PACKED_INTEGER_LANES_FROM_PAYLOAD_DIAGNOSTIC = GuardDiagnostic(
     subject_name="vector.bitunpack",
     constraint_key="amdgpu.packed_integer.lanes_from_payload",
 )
+_VECTOR_EXTRACT_SHAPE_DIAGNOSTIC = GuardDiagnostic(
+    subject_role="shape",
+    subject_name="vector.extract",
+    constraint_key="amdgpu.arithmetic.vector_extract_shape",
+)
 
 
 def _descriptor(key: str) -> Descriptor:
@@ -338,13 +393,19 @@ def _descriptor(key: str) -> Descriptor:
 
 
 def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
-    if type_pattern == _VEC_I32:
+    if type_pattern in (_VEC_I32, _VEC_I32_STATIC):
         return _VEC_I32_DIAGNOSTIC
-    if type_pattern == _VEC_F32:
+    if type_pattern in (_VEC_F32, _VEC_F32_STATIC):
         return _VEC_F32_DIAGNOSTIC
-    if type_pattern == _VEC_F16_PACKED:
+    if type_pattern == _VEC_I64_STATIC:
+        return _VEC_I64_DIAGNOSTIC
+    if type_pattern == _VEC_F64_STATIC:
+        return _VEC_F64_DIAGNOSTIC
+    if type_pattern in (_VEC_F16_PACKED, _VEC_F16_PACKED_STORAGE):
         return _VEC_F16_PACKED_DIAGNOSTIC
-    if type_pattern == _VEC_I16_PACKED:
+    if type_pattern == _VEC_BF16_PACKED_STORAGE:
+        return _VEC_BF16_PACKED_DIAGNOSTIC
+    if type_pattern in (_VEC_I16_PACKED, _VEC_I16_PACKED_STORAGE):
         return _VEC_I16_PACKED_DIAGNOSTIC
     if type_pattern == _VEC_I8_PACKED:
         return _VEC_I8_PACKED_DIAGNOSTIC
@@ -645,6 +706,48 @@ def _vector_packed_integer_recipe_rules() -> tuple[RecipeRule, ...]:
             _VEC_I8_PACKED,
             maximum_width=8,
         ),
+    )
+
+
+def _vector_extract_recipe_rule(
+    source_type: TypePattern,
+    result_type: TypePattern,
+) -> RecipeRule:
+    return RecipeRule(
+        source_op=vector.vector_extract,
+        guards=(
+            _value_type("source", source_type),
+            _value_type("result", result_type),
+            Guard.vector_extract_shape(
+                "source",
+                "result",
+                "static_indices",
+                diagnostic=_VECTOR_EXTRACT_SHAPE_DIAGNOSTIC,
+            ),
+        ),
+    )
+
+
+def _vector_extract_recipe_rules() -> tuple[RecipeRule, ...]:
+    full_width_pairs = (
+        (_VEC_I32_STATIC, _I32),
+        (_VEC_F32_STATIC, _F32),
+        (_VEC_I64_STATIC, _I64),
+        (_VEC_F64_STATIC, _F64),
+        (_VEC_I32_STATIC, _VEC_I32_STATIC),
+        (_VEC_F32_STATIC, _VEC_F32_STATIC),
+        (_VEC_I64_STATIC, _VEC_I64_STATIC),
+        (_VEC_F64_STATIC, _VEC_F64_STATIC),
+    )
+    packed_scalar_pairs = (
+        (_VEC_F16_PACKED_STORAGE, _F16),
+        (_VEC_BF16_PACKED_STORAGE, _BF16),
+        (_VEC_I16_PACKED_STORAGE, _I16),
+        (_VEC_I8_PACKED, _I8),
+    )
+    return tuple(
+        _vector_extract_recipe_rule(source_type, result_type)
+        for source_type, result_type in (*full_width_pairs, *packed_scalar_pairs)
     )
 
 
@@ -2431,6 +2534,7 @@ def _rules() -> tuple[ContractCase, ...]:
             _packed_f32_vector_fma_rule(),
             *_packed_f16_vector_fma_rules(),
             *_packed_i16_vector_fmai_rules(),
+            *_vector_extract_recipe_rules(),
             *_f32_fma_rules(vector.vector_fmaf, _VEC_F32),
             _unary_rule(vector.vector_exp2f, _VEC_F32, "amdgpu.v_exp_f32"),
             _unary_rule(vector.vector_log2f, _VEC_F32, "amdgpu.v_log_f32"),

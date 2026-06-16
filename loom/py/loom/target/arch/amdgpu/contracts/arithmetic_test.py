@@ -15,7 +15,9 @@ from loom.target.arch.amdgpu.contracts.arithmetic import (
     AMDGPU_ARITHMETIC_CONTRACT_FRAGMENT,
 )
 from loom.target.contracts import (
+    LOWER_RULE_FLAG_CONTRACT_ONLY,
     CompiledLowerRuleSet,
+    GuardKind,
     LowerRule,
     compile_lower_rule_set,
 )
@@ -136,3 +138,23 @@ def test_bitfield_insert_rules_try_native_bfi_before_mask_merge_fallback() -> No
             )
         ]
     )
+
+
+def test_vector_extract_rules_publish_contract_only_shape_rows() -> None:
+    compiled = _compiled_arithmetic_rules()
+    rules = _rules_for_source_op(compiled, vector.vector_extract)
+    contract_rules = tuple(
+        rule for rule in rules if rule.flags & LOWER_RULE_FLAG_CONTRACT_ONLY
+    )
+
+    assert len(contract_rules) == 12
+    for rule in contract_rules:
+        assert rule.emit_count == 0
+        guard_kinds = tuple(
+            compiled.guards[guard_index].kind
+            for guard_index in range(
+                rule.guard_start,
+                rule.guard_start + rule.guard_count,
+            )
+        )
+        assert GuardKind.VECTOR_EXTRACT_SHAPE in guard_kinds

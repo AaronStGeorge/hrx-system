@@ -27,6 +27,8 @@ class TypePattern:
     dims: tuple[int, ...] = ()
     minimum_lanes: CTypeExpression | None = None
     maximum_lanes: CTypeExpression | None = None
+    minimum_static_elements: CTypeExpression | None = None
+    maximum_static_elements: CTypeExpression | None = None
 
     @classmethod
     def scalar(cls, element: ScalarElementPattern) -> Self:
@@ -41,6 +43,8 @@ class TypePattern:
         dims: Sequence[int] | None = None,
         minimum_lanes: CTypeExpression | None = None,
         maximum_lanes: CTypeExpression | None = None,
+        minimum_static_elements: CTypeExpression | None = None,
+        maximum_static_elements: CTypeExpression | None = None,
     ) -> Self:
         return cls(
             kind="vector",
@@ -49,6 +53,8 @@ class TypePattern:
             dims=() if dims is None else tuple(dims),
             minimum_lanes=minimum_lanes,
             maximum_lanes=maximum_lanes,
+            minimum_static_elements=minimum_static_elements,
+            maximum_static_elements=maximum_static_elements,
         )
 
     @classmethod
@@ -83,6 +89,8 @@ class TypePattern:
                 or dims
                 or self.minimum_lanes is not None
                 or self.maximum_lanes is not None
+                or self.minimum_static_elements is not None
+                or self.maximum_static_elements is not None
             ):
                 raise ValueError("scalar type patterns cannot constrain shape")
             return
@@ -92,16 +100,26 @@ class TypePattern:
                 or dims
                 or self.minimum_lanes is not None
                 or self.maximum_lanes is not None
+                or self.minimum_static_elements is not None
+                or self.maximum_static_elements is not None
             ):
                 raise ValueError("view type patterns cannot constrain shape")
             return
+        has_static_element_range = (
+            self.minimum_static_elements is not None
+            or self.maximum_static_elements is not None
+        )
         if dims:
             if (
                 self.lanes is not None
                 or self.minimum_lanes is not None
                 or self.maximum_lanes is not None
+                or has_static_element_range
             ):
-                raise ValueError("vector type pattern cannot mix exact dims with lanes")
+                raise ValueError(
+                    "vector type pattern cannot mix exact dims with other "
+                    "shape constraints"
+                )
             if len(dims) > 2:
                 raise ValueError(
                     "generated vector type patterns support at most two dims"
@@ -111,17 +129,52 @@ class TypePattern:
                     raise ValueError("vector static dims must be non-negative")
             return
         if self.lanes is not None:
-            if self.minimum_lanes is not None or self.maximum_lanes is not None:
+            if (
+                self.minimum_lanes is not None
+                or self.maximum_lanes is not None
+                or has_static_element_range
+            ):
                 raise ValueError(
-                    "vector type pattern cannot mix exact and ranged lanes"
+                    "vector type pattern cannot mix exact lanes with other "
+                    "shape constraints"
                 )
             if self.lanes < 0:
                 raise ValueError("vector lane count must be non-negative")
         elif self.minimum_lanes is not None or self.maximum_lanes is not None:
+            if has_static_element_range:
+                raise ValueError(
+                    "vector type pattern cannot mix dim0 and static element ranges"
+                )
             if self.minimum_lanes is None or self.maximum_lanes is None:
                 raise ValueError("vector lane range requires minimum and maximum")
-            _validate_lane_bound(self.minimum_lanes, "minimum vector lane count")
-            _validate_lane_bound(self.maximum_lanes, "maximum vector lane count")
+            _validate_count_bound(self.minimum_lanes, "minimum vector lane count")
+            _validate_count_bound(self.maximum_lanes, "maximum vector lane count")
+            _validate_count_bound_order(
+                self.minimum_lanes,
+                self.maximum_lanes,
+                "vector lane range",
+            )
+        elif has_static_element_range:
+            if (
+                self.minimum_static_elements is None
+                or self.maximum_static_elements is None
+            ):
+                raise ValueError(
+                    "vector static element range requires minimum and maximum"
+                )
+            _validate_count_bound(
+                self.minimum_static_elements,
+                "minimum vector static element count",
+            )
+            _validate_count_bound(
+                self.maximum_static_elements,
+                "maximum vector static element count",
+            )
+            _validate_count_bound_order(
+                self.minimum_static_elements,
+                self.maximum_static_elements,
+                "vector static element range",
+            )
 
 
 def Scalar(element: ScalarElementPattern) -> TypePattern:
@@ -137,6 +190,8 @@ def Vector(
     dims: Sequence[int] | None = None,
     minimum_lanes: CTypeExpression | None = None,
     maximum_lanes: CTypeExpression | None = None,
+    minimum_static_elements: CTypeExpression | None = None,
+    maximum_static_elements: CTypeExpression | None = None,
 ) -> TypePattern:
     """Returns a vector type pattern."""
 
@@ -146,6 +201,8 @@ def Vector(
         dims=dims,
         minimum_lanes=minimum_lanes,
         maximum_lanes=maximum_lanes,
+        minimum_static_elements=minimum_static_elements,
+        maximum_static_elements=maximum_static_elements,
     )
 
 
@@ -161,10 +218,19 @@ def _normalize_elements(element: ScalarElementPattern) -> tuple[str, ...]:
     return tuple(element)
 
 
-def _validate_lane_bound(value: CTypeExpression, subject: str) -> None:
+def _validate_count_bound(value: CTypeExpression, subject: str) -> None:
     if isinstance(value, int):
         if value < 0:
             raise ValueError(f"{subject} must be non-negative")
         return
     if not value:
         raise ValueError(f"{subject} C expression must be non-empty")
+
+
+def _validate_count_bound_order(
+    minimum: CTypeExpression,
+    maximum: CTypeExpression,
+    subject: str,
+) -> None:
+    if isinstance(minimum, int) and isinstance(maximum, int) and minimum > maximum:
+        raise ValueError(f"{subject} minimum exceeds maximum")
