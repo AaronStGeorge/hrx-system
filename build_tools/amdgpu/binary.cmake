@@ -54,8 +54,8 @@ endfunction()
 function(_iree_amdgpu_resolve_bitcode_deps out_paths out_targets)
   set(_DEP_PATHS)
   set(_DEP_TARGETS)
-  iree_package_target_names(_RESOLVED_DEPS ${ARGN})
-  foreach(_DEP ${_RESOLVED_DEPS})
+  foreach(_DEP_REF ${ARGN})
+    iree_package_target_name(_DEP "${_DEP_REF}")
     if(TARGET "${_DEP}")
       get_target_property(_DEP_PATH
         "${_DEP}" IREE_AMDGPU_BITCODE_ARCHIVE_OUTPUT)
@@ -66,8 +66,27 @@ function(_iree_amdgpu_resolve_bitcode_deps out_paths out_targets)
       endif()
       list(APPEND _DEP_PATHS "${_DEP_PATH}")
       list(APPEND _DEP_TARGETS "${_DEP}")
+    elseif("${_DEP_REF}" MATCHES "::")
+      iree_package_ns(_PACKAGE_NS)
+      string(REGEX REPLACE "^::" "${_PACKAGE_NS}::" _DEP_NS "${_DEP_REF}")
+      string(FIND "${_DEP_NS}" "::" _DEP_TARGET_OFFSET REVERSE)
+      if(_DEP_TARGET_OFFSET EQUAL -1)
+        message(FATAL_ERROR
+          "iree_amdgpu_binary DEPS target '${_DEP_REF}' is malformed")
+      endif()
+      math(EXPR _DEP_NAME_OFFSET "${_DEP_TARGET_OFFSET} + 2")
+      string(SUBSTRING "${_DEP_NS}" 0 "${_DEP_TARGET_OFFSET}" _DEP_PACKAGE_NS)
+      string(SUBSTRING "${_DEP_NS}" "${_DEP_NAME_OFFSET}" -1 _DEP_NAME)
+      string(REPLACE "::" "/" _DEP_PACKAGE_PATH "${_DEP_PACKAGE_NS}")
+      if(NOT EXISTS "${IREE_SOURCE_DIR}/${_DEP_PACKAGE_PATH}/CMakeLists.txt")
+        message(FATAL_ERROR
+          "iree_amdgpu_binary DEPS target '${_DEP_REF}' references unknown "
+          "package '${_DEP_PACKAGE_PATH}'")
+      endif()
+      list(APPEND _DEP_PATHS
+        "${IREE_BINARY_DIR}/${_DEP_PACKAGE_PATH}/${_DEP_NAME}.a")
     else()
-      list(APPEND _DEP_PATHS "${_DEP}")
+      list(APPEND _DEP_PATHS "${_DEP_REF}")
     endif()
   endforeach()
   set(${out_paths} "${_DEP_PATHS}" PARENT_SCOPE)
@@ -229,16 +248,16 @@ endfunction()
 #                compiled as translation units or exposed as interface headers.
 # COPTS: additional flags to pass to clang.
 # LINKOPTS: additional flags to pass to lld.
-# NO_INTERNALIZE: do not internalize linked dependency symbols after lazy
-#                 archive extraction. Use when dependencies provide executable
-#                 ABI symbols such as HAL globals.
+# INTERNALIZE: whether to internalize linked dependency symbols after lazy
+#              archive extraction. Defaults ON. Set OFF when dependencies
+#              provide executable ABI symbols such as HAL globals.
 # MINIMIZE: apply post-link symbol-table minimization. Only valid for opaque
 #           code-object data blobs whose kernels are not looked up by name.
 function(iree_amdgpu_binary)
   cmake_parse_arguments(
     _RULE
-    "MINIMIZE;NO_INTERNALIZE"
-    "NAME;OUT;TARGET;ARCH"
+    "MINIMIZE"
+    "NAME;OUT;TARGET;ARCH;INTERNALIZE"
     "SRCS;DEPS;INTERNAL_HDRS;COPTS;LINKOPTS"
     ${ARGN}
   )
@@ -310,8 +329,12 @@ function(iree_amdgpu_binary)
     ${_RULE_DEPS}
   )
 
+  set(_INTERNALIZE ON)
+  if(DEFINED _RULE_INTERNALIZE)
+    set(_INTERNALIZE "${_RULE_INTERNALIZE}")
+  endif()
   set(_INTERNALIZE_ARGS)
-  if(NOT _RULE_NO_INTERNALIZE)
+  if(_INTERNALIZE)
     list(APPEND _INTERNALIZE_ARGS "-internalize")
   endif()
 
@@ -539,14 +562,14 @@ endfunction()
 #              to the current binary directory.
 # OUTPUT_PATHS_OUT: Optional variable receiving absolute generated output paths.
 # TARGETS_OUT: Optional variable receiving generated CMake target names.
-# NO_INTERNALIZE: do not internalize linked dependency symbols after lazy
-#                 archive extraction.
+# INTERNALIZE: whether to internalize linked dependency symbols after lazy
+#              archive extraction. Defaults ON.
 # MINIMIZE: apply post-link symbol-table minimization.
 function(iree_amdgpu_binary_variants)
   cmake_parse_arguments(
     _RULE
-    "MINIMIZE;NO_INTERNALIZE"
-    "NAME;TARGET;BINARY_NAME_PREFIX;OUTPUTS_OUT;OUTPUT_PATHS_OUT;TARGETS_OUT"
+    "MINIMIZE"
+    "NAME;TARGET;BINARY_NAME_PREFIX;OUTPUTS_OUT;OUTPUT_PATHS_OUT;TARGETS_OUT;INTERNALIZE"
     "TARGETS;SRCS;DEPS;INTERNAL_HDRS;COPTS;LINKOPTS"
     ${ARGN}
   )
@@ -592,9 +615,9 @@ function(iree_amdgpu_binary_variants)
     if(_RULE_MINIMIZE)
       set(_MINIMIZE MINIMIZE)
     endif()
-    set(_NO_INTERNALIZE)
-    if(_RULE_NO_INTERNALIZE)
-      set(_NO_INTERNALIZE NO_INTERNALIZE)
+    set(_INTERNALIZE_ARG)
+    if(DEFINED _RULE_INTERNALIZE)
+      set(_INTERNALIZE_ARG INTERNALIZE "${_RULE_INTERNALIZE}")
     endif()
     iree_amdgpu_binary(
       NAME
@@ -616,7 +639,7 @@ function(iree_amdgpu_binary_variants)
       LINKOPTS
         ${_RULE_LINKOPTS}
       ${_MINIMIZE}
-      ${_NO_INTERNALIZE}
+      ${_INTERNALIZE_ARG}
     )
 
     list(APPEND _VARIANT_OUTPUTS "${_VARIANT_OUTPUT}")
@@ -655,17 +678,19 @@ endfunction()
 # INTERNAL_HDRS: headers that should invalidate device compilation.
 # COPTS: additional flags to pass to clang.
 # LINKOPTS: additional flags to pass to lld.
-# DEPS: dependencies for the generated C embed-data library.
+# DEPS: bitcode archive dependencies to link into each generated binary.
 # INCLUDES: include paths for the generated C embed-data library.
 # FLATTEN: drop directory components from table-of-contents names.
 # PUBLIC: expose the generated C embed-data library publicly.
 # TESTONLY: only build the generated library when tests are enabled.
 # MINIMIZE: apply post-link symbol-table minimization.
+# INTERNALIZE: whether to internalize linked dependency symbols after lazy
+#              archive extraction. Defaults ON.
 function(iree_amdgpu_binary_variants_embed_data)
   cmake_parse_arguments(
     _RULE
     "FLATTEN;PUBLIC;TESTONLY;MINIMIZE"
-    "NAME;TARGET;BINARY_NAME_PREFIX;C_FILE_OUTPUT;H_FILE_OUTPUT;IDENTIFIER"
+    "NAME;TARGET;BINARY_NAME_PREFIX;C_FILE_OUTPUT;H_FILE_OUTPUT;IDENTIFIER;INTERNALIZE"
     "TARGETS;SRCS;INTERNAL_HDRS;COPTS;LINKOPTS;DEPS;INCLUDES"
     ${ARGN}
   )
@@ -698,6 +723,10 @@ function(iree_amdgpu_binary_variants_embed_data)
   if(_RULE_MINIMIZE)
     set(_MINIMIZE_ARG MINIMIZE)
   endif()
+  set(_INTERNALIZE_ARG)
+  if(DEFINED _RULE_INTERNALIZE)
+    set(_INTERNALIZE_ARG INTERNALIZE "${_RULE_INTERNALIZE}")
+  endif()
   iree_amdgpu_binary_variants(
     NAME
       "${_BINARY_VARIANTS_NAME}"
@@ -716,7 +745,10 @@ function(iree_amdgpu_binary_variants_embed_data)
       ${_RULE_COPTS}
     LINKOPTS
       ${_RULE_LINKOPTS}
+    DEPS
+      ${_RULE_DEPS}
     ${_MINIMIZE_ARG}
+    ${_INTERNALIZE_ARG}
   )
 
   set(_IDENTIFIER_ARG)
@@ -745,8 +777,6 @@ function(iree_amdgpu_binary_variants_embed_data)
     H_FILE_OUTPUT
       "${_H_FILE_OUTPUT}"
     ${_IDENTIFIER_ARG}
-    DEPS
-      ${_RULE_DEPS}
     INCLUDES
       ${_RULE_INCLUDES}
     ${_FLATTEN_ARG}

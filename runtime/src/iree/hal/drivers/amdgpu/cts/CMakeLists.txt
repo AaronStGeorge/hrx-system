@@ -51,8 +51,8 @@ iree_amdgpu_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
     "testdata/command_buffer_dispatch_constants_bindings_test.c"
     "testdata/command_buffer_dispatch_constants_test.c"
@@ -83,15 +83,16 @@ iree_amdgpu_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
     "testdata/asan_allocation_test.c"
     "testdata/manual_asan_noop_test.c"
     "testdata/manual_asan_test.c"
   DEPS
     runtime::src::iree::hal::drivers::amdgpu::device::asanrtl_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
-  NO_INTERNALIZE
+  INTERNALIZE
+    OFF
   TESTONLY
 )
 endif()

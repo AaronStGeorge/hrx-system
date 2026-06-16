@@ -54,14 +54,14 @@ endfunction()
 # INTERNAL_HDRS: Headers that should invalidate device compilation.
 # COPTS: Additional flags to pass to clang.
 # LINKOPTS: Additional flags to pass to lld.
-# NO_INTERNALIZE: Do not internalize linked dependency symbols after lazy
-#                 archive extraction.
+# INTERNALIZE: Whether to internalize linked dependency symbols after lazy
+#              archive extraction. Defaults ON.
 # TESTONLY: Only build generated targets when tests are enabled.
 function(iree_amdgpu_hal_cts_testdata)
   cmake_parse_arguments(
     _RULE
-    "NO_INTERNALIZE;TESTONLY"
-    "NAME;TARGET;FORMAT_NAME;FORMAT_STRING;IDENTIFIER;BACKEND_NAME"
+    "TESTONLY"
+    "NAME;TARGET;FORMAT_NAME;FORMAT_STRING;IDENTIFIER;BACKEND_NAME;INTERNALIZE"
     "TARGETS;SRCS;DEPS;INTERNAL_HDRS;COPTS;LINKOPTS"
     ${ARGN}
   )
@@ -98,9 +98,9 @@ function(iree_amdgpu_hal_cts_testdata)
   if(_RULE_TESTONLY)
     set(_TESTONLY_ARG TESTONLY)
   endif()
-  set(_NO_INTERNALIZE_ARG)
-  if(_RULE_NO_INTERNALIZE)
-    set(_NO_INTERNALIZE_ARG NO_INTERNALIZE)
+  set(_INTERNALIZE_ARG)
+  if(DEFINED _RULE_INTERNALIZE)
+    set(_INTERNALIZE_ARG INTERNALIZE "${_RULE_INTERNALIZE}")
   endif()
 
   set(_TARGET_LIBS)
@@ -138,7 +138,7 @@ function(iree_amdgpu_hal_cts_testdata)
           ${_RULE_COPTS}
         LINKOPTS
           ${_RULE_LINKOPTS}
-        ${_NO_INTERNALIZE_ARG}
+        ${_INTERNALIZE_ARG}
       )
       list(APPEND _TARGET_SRCS "${_BINARY_OUT}")
     endforeach()

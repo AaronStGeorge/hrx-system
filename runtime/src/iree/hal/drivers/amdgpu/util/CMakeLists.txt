@@ -1025,8 +1025,8 @@ iree_amdgpu_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
     "queue_benchmark_testdata.c"
   TESTONLY
@@ -1177,8 +1177,8 @@ iree_amdgpu_binary_variants_embed_data(
   IDENTIFIER
     "iree_hal_amdgpu_feedback_channel_test_kernels"
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
     "feedback_channel_test_kernels.c"
   TESTONLY

@@ -48,7 +48,9 @@ iree_amdgpu_binary_variants_embed_data(
   SRCS
     "tests/asan/hip_asan_kernels.c"
   DEPS
-    iree::hal::drivers::amdgpu::device::asanrtl_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
+    runtime::src::iree::hal::drivers::amdgpu::device::asanrtl_{AMDGPU_CODE_OBJECT_TARGET_FRAGMENT}
+  INTERNALIZE
+    OFF
   TESTONLY
   PUBLIC
 )

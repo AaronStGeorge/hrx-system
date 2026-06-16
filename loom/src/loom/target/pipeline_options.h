@@ -12,8 +12,8 @@
 
 #include <stdint.h>
 
-#include "loom/target/low_legality.h"
 #include "loom/sanitizer/options.h"
+#include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {

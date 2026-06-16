@@ -50,7 +50,7 @@ iree_amdgpu_library_variants(
   TARGETS
     ${IREE_HAL_AMDGPU_TARGETS}
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
     "bitcode_hdrs.stamp"
   SRCS
     "asanrtl.c"

@@ -524,11 +524,11 @@ class BuildFileFunctions(object):
         # - dropping any leading ':' as in:
         #      ':generated.c' -> 'generated.c'
         # - replacing any leading '//' by '${PROJECT_SOURCE_DIR}/' or
-        #   '${PROJECT_BINARY_DIR}/' and any internal ':' by '/', as in:
+        #   '${IREE_BINARY_DIR}/' and any internal ':' by '/', as in:
         #      '//path/to/package:source.c'
         #      -> '${PROJECT_SOURCE_DIR}/path/to/package/source.c'
         #      '//path/to/package:generated.c'
-        #      -> '${PROJECT_BINARY_DIR}/path/to/package/generated.c'
+        #      -> '${IREE_BINARY_DIR}/path/to/package/generated.c'
         pkg_root_relative_label = src.startswith("//")
         src = src.lstrip("/").lstrip(":").replace(":", "/")
         if not pkg_root_relative_label:
@@ -539,7 +539,7 @@ class BuildFileFunctions(object):
         if os.path.exists(os.path.join(check_dir, src)):
             return f"${{PROJECT_SOURCE_DIR}}/{src}"
         else:
-            return f"${{PROJECT_BINARY_DIR}}/{src}"
+            return f"${{IREE_BINARY_DIR}}/{src}"
 
     def _current_package(self):
         if not self._repo_root:
@@ -646,7 +646,7 @@ class BuildFileFunctions(object):
             path = self._target_file_paths[canonical_label]
             if package == self._current_package():
                 return [path]
-            return [f"${{PROJECT_BINARY_DIR}}/{package}/{path}"]
+            return [f"${{IREE_BINARY_DIR}}/{package}/{path}"]
         source_path = self._cmake_source_location_path(label)
         if self._repo_root:
             concrete_source_path = os.path.join(self._repo_root, package, name)
@@ -941,6 +941,11 @@ class BuildFileFunctions(object):
         return self._convert_string_list_block(
             "DEPS", converted_deps, sort=False, quote=False
         )
+
+    def _convert_amdgpu_internalize_block(self, internalize):
+        if internalize is False:
+            return self._convert_string_arg_block("INTERNALIZE", "OFF", quote=False)
+        return ""
 
     def _local_cts_testdata_lib_deps(self, deps):
         if isinstance(deps, MixedDeps):
@@ -1910,9 +1915,7 @@ class BuildFileFunctions(object):
         linkopts_block = self._convert_string_list_block(
             "LINKOPTS", linkopts, sort=False
         )
-        no_internalize_block = self._convert_option_block(
-            "NO_INTERNALIZE", internalize is False
-        )
+        internalize_block = self._convert_amdgpu_internalize_block(internalize)
 
         self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
@@ -1926,7 +1929,7 @@ class BuildFileFunctions(object):
             f"{deps_block}"
             f"{copts_block}"
             f"{linkopts_block}"
-            f"{no_internalize_block}"
+            f"{internalize_block}"
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
@@ -2057,9 +2060,7 @@ class BuildFileFunctions(object):
         hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
         srcs_block = self._convert_srcs_block(srcs)
         deps_block = self._convert_amdgpu_bitcode_deps_block(deps)
-        no_internalize_block = self._convert_option_block(
-            "NO_INTERNALIZE", internalize is False
-        )
+        internalize_block = self._convert_amdgpu_internalize_block(internalize)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._emit_platform_guard_begin(target_compatible_with)
@@ -2075,7 +2076,7 @@ class BuildFileFunctions(object):
             f"{hdrs_block}"
             f"{srcs_block}"
             f"{deps_block}"
-            f"{no_internalize_block}"
+            f"{internalize_block}"
             f"{testonly_block}"
             f")\n\n"
         )
@@ -2124,9 +2125,7 @@ class BuildFileFunctions(object):
         linkopts_block = self._convert_string_list_block(
             "LINKOPTS", linkopts, sort=False
         )
-        no_internalize_block = self._convert_option_block(
-            "NO_INTERNALIZE", internalize is False
-        )
+        internalize_block = self._convert_amdgpu_internalize_block(internalize)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
         self._emit_platform_guard_begin(target_compatible_with)
@@ -2141,7 +2140,7 @@ class BuildFileFunctions(object):
             f"{deps_block}"
             f"{copts_block}"
             f"{linkopts_block}"
-            f"{no_internalize_block}"
+            f"{internalize_block}"
             f"{testonly_block}"
             f")\n\n"
         )
@@ -2162,6 +2161,7 @@ class BuildFileFunctions(object):
         copts=None,
         linkopts=None,
         deps=None,
+        internalize=True,
         testonly=None,
         tags=None,
         target_compatible_with=None,
@@ -2190,7 +2190,8 @@ class BuildFileFunctions(object):
         linkopts_block = self._convert_string_list_block(
             "LINKOPTS", linkopts, sort=False
         )
-        deps_block = self._convert_target_list_block("DEPS", deps)
+        deps_block = self._convert_amdgpu_bitcode_deps_block(deps)
+        internalize_block = self._convert_amdgpu_internalize_block(internalize)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         flatten_block = self._convert_option_block("FLATTEN", flatten)
 
@@ -2209,6 +2210,7 @@ class BuildFileFunctions(object):
             f"{copts_block}"
             f"{linkopts_block}"
             f"{deps_block}"
+            f"{internalize_block}"
             f"{testonly_block}"
             f"{flatten_block}"
             f"  PUBLIC\n)\n\n"

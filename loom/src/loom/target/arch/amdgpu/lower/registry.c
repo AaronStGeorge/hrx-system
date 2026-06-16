@@ -1267,8 +1267,8 @@ const loom_target_low_legality_provider_t
         .builtin_dialect_bits =
             (1u << LOOM_DIALECT_INDEX) | (1u << LOOM_DIALECT_BUFFER) |
             (1u << LOOM_DIALECT_SCALAR) | (1u << LOOM_DIALECT_SANITIZER) |
-            (1u << LOOM_DIALECT_VIEW) |
-            (1u << LOOM_DIALECT_VECTOR) | (1u << LOOM_DIALECT_KERNEL),
+            (1u << LOOM_DIALECT_VIEW) | (1u << LOOM_DIALECT_VECTOR) |
+            (1u << LOOM_DIALECT_KERNEL),
         .try_verify_op = loom_amdgpu_low_legality_try_verify_op,
 };
 

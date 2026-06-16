@@ -1611,6 +1611,8 @@ def _gfx1250_core_overlay_descriptors(
     return _with_execution_mask_state_reads(
         materialize_amdgpu_descriptor_overlays(spec, _gfx1250_core_overlays())
     )
+
+
 def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
     return (
         _AMDGPU_CDNA3_CORE_DESCRIPTOR_SET_BASE,

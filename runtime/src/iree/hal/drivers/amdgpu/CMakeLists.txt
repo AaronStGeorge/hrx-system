@@ -808,8 +808,8 @@ iree_amdgpu_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   INTERNAL_HDRS
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
-    "${PROJECT_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/abi/amdgpu_abi_bitcode_hdrs.stamp"
+    "${IREE_BINARY_DIR}/runtime/src/iree/hal/drivers/amdgpu/device/bitcode_hdrs.stamp"
   SRCS
     "pm4_command_buffer_benchmark_testdata.c"
   TESTONLY
